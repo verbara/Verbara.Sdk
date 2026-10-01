@@ -123,7 +123,7 @@ builder.Services
 
 - **9 `ActivitySource`s** — AMI, ARI, AGI, Live, Sessions, Push, VoiceAi, VoiceAi.AudioSocket, VoiceAi.OpenAiRealtime
 - **15 `Meter`s** — all of the above plus Ari.Audio, VoiceAi.Stt, VoiceAi.Tts, Push.Webhooks, Push.Nats, Resilience
-- **11 `IHealthCheck`s** auto-registered — 6 core + 5 VoiceAi
+- **12 `IHealthCheck`s** auto-registered — 7 core + 5 VoiceAi
 - **`VerbaraSemanticConventions`** — public static catalog of 60 const strings across 14 nested classes (Resource, Channel, Bridge, Calls, Dialplan, Sip, Media, Queues, Agent, VoiceAi, Events, Tenant, Event, Node) — pinned by 14+ unit tests so dashboard queries stay stable across SDK versions
 
 See the [high-load tuning guide](docs/guides/high-load-tuning.md) for metric definitions and sizing recommendations at 10K / 100K agent scale.

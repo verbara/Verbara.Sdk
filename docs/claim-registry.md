@@ -66,7 +66,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 | 101 | session-store provenance: re-measured 2026-09-12, .NET 10.0.12, xunit Fact + Stopwatch against local Docker, PostgreSQL 18.4 / Redis 7.4.8, median of five runs; Postgres single-save latency is the WAL flush | COHERENCE | `PerformanceTableCoherenceTests` — the per-row provenance test | PARTIAL — date and runtime asserted against the Performance section; server versions, run count and the WAL-flush attribution stated, not asserted; and the check is opt-in, so deleting `provenance` from the record unbinds this line unnoticed |
 | 124 | 9 ActivitySources | ENFORCING | `MarketingClaimsTests.cs:45-50` | OK |
 | 125 | 15 Meters | ENFORCING | `MarketingClaimsTests.cs:52-57` | OK |
-| 126 | 11 IHealthChecks — 6 core + 5 VoiceAi | ENFORCING | `MarketingClaimsTests.cs:76-97` | PARTIAL — total pinned, the 6/5 split is not |
+| 126 | 12 IHealthChecks — 7 core + 5 VoiceAi | ENFORCING | `MarketingClaimsTests.cs:76-97` | PARTIAL — total pinned, the 7/5 split is not |
 | 127 | 60 const strings, 14 nested classes, "14+ unit tests" | ENFORCING | `MarketingClaimsTests.cs:59-74` | PARTIAL — the "14+ tests" sub-claim is unpinned |
 | 155 | "First contact in 10 lines" | COHERENCE | — | WRONG — the snippet at :158-172 is 15 lines (13 non-blank); the old anchor :166-182 was already off before #322 |
 | 461 | Cartesia Sonic-3, no figure | — | — | **DELETED** — the figure moved to `src/Verbara.Sdk.VoiceAi.Tts/README.md`, cited; `40-90 ms` was never Cartesia's number (they publish sub-90 ms) |

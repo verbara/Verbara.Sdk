@@ -76,7 +76,7 @@ public sealed class MarketingClaimsTests
     [Fact]
     public void IHealthCheck_ImplementationCount_ShouldMatchReadmeClaim()
     {
-        // README.md "Observability" claims 11 IHealthCheck implementations.
+        // README.md "Observability" claims 12 IHealthCheck implementations.
         // Sweep every loaded Verbara.Sdk.* assembly (the `_assemblyAnchors` array
         // above forces them to load) and count concrete IHealthCheck types.
         var anchorAssemblies = _assemblyAnchors
@@ -93,6 +93,6 @@ public sealed class MarketingClaimsTests
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
 
-        healthCheckTypes.Should().HaveCount(11);
+        healthCheckTypes.Should().HaveCount(12);
     }
 }

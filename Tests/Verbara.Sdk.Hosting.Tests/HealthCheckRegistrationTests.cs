@@ -1,4 +1,5 @@
 using Verbara.Sdk.Hosting;
+using Verbara.Sdk.Live.Diagnostics;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -9,8 +10,8 @@ namespace Verbara.Sdk.Hosting.Tests;
 /// <summary>
 /// Which health checks each registration method installs. <c>AddVerbara</c> registers <c>ami</c>, <c>live</c> and
 /// <c>agi</c>; <c>AddVerbaraMultiServer</c> registers one check that reads every server of the pool, once, however many
-/// times it is called. The pool check's name and tags are the owner's ruling (design D9, Q2); these tests count
-/// registrations and do not presume them.
+/// times it is called, under the name <c>verbara-pool</c> and with no tags (the owner's ruling, design D9, Q2,
+/// 2026-09-30).
 /// </summary>
 public sealed class HealthCheckRegistrationTests
 {
@@ -24,7 +25,11 @@ public sealed class HealthCheckRegistrationTests
 
         await using var provider = services.BuildServiceProvider();
         var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
-        registrations.Should().NotBeEmpty("a multi-server host gets a health check that reads its servers' connections");
+        var pool = registrations.Should().ContainSingle("a multi-server host gets one health check that reads its servers' connections")
+            .Which;
+        pool.Name.Should().Be("verbara-pool");
+        pool.Tags.Should().BeEmpty("an untagged check stays out of endpoints filtered on a tag, such as a readiness probe");
+        pool.Factory(provider).Should().BeOfType<VerbaraServerPoolHealthCheck>();
     }
 
     [Fact]
@@ -40,9 +45,13 @@ public sealed class HealthCheckRegistrationTests
         var health = provider.GetService<HealthCheckService>();
         health.Should().NotBeNull("the registration installs the health check service");
         var run = async () => await health!.CheckHealthAsync();
-        await run.Should().NotThrowAsync("a second call registers nothing, so no duplicate name reaches the health check service");
+        var report = (await run.Should().NotThrowAsync(
+            "a second call registers nothing, so no duplicate name reaches the health check service")).Subject;
+        report.Entries.Should().ContainSingle().Which.Key.Should().Be("verbara-pool");
+        report.Entries["verbara-pool"].Status.Should().Be(HealthStatus.Healthy, "an empty pool holds no servers yet");
         provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations
-            .Should().ContainSingle("the pool check is registered once, however many times the method is called");
+            .Should().ContainSingle("the pool check is registered once, however many times the method is called")
+            .Which.Name.Should().Be("verbara-pool");
     }
 
     [Fact]
