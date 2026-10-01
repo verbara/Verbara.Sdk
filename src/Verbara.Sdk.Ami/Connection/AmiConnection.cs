@@ -68,6 +68,9 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Connection-lost handler error")]
     public static partial void LostHandlerError(ILogger logger, Exception exception);
 
+    [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] State-change handler error")]
+    public static partial void StateChangedHandlerError(ILogger logger, Exception exception);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] OnEvent handler threw on {EventType}")]
     public static partial void HandlerFault(ILogger logger, string? eventType, Exception exception);
 }
@@ -113,6 +116,7 @@ public sealed class AmiConnection : IAmiConnection
     private volatile IObserver<ManagerEvent>[] _observers = [];
     private readonly Lock _observerLock = new();
 
+    // Written only by SetStateLocked, the funnel that announces each change on StateChanged.
     private volatile AmiConnectionState _state = AmiConnectionState.Initial;
 
     // Set by DisconnectAsync and DisposeAsync. A connection that ended on its own (the peer closed, or a
@@ -163,8 +167,9 @@ public sealed class AmiConnection : IAmiConnection
     // announces says what ended the connection. Cleared by every connect attempt, next to the renewal of _fullyBooted.
     private volatile TimeoutException? _heartbeatFailure;
 
-    // The queue Lost and Reconnected are delivered on: one notification at a time, in the order they were queued, on the
-    // thread pool. The reader, the heartbeat and the reconnect loop only append to it; nothing awaits it.
+    // The queue StateChanged, Lost and Reconnected are delivered on: one notification at a time, in the order they were
+    // queued, on the thread pool. The reader, the heartbeat, the reconnect loop and the endings only append to it; nothing
+    // awaits it. Taken inside _endingLock where both are held, never the reverse.
     private readonly Lock _notifyLock = new();
     private Task _notifyTail = Task.CompletedTask;
 
@@ -215,9 +220,10 @@ public sealed class AmiConnection : IAmiConnection
     internal event Action<Exception?>? Lost;
 
     /// <summary>
-    /// The tail of the queue <see cref="Lost"/> and <see cref="Reconnected"/> are delivered on: it completes once every
-    /// notification queued before the read has been delivered. For tests, which await it after an ending to assert that
-    /// nothing more was announced. Not called by Verbara.Sdk.Live, and not part of what it binds to.
+    /// The tail of the queue <see cref="StateChanged"/>, <see cref="Lost"/> and <see cref="Reconnected"/> are delivered
+    /// on: it completes once every notification queued before the read has been delivered. For tests, which await it
+    /// after an ending to assert that nothing more was announced. Not called by Verbara.Sdk.Live, and not part of what it
+    /// binds to.
     /// </summary>
     internal Task PendingNotifications
     {
@@ -283,6 +289,9 @@ public sealed class AmiConnection : IAmiConnection
 
     public event Action? Reconnected;
 
+    /// <inheritdoc />
+    public event Action<AmiConnectionStateChange>? StateChanged;
+
     public AmiConnection(IOptions<AmiConnectionOptions> options, ISocketConnectionFactory socketFactory, ILogger<AmiConnection> logger)
     {
         _options = options.Value;
@@ -307,9 +316,11 @@ public sealed class AmiConnection : IAmiConnection
     /// pass the guard at <see cref="ConnectAsync"/>'s entry: that guard is the caller's.
     /// </summary>
     /// <param name="byLoop">
-    /// <see langword="true"/> for the reconnect loop. Its state writes then yield to an ending recorded
-    /// meanwhile, and the attempt is abandoned with an <see cref="OperationCanceledException"/>. The ending
-    /// that cut it short releases what it acquired, once the loop has left.
+    /// <see langword="true"/> for the reconnect loop, whose state changes are announced as the connection's own;
+    /// <see langword="false"/> for the caller's connect, whose changes are announced as the caller's. Either way the
+    /// attempt's state writes yield to an ending recorded meanwhile, and the attempt is abandoned with an
+    /// <see cref="OperationCanceledException"/>. For the reconnect loop, the ending that cut it short releases what it
+    /// acquired, once the loop has left.
     /// </param>
     /// <param name="cancellationToken">The caller's token, or the lifetime token for the reconnect loop.</param>
     private async ValueTask ConnectCoreAsync(bool byLoop, CancellationToken cancellationToken)
@@ -415,34 +426,96 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <summary>
-    /// A caller's connect writes its state. The reconnect loop's connect yields to an ending recorded meanwhile
-    /// and abandons the attempt.
+    /// A connect writes its state, the caller's and the reconnect loop's alike, unless an ending has been recorded:
+    /// from then on that ending owns the state, and the attempt is abandoned with an
+    /// <see cref="OperationCanceledException"/>. A caller's connect that finds the caller's own ending recorded before
+    /// it wrote anything throws <see cref="ObjectDisposedException"/>, as <see cref="ConnectAsync"/>'s guard does once
+    /// that ending has finished.
     /// </summary>
     private void SetConnectState(AmiConnectionState state, bool byLoop)
     {
-        if (!byLoop)
+        bool closedByCaller;
+        lock (_endingLock)
         {
-            _state = state;
+            if (_ending is null)
+            {
+                SetStateLocked(state, cause: null, byCaller: !byLoop);
+                return;
+            }
+
+            closedByCaller = _closedByCaller;
         }
-        else if (!TrySetAutomaticState(state))
-        {
+
+        if (byLoop)
             throw new OperationCanceledException("The connection was ended during a reconnect attempt.", _lifetime.Token);
-        }
+
+        ObjectDisposedException.ThrowIf(state == AmiConnectionState.Connecting && closedByCaller, this);
+        throw new OperationCanceledException("The connection was ended during the connect.", _lifetime.Token);
     }
 
     /// <summary>
     /// Writes a state the connection chose on its own, the reconnect loop's, unless an ending has been
     /// recorded: from then on that ending owns the state. Returns <see langword="false"/> when it yielded.
     /// </summary>
-    private bool TrySetAutomaticState(AmiConnectionState state)
+    private bool TrySetAutomaticState(AmiConnectionState state, Exception? cause)
     {
         lock (_endingLock)
         {
             if (_ending is not null)
                 return false;
 
-            _state = state;
+            SetStateLocked(state, cause, byCaller: false);
             return true;
+        }
+    }
+
+    /// <summary>
+    /// The one write of <see cref="State"/>. It reads the previous state, writes the next one and queues the change for
+    /// <see cref="StateChanged"/>'s handlers under <c>_notifyLock</c>, so the changes are delivered in the order they were
+    /// written and each one's previous state is the state the one before it announced. A write that leaves the state as
+    /// it was announces nothing, and nothing is queued while the event has no handler.
+    /// </summary>
+    /// <remarks>
+    /// The caller holds <c>_endingLock</c>: an ending records itself under it, so a write that checks for a recorded
+    /// ending, and the ending's own writes, are ordered with it. <c>_notifyLock</c> is always taken inside it.
+    /// </remarks>
+    private void SetStateLocked(AmiConnectionState next, Exception? cause, bool byCaller)
+    {
+        Debug.Assert(_endingLock.IsHeldByCurrentThread, "Every state write holds _endingLock.");
+        lock (_notifyLock)
+        {
+            var previous = _state;
+            if (previous == next)
+                return;
+
+            _state = next;
+            if (StateChanged is null)
+                return;
+
+            var change = new AmiConnectionStateChange(previous, next, cause, byCaller);
+            NotifyLocked(() => DeliverStateChange(change));
+        }
+    }
+
+    /// <summary>Delivers one change to <see cref="StateChanged"/>'s handlers, handler by handler.</summary>
+    private void DeliverStateChange(AmiConnectionStateChange change)
+    {
+        // Read at delivery time: a handler removed while this notification waited is not called.
+        var handlers = StateChanged;
+        if (handlers is null)
+            return;
+
+        foreach (var handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((Action<AmiConnectionStateChange>)handler).Invoke(change);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // A subscriber's failure is its own: logged, and the handlers after it still run.
+                AmiConnectionLog.StateChangedHandlerError(_logger, ex);
+            }
         }
     }
 
@@ -962,13 +1035,13 @@ public sealed class AmiConnection : IAmiConnection
                     var cause = (Exception?)_heartbeatFailure ?? endedBy;
                     if (_options.AutoReconnect)
                     {
-                        _state = AmiConnectionState.Reconnecting;
+                        SetStateLocked(AmiConnectionState.Reconnecting, cause, byCaller: false);
                         NotifyLost(cause);
                         _reconnectLoop = Task.Run(() => ReconnectLoopAsync(), CancellationToken.None);
                     }
                     else
                     {
-                        _state = AmiConnectionState.Disconnecting;
+                        SetStateLocked(AmiConnectionState.Disconnecting, cause, byCaller: false);
                         NotifyLost(cause);
                         _ = Task.Run(() => EndLostConnectionAsync(), CancellationToken.None);
                     }
@@ -1083,7 +1156,7 @@ public sealed class AmiConnection : IAmiConnection
             {
                 // The attempt wrote Connecting. Reconnecting again keeps the loop going, unless an ending was
                 // recorded meanwhile: that ending owns the state, and the attempt is the one it cut short.
-                if (!TrySetAutomaticState(AmiConnectionState.Reconnecting))
+                if (!TrySetAutomaticState(AmiConnectionState.Reconnecting, ex))
                     return;
 
                 AmiConnectionLog.ReconnectAttemptFailed(_logger, ex);
@@ -1163,14 +1236,33 @@ public sealed class AmiConnection : IAmiConnection
     private void Notify(Action notification)
     {
         lock (_notifyLock)
+            NotifyLocked(notification);
+    }
+
+    /// <summary>
+    /// <see cref="Notify"/> for a caller that holds <c>_notifyLock</c>. The notification is queued with the execution
+    /// context's flow suppressed: it is often queued from inside an event dispatch (an ending an <see cref="OnEvent"/>
+    /// handler called), and a handler must not inherit that dispatch's mark (<c>_inDispatch</c>) or anything else that
+    /// flows with the context of whoever queued it.
+    /// </summary>
+    private void NotifyLocked(Action notification)
+    {
+        if (ExecutionContext.IsFlowSuppressed())
         {
+            Append(notification);
+            return;
+        }
+
+        using (ExecutionContext.SuppressFlow())
+            Append(notification);
+
+        void Append(Action next) =>
             _notifyTail = _notifyTail.ContinueWith(
                 static (_, state) => ((Action)state!).Invoke(),
-                notification,
+                next,
                 CancellationToken.None,
                 TaskContinuationOptions.None,
                 TaskScheduler.Default);
-        }
     }
 
     private ValueTask DispatchEventAsync(ManagerEvent evt)
@@ -1305,8 +1397,8 @@ public sealed class AmiConnection : IAmiConnection
             {
                 mine = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 _ending = mine;
-                // Written under the lock the reconnect loop's state writes take, so none of them overrides it.
-                _state = AmiConnectionState.Disconnecting;
+                // Written under the lock every connect's state writes take, so none of them overrides it.
+                SetStateLocked(AmiConnectionState.Disconnecting, cause: null, byCaller);
             }
 
             ending = _ending.Task;
@@ -1362,7 +1454,9 @@ public sealed class AmiConnection : IAmiConnection
         }
         finally
         {
-            _state = AmiConnectionState.Disconnected;
+            lock (_endingLock)
+                SetStateLocked(AmiConnectionState.Disconnected, cause: null, byCaller);
+
             AmiConnectionLog.Disconnected(_logger);
             mine.TrySetResult();
         }

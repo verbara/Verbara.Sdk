@@ -80,6 +80,46 @@ public interface IAmiConnection : IAsyncDisposable
     /// </remarks>
     event Action? Reconnected;
 
+    /// <summary>
+    /// Raised for every change of <see cref="State"/>, once per change, with the state before and after, what caused
+    /// it, and whether the caller's own connect or ending made it (<see cref="AmiConnectionStateChange"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Order.</b> Changes are delivered in the order the state was written, whoever wrote it: the caller's connect
+    /// or ending, the reader that lost the connection, or the reconnect loop. Each change's
+    /// <see cref="AmiConnectionStateChange.Previous"/> is the <see cref="AmiConnectionStateChange.Current"/> of the
+    /// change delivered before it, and a write that leaves the state as it was announces nothing. Once the caller's
+    /// ending has been recorded, no connect announces a state other than the ending's.
+    /// </para>
+    /// <para>
+    /// <b>Queue and thread.</b> The changes share one ordered queue with <see cref="Reconnected"/> (and, on
+    /// <c>AmiConnection</c>, with the loss announcement Verbara.Sdk.Live raises <c>ConnectionLost</c> from): the change
+    /// that leaves <see cref="AmiConnectionState.Connected"/> is delivered before the loss is announced, and a
+    /// reconnect's change to <see cref="AmiConnectionState.Connected"/> before its <see cref="Reconnected"/>. Handlers
+    /// run one at a time on the thread pool, never on the connection's reader, heartbeat or reconnect loop, and none of
+    /// those waits for them. A slow handler delays only the notifications queued behind it, so keep handlers short.
+    /// The handlers are read when a change is delivered, and nothing is queued while the event has no handler. The
+    /// caller's own <see cref="AmiConnectionState.Disconnecting"/> and <see cref="AmiConnectionState.Disconnected"/>
+    /// can be delivered after <see cref="DisconnectAsync"/> or <c>DisposeAsync</c> has returned.
+    /// </para>
+    /// <para>
+    /// <b>Handlers that throw, or end the connection.</b> A handler that throws is logged, and the handlers after it
+    /// still receive the change. A handler may end the connection and wait for that ending: no ending waits for the
+    /// queue.
+    /// </para>
+    /// <para>
+    /// <b>Default implementation.</b> An implementation of this interface that does not provide the event raises
+    /// nothing: subscribing to it is accepted and has no effect. An implementation that wraps another connection
+    /// forwards the inner connection's changes.
+    /// </para>
+    /// </remarks>
+    event Action<AmiConnectionStateChange>? StateChanged
+    {
+        add { }
+        remove { }
+    }
+
     /// <summary>Gracefully disconnect from the AMI.</summary>
     /// <remarks>
     /// The connection ends for good, including a reconnect in progress: the reconnect loop stops wherever it

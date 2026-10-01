@@ -76,3 +76,12 @@ const Verbara.Sdk.VerbaraSemanticConventions.Node.ReceiverId = "receiver.node.id
 const Verbara.Sdk.VerbaraSemanticConventions.Tenant.Id = "tenant.id" -> string!
 *REMOVED*Verbara.Sdk.IAriChannelsResource.CreateExternalMediaAsync(string! app, string! externalHost, string! format, string? encapsulation = null, string? transport = null, string? connectionType = null, string? direction = null, string? data = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
 Verbara.Sdk.IAriChannelsResource.CreateExternalMediaAsync(string! app, string! externalHost, string! format, string? encapsulation = null, string? transport = null, string? connectionType = null, string? direction = null, string? data = null, string? channelId = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
+Verbara.Sdk.AmiConnectionStateChange
+Verbara.Sdk.AmiConnectionStateChange.AmiConnectionStateChange(Verbara.Sdk.Enums.AmiConnectionState previous, Verbara.Sdk.Enums.AmiConnectionState current, System.Exception? cause, bool byCaller) -> void
+Verbara.Sdk.AmiConnectionStateChange.ByCaller.get -> bool
+Verbara.Sdk.AmiConnectionStateChange.Cause.get -> System.Exception?
+Verbara.Sdk.AmiConnectionStateChange.Current.get -> Verbara.Sdk.Enums.AmiConnectionState
+Verbara.Sdk.AmiConnectionStateChange.IsFinal.get -> bool
+Verbara.Sdk.AmiConnectionStateChange.IsLoss.get -> bool
+Verbara.Sdk.AmiConnectionStateChange.Previous.get -> Verbara.Sdk.Enums.AmiConnectionState
+Verbara.Sdk.IAmiConnection.StateChanged -> System.Action<Verbara.Sdk.AmiConnectionStateChange!>?

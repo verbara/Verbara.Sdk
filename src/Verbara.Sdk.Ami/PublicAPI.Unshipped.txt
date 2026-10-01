@@ -1,1 +1,2 @@
 #nullable enable
+Verbara.Sdk.Ami.Connection.AmiConnection.StateChanged -> System.Action<Verbara.Sdk.AmiConnectionStateChange!>?

@@ -91,7 +91,7 @@ public sealed class AmiConnectionConnectRacingEndingTests
     /// Plays the peer through the login up to <paramref name="point"/>, arms the hold on the connection's input there,
     /// and hands that input back.
     /// </summary>
-    private static async Task<HoldingReader> PlayUntilAsync(HoldingSocketFactory sockets, string point, CancellationToken ct)
+    internal static async Task<HoldingReader> PlayUntilAsync(HoldingSocketFactory sockets, string point, CancellationToken ct)
     {
         var socket = await sockets.Inner.NextAsync(ct);
         var input = sockets.Readers[0];
