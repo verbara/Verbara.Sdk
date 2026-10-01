@@ -1,4 +1,5 @@
 #nullable enable
+Verbara.Sdk.Live.Bridges.BridgeManager.ActiveBridgeCount.get -> int
 Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck
 Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
 Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck.VerbaraServerPoolHealthCheck(Verbara.Sdk.Live.Server.VerbaraServerPool! pool) -> void
