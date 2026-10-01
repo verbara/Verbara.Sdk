@@ -20,7 +20,8 @@ namespace Verbara.Sdk.Live.Tests.Harness;
 /// Nothing here waits on the wall clock. Every wait is bounded by <see cref="Bound"/>, a hang bound that a healthy
 /// run never reaches, and ends on the signal it waits for: the connect, the start, <see cref="Reconnected"/>, a log
 /// line on <see cref="ConnectionLog"/> or <see cref="ServerLog"/>, or a timer on <see cref="Clock"/>. The connection's
-/// heartbeat is off and its event-action timeout is disabled, so no timer inside the connection ends a load either.
+/// heartbeat is off and its event-action timeout is disabled unless a test passes one to <see cref="ConnectAsync"/>, so
+/// no timer inside the connection ends a load either.
 /// </para>
 /// </remarks>
 internal sealed class Run : IAsyncDisposable
@@ -36,7 +37,8 @@ internal sealed class Run : IAsyncDisposable
     private Task _peers = Task.CompletedTask;
     private Task _firstServed = Task.CompletedTask;
 
-    private Run(BootingAsterisk firstPeer, BootingAsterisk? secondPeer, bool autoReconnect, TimeSpan reconnectInitialDelay)
+    private Run(BootingAsterisk firstPeer, BootingAsterisk? secondPeer, bool autoReconnect, TimeSpan reconnectInitialDelay,
+        TimeSpan eventTimeout)
     {
         FirstPeer = firstPeer;
         SecondPeer = secondPeer;
@@ -52,8 +54,9 @@ internal sealed class Run : IAsyncDisposable
                 // A limit, never a wait: a connect attempt the test holds must not give up while the test holds it.
                 ConnectionTimeout = TimeSpan.FromMinutes(1),
                 DefaultResponseTimeout = TimeSpan.FromMinutes(1),
-                // No wall-clock bound inside a load: the test's own bound reports a load that hangs.
-                DefaultEventTimeout = TimeSpan.Zero,
+                // No wall-clock bound inside a load by default: the test's own bound reports a load that hangs. A test
+                // of what a caller sees when the connection's own bound ends an action sets one.
+                DefaultEventTimeout = eventTimeout,
             }),
             _sockets,
             ConnectionLog);
@@ -94,9 +97,10 @@ internal sealed class Run : IAsyncDisposable
     /// one, is served by <paramref name="secondPeer"/> once the test calls <see cref="ReleaseSecondPeer"/>.
     /// </summary>
     public static async Task<Run> ConnectAsync(BootingAsterisk firstPeer, BootingAsterisk? secondPeer = null,
-        bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null)
+        bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null, TimeSpan? eventTimeout = null)
     {
-        var run = new Run(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay ?? TimeSpan.FromMilliseconds(1));
+        var run = new Run(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay ?? TimeSpan.FromMilliseconds(1),
+            eventTimeout ?? TimeSpan.Zero);
         run._peers = run.ServePeersAsync(run._peerCts.Token);
         try
         {
