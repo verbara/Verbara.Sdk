@@ -1,9 +1,9 @@
 namespace Verbara.Sdk.Governance.Tests;
 
 /// <summary>
-/// In-process guard for "a test class's cleanup is one the runner calls" (openspec change
-/// <c>a-test-class-releases-what-it-opened</c>; ADR-0066): no test class and no class or collection
-/// fixture under <c>Tests/</c> has <c>IAsyncDisposable</c> in its interface closure. xunit 2.9.3 never
+/// In-process guard for "a test class's cleanup is one the runner calls" (ADR-0066): no test class
+/// and no class or collection fixture under <c>Tests/</c> has <c>IAsyncDisposable</c> in its
+/// interface closure. xunit 2.9.3 never
 /// calls <c>IAsyncDisposable.DisposeAsync</c> on either, so a cleanup written there is dead code.
 /// ZERO-TOLERANCE with no baseline: the conversion landed with the guard. Carries two liveness floors
 /// — files walked and test classes recognised — and detector fixtures for every shape the rule

@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: every originate Asterisk accepted ended in a timeout, and events that carry a Response header never reached OnEvent (#362)
+
+`AmiMessage.IsResponse` was true for any message with a `Response` header, so an event that also carries one was taken
+for an action response and dropped. `OriginateResponse` is such an event, so `VerbaraServer.OriginateAsync` threw
+`OperationCanceledException` at `DefaultEventTimeout` (5 s) for every originate Asterisk accepted: 240 of 240 on
+Asterisk 20.20.1, 22.9.0 and 23.4.1.
+
+- A message with an `Event` header is now an event: `AmiMessage.IsResponse` is false when `Event` is present. Measured
+  on 20/22/23: no response carries `Event`.
+- Newly delivered to `OnEvent`, observers and event collectors: `OriginateResponse`, `ChallengeResponseFailed` (to a
+  user with `security` read), and a `UserEvent` sent with a `Response` header. They are counted in
+  `ami.events.received`, no longer in `ami.responses.received`. A handler that must not see them filters on type.
+- `SendEventGeneratingActionAsync` for an async `Originate` yields its `OriginateResponse` and ends, instead of
+  waiting for the event timeout.
+- An `OriginateResponse` that arrives before the originate's own response no longer completes
+  `SendActionAsync(Originate)` with `Failure`. Not seen on the wire (240 of 240 had the response first).
+- Over an `AmiConnection`, `OriginateAsync` waits up to the originate's `Timeout` (30 s by default) plus
+  `DefaultResponseTimeout`, so a destination that rings past `DefaultEventTimeout` still returns its outcome (measured
+  ≈8 s answered, ≈12 s unanswered). Any other `IAmiConnection` keeps its own bound. No API signature changes.
+
+### Fixed: a Live load whose Status Asterisk refused ended every live call (#362)
+
+For an AMI user whose `write` allows none of `system`, `call` or `reporting`, Asterisk refuses `Status` with
+`Permission denied`. The load read the refusal as "no channels" and removed every held channel, and Sessions emitted
+`CallEnded` for calls still up (60 of 60). A refused `Status` now reconciles nothing: no channel is removed and no
+call is ended. The load still loads queues and agents. It logs `[LIVE] Status refused: <message>; the channel table
+was not reconciled …` once at Warning and tags the load's activity `live.status.refused`. Grant the user `Status` so a
+load can reconcile again; until then a channel that ended during an outage stays held. A hand-written `IAmiConnection`
+passed to `VerbaraServer` still reads a refusal as an empty snapshot.
+
+### Fixed: an OnEvent handler that threw stopped every later event of its session (#362)
+
+A handler that threw, or whose task faulted, ended the event pump's consumer: from then on the session delivered
+nothing, silently, and every later event was dropped as `buffer_full`. Each handler is now guarded. A failure is
+logged once at Warning, `[AMI_EVENT] OnEvent handler threw on {EventType}`, with the exception, and counted on the new
+`ami.events.handler_faults` counter. The other handlers and the observers still receive that event, and delivery goes
+on.
+
+### Changed — BREAKING: AmiConnection.OnEvent awaits every handler, not only the last one (#362)
+
+`OnEvent` was a multicast delegate, whose invoke returns only the last handler's task, so an earlier slow handler was
+never awaited. Every handler is now started in subscription order and every one is awaited before the next event. A
+slow handler holds delivery whatever its position, which can create `buffer_full` drops that did not happen before:
+one first handler of about 1 s and a burst gave 900 of 1,000 at capacity 100, and 5,000 of 25,000 at the default
+capacity. `OnEvent`'s signature, `+=` and `-=` are unchanged; removing a handler subscribed twice removes its last
+subscription.
+
+**Migration guide:** [`docs/guides/onevent-await-all-migration.md`](docs/guides/onevent-await-all-migration.md)
+
 ### Changed — BREAKING: a caller's `DisposeAsync` or `DisconnectAsync` no longer delivers the AMI events still buffered (#360)
 
 Ending an `AmiConnection` delivered every event still in its event pump before the call returned: the pump looked

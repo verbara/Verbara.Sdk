@@ -62,6 +62,9 @@ internal static partial class AmiConnectionLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Connection-lost handler error")]
     public static partial void LostHandlerError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] OnEvent handler threw on {EventType}")]
+    public static partial void HandlerFault(ILogger logger, string? eventType, Exception exception);
 }
 
 /// <summary>
@@ -81,6 +84,9 @@ public sealed class AmiConnection : IAmiConnection
     // Tags of ami.events.dropped: the reasons AmiMetrics.EventsDropped documents.
     private static readonly KeyValuePair<string, object?> BufferFullReason = new("reason", "buffer_full");
     private static readonly KeyValuePair<string, object?> CallerEndingReason = new("reason", "caller_ending");
+
+    /// <summary>The longest delay <see cref="CancellationTokenSource.CancelAfter(TimeSpan)"/> takes.</summary>
+    private static readonly TimeSpan MaxCancelAfter = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
 
     private ISocketConnection? _socket;
     private AmiProtocolReader? _reader;
@@ -217,9 +223,59 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-#pragma warning disable CS0067
-    public event Func<ManagerEvent, ValueTask>? OnEvent;
-#pragma warning restore CS0067
+    // The OnEvent handlers, in subscription order: an immutable array swapped under _handlersLock, read lock-free
+    // by the dispatch, like _observers.
+    private volatile Func<ManagerEvent, ValueTask>[] _handlers = [];
+    private readonly Lock _handlersLock = new();
+
+    /// <summary>Raised for every AMI event the connection delivers, in the order Asterisk sent them.</summary>
+    /// <remarks>
+    /// <para>
+    /// Each handler is called in the order it subscribed, and every handler is called before any is awaited. The
+    /// event pump then waits for every handler's task, not only the last one's, before it delivers the next event:
+    /// a slow handler holds delivery whatever its position, and events that arrive meanwhile wait in the pump's
+    /// buffer (<c>AmiConnectionOptions.EventPumpCapacity</c>), where a full buffer drops them
+    /// (<c>ami.events.dropped</c>, <c>reason=buffer_full</c>). A handler that must not hold delivery hands its work
+    /// off and returns.
+    /// </para>
+    /// <para>
+    /// A handler that throws, or whose task faults, stops neither delivery nor the other subscribers: the other
+    /// handlers and the observers receive that event too, and the failing handler receives the next one. Each failure
+    /// is logged once at Warning (<c>[AMI_EVENT] OnEvent handler threw on {EventType}</c>, with the exception) and
+    /// counted once on <c>ami.events.handler_faults</c>.
+    /// </para>
+    /// </remarks>
+    public event Func<ManagerEvent, ValueTask>? OnEvent
+    {
+        add
+        {
+            if (value is null)
+                return;
+
+            lock (_handlersLock)
+                _handlers = [.. _handlers, value];
+        }
+        remove
+        {
+            if (value is null)
+                return;
+
+            lock (_handlersLock)
+            {
+                // The last subscription of that handler goes, as a multicast delegate's removal does.
+                var current = _handlers;
+                var index = Array.LastIndexOf(current, value);
+                if (index < 0)
+                    return;
+
+                var next = new Func<ManagerEvent, ValueTask>[current.Length - 1];
+                Array.Copy(current, 0, next, 0, index);
+                Array.Copy(current, index + 1, next, index, current.Length - index - 1);
+                _handlers = next;
+            }
+        }
+    }
+
     public event Action? Reconnected;
 
     public AmiConnection(IOptions<AmiConnectionOptions> options, ISocketConnectionFactory socketFactory, ILogger<AmiConnection> logger)
@@ -610,17 +666,60 @@ public sealed class AmiConnection : IAmiConnection
     /// <param name="action">The action to send.</param>
     /// <param name="outcome">Receives how the action ended; <see langword="null"/> for a caller that does not ask.</param>
     /// <param name="cancellationToken">Cancels the enumeration.</param>
-    internal async IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
-        ManagerAction action, EventActionOutcome? outcome,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    internal IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
+        ManagerAction action, EventActionOutcome? outcome, CancellationToken cancellationToken = default) =>
+        SendEventGeneratingCoreAsync(action, outcome, _options.DefaultEventTimeout, cancellationToken);
+
+    /// <summary>
+    /// <see cref="SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome, CancellationToken)"/> for an action
+    /// that Asterisk may take up to <paramref name="completesWithin"/> to end: the wait for its sequence is bounded by
+    /// <paramref name="completesWithin"/> plus <see cref="AmiConnectionOptions.DefaultResponseTimeout"/>, in place of
+    /// <see cref="AmiConnectionOptions.DefaultEventTimeout"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An asynchronous <c>Originate</c> reports its outcome in an <c>OriginateResponse</c> once the destination answers or
+    /// its <c>Timeout</c> runs out: 8.0 s after the action for a destination that answers after a dialplan
+    /// <c>Wait(8)</c>, 12.0 s for one that never answers within a 12 s <c>Timeout</c> (measured on Asterisk 20.20.1,
+    /// 22.9.0 and 23.4.1). Bounded by <see cref="AmiConnectionOptions.DefaultEventTimeout"/>, 5 s by default, every
+    /// originate to a destination that rang longer ended in an <see cref="OperationCanceledException"/>. The
+    /// <see cref="AmiConnectionOptions.DefaultResponseTimeout"/> on top is the margin for Asterisk to write the event once
+    /// that time is up. The bound applies even when <see cref="AmiConnectionOptions.DefaultEventTimeout"/> is
+    /// <see cref="TimeSpan.Zero"/> (no bound); a negative <paramref name="completesWithin"/> counts as zero. The events
+    /// come from the reader loop, as for the other overloads, not through the event pump, so none is dropped when the
+    /// pump is full. When the bound runs out the enumeration ends with <see cref="OperationCanceledException"/>.
+    /// </para>
+    /// <para>
+    /// Called by Verbara.Sdk.Live's <c>OriginateAsync</c> since 2.7.0; kept with this signature until 3.0, because a
+    /// Live package of the 2.x line runs on any newer Ami.
+    /// </para>
+    /// </remarks>
+    /// <param name="action">The action to send.</param>
+    /// <param name="outcome">Receives how the action ended; <see langword="null"/> for a caller that does not ask.</param>
+    /// <param name="completesWithin">How long Asterisk may take to end the action's sequence: for an originate, its
+    /// <c>Timeout</c>.</param>
+    /// <param name="cancellationToken">Cancels the enumeration.</param>
+    internal IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
+        ManagerAction action, EventActionOutcome? outcome, TimeSpan completesWithin,
+        CancellationToken cancellationToken = default) =>
+        SendEventGeneratingCoreAsync(action, outcome,
+            (completesWithin > TimeSpan.Zero ? completesWithin : TimeSpan.Zero) + _options.DefaultResponseTimeout,
+            cancellationToken);
+
+    /// <summary>
+    /// Sends <paramref name="action"/> and yields the events its sequence carries, the wait bounded by
+    /// <paramref name="eventTimeout"/> (<see cref="TimeSpan.Zero"/> or less: no bound).
+    /// </summary>
+    private async IAsyncEnumerable<ManagerEvent> SendEventGeneratingCoreAsync(
+        ManagerAction action, EventActionOutcome? outcome, TimeSpan eventTimeout,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         EnsureConnected();
 
-        // Apply DefaultEventTimeout if configured
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        if (_options.DefaultEventTimeout > TimeSpan.Zero)
+        if (eventTimeout > TimeSpan.Zero)
         {
-            timeoutCts.CancelAfter(_options.DefaultEventTimeout);
+            timeoutCts.CancelAfter(eventTimeout < MaxCancelAfter ? eventTimeout : MaxCancelAfter);
         }
 
         var ct = timeoutCts.Token;
@@ -800,10 +899,18 @@ public sealed class AmiConnection : IAmiConnection
                     var actionId = msg.ActionId;
                     if (actionId is not null && _pendingEventActions.TryGetValue(actionId, out var collector))
                     {
-                        // Check for "complete" events
                         var eventName = msg.EventType ?? "";
                         if (eventName.EndsWith("Complete", StringComparison.OrdinalIgnoreCase))
                         {
+                            // A list's "…Complete" event marks its end and is not part of it.
+                            collector.Complete();
+                            _pendingEventActions.TryRemove(actionId, out _);
+                        }
+                        else if (string.Equals(eventName, "OriginateResponse", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // An async Originate gets exactly one OriginateResponse, and it is the sequence's payload:
+                            // yield it, then end, rather than leave the caller to wait for DefaultEventTimeout.
+                            collector.Add(evt);
                             collector.Complete();
                             _pendingEventActions.TryRemove(actionId, out _);
                         }
@@ -1081,8 +1188,51 @@ public sealed class AmiConnection : IAmiConnection
         AmiMetrics.EventsDispatched.Add(1);
         AmiMetrics.EventDispatchMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);
 
-        // Notify event handler
-        return OnEvent?.Invoke(evt) ?? ValueTask.CompletedTask;
+        // Every handler is started in order, each guarded, before any is awaited; then every one that has not
+        // completed is awaited, each guarded. A failure is logged and counted, and stops neither the other handlers
+        // nor the pump.
+        var handlers = _handlers;
+        ValueTask[]? pending = null;
+        var pendingCount = 0;
+        for (var i = 0; i < handlers.Length; i++)
+        {
+            try
+            {
+                var task = handlers[i](evt);
+                if (task.IsCompletedSuccessfully)
+                    continue;
+
+                // Still running, or already faulted or cancelled: awaited below, where a failure is observed.
+                (pending ??= new ValueTask[handlers.Length - i])[pendingCount++] = task;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                RecordHandlerFault(evt, ex);
+            }
+        }
+
+        return pendingCount == 0 ? ValueTask.CompletedTask : AwaitHandlersAsync(pending!, pendingCount, evt);
+    }
+
+    private async ValueTask AwaitHandlersAsync(ValueTask[] pending, int count, ManagerEvent evt)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            try
+            {
+                await pending[i].ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                RecordHandlerFault(evt, ex);
+            }
+        }
+    }
+
+    private void RecordHandlerFault(ManagerEvent evt, Exception exception)
+    {
+        AmiMetrics.HandlerFaults.Add(1);
+        AmiConnectionLog.HandlerFault(_logger, evt.EventType, exception);
     }
 
     /// <inheritdoc />
@@ -1439,7 +1589,8 @@ internal sealed class EventActionOutcome
 /// Uses a bounded System.Threading.Channel to prevent unbounded memory growth.
 /// </summary>
 /// <remarks>
-/// It ends once, in one of three ways: Asterisk completes the list (<see cref="Complete"/>), Asterisk refuses the action
+/// It ends once, in one of three ways: Asterisk completes the action (<see cref="Complete"/>, at a list's
+/// <c>…Complete</c> event or after an originate's one <c>OriginateResponse</c>), Asterisk refuses the action
 /// (<see cref="Reject"/>), or the session ends first (<see cref="Abandon"/>). The first way to arrive is the one it
 /// records, and each records how it ended before it completes the channel, so a reader that sees the end sees why.
 /// </remarks>
@@ -1465,7 +1616,7 @@ internal sealed class ResponseEventCollector
 
     public void Add(ManagerEvent evt) => _channel.Writer.TryWrite(evt);
 
-    /// <summary>Asterisk completed the action's list.</summary>
+    /// <summary>Asterisk completed the action: its list's <c>…Complete</c> event, or an originate's <c>OriginateResponse</c>.</summary>
     public void Complete()
     {
         if (Interlocked.Exchange(ref _ended, 1) == 0)

@@ -40,6 +40,21 @@ public interface IAmiConnection : IAsyncDisposable
         where TResponse : ManagerResponse;
 
     /// <summary>Send an event-generating action and stream the resulting events.</summary>
+    /// <remarks>
+    /// <para>
+    /// The sequence holds the events that carry the action's ActionID, and ends when Asterisk ends the action: at an
+    /// event whose name ends in <c>Complete</c>, which marks the end of a list and is not yielded; at the
+    /// <c>OriginateResponse</c> of an asynchronous <c>Originate</c>, which is the originate's outcome and is yielded
+    /// before the sequence ends; or at the <c>Response: Error</c> with which Asterisk refuses the action. It also ends
+    /// when the connection's session ends first. Otherwise the connection's event timeout
+    /// (<c>AmiConnectionOptions.DefaultEventTimeout</c> on <c>AmiConnection</c>) ends it with an
+    /// <see cref="System.OperationCanceledException"/>.
+    /// </para>
+    /// <para>
+    /// An event is a message with an <c>Event</c> header, whether or not it also carries a <c>Response</c> header, as
+    /// <c>OriginateResponse</c> does: it is delivered as an event, never taken for the action's response.
+    /// </para>
+    /// </remarks>
     /// <exception cref="System.ArgumentException">
     /// Surfaced by the first <c>MoveNextAsync</c> of the returned sequence: the action's ActionID, or
     /// a key or value among the fields it serializes to, contains a line break (CR or LF), which would

@@ -68,9 +68,12 @@ internal sealed record StatusChannel(string UniqueId, string Channel, string Lin
 /// booted, and both come from the one trigger. <see cref="FirstRefusalAnswered"/> tells the test when to call it.
 /// </para>
 /// <para>
-/// It answers <c>Status</c> with <see cref="StatusChannels"/>; <c>QueueStatus</c> with one queue, <c>rqq</c>
-/// (<c>ringall</c>, one static member); <c>Agents</c> with agent <c>1001</c>; and anything else with
-/// <c>Success</c>. It counts every action it reads, by name.
+/// It answers <c>Status</c> with <see cref="StatusChannels"/>, or refuses it with <c>Permission denied</c> from the
+/// <see cref="StatusRefusedFromAsk"/>-th ask on; <c>QueueStatus</c> with one queue, <c>rqq</c> (<c>ringall</c>, one
+/// static member); <c>Agents</c> with agent <c>1001</c>; an async <c>Originate</c>, when
+/// <see cref="OriginateOutcome"/> is set, with its <c>Response: Success</c> and then one <c>OriginateResponse</c>, as
+/// Asterisk 20.20.1, 22.9.0 and 23.4.1 do; and anything else with <c>Success</c>. It counts every action it reads, by
+/// name, and <see cref="AskedAtLeast"/> turns a count into a signal.
 /// </para>
 /// </remarks>
 internal sealed class BootingAsterisk
@@ -90,7 +93,12 @@ internal sealed class BootingAsterisk
     /// <summary>A refusal that is not an unknown command, which Asterisk also sends.</summary>
     public const string PermissionDenied = "Permission denied";
 
+    /// <summary>The channel an accepted originate reports in its <c>OriginateResponse</c>.</summary>
+    public const string OriginatedChannel = "Local/s@hold-00000132;1";
+
     private readonly ConcurrentDictionary<string, int> _asks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Lock _askWaitersGate = new();
+    private readonly List<(string Action, int Times, TaskCompletionSource Signal)> _askWaiters = [];
     private readonly TaskCompletionSource _firstRefusalAnswered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _served = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private PipedSocket? _socket;
@@ -130,6 +138,27 @@ internal sealed class BootingAsterisk
     /// <summary>How many channels a <c>Status</c> list holds before the close under <see cref="PeerClose.DuringStatus"/>.</summary>
     public int StatusChannelsBeforeClose { get; set; }
 
+    /// <summary>
+    /// From which <c>Status</c> ask on this session, counting from 1, the peer refuses it with <c>Response: Error</c> and
+    /// <c>Message: Permission denied</c>, as Asterisk does for an AMI user whose write classes allow none of
+    /// <c>system</c>, <c>call</c> or <c>reporting</c>; 0 never refuses it. Settable between two loads.
+    /// </summary>
+    public int StatusRefusedFromAsk { get; set; }
+
+    /// <summary>
+    /// The <c>Response</c> of the <c>OriginateResponse</c> the peer sends after accepting an <c>Originate</c>:
+    /// <c>Success</c> or <c>Failure</c>; <see langword="null"/> answers an <c>Originate</c> like any other action.
+    /// </summary>
+    public string? OriginateOutcome { get; init; }
+
+    /// <summary>
+    /// How long the destination of an accepted <c>Originate</c> rings before Asterisk reports its outcome: the peer
+    /// writes the <c>Response: Success</c> at once and the <c>OriginateResponse</c> this long after it, as Asterisk does
+    /// for a destination that answers late (8 s after the action for a dialplan <c>Wait(8)</c> before <c>Answer</c>,
+    /// measured on 20.20.1, 22.9.0 and 23.4.1). <see cref="TimeSpan.Zero"/> reports it at once.
+    /// </summary>
+    public TimeSpan OriginateRings { get; init; }
+
     /// <summary>The channels the peer lists on <c>Status</c>. Settable between two loads.</summary>
     public IReadOnlyList<StatusChannel> StatusChannels { get; set; } = [];
 
@@ -147,6 +176,25 @@ internal sealed class BootingAsterisk
 
     /// <summary>How many times the connection sent the action named <paramref name="action"/> on this session.</summary>
     public int Asked(string action) => _asks.TryGetValue(action, out var count) ? count : 0;
+
+    /// <summary>
+    /// Completes once the connection has sent the action named <paramref name="action"/> at least
+    /// <paramref name="times"/> times on this session, counting the ones already sent. The peer counts an action when
+    /// it reads it, before it answers.
+    /// </summary>
+    public Task AskedAtLeast(string action, int times)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(times, 1);
+        lock (_askWaitersGate)
+        {
+            if (Asked(action) >= times)
+                return Task.CompletedTask;
+
+            var signal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _askWaiters.Add((action, times, signal));
+            return signal.Task;
+        }
+    }
 
     /// <summary>
     /// Asterisk finishes starting: the peer answers as booted from now on, then reports <c>FullyBooted</c> when
@@ -262,7 +310,7 @@ internal sealed class BootingAsterisk
     private async Task<bool> AnswerAsync(PipedSocket socket, string action)
     {
         var name = ActionName(action);
-        _asks.AddOrUpdate(name, 1, static (_, count) => count + 1);
+        Count(name);
         var id = PipedSocket.ActionIdOf(action);
 
         if (Close == PeerClose.WhenAsked && string.Equals(name, CloseWhenAsked, StringComparison.OrdinalIgnoreCase))
@@ -272,7 +320,21 @@ internal sealed class BootingAsterisk
         }
 
         if (string.Equals(name, "Status", StringComparison.OrdinalIgnoreCase))
+        {
+            if (StatusRefusedFromAsk > 0 && Asked(name) >= StatusRefusedFromAsk)
+            {
+                await socket.RespondAsync("Error", id, [new("Message", PermissionDenied)]);
+                return true;
+            }
+
             return await AnswerStatusAsync(socket, id);
+        }
+
+        if (OriginateOutcome is { } outcome && string.Equals(name, "Originate", StringComparison.OrdinalIgnoreCase))
+        {
+            await AnswerOriginateAsync(socket, id, outcome, OriginateRings);
+            return true;
+        }
 
         if (string.Equals(name, "QueueStatus", StringComparison.OrdinalIgnoreCase))
         {
@@ -348,6 +410,26 @@ internal sealed class BootingAsterisk
         return true;
     }
 
+    /// <summary>The order and headers Asterisk 22.9.0 wrote for an async originate, raw.</summary>
+    private static async Task AnswerOriginateAsync(PipedSocket socket, string id, string outcome, TimeSpan rings)
+    {
+        await socket.RespondAsync("Success", id, [new("Message", "Originate successfully queued")]);
+        if (rings > TimeSpan.Zero)
+        {
+            // fence-allow: SIMULATED-WORK — the destination rings this long before Asterisk reports the outcome
+            await Task.Delay(rings);
+        }
+
+        var success = string.Equals(outcome, "Success", StringComparison.Ordinal);
+        await socket.WriteEventAsync("OriginateResponse",
+        [
+            new("Privilege", "call,all"), new("ActionID", id), new("Response", outcome),
+            new("Channel", success ? OriginatedChannel : "Nosuchtech/x"), new("Context", "hold"), new("Exten", "s"),
+            new("Reason", success ? "4" : "0"), new("Uniqueid", success ? "1790763823.612" : "<unknown>"),
+            new("CallerIDNum", "<unknown>"), new("CallerIDName", "<unknown>"),
+        ]);
+    }
+
     private static async Task AnswerQueueStatusAsync(PipedSocket socket, string id)
     {
         await socket.RespondAsync("Success", id,
@@ -386,9 +468,31 @@ internal sealed class BootingAsterisk
     {
         var action = await socket.ReadActionAsync(cancellationToken);
         if (action is not null)
-            _asks.AddOrUpdate(ActionName(action), 1, static (_, count) => count + 1);
+            Count(ActionName(action));
 
         return action;
+    }
+
+    /// <summary>Counts one ask of <paramref name="name"/> and completes every <see cref="AskedAtLeast"/> it reaches.</summary>
+    private void Count(string name)
+    {
+        var count = _asks.AddOrUpdate(name, 1, static (_, count) => count + 1);
+        List<TaskCompletionSource>? reached = null;
+        lock (_askWaitersGate)
+        {
+            for (var i = _askWaiters.Count - 1; i >= 0; i--)
+            {
+                var waiter = _askWaiters[i];
+                if (string.Equals(waiter.Action, name, StringComparison.OrdinalIgnoreCase) && count >= waiter.Times)
+                {
+                    (reached ??= []).Add(waiter.Signal);
+                    _askWaiters.RemoveAt(i);
+                }
+            }
+        }
+
+        foreach (var signal in reached ?? [])
+            signal.TrySetResult();
     }
 
     private static KeyValuePair<string, string>[] StatusFields(StatusChannel channel, string id) =>

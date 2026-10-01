@@ -2,6 +2,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verbara.Sdk.Live\Verbara.Sdk.Live.csproj" />
+    <!-- A refused Status seen from the session manager (CallSessionManagerRefusedStatusTests): the test drives the
+         Live harness, whose clock seam is internal to Live, so it lives here rather than in Sessions.Tests. -->
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Sessions\Verbara.Sdk.Sessions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -283,11 +283,23 @@ public sealed class AmiMessage
     /// <summary>True if this is a protocol identifier message.</summary>
     public bool IsProtocolIdentifier => _fields.ContainsKey("__ProtocolIdentifier");
 
-    /// <summary>True if this is an event message.</summary>
+    /// <summary>True if this is an event message: it carries an <c>Event</c> header.</summary>
+    /// <remarks>
+    /// An event may also carry a <c>Response</c> header — Asterisk's <c>OriginateResponse</c> (the originate's outcome)
+    /// and <c>ChallengeResponseFailed</c> (the digest a client sent) do, and a <c>UserEvent</c> carries whatever
+    /// headers its sender gave it. It is still an event, and <see cref="IsResponse"/> is <see langword="false"/> for it.
+    /// </remarks>
     public bool IsEvent => _fields.ContainsKey("Event");
 
-    /// <summary>True if this is a response message.</summary>
-    public bool IsResponse => _fields.ContainsKey("Response");
+    /// <summary>
+    /// True if this is a response message: it carries a <c>Response</c> header and no <c>Event</c> header.
+    /// </summary>
+    /// <remarks>
+    /// Every response Asterisk sends starts with <c>Response</c> and carries no <c>Event</c> header; a message that
+    /// carries both is an event (<see cref="IsEvent"/>), whose <c>Response</c> is one of its own fields, never the
+    /// answer to a pending action. In 2.6.1 and earlier this property was <see langword="true"/> for such an event.
+    /// </remarks>
+    public bool IsResponse => _fields.ContainsKey("Response") && !_fields.ContainsKey("Event");
 
     /// <summary>The event type name, or null if not an event.</summary>
     public string? EventType => this["Event"];

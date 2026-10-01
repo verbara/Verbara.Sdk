@@ -56,6 +56,7 @@ Use `dotnet-counters`, OpenTelemetry, or Prometheus to track these metrics.
 | `ami.events.received` | Counter | — | Total events received from Asterisk |
 | `ami.events.dropped` | Counter | > 0 with `reason=buffer_full` | Events the consumer never saw, tagged `reason`: `buffer_full` — dropped by a full buffer, one per event. **Action:** increase `EventPumpCapacity`; `caller_ending` — still buffered when the caller's `DisposeAsync`/`DisconnectAsync` ended the connection, one measurement per ending with the count. Expected; alert and tune on `reason=buffer_full` only ([migration](ami-caller-ending-buffered-events-migration.md)) |
 | `ami.events.dispatched` | Counter | — | Events successfully dispatched to observers |
+| `ami.events.handler_faults` | Counter | > 0 | `OnEvent` handler failures: a handler threw, or its task faulted, one per failure, each also logged as `[AMI_EVENT] OnEvent handler threw on <EventType>` at Warning. Delivery goes on. **Action:** fix the handler. Every `OnEvent` handler is awaited before the next event, so a slow one holds the pump whatever its position ([migration](onevent-await-all-migration.md)) |
 | `ami.event.dispatch` | Histogram (ms) | p99 > 50ms | Time to dispatch one event. High values indicate slow observers |
 | `ami.action.roundtrip` | Histogram (ms) | p99 > 2000ms | Action send-to-response time. High values indicate Asterisk overload |
 | `ami.reconnections` | Counter | > 0 | Connection drops. Investigate network or Asterisk stability |

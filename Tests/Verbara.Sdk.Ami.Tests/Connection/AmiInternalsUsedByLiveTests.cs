@@ -29,6 +29,11 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// <c>AmiConnection.SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome, CancellationToken)</c>, an
 /// <see cref="IAsyncEnumerable{T}"/> of <see cref="ManagerEvent"/>;
 /// </description></item>
+/// <item><description>
+/// <c>AmiConnection.SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome?, TimeSpan, CancellationToken)</c>,
+/// an <see cref="IAsyncEnumerable{T}"/> of <see cref="ManagerEvent"/>, which <c>OriginateAsync</c> calls with the
+/// originate's own <c>Timeout</c> (since 2.7.0);
+/// </description></item>
 /// <item><description><c>new EventActionOutcome()</c>;</description></item>
 /// <item><description><c>EventActionOutcome.Rejection</c>, a nullable <see cref="string"/>;</description></item>
 /// <item><description><c>EventActionOutcome.SessionEnded</c>, a <see cref="bool"/>;</description></item>
@@ -80,6 +85,10 @@ public sealed class AmiInternalsUsedByLiveTests
         Func<ManagerAction, EventActionOutcome, CancellationToken, IAsyncEnumerable<ManagerEvent>> send =
             connection.SendEventGeneratingActionAsync;
         var events = connection.SendEventGeneratingActionAsync(new StatusAction(), outcome, CancellationToken.None);
+
+        // The overload OriginateAsync calls, by its exact parameter list and return type; bound only, never enumerated.
+        Func<ManagerAction, EventActionOutcome?, TimeSpan, CancellationToken, IAsyncEnumerable<ManagerEvent>> sendWithin =
+            connection.SendEventGeneratingActionAsync;
         Exactly<IAsyncEnumerable<ManagerEvent>>(ref events);
 
         var read = ReadAllAsync(events);
@@ -99,6 +108,7 @@ public sealed class AmiInternalsUsedByLiveTests
         using (new AssertionScope())
         {
             send.Should().NotBeNull("the overload binds to the delegate Live's call site needs");
+            sendWithin.Should().NotBeNull("the overload binds to the delegate OriginateAsync's call site needs");
             onLost.Should().NotBeNull("the event takes the handler type Live's call site declares");
             fullyBooted.IsCompleted.Should().BeFalse("the peer never reported FullyBooted on this session");
             received.Should().BeEmpty("the peer's list was empty");

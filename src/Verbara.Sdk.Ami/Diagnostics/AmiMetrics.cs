@@ -35,6 +35,14 @@ public static class AmiMetrics
         Meter.CreateCounter<long>("ami.events.dispatched", "events",
             "AMI events dispatched to observers");
 
+    /// <summary>
+    /// <c>OnEvent</c> handler failures: a handler that threw, or whose task faulted or was cancelled, one per failure.
+    /// The failure is also logged at Warning with the event type; delivery goes on.
+    /// </summary>
+    internal static readonly Counter<long> HandlerFaults =
+        Meter.CreateCounter<long>("ami.events.handler_faults", "faults",
+            "OnEvent handler failures (a handler threw, or its task faulted); delivery goes on");
+
     /// <summary>Total AMI actions sent to Asterisk.</summary>
     public static readonly Counter<long> ActionsSent =
         Meter.CreateCounter<long>("ami.actions.sent", "actions",

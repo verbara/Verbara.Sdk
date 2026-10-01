@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Globalization;
+using System.Reflection;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Ami.Events;
+using Verbara.Sdk.Ami.Internal;
 using Verbara.Sdk.Enums;
 using FluentAssertions;
 using FluentAssertions.Execution;
@@ -412,48 +414,55 @@ public sealed class AmiConnectionBufferedEventsTests
     }
 
     /// <summary>
-    /// A loss whose drain leaves events undelivered with no caller involved: the held handler throws when its gate
-    /// opens, which ends the pump's consumer with <see cref="FaultedDrainBuffered"/> events still buffered. That is a
-    /// loss alone, so it reports no caller's discard: no <c>Discarded on caller ending</c> Warning and no
-    /// <c>reason=caller_ending</c> measurement. What the fault itself leaves behind is not asserted here.
+    /// A pump whose consumer stopped with <see cref="FaultedDrainBuffered"/> events still buffered, released by a
+    /// connection nobody ended: a loss alone, so the release reports no caller's discard — no <c>Discarded on caller
+    /// ending</c> Warning and no <c>reason=caller_ending</c> measurement — although the pump counts every one of them
+    /// as undelivered.
     /// </summary>
+    /// <remarks>
+    /// Pinned at pump level. A connection's dispatch guards every <c>OnEvent</c> handler, so no handler fault ends the
+    /// consumer of a connection's pump any more and a loss through a real connection leaves nothing undelivered: there
+    /// the release's check of the caller's ending could not be shown red. Here the pump's own handler, which the pump
+    /// does not guard, throws on its first event once the rest are buffered; the release under test is the
+    /// connection's, reached through <see cref="ReleasePump"/>. Removing the check of the lifetime token from it turns
+    /// this test red.
+    /// </remarks>
     [Fact]
-    public async Task LostConnection_ShouldReportNoCallerEndingDiscard_WhenAHandlerFaultsTheLossDrain()
+    public async Task ReleasePump_ShouldReportNoCallerEndingDiscard_WhenAPumpStoppedWithEventsBufferedAndNobodyEndedTheConnection()
     {
-        using var peerCts = new CancellationTokenSource(Bound * 2);
         using var dropped = new CallerEndingDrops();
-        var factory = new PipedSocketFactory();
         var logger = new CapturingLogger<AmiConnection>();
-        var connection = Create(factory, autoReconnect: false, logger);
+        var connection = Create(new PipedSocketFactory(), autoReconnect: false, logger);
+        var pump = new AsyncEventPump(FaultedDrainBuffered + 1);
         var first = new HeldDispatch();
         var dispatchCount = 0;
-        connection.OnEvent += async _ =>
+        pump.Start(async _ =>
         {
             if (Interlocked.Increment(ref dispatchCount) != 1)
                 return;
 
             first.Enter();
             await first.Gate;
-            throw new InvalidOperationException("The handler fails while the loss drains the buffer.");
-        };
-        var disconnected = logger.Logged("[AMI] Disconnected");
-        var socket = await ConnectAsync(connection, factory, peerCts);
-        (await socket.WriteEventAsync("FullyBooted")).Should().BeTrue("the peer sends the first event");
-        (await CompletesWithinBoundAsync(first.Entered)).Should().BeTrue("the handler receives it and holds its dispatch");
-        await BufferAsync(connection, socket, FaultedDrainBuffered, peerCts);
+            throw new InvalidOperationException("The pump's handler fails with events still buffered.");
+        });
+        pump.TryEnqueue(new PeerStatusEvent { Peer = PeerName(0) }).Should().BeTrue();
+        (await CompletesWithinBoundAsync(first.Entered)).Should().BeTrue("the handler receives the first event and holds it");
+        for (var i = 1; i <= FaultedDrainBuffered; i++)
+            pump.TryEnqueue(new PeerStatusEvent { Peer = PeerName(i) }).Should().BeTrue();
 
-        socket.CloseFromPeer();
         first.Open();
-        var ended = await CompletesWithinBoundAsync(disconnected);
+        var released = await CompletesWithinBoundAsync(ReleasePump(connection, pump));
 
         using (new AssertionScope())
         {
-            ended.Should().BeTrue("the peer's close ends the connection, and the release returns once the consumer has");
+            released.Should().BeTrue("the release returns once the stopped consumer has");
+            pump.DroppedOnDispose.Should().Be(FaultedDrainBuffered,
+                $"the consumer stopped at the fault, so the release finds all {FaultedDrainBuffered} buffered events undelivered");
+            Volatile.Read(ref dispatchCount).Should().Be(1, "the fault stopped the pump's consumer after its first event");
             logger.Entries.Where(e => e.Format == DiscardedFormat).Should().BeEmpty(
-                "nobody ended this connection: a loss never logs a caller's discard, whatever its drain left undelivered");
+                "nobody ended this connection: a release without a caller's ending never logs a caller's discard");
             dropped.Measurements.Should().NotContain(FaultedDrainBuffered,
-                "a loss records nothing on ami.events.dropped with reason=caller_ending");
-            connection.State.Should().Be(AmiConnectionState.Disconnected);
+                "a release without a caller's ending records nothing on ami.events.dropped with reason=caller_ending");
         }
     }
 
@@ -776,6 +785,18 @@ public sealed class AmiConnectionBufferedEventsTests
         public IReadOnlyList<long> Measurements => [.. _measurements];
 
         public void Dispose() => _listener.Dispose();
+    }
+
+    /// <summary>
+    /// The connection's release of a detached event pump (<c>AmiConnection.ReleasePumpAsync</c>), private and reached
+    /// by reflection: a test project is not AOT-published, and an <c>extern</c> accessor reads as unmanaged code to
+    /// the code scan.
+    /// </summary>
+    private static Task ReleasePump(AmiConnection connection, AsyncEventPump pump)
+    {
+        var release = typeof(AmiConnection).GetMethod("ReleasePumpAsync", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("AmiConnection has no private ReleasePumpAsync to release a pump with.");
+        return (Task)release.Invoke(connection, [pump])!;
     }
 
     private sealed record LogEntry(LogLevel Level, string? Format, string Line, IReadOnlyDictionary<string, object?> State);

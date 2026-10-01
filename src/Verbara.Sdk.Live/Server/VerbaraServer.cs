@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -42,6 +43,10 @@ internal static partial class VerbaraServerLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "[LIVE] {Action} never registered: still refused {BudgetSeconds} s after the load's first refusal, so the load completes without it (Asterisk: {Message}). An AMI user with 'system' in read receives FullyBooted and is not kept waiting")]
     public static partial void ActionNeverRegistered(ILogger logger, string action, int budgetSeconds, string message);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[LIVE] Status refused: {Message}; the channel table was not reconciled, so no held channel was removed and no call was ended. The AMI user needs 'system', 'call' or 'reporting' in write for a load to reconcile the channels")]
+    public static partial void StatusRefused(ILogger logger, string message);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "[LIVE] Initial state load interrupted: its AMI session ended and the connection is {State}, so the start returns and the reload that follows the reconnect loads the state ({Reason})")]
@@ -313,6 +318,13 @@ public sealed class VerbaraServer : IVerbaraServer
     /// no call, and it never returns as if the state it holds were complete. The queues and agents it had read stay
     /// until the next load. <see cref="StartAsync"/>, by contrast, returns when the reconnect's reload will follow.
     /// </para>
+    /// <para>
+    /// When Asterisk refuses the <c>Status</c> request, as it does for an AMI user whose write classes allow none of
+    /// <c>system</c>, <c>call</c> or <c>reporting</c>, the load does not throw and removes no channel: it logs the refusal
+    /// at <c>Warning</c> and goes on to the queues and the agents. A channel that ended unseen stays in the table until
+    /// a load whose <c>Status</c> is answered. Only an <see cref="AmiConnection"/> reports the refusal; over any other
+    /// <see cref="IAmiConnection"/> it reads as a snapshot with no channels.
+    /// </para>
     /// </remarks>
     /// <exception cref="AmiNotConnectedException">
     /// The connection is not established, or its AMI session ended before the load completed.
@@ -339,8 +351,11 @@ public sealed class VerbaraServer : IVerbaraServer
             // Populate channels from StatusAction. Buffer first, then reconcile: a snapshot that
             // throws, is cancelled or never completes must leave every held channel alone, and it can
             // only do that if nothing was mutated while it was being read (ADR-0062, design D1).
-            var (admittedThrough, channelSnapshot) = await ReadChannelSnapshotAsync(session, states, cancellationToken);
-            Channels.ReconcileWithSnapshot(channelSnapshot, admittedThrough);
+            // A Status Asterisk refused yields no snapshot: a refusal is no evidence that any channel is gone, so the
+            // table is left as it is and the load goes on to the queues and the agents.
+            var (admittedThrough, channelSnapshot) = await ReadChannelSnapshotAsync(session, states, activity, cancellationToken);
+            if (channelSnapshot is not null)
+                Channels.ReconcileWithSnapshot(channelSnapshot, admittedThrough);
 
             request = "QueueStatus";
             await LoadQueuesAsync(session, states, cancellationToken);
@@ -419,9 +434,18 @@ public sealed class VerbaraServer : IVerbaraServer
     /// connection ends it quietly, with the channels listed so far. Over an <see cref="AmiConnection"/>, which says so,
     /// it throws instead of returning that partial list; any other <see cref="IAmiConnection"/> is read as before.
     /// </para>
+    /// <para>
+    /// A <c>Status</c> Asterisk refused (<c>Response: Error</c>, such as <c>Permission denied</c> for an AMI user whose
+    /// write classes allow none of <c>system</c>, <c>call</c> or <c>reporting</c>) lists no channel, and that is no
+    /// evidence that any channel is gone. Over an <see cref="AmiConnection"/>, which says so, it returns no snapshot
+    /// (<see langword="null"/>), logs the refusal once at <c>Warning</c> and tags the load's activity with it; the
+    /// caller then reconciles nothing. Any other <see cref="IAmiConnection"/> cannot tell a refusal from an empty
+    /// answer and is read as before.
+    /// </para>
     /// </summary>
-    private async ValueTask<(long AdmittedThrough, List<ChannelSnapshotEntry> Entries)>
-        ReadChannelSnapshotAsync(LoadSession? session, LoadConnectionStates states, CancellationToken cancellationToken)
+    private async ValueTask<(long AdmittedThrough, List<ChannelSnapshotEntry>? Entries)>
+        ReadChannelSnapshotAsync(
+            LoadSession? session, LoadConnectionStates states, Activity? activity, CancellationToken cancellationToken)
     {
         // Before the request, never after: a mark read once the answer is in hand would place every
         // channel that arrived meanwhile at or below it, and hand the reconciliation the power to
@@ -477,6 +501,15 @@ public sealed class VerbaraServer : IVerbaraServer
         // Nor is the end of the session: reconciling what it cut short would end every call it had not listed yet.
         if (outcome is { SessionEnded: true })
             throw states.Stop("the AMI session ended while the live state load was reading Status");
+
+        // Nor is a refusal: Asterisk listed nothing because it would not answer, not because nothing is up.
+        if (outcome?.Rejection is { } rejection)
+        {
+            var message = rejection.Length == 0 ? "(Asterisk sent no message)" : rejection;
+            VerbaraServerLog.StatusRefused(_logger, message);
+            LiveActivitySource.SetStatusRefused(activity, message);
+            return (admittedThrough, null);
+        }
 
         return (admittedThrough, snapshot);
     }
@@ -722,6 +755,14 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>
     /// Originate an outbound call asynchronously.
     /// </summary>
+    /// <remarks>
+    /// Returns the outcome Asterisk reports in its <c>OriginateResponse</c>, once the destination answers or
+    /// <paramref name="timeout"/> (30 s when not given) runs out. Over an <see cref="AmiConnection"/> the wait for it is
+    /// bounded by <paramref name="timeout"/> plus the connection's <c>DefaultResponseTimeout</c>, not by its
+    /// <c>DefaultEventTimeout</c>, so a destination that rings longer than the event timeout still returns its outcome;
+    /// past that bound the call throws <see cref="OperationCanceledException"/>. Over any other
+    /// <see cref="IAmiConnection"/> the wait is that connection's own.
+    /// </remarks>
     public async ValueTask<OriginateResult> OriginateAsync(
         string channel, string context, string extension, int priority = 1,
         string? callerId = null, TimeSpan? timeout = null,
@@ -729,6 +770,7 @@ public sealed class VerbaraServer : IVerbaraServer
     {
         using var activity = LiveActivitySource.StartOriginate(channel, context, extension);
 
+        var ringFor = timeout ?? TimeSpan.FromMilliseconds(30000);
         var action = new OriginateAction
         {
             Channel = channel,
@@ -736,11 +778,19 @@ public sealed class VerbaraServer : IVerbaraServer
             Exten = extension,
             Priority = priority,
             CallerId = callerId,
-            Timeout = timeout.HasValue ? (long)timeout.Value.TotalMilliseconds : 30000,
+            Timeout = (long)ringFor.TotalMilliseconds,
             IsAsync = true
         };
 
-        await foreach (var evt in _connection.SendEventGeneratingActionAsync(action, cancellationToken))
+        // Asterisk reports the outcome once the destination answers or the originate's Timeout runs out, which can be
+        // long after DefaultEventTimeout (5 s by default): over an AmiConnection the wait is bounded by that Timeout
+        // plus DefaultResponseTimeout instead. Any other IAmiConnection keeps the public overload and its own bound.
+        var events = _connection is AmiConnection amiConnection
+            ? amiConnection.SendEventGeneratingActionAsync(
+                action, outcome: null, ringFor, cancellationToken)
+            : _connection.SendEventGeneratingActionAsync(action, cancellationToken);
+
+        await foreach (var evt in events)
         {
             if (evt is OriginateResponseEvent ore)
             {

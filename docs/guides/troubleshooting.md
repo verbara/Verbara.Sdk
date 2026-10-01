@@ -99,6 +99,16 @@ See [High-Load Tuning Guide](high-load-tuning.md) for sizing recommendations.
 1. Verify AMI user has `read = all` (or specific classes like `read = system,call,agent`: queue events are in the `agent` class, since `queue` is not an AMI class, and `system` carries `FullyBooted`, which the live state's load waits for)
 2. Check ARI application name matches your Stasis app
 3. Ensure you subscribe before the events fire (subscribe before `ConnectAsync` or use `ReplaySubject`)
+4. Events with both an `Event` and a `Response` header (`OriginateResponse`, `ChallengeResponseFailed`, a `UserEvent` sent with a `Response` header) were taken for responses and never delivered up to 2.6.1. Upgrade.
+5. Every event of a session stopped after one `OnEvent` handler threw: up to 2.6.1 a throwing or faulting handler ended delivery silently. Upgrade; a failing handler is now logged as `[AMI_EVENT] OnEvent handler threw on <EventType>` at Warning, counted on `ami.events.handler_faults`, and delivery goes on.
+
+### Every originate times out after 5 s
+
+**Symptoms:** `VerbaraServer.OriginateAsync` throws `OperationCanceledException` after `DefaultEventTimeout` (5 s by default), even though the call was placed; `SendEventGeneratingActionAsync` with an `OriginateAction` never yields its `OriginateResponse`.
+
+**Cause:** up to 2.6.1 the SDK took `OriginateResponse`, which carries a `Response` header, for an action response and dropped it, so the outcome never arrived. And the wait was bounded by `DefaultEventTimeout`, shorter than a destination that rings.
+
+**Solution:** upgrade. `OriginateAsync` then returns the outcome once the destination answers or the originate's `Timeout` (30 s when not given) runs out; over an `AmiConnection` it waits up to that `Timeout` plus `DefaultResponseTimeout`, whatever `DefaultEventTimeout` is. Remove any workaround that raised `DefaultEventTimeout` or caught the timeout for this.
 
 ---
 
@@ -138,6 +148,10 @@ Measured on 2026-09-28 against Asterisk 20.20.1, 22.9.0 and 23.4.1, with raw AMI
 - With `AutoReconnect` off, or once the reconnect has given up or the connection has been disconnected, `StartAsync` throws `AmiNotConnectedException`: nothing will reload the state.
 - `StartAsync` called before the connection is established (`Initial`, or `Connecting` while a connect attempt runs) throws `AmiNotConnectedException`, as it always did. Call it after `ConnectAsync` returns.
 - A direct call to `RequestInitialStateAsync` throws `AmiNotConnectedException` whenever its session ends before the load completes, reconnecting or not.
+
+**Live lost its channels after a reconnect** (up to 2.6.1). When Asterisk refused the load's `Status` — `Response: Error`, `Permission denied` for an AMI user whose `write` allows none of `system`, `call` or `reporting` — the load read the refusal as "no channels up" and removed every channel it held, ending every live call in `Verbara.Sdk.Sessions`. Upgrade: a refused `Status` now removes no channel, the load goes on to the queues and the agents, and it logs `[LIVE] Status refused: <Asterisk's message>; the channel table was not reconciled …` at Warning and tags the load's activity `live.status.refused`. Then grant the user `Status`: put `system`, `call` or `reporting` in its `write` line in `manager.conf` (`write = all` includes them). Only an `AmiConnection` reports the refusal; an `IAmiConnection` of your own that wraps one still reads it as an empty snapshot.
+
+**A channel that ended during an outage stays in Live.** With an AMI user that may not run `Status`, no load can reconcile the channel table: a call that ended while the connection was down stays held until its own `Hangup` is seen, which never comes for a hangup lost in the outage. The only sign is the `[LIVE] Status refused` Warning on every load. Grant the user `Status` as above.
 
 ### Detecting an AMI loss
 
