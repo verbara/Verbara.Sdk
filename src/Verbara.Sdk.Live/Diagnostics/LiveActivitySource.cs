@@ -35,6 +35,13 @@ public static class LiveActivitySource
         activity.SetStatus(ActivityStatusCode.Ok);
     }
 
+    /// <summary>
+    /// Tags a state load whose <c>Status</c> Asterisk refused with Asterisk's message, so a trace shows why the load
+    /// left the channel table as it was.
+    /// </summary>
+    internal static void SetStatusRefused(Activity? activity, string message) =>
+        activity?.SetTag("live.status.refused", message);
+
     internal static Activity? StartOriginate(string channel, string context, string extension)
     {
         var activity = Source.StartActivity($"live originate {channel}", ActivityKind.Client);

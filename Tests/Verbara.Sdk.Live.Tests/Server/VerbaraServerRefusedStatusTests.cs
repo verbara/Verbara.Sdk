@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Live.Tests.Harness;
 using FluentAssertions;
@@ -24,6 +25,7 @@ namespace Verbara.Sdk.Live.Tests.Server;
 public sealed class VerbaraServerRefusedStatusTests
 {
     private const string StatusRefused = "[LIVE] Status refused";
+    private const string StatusRefusedTag = "live.status.refused";
 
     private static IReadOnlyList<StatusChannel> OneCallTwoLegs() =>
     [
@@ -103,6 +105,46 @@ public sealed class VerbaraServerRefusedStatusTests
             refusals.Should().OnlyContain(e => e.Level == LogLevel.Warning, "a channel table left unreconciled is a Warning");
             refusals.Should().OnlyContain(e => e.Line.StartsWith(StatusRefused, StringComparison.Ordinal),
                 $"the line names what happened: {StatusRefused}");
+            peer.Fault.Should().BeNull("the peer served the session without failing");
+        }
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldTagTheLoadsActivityWithTheRefusal_WhenAsteriskRefusesStatus()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true, StatusChannels = OneCallTwoLegs() };
+        await using var run = await Run.StartAsync(peer);
+
+        // The loads of this test run under a parent of its own, so a load another test runs at the same time is not
+        // read as one of this test's.
+        using var testSource = new ActivitySource("Verbara.Sdk.Live.Tests.RefusedStatus");
+        var loads = new ConcurrentQueue<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name is "Verbara.Sdk.Live" or "Verbara.Sdk.Live.Tests.RefusedStatus",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity => loads.Enqueue(activity),
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        string? parentId;
+        using (var parent = testSource.StartActivity("refused-status test"))
+        {
+            parentId = parent?.Id;
+            peer.StatusRefusedFromAsk = 3;
+            await run.Server.RequestInitialStateAsync().AsTask().WaitAsync(Run.Bound);
+            await run.Server.RequestInitialStateAsync().AsTask().WaitAsync(Run.Bound);
+        }
+
+        var mine = loads.Where(a => a.OperationName == "live state-load" && a.ParentId == parentId).ToList();
+        using (new AssertionScope())
+        {
+            parentId.Should().NotBeNull("the test's parent activity was sampled");
+            mine.Should().HaveCount(2, "the test ran two loads under its parent");
+            mine.Should().ContainSingle(a => a.GetTagItem(StatusRefusedTag) == null,
+                "the load whose Status Asterisk answered carries no refusal");
+            mine.Should().ContainSingle(a => Equals(a.GetTagItem(StatusRefusedTag), BootingAsterisk.PermissionDenied),
+                "the refused load's trace says why the channel table was left alone, with Asterisk's message");
             peer.Fault.Should().BeNull("the peer served the session without failing");
         }
     }
