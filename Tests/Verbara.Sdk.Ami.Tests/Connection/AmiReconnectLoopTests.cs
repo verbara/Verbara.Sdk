@@ -350,6 +350,60 @@ public sealed class AmiReconnectLoopTests
         factory.Created.Should().HaveCount(socketsBeforeConnect, "the refused connect creates no socket");
     }
 
+    /// <summary>
+    /// The loop's backoff cannot be computed: the options were valid when the connection was built, and were changed
+    /// afterwards, through the object the connection holds, to a multiplier below 1. The loop must not die where nobody
+    /// sees it. It writes one <c>ReconnectBackoffFailed</c> entry with the failure, makes no connect, releases what the
+    /// lost connection held and ends <see cref="AmiConnectionState.Disconnected"/>. The entry is matched by its event
+    /// name, never by counting <c>Error</c> entries: the loss writes its own.
+    /// </summary>
+    [Fact]
+    public async Task ReconnectLoop_ShouldEndDisconnectedWithOneBackoffError_WhenTheBackoffCannotBeComputed()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory { ConnectsAccepted = 1 };
+        var logger = new RecordingLogger();
+        var options = new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = true,
+            ReconnectInitialDelay = Backoff,
+            ReconnectMaxDelay = Backoff,
+        };
+        var connection = new AmiConnection(Options.Create(options), factory, logger);
+        // Changed after construction, so the constructor's check never saw it.
+        options.ReconnectMultiplier = 0.5;
+        var first = await ConnectAsync(connection, factory, peerCts);
+        var backoffFailedBeforeTheLoss = logger.Named("ReconnectBackoffFailed").Count;
+        var disconnected = logger.Logged("[AMI] Disconnected");
+
+        first.CloseFromPeer();
+        var ended = await CompletesWithinBoundAsync(disconnected);
+
+        var sockets = factory.Created;
+        var backoffFailed = logger.Named("ReconnectBackoffFailed");
+        using (new AssertionScope())
+        {
+            ended.Should().BeTrue("a loop whose backoff cannot be computed ends the connection instead of staying Reconnecting");
+            connection.State.Should().Be(AmiConnectionState.Disconnected);
+            backoffFailedBeforeTheLoss.Should().Be(0, "nothing failed before the loss");
+            backoffFailed.Should().ContainSingle("the failure is logged exactly once, not once per iteration");
+            if (backoffFailed.Count == 1)
+            {
+                backoffFailed[0].Level.Should().Be(LogLevel.Error);
+                backoffFailed[0].Exception.Should().BeOfType<ArgumentOutOfRangeException>("the entry carries what the backoff threw");
+            }
+
+            sockets.Should().HaveCount(1, "the failure is not a failed connect attempt: the loop makes no connect");
+            Unreleased(sockets).Should().BeEmpty("the lost socket is released exactly once when the loop ends");
+        }
+
+        (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
+    }
+
     /// <summary>Each socket not disposed exactly once, described by its place in creation order.</summary>
     private static List<string> Unreleased(IReadOnlyList<PipedSocket> sockets) =>
         [.. sockets
@@ -498,6 +552,42 @@ public sealed class AmiReconnectLoopTests
             {
                 Act?.Invoke();
             }
+        }
+    }
+
+    /// <summary>
+    /// Keeps every entry with its event name, level and exception, and signals a line as <see cref="SignalingLogger{T}"/>
+    /// does, so a test can match an entry by its <see cref="EventId.Name"/> instead of its text.
+    /// </summary>
+    private sealed class RecordingLogger : ILogger<AmiConnection>
+    {
+        private readonly SignalingLogger<AmiConnection> _signals = new();
+        private readonly Lock _gate = new();
+        private readonly List<(string? Name, LogLevel Level, Exception? Exception)> _entries = [];
+
+        public Task Logged(string fragment) => _signals.Logged(fragment);
+
+        public List<(string? Name, LogLevel Level, Exception? Exception)> Named(string eventName)
+        {
+            lock (_gate)
+            {
+                return [.. _entries.Where(e => e.Name == eventName)];
+            }
+        }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            lock (_gate)
+            {
+                _entries.Add((eventId.Name, logLevel, exception));
+            }
+
+            _signals.Log(logLevel, eventId, state, exception, formatter);
         }
     }
 }

@@ -21,6 +21,29 @@ public sealed class AmiConnectionFactoryTests
     private const string LoginRejected = "the peer rejects the login";
 
     [Fact]
+    public async Task Create_ShouldThrowNamingTheOption_WhenAReconnectValueIsUnusableAndAutoReconnectIsOn()
+    {
+        var socketFactory = Substitute.For<ISocketConnectionFactory>();
+        var sut = new AmiConnectionFactory(socketFactory, NullLoggerFactory.Instance);
+        var options = AmiConnectionOptionsValidatorTests.ReconnectOptions("ReconnectMultiplier = 0.5", autoReconnect: true);
+        IAmiConnection? created = null;
+
+        var act = () => created = sut.Create(options);
+
+        try
+        {
+            act.Should().Throw<ArgumentOutOfRangeException>(
+                    "the factory constructs through the connection's constructor, which rejects a multiplier below 1 with AutoReconnect on")
+                .Which.ParamName.Should().Be(nameof(AmiConnectionOptions.ReconnectMultiplier));
+        }
+        finally
+        {
+            if (created is not null)
+                await created.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public void Create_ShouldReturnAmiConnection()
     {
         var socketFactory = Substitute.For<ISocketConnectionFactory>();

@@ -650,6 +650,50 @@ public sealed class AriClientStateTests
     }
 
     [Fact]
+    public async Task ReconnectLoop_ShouldEndFaultedWithOneBackoffError_WhenTheBackoffCannotBeComputed()
+    {
+        // The options were valid when the client was built and were changed afterwards, through the object the
+        // client holds, to a maximum delay below the initial one. The loop must not die where nobody sees it: one
+        // ReconnectBackoffFailed entry with the failure, no dial, and Faulted. The entry is matched by its event
+        // name, never by counting Error entries: the drop writes its own WebSocketError.
+        var logger = new RecordingLogger();
+        await using var peer = new ReconnectPeer(answer: _ => false);
+        var options = ReconnectOptions(peer.Port);
+        var sut = new AriClient(options, logger);
+        options.Value.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
+        options.Value.ReconnectMaxDelay = TimeSpan.FromMilliseconds(500);
+
+        try
+        {
+            await sut.ConnectAsync();
+            var loop = sut.EventLoop!;
+            // Bounded; neither a timeout nor the loop's own exception is thrown here: both are asserted below.
+            await loop.WaitAsync(WaitLimit).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            var ended = loop.IsCompleted;
+
+            var backoffFailed = logger.Entries.Where(e => e.EventId.Name == "ReconnectBackoffFailed").ToList();
+            using (new AssertionScope())
+            {
+                ended.Should().BeTrue("the loop ends instead of reconnecting");
+                loop.IsFaulted.Should().BeFalse("the loop ends in its terminal state, not with an exception nobody observes");
+                sut.State.Should().Be(AriConnectionState.Faulted, "a loop whose backoff cannot be computed ends Faulted, not Reconnecting");
+                backoffFailed.Should().ContainSingle("the failure is logged exactly once, not once per iteration");
+                if (backoffFailed.Count == 1)
+                {
+                    backoffFailed[0].Level.Should().Be(LogLevel.Error);
+                    backoffFailed[0].Exception.Should().BeOfType<ArgumentOutOfRangeException>("the entry carries what the backoff threw");
+                }
+
+                peer.ReconnectDials.Should().Be(0, "the failure is not a failed dial: no reconnect dial is made");
+            }
+        }
+        finally
+        {
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task DisposeAsync_ShouldStopReconnecting_WhenAReconnectUpgradeIsHeld()
     {
         // The reconnect loop is inside a dial the far end never answers. Disposal cancels that dial

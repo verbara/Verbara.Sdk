@@ -494,5 +494,42 @@ public sealed class AmiConnectionTests : IAsyncLifetime
         // cycle works without errors (the fix is structural — a bool guard).
     }
 
+    [Theory]
+    [MemberData(nameof(AmiConnectionOptionsValidatorTests.ValuesAConstructorRejects), MemberType = typeof(AmiConnectionOptionsValidatorTests))]
+    public async Task Ctor_ShouldThrowNamingTheOption_WhenAReconnectValueIsUnusableAndAutoReconnectIsOn(string value, string option)
+    {
+        var options = AmiConnectionOptionsValidatorTests.ReconnectOptions(value, autoReconnect: true);
+        AmiConnection? created = null;
+
+        var act = () => created = new AmiConnection(
+            Options.Create(options), Substitute.For<ISocketConnectionFactory>(), NullLogger<AmiConnection>.Instance);
+
+        try
+        {
+            act.Should().Throw<ArgumentOutOfRangeException>(
+                    $"with AutoReconnect on, {value} is a value the reconnect backoff cannot use, and no validator runs on this path")
+                .Which.ParamName.Should().Be(option, "the error names the option to fix");
+        }
+        finally
+        {
+            if (created is not null)
+                await created.DisposeAsync();
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(AmiConnectionOptionsValidatorTests.ValuesAConstructorRejects), MemberType = typeof(AmiConnectionOptionsValidatorTests))]
+    public async Task Ctor_ShouldSucceed_WhenAutoReconnectIsOffWithUnusableValues(string value, string option)
+    {
+        var options = AmiConnectionOptionsValidatorTests.ReconnectOptions(value, autoReconnect: false);
+
+        var connection = new AmiConnection(
+            Options.Create(options), Substitute.For<ISocketConnectionFactory>(), NullLogger<AmiConnection>.Instance);
+
+        connection.State.Should().Be(AmiConnectionState.Initial,
+            $"without AutoReconnect the backoff never runs, so {value} ({option}) is not checked at construction");
+        await connection.DisposeAsync();
+    }
+
     private sealed class TestAction : ManagerAction;
 }

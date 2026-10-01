@@ -111,6 +111,22 @@ public sealed class AriClientOptionsValidatorTests
         { "ReconnectInitialDelay = -1 s", nameof(AriClientOptions.ReconnectInitialDelay) },
     };
 
+    /// <summary>
+    /// What a constructor rejects with <c>AutoReconnect</c> on: every value of <see cref="UnusableReconnectValues"/>, and a
+    /// negative attempt limit, which the validator rejects through its range attribute but a constructor must check itself.
+    /// </summary>
+    public static TheoryData<string, string> ValuesAConstructorRejects
+    {
+        get
+        {
+            var data = new TheoryData<string, string>();
+            foreach (var row in (IEnumerable<object[]>)UnusableReconnectValues)
+                data.Add((string)row[0], (string)row[1]);
+            data.Add("MaxReconnectAttempts = -1", nameof(AriClientOptions.MaxReconnectAttempts));
+            return data;
+        }
+    }
+
     /// <summary>The boundary values the backoff accepts: a multiplier of exactly 1, a maximum equal to the initial delay, a zero initial delay.</summary>
     public static TheoryData<string> BoundaryReconnectValues => new()
     {
@@ -212,6 +228,7 @@ public sealed class AriClientOptionsValidatorTests
                 options.ReconnectMaxDelay = TimeSpan.FromMilliseconds(500);
                 break;
             case "ReconnectInitialDelay = -1 s": options.ReconnectInitialDelay = TimeSpan.FromSeconds(-1); break;
+            case "MaxReconnectAttempts = -1": options.MaxReconnectAttempts = -1; break;
             case "ReconnectMultiplier = 1": options.ReconnectMultiplier = 1.0; break;
             case "ReconnectMaxDelay = ReconnectInitialDelay = 1 s":
                 options.ReconnectInitialDelay = TimeSpan.FromSeconds(1);
