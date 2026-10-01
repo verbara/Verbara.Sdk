@@ -29,6 +29,15 @@ public sealed class BridgeManager
     private readonly ConcurrentDictionary<string, AsteriskBridge> _bridgeByChannel = new();
     private readonly ILogger _logger;
 
+    // How long a destroyed bridge stays reachable through GetById before it may be released. Ten minutes, mirroring
+    // SessionOptions.CompletedRetention's default; internal, not a public option. Settable by tests (via
+    // InternalsVisibleTo).
+    internal TimeSpan DestroyedRetention { get; set; } = TimeSpan.FromMinutes(10);
+
+    // The clock that stamps a bridge's destruction. Settable by tests (via InternalsVisibleTo) to drive the retention
+    // on a manual clock.
+    internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
     /// <summary>Fires when a new bridge is created.</summary>
     public event Action<AsteriskBridge>? BridgeCreated;
 
@@ -130,7 +139,7 @@ public sealed class BridgeManager
 
         lock (bridge.SyncRoot)
         {
-            bridge.DestroyedAt = DateTimeOffset.UtcNow;
+            bridge.DestroyedAt = TimeProvider.GetUtcNow();
             foreach (var channelId in bridge.Channels.Keys)
                 _bridgeByChannel.TryRemove(channelId, out _);
         }
