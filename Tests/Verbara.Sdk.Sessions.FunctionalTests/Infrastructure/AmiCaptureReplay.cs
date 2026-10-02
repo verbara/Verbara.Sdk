@@ -77,6 +77,29 @@ internal static class AmiCaptureReplay
         "queue-reload-asterisk-23.4.1.raw",
     ];
 
+    /// <summary>
+    /// The queue-exit captures, one per Asterisk version (20.20.1, 22.9.0, 23.4.1), read with the <c>dialplan</c>
+    /// class: one call of each way of leaving a queue (answered, a hang-up while waiting, the queue's timeout, the queue
+    /// emptying, a key, a redirect and a withdrawal), each in a queue of its own.
+    /// </summary>
+    public static readonly IReadOnlyList<string> QueueExitCaptures =
+    [
+        "queue-exits-asterisk-20.20.1.raw",
+        "queue-exits-asterisk-22.9.0.raw",
+        "queue-exits-asterisk-23.4.1.raw",
+    ];
+
+    /// <summary>
+    /// The queue-loop captures, one per Asterisk version (20.20.1, 22.9.0, 23.4.1), read with the <c>dialplan</c>
+    /// class: one caller timed out of the same queue three times, with an announcement after each, then answered.
+    /// </summary>
+    public static readonly IReadOnlyList<string> QueueLoopCaptures =
+    [
+        "queue-loop-asterisk-20.20.1.raw",
+        "queue-loop-asterisk-22.9.0.raw",
+        "queue-loop-asterisk-23.4.1.raw",
+    ];
+
     private const string MarkerUserEvent = "N5Marker";
     private const string BeforeFirstMarker = "(before-the-first-marker)";
 
@@ -416,6 +439,71 @@ internal static class AmiCaptureReplay
             await manager.DisposeAsync();
             await server.DisposeAsync();
         }
+    }
+
+    /// <summary>
+    /// Replays <paramref name="fixture"/> (a file name in <c>Recordings/asterisk-ami/</c>) into a fresh server, session
+    /// manager and <see cref="QueueSessionTracker"/>, and reads beside it, per queue, what Asterisk reported in the same
+    /// capture: its <c>QueueCallerAbandon</c>s, and its <c>QUEUESTATUS=TIMEOUT</c>s, each attributed to the queue the
+    /// caller's channel last left. After each <c>QueueCallerLeave</c> it reads how many calls the left queue counts as
+    /// waiting.
+    /// </summary>
+    public static async Task<QueueExitReplay> ReplayQueueExitsAsync(string fixture)
+    {
+        var options = new SessionOptions();
+        await using var rig = await ReplayRig.StartAsync(options);
+        using var tracker = new QueueSessionTracker(rig.Manager, Options.Create(options));
+
+        var lastLeftQueue = new Dictionary<string, string>(StringComparer.Ordinal);
+        var asteriskAbandons = new Dictionary<string, int>(StringComparer.Ordinal);
+        var asteriskTimeouts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var waitingAfterLeaves = new List<(string Queue, int Waiting)>();
+        var swallowed = new List<SwallowedObserverException>();
+
+        await foreach (var evt in ReadEventsAsync(FixturePath(fixture)))
+        {
+            var fields = evt.RawFields;
+            var uniqueId = fields?.GetValueOrDefault("Uniqueid");
+            var queue = fields?.GetValueOrDefault("Queue");
+            switch (evt.EventType)
+            {
+                case "QueueCallerAbandon" when queue is not null:
+                    asteriskAbandons[queue] = asteriskAbandons.GetValueOrDefault(queue) + 1;
+                    break;
+                case "QueueCallerLeave" when queue is not null && uniqueId is not null:
+                    lastLeftQueue[uniqueId] = queue;
+                    break;
+                case "VarSet" when fields?.GetValueOrDefault("Variable") == "QUEUESTATUS"
+                                   && fields.GetValueOrDefault("Value") == "TIMEOUT"
+                                   && uniqueId is not null:
+                    var timedOutOf = lastLeftQueue.TryGetValue(uniqueId, out var left)
+                        ? left
+                        : throw new InvalidOperationException(
+                            $"{fixture}: QUEUESTATUS=TIMEOUT on {uniqueId}, which left no queue before it.");
+                    asteriskTimeouts[timedOutOf] = asteriskTimeouts.GetValueOrDefault(timedOutOf) + 1;
+                    break;
+            }
+
+            if (rig.Deliver(evt) is { } thrown)
+                swallowed.Add(new SwallowedObserverException(queue ?? "", evt.EventType ?? "", thrown));
+
+            if (evt.EventType == "QueueCallerLeave" && queue is not null)
+                waitingAfterLeaves.Add((queue, tracker.GetByQueueName(queue)?.CallsWaiting ?? 0));
+        }
+
+        var queues = tracker.ActiveQueues
+            .Select(q => q.QueueName)
+            .Concat(asteriskAbandons.Keys)
+            .Concat(asteriskTimeouts.Keys)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .Select(name => tracker.GetByQueueName(name) is { } q
+                ? new QueueExitCount(name, q.CallsOffered, q.CallsAnswered, q.CallsAbandoned, q.CallsTimedOut, q.CallsWaiting,
+                    asteriskAbandons.GetValueOrDefault(name), asteriskTimeouts.GetValueOrDefault(name))
+                : new QueueExitCount(name, 0, 0, 0, 0, 0, asteriskAbandons.GetValueOrDefault(name), asteriskTimeouts.GetValueOrDefault(name)))
+            .ToList();
+
+        return new QueueExitReplay(fixture, queues, waitingAfterLeaves, swallowed);
     }
 
     /// <summary>
@@ -1157,4 +1245,37 @@ internal sealed class QueueReloadReplay(
     private CapturedQueueFrame Nth(string eventType, int ordinal) =>
         CallerQueueFrames.Where(f => f.EventType == eventType).ElementAtOrDefault(ordinal - 1)
         ?? throw new InvalidOperationException($"{Fixture}: the caller has no {eventType} #{ordinal}.");
+}
+
+/// <summary>
+/// One queue after a <see cref="AmiCaptureReplay.ReplayQueueExitsAsync"/>: what the tracker counts, and what Asterisk
+/// reported for it in the same capture.
+/// </summary>
+internal sealed record QueueExitCount(
+    string Queue, int Offered, int Answered, int Abandoned, int TimedOut, int Waiting, int AsteriskAbandons, int AsteriskTimeouts);
+
+/// <summary>What one <see cref="AmiCaptureReplay.ReplayQueueExitsAsync"/> produced.</summary>
+internal sealed class QueueExitReplay(
+    string fixture,
+    IReadOnlyList<QueueExitCount> queues,
+    IReadOnlyList<(string Queue, int Waiting)> waitingAfterLeaves,
+    IReadOnlyList<SwallowedObserverException> observerExceptions)
+{
+    public string Fixture { get; } = fixture;
+
+    /// <summary>Every queue the tracker counted or Asterisk reported an abandon or a timeout for, by name.</summary>
+    public IReadOnlyList<QueueExitCount> Queues { get; } = queues;
+
+    /// <summary>After each <c>QueueCallerLeave</c>, in capture order, how many calls the left queue counted waiting.</summary>
+    public IReadOnlyList<(string Queue, int Waiting)> WaitingAfterLeaves { get; } = waitingAfterLeaves;
+
+    /// <summary>Every exception the server's observer threw, in delivery order.</summary>
+    public IReadOnlyList<SwallowedObserverException> ObserverExceptions { get; } = observerExceptions;
+
+    public string Describe() =>
+        $"{Fixture}:{Environment.NewLine}" + string.Join(Environment.NewLine, Queues.Select(q =>
+            $"  {q.Queue}: offered {q.Offered}, answered {q.Answered}, abandoned {q.Abandoned} (Asterisk {q.AsteriskAbandons}), "
+            + $"timed out {q.TimedOut} (Asterisk {q.AsteriskTimeouts}), waiting {q.Waiting}"))
+        + $"{Environment.NewLine}  waiting after each leave: "
+        + string.Join(", ", WaitingAfterLeaves.Select(w => $"{w.Queue}={w.Waiting}"));
 }
