@@ -1,6 +1,7 @@
 using Verbara.Sdk.VoiceAi.AudioSocket;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Internal;
+using Verbara.Sdk.Tests.Shared.Sockets;
 using Verbara.Sdk.VoiceAi.Pipeline;
 using FluentAssertions;
 using FluentAssertions.Execution;
@@ -33,6 +34,14 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Bridge;
 /// function's result was not sent; the test's logger holds the session there, on that entry, while the
 /// host cancels and releases the bridge, then lets it go on to raise the call's event. Every wait is
 /// bounded by <see cref="SignalTimeout"/> as a failure bound, never as a pace.
+/// </para>
+/// <para>
+/// The last row is the host's cancellation landing after the caller hung up and before the session sent
+/// its close to the vendor, while a function call still holds the vendor-to-caller loop. The session
+/// returns only once that loop has ended: it waits for the function, and nothing of it is left running
+/// over the resources the session releases. The bridge's internal hooks give the instants: the test
+/// cancels from the one awaited before the close, and reads the session's wait for its loops from the
+/// other.
 /// </para>
 /// </remarks>
 public sealed class OpenAiRealtimeBridgeHostShutdownTests
@@ -151,6 +160,85 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
         }
     }
 
+    [Fact]
+    public async Task HandleSessionAsync_ShouldReturnOnlyAfterBothLoopsEnded_WhenTheHostCancelsBeforeTheCloseAfterTheCallerHungUp()
+    {
+        await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fakeOpenAi.EventsToSend.Add(ParkedFunction.CallEvent);
+        fakeOpenAi.Start();
+        var function = new ParkedFunction();
+        using var metrics = new MeterCapture(MeterName);
+        using var unobserved = new UnobservedServerFaults(nameof(OpenAiRealtimeBridge));
+        await using var bridge = CreateBridge(fakeOpenAi, NullLogger<OpenAiRealtimeBridge>.Instance, function);
+        using var host = new CancellationTokenSource();
+        var closeStarting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var awaitingLoops = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        bridge.HangupCloseStarting = async () =>
+        {
+            closeStarting.TrySetResult();
+            await host.CancelAsync();
+        };
+        bridge.AwaitingLoopsOnExit = () => awaitingLoops.TrySetResult();
+
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
+            NullLogger<AudioSocketServer>.Instance);
+        var sessionReady = new TaskCompletionSource<AudioSocketSession>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.OnSessionStarted += session =>
+        {
+            sessionReady.TrySetResult(session);
+            return ValueTask.CompletedTask;
+        };
+        try
+        {
+            await server.StartAsync(CancellationToken.None);
+            await using var caller = new AudioSocketClient("127.0.0.1", server.BoundPort, Guid.NewGuid());
+            await caller.ConnectAsync(CancellationToken.None);
+            var session = await sessionReady.Task.WaitAsync(SignalTimeout);
+
+            var sessionTask = bridge.HandleSessionAsync(session, host.Token).AsTask();
+            var functionReturnedAtSessionEnd = sessionTask.ContinueWith(
+                _ => function.Returned.IsCompleted,
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            await function.Started.WaitAsync(SignalTimeout);
+
+            // The caller hangs up while the function runs; the hook cancels the session just before the
+            // session waits for its write lock to send its close.
+            await caller.SendHangupAsync();
+            await closeStarting.Task.WaitAsync(SignalTimeout);
+            var first = await Task.WhenAny(sessionTask, awaitingLoops.Task).WaitAsync(SignalTimeout);
+            var sessionReturnedWithTheFunctionRunning = sessionTask.IsCompleted;
+
+            function.Release();
+            await sessionTask.WaitAsync(SignalTimeout);
+            var functionReturned = await functionReturnedAtSessionEnd.WaitAsync(SignalTimeout);
+            UnobservedServerFaults.CollectDiscardedTasks();
+
+            using (new AssertionScope())
+            {
+                first.Should().BeSameAs(
+                    awaitingLoops.Task,
+                    "the session waits for its loops on its way out, with the function still holding one of them");
+                sessionReturnedWithTheFunctionRunning.Should().BeFalse(
+                    "a session does not return while its vendor-to-caller loop still runs");
+                functionReturned.Should().BeTrue(
+                    "the session returned only after the function, and so its loop, had returned");
+                unobserved.Faults.Should().BeEmpty(
+                    "nothing of the session is left to fault where nobody awaits it");
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(
+                    0, "a session the host cancelled is not a failure");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(
+                    1, "a session the host cancelled is counted completed");
+            }
+        }
+        finally
+        {
+            function.Release();
+        }
+    }
+
     private static OpenAiRealtimeBridge CreateBridge(
         RealtimeFakeServer fakeOpenAi, ILogger<OpenAiRealtimeBridge> logger, IRealtimeFunctionHandler function)
     {
@@ -181,6 +269,7 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
 
         private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _returned = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public string Name => FunctionName;
 
@@ -191,6 +280,9 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
         /// <summary>Completes when the bridge has called the function.</summary>
         public Task Started => _started.Task;
 
+        /// <summary>Completes as the function returns its result, after its gate opened.</summary>
+        public Task Returned => _returned.Task;
+
         /// <summary>Opens the gate. Safe to call more than once.</summary>
         public void Release() => _gate.TrySetResult();
 
@@ -198,6 +290,7 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
         {
             _started.TrySetResult();
             await _gate.Task.ConfigureAwait(false);
+            _returned.TrySetResult();
             return """{"status":"shipped"}""";
         }
     }

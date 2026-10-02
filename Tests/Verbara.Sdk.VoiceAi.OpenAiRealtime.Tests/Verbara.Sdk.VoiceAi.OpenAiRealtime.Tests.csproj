@@ -7,6 +7,9 @@
     <ProjectReference Include="..\Verbara.Sdk.TestInfrastructure\Verbara.Sdk.TestInfrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\Sockets\UnobservedServerFaults.cs" Link="Shared\Sockets\UnobservedServerFaults.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
