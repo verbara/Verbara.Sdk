@@ -71,8 +71,13 @@ public static class SsePushEndpoints
         ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
-        var tenantId = ctx.User.FindFirst("tenantId")?.Value;
-        var userId = ctx.User.FindFirst("sub")?.Value;
+        // Read per request, never required: a host set up with AddVerbaraPush() only has no stream options
+        // registered and is served with the defaults. Read first, because the claim types live there.
+        var options = ctx.RequestServices.GetService<IOptions<SsePushStreamOptions>>()?.Value ?? SsePushStreamOptions.Default;
+
+        var identity = SseSubscriberIdentity.From(ctx.User, options);
+        var tenantId = identity.TenantId;
+        var userId = identity.UserId;
 
         if (string.IsNullOrEmpty(tenantId))
         {
@@ -81,12 +86,12 @@ public static class SsePushEndpoints
             return;
         }
 
-        // Build the subscriber context for this connection.
+        // The subscriber the authorizer and the delivery filter are both handed for this connection.
         var subscriber = new SubscriberContext(
             TenantId: tenantId,
             UserId: userId,
-            Roles: new HashSet<string>(StringComparer.Ordinal),
-            Permissions: new HashSet<string>(StringComparer.Ordinal));
+            Roles: identity.Roles,
+            Permissions: identity.Permissions);
 
         // Admission is decided before the response starts: a refusal is written as text/plain before any
         // event-stream byte and before subscribing to the bus.
@@ -125,9 +130,6 @@ public static class SsePushEndpoints
         ctx.Response.Headers.CacheControl = "no-cache";
         ctx.Response.Headers["X-Accel-Buffering"] = "no";
 
-        // Read per request, never required: a host set up with AddVerbaraPush() only has no stream options
-        // registered and is served with the defaults.
-        var options = ctx.RequestServices.GetService<IOptions<SsePushStreamOptions>>()?.Value ?? SsePushStreamOptions.Default;
         var metrics = ctx.RequestServices.GetService<PushMetrics>();
         var logger = loggerFactory.CreateLogger(SsePushLog.Category);
 

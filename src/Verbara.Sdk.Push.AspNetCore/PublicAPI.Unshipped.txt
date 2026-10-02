@@ -3,3 +3,11 @@ Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions
 Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.MaxQueuedBytesPerConnection.get -> long
 Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.MaxQueuedBytesPerConnection.set -> void
 Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.SsePushStreamOptions() -> void
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.PermissionClaimTypes.get -> string![]!
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.PermissionClaimTypes.set -> void
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.RoleClaimTypes.get -> string![]!
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.RoleClaimTypes.set -> void
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.TenantIdClaimTypes.get -> string![]!
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.TenantIdClaimTypes.set -> void
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.UserIdClaimTypes.get -> string![]!
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.UserIdClaimTypes.set -> void
