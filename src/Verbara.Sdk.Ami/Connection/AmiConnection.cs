@@ -341,8 +341,10 @@ public sealed class AmiConnection : IAmiConnection
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
         _options = options.Value;
-        // No validator runs on this path (factories, the server pool, Options.Create): with AutoReconnect on, a value
-        // the reconnect backoff cannot use is rejected here, naming the option, instead of in a loop after a loss.
+        // No validator runs on this path (factories, the server pool, Options.Create): a ConnectionTimeout that cannot
+        // bound a connect is rejected here, naming the option, whether or not AutoReconnect is on; with AutoReconnect on,
+        // so is a value the reconnect backoff cannot use, instead of in a loop after a loss.
+        ConnectTimeoutRule.ThrowIfUnusable(_options);
         ReconnectRule.ThrowIfUnusable(_options);
         _socketFactory = socketFactory;
         _logger = logger;
