@@ -162,6 +162,162 @@ public sealed class AudioSocketServerLifetimeTests
             "the server is ignored");
     }
 
+    [Fact]
+    public async Task StopAsync_ShouldLeaveNoPortServing_WhenTheServerWasStartedTwice()
+    {
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
+            NullLogger<AudioSocketServer>.Instance);
+        await server.StartAsync(CancellationToken.None);
+        var firstPort = server.BoundPort;
+        await server.StartAsync(CancellationToken.None);
+        var secondPort = server.BoundPort;
+        var probe = SessionStartedProbe.SubscribeTo(server);
+
+        await server.StopAsync(CancellationToken.None);
+
+        // Every port the server bound, the first above all: a second start that replaced the listener
+        // left the first one, and whichever accept loop serves it, out of the stop's reach. A listener
+        // still bound takes the connection into its backlog whether or not a loop ever accepts it, so
+        // the refusal is the one outcome that proves no session can come of it.
+        foreach (var port in new[] { firstPort, secondPort }.Distinct())
+        {
+            var channelId = Guid.NewGuid();
+            using var peer = await TryConnectAndIdentifyAsync(port, channelId);
+
+            (peer is null).Should().BeTrue(
+                $"the stop releases every listener the server started, so nothing takes a connection on port " +
+                $"{port} (the {(port == firstPort ? "first" : "second")} start's) any more");
+            probe.Started(channelId).IsCompleted.Should().BeFalse("a refused connection is never announced");
+        }
+
+        server.ActiveSessionCount.Should().Be(0, "nothing is served once the server has stopped");
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldKeepTheFirstListener_WhenTheServerIsAlreadyRunning()
+    {
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
+            NullLogger<AudioSocketServer>.Instance);
+        await server.StartAsync(CancellationToken.None);
+        var firstPort = server.BoundPort;
+        var probe = SessionStartedProbe.SubscribeTo(server);
+
+        var second = async () => await server.StartAsync(CancellationToken.None);
+
+        await second.Should().NotThrowAsync(
+            "a host may start the same server twice, once as the hosted service and once by hand, and an " +
+            "error there would end the code that started it second");
+        server.BoundPort.Should().Be(
+            firstPort, "a second start while running binds no second listener: the server holds one in its lifetime");
+        var channelId = Guid.NewGuid();
+        await using var peer = await AudioSocketPeer.ConnectAsync(server, channelId);
+        (await probe.Started(channelId).WaitAsync(SignalTimeout)).ChannelId.Should().Be(
+            channelId, "the one listener still serves");
+        server.ActiveSessionCount.Should().Be(1, "the peer is served once");
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldBindNothing_WhenTheServerWasStopped()
+    {
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
+            NullLogger<AudioSocketServer>.Instance);
+        await server.StartAsync(CancellationToken.None);
+        await server.StopAsync(CancellationToken.None);
+
+        var restart = async () => await server.StartAsync(CancellationToken.None);
+
+        await restart.Should().NotThrowAsync("a start after a stop completes without an exception");
+        server.BoundPort.Should().Be(
+            0, "the server is not restartable, as the session broker is not: a start after a stop listens on no endpoint");
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldThrowAndBindNothing_WhenTheServerWasDisposed()
+    {
+        var server = new AudioSocketServer(
+            new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
+            NullLogger<AudioSocketServer>.Instance);
+        await server.DisposeAsync();
+        try
+        {
+            var start = async () => await server.StartAsync(CancellationToken.None);
+
+            await start.Should().ThrowAsync<ObjectDisposedException>(
+                "a disposed server starts nothing, and says so");
+            server.BoundPort.Should().Be(0, "a start after disposal binds no listener");
+        }
+        finally
+        {
+            // A start that wrongly bound must not leave its listener behind for the next test: stop it
+            // here, whatever the outcome above. A stop after disposal is itself a defect on today's code,
+            // so its failure is not this row's to report.
+            await StopQuietlyAsync(server);
+        }
+    }
+
+    [Fact]
+    public async Task StopAsync_ShouldCompleteWithoutThrowing_WhenTheServerWasDisposed()
+    {
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
+            NullLogger<AudioSocketServer>.Instance);
+        await server.StartAsync(CancellationToken.None);
+        await server.DisposeAsync();
+
+        var stop = async () => await server.StopAsync(CancellationToken.None);
+
+        await stop.Should().NotThrowAsync(
+            "a stop after disposal has nothing left to do, and a host or a hand-driven owner may still call it");
+    }
+
+    /// <summary>
+    /// Connects to <c>127.0.0.1:<paramref name="port"/></c> and sends the UUID frame that identifies
+    /// <paramref name="channelId"/>; <see langword="null"/> when the connection is refused. The caller
+    /// owns the returned client.
+    /// </summary>
+    private static async Task<TcpClient?> TryConnectAndIdentifyAsync(int port, Guid channelId)
+    {
+        var client = new TcpClient();
+        try
+        {
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            var uuid = new byte[19];
+            uuid[0] = (byte)AudioSocketFrameType.Uuid;
+            uuid[2] = 16;
+            channelId.TryWriteBytes(uuid.AsSpan(3), bigEndian: true, out _);
+            await client.GetStream().WriteAsync(uuid);
+            return client;
+        }
+        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.ConnectionRefused)
+        {
+            // Nothing listens on that port: the outcome a stopped server should leave.
+            client.Dispose();
+            return null;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Any other failure is the test's to report: release the socket first.
+            client.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Stops <paramref name="server"/> as cleanup, so a listener a red start bound is released.</summary>
+    private static async Task StopQuietlyAsync(AudioSocketServer server)
+    {
+        try
+        {
+            await server.StopAsync(CancellationToken.None);
+        }
+        catch (ObjectDisposedException)
+        {
+            // The stop after disposal that another row pins; nothing more to release here.
+        }
+    }
+
     /// <summary>
     /// Reads one byte from the server's end of <paramref name="client"/>: 0 once the server has
     /// closed the connection.

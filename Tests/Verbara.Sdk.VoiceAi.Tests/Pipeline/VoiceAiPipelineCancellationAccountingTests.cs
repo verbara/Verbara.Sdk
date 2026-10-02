@@ -34,8 +34,8 @@ namespace Verbara.Sdk.VoiceAi.Tests.Pipeline;
 /// caller's token and the synthesis's own source (cancelled by a barge-in or a disposal) are requested
 /// endings, and a requested ending is not a synthesis failure. A synthesizer that cancels itself while
 /// neither is cancelled has failed, and used to be booked as a barge-in (<c>ADR-0050</c> E6/E8: the
-/// token is the discriminator). What a requested ending counts as instead is today's accounting, which
-/// <c>ADR-0050</c> E9 records as debt; the tests pin it so that changing it is a decision.
+/// token is the discriminator). A requested ending counts the synthesis cancelled — never completed,
+/// never failed — so every started synthesis ends in exactly one of the three.
 /// </para>
 /// <para>
 /// Nothing here waits on a clock to establish an ordering. The synthesizer parks between chunks, or in
@@ -373,9 +373,9 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
             logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
             activities.Statuses.Should().ContainSingle().Which.Should().NotBe(ActivityStatusCode.Error);
 
-            // Today's accounting, pinned so that changing it is a decision; the requirement does not
-            // ask for it. ADR-0050 E9 records counting a cancelled synthesis as completed as debt.
-            ttsMetrics.Get("tts.syntheses.completed").Should().Be(1);
+            // Cut short by the caller, so cancelled and not completed; it still ends with its event.
+            ttsMetrics.Get("tts.syntheses.completed").Should().Be(0, "a barge-in is not a completed synthesis");
+            ttsMetrics.Get("tts.syntheses.cancelled").Should().Be(1, "a barge-in cancels the synthesis");
             capture.Events.OfType<SynthesisEndedEvent>().Should().ContainSingle();
         }
 
@@ -424,8 +424,9 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
             logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
             activities.Statuses.Should().ContainSingle().Which.Should().NotBe(ActivityStatusCode.Error);
 
-            // Today's accounting, not a requirement (ADR-0050 E9 debt, as for a barge-in).
-            ttsMetrics.Get("tts.syntheses.completed").Should().Be(1);
+            // Cut short by the disposal, so cancelled and not completed, as for a barge-in.
+            ttsMetrics.Get("tts.syntheses.completed").Should().Be(0, "a disposal is not a completed synthesis");
+            ttsMetrics.Get("tts.syntheses.cancelled").Should().Be(1, "a disposal cancels the synthesis");
         }
 
         await CleanupAsync(client, server);
@@ -499,11 +500,11 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
     /// filter that also asked what the exception looks like fails here.
     /// </remarks>
     [Theory]
-    [InlineData(RequestedEnding.BargIn, 1L)]
-    [InlineData(RequestedEnding.PipelineDisposal, 1L)]
+    [InlineData(RequestedEnding.BargIn, 0L)]
+    [InlineData(RequestedEnding.PipelineDisposal, 0L)]
     [InlineData(RequestedEnding.CallerToken, 0L)]
     public async Task HandleSessionAsync_ShouldNotReportASynthesisFailure_WhenARequestedEndingLandsWhileTheOwnCancellationUnwinds(
-        RequestedEnding ending, long completedToday)
+        RequestedEnding ending, long completed)
     {
         // Arrange
         var detector = new ScriptedTurnDetector(
@@ -567,9 +568,10 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
             // activity above carry this assertion.
             capture.Events.OfType<PipelineErrorEvent>().Should().BeEmpty();
 
-            // Today's accounting, not a requirement: a barge-in or a disposal counts the synthesis
-            // completed (ADR-0050 E9 debt) and the caller's cancellation counts it as neither.
-            ttsMetrics.Get("tts.syntheses.completed").Should().Be(completedToday);
+            // Every requested ending cuts the synthesis short: cancelled once, never completed.
+            ttsMetrics.Get("tts.syntheses.completed").Should().Be(completed);
+            ttsMetrics.Get("tts.syntheses.cancelled").Should()
+                .Be(1, "the requested ending ({0}) cancelled the synthesis", ending);
         }
 
         await CleanupAsync(client, server);
@@ -662,9 +664,11 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
             tts.ChunksPulled.Should().Be(
                 2, "the pipeline stops pulling audio once the far end is gone");
 
-            // Today's accounting, pinned so that changing it is a decision; the requirement does not
-            // ask for it. ADR-0050 E9 records counting a cut-short synthesis as completed as debt.
-            ttsMetrics.Get("tts.syntheses.completed").Should().Be(1);
+            // Cut short by the far end leaving, so cancelled and not completed; it still ends with its
+            // event.
+            ttsMetrics.Get("tts.syntheses.completed").Should()
+                .Be(0, "the caller did not hear the whole answer");
+            ttsMetrics.Get("tts.syntheses.cancelled").Should().Be(1, "the far end leaving cancels the synthesis");
             capture.Events.OfType<SynthesisEndedEvent>().Should().ContainSingle();
         }
 

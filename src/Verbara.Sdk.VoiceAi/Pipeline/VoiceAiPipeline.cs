@@ -46,6 +46,13 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
     /// </summary>
     private CancellationTokenSource? _ttsCts;
 
+    /// <summary>
+    /// What cancelled <see cref="_ttsCts"/> — a barge-in or a disposal — or <c>null</c> while nothing
+    /// has. Guarded by <see cref="_ttsGate"/> and written only by whoever cancels the source first, so a
+    /// disposal landing after a barge-in does not relabel it.
+    /// </summary>
+    private string? _ttsEnding;
+
     /// <summary>Observable stream of pipeline lifecycle events.</summary>
     public IObservable<VoiceAiPipelineEvent> Events => _events;
 
@@ -161,7 +168,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                         break;
 
                     case TurnAction.BargIn:
-                        CancelSynthesis();
+                        CancelSynthesis(TurnEnding.BargeIn);
                         VoiceAiLog.BargInDetected(_logger, session.ChannelId);
                         Publish(new BargInDetectedEvent(DateTimeOffset.UtcNow));
                         if (!isSpeaking)
@@ -232,6 +239,11 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                // The session's token was cancelled mid-transcription — by the host or by the session
+                // broker's stop or disposal. Not a failure of the recognizer and not a completion: every
+                // started transcription ends in exactly one of completed, failed or cancelled.
+                SpeechRecognitionMetrics.TranscriptionsCancelled.Add(1,
+                    TurnEnding.Tag(TurnEnding.SessionCancelled));
                 throw;
             }
             catch (Exception ex)
@@ -301,8 +313,12 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                 // Publishing the source and observing an already-disposed pipeline have to happen
                 // under one gate, or a DisposeAsync landing here would cancel nothing and leave this
                 // synthesis running past the disposal that was meant to stop it.
+                _ttsEnding = null;
                 if (Volatile.Read(ref _disposed) != 0)
+                {
+                    _ttsEnding = TurnEnding.Disposal;
                     ttsCts.Cancel();
+                }
                 _ttsCts = ttsCts;
             }
 
@@ -354,16 +370,15 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                     // draining an answer nobody can hear.
                     //
                     // Accounted exactly as the barge-in clause below accounts its ending: both are
-                    // someone outside the pipeline ending this playback, and tying the two together
-                    // means one future instrument separating "the caller heard the answer" from "the
-                    // caller heard part of it" moves both at once. Counting it completed is today's
-                    // accounting, not a claim the caller heard the answer (ADR-0050 E9 debt).
+                    // someone outside the pipeline ending this playback, so the synthesis is cancelled,
+                    // not completed — completed means all of its audio was written to the session — and
+                    // the tag says who ended it.
                     //
                     // Not the normal-completion tail below: that one adds the turn to the conversation
                     // history and guards tts.syntheses.silent, and neither belongs to a turn whose
                     // listener has gone. The ending is visible at Debug and nowhere an operator pages.
                     VoiceAiLog.PlaybackStoppedSessionEnded(_logger, channelId);
-                    SpeechSynthesisMetrics.SynthesesCompleted.Add(1);
+                    SpeechSynthesisMetrics.SynthesesCancelled.Add(1, TurnEnding.Tag(TurnEnding.FarEnd));
                     Publish(new SynthesisEndedEvent(
                         DateTimeOffset.UtcNow, DateTimeOffset.UtcNow - synthStart));
                 }
@@ -393,6 +408,10 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                // The session's token was cancelled mid-synthesis — by the host or by the session
+                // broker's stop or disposal. Counted cancelled so the started synthesis ends in exactly
+                // one bucket; no SynthesisEndedEvent, since the session itself is ending.
+                SpeechSynthesisMetrics.SynthesesCancelled.Add(1, TurnEnding.Tag(TurnEnding.SessionCancelled));
                 throw;
             }
             catch (OperationCanceledException) when (ttsCts.IsCancellationRequested)
@@ -407,9 +426,13 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                 // raises whichever token it observed, so comparing tokens would miss a genuine barge-in
                 // (ADR-0053 records the same trap for the bridge's ConnectAsync).
                 //
-                // Counting it completed is today's accounting, not a claim that the caller heard the
-                // answer: ADR-0050 E9 records it as debt.
-                SpeechSynthesisMetrics.SynthesesCompleted.Add(1);
+                // Cancelled, not completed: the caller did not hear the answer in full. The tag is
+                // whichever of the two cancelled the source first, recorded by that canceller under the
+                // gate.
+                string ending;
+                lock (_ttsGate)
+                    ending = _ttsEnding ?? TurnEnding.BargeIn;
+                SpeechSynthesisMetrics.SynthesesCancelled.Add(1, TurnEnding.Tag(ending));
                 Publish(new SynthesisEndedEvent(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow - synthStart));
             }
             catch (Exception ex)
@@ -457,10 +480,15 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
     /// Asks the synthesis in flight, if any, to stop. This is the only way anything other than
     /// <see cref="PipelineLoop"/> may touch <see cref="_ttsCts"/>.
     /// </summary>
-    private void CancelSynthesis()
+    private void CancelSynthesis(string ending)
     {
         lock (_ttsGate)
-            _ttsCts?.Cancel();
+        {
+            if (_ttsCts is not { IsCancellationRequested: false } cts)
+                return;
+            _ttsEnding = ending;
+            cts.Cancel();
+        }
     }
 
     /// <inheritdoc/>
@@ -471,7 +499,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
 
         // Intent, not mechanism (ADR-0053's shape, ADR-0054 for this type): a disposed pipeline
         // wants the synthesis stopped, but PipelineLoop's finally is what releases the source.
-        CancelSynthesis();
+        CancelSynthesis(TurnEnding.Disposal);
 
         // Completed, deliberately not disposed. The two loops outlive this call — Task.WhenAll has
         // not observed them yet — and they publish as they unwind. OnCompleted has already dropped

@@ -86,6 +86,17 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     // (via InternalsVisibleTo); a private value, not an option, for the close bound's reason.
     internal TimeSpan ConnectTimeout { get; set; } = WebSocketConnectBound.Default;
 
+    // Settable by tests (via InternalsVisibleTo); null in production. Awaited when the caller has hung up
+    // and the session is about to take its write lock to send its close to the vendor, before it waits
+    // for that lock: a test cancels the session there, the one instant at which a host's cancellation
+    // lands after the caller's hangup and before the close is out.
+    internal Func<ValueTask>? HangupCloseStarting { get; set; }
+
+    // Settable by tests (via InternalsVisibleTo); null in production. Invoked when a session, on its way
+    // out, starts waiting for its two loops to end, so a test can tell that wait from the session having
+    // returned without reading a clock.
+    internal Action? AwaitingLoopsOnExit { get; set; }
+
     /// <summary>Observable stream of Realtime bridge events from all active sessions.</summary>
     public IObservable<RealtimeEvent> Events => _events;
 
@@ -123,6 +134,18 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
         var sessionFailed = false;
 
+        // The two loops and the two sources only they use, declared out here so the terminal block can
+        // wait for the loops before anything they use is released. Declared inside the try, the sources
+        // were released as the try exited, before that block ran: a host cancellation that left the try
+        // while the caller-to-vendor close was pending left the vendor-to-caller loop running over the
+        // released write lock, resamplers and silence bound, faulting where nobody awaited it. The terminal
+        // block releases the sources at one point, after the loops end and before the close, which no
+        // `using` gives: it would release them either before the loops end or after the close.
+        CancellationTokenSource? inputCts = null;
+        EndOfInputSilenceBound? silence = null;
+        Task? input = null;
+        Task<bool>? output = null;
+
         // One try, one terminal block. The connect and the session.update send used to sit outside
         // it, so a cancel landing in that window escaped as a fault and skipped the close, the
         // counters, the duration and the end-of-session log entirely — see ADR-0053. The fix is to
@@ -144,14 +167,14 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
             // The input loop's own source, linked to the session token, so that this method can stop
             // reading the caller when the vendor ends the session first (below).
-            using var inputCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            inputCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             // Bounds the wait for the vendor's answer once the bridge has sent its own close (below).
             // Only OutputLoop's reads run on its token. The session token stays the host's: a host
             // cancellation still ends the session as it always did, and is never taken for the bound
             // running out.
-            using var silence = new EndOfInputSilenceBound(CloseAnswerBound, TimeProvider, ct);
-            var input = InputLoop(session, ws, wsWriteLock, upsampler, inputCts.Token);
-            var output = OutputLoop(session, ws, wsWriteLock, downsampler, silence, ct);
+            silence = new EndOfInputSilenceBound(CloseAnswerBound, TimeProvider, ct);
+            input = InputLoop(session, ws, wsWriteLock, upsampler, inputCts.Token);
+            output = OutputLoop(session, ws, wsWriteLock, downsampler, silence, ct);
             var first = await Task.WhenAny(input, output).ConfigureAwait(false);
 
             if (first == output && !input.IsCompleted)
@@ -189,6 +212,8 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 // second concurrent receive on the socket OutputLoop is reading.
                 if (first == input && !input.IsCanceled && !output.IsCompleted)
                 {
+                    if (HangupCloseStarting is { } hangupCloseStarting)
+                        await hangupCloseStarting().ConfigureAwait(false);
                     await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
                     try
                     {
@@ -237,6 +262,13 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         }
         finally
         {
+            // Both loops end before anything they use is released, on every path out of the try. The
+            // session is already classified above, so what they raise here is observed and nothing more:
+            // a session the host cancelled stays completed.
+            if (input is not null && output is not null)
+                await AwaitLoopsAsync(inputCts!, input, output).ConfigureAwait(false);
+            ReleaseLoopSources(inputCts, silence);
+
             // Clean close — never on ct, which is already cancelled. Conditional by necessity:
             // cancelling a WebSocket operation aborts the socket, so on most cancelled paths there
             // is nothing left to close politely.
@@ -254,6 +286,34 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             RealtimeMetrics.SessionDurationMs.Record(
                 Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds);
             RealtimeLog.SessionEnded(_logger, channelId);
+        }
+    }
+
+    // Releases the two sources only a session's loops use, in this order, each only if it was made.
+    private static void ReleaseLoopSources(CancellationTokenSource? inputCts, EndOfInputSilenceBound? silence)
+    {
+        inputCts?.Dispose();
+        silence?.Dispose();
+    }
+
+    // Stops reading the caller and waits for both loops. The vendor-to-caller loop is not stopped here:
+    // every path that leaves it running ends with the session token cancelled, which ends its read, and
+    // a function call it is running returns on the function's own pace, as it does on the paths that
+    // never left the try.
+    private async Task AwaitLoopsAsync(CancellationTokenSource inputCts, Task input, Task<bool> output)
+    {
+        AwaitingLoopsOnExit?.Invoke();
+        await inputCts.CancelAsync().ConfigureAwait(false);
+        try
+        {
+            await Task.WhenAll(input, output).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Observed and not rethrown: a fault of either loop has already reached the session's
+            // classification, or the session ended for a reason that outranks it (the host's
+            // cancellation, the vendor's close). Rethrown from the terminal block it would replace the
+            // exception the session is leaving with.
         }
     }
 
@@ -646,7 +706,26 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         return buffer.WrittenMemory;
     }
 
-    private void Publish(RealtimeEvent evt) => _events.OnNext(evt);
+    // A session still unwinding when the host released the bridge can reach an event after the
+    // disposal: that event is dropped, logged at Debug, and never raises inside the session. The second
+    // check covers a disposal that lands between the first and the raise.
+    private void Publish(RealtimeEvent evt)
+    {
+        if (Volatile.Read(ref _disposed) == 0)
+        {
+            try
+            {
+                _events.OnNext(evt);
+                return;
+            }
+            catch (ObjectDisposedException) when (Volatile.Read(ref _disposed) != 0)
+            {
+                // The disposal released the event stream under this raise; the event is dropped below.
+            }
+        }
+
+        RealtimeLog.EventDroppedAfterDisposal(_logger, evt.ChannelId, evt.GetType().Name);
+    }
 
     /// <inheritdoc/>
     public ValueTask DisposeAsync()

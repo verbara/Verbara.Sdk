@@ -333,6 +333,6 @@ The refused connection receives a hangup frame, so on Asterisk 20 and later `Aud
 
 **Symptoms:** `[AudioSocket] Session limit reached (<limit>), rejecting connection`, at Warning.
 
-**Cause:** the number of live sessions has reached `AudioSocketOptions.MaxConcurrentSessions`. A call that comes back with a UUID a live session holds is not counted against the limit, since it takes that session's place.
+**Cause:** the number of live sessions has reached `AudioSocketOptions.MaxConcurrentSessions`. The limit is checked and taken in one atomic step, so a burst of calls arriving together is admitted up to the limit and the rest are refused; a deployment that ran past its limit in bursts on 2.6.1 and earlier now sees this Warning instead. A call that comes back with a UUID a live session holds is not counted against the limit, since it takes that session's place.
 
 **Solutions:** raise `MaxConcurrentSessions` if the host has room, or spread calls over more servers. The refused connection receives a hangup frame, with the same Asterisk 20 and later / Asterisk 18 behaviour as above. Refused connections are not counted in `audiosocket.connections.accepted` and open no `audiosocket.session` activity.

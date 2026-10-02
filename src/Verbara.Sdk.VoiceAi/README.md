@@ -42,8 +42,11 @@ pipeline.Events.Subscribe(evt => Console.WriteLine(evt));
 - `IConversationHandler` — scoped per session; implement to plug in any LLM or business logic
 - `ISessionHandler` — low-level interface; implement for fully custom session handling
 - `VoiceAiSessionBroker` — hosted service that hands each `AudioSocketSession` to the active `ISessionHandler`, once
-  - The handler's `CancellationToken` belongs to the broker. It is cancelled when the host's stop is no longer graceful (the token passed to `StopAsync` is, or later becomes, cancelled) or when the broker is disposed. A graceful stop leaves it uncancelled: the AudioSocket server's own stop ends the session.
-  - Once its stop has returned, or once it is disposed, the broker dispatches no new session. The AudioSocket server keeps such a session and releases it when it stops. The broker is not restartable.
+  - **The session ends when its handler does.** As soon as `HandleSessionAsync` returns, throws or is cancelled, the broker calls the session's `HangupAsync`: one hangup frame if the line is still live, then the close. On Asterisk 20 and later the call goes on in the dialplan after `AudioSocket()`; an ARI `externalMedia` channel leaves Stasis with the caller still in your bridge. A handler keeps its line exactly as long as it runs, so await the conversation rather than leaving it to a background task. A session the caller or the handler already ended gets nothing more, and one the broker ends while still live is logged once at Information.
+  - **A graceful stop ends the calls, then waits.** While the token passed to `StopAsync` is not cancelled, the stop ends every live session it handed out with a hangup frame and waits for the handlers to return; it does not cancel their token. Once that token is cancelled (the host's shutdown budget ran out), the stop cancels the handlers' token and returns without waiting further. A direct `StopAsync(CancellationToken.None)` therefore waits until every handler has returned: pass a token you cancel after a bound of your own.
+  - **Disposal does not wait.** `Dispose` cancels the handlers' token and returns.
+  - The handler's `CancellationToken` belongs to the broker: only a stop that is no longer graceful, or `Dispose`, cancels it. Once its stop has been called, or once it is disposed, the broker hands no new session on; the AudioSocket server keeps such a session and releases it when it stops. The broker is not restartable: a start after a stop subscribes nothing, a start after `Dispose` throws `ObjectDisposedException`, and a stop after `Dispose` does nothing.
+  - Register `AddAudioSocketServer` before `AddVoiceAiPipeline`, as above: the host stops services in reverse order, so the broker then stops first and every call ends with a hangup frame. A server stopped first closes its sessions without one.
 - Observable `Events` stream (`SpeechStartedEvent`, `TranscriptReceivedEvent`, `BargInDetectedEvent`, etc.)
 - Native AOT compatible
 
@@ -70,11 +73,11 @@ If you don't override `ProviderName` the default falls back to `GetType().Name` 
 
 ## Observability
 
-- **Metrics:** `VoiceAiMetrics` (sessions started/completed/failed, session duration), `SpeechRecognitionMetrics` (transcriptions started/completed/failed, latency), `SpeechSynthesisMetrics` (syntheses started/completed/failed, latency, characters).
+- **Metrics:** `VoiceAiMetrics` (sessions started/completed/failed, session duration), `SpeechRecognitionMetrics` (transcriptions started/completed/failed/cancelled, latency), `SpeechSynthesisMetrics` (syntheses started/completed/failed/cancelled/silent, latency, characters). Every recognition and synthesis the pipeline starts ends in exactly one of `completed`, `failed` or `cancelled`; `cancelled` is tagged `voiceai.ending` with what cut it short (`session-cancelled`, and for syntheses also `barge-in`, `disposal`, `far-end`), and `tts.syntheses.completed` counts only a synthesis whose audio was all written.
 - **Tracing:** `VoiceAiActivitySource` — session / recognition / synthesis spans.
 - **Health:** `VoiceAiHealthCheck`, `SttHealthCheck`, `TtsHealthCheck` auto-registered by `AddVoiceAiPipeline<THandler>()`.
 - Discover names via `VerbaraTelemetry.ActivitySourceNames` / `MeterNames` from `Verbara.Sdk.Hosting`.
 
 ## Documentation
 
-See the [main README](../../README.md) for full documentation.
+See the [main README](../../README.md) for full documentation. Upgrading from 2.6.1: [voice-session-ending-migration.md](../../docs/guides/voice-session-ending-migration.md).

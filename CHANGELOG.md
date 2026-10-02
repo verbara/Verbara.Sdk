@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: a voice session ends when its handler does, and the broker's stop ends live sessions and waits for them (#373)
+
+When `HandleSessionAsync` returned, threw, or the Realtime vendor closed, `VoiceAiSessionBroker` left the line open:
+on 2.6.1 the channel and the caller stayed up in digital silence, 360 of 360 calls at 15 s and 30 of 30 at 300 s
+(Asterisk 20, 22 and 23). The broker now ends the session — a hangup frame if it is still live, then the close —
+within 8 ms of the handler returning: with `AudioSocket()` the dialplan continues at the next priority (180 of 180),
+with ARI `externalMedia` the app receives `StasisEnd` (180 of 180). A handler that returns early and keeps using the
+session in the background loses its line. The broker's `StopAsync` now ends every live session with a hangup frame
+and waits for its handlers, bounded by the stop token (before, it returned while handlers ran and the server's stop
+closed their connections without a frame); a direct caller that passes `CancellationToken.None` can block until the
+handlers finish. Disposal stays synchronous; a start after disposal throws `ObjectDisposedException`.
+
+**Migration guide:** [`docs/guides/voice-session-ending-migration.md`](docs/guides/voice-session-ending-migration.md)
+
+### Added: `stt.transcriptions.cancelled` and `tts.syntheses.cancelled` (#373)
+
+Each carries a `voiceai.ending` tag: `session-cancelled`, `barge-in`, `disposal` or `far-end`.
+
+### Changed — BREAKING: a turn that ends early is counted as cancelled, not completed (#373)
+
+A turn cancelled mid STT or TTS by the host was counted nowhere (`started=1, completed=0, failed=0`, 30 of 30), and a
+barge-in, a disposal or a far-end hangup during TTS was counted as `completed`. Every turn now satisfies
+`started = completed + failed + cancelled` for each of STT and TTS. The migration guide gives the formula that
+recovers the old `tts.syntheses.completed` figure from the new tag.
+
+**Migration guide:** [`docs/guides/voice-session-ending-migration.md`](docs/guides/voice-session-ending-migration.md)
+
+### Fixed — BREAKING: the AudioSocket server never exceeds `MaxConcurrentSessions` (#373)
+
+A burst could pass the limit: a cap of 3 reached 4 in 4 of 100 bursts and 5 in 1. A connection beyond the limit is now
+refused with a hangup frame, and a re-entry with the same id still takes its holder's place. A deployment that ran past
+its limit now refuses at the limit.
+
+### Changed: `AudioSocketSession.HangupAsync` is idempotent (#373)
+
+On a session that has already ended it completes as a no-op; it threw `ObjectDisposedException` (20 of 20). A hangup
+and an audio write no longer interleave on the wire.
+
+### Fixed: the AudioSocket server's and the broker's start, stop and disposal (#373)
+
+A second `AudioSocketServer.StartAsync` replaced its listener without stopping the first; it is now a no-op, and so is
+a start after a stop. A start after disposal throws `ObjectDisposedException`. A stop after disposal threw
+`ObjectDisposedException`; it is now a no-op for both the server and the broker. A connection that identified itself
+while the server was stopping could still be announced; it is now refused.
+
+### Fixed: a Realtime session ended by the host never faults after the bridge is disposed (#373)
+
+An event a Realtime session raised after the bridge was disposed threw `ObjectDisposedException` and was counted in
+`openai_realtime.sessions.failed`; it is dropped and logged at Debug. A session the host cancels after the caller hung
+up returns only after both of its loops have ended; before, the output loop faulted unobserved.
+
 ### Security — BREAKING: an SSE stream request is served only the topics it asked for and was allowed (#371)
 
 When every `topic` a client named was denied by `ISubscriptionAuthorizer`, or failed to parse, the stream that
