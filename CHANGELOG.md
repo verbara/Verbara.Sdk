@@ -4,6 +4,73 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security — BREAKING: an SSE stream request is served only the topics it asked for and was allowed (#371)
+
+When every `topic` a client named was denied by `ISubscriptionAuthorizer`, or failed to parse, the stream that
+`MapPushEndpoints` serves asked the authorizer about `**` instead and, if that was allowed, subscribed the client to
+every event of its tenant: with a deny-list authorizer, a request for exactly `billing.**` received `billing.**` and
+everything else. This closes that authorization bypass. In 2.6.1 it was reachable only on a host with
+`AllowSynchronousIO = true` (on a default Kestrel host every stream request answered `500`, next entry) and a custom
+authorizer that denies topics but allows `**`; the default authorizer allows everything. Tenant and user isolation
+held throughout. The endpoint now decides before it writes or subscribes:
+- a topic that does not parse → `400`, and the authorizer is asked nothing;
+- only the named topics are authorized; a request with no topic asks for `**`;
+- every topic denied → `403 Subscription denied.`, with the authorizer's reason logged once at Warning and never sent;
+- a partial denial is served, with `X-Push-Denied-Topics` listing the denied topics, percent-encoded.
+
+This withdraws the contract the package README stated in 2.6.1 (an authorizer that scopes subscribers "must therefore
+also decide `**`").
+
+**Migration guide:** [`docs/guides/push-stream-and-webhook-options-migration.md`](docs/guides/push-stream-and-webhook-options-migration.md)
+
+### Fixed: the SSE stream works on a default Kestrel host, and one slow client no longer stalls the bus (#371)
+
+The stream flushed synchronously, which Kestrel refuses unless `AllowSynchronousIO = true`, so every stream request on
+a default host answered `500`. It also wrote each event on the bus's dispatch loop while the heartbeat wrote from
+another thread: a client that stopped reading held every subscriber behind it (another subscriber received 266 of
+2,000 events), and a slow one could receive torn frames. Every write is now asynchronous, through one writer per
+connection that writes whole frames; the bus never waits for a client. A disconnect or reset ends the stream cleanly.
+A CR or LF in an `event:` value is written as `%0D`/`%0A`.
+
+### Changed: each SSE connection's queue is bounded at 1 MiB, dropping the oldest frames and reporting the gap (#371)
+
+Each connection queues at most `SsePushStreamOptions.MaxQueuedBytesPerConnection` bytes of UTF-8 frames (new public
+option, default 1 MiB, validated at start). Without a bound, a client that stops reading cost the server about 53 MB
+per minute at 1,000 events/s, and Kestrel never cut it. At the bound the oldest frames are dropped, and before its next
+event the client receives one `event: .gap` / `data: {"dropped":N}` with the number of event frames dropped.
+Heartbeats are outside the bound. A single frame larger than the bound is delivered whole, alone. `.gap` is reserved:
+an event so named is written `%2Egap`. Drops are counted on `asterisk.push.sse.events.dropped` (meter
+`Verbara.Sdk.Push`) and logged once per gap episode at Warning.
+
+**Migration guide:** [`docs/guides/push-stream-and-webhook-options-migration.md`](docs/guides/push-stream-and-webhook-options-migration.md)
+
+### Changed: a push delivery continues the publisher's trace (#371)
+
+`push deliver <eventType>` started a root span (0 of 30 deliveries in the publishing request's trace), so a webhook
+POST or a NATS publish made during delivery was outside that trace; a bus first resolved inside an activity put every
+later delivery in that one trace. The delivery span is now a child of the event's `Metadata.TraceContext` (30 of 30),
+and the dispatch loop no longer inherits its builder's activity. An event with no, or an unparseable, trace context is
+still delivered under a root span. With a parent-based sampler, deliveries now follow the publisher's decision.
+
+### Changed — BREAKING: webhook delivery options that can never deliver are rejected (#371)
+
+These values were accepted, and with them a delivery that failed once was lost silently (0 of 10 delivered, no
+`Error`, `dead_letter` 0) or nothing was ever delivered: `MaxDelay` below `InitialDelay`; a negative `InitialDelay`; a
+delay above `int.MaxValue` ms; `MaxRetries` below 0; a `TimeoutPerAttempt` of zero or less, or above `int.MaxValue`
+ms (other than `Timeout.InfiniteTimeSpan`). `AddVerbaraPushWebhooks` now fails the host start with an
+`OptionsValidationException` naming the option, and both `WebhookDeliveryService` constructors throw
+`ArgumentOutOfRangeException` whose `ParamName` is the option. The defaults are accepted. Upgrade: fix the value the
+exception names.
+
+**Migration guide:** [`docs/guides/push-stream-and-webhook-options-migration.md`](docs/guides/push-stream-and-webhook-options-migration.md)
+
+### Fixed: a failed webhook backoff or dispatch is dead-lettered or logged, never left in an unobserved task (#371)
+
+- A retry delay made unusable after start dead-letters that delivery with one `Error` (EventId 8); later events are
+  delivered.
+- An event whose `TopicPath` does not parse logs one `Error` (EventId 9) instead of faulting the dispatch task.
+- A delivery that fails outside its attempts is dead-lettered with `Error` (EventId 10).
+
 ### Changed: a destroyed bridge is released ten minutes after its destruction (#370)
 
 `BridgeManager` held every destroyed bridge until the next reconnect, about 1.9 KB each: 50,000 bridges over a

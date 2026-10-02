@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace Verbara.Sdk.Push.Webhooks;
 
@@ -18,6 +19,9 @@ public static class WebhookServiceCollectionExtensions
     /// Consumers can override any piece by registering a replacement BEFORE calling
     /// <c>AddVerbaraPushWebhooks</c>, or by calling <c>services.Replace(...)</c> after.
     /// The built-in registrations use <c>TryAdd*</c> semantics.
+    /// <see cref="WebhookDeliveryOptions"/> is validated when it is first resolved (at the latest when the
+    /// hosted service is built at host start); an unusable value fails with an
+    /// <see cref="OptionsValidationException"/> naming the option.
     /// </remarks>
     public static IServiceCollection AddVerbaraPushWebhooks(
         this IServiceCollection services,
@@ -29,6 +33,7 @@ public static class WebhookServiceCollectionExtensions
             services.Configure(configure);
 
         services.AddOptions<WebhookDeliveryOptions>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<WebhookDeliveryOptions>, WebhookDeliveryOptionsValidator>());
         services.TryAddSingleton<IWebhookSubscriptionStore, InMemoryWebhookSubscriptionStore>();
         services.TryAddSingleton<IWebhookSigner, HmacSha256Signer>();
         services.TryAddSingleton<IWebhookPayloadSerializer, DefaultWebhookPayloadSerializer>();
