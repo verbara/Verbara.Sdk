@@ -697,7 +697,7 @@ public sealed partial class FunctionCallTimeoutTests
             {
                 try
                 {
-                    await Task.Delay(Timeout.InfiniteTimeSpan, ct).ConfigureAwait(false);
+                    await Task.Delay(Timeout.InfiniteTimeSpan, ct).ConfigureAwait(false); // fence-allow: GUARD-TIMEOUT — infinite; the handed token is the only arm
                 }
                 catch (OperationCanceledException)
                 {
@@ -711,7 +711,7 @@ public sealed partial class FunctionCallTimeoutTests
             new(async (self, _) =>
             {
                 await self.ClockSet.ConfigureAwait(false);
-                var delay = Task.Delay(after, self._clock, CancellationToken.None);
+                var delay = Task.Delay(after, self._clock, CancellationToken.None); // fence-allow: SIMULATED-WORK — the handler's work, on the bridge's manual clock
                 self._armed.TrySetResult();
                 await delay.ConfigureAwait(false);
                 throw new TimeoutException(OwnTimeoutMessage);
@@ -720,7 +720,7 @@ public sealed partial class FunctionCallTimeoutTests
         public static ScriptedFunction ReturnsAfter(TimeSpan after) =>
             new(async (self, _) =>
             {
-                var delay = Task.Delay(after, self._clock, CancellationToken.None);
+                var delay = Task.Delay(after, self._clock, CancellationToken.None); // fence-allow: SIMULATED-WORK — the handler's work, on the bridge's manual clock
                 self._armed.TrySetResult();
                 await delay.ConfigureAwait(false);
                 return Result;
