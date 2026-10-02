@@ -458,6 +458,33 @@ public class ChannelManagerReconcileTests
             + "an admission from the stale snapshot, so admitting it would hold a ghost channel until the next reload");
     }
 
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldNotAdmitTheChannelAgain_WhenAnotherReloadRemovedItWhileTheSnapshotWasRead()
+    {
+        _sut.OnNewChannel("1700000000.5", "PJSIP/5000-0005", ChannelState.Up);
+        _added.Clear();
+
+        // Two reads overlap: the older one asked Asterisk first, the newer one was answered first
+        // and its snapshot no longer lists the channel.
+        using var older = _sut.OpenReadWindow();
+        using (var newer = _sut.OpenReadWindow())
+        {
+            _sut.ReconcileWithSnapshot([], newer);
+        }
+
+        _sut.ReconcileWithSnapshot([Entry("1700000000.5", "PJSIP/5000-0005")], older);
+
+        new
+        {
+            Added = _added.Count(c => c.UniqueId == "1700000000.5"),
+            Removed = _removed.Count(c => c.UniqueId == "1700000000.5"),
+            Held = _sut.ChannelCount,
+        }.Should().BeEquivalentTo(
+            new { Added = 0, Removed = 1, Held = 0 },
+            "a newer read already proved the channel gone after the older read was requested, so the older "
+            + "snapshot listing it is stale; admitting it again brings back a call whose ending was announced");
+    }
+
     // --- one admission per channel -----------------------------------------------------------------
 
     [Fact]
@@ -477,6 +504,24 @@ public class ChannelManagerReconcileTests
             new { Announcements = 1, SameInstance = true },
             "the channel is admitted once while it is held, whichever route reports it first; a second "
             + "announcement makes a subscriber count the leg twice, and its one hangup then leaves the copy behind");
+    }
+
+    [Fact]
+    public void OnNewChannel_ShouldAnnounceNothingAndKeepTheHeldInstance_WhenALiveArrivalRepeatsAHeldChannel()
+    {
+        _sut.OnNewChannel("1700000000.6", "PJSIP/6000-0006", ChannelState.Ring);
+        var admitted = _sut.GetByUniqueId("1700000000.6");
+
+        _sut.OnNewChannel("1700000000.6", "PJSIP/6000-0006", ChannelState.Up);
+
+        new
+        {
+            Announcements = _added.Count(c => c.UniqueId == "1700000000.6"),
+            SameInstance = ReferenceEquals(_sut.GetByUniqueId("1700000000.6"), admitted),
+        }.Should().BeEquivalentTo(
+            new { Announcements = 1, SameInstance = true },
+            "a channel the table holds is admitted once, whichever route admitted it; a second live arrival "
+            + "replacing it would leave every subscriber that kept the first instance holding an orphan");
     }
 
     // --- provenance of an admission -------------------------------------------------------------
