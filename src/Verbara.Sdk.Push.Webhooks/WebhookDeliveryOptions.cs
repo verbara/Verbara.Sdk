@@ -8,7 +8,8 @@ namespace Verbara.Sdk.Push.Webhooks;
 /// Validated when the options are resolved and by both <see cref="WebhookDeliveryService"/> constructors:
 /// <see cref="MaxRetries"/> must be 0 or more; <see cref="InitialDelay"/> between zero and <c>int.MaxValue</c>
 /// milliseconds; <see cref="MaxDelay"/> between <see cref="InitialDelay"/> and <c>int.MaxValue</c> milliseconds;
-/// <see cref="TimeoutPerAttempt"/> greater than zero, or <see cref="Timeout.InfiniteTimeSpan"/>.
+/// <see cref="TimeoutPerAttempt"/> greater than zero and at most <c>int.MaxValue</c> milliseconds, or
+/// <see cref="Timeout.InfiniteTimeSpan"/>.
 /// </remarks>
 public sealed class WebhookDeliveryOptions
 {
@@ -24,7 +25,10 @@ public sealed class WebhookDeliveryOptions
     [WebhookDeliveryRule]
     public TimeSpan MaxDelay { get; set; } = TimeSpan.FromSeconds(60);
 
-    /// <summary>HTTP timeout for a single attempt. Default 10 s.</summary>
+    /// <summary>
+    /// HTTP timeout for a single attempt: greater than zero and at most <c>int.MaxValue</c> milliseconds (the most
+    /// <c>HttpClient.Timeout</c> accepts), or <see cref="Timeout.InfiniteTimeSpan"/>. Default 10 s.
+    /// </summary>
     [WebhookDeliveryRule]
     public TimeSpan TimeoutPerAttempt { get; set; } = TimeSpan.FromSeconds(10);
 

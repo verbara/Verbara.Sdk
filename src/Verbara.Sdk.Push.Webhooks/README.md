@@ -39,7 +39,7 @@ delivery could never use stops the host from starting instead of losing deliveri
 | `MaxRetries` | `0` or more | `5` |
 | `InitialDelay` | `TimeSpan.Zero` to `int.MaxValue` ms (about 24.8 days) | 1 s |
 | `MaxDelay` | `InitialDelay` to `int.MaxValue` ms | 60 s |
-| `TimeoutPerAttempt` | greater than zero, or `Timeout.InfiniteTimeSpan` | 10 s |
+| `TimeoutPerAttempt` | greater than zero and at most `int.MaxValue` ms, or `Timeout.InfiniteTimeSpan` | 10 s |
 
 Through `AddVerbaraPushWebhooks` a rejected value fails with an `OptionsValidationException` that lists every
 offending option, for example

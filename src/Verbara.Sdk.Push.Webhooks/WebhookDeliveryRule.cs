@@ -7,11 +7,15 @@ namespace Verbara.Sdk.Push.Webhooks;
 /// validator (<see cref="WebhookDeliveryOptionsValidator"/>) and both <see cref="WebhookDeliveryService"/>
 /// constructors. Every rejected value is one the delivery loop can never honour: a retry delay
 /// <c>BackoffSchedule.Compute</c> or <c>Task.Delay</c> throws on, a negative retry count, or a per-attempt
-/// timeout that ends every attempt before it starts.
+/// timeout that ends every attempt before it starts or that <c>HttpClient.Timeout</c> refuses (above <c>int.MaxValue</c>
+/// milliseconds), so every attempt fails.
 /// </summary>
 internal static class WebhookDeliveryRule
 {
-    /// <summary>The longest delay accepted: <c>int.MaxValue</c> milliseconds, the bound the AMI/ARI reconnect rule uses.</summary>
+    /// <summary>
+    /// The longest delay or finite per-attempt timeout accepted: <c>int.MaxValue</c> milliseconds, the bound the AMI/ARI
+    /// reconnect rule uses and the largest finite value <c>HttpClient.Timeout</c> takes.
+    /// </summary>
     internal static readonly TimeSpan WaitLimit = TimeSpan.FromMilliseconds(int.MaxValue);
 
     /// <summary>The checked members, in the order the constructors report the first violation.</summary>
@@ -33,8 +37,10 @@ internal static class WebhookDeliveryRule
         nameof(WebhookDeliveryOptions.MaxDelay) =>
             DelayViolation(member, options.MaxDelay, options.InitialDelay, nameof(WebhookDeliveryOptions.InitialDelay)),
         nameof(WebhookDeliveryOptions.TimeoutPerAttempt)
-            when options.TimeoutPerAttempt != Timeout.InfiniteTimeSpan && options.TimeoutPerAttempt <= TimeSpan.Zero =>
-            Unusable(member, Format(options.TimeoutPerAttempt), "greater than zero, or Timeout.InfiniteTimeSpan"),
+            when options.TimeoutPerAttempt != Timeout.InfiniteTimeSpan
+                && (options.TimeoutPerAttempt <= TimeSpan.Zero || options.TimeoutPerAttempt > WaitLimit) =>
+            Unusable(member, Format(options.TimeoutPerAttempt),
+                "greater than zero and at most int.MaxValue ms, or Timeout.InfiniteTimeSpan"),
         _ => null,
     };
 

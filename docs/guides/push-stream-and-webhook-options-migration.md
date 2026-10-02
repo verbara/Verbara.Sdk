@@ -29,7 +29,7 @@ property, `MaxQueuedBytesPerConnection`; no existing signature changed, so nothi
 - **A webhook delivery option that could never work was accepted.** With `MaxDelay` below `InitialDelay`, a negative
   `InitialDelay`, or a delay longer than .NET can wait, an event whose first attempt failed was never retried and
   nothing said so: no `Error` entry, no `dead_letter` count, only an exception in a task nobody observed. A negative
-  `MaxRetries` or a zero `TimeoutPerAttempt` delivered nothing either.
+  `MaxRetries`, a zero `TimeoutPerAttempt` or one above `int.MaxValue` ms delivered nothing either.
 
 ## What the SDK does now
 
@@ -136,7 +136,7 @@ trace 2  push deliver order.created  (root)    └── push deliver order.crea
 | `MaxRetries` | `0` or more | `5` |
 | `InitialDelay` | `TimeSpan.Zero` to `int.MaxValue` ms (about 24.8 days) | 1 s |
 | `MaxDelay` | `InitialDelay` to `int.MaxValue` ms | 60 s |
-| `TimeoutPerAttempt` | greater than zero, or `Timeout.InfiniteTimeSpan` | 10 s |
+| `TimeoutPerAttempt` | greater than zero and at most `int.MaxValue` ms, or `Timeout.InfiniteTimeSpan` | 10 s |
 
 - **Through `AddVerbaraPushWebhooks`** the start fails with an `OptionsValidationException` listing every offending
   option, for example
