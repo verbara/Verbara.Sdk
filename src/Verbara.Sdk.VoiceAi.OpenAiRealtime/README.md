@@ -44,6 +44,27 @@ bridge.Events.Subscribe(evt =>
 - `AddOpenAiRealtimeBridge()` and `AddFunction<T>()` DI extension methods
 - Native AOT compatible (AOT-safe JSON via `System.Text.Json` source generation)
 
+## When the conversation ends
+
+The bridge runs one Realtime conversation per AudioSocket session, and the session broker that
+`AddOpenAiRealtimeBridge` registers ends the line as soon as the bridge returns:
+
+- **The vendor closes the conversation.** The bridge returns and the broker hangs the line up with
+  one hangup frame. On the `AudioSocket()` route of Asterisk 20 and later the caller goes on in the
+  dialplan at once (measured 2026-10-02 on 20.20.1, 22.9.0 and 23.4.1: 60 of 60 calls, within
+  2 ms of the bridge returning); on an ARI `externalMedia` route the channel leaves Stasis with the
+  caller still in your bridge (60 of 60). Put what the caller should hear next in the dialplan or
+  your ARI application. On Asterisk 18 the application fails and the call is hung up.
+- **The caller hangs up.** The bridge closes the vendor session and returns; nothing more is sent
+  to the caller.
+- **The host stops.** A graceful stop hangs up every live call with a frame and waits for each
+  conversation to return, within the host's shutdown budget. A conversation the host cancels
+  returns only once both of its audio loops have ended, and an event a session raises after the
+  bridge was disposed is dropped and logged at Debug rather than thrown inside the session.
+
+Register `AddAudioSocketServer` before `AddOpenAiRealtimeBridge` (the prerequisite above), so the
+broker stops before the server and every call ends with a hangup frame.
+
 ## Documentation
 
-See the [main README](../../README.md) for full documentation.
+See the [main README](../../README.md) for full documentation. Upgrading from 2.6.1: [voice-session-ending-migration.md](../../docs/guides/voice-session-ending-migration.md).

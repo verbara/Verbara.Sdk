@@ -34,11 +34,51 @@ server.OnSessionStarted += async session =>
 ## Features
 
 - `AudioSocketServer` — `IHostedService` TCP server; accepts Asterisk AudioSocket connections
-- `AudioSocketSession` — per-call session with `ReadAudioAsync()` and `WriteAudioAsync()` for 20 ms PCM16 frames
+- `AudioSocketSession` — per-call session with `ReadAudioAsync()` and `WriteAudioAsync()` for 20 ms PCM16 frames, and an idempotent `HangupAsync()`
 - UUID handshake: automatically reads the channel UUID frame from Asterisk on connection
 - `OnSessionStarted` event for routing sessions to custom handlers
 - `AddAudioSocketServer()` DI extension for one-line registration
 - Zero-copy `System.IO.Pipelines` framing; Native AOT compatible
+
+## Ending a session
+
+`HangupAsync` writes one hangup frame and closes the connection. On Asterisk 20 and later the call
+then goes on in the dialplan after `AudioSocket()`, where a bare close with the caller's audio unread
+fails the call; on Asterisk 18 any end from the server fails the application.
+
+- **Idempotent.** On a session that has already ended (the caller hung up, it was hung up before, or
+  its owner disposed it) `HangupAsync` completes and writes nothing, so the far end receives at most
+  one hangup frame per session. Call it on every way out without checking `IsConnected` first.
+- **Never inside another frame.** Writes are serialised per session: a hangup issued while an audio
+  write is in flight waits for that write, so the far end reads whole frames only. Cancelling the
+  hangup's token while it waits abandons it with an `OperationCanceledException`.
+- With `Verbara.Sdk.VoiceAi`'s broker, you rarely call it yourself: the broker hangs a session up as
+  soon as its handler returns or throws.
+
+## Starting and stopping the server
+
+The server binds one listener and runs one accept loop in its lifetime.
+
+- A `StartAsync` while the server is running binds nothing, so a host that starts the same instance
+  twice (as the hosted service `AddAudioSocketServer` registers, and again by hand) keeps one
+  listener, and one stop releases everything.
+- The server is not restartable: a `StartAsync` after `StopAsync` binds nothing. Create a new server
+  instead.
+- A `StartAsync` after `DisposeAsync` throws `ObjectDisposedException`; a `StopAsync` after it does
+  nothing.
+- The stop closes the sessions it serves without a hangup frame. Register the server before the
+  Voice AI pipeline or the Realtime bridge, so their broker stops first and ends each call with one.
+- Once the stop has begun, nothing more is registered: a connection that identified itself just
+  before is refused with a hangup frame and never announced.
+
+## The session limit
+
+`MaxConcurrentSessions` is never passed. Each channel id the server serves takes its place after the
+connection has identified itself, in the same atomic step that checks the limit, so a burst of calls
+that identify at once admits exactly the limit and refuses the rest. Each refused call receives a
+hangup frame and the server logs `Session limit reached` at Warning. A call that comes back with the
+UUID of a session still ending shares that session's place (below). Size the limit for the peak you
+want served: a deployment that ran past it in bursts on 2.6.1 and earlier now refuses those calls.
 
 ## A call that comes back with the same UUID
 
@@ -65,4 +105,4 @@ call, and reuse it only when the same call comes back to the bot.
 
 ## Documentation
 
-See the [main README](../../README.md) for full documentation.
+See the [main README](../../README.md) for full documentation. Upgrading from 2.6.1: [voice-session-ending-migration.md](../../docs/guides/voice-session-ending-migration.md).
