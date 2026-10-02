@@ -103,6 +103,7 @@ The package exposes a `System.Diagnostics.Metrics.Meter` named **`Verbara.Sdk.Pu
 | `asterisk.push.events.published` | Counter&lt;long&gt; | Events accepted by `PublishAsync`. |
 | `asterisk.push.events.delivered` | Counter&lt;long&gt; | Events dispatched to at least one observer. |
 | `asterisk.push.events.dropped`   | Counter&lt;long&gt; | Events discarded (tag: `reason=buffer_full\|writer_closed`). |
+| `asterisk.push.sse.events.dropped` | Counter&lt;long&gt; | Event frames an SSE connection of `Verbara.Sdk.Push.AspNetCore` dropped at its per-connection bound (each reported to that client in a `.gap` frame). |
 | `asterisk.push.subscribers.active` | ObservableGauge&lt;int&gt; | Current active subscriptions (bound via `PushMetrics.BindActiveSubscribersGauge`). |
 
 Wire into OpenTelemetry with `meterProvider.AddMeter("Verbara.Sdk.Push")`.

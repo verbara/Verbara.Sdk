@@ -29,6 +29,12 @@ public sealed class PushMetrics : IDisposable
     /// </summary>
     public Counter<long> EventsDropped { get; }
 
+    /// <summary>
+    /// Event frames an SSE connection dropped at its per-connection bound (<c>Verbara.Sdk.Push.AspNetCore</c>);
+    /// each one is reported to that client in a <c>.gap</c> frame. Internal: written only by the SSE endpoint.
+    /// </summary>
+    internal Counter<long> SseEventsDropped { get; }
+
     public PushMetrics()
     {
         _meter = new Meter(MeterName, "1.6.0");
@@ -44,6 +50,10 @@ public sealed class PushMetrics : IDisposable
         EventsDropped = _meter.CreateCounter<long>(
             "asterisk.push.events.dropped", "events",
             "Push events dropped by a full buffer or a closed bus");
+
+        SseEventsDropped = _meter.CreateCounter<long>(
+            "asterisk.push.sse.events.dropped", "events",
+            "Event frames an SSE connection dropped at its per-connection bound");
     }
 
     /// <summary>

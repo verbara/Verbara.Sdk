@@ -252,8 +252,8 @@ public sealed class SseFrameTests
 
 /// <summary>
 /// Spec <c>push-sse-stream-delivery</c>, requirement <i>One slow connection never stalls the bus or grows
-/// without limit</i>, policy-agnostic half: a stopped reader does not stall another subscriber. The
-/// queue-depth half is written in task 2.2 against its internal hook (it does not exist on unfixed code).
+/// without limit</i>, policy-agnostic half: a stopped reader does not stall another subscriber, and the
+/// connection's queue never holds more than the bound (read through the stream's internal queue-depth hook).
 /// </summary>
 public sealed class SseStoppedReaderTests
 {
@@ -267,10 +267,12 @@ public sealed class SseStoppedReaderTests
     {
         const int m = 2000;
         var pad = new string('x', 16_000); // ≈32 MB: far past the bound and the transport's buffers
+        var queueDepth = new QueueDepthProbe();
         await using var host = await SseTestHost.StartAsync(new SseHostOptions
         {
             AllowSynchronousIO = allowSynchronousIO,
             BusCapacity = 4096, // ≥ m (design D7)
+            QueueDepth = queueDepth,
         });
 
         var other = new CountingObserver();
@@ -302,6 +304,9 @@ public sealed class SseStoppedReaderTests
             subscribed.Should().BeTrue("the stopped reader's stream is admitted and subscribed next to the other subscriber");
             allReceived.Should().BeTrue("the other subscriber receives every event within the bound (it received {0} of {1})", received, m);
             dropped.Should().Be(0, "the bus dropped nothing, so a missing event is a stall, not a bus drop");
+            queueDepth.Observations.Should().BePositive("the stream queued frames through its bounded queue");
+            queueDepth.MaxQueuedBytes.Should().BeLessThanOrEqualTo(SseStreamSettings.DefaultBoundBytes,
+                "the connection's server-side queue never holds more than the bound");
         }
     }
 }
@@ -399,8 +404,9 @@ public sealed class SseAbortTests
 /// Spec <c>push-sse-stream-delivery</c>, the policy Q1 ruled (design <i>Owner answers</i>, Q1 2026-10-01):
 /// drop oldest at a byte bound (1 MiB per connection by default), then one <c>event: .gap</c> carrying the
 /// count of dropped event frames; heartbeats outside the bound; a metric and one Warning per gap episode;
-/// <c>.gap</c> reserved. Runs alone: the drop metric is read by meter name, process-wide. The queue-depth
-/// assertion, the public option's non-default value and a single frame larger than the bound are task 2.2's.
+/// <c>.gap</c> reserved. Runs alone: the drop metric is read by meter name, process-wide. Task 2.2 added the
+/// queue-depth assertion (through the stream's internal hook), the public option's non-default value and a
+/// single frame larger than the bound.
 /// </summary>
 [Collection(SseProcessWideStateGroup.Name)]
 public sealed class SseStreamBoundTests
@@ -428,7 +434,8 @@ public sealed class SseStreamBoundTests
         IReadOnlyDictionary<string, long> StreamMetric,
         IReadOnlyList<CapturedLog> Logs,
         string Pad,
-        int Published);
+        int Published,
+        long MaxQueuedBytes);
 
     public static TheoryData<int, bool> PayloadsAndSettings() => new()
     {
@@ -460,6 +467,74 @@ public sealed class SseStreamBoundTests
                 "the bytes queued for the connection (what the last .gap is followed by) never exceed the 1 MiB default");
             gaps.EventBytesAfterLastGap.Should().BeGreaterThan(SseStreamSettings.DefaultBoundBytes - (2 * gaps.LargestEventFrameBytes),
                 "the default bound is 1 MiB of UTF-8 frames, not less (one frame is {0} bytes)", gaps.LargestEventFrameBytes);
+            episode.MaxQueuedBytes.Should().BeLessThanOrEqualTo(SseStreamSettings.DefaultBoundBytes,
+                "the bytes queued for that connection never exceed 1 MiB (read through the queue-depth hook)");
+            episode.MaxQueuedBytes.Should().BeGreaterThan(SseStreamSettings.DefaultBoundBytes - (2 * gaps.LargestEventFrameBytes),
+                "the queue fills up to the bound before it drops");
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Settings))]
+    public async Task Stream_ShouldUseTheHostsBound_WhenThePublicOptionIsSet(bool allowSynchronousIO)
+    {
+        const long bound = 256 * 1024;
+        var episode = await RunStoppedReaderEpisodeAsync(16_000, allowSynchronousIO, heartbeat: null, boundBytes: bound);
+        var gaps = GapAnalysis.Of(episode.Frames, episode.Published);
+
+        using (new AssertionScope($"bound={bound} (AllowSynchronousIO={allowSynchronousIO})"))
+        {
+            AssertEpisodeRan(episode);
+            gaps.Gaps.Should().NotBeEmpty("events were dropped at the host's bound");
+            gaps.Gaps.Sum(static g => g.Count ?? 0).Should().Be(gaps.Missing, "every event that never arrived is reported by a .gap");
+            gaps.EventBytesAfterLastGap.Should().BeLessThanOrEqualTo(bound, "the host's bound replaces the 1 MiB default");
+            gaps.EventBytesAfterLastGap.Should().BeGreaterThan(bound - (2 * gaps.LargestEventFrameBytes), "the queue fills up to the host's bound");
+            episode.MaxQueuedBytes.Should().BeLessThanOrEqualTo(bound, "the bytes queued never exceed the host's bound");
+            episode.MaxQueuedBytes.Should().BeGreaterThan(bound - (2 * gaps.LargestEventFrameBytes), "the queue fills up to the host's bound before it drops");
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Settings))]
+    public async Task Stream_ShouldDeliverAFrameLargerThanTheBoundWhole_WhenItIsAlone(bool allowSynchronousIO)
+    {
+        const long bound = 4096;
+        var pad = new string('x', 16_000); // one frame of ≈16 KB against a 4 KiB bound
+        var queueDepth = new QueueDepthProbe();
+        await using var host = await SseTestHost.StartAsync(new SseHostOptions
+        {
+            AllowSynchronousIO = allowSynchronousIO,
+            PerConnectionBoundBytes = bound,
+            QueueDepth = queueDepth,
+        });
+
+        using var abort = new CancellationTokenSource();
+        var responseTask = host.OpenStreamAsync(string.Empty, abort.Token);
+        var headersArrived = await Task.WhenAny(responseTask, Task.Delay(Bound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+        using var response = headersArrived ? await responseTask : null;
+        var subscribed = response?.StatusCode == HttpStatusCode.OK
+            && await host.Bus.Subscribers.WaitUntilAsync(static c => c >= 1, Bound);
+
+        await host.PublishAsync(LoadFrames.Topic(0), correlationId: LoadFrames.Correlation(0, pad));
+
+        IReadOnlyList<SseFrame> frames = [];
+        if (subscribed)
+        {
+            using var reader = new SseReader(await response!.Content.ReadAsStreamAsync(abort.Token));
+            await reader.ReadUntilAsync(static f => LoadFrames.Sequence(f) == 0, Bound);
+            frames = [.. reader.Frames.Where(static f => !f.IsHeartbeat)];
+        }
+
+        await abort.CancelAsync();
+
+        using (new AssertionScope($"AllowSynchronousIO={allowSynchronousIO}"))
+        {
+            response?.StatusCode.Should().Be(HttpStatusCode.OK);
+            subscribed.Should().BeTrue("the admitted stream subscribes to the bus");
+            frames.Should().ContainSingle("a frame larger than the bound is still delivered, and nothing was dropped (no .gap)")
+                .Which.Should().Match<SseFrame>(f => LoadFrames.IsWellFormed(f, pad), "it arrives whole");
+            frames[0].Utf8Bytes.Should().BeGreaterThan((int)bound, "the frame really is larger than the bound");
+            queueDepth.MaxQueuedBytes.Should().Be(frames[0].Utf8Bytes, "it was queued alone");
         }
     }
 
@@ -639,7 +714,7 @@ public sealed class SseStreamBoundTests
     /// A client that stops reading after the headers while events are published far past the 1 MiB bound
     /// and the transport's buffers (≈32 MB at 16 KB, ≈20 MB at 0.5 KB), then reads everything.
     /// </summary>
-    private static async Task<Episode> RunStoppedReaderEpisodeAsync(int payload, bool allowSynchronousIO, TimeSpan? heartbeat)
+    private static async Task<Episode> RunStoppedReaderEpisodeAsync(int payload, bool allowSynchronousIO, TimeSpan? heartbeat, long? boundBytes = null)
     {
         var count = payload >= 16_000 ? 2_000 : 40_000;
         var pad = new string('x', payload);
@@ -655,11 +730,14 @@ public sealed class SseStreamBoundTests
         meterListener.SetMeasurementEventCallback<int>((instrument, value, _, _) => streamMetric.AddOrUpdate(instrument.Name, value, (_, v) => v + value));
         meterListener.Start();
 
+        var queueDepth = new QueueDepthProbe();
         await using var host = await SseTestHost.StartAsync(new SseHostOptions
         {
             AllowSynchronousIO = allowSynchronousIO,
             BusCapacity = count + 16, // ≥ the events published (design D7)
             HeartbeatInterval = heartbeat,
+            PerConnectionBoundBytes = boundBytes,
+            QueueDepth = queueDepth,
         });
 
         var probe = new CountingObserver();
@@ -702,6 +780,6 @@ public sealed class SseStreamBoundTests
         await abort.CancelAsync();
         response?.Dispose();
 
-        return new Episode(status, subscribed, busDelivered, busReceived, sawLast, frames, busDropped, new Dictionary<string, long>(streamMetric, StringComparer.Ordinal), logs, pad, count);
+        return new Episode(status, subscribed, busDelivered, busReceived, sawLast, frames, busDropped, new Dictionary<string, long>(streamMetric, StringComparer.Ordinal), logs, pad, count, queueDepth.MaxQueuedBytes);
     }
 }

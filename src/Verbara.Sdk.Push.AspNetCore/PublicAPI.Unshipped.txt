@@ -1,1 +1,5 @@
 #nullable enable
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.MaxQueuedBytesPerConnection.get -> long
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.MaxQueuedBytesPerConnection.set -> void
+Verbara.Sdk.Push.AspNetCore.SsePushStreamOptions.SsePushStreamOptions() -> void

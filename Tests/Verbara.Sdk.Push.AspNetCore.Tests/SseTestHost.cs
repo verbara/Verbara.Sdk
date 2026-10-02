@@ -221,24 +221,58 @@ public sealed class BusDropListener : IDisposable
 }
 
 /// <summary>
-/// The stream's settings a test needs (heartbeat interval, per-connection bound). Unfixed code has no
-/// seam for either: <see cref="Configure"/> registers nothing today, so a test runs at the shipped 15 s
-/// heartbeat and an unbounded (2.6.1) stream. Task 2.2 adds the internal <c>SsePushStreamOptions</c> and
-/// registers it here — the one place the tests set the stream's settings — and only when a test sets a
-/// value, so a host that sets nothing (the <c>AddVerbaraPush()</c>-only host) reads the endpoint's defaults.
+/// The stream's settings a test needs (heartbeat interval, per-connection bound, the queue-depth hook), set
+/// through <see cref="SsePushStreamOptions"/> — the bound through its public option, the heartbeat and the
+/// hook through its internal members — and only when a test sets a value, so a host that sets nothing (the
+/// <c>AddVerbaraPush()</c>-only host) reads the endpoint's defaults.
 /// </summary>
 public static class SseStreamSettings
 {
     /// <summary>The bound the spec rules as the default: 1 MiB of UTF-8 frames per connection.</summary>
     public const long DefaultBoundBytes = 1_048_576;
 
-    public static void Configure(IServiceCollection services, TimeSpan? heartbeatInterval, long? boundBytes)
+    public static void Configure(IServiceCollection services, TimeSpan? heartbeatInterval, long? boundBytes, Action<long>? queuedBytesObserved = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // No seam on unfixed code (design D3): task 2.2 registers SsePushStreamOptions here.
-        _ = heartbeatInterval;
-        _ = boundBytes;
+        if (heartbeatInterval is null && boundBytes is null && queuedBytesObserved is null)
+            return;
+
+        services.Configure<SsePushStreamOptions>(o =>
+        {
+            if (heartbeatInterval is { } interval)
+                o.HeartbeatInterval = interval;
+            if (boundBytes is { } bound)
+                o.MaxQueuedBytesPerConnection = bound;
+            if (queuedBytesObserved is not null)
+                o.QueuedBytesObserved = queuedBytesObserved;
+        });
+    }
+}
+
+/// <summary>The high-water mark of one host's per-connection queue, read through the stream's internal hook.</summary>
+public sealed class QueueDepthProbe
+{
+    private long _max;
+    private long _observations;
+
+    /// <summary>The most bytes any connection of the host had queued at once.</summary>
+    public long MaxQueuedBytes => Interlocked.Read(ref _max);
+
+    /// <summary>How many times a frame was queued.</summary>
+    public long Observations => Interlocked.Read(ref _observations);
+
+    public void Observe(long queuedBytes)
+    {
+        Interlocked.Increment(ref _observations);
+        var current = Interlocked.Read(ref _max);
+        while (queuedBytes > current)
+        {
+            var seen = Interlocked.CompareExchange(ref _max, queuedBytes, current);
+            if (seen == current)
+                return;
+            current = seen;
+        }
     }
 }
 
@@ -257,6 +291,9 @@ public sealed record SseHostOptions
     public TimeSpan? HeartbeatInterval { get; init; }
 
     public long? PerConnectionBoundBytes { get; init; }
+
+    /// <summary>When set, records the high-water mark of the connection's queue (design D3's hook).</summary>
+    public QueueDepthProbe? QueueDepth { get; init; }
 }
 
 /// <summary>
@@ -316,7 +353,7 @@ public sealed class SseTestHost : IAsyncDisposable
         else
             builder.Services.AddVerbaraPush(o => o.BufferCapacity = options.BusCapacity);
 
-        SseStreamSettings.Configure(builder.Services, options.HeartbeatInterval, options.PerConnectionBoundBytes);
+        SseStreamSettings.Configure(builder.Services, options.HeartbeatInterval, options.PerConnectionBoundBytes, options.QueueDepth is { } probe ? probe.Observe : null);
 
         // The endpoint's bus, wrapped so the tests can count its subscriptions.
         builder.Services.AddSingleton<RxPushEventBus>();

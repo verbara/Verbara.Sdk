@@ -1,14 +1,16 @@
 namespace Verbara.Sdk.Push.AspNetCore;
 
 using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Verbara.Sdk.Push.Authz;
 using Verbara.Sdk.Push.Bus;
 using Verbara.Sdk.Push.Delivery;
+using Verbara.Sdk.Push.Diagnostics;
 using Verbara.Sdk.Push.Events;
 using Verbara.Sdk.Push.Topics;
 
@@ -117,33 +119,97 @@ public static class SsePushEndpoints
         ctx.Response.Headers.CacheControl = "no-cache";
         ctx.Response.Headers["X-Accel-Buffering"] = "no";
 
-        await using var writer = new StreamWriter(ctx.Response.Body) { AutoFlush = true };
+        // Read per request, never required: a host set up with AddVerbaraPush() only has no stream options
+        // registered and is served with the defaults (spec push-sse-stream-delivery).
+        var options = ctx.RequestServices.GetService<IOptions<SsePushStreamOptions>>()?.Value ?? SsePushStreamOptions.Default;
+        var metrics = ctx.RequestServices.GetService<PushMetrics>();
+        var logger = loggerFactory.CreateLogger(SsePushLog.Category);
 
-        // Heartbeat every 15 s to keep proxies and clients from timing out the connection.
-        using var heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var heartbeatTask = RunHeartbeatAsync(writer, heartbeatCts.Token);
-
-        // Subscribe to the bus and stream filtered events as SSE.
-        var streamCts = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        ct.Register(() => streamCts.TrySetResult());
-
-        using (bus.AsObservable().Subscribe(evt =>
+        try
         {
-            if (!deliveryFilter.IsDeliverableToSubscriber(evt, subscriber))
-                return;
-
-            if (!MatchesAnyPattern(evt, patterns, userId))
-                return;
-
-            WriteEvent(writer, evt);
-        }))
+            // StartAsync alone does not put the headers on the wire; the flush does (C7.md).
+            await ctx.Response.StartAsync(ct).ConfigureAwait(false);
+            await ctx.Response.Body.FlushAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsConnectionEnd(ex))
         {
-            await streamCts.Task.ConfigureAwait(false);
+            LogStreamEnded(logger, tenantId, userId, ex);
+            return;
         }
 
-        await heartbeatCts.CancelAsync().ConfigureAwait(false);
-        await heartbeatTask.ConfigureAwait(false);
+        // One writer per connection over a bounded queue of whole frames (design D3, D4): the bus callback and
+        // the heartbeat only queue frames, so neither ever waits on the client and no two frames interleave.
+        var queue = new SseFrameQueue(options.MaxQueuedBytesPerConnection, options.QueuedBytesObserved);
+        using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var writer = WriteFramesAsync(ctx.Response.Body, queue, logger, tenantId, userId, streamCts.Token);
+        var heartbeat = RunHeartbeatAsync(queue, options.HeartbeatInterval, streamCts.Token);
+        try
+        {
+            using (bus.AsObservable().Subscribe(evt =>
+            {
+                if (!deliveryFilter.IsDeliverableToSubscriber(evt, subscriber))
+                    return;
+
+                if (!MatchesAnyPattern(evt, patterns, userId))
+                    return;
+
+                var queued = queue.EnqueueEvent(SseFrameFormat.Event(evt));
+                if (queued.Dropped > 0)
+                {
+                    metrics?.SseEventsDropped.Add(queued.Dropped);
+                    if (queued.EpisodeStarted)
+                        SsePushLog.GapEpisodeStarted(logger, options.MaxQueuedBytesPerConnection, tenantId, userId);
+                }
+            }))
+            {
+                // The writer runs until the connection ends (abort, reset or cancellation).
+                await writer.ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            await streamCts.CancelAsync().ConfigureAwait(false);
+            queue.Complete();
+            await heartbeat.ConfigureAwait(false);
+            await writer.ConfigureAwait(false);
+        }
     }
+
+    /// <summary>
+    /// The connection's only writer: takes whole frames off the queue, writes a <c>.gap</c> first when frames
+    /// were dropped, and flushes each frame. A disconnect, reset or cancellation ends it, logged at Debug.
+    /// </summary>
+    private static async Task WriteFramesAsync(
+        Stream body, SseFrameQueue queue, ILogger logger, string tenantId, string? userId, CancellationToken ct)
+    {
+        try
+        {
+            while (true)
+            {
+                var next = await queue.DequeueAsync(ct).ConfigureAwait(false);
+                if (next.Frame is null)
+                    return;
+
+                if (next.Dropped > 0)
+                    await body.WriteAsync(SseFrameFormat.Gap(next.Dropped), ct).ConfigureAwait(false);
+                await body.WriteAsync(next.Frame, ct).ConfigureAwait(false);
+                await body.FlushAsync(ct).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (IsConnectionEnd(ex))
+        {
+            LogStreamEnded(logger, tenantId, userId, ex);
+        }
+    }
+
+    /// <summary>
+    /// Whether an exception is the connection ending: a cancellation (the request aborted) or the transport's
+    /// reset (<see cref="IOException"/>, which Kestrel's <c>ConnectionResetException</c> derives from).
+    /// </summary>
+    private static void LogStreamEnded(ILogger logger, string tenantId, string? userId, Exception ex) =>
+        SsePushLog.StreamEnded(logger, tenantId, userId, ex is OperationCanceledException ? "cancelled" : "reset");
+
+    private static bool IsConnectionEnd(Exception ex) => ex is OperationCanceledException or IOException;
 
     private static bool MatchesAnyPattern(PushEvent evt, IReadOnlyList<TopicPattern> patterns, string? userId)
     {
@@ -173,26 +239,17 @@ public static class SsePushEndpoints
         return false;
     }
 
-    private static void WriteEvent(StreamWriter writer, PushEvent evt)
+    private static async Task RunHeartbeatAsync(SseFrameQueue queue, TimeSpan interval, CancellationToken ct)
     {
-        var eventType = evt.Metadata?.TopicPath ?? evt.EventType;
-        var data = JsonSerializer.Serialize(evt, SseJsonContext.Default.PushEvent);
-        writer.Write($"event: {eventType}\ndata: {data}\n\n");
-    }
-
-    private static async Task RunHeartbeatAsync(StreamWriter writer, CancellationToken ct)
-    {
+        using var timer = new PeriodicTimer(interval);
         try
         {
-            while (!ct.IsCancellationRequested)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
-                await writer.WriteAsync(": heartbeat\n\n".AsMemory(), ct).ConfigureAwait(false);
-            }
+            while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+                queue.TryEnqueueHeartbeat(SseFrameFormat.Heartbeat);
         }
         catch (OperationCanceledException)
         {
-            // Normal shutdown — swallow.
+            // The stream ended — normal shutdown.
         }
     }
 }
