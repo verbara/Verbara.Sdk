@@ -1,6 +1,7 @@
 using Verbara.Sdk;
 using Verbara.Sdk.Ari.Internal;
 using FluentAssertions;
+using FluentAssertions.Execution;
 
 namespace Verbara.Sdk.Ari.Tests.Internal;
 
@@ -48,6 +49,29 @@ public class AriEventPumpTests
 
         await allDispatched.Task.WaitAsync(TimeSpan.FromSeconds(2));
         pump.ProcessedEvents.Should().BeGreaterOrEqualTo(2);
+    }
+
+    [Fact]
+    public async Task TryEnqueue_ShouldCountEachDiscardWithTheDiscardedEvent_WhenTheBufferIsFull()
+    {
+        // Capacity 2, consumer held on its first event: of five writes the buffer keeps the last two and discards
+        // the three oldest. Each discard is counted and reported with the event it discarded.
+        await using var pump = new AriEventPump(capacity: 2);
+        var discarded = new List<string?>();
+        pump.OnEventDropped = evt =>
+        {
+            lock (discarded) discarded.Add(evt.Type);
+        };
+
+        for (var i = 0; i < 5; i++)
+            pump.TryEnqueue(new AriEvent { Type = $"Event-{i}" });
+
+        using (new AssertionScope())
+        {
+            pump.DroppedEvents.Should().Be(3, "three writes found the buffer full");
+            discarded.Should().Equal(["Event-0", "Event-1", "Event-2"], "each discard carries the oldest event, the one discarded");
+            pump.PendingCount.Should().Be(2);
+        }
     }
 
     [Fact]
