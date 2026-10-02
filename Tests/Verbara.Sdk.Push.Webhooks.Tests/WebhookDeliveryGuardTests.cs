@@ -213,6 +213,7 @@ public sealed class WebhookDeliveryGuardTests
             _webhookMetrics.Dispose();
             _bus.Dispose();
             _pushMetrics.Dispose();
+            Endpoint.Dispose();
         }
     }
 
@@ -232,6 +233,7 @@ public sealed class WebhookDeliveryGuardTests
 
     private sealed class FakeEndpoint(HttpStatusCode status) : HttpMessageHandler
     {
+        private readonly ConcurrentQueue<HttpResponseMessage> _responses = new();
         private int _calls;
         private volatile int _status = (int)status;
 
@@ -246,7 +248,22 @@ public sealed class WebhookDeliveryGuardTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _calls);
-            return Task.FromResult(new HttpResponseMessage { StatusCode = Status });
+            var response = new HttpResponseMessage { StatusCode = Status };
+            _responses.Enqueue(response);
+            return Task.FromResult(response);
+        }
+
+        // The service owns each response it receives; the endpoint also releases every one it created, so none
+        // outlives the test whatever path the service took.
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                while (_responses.TryDequeue(out var response))
+                    response.Dispose();
+            }
+
+            base.Dispose(disposing);
         }
     }
 
