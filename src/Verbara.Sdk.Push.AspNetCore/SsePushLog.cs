@@ -23,4 +23,10 @@ internal static partial class SsePushLog
     [LoggerMessage(EventId = 3, Level = LogLevel.Debug,
         Message = "[Push] SSE stream ended by the connection: tenant={TenantId} user={UserId} ({Reason})")]
     public static partial void StreamEnded(ILogger logger, string tenantId, string? userId, string reason);
+
+    // Warning once per published event, not once per stream that evaluated it. The event type and topic path
+    // arrive percent-encoded; the tenant is the authenticated subscriber's, logged as the other entries log it.
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning,
+        Message = "[Push] SSE event dropped: its topic path does not parse: tenant={TenantId} eventType={EventType} topicPath={TopicPath}")]
+    public static partial void UnparseableTopicDropped(ILogger logger, string tenantId, string eventType, string topicPath);
 }

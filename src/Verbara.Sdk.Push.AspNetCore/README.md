@@ -46,12 +46,22 @@ other topic.
 | No `tenantId` claim | `400 Bad Request` | `Missing tenantId claim.` |
 | Any `topic` fails to parse (alone or next to valid ones) | `400 Bad Request` | `text/plain`, the invalid topics percent-encoded; the authorizer is asked nothing |
 | Every requested topic denied (no topic = `**` denied) | `403 Forbidden` | `text/plain`, the fixed text `Subscription denied.` |
-| At least one requested topic allowed | `200 OK` | `text/event-stream` with the events of the allowed topics only |
+| At least one requested topic allowed | `200 OK` | `text/event-stream` with the events whose name matches an allowed topic only (see below) |
 
 A denied topic is never replaced by a wider pattern: an authorizer that denies `billing.**` keeps the client
 off `billing.**` even when it would allow `**`. The authorizer's `Reason` is never returned to the client; the
 endpoint logs one `Warning` per refused request (category `Verbara.Sdk.Push.AspNetCore.SsePushEndpoints`) with
 the tenant, the user, the denied topics percent-encoded and the first reason.
+
+An event is matched by its **name**: its `TopicPath`, or its `EventType` when the topic path is null or
+empty. A topic-less `billing.invoice.created` event therefore reaches a stream allowed `billing.**` and no
+stream allowed only `queue.**`, and `{self}` resolves in the event type as it does in a topic path. An event
+type that is not a valid topic (for example `billing..x`, or `.gap`) is never matched by its text: a topic-less
+event of such a type reaches only streams allowed `**`. An event whose non-empty `TopicPath` is not a valid
+topic (for example `a..b`) reaches no stream, `**` included, and never falls back to its event type; the
+endpoint logs one `Warning` per such event, however many streams evaluated it, with the tenant and the event
+type and topic path percent-encoded. For a **null** topic path this is the convention the NATS bridge uses to
+build its subject (`TopicPath ?? EventType`).
 
 When some requested topics are allowed and others denied, the stream is served and the response header
 `X-Push-Denied-Topics` lists the denied topics exactly as requested, each percent-encoded (`Uri.EscapeDataString`),
@@ -73,7 +83,8 @@ data: {"eventType":"queue.42.updated","metadata":{...},...}
 : heartbeat
 ```
 
-The `event:` value is the event's topic path, or its event type when it has none. A CR or LF in it is written
+The `event:` value is the name the event was matched by: its topic path, or its event type when the topic
+path is null or empty. A CR or LF in it is written
 percent-encoded (`%0D`, `%0A`), so an event can never add lines to its frame; `data:` is JSON on one line.
 
 ### Heartbeat, the per-connection bound and `.gap`
@@ -102,7 +113,7 @@ written before the drops, so a client that keeps falling behind keeps receiving 
 - **A single event larger than the bound is still delivered**, alone: everything queued before it is dropped
   and reported.
 - **`.gap` is reserved.** An event whose name would be `.gap` (an `EventType` of `.gap` with no topic path) is
-  written as `event: %2Egap`. An `EventSource` client listens with `addEventListener('.gap', …)`; a client
+  written as `event: %2Egap`. `.gap` is not a valid topic, so such an event reaches only streams allowed `**`. An `EventSource` client listens with `addEventListener('.gap', …)`; a client
   that does not listen ignores it.
 - **Operators see the drops** on the `asterisk.push.sse.events.dropped` counter of the `Verbara.Sdk.Push` meter
   (one per dropped event frame) and in one `Warning` per run of drops (category

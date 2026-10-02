@@ -1,6 +1,7 @@
 namespace Verbara.Sdk.Push.AspNetCore;
 
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -25,6 +26,11 @@ public static class SsePushEndpoints
 
     /// <summary>The fixed 403 body: the authorizer's reason is logged, never returned.</summary>
     internal const string SubscriptionDeniedBody = "Subscription denied.";
+
+    /// <summary>The events already reported as unparseable; an entry lives only as long as its event.</summary>
+    private static readonly ConditionalWeakTable<PushEvent, object> ReportedUnparseableEvents = new();
+
+    private static readonly object ReportedMarker = new();
 
     /// <summary>
     /// Maps the push event stream endpoint at <c>{prefix}/stream</c>.
@@ -82,8 +88,8 @@ public static class SsePushEndpoints
             Roles: new HashSet<string>(StringComparer.Ordinal),
             Permissions: new HashSet<string>(StringComparer.Ordinal));
 
-        // Admission is decided before the response starts (spec push-sse-admission): a refusal is written
-        // as text/plain before any event-stream byte and before subscribing to the bus.
+        // Admission is decided before the response starts: a refusal is written as text/plain before any
+        // event-stream byte and before subscribing to the bus.
         var admission = SseAdmission.Decide(ctx.Request.Query["topic"], subscriber, authorizer);
         switch (admission.Outcome)
         {
@@ -120,7 +126,7 @@ public static class SsePushEndpoints
         ctx.Response.Headers["X-Accel-Buffering"] = "no";
 
         // Read per request, never required: a host set up with AddVerbaraPush() only has no stream options
-        // registered and is served with the defaults (spec push-sse-stream-delivery).
+        // registered and is served with the defaults.
         var options = ctx.RequestServices.GetService<IOptions<SsePushStreamOptions>>()?.Value ?? SsePushStreamOptions.Default;
         var metrics = ctx.RequestServices.GetService<PushMetrics>();
         var logger = loggerFactory.CreateLogger(SsePushLog.Category);
@@ -150,7 +156,10 @@ public static class SsePushEndpoints
                 if (!deliveryFilter.IsDeliverableToSubscriber(evt, subscriber))
                     return;
 
-                if (!MatchesAnyPattern(evt, patterns, userId))
+                var match = SseTopicResolver.Resolve(evt, patterns, userId);
+                if (match == SseTopicMatch.Unparseable)
+                    ReportUnparseableTopicOnce(logger, evt, tenantId);
+                if (match != SseTopicMatch.Deliver)
                     return;
 
                 var queued = queue.EnqueueEvent(SseFrameFormat.Event(evt));
@@ -211,32 +220,21 @@ public static class SsePushEndpoints
 
     private static bool IsConnectionEnd(Exception ex) => ex is OperationCanceledException or IOException;
 
-    private static bool MatchesAnyPattern(PushEvent evt, IReadOnlyList<TopicPattern> patterns, string? userId)
+    /// <summary>
+    /// Logs one <c>Warning</c> per published event whose topic path does not parse, however many streams evaluate
+    /// it: the first stream to claim the event in <see cref="ReportedUnparseableEvents"/> logs, the others do not.
+    /// The event type and topic path are percent-encoded, so a CR or LF in them cannot forge a log line.
+    /// </summary>
+    private static void ReportUnparseableTopicOnce(ILogger logger, PushEvent evt, string tenantId)
     {
-        if (patterns.Count == 0)
-            return false;
+        if (!ReportedUnparseableEvents.TryAdd(evt, ReportedMarker))
+            return;
 
-        var topicPath = evt.Metadata?.TopicPath;
-        if (topicPath is null)
-            return true; // No topic path — let delivery filter decide; pass through.
-
-        TopicName topicName;
-        try
-        {
-            topicName = TopicName.Parse(topicPath);
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-
-        foreach (var pattern in patterns)
-        {
-            if (pattern.Matches(topicName, userId))
-                return true;
-        }
-
-        return false;
+        SsePushLog.UnparseableTopicDropped(
+            logger,
+            tenantId,
+            Uri.EscapeDataString(evt.EventType ?? string.Empty),
+            Uri.EscapeDataString(evt.Metadata?.TopicPath ?? string.Empty));
     }
 
     private static async Task RunHeartbeatAsync(SseFrameQueue queue, TimeSpan interval, CancellationToken ct)
