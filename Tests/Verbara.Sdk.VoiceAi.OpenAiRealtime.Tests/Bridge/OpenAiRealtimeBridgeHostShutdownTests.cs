@@ -60,11 +60,13 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
         var function = new ParkedFunction();
         var log = new HoldingLogger(holdOn: "FunctionResultNotSent");
         using var metrics = new MeterCapture(MeterName);
-        var bridge = CreateBridge(fakeOpenAi, log, function);
+        // Declared server, bridge, broker: on a failure the scope releases them broker first, then the
+        // bridge, then the server, the order the host's container releases them in.
         await using var server = new AudioSocketServer(
             new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
             NullLogger<AudioSocketServer>.Instance);
-        var broker = new VoiceAiSessionBroker(server, bridge, NullLogger<VoiceAiSessionBroker>.Instance);
+        await using var bridge = CreateBridge(fakeOpenAi, log, function);
+        using var broker = new VoiceAiSessionBroker(server, bridge, NullLogger<VoiceAiSessionBroker>.Instance);
         try
         {
             await server.StartAsync(CancellationToken.None);
@@ -108,8 +110,6 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
         {
             function.Release();
             log.Proceed();
-            broker.Dispose();
-            await bridge.DisposeAsync();
         }
     }
 
@@ -122,11 +122,13 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
         var function = new ParkedFunction();
         var log = new HoldingLogger(holdOn: null);
         using var metrics = new MeterCapture(MeterName);
-        var bridge = CreateBridge(fakeOpenAi, log, function);
+        // Declared server, bridge, broker: on a failure the scope releases them broker first, then the
+        // bridge, then the server, the order the host's container releases them in.
         await using var server = new AudioSocketServer(
             new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
             NullLogger<AudioSocketServer>.Instance);
-        var broker = new VoiceAiSessionBroker(server, bridge, NullLogger<VoiceAiSessionBroker>.Instance);
+        await using var bridge = CreateBridge(fakeOpenAi, log, function);
+        using var broker = new VoiceAiSessionBroker(server, bridge, NullLogger<VoiceAiSessionBroker>.Instance);
         try
         {
             await server.StartAsync(CancellationToken.None);
@@ -155,8 +157,6 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
         finally
         {
             function.Release();
-            broker.Dispose();
-            await bridge.DisposeAsync();
         }
     }
 

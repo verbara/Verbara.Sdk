@@ -270,11 +270,9 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
         // The cancel above comes first: a registration whose entry this loop does not see reads it after
         // its add and withdraws. An entry still pending is left to its registrant, which sees the cancel
         // and refuses the connection with a hangup frame; ending it here would close it frameless.
-        foreach (var entry in _sessions.Values)
-        {
-            if (entry.ClaimForStop())
-                await entry.Session.DisposeAsync().ConfigureAwait(false);
-        }
+        // Each entry is claimed as the loop reaches it, after the previous one's disposal, as before.
+        foreach (var entry in _sessions.Values.Where(e => e.ClaimForStop()))
+            await entry.Session.DisposeAsync().ConfigureAwait(false);
 
         _sessions.Clear();
         AudioSocketLog.ServerStopped(_logger);

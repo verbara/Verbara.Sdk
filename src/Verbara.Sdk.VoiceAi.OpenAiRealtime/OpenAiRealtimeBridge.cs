@@ -138,7 +138,9 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         // wait for the loops before anything they use is released. Declared inside the try, the sources
         // were released as the try exited, before that block ran: a host cancellation that left the try
         // while the caller-to-vendor close was pending left the vendor-to-caller loop running over the
-        // released write lock, resamplers and silence bound, faulting where nobody awaited it.
+        // released write lock, resamplers and silence bound, faulting where nobody awaited it. The terminal
+        // block releases the sources at one point, after the loops end and before the close, which no
+        // `using` gives: it would release them either before the loops end or after the close.
         CancellationTokenSource? inputCts = null;
         EndOfInputSilenceBound? silence = null;
         Task? input = null;
@@ -265,8 +267,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             // a session the host cancelled stays completed.
             if (input is not null && output is not null)
                 await AwaitLoopsAsync(inputCts!, input, output).ConfigureAwait(false);
-            inputCts?.Dispose();
-            silence?.Dispose();
+            ReleaseLoopSources(inputCts, silence);
 
             // Clean close — never on ct, which is already cancelled. Conditional by necessity:
             // cancelling a WebSocket operation aborts the socket, so on most cancelled paths there
@@ -286,6 +287,13 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds);
             RealtimeLog.SessionEnded(_logger, channelId);
         }
+    }
+
+    // Releases the two sources only a session's loops use, in this order, each only if it was made.
+    private static void ReleaseLoopSources(CancellationTokenSource? inputCts, EndOfInputSilenceBound? silence)
+    {
+        inputCts?.Dispose();
+        silence?.Dispose();
     }
 
     // Stops reading the caller and waits for both loops. The vendor-to-caller loop is not stopped here:

@@ -328,15 +328,13 @@ public sealed class VoiceAiSessionBrokerTests
         await using var rig = await BrokerRig.StartServerAsync();
         rig.Broker.Dispose();
 
-        // Whether a start after disposal throws ObjectDisposedException or completes is not what this
-        // row pins; either way it must not subscribe to the server.
+        // A start after disposal throws ObjectDisposedException and subscribes nothing to the server.
         var start = await Record.ExceptionAsync(() => rig.Broker.StartAsync(CancellationToken.None));
         var probe = SessionStartedProbe.SubscribeTo(rig.Server);
         var channel = await rig.ConnectPeerAsync();
         await probe.Started(channel).WaitAsync(SignalTimeout);
 
-        (start is null or ObjectDisposedException).Should().BeTrue(
-            $"a start after disposal either completes or reports the disposal (it raised {start?.GetType().Name ?? "nothing"})");
+        start.Should().BeOfType<ObjectDisposedException>("a start after disposal reports the disposal");
         rig.Handler.Calls.Count.Should().Be(
             0,
             "a disposed broker hands no session on whatever is called on it afterwards, even when it was never " +

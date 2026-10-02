@@ -263,16 +263,16 @@ public sealed class VoiceAiPipelineTurnAccountingTests
             _ => new ScriptedTurnDetector(TurnAction.SpeechStarted, TurnAction.EndOfUtterance),
         };
 
-        var recognizer = ending switch
+        SpeechRecognizer recognizer = ending switch
         {
-            Ending.HostCancelsDuringRecognition => (SpeechRecognizer)new ParkingRecognizer(),
+            Ending.HostCancelsDuringRecognition => new ParkingRecognizer(),
             Ending.ProviderFailureInEachArm => new FailsFirstRecognizer(),
             _ => new FakeSpeechRecognizer().WithTranscript("hola"),
         };
 
-        await using var synthesizer = ending switch
+        await using SpeechSynthesizer synthesizer = ending switch
         {
-            Ending.ProviderFailureInEachArm => (SpeechSynthesizer)new FakeSpeechSynthesizer()
+            Ending.ProviderFailureInEachArm => new FakeSpeechSynthesizer()
                 .WithError(new InvalidOperationException("The synthesis provider failed.")),
             Ending.SynthesizerCancelsItself => new SelfCancellingSpeechSynthesizer(),
             Ending.BargeIn or Ending.PipelineDisposal or Ending.HostCancelsDuringSynthesis =>

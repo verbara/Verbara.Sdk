@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
+using Xunit.Sdk;
 
 namespace Verbara.Sdk.VoiceAi.AudioSocket.Tests;
 
@@ -106,12 +107,13 @@ public sealed class AudioSocketSessionHangupTests : IAsyncLifetime
                 inFlight = write.AsTask();
         }
 
-        inFlight.Should().NotBeNull("the far end reads nothing, so a write eventually waits for the transport");
+        var pending = inFlight
+            ?? throw new XunitException("the far end reads nothing, so a write eventually waits for the transport");
 
         var hangup = Record.ExceptionAsync(async () => await session.HangupAsync());
         peer.StartReading();
         var read = await peer.ReadToEndAsync(SignalTimeout);
-        var writeFault = await Record.ExceptionAsync(() => inFlight!.WaitAsync(SignalTimeout));
+        var writeFault = await Record.ExceptionAsync(() => pending.WaitAsync(SignalTimeout));
         var hangupFault = await hangup.WaitAsync(SignalTimeout);
 
         using (new AssertionScope())

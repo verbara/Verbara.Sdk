@@ -134,8 +134,7 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         {
             barrier.TrySetResult();
             await server.DisposeAsync();
-            foreach (var peer in peers)
-                peer.Dispose();
+            DisposeEach(peers);
             await Task.WhenAll(reads).WaitAsync(SignalTimeout);
         }
     }
@@ -291,8 +290,7 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         {
             gate.Set();
             await server.DisposeAsync();
-            foreach (var peer in peers)
-                peer.Dispose();
+            DisposeEach(peers);
         }
     }
 
@@ -452,8 +450,7 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         finally
         {
             await server.DisposeAsync();
-            foreach (var peer in peers)
-                peer.Dispose();
+            DisposeEach(peers);
         }
     }
 
@@ -494,12 +491,18 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         finally
         {
             await server.DisposeAsync();
-            foreach (var peer in peers)
-                peer.Dispose();
+            DisposeEach(peers);
         }
     }
 
     // ---- Harness ----
+
+    /// <summary>Releases every peer, in order; used by the terminal blocks once the server is disposed.</summary>
+    private static void DisposeEach(IEnumerable<TcpClient> peers)
+    {
+        foreach (var peer in peers)
+            peer.Dispose();
+    }
 
     private static AudioSocketServer NewServer(SeamClock clock, CapturingLogger logger, int maxConcurrentSessions) =>
         new(
