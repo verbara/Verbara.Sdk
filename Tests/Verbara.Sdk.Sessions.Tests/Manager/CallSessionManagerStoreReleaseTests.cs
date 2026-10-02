@@ -26,9 +26,11 @@ namespace Verbara.Sdk.Sessions.Tests.Manager;
 /// <para>Retention is crossed on the manager's clock seam, never by waiting. The two concurrent cases
 /// are ordered by construction, each from one side of the interleaving: a release that lands inside a
 /// save (the store runs the other server's arrival, on a thread of its own, after the manager decided
-/// to save and before the store's write), and a save that lands inside a release (the store runs a
-/// late leg's departure, on a thread of its own, right after it has let go of the call and before the
-/// release returns). Each waits for its thread to finish.</para>
+/// to save and before the store's write), and a departure that lands inside a release (the store runs
+/// the departure of a leg reusing the released call's <c>linkedid</c>, on a thread of its own, right
+/// after it has let go of the call and before the release returns — the leg opened a call of its own,
+/// so its departure is saved there and never on the released call). Each waits for its thread to
+/// finish.</para>
 /// </summary>
 [SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
 public sealed class CallSessionManagerStoreReleaseTests : IAsyncLifetime
@@ -131,8 +133,14 @@ public sealed class CallSessionManagerStoreReleaseTests : IAsyncLifetime
         var sut = Attach(store);
         var call = EndedCall("v", _serverA);
         _serverA.Channels.OnNewChannel("x-v", "PJSIP/300-x-v", ChannelState.Ring, linkedId: "L-v");
-        (sut.GetByChannelId("x-v")?.SessionId).Should().Be(call.SessionId,
-            "premise: a leg carrying the ended call's linkedid joined it while it was retained");
+        // A second late leg keeps the late call up after x-v leaves, so the departure inside the release
+        // is a save and not an ending: an ending would run a release walk of its own, which waits for
+        // the release under way, and that release is waiting for this departure's thread.
+        _serverA.Channels.OnNewChannel("y-v", "PJSIP/300-y-v", ChannelState.Ring, linkedId: "L-v");
+        var lateCall = sut.GetByChannelId("x-v");
+        new { Opened = lateCall is not null && !ReferenceEquals(lateCall, call), Joined = ReferenceEquals(sut.GetByChannelId("y-v"), lateCall) }
+            .Should().BeEquivalentTo(new { Opened = true, Joined = true },
+                "premise: legs carrying the ended call's linkedid opened one call of their own while the ended call was retained");
         _clock.Advance(_options.CompletedRetention + TimeSpan.FromHours(1));
 
         // The release of the call is under way — the store has just let go of it — when the late leg
@@ -156,6 +164,7 @@ public sealed class CallSessionManagerStoreReleaseTests : IAsyncLifetime
             during.SavesOfTheCall = store.WritesOf(call.SessionId);
         });
         var writesBefore = store.WritesOf(call.SessionId);
+        var lateWritesBefore = store.WritesOf(lateCall!.SessionId);
 
         _serverB.Channels.OnNewChannel("n-1", "PJSIP/100-n-1", ChannelState.Ring, linkedId: "L-n");
 
@@ -164,7 +173,7 @@ public sealed class CallSessionManagerStoreReleaseTests : IAsyncLifetime
             ReleaseStepRan = store.ReleaseStepRan,
             during.DepartureFinished,
             during.Failure,
-            LateLegLeft = call.Participants.Single(p => p.UniqueId == "x-v").LeftAt.HasValue,
+            LateLegLeft = lateCall.Participants.Single(p => p.UniqueId == "x-v").LeftAt.HasValue,
             Released = sut.GetById(call.SessionId) is null,
         }.Should().BeEquivalentTo(
             new { ReleaseStepRan = true, DepartureFinished = true, Failure = default(Exception), LateLegLeft = true, Released = true },
@@ -172,13 +181,16 @@ public sealed class CallSessionManagerStoreReleaseTests : IAsyncLifetime
 
         var byId = await store.Inner.GetAsync(call.SessionId, CancellationToken.None);
 
-        new { ById = byId?.SessionId, WritesDuringTheRelease = during.SavesOfTheCall - writesBefore }
-            .Should().BeEquivalentTo(
-                new { ById = default(string), WritesDuringTheRelease = 0 },
-                "the manager stops holding the call before it tells the store, so a save that checks "
-                + "while the release is under way already finds the call released and writes nothing; "
-                + "told the other way round, the save would find it held, write it back after the store "
-                + "let go of it, and find it held again when it checked once more");
+        new
+        {
+            ById = byId?.SessionId,
+            WritesDuringTheRelease = during.SavesOfTheCall - writesBefore,
+            LateCallSaved = store.WritesOf(lateCall.SessionId) - lateWritesBefore,
+        }.Should().BeEquivalentTo(
+                new { ById = default(string), WritesDuringTheRelease = 0, LateCallSaved = 1 },
+                "the leg that left during the release opened a call of its own, so its departure is saved "
+                + "on that call and writes nothing of the released one; the manager stops holding the "
+                + "released call before it tells the store, so nothing puts it back");
     }
 
     private CallSessionManager Attach(SessionStoreBase store)

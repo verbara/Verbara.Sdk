@@ -1,5 +1,6 @@
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Channels;
+using Verbara.Sdk.Live.Tests.Harness;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -29,13 +30,23 @@ public class ChannelManagerReconcileTests
         new(uniqueId, name, state, CallerIdNum: callerIdNum, LinkedId: linkedId);
 
     /// <summary>
-    /// Reconcile the way the reload does: the admission mark is captured first, then the snapshot
-    /// is taken. Everything the test arranged before this call is therefore at or below the mark
-    /// and is judged by the snapshot; only a channel admitted <c>after</c> it is newer than the
-    /// snapshot. The tests that bind that window pass their own mark instead (ADR-0062, design D6).
+    /// Reconcile the way the reload does: the read window is opened first, then the snapshot is
+    /// taken. Everything the test arranged before this call is therefore at or below the window's
+    /// mark and is judged by the snapshot; only a channel admitted <c>after</c> it is newer than the
+    /// snapshot. The tests that bind that line open their own window instead.
     /// </summary>
-    private void ReconcileAgainst(params ChannelSnapshotEntry[] snapshot) =>
-        _sut.ReconcileWithSnapshot(snapshot, _sut.CaptureAdmissionMark());
+    private void ReconcileAgainst(params ChannelSnapshotEntry[] snapshot)
+    {
+        using var window = _sut.OpenReadWindow();
+        _sut.ReconcileWithSnapshot(snapshot, window);
+    }
+
+    /// <summary>The admission mark a read window opened now would carry.</summary>
+    private static long MarkNow(ChannelManager manager)
+    {
+        using var window = manager.OpenReadWindow();
+        return window.Mark;
+    }
 
     // --- added only -------------------------------------------------------------------------
 
@@ -289,11 +300,11 @@ public class ChannelManagerReconcileTests
     {
         // The reload reads the mark, then asks Asterisk for its snapshot. The call below starts
         // while that request is in flight: it is in the table and it cannot be in the snapshot.
-        var admittedThrough = _sut.CaptureAdmissionMark();
+        using var window = _sut.OpenReadWindow();
         _sut.OnNewChannel("1700000000.5", "PJSIP/2000-0005", ChannelState.Up);
         _added.Clear();
 
-        _sut.ReconcileWithSnapshot([], admittedThrough);
+        _sut.ReconcileWithSnapshot([], window);
 
         _sut.GetByUniqueId("1700000000.5").Should().NotBeNull(
             "the snapshot was requested before this channel existed, so it could not have reported "
@@ -314,10 +325,10 @@ public class ChannelManagerReconcileTests
         // equal case, which `>` and `<` both decide the same way.
         _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
         _sut.OnNewChannel("1700000000.2", "PJSIP/3000-0002", ChannelState.Up);
-        var admittedThrough = _sut.CaptureAdmissionMark();
+        using var window = _sut.OpenReadWindow();
         _added.Clear();
 
-        _sut.ReconcileWithSnapshot([Entry("1700000000.2", "PJSIP/3000-0002")], admittedThrough);
+        _sut.ReconcileWithSnapshot([Entry("1700000000.2", "PJSIP/3000-0002")], window);
 
         _sut.GetByUniqueId("1700000000.1").Should().BeNull(
             "the snapshot could have reported this channel and did not; that absence is the only "
@@ -329,11 +340,11 @@ public class ChannelManagerReconcileTests
     public void ReconcileWithSnapshot_ShouldJudgeTheOlderChannelAndSpareTheNewerOne_WhenTheMarkFallsBetweenThem()
     {
         _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
-        var admittedThrough = _sut.CaptureAdmissionMark();
+        using var window = _sut.OpenReadWindow();
         _sut.OnNewChannel("1700000000.5", "PJSIP/2000-0005", ChannelState.Up);
         _added.Clear();
 
-        _sut.ReconcileWithSnapshot([], admittedThrough);
+        _sut.ReconcileWithSnapshot([], window);
 
         _removed.Should().ContainSingle(
             "exactly one of the two is older than the snapshot").Which.UniqueId.Should()
@@ -344,9 +355,9 @@ public class ChannelManagerReconcileTests
     [Fact]
     public void OnNewChannel_ShouldStampEachAdmissionAboveTheMarkReadBeforeIt_WhenChannelsArriveInOrder()
     {
-        var beforeAny = _sut.CaptureAdmissionMark();
+        var beforeAny = MarkNow(_sut);
         _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
-        var afterFirst = _sut.CaptureAdmissionMark();
+        var afterFirst = MarkNow(_sut);
         _sut.OnNewChannel("1700000000.2", "PJSIP/3000-0002", ChannelState.Up);
 
         // The counter, not the clock: two admissions this close together share a CreatedAt on a
@@ -358,7 +369,7 @@ public class ChannelManagerReconcileTests
     }
 
     [Fact]
-    public async Task CaptureAdmissionMark_ShouldStampEveryChannelExactlyOnce_WhenAdmissionsRaceEachOther()
+    public async Task OnNewChannel_ShouldStampEveryChannelExactlyOnce_WhenAdmissionsRaceEachOther()
     {
         // Channels arrive on the AMI observer thread while a reload reads its snapshot, so the
         // counter has to be interlocked: a lost increment would give two channels one stamp and
@@ -369,7 +380,7 @@ public class ChannelManagerReconcileTests
         // concurrent ChannelAdded handlers would corrupt it, which would fail this test for a
         // reason that has nothing to do with the counter.
         var manager = new ChannelManager(NullLogger.Instance);
-        var before = manager.CaptureAdmissionMark();
+        var before = MarkNow(manager);
 
         await Parallel.ForAsync(0, admissions, (i, _) =>
         {
@@ -381,7 +392,224 @@ public class ChannelManagerReconcileTests
         marks.Should().HaveCount(admissions);
         marks.Distinct().Should().HaveCount(admissions, "a lost increment is a duplicated stamp");
         marks.Should().OnlyContain(m => m > before);
-        manager.CaptureAdmissionMark().Should().Be(before + admissions);
+        MarkNow(manager).Should().Be(before + admissions);
+    }
+
+    // --- a departure during the read --------------------------------------------------------------
+
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldNotAdmitTheChannelAgain_WhenItsHangupWasObservedWhileTheSnapshotWasRead()
+    {
+        _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
+        using var window = _sut.OpenReadWindow();
+        // The hangup is observed after the snapshot was requested; Asterisk answered before it hung up.
+        _sut.OnHangup("1700000000.1", HangupCause.NormalClearing);
+        _added.Clear();
+
+        _sut.ReconcileWithSnapshot([Entry("1700000000.1", "PJSIP/2000-0001")], window);
+
+        new { Added = _added.Count, Held = _sut.ChannelCount }.Should().BeEquivalentTo(
+            new { Added = 0, Held = 0 },
+            "the snapshot is older than the hangup the SDK observed, so listing the channel says only that it "
+            + "had not hung up yet when Asterisk answered; admitting it again brings back a call that ended");
+    }
+
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldNotAdmitTheChannelAgain_WhenItHangsUpWhileTheReconciliationAdmitsAnother()
+    {
+        _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
+        using var window = _sut.OpenReadWindow();
+        // The hangup lands between the removals and the held channel's turn in the admissions: the
+        // subscriber of the unseen channel's announcement is what delivers it, on this same thread.
+        _sut.ChannelAdded += channel =>
+        {
+            if (channel.UniqueId == "1700000000.9")
+                _sut.OnHangup("1700000000.1", HangupCause.NormalClearing);
+        };
+        _added.Clear();
+
+        _sut.ReconcileWithSnapshot(
+        [
+            Entry("1700000000.9", "PJSIP/9000-0009"),
+            Entry("1700000000.1", "PJSIP/2000-0001"),
+        ], window);
+
+        new
+        {
+            AddedHeldChannel = _added.Count(c => c.UniqueId == "1700000000.1"),
+            HeldChannelStillHeld = _sut.GetByUniqueId("1700000000.1") is not null,
+        }.Should().BeEquivalentTo(
+            new { AddedHeldChannel = 0, HeldChannelStillHeld = false },
+            "the channel hung up after the snapshot was requested, so the snapshot's entry for it is stale even "
+            + "though the hangup arrived while the reconciliation was already running");
+    }
+
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldNotAdmitAChannelNeverHeld_WhenItsHangupWasObservedWhileTheSnapshotWasRead()
+    {
+        // A call that started while the connection was down: the SDK never held it.
+        using var window = _sut.OpenReadWindow();
+        _sut.OnHangup("1700000000.3", HangupCause.NormalClearing);
+
+        _sut.ReconcileWithSnapshot([Entry("1700000000.3", "PJSIP/3000-0003")], window);
+
+        new { Added = _added.Count, Held = _sut.ChannelCount }.Should().BeEquivalentTo(
+            new { Added = 0, Held = 0 },
+            "the SDK observed this channel hang up after the snapshot was requested; no hangup will ever follow "
+            + "an admission from the stale snapshot, so admitting it would hold a ghost channel until the next reload");
+    }
+
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldNotAdmitTheChannelAgain_WhenAnotherReloadRemovedItWhileTheSnapshotWasRead()
+    {
+        _sut.OnNewChannel("1700000000.5", "PJSIP/5000-0005", ChannelState.Up);
+        _added.Clear();
+
+        // Two reads overlap: the older one asked Asterisk first, the newer one was answered first
+        // and its snapshot no longer lists the channel.
+        using var older = _sut.OpenReadWindow();
+        using (var newer = _sut.OpenReadWindow())
+        {
+            _sut.ReconcileWithSnapshot([], newer);
+        }
+
+        _sut.ReconcileWithSnapshot([Entry("1700000000.5", "PJSIP/5000-0005")], older);
+
+        new
+        {
+            Added = _added.Count(c => c.UniqueId == "1700000000.5"),
+            Removed = _removed.Count(c => c.UniqueId == "1700000000.5"),
+            Held = _sut.ChannelCount,
+        }.Should().BeEquivalentTo(
+            new { Added = 0, Removed = 1, Held = 0 },
+            "a newer read already proved the channel gone after the older read was requested, so the older "
+            + "snapshot listing it is stale; admitting it again brings back a call whose ending was announced");
+    }
+
+    // --- what the read windows keep, and when they drop it ---------------------------------------------
+
+    [Fact]
+    public void OnHangup_ShouldRecordNoDeparture_WhenNoReadWindowIsOpen()
+    {
+        const int hangups = 64;
+        for (var i = 0; i < hangups; i++)
+            _sut.OnNewChannel($"1700000000.{i}", $"PJSIP/2000-{i}", ChannelState.Up);
+        using (var window = _sut.OpenReadWindow())
+            _sut.ReconcileWithSnapshot([], window);
+
+        // Held channels and channels never held alike, with no read in progress.
+        _sut.OnNewChannel("1700000001.1", "PJSIP/3000-0001", ChannelState.Up);
+        _sut.OnHangup("1700000001.1", HangupCause.NormalClearing);
+        for (var i = 0; i < hangups; i++)
+            _sut.OnHangup($"1700000002.{i}", HangupCause.NormalClearing);
+
+        new
+        {
+            Departures = ReadWindowRecord.Departures(_sut),
+            OpenWindows = ReadWindowRecord.OpenWindows(_sut),
+        }.Should().BeEquivalentTo(
+            new { Departures = 0, OpenWindows = 0 },
+            "a departure matters only to a read in progress, so with none open nothing is kept and the record "
+            + "cannot grow between reloads");
+    }
+
+    [Fact]
+    public void Dispose_ShouldKeepOnlyTheDeparturesAnOpenWindowStillNeeds_WhenAnOlderWindowClosesFirst()
+    {
+        // Closed explicitly below, in the order under test; the using declarations only cover a throw.
+        using var older = _sut.OpenReadWindow();
+        _sut.OnHangup("1700000000.1", HangupCause.NormalClearing);
+        using var newer = _sut.OpenReadWindow();
+        _sut.OnHangup("1700000000.2", HangupCause.NormalClearing);
+        var bothOpen = ReadWindowRecord.Departures(_sut);
+
+        older.Dispose();
+        older.Dispose();
+        var newerOpen = (Departures: ReadWindowRecord.Departures(_sut), Windows: ReadWindowRecord.OpenWindows(_sut));
+        newer.Dispose();
+
+        new
+        {
+            BothOpen = bothOpen,
+            NewerOpen = newerOpen.Departures,
+            WindowsWhileNewerOpen = newerOpen.Windows,
+            NoneOpen = ReadWindowRecord.Departures(_sut),
+            WindowsAtTheEnd = ReadWindowRecord.OpenWindows(_sut),
+        }.Should().BeEquivalentTo(
+            new { BothOpen = 2, NewerOpen = 1, WindowsWhileNewerOpen = 1, NoneOpen = 0, WindowsAtTheEnd = 0 },
+            "the first hangup happened before the newer window's request was sent, so once the older window closes "
+            + "no open read can need it; a window closed twice closes once, and the last close drops everything");
+    }
+
+    [Fact]
+    public void Clear_ShouldDropEveryRecordedDeparture_WhenAReadWindowIsOpen()
+    {
+        _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
+        using var window = _sut.OpenReadWindow();
+        _sut.OnHangup("1700000000.1", HangupCause.NormalClearing);
+        _sut.OnHangup("1700000000.2", HangupCause.NormalClearing);
+        var beforeClear = ReadWindowRecord.Departures(_sut);
+
+        _sut.Clear();
+
+        new { BeforeClear = beforeClear, AfterClear = ReadWindowRecord.Departures(_sut) }.Should().BeEquivalentTo(
+            new { BeforeClear = 2, AfterClear = 0 },
+            "a cleared table starts over, and nothing it recorded outlives the reset");
+    }
+
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldThrowAndAdmitNothing_WhenItsWindowIsAlreadyClosed()
+    {
+        using var window = _sut.OpenReadWindow();
+        _sut.OnHangup("1700000000.1", HangupCause.NormalClearing);
+        window.Dispose();
+
+        var outcome = Record.Exception(
+            () => _sut.ReconcileWithSnapshot([Entry("1700000000.1", "PJSIP/2000-0001")], window));
+
+        outcome.Should().BeOfType<ObjectDisposedException>(
+            "a closed window has dropped the departures it recorded, so its snapshot can no longer be told from a "
+            + "stale one");
+        new { Added = _added.Count, Held = _sut.ChannelCount }.Should().BeEquivalentTo(new { Added = 0, Held = 0 });
+    }
+
+    // --- one admission per channel -----------------------------------------------------------------
+
+    [Fact]
+    public void OnNewChannel_ShouldAnnounceNothingAndKeepTheHeldInstance_WhenTheSnapshotAdmittedTheChannelFirst()
+    {
+        // The snapshot reports a call whose live NewChannel is still queued behind it.
+        ReconcileAgainst([Entry("1700000000.4", "PJSIP/4000-0004")]);
+        var admitted = _sut.GetByUniqueId("1700000000.4");
+
+        _sut.OnNewChannel("1700000000.4", "PJSIP/4000-0004", ChannelState.Ring);
+
+        new
+        {
+            Announcements = _added.Count(c => c.UniqueId == "1700000000.4"),
+            SameInstance = ReferenceEquals(_sut.GetByUniqueId("1700000000.4"), admitted),
+        }.Should().BeEquivalentTo(
+            new { Announcements = 1, SameInstance = true },
+            "the channel is admitted once while it is held, whichever route reports it first; a second "
+            + "announcement makes a subscriber count the leg twice, and its one hangup then leaves the copy behind");
+    }
+
+    [Fact]
+    public void OnNewChannel_ShouldAnnounceNothingAndKeepTheHeldInstance_WhenALiveArrivalRepeatsAHeldChannel()
+    {
+        _sut.OnNewChannel("1700000000.6", "PJSIP/6000-0006", ChannelState.Ring);
+        var admitted = _sut.GetByUniqueId("1700000000.6");
+
+        _sut.OnNewChannel("1700000000.6", "PJSIP/6000-0006", ChannelState.Up);
+
+        new
+        {
+            Announcements = _added.Count(c => c.UniqueId == "1700000000.6"),
+            SameInstance = ReferenceEquals(_sut.GetByUniqueId("1700000000.6"), admitted),
+        }.Should().BeEquivalentTo(
+            new { Announcements = 1, SameInstance = true },
+            "a channel the table holds is admitted once, whichever route admitted it; a second live arrival "
+            + "replacing it would leave every subscriber that kept the first instance holding an orphan");
     }
 
     // --- provenance of an admission -------------------------------------------------------------

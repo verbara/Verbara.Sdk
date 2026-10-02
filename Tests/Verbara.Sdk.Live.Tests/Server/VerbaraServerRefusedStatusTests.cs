@@ -148,6 +148,47 @@ public sealed class VerbaraServerRefusedStatusTests
         }
     }
 
+    /// <summary>
+    /// A read Asterisk refuses still ends, and its window closes with it: the departures recorded while the refused
+    /// <c>Status</c> was pending are dropped, so a refusal leaves nothing behind that could grow.
+    /// </summary>
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldKeepNoDeparture_WhenAsteriskRefusedTheStatusTheyWereRecordedFor()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true, StatusChannels = OneCallTwoLegs() };
+        await using var run = await Run.StartAsync(peer);
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.StatusRefusedFromAsk = 2;
+        peer.StatusAnsweredAfter = answer.Task;
+        try
+        {
+            var load = run.Server.RequestInitialStateAsync().AsTask();
+            // The peer counts the Status before it answers, and the load opened its window before it sent it.
+            var readOpen = await CompletesWithinBoundAsync(peer.AskedAtLeast("Status", 2));
+            run.Server.Channels.OnHangup("1700000000.1");
+            run.Server.Channels.OnHangup("1700000000.9");
+            var recordedWhileOpen = ReadWindowRecord.Departures(run.Server.Channels);
+            answer.SetResult();
+            var outcome = await Record.ExceptionAsync(() => load.WaitAsync(Run.Bound));
+
+            using (new AssertionScope())
+            {
+                readOpen.Should().BeTrue("the load asked Status a second time");
+                recordedWhileOpen.Should().Be(2,
+                    "a held leg and a channel never held hung up while the read was open, and both were recorded for it");
+                outcome.Should().BeNull("a refused Status does not fail the load");
+                ReadWindowRecord.Departures(run.Server.Channels).Should().Be(0,
+                    "the refused read ended, and nothing it recorded outlives it");
+                ReadWindowRecord.OpenWindows(run.Server.Channels).Should().Be(0, "the refused read's window is closed");
+                peer.Fault.Should().BeNull("the peer served the session without failing");
+            }
+        }
+        finally
+        {
+            answer.TrySetResult();
+        }
+    }
+
     /// <summary>The control: a <c>Status</c> Asterisk answers with an empty list still removes a channel it no longer has.</summary>
     [Fact]
     public async Task RequestInitialStateAsync_ShouldRemoveAGoneChannel_WhenStatusSucceedsWithNoChannels()

@@ -350,12 +350,19 @@ public sealed class VerbaraServer : IVerbaraServer
         {
             // Populate channels from StatusAction. Buffer first, then reconcile: a snapshot that
             // throws, is cancelled or never completes must leave every held channel alone, and it can
-            // only do that if nothing was mutated while it was being read (ADR-0062, design D1).
+            // only do that if nothing was mutated while it was being read.
             // A Status Asterisk refused yields no snapshot: a refusal is no evidence that any channel is gone, so the
             // table is left as it is and the load goes on to the queues and the agents.
-            var (admittedThrough, channelSnapshot) = await ReadChannelSnapshotAsync(session, states, activity, cancellationToken);
-            if (channelSnapshot is not null)
-                Channels.ReconcileWithSnapshot(channelSnapshot, admittedThrough);
+            // The read window opens before Status is sent and covers the read and the reconciliation only. While it is
+            // open, every hangup the event observer delivers is recorded for it, so a channel the answer still lists
+            // after it hung up is not brought back. It is closed on every way out of them — completed, refused, thrown,
+            // cancelled or ended with the session — so nothing it keeps outlives this snapshot.
+            using (var window = Channels.OpenReadWindow())
+            {
+                var channelSnapshot = await ReadChannelSnapshotAsync(session, states, activity, cancellationToken);
+                if (channelSnapshot is not null)
+                    Channels.ReconcileWithSnapshot(channelSnapshot, window);
+            }
 
             request = "QueueStatus";
             await LoadQueuesAsync(session, states, cancellationToken);
@@ -419,15 +426,16 @@ public sealed class VerbaraServer : IVerbaraServer
     /// session derived from it — untouched, because the buffer is discarded with the exception and
     /// the reconciliation never runs. <c>OnReconnected</c> is <c>async void</c> and swallows every
     /// exception into a log line, so a failure path that mutates nothing is the only one that stays
-    /// safe underneath it (ADR-0062, design D1).
+    /// safe underneath it.
     /// </para>
     /// <para>
-    /// The returned admission mark is read <c>before</c> the <c>Status</c> action is sent, and says
-    /// how much of the channel table this snapshot could possibly describe. <c>OnReconnected</c>
-    /// re-subscribes the event observer before it awaits this read, so a call that starts during the
-    /// read is admitted live and is legitimately absent from the older snapshot; on a large estate
-    /// that window is a full <c>Status</c> round trip. The mark is what keeps the reconciliation
-    /// from reading that absence as a hangup and ending a call that is up (ADR-0062, design D6).
+    /// The caller opens the channel table's read window <c>before</c> calling this, so the window's
+    /// admission mark is read before the <c>Status</c> action is sent and says how much of the
+    /// channel table this snapshot could possibly describe. <c>OnReconnected</c> re-subscribes the
+    /// event observer before it awaits this read, so a call that starts during the read is admitted
+    /// live and is legitimately absent from the older snapshot; on a large estate that is a full
+    /// <c>Status</c> round trip. The mark is what keeps the reconciliation from reading that absence
+    /// as a hangup and ending a call that is up.
     /// </para>
     /// <para>
     /// A snapshot whose AMI session ended before <c>StatusComplete</c> is as unfinished as a cancelled one, and the
@@ -445,15 +453,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// answer and is read as before.
     /// </para>
     /// </summary>
-    private async ValueTask<(long AdmittedThrough, List<ChannelSnapshotEntry>? Entries)>
-        ReadChannelSnapshotAsync(
-            LoadSession? session, LoadConnectionStates states, Activity? activity, CancellationToken cancellationToken)
+    private async ValueTask<List<ChannelSnapshotEntry>?> ReadChannelSnapshotAsync(
+        LoadSession? session, LoadConnectionStates states, Activity? activity, CancellationToken cancellationToken)
     {
-        // Before the request, never after: a mark read once the answer is in hand would place every
-        // channel that arrived meanwhile at or below it, and hand the reconciliation the power to
-        // end those calls.
-        var admittedThrough = Channels.CaptureAdmissionMark();
-
         var snapshot = new List<ChannelSnapshotEntry>();
 
         // Any other connection is asked for the outcome only when it says it reports one: a mock, or a wrapper that does
@@ -474,7 +476,7 @@ public sealed class VerbaraServer : IVerbaraServer
             // Every field below that Asterisk really sends is read from RawFields. StatusEvent's
             // own State and CallerId properties are read by nothing here on purpose: no supported
             // version populates them, so the parse that used to consume them could only ever
-            // produce ChannelState.Unknown and a null caller id (ADR-0062, design D5).
+            // produce ChannelState.Unknown and a null caller id.
             var rawFields = se.RawFields;
             snapshot.Add(new ChannelSnapshotEntry(
                 se.UniqueId ?? "",
@@ -494,7 +496,7 @@ public sealed class VerbaraServer : IVerbaraServer
                 // UniqueId in CallSessionManager, so the two legs of a call that started during the
                 // outage — neither of which the SDK ever saw — open two sessions instead of one.
                 // Measured present, non-empty and identical across every leg of one call on 18.26.4,
-                // 20.20.1, 22.9.0 and 23.4.1, so no mapping is needed: pass it (ADR-0062, design D4).
+                // 20.20.1, 22.9.0 and 23.4.1, so no mapping is needed: pass it.
                 // An absent or empty header still degrades to linkedId = uniqueId downstream, which
                 // is exactly today's behaviour for an uncorrelated channel.
                 LinkedId: se.LinkedId));
@@ -515,10 +517,10 @@ public sealed class VerbaraServer : IVerbaraServer
             var message = rejection.Length == 0 ? "(Asterisk sent no message)" : rejection;
             VerbaraServerLog.StatusRefused(_logger, message);
             LiveActivitySource.SetStatusRefused(activity, message);
-            return (admittedThrough, null);
+            return null;
         }
 
-        return (admittedThrough, snapshot);
+        return snapshot;
     }
 
     /// <summary>

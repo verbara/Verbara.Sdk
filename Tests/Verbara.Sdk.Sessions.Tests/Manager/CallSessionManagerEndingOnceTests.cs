@@ -16,15 +16,16 @@ namespace Verbara.Sdk.Sessions.Tests.Manager;
 
 /// <summary>
 /// Binds the two halves of a call's ending that the functional tests (<c>EndingOnceTests</c>) do not
-/// read: the completion measurements and span, and the save a repeat departure triggers.
+/// read: the completion measurements and span, and the saves a late leg's departure triggers.
 ///
-/// <para>The manager ends a call when every participant has left, and reaches that point again when
-/// a leg that joined the ended call — carrying its <c>linkedid</c> — leaves too. The ending is
-/// delivered once: the <c>CallEndedEvent</c>, the release-queue entry, the <c>sessions.completed</c>
-/// count, the duration and talk-time recordings and the <c>session completed</c> span all belong to
-/// it, so none of them may be produced again by the repeat. What the repeat still does is save the
-/// call, which now records the late leg as joined and left — but only while the manager still holds
-/// the call: a save after its release would hand a store a call the SDK has let go of.</para>
+/// <para>The manager ends a call when every participant has left. A leg that arrives afterwards
+/// carrying the ended call's <c>linkedid</c> opens a call of its own, and its departure ends that
+/// call. The ended call's ending is delivered once: the <c>CallEndedEvent</c>, the release-queue
+/// entry, the <c>sessions.completed</c> count, the duration and talk-time recordings and the
+/// <c>session completed</c> span all belong to it, so none of them may be produced again by the late
+/// leg; the late leg's own call is measured once, as any call is. The late leg's departure is saved on
+/// its own call, never on the ended one — whether the ended call is still held or already released:
+/// a save after its release would hand a store a call the SDK has let go of.</para>
 ///
 /// <para>The session instruments carry no tags and are process-wide, and this assembly runs classes in
 /// parallel, so the capture counts only what is recorded on the test's own thread while it drives
@@ -67,46 +68,61 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
     }
 
     [Fact]
-    public void OnSessionCompleted_ShouldRecordTheCompletionMeasurementsAndSpanOnce_WhenALegReusingTheEndedCallsLinkedIdHangsUp()
+    public void OnSessionCompleted_ShouldMeasureTheEndedCallOnceAndTheLateLegsOwnCallOnce_WhenALegReusingTheEndedCallsLinkedIdHangsUp()
     {
         using var capture = new CompletionCapture();
 
         var call = EndedCall("g");
         LegJoins("x-g", "g");
-        (_sut.GetByChannelId("x-g")?.SessionId).Should().Be(call.SessionId,
-            "premise: a leg carrying an ended call's linkedid joins that call while it is retained");
+        var lateCall = _sut.GetByChannelId("x-g")?.SessionId;
         LegLeaves("x-g");
 
-        capture.For(call.SessionId).Should().BeEquivalentTo(
-            new Completion(SessionsCompleted: 1, DurationRecordings: 1, TalkTimeRecordings: 1, Spans: 1),
-            "the call ended once, so it is counted, timed and traced once; a leg that joined it after "
-            + "its ending and left does not complete it again");
+        var lateCallIsItsOwn = lateCall is not null && lateCall != call.SessionId;
+        new
+        {
+            Endings = capture.Endings,
+            DurationRecordings = capture.DurationRecordings,
+            EndedCallSpans = capture.SpansOf(call.SessionId),
+            LateLegOpenedItsOwnCall = lateCallIsItsOwn,
+            LateCallSpans = lateCallIsItsOwn ? capture.SpansOf(lateCall!) : 0,
+        }.Should().BeEquivalentTo(
+            new { Endings = 2, DurationRecordings = 2, EndedCallSpans = 1, LateLegOpenedItsOwnCall = true, LateCallSpans = 1 },
+            "a call that has ended cannot report another leg's ending, so a leg that arrives after it carrying its "
+            + "linkedid opens a call of its own; each call ends once, so each is counted, timed and traced once");
     }
 
     [Fact]
-    public void OnSessionCompleted_ShouldSaveTheLateLegsDeparture_WhenTheEndedCallIsStillHeld()
+    public void OnSessionCompleted_ShouldSaveTheLateLegsDepartureOnItsOwnCall_WhenTheEndedCallIsStillHeld()
     {
         var call = EndedCall("h");
         LegJoins("x-h", "h");
+        var lateCall = _sut.GetByChannelId("x-h")
+            ?? throw new InvalidOperationException("premise: the late leg is held in a call");
         var savesBefore = _store.SavesOf(call.SessionId);
+        var lateSavesBefore = _store.SavesOf(lateCall.SessionId);
 
         LegLeaves("x-h");
 
         new
         {
-            SavedAgain = _store.SavesOf(call.SessionId) - savesBefore,
-            LateLegLeft = call.Participants.Single(p => p.UniqueId == "x-h").LeftAt.HasValue,
+            LateLegOpenedItsOwnCall = !ReferenceEquals(lateCall, call),
+            EndedCallSavedAgain = _store.SavesOf(call.SessionId) - savesBefore,
+            LateCallSaved = _store.SavesOf(lateCall.SessionId) - lateSavesBefore,
+            LateLegLeft = lateCall.Participants.Single(p => p.UniqueId == "x-h").LeftAt.HasValue,
+            EndedCallHoldsTheLateLeg = call.Participants.Any(p => p.UniqueId == "x-h"),
         }.Should().BeEquivalentTo(
-            new { SavedAgain = 1, LateLegLeft = true },
-            "the late leg's departure delivers no ending, but it is recorded on the call, and while the "
-            + "manager still holds the call that record is saved like any other change to it");
+            new { LateLegOpenedItsOwnCall = true, EndedCallSavedAgain = 0, LateCallSaved = 1, LateLegLeft = true, EndedCallHoldsTheLateLeg = false },
+            "the late leg opened a call of its own, so its departure is recorded and saved on that call, "
+            + "once, and the ended call is neither changed nor saved again");
     }
 
     [Fact]
-    public void OnSessionCompleted_ShouldNotSaveTheCall_WhenALegThatJoinedItLeavesAfterItsRelease()
+    public void OnSessionCompleted_ShouldNotSaveTheCall_WhenALegReusingItsLinkedIdLeavesAfterItsRelease()
     {
         var call = EndedCall("v");
         LegJoins("x-v", "v");
+        _sut.GetByChannelId("x-v").Should().NotBeNull().And.NotBeSameAs(call,
+            "premise: the leg opened a call of its own while the ended call was retained");
         _clock.Advance(_options.CompletedRetention + TimeSpan.FromHours(1));
         EndedCall("n");
         _sut.GetById(call.SessionId).Should().BeNull(
@@ -144,7 +160,6 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
     private void LegLeaves(string uniqueId) =>
         _server.Channels.OnHangup(uniqueId, HangupCause.NormalClearing);
 
-    private sealed record Completion(int SessionsCompleted, int DurationRecordings, int TalkTimeRecordings, int Spans);
 
     /// <summary>
     /// What the ending of a call records on the session meter and activity source, counted only on the
@@ -161,9 +176,15 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
 
         public CompletionCapture()
         {
+            // Read both before either listener is registered. Registering an activity listener asks every
+            // existing source whether to listen; a source first created from inside that question is
+            // created too late to be asked, and the capture then sees no span when it runs first.
+            var meter = SessionMetrics.Meter;
+            var source = SessionActivitySource.Source;
+
             _meters.InstrumentPublished = (instrument, listener) =>
             {
-                if (ReferenceEquals(instrument.Meter, SessionMetrics.Meter))
+                if (ReferenceEquals(instrument.Meter, meter))
                     listener.EnableMeasurementEvents(instrument);
             };
             _meters.SetMeasurementEventCallback<long>((instrument, value, _, _) => Count(instrument, (int)value));
@@ -172,7 +193,7 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
 
             _spans = new ActivityListener
             {
-                ShouldListenTo = source => ReferenceEquals(source, SessionActivitySource.Source),
+                ShouldListenTo = candidate => ReferenceEquals(candidate, source),
                 Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
                 ActivityStopped = activity =>
                 {
@@ -185,11 +206,16 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
 
         private bool OnCapturingThread => Environment.CurrentManagedThreadId == _thread;
 
-        public Completion For(string sessionId) => new(
-            SessionsCompleted: _measurements.GetValueOrDefault("sessions.completed"),
-            DurationRecordings: _measurements.GetValueOrDefault("sessions.duration"),
-            TalkTimeRecordings: _measurements.GetValueOrDefault("sessions.talk_time"),
-            Spans: _stoppedSpans.Count(name => name == $"session completed {sessionId}"));
+        /// <summary>Calls counted as ended, whatever their final state: completed, failed or timed out.</summary>
+        public int Endings =>
+            _measurements.GetValueOrDefault("sessions.completed")
+            + _measurements.GetValueOrDefault("sessions.failed")
+            + _measurements.GetValueOrDefault("sessions.timed_out");
+
+        public int DurationRecordings => _measurements.GetValueOrDefault("sessions.duration");
+
+        public int SpansOf(string sessionId) =>
+            _stoppedSpans.Count(name => name == $"session completed {sessionId}");
 
         public void Dispose()
         {
