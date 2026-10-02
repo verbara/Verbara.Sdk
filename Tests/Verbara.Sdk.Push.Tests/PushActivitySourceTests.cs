@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace Verbara.Sdk.Push.Tests;
 
-// Adds a global listener on the push source: never alongside another such class (design D7).
+// Adds a global listener on the push source: never alongside another such class.
 [Collection(PushTracingGroup.Name)]
 public sealed class PushActivitySourceTests : IDisposable
 {

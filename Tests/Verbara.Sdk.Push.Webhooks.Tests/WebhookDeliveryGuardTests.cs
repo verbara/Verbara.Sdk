@@ -66,7 +66,7 @@ public sealed class WebhookDeliveryGuardTests
             "no retry was exhausted, so the 'exhausted retries' entry would be false");
         if (errors.Length == 1)
         {
-            errors[0].EventId.Should().Be(BackoffFailedEventId, "it is the new backoff-failure entry (design D6)");
+            errors[0].EventId.Should().Be(BackoffFailedEventId, "it is the new backoff-failure entry, not the exhausted-retries one");
             errors[0].Message.Should().Contain("s-fail", "the entry names the subscription");
             errors[0].Message.Should().Contain(GuardEvent.Type, "the entry names the event type");
             errors[0].Exception.Should().NotBeNull("the entry carries the failure");

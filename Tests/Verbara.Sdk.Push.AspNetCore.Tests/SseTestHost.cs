@@ -86,7 +86,7 @@ public sealed class CapturingLoggerProvider : ILoggerProvider
     }
 }
 
-/// <summary>An integer that tests wait on by value, never by time (design D7).</summary>
+/// <summary>An integer that tests wait on by value, never by time.</summary>
 public sealed class CountSignal
 {
     private int _value;
@@ -129,7 +129,7 @@ public sealed class CountSignal
 }
 
 /// <summary>
-/// The bus the endpoint is handed, wrapped so a test can count live subscriptions (design D7: the
+/// The bus the endpoint is handed, wrapped so a test can count live subscriptions (the
 /// endpoint takes the bus as a DI-bound parameter, and <c>RxPushEventBus._observers</c> is private).
 /// </summary>
 public sealed class CountingPushEventBus(IPushEventBus inner) : IPushEventBus
@@ -283,7 +283,7 @@ public sealed record SseHostOptions
 
     public PushRegistration Registration { get; init; } = PushRegistration.AspNetCore;
 
-    /// <summary>The bus's <c>BufferCapacity</c>, pinned above the events a test publishes (design D7).</summary>
+    /// <summary>The bus's <c>BufferCapacity</c>, pinned above the events a test publishes.</summary>
     public int BusCapacity { get; init; } = 64;
 
     public ISubscriptionAuthorizer? Authorizer { get; init; }
@@ -292,12 +292,12 @@ public sealed record SseHostOptions
 
     public long? PerConnectionBoundBytes { get; init; }
 
-    /// <summary>When set, records the high-water mark of the connection's queue (design D3's hook).</summary>
+    /// <summary>When set, records the high-water mark of the connection's queue (the stream's internal hook).</summary>
     public QueueDepthProbe? QueueDepth { get; init; }
 }
 
 /// <summary>
-/// A real Kestrel host on <c>127.0.0.1:0</c> (design D7, ADR-0044) serving <c>MapPushEndpoints()</c> to a
+/// A real Kestrel host on <c>127.0.0.1:0</c> (an IPv4 literal, never <c>localhost</c>) serving <c>MapPushEndpoints()</c> to a
 /// principal of tenant <c>T1</c>, user <c>u1</c>.
 /// </summary>
 public sealed class SseTestHost : IAsyncDisposable
@@ -512,7 +512,7 @@ public sealed class ThrottledReadStream(Stream inner, int chunk, TimeSpan pause)
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
         var n = await inner.ReadAsync(buffer[..Math.Min(chunk, buffer.Length)], cancellationToken);
-        // fence-allow: SIMULATED-WORK — a slow client between reads, so the server's writes really go asynchronous (C7.md control N)
+        // fence-allow: SIMULATED-WORK — a slow client between reads, so the server's writes really go asynchronous
         await Task.Delay(pause, cancellationToken);
         return n;
     }

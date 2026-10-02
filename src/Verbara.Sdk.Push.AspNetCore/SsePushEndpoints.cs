@@ -127,7 +127,7 @@ public static class SsePushEndpoints
 
         try
         {
-            // StartAsync alone does not put the headers on the wire; the flush does (C7.md).
+            // StartAsync alone does not put the headers on the wire; the flush does.
             await ctx.Response.StartAsync(ct).ConfigureAwait(false);
             await ctx.Response.Body.FlushAsync(ct).ConfigureAwait(false);
         }
@@ -137,7 +137,7 @@ public static class SsePushEndpoints
             return;
         }
 
-        // One writer per connection over a bounded queue of whole frames (design D3, D4): the bus callback and
+        // One writer per connection over a bounded queue of whole frames: the bus callback and
         // the heartbeat only queue frames, so neither ever waits on the client and no two frames interleave.
         var queue = new SseFrameQueue(options.MaxQueuedBytesPerConnection, options.QueuedBytesObserved);
         using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);

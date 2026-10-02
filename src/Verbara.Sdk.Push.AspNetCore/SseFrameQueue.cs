@@ -11,7 +11,7 @@ internal readonly record struct SseEnqueueResult(long Dropped, bool EpisodeStart
 internal readonly record struct SseDequeued(byte[]? Frame, long Dropped);
 
 /// <summary>
-/// The per-connection queue of whole SSE frames (design D3/D4, Q1 ruling): many producers (the bus callback and
+/// The per-connection queue of whole SSE frames: many producers (the bus callback and
 /// the heartbeat), one reader (the writer). Bounded in bytes; when an event frame does not fit, the oldest
 /// frames are dropped and the dropped event frames are counted until the writer reports them. Heartbeats are
 /// outside the bound: never queued while a drop is unreported or while they do not fit, removed when a drop

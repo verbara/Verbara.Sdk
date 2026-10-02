@@ -17,7 +17,7 @@ namespace Verbara.Sdk.Push.Nats.IntegrationTests;
 
 /// <summary>
 /// Every test class in this assembly that adds a global <see cref="ActivityListener"/> on the push
-/// source runs in this collection, never alongside another test class (design D7). It owns its own
+/// source runs in this collection, never alongside another test class. It owns its own
 /// NATS container, because a test class belongs to one collection only.
 /// </summary>
 #pragma warning disable CA1711 // xunit convention
@@ -44,7 +44,7 @@ public sealed class PushDeliveryTracingNatsTests(NatsContainerFixture fixture) :
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(20);
     private static readonly ActivitySource Api = new(ApiSourceName);
 
-    // Every source, as C8.md's measured probe: the NATS client's own spans write the wire header.
+    // Every source: the NATS client's own spans write the wire header.
     private readonly ActivityListener _listener = Listen();
 
     public void Dispose() => _listener.Dispose();

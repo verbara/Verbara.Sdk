@@ -10,7 +10,7 @@ using Verbara.Sdk.Push.Hosting;
 namespace Verbara.Sdk.Push.Webhooks.Tests;
 
 /// <summary>
-/// Spec <c>webhook-delivery-options</c> as ruled at Q3 = (a): an unusable webhook delivery setting is rejected
+/// An unusable webhook delivery setting is rejected
 /// by options validation, naming the option, and both <see cref="WebhookDeliveryService"/> constructors refuse
 /// it with an <see cref="ArgumentOutOfRangeException"/> whose <c>ParamName</c> is the option; the defaults and
 /// the boundaries are accepted.

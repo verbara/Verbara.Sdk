@@ -25,7 +25,7 @@ namespace Verbara.Sdk.Push.Webhooks.IntegrationTests;
 
 /// <summary>
 /// Every test class in this assembly that adds a global <see cref="ActivityListener"/> on the push
-/// source runs in this collection, never alongside another test class (design D7).
+/// source runs in this collection, never alongside another test class.
 /// </summary>
 [CollectionDefinition(Name, DisableParallelization = true)]
 public sealed class PushTracingGroup

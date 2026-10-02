@@ -187,7 +187,7 @@ public sealed class PushDeliveryTracingTests : IDisposable
         Metadata = new PushEventMetadata("tenant-1", null, DateTimeOffset.UtcNow, null) { TraceContext = traceContext },
     };
 
-    // BufferCapacity above every event a test publishes, so no event is evicted (design D7).
+    // BufferCapacity above every event a test publishes, so no event is evicted.
     private static RxPushEventBus NewBus() => new(
         Options.Create(new PushEventBusOptions { BufferCapacity = 1024 }),
         NullLogger<RxPushEventBus>.Instance,

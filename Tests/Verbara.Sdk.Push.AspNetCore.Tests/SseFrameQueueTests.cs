@@ -4,7 +4,7 @@ using System.Text;
 using Microsoft.Extensions.Options;
 
 /// <summary>
-/// The per-connection queue on its own (spec <c>push-sse-stream-delivery</c>, the bound as Q1 ruled): drop
+/// The per-connection queue on its own: drop
 /// oldest at a byte bound, the dropped event frames reported once before the next frame, heartbeats outside
 /// the bound, and a frame larger than the bound still delivered alone.
 /// </summary>

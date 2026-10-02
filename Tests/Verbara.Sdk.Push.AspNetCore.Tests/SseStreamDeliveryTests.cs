@@ -11,7 +11,7 @@ using Verbara.Sdk.Push.Diagnostics;
 
 /// <summary>
 /// The classes that assert on process-wide state — <c>TaskScheduler.UnobservedTaskException</c> and the
-/// stream's drop metric, read by meter name — run alone (design D7).
+/// stream's drop metric, read by meter name — run alone.
 /// </summary>
 [CollectionDefinition(Name, DisableParallelization = true)]
 public sealed class SseProcessWideStateGroup
@@ -179,13 +179,13 @@ public sealed class SseFrameTests
     public async Task Stream_ShouldDeliverWholeFramesInOrderAndKeepHeartbeating_WhenReaderIsSlow(bool allowSynchronousIO)
     {
         const int n = 1000;
-        var pad = new string('x', 20_000); // ≈20 MB in all, as C7.md's slow-reader run
+        var pad = new string('x', 20_000); // ≈20 MB in all, enough to fill the transport's buffers
         await using var host = await SseTestHost.StartAsync(new SseHostOptions
         {
             AllowSynchronousIO = allowSynchronousIO,
             BusCapacity = 8192, // ≥ n, so a frame the bus dropped is never read as one the stream lost
             HeartbeatInterval = TimeSpan.FromMilliseconds(10),
-            PerConnectionBoundBytes = 64L * 1024 * 1024, // ≥ everything published: tests serialization, not Q1's policy
+            PerConnectionBoundBytes = 64L * 1024 * 1024, // ≥ everything published: tests serialization, not the drop policy
         });
 
         using var abort = new CancellationTokenSource();
@@ -213,7 +213,7 @@ public sealed class SseFrameTests
         {
             await host.PublishAsync(LoadFrames.Topic(i), correlationId: LoadFrames.Correlation(i, pad));
             if (i % 10 == 9)
-                await Task.Delay(20); // fence-allow: SIMULATED-WORK — publishes in bursts of ten so heartbeats fall due between them (C7.md)
+                await Task.Delay(20); // fence-allow: SIMULATED-WORK — publishes in bursts of ten so heartbeats fall due between them
         }
 
         var (frames, sawLast, heartbeatAfter) = await readTask;
@@ -271,7 +271,7 @@ public sealed class SseStoppedReaderTests
         await using var host = await SseTestHost.StartAsync(new SseHostOptions
         {
             AllowSynchronousIO = allowSynchronousIO,
-            BusCapacity = 4096, // ≥ m (design D7)
+            BusCapacity = 4096, // ≥ m, so the bus evicts none
             QueueDepth = queueDepth,
         });
 
@@ -401,12 +401,11 @@ public sealed class SseAbortTests
 }
 
 /// <summary>
-/// Spec <c>push-sse-stream-delivery</c>, the policy Q1 ruled (design <i>Owner answers</i>, Q1 2026-10-01):
-/// drop oldest at a byte bound (1 MiB per connection by default), then one <c>event: .gap</c> carrying the
+/// The per-connection bound's policy: drop oldest at a byte bound (1 MiB per connection by default), then one <c>event: .gap</c> carrying the
 /// count of dropped event frames; heartbeats outside the bound; a metric and one Warning per gap episode;
-/// <c>.gap</c> reserved. Runs alone: the drop metric is read by meter name, process-wide. Task 2.2 added the
-/// queue-depth assertion (through the stream's internal hook), the public option's non-default value and a
-/// single frame larger than the bound.
+/// <c>.gap</c> reserved. Runs alone: the drop metric is read by meter name, process-wide. Also pinned: the
+/// queue depth (through the stream's internal hook), the public option's non-default value and a single
+/// frame larger than the bound.
 /// </summary>
 [Collection(SseProcessWideStateGroup.Name)]
 public sealed class SseStreamBoundTests
@@ -734,7 +733,7 @@ public sealed class SseStreamBoundTests
         await using var host = await SseTestHost.StartAsync(new SseHostOptions
         {
             AllowSynchronousIO = allowSynchronousIO,
-            BusCapacity = count + 16, // ≥ the events published (design D7)
+            BusCapacity = count + 16, // ≥ the events published, so the bus evicts none
             HeartbeatInterval = heartbeat,
             PerConnectionBoundBytes = boundBytes,
             QueueDepth = queueDepth,

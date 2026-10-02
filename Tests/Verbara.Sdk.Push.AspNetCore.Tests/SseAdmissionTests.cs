@@ -5,7 +5,7 @@ using FluentAssertions.Execution;
 
 /// <summary>
 /// Spec <c>push-sse-admission</c>: the measured scenarios of C7 (S0a–S5, X2–X4) on a real Kestrel host,
-/// each with <c>AllowSynchronousIO</c> false (the default) and true (design D7).
+/// each with <c>AllowSynchronousIO</c> false (the default) and true.
 /// </summary>
 public sealed class SseAdmissionTests
 {
@@ -30,7 +30,7 @@ public sealed class SseAdmissionTests
 
     private static bool OnlyQueue(string p) => p.StartsWith("queue.", StringComparison.Ordinal);
 
-    /// <summary>One measured row of C7.md and what the spec says it is answered.</summary>
+    /// <summary>One admission scenario (S0a–S5, X2–X4) and the answer it is expected to get.</summary>
     private sealed record Row(
         string Query,
         Func<string, bool> Allow,
@@ -77,7 +77,7 @@ public sealed class SseAdmissionTests
         {
             AllowSynchronousIO = allowSynchronousIO,
             Authorizer = authorizer,
-            BusCapacity = 64, // above the 7 events published (design D7)
+            BusCapacity = 64, // above the 7 events published, so the bus evicts none
         });
 
         using var abort = new CancellationTokenSource();

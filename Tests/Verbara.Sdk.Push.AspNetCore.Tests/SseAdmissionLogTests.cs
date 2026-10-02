@@ -5,7 +5,7 @@ using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
-/// Spec <c>push-sse-admission</c>, design D2: a refused stream request logs one <c>Warning</c> that carries the
+/// A refused stream request logs one <c>Warning</c> that carries the
 /// authorizer's reason server-side, and an admitted or unparseable request logs no refusal.
 /// </summary>
 public sealed class SseAdmissionLogTests
