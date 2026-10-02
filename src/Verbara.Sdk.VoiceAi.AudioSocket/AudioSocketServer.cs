@@ -48,6 +48,14 @@ namespace Verbara.Sdk.VoiceAi.AudioSocket;
 /// after <see cref="StopAsync"/> began, including one that identified itself before, is refused with a
 /// hangup frame, never announced or counted, and not logged as a refusal: the client missed nothing.
 /// </para>
+/// <para>
+/// <b>Started once.</b> The server binds one listener and runs one accept loop in its lifetime. A start
+/// while it is running changes nothing, so a host that starts the same instance twice (as the hosted
+/// service <c>AddAudioSocketServer</c> registers and again by hand) keeps the one listener, and the stop
+/// releases everything the server started. The server is not restartable: a start after a stop binds
+/// nothing. A start after disposal throws <see cref="ObjectDisposedException"/>, and a stop after
+/// disposal does nothing.
+/// </para>
 /// </remarks>
 public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
 {
@@ -98,13 +106,37 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// </summary>
     private int _disposed;
 
+    /// <summary>
+    /// Set once <see cref="DisposeAsync"/> has released <see cref="_cts"/> and the meter. The public
+    /// <see cref="StopAsync"/> keys its no-op on this flag rather than on <see cref="_disposed"/>:
+    /// disposal sets that flag before it runs its own stop, and runs that stop through
+    /// <see cref="StopCoreAsync"/>, which no flag guards.
+    /// </summary>
+    private int _released;
+
+    /// <summary>
+    /// Guards the start and the stop's first step, so that a start and a stop or a disposal racing it
+    /// see each other: a start either binds before the stop reads what to release, or finds the stop
+    /// (or the disposal) already begun and binds nothing.
+    /// </summary>
+    private readonly Lock _lifecycleGate = new();
+
+    /// <summary>
+    /// Set, under <see cref="_lifecycleGate"/>, by the first start that bound its listener and by the
+    /// first stop, whichever comes first. Once it is set, a start binds nothing.
+    /// </summary>
+    private bool _lifecycleBegun;
+
     /// <summary>Raised when a new AudioSocket session has been established and the UUID frame received.</summary>
     /// <remarks>Raised once per served connection, and never for a refused one. For a channel id that
     /// connects again, it is raised after every <see cref="AudioSocketSession.OnHangup"/> handler of the
     /// previous session has returned (see the class remarks).</remarks>
     public event Func<AudioSocketSession, ValueTask>? OnSessionStarted;
 
-    /// <summary>The actual port the server is listening on. Available after <see cref="StartAsync"/>.</summary>
+    /// <summary>
+    /// The actual port the server is listening on. Available after <see cref="StartAsync"/>; 0 before it
+    /// and once the server has stopped.
+    /// </summary>
     public int BoundPort => (_listener?.LocalEndpoint as IPEndPoint)?.Port ?? 0;
 
     /// <summary>Number of currently active sessions.</summary>
@@ -146,42 +178,94 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// <summary>The places currently taken against <see cref="AudioSocketOptions.MaxConcurrentSessions"/>.</summary>
     internal int PlacesHeld => _admission.Held;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Binds the listener and starts the accept loop, the first time. A start while the server is running,
+    /// or after it was stopped, completes and binds nothing.
+    /// </summary>
+    /// <param name="cancellationToken">Unused: this start begins nothing that can be aborted.</param>
+    /// <exception cref="ObjectDisposedException">The server has been disposed.</exception>
     public Task StartAsync(CancellationToken cancellationToken)
     {
         // The parameter is deliberately unused: it means the start was aborted, and this start begins
         // nothing that can be aborted. The accept loop gets the token this server owns, which the
         // server's own stop cancels.
-        _cts = new CancellationTokenSource();
-        var endpoint = new IPEndPoint(IPAddress.Parse(_options.ListenAddress), _options.Port);
-        _listener = new TcpListener(endpoint);
-        _listener.Start(_options.MaxConcurrentSessions);
-        AudioSocketLog.ServerListening(_logger, _options.ListenAddress, _options.Port);
-        _instanceMeter.CreateObservableGauge<long>(
-            "audiosocket.sessions.active",
-            () => ActiveSessionCount,
-            unit: "{sessions}",
-            description: "Active AudioSocket sessions");
+        lock (_lifecycleGate)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        // CancellationToken.None on the hand-off, and deliberately so. Task.Run's token skips a work
-        // item that has not started yet, and the listener is already bound with this loop as the only
-        // thing that serves it: a skipped hand-off leaves a listener that takes connections into its
-        // backlog and never accepts one. The loop's token is read here rather than inside the lambda. A
-        // DisposeAsync that gets there first releases _cts, whose Token getter would then throw on the
-        // pool and fault a task nobody observes; a token read before the release just reads as
-        // cancelled, and the loop ends at its first check.
-        var token = _cts.Token;
-        _ = Task.Run(() => AcceptLoopAsync(token), CancellationToken.None);
+            // A second start would replace the listener and the stopping source, and leave the first
+            // listener and its loop serving out of the stop's reach. A start after a stop would bind a
+            // listener of a server its owner has finished with.
+            if (_lifecycleBegun)
+                return Task.CompletedTask;
+
+            var endpoint = new IPEndPoint(IPAddress.Parse(_options.ListenAddress), _options.Port);
+            var listener = new TcpListener(endpoint);
+            try
+            {
+                listener.Start(_options.MaxConcurrentSessions);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Nothing was bound, so nothing was started: a later start may try again.
+                listener.Dispose();
+                throw;
+            }
+
+            _cts = new CancellationTokenSource();
+            _listener = listener;
+            _lifecycleBegun = true;
+            AudioSocketLog.ServerListening(_logger, _options.ListenAddress, _options.Port);
+
+            // Created here, once per instance: only the one start that binds reaches this line.
+            _instanceMeter.CreateObservableGauge<long>(
+                "audiosocket.sessions.active",
+                () => ActiveSessionCount,
+                unit: "{sessions}",
+                description: "Active AudioSocket sessions");
+
+            // CancellationToken.None on the hand-off, and deliberately so. Task.Run's token skips a work
+            // item that has not started yet, and the listener is already bound with this loop as the
+            // only thing that serves it: a skipped hand-off leaves a listener that takes connections
+            // into its backlog and never accepts one. The loop's token is read here rather than inside
+            // the lambda. A DisposeAsync that gets there first releases _cts, whose Token getter would
+            // then throw on the pool and fault a task nobody observes; a token read before the release
+            // just reads as cancelled, and the loop ends at its first check.
+            var token = _cts.Token;
+            _ = Task.Run(() => AcceptLoopAsync(token), CancellationToken.None);
+        }
+
         return Task.CompletedTask;
     }
 
-    /// <inheritdoc/>
-    public async Task StopAsync(CancellationToken cancellationToken)
-    {
-        if (_cts is not null)
-            await _cts.CancelAsync().ConfigureAwait(false);
+    /// <summary>
+    /// Stops accepting, releases the listener and ends every session the server serves. A stop after
+    /// disposal completes and does nothing.
+    /// </summary>
+    /// <param name="cancellationToken">Unused: the stop waits for nothing that can outlast it.</param>
+    public Task StopAsync(CancellationToken cancellationToken) =>
+        Volatile.Read(ref _released) != 0 ? Task.CompletedTask : StopCoreAsync();
 
-        _listener?.Stop();
+    /// <summary>
+    /// The stop itself, run by <see cref="StopAsync"/> and by <see cref="DisposeAsync"/>. Marks the
+    /// server's lifetime begun before it reads what to release, so a start that has not bound yet binds
+    /// nothing afterwards.
+    /// </summary>
+    private async Task StopCoreAsync()
+    {
+        CancellationTokenSource? cts;
+        TcpListener? listener;
+        lock (_lifecycleGate)
+        {
+            _lifecycleBegun = true;
+            cts = _cts;
+            listener = _listener;
+        }
+
+        if (cts is not null)
+            await CancelStoppingSourceAsync(cts).ConfigureAwait(false);
+
+        listener?.Stop();
 
         // The cancel above comes first: a registration whose entry this loop does not see reads it after
         // its add and withdraws. An entry still pending is left to its registrant, which sees the cancel
@@ -236,6 +320,23 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
             catch (OperationCanceledException) { break; }
 
             backoff = TimeSpan.FromTicks(Math.Min(backoff.Ticks * 2, MaxAcceptBackoff.Ticks));
+        }
+    }
+
+    /// <summary>
+    /// Cancels the stopping source. A public stop that read the released flag just before a concurrent
+    /// disposal finished can meet the source already released; that disposal's own stop cancelled it
+    /// first, so there is nothing left to cancel.
+    /// </summary>
+    private static async Task CancelStoppingSourceAsync(CancellationTokenSource cts)
+    {
+        try
+        {
+            await cts.CancelAsync().ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Released by a disposal whose own stop had already cancelled it.
         }
     }
 
@@ -568,9 +669,12 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        await StopAsync(CancellationToken.None).ConfigureAwait(false);
+        // The core, not the public stop: the public one is a no-op once the server is released, and
+        // disposal must still run its own stop.
+        await StopCoreAsync().ConfigureAwait(false);
         _cts?.Dispose();
         _instanceMeter.Dispose();
         _listener = null;
+        Volatile.Write(ref _released, 1);
     }
 }
