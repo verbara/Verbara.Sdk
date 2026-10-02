@@ -8,8 +8,8 @@ using Microsoft.Extensions.Options;
 namespace Verbara.Sdk.Ami.Tests.Connection;
 
 /// <summary>
-/// The internal members of <c>Verbara.Sdk.Ami</c> that <c>Verbara.Sdk.Live</c> calls, each called here exactly as Live
-/// calls it.
+/// The members of <c>Verbara.Sdk.Ami</c> that <c>Verbara.Sdk.Live</c> calls and that were internal when a Live package of
+/// the 2.x line was built against them, each called here exactly as Live calls it.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -22,6 +22,11 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// <para>
 /// This test is where the rule fails first: it names each member with the exact signature Live's call site binds to,
 /// so removing one, renaming it, or changing a parameter or a return type breaks this project's build.
+/// </para>
+/// <para>
+/// Since 2.7.0 the outcome overload is public with the same signature, and <c>EventActionOutcome</c> is public in
+/// <c>Verbara.Sdk</c> under the same full name, forwarded from <c>Verbara.Sdk.Ami</c>. Being recompiled, this test binds to
+/// the type's new home: it pins the signatures, not the forward.
 /// </para>
 /// <list type="bullet">
 /// <item><description><c>AmiConnection.FullyBooted</c>, a <see cref="Task"/>;</description></item>

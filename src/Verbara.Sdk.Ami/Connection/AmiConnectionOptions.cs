@@ -27,6 +27,18 @@ public sealed class AmiConnectionOptions
     public bool UseSsl { get; set; }
 
     /// <summary>Socket connection timeout. Default: 5 seconds.</summary>
+    /// <remarks>
+    /// Accepted: more than zero and at most <see cref="int.MaxValue"/> milliseconds (about 24.8 days); zero, a negative
+    /// value and <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> are rejected by the options validator and by the
+    /// <see cref="AmiConnection"/> constructor, naming this option. Checked whether or not <see cref="AutoReconnect"/> is
+    /// on. The connection holds the options object it was given, so a value changed afterwards to one of those is
+    /// rejected where it is used: <see cref="AmiConnection.ConnectAsync"/> throws
+    /// <see cref="ArgumentOutOfRangeException"/> naming this option before it dials, and the reconnect loop ends the
+    /// connection once, carrying that exception, instead of retrying. It also bounds how long <see cref="AmiConnection.ConnectAsync"/> waits for the release of a session the
+    /// connection lost on its own before it connects, so a connect can take up to twice this value: that wait, then the
+    /// connect itself.
+    /// </remarks>
+    [ConnectTimeoutRule]
     public TimeSpan ConnectionTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
     /// <summary>Socket read idle timeout. Default: infinite (TimeSpan.Zero).</summary>

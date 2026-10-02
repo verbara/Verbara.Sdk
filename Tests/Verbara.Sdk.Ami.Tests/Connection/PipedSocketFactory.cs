@@ -20,12 +20,30 @@ internal sealed class PipedSocketFactory : ISocketConnectionFactory
     private readonly Lock _gate = new();
     private readonly List<PipedSocket> _all = [];
     private TaskCompletionSource<PipedSocket> _nextCreated = NewCreatedSignal();
+    private bool _refuseConnects;
 
     /// <summary>
     /// How many sockets accept their connect. Every socket created after them refuses it, as a peer that
     /// is down does, so a test can make every reconnect fail. Unlimited by default.
     /// </summary>
     public int ConnectsAccepted { get; init; } = int.MaxValue;
+
+    /// <summary>
+    /// While <see langword="true"/>, every socket created refuses its connect, whatever <see cref="ConnectsAccepted"/>
+    /// says. Unlike <see cref="ConnectsAccepted"/> it can be switched back, so a test can refuse the reconnect loop's
+    /// attempts and then accept the caller's own connect.
+    /// </summary>
+    public bool RefuseConnects
+    {
+        get => Volatile.Read(ref _refuseConnects);
+        set => Volatile.Write(ref _refuseConnects, value);
+    }
+
+    /// <summary>
+    /// Runs inside <see cref="Create"/> for every socket, before the connection receives it, so a test can arm a socket
+    /// (<see cref="PipedSocket.DuringFirstDispose"/>) that the connection creates and releases with no pause in between.
+    /// </summary>
+    public Action<PipedSocket>? OnCreated { get; set; }
 
     /// <summary>Every socket handed out so far, in creation order.</summary>
     public IReadOnlyList<PipedSocket> Created
@@ -45,11 +63,13 @@ internal sealed class PipedSocketFactory : ISocketConnectionFactory
         TaskCompletionSource<PipedSocket> created;
         lock (_gate)
         {
-            socket = new PipedSocket(refusesConnect: _all.Count >= ConnectsAccepted);
+            socket = new PipedSocket(refusesConnect: _all.Count >= ConnectsAccepted || RefuseConnects);
             _all.Add(socket);
             created = _nextCreated;
             _nextCreated = NewCreatedSignal();
         }
+
+        OnCreated?.Invoke(socket);
 
         _created.Writer.TryWrite(socket);
         created.TrySetResult(socket);
@@ -123,6 +143,9 @@ internal sealed class PipedSocket(bool refusesConnect = false) : ISocketConnecti
     private int _disposeCount;
 
     public bool IsConnected => !_closed.IsCancellationRequested;
+
+    /// <summary>Whether this socket refuses its connect, as a peer that is down does.</summary>
+    public bool RefusesConnect => refusesConnect;
 
     public PipeReader Input => _toConnection.Reader;
 

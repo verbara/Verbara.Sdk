@@ -431,15 +431,17 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </para>
     /// <para>
     /// A snapshot whose AMI session ended before <c>StatusComplete</c> is as unfinished as a cancelled one, and the
-    /// connection ends it quietly, with the channels listed so far. Over an <see cref="AmiConnection"/>, which says so,
-    /// it throws instead of returning that partial list; any other <see cref="IAmiConnection"/> is read as before.
+    /// connection ends it quietly, with the channels listed so far. Over a connection that reports how the action ended
+    /// (an <see cref="AmiConnection"/>, or a wrapper that forwards
+    /// <see cref="IAmiConnection.ReportsEventActionOutcome"/> and the outcome overload), it throws instead of returning
+    /// that partial list; any other <see cref="IAmiConnection"/> is read as before.
     /// </para>
     /// <para>
     /// A <c>Status</c> Asterisk refused (<c>Response: Error</c>, such as <c>Permission denied</c> for an AMI user whose
     /// write classes allow none of <c>system</c>, <c>call</c> or <c>reporting</c>) lists no channel, and that is no
-    /// evidence that any channel is gone. Over an <see cref="AmiConnection"/>, which says so, it returns no snapshot
-    /// (<see langword="null"/>), logs the refusal once at <c>Warning</c> and tags the load's activity with it; the
-    /// caller then reconciles nothing. Any other <see cref="IAmiConnection"/> cannot tell a refusal from an empty
+    /// evidence that any channel is gone. Over a connection that reports how the action ended, as above, it returns no
+    /// snapshot (<see langword="null"/>), logs the refusal once at <c>Warning</c> and tags the load's activity with it;
+    /// the caller then reconciles nothing. Any other <see cref="IAmiConnection"/> cannot tell a refusal from an empty
     /// answer and is read as before.
     /// </para>
     /// </summary>
@@ -454,10 +456,15 @@ public sealed class VerbaraServer : IVerbaraServer
 
         var snapshot = new List<ChannelSnapshotEntry>();
 
-        var outcome = session is null ? null : new EventActionOutcome();
-        var events = session is null
-            ? _connection.SendEventGeneratingActionAsync(new StatusAction(), cancellationToken)
-            : session.Connection.SendEventGeneratingActionAsync(new StatusAction(), outcome, cancellationToken);
+        // Any other connection is asked for the outcome only when it says it reports one: a mock, or a wrapper that does
+        // not forward it, answers the outcome overload with nothing (a mock does not run the interface's default body),
+        // and its configured Status comes through the plain overload as before.
+        var outcome = session is not null || _connection.ReportsEventActionOutcome ? new EventActionOutcome() : null;
+        var events = session is not null
+            ? session.Connection.SendEventGeneratingActionAsync(new StatusAction(), outcome, cancellationToken)
+            : outcome is not null
+                ? _connection.SendEventGeneratingActionAsync(new StatusAction(), outcome, cancellationToken)
+                : _connection.SendEventGeneratingActionAsync(new StatusAction(), cancellationToken);
 
         await foreach (var evt in events)
         {
@@ -499,11 +506,11 @@ public sealed class VerbaraServer : IVerbaraServer
         cancellationToken.ThrowIfCancellationRequested();
 
         // Nor is the end of the session: reconciling what it cut short would end every call it had not listed yet.
-        if (outcome is { SessionEnded: true })
+        if (outcome is { Reported: true, SessionEnded: true })
             throw states.Stop("the AMI session ended while the live state load was reading Status");
 
         // Nor is a refusal: Asterisk listed nothing because it would not answer, not because nothing is up.
-        if (outcome?.Rejection is { } rejection)
+        if (outcome is { Reported: true, Rejection: { } rejection })
         {
             var message = rejection.Length == 0 ? "(Asterisk sent no message)" : rejection;
             VerbaraServerLog.StatusRefused(_logger, message);

@@ -406,6 +406,86 @@ public sealed class AmiReconnectLoopTests
     }
 
     /// <summary>
+    /// The options were valid when the connection was built, and <see cref="AmiConnectionOptions.ConnectionTimeout"/> was
+    /// changed afterwards, through the object the connection holds, to a negative value, which cannot bound a connect.
+    /// The loop must not count that as a failed attempt and retry it forever (with <c>MaxReconnectAttempts = 0</c> it
+    /// would never end): it ends the connection once, as a backoff that cannot be computed does, with one
+    /// <c>ReconnectBackoffFailed</c> entry whose exception names the option, no connect, the lost socket released, and a
+    /// final <see cref="AmiConnectionState.Disconnected"/> that carries that exception.
+    /// </summary>
+    [Fact]
+    public async Task ReconnectLoop_ShouldEndOnceCarryingTheRejection_WhenTheConnectionTimeoutIsMadeUnusableAfterConstruction()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory { ConnectsAccepted = 1 };
+        var logger = new RecordingLogger();
+        var options = new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = true,
+            MaxReconnectAttempts = 0,
+            ReconnectInitialDelay = TimeSpan.FromMilliseconds(5),
+            ReconnectMaxDelay = TimeSpan.FromMilliseconds(5),
+        };
+        var connection = new AmiConnection(Options.Create(options), factory, logger);
+        var changes = new List<AmiConnectionStateChange>();
+        var changesGate = new Lock();
+        // The final change is announced on the notification queue, after the log line: wait for the change itself.
+        var announcedDisconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.StateChanged += change =>
+        {
+            lock (changesGate)
+                changes.Add(change);
+            if (change.Current == AmiConnectionState.Disconnected)
+                announcedDisconnected.TrySetResult();
+        };
+        var first = await ConnectAsync(connection, factory, peerCts);
+        // Changed after construction, so the constructor's check never saw it.
+        options.ConnectionTimeout = TimeSpan.FromSeconds(-5);
+        var disconnected = logger.Logged("[AMI] Disconnected");
+
+        first.CloseFromPeer();
+        var ended = await CompletesWithinBoundAsync(disconnected)
+            && await CompletesWithinBoundAsync(announcedDisconnected.Task);
+
+        var sockets = factory.Created;
+        var backoffFailed = logger.Named("ReconnectBackoffFailed");
+        var attemptsFailed = logger.Named("ReconnectAttemptFailed");
+        string ending;
+        lock (changesGate)
+        {
+            ending = changes.Count == 0
+                ? "no change"
+                : changes[^1] is { Cause: ArgumentOutOfRangeException rejected } last
+                    ? $"{last.Current} carrying ArgumentOutOfRangeException naming {rejected.ParamName}"
+                    : $"{changes[^1].Current} carrying {changes[^1].Cause?.GetType().Name ?? "no cause"}";
+        }
+        using (new AssertionScope())
+        {
+            ended.Should().BeTrue("a loop whose ConnectionTimeout cannot bound a connect ends the connection instead of retrying it");
+            connection.State.Should().Be(AmiConnectionState.Disconnected);
+            attemptsFailed.Should().BeEmpty("an unusable option is not a failed attempt to retry");
+            backoffFailed.Should().ContainSingle("the loop ends once, loudly");
+            if (backoffFailed.Count == 1)
+            {
+                backoffFailed[0].Exception.Should().BeOfType<ArgumentOutOfRangeException>()
+                    .Which.ParamName.Should().Be(nameof(AmiConnectionOptions.ConnectionTimeout), "the entry names the option to fix");
+            }
+
+            ending.Should().Be(
+                $"{AmiConnectionState.Disconnected} carrying ArgumentOutOfRangeException naming {nameof(AmiConnectionOptions.ConnectionTimeout)}",
+                "the last change ends the connection and carries the rejection");
+            sockets.Should().HaveCount(1, "the loop makes no connect with an option that cannot bound it");
+            Unreleased(sockets).Should().BeEmpty("the lost socket is released exactly once when the loop ends");
+        }
+
+        (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
+    }
+
+    /// <summary>
     /// <c>MaxReconnectAttempts = N</c> makes exactly N reconnect connects when every one is refused, then gives up
     /// <see cref="AmiConnectionState.Disconnected"/>. Counted on the client side: the factory's sockets, read after the
     /// loop's own task has completed, so a connect the loop made after the give-up would be counted too.

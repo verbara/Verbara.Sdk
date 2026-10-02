@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -340,8 +341,10 @@ public sealed class AmiConnection : IAmiConnection
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
         _options = options.Value;
-        // No validator runs on this path (factories, the server pool, Options.Create): with AutoReconnect on, a value
-        // the reconnect backoff cannot use is rejected here, naming the option, instead of in a loop after a loss.
+        // No validator runs on this path (factories, the server pool, Options.Create): a ConnectionTimeout that cannot
+        // bound a connect is rejected here, naming the option, whether or not AutoReconnect is on; with AutoReconnect on,
+        // so is a value the reconnect backoff cannot use, instead of in a loop after a loss.
+        ConnectTimeoutRule.ThrowIfUnusable(_options);
         ReconnectRule.ThrowIfUnusable(_options);
         _socketFactory = socketFactory;
         _logger = logger;
@@ -349,12 +352,103 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <inheritdoc path="/remarks/node()" />
+    /// <para>
+    /// A connect made while the connection is still ending a session it lost on its own — a loss with
+    /// <c>AutoReconnect</c> off, or a reconnect loop that gave up — first waits for that ending to release the lost
+    /// session: its socket, its reader and heartbeat, and the delivery of every event it had buffered. It then connects
+    /// as it does from <see cref="AmiConnectionState.Disconnected"/>, whether the caller acts on
+    /// <see cref="AmiConnectionState.Disconnecting"/>, on <see cref="AmiConnectionState.Disconnected"/>, on
+    /// <see cref="Lost"/> or by polling <see cref="State"/>. The wait writes no state and acquires nothing, and it never
+    /// resumes on the caller's <see cref="SynchronizationContext"/>.
+    /// </para>
+    /// <para>
+    /// The wait is bounded by the first of <see cref="AmiConnectionOptions.ConnectionTimeout"/>, the caller's
+    /// <paramref name="cancellationToken"/> and the caller's own ending. When <c>ConnectionTimeout</c> runs out first, the
+    /// call throws <see cref="OperationCanceledException"/> ("The connection was ended during the connect.") and the lost
+    /// ending finishes on its own; a later call waits again. The caller's token ends it with an
+    /// <see cref="OperationCanceledException"/> for that token. A <see cref="DisconnectAsync"/> or
+    /// <see cref="DisposeAsync"/> ends it at once with <see cref="ObjectDisposedException"/>. A connect can therefore take
+    /// up to twice <c>ConnectionTimeout</c>: the wait, then the connect itself. A lost session that takes longer than
+    /// <c>ConnectionTimeout</c> to deliver its buffered events makes the call fail that way.
+    /// </para>
+    /// <para>
+    /// A call made from inside the connection's own event dispatch does not wait, because that dispatch is part of what
+    /// the release waits for: an <see cref="OnEvent"/> handler that awaits it, an observer's <c>OnNext</c> that waits on
+    /// it, or anything they call from there. It throws that same <see cref="OperationCanceledException"/> at once and
+    /// writes no state; a connect made from outside once the handler has returned connects. A task a dispatch started
+    /// counts as inside it until that dispatch returns, so whether such a task's call waits depends on whether it is made
+    /// before or after the dispatch has returned (as <see cref="DisposeAsync"/> describes).
+    /// </para>
+    /// <para>
+    /// An event handler must not await, without a token, external work that reconnects — a worker or queue that calls
+    /// this method: that connect fails after <c>ConnectionTimeout</c>, because the release it waits for waits for the
+    /// handler. Likewise, a <see cref="StateChanged"/> or <see cref="Lost"/> handler that blocks on this method holds the
+    /// notification queue, so no later notification is delivered, for up to that bound.
+    /// </para>
+    /// </remarks>
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_state == AmiConnectionState.Disconnected && _closedByCaller, this);
+        // The options are held by reference and can change after construction: the rule the constructor checked is
+        // checked again before the option bounds the wait below and the connect, so an unusable value is rejected here,
+        // naming the option, before anything is waited for, dialled or written.
+        ConnectTimeoutRule.ThrowIfUnusable(_options);
+        if (TryGetLostEndingToWaitFor(out var lostEnding))
+        {
+            // Always resumes on the thread pool, never on the caller's context, even when the ending has finished by
+            // the time this await runs: a caller that blocks on this call from a single-threaded context holds the only
+            // thread that context could resume on.
+            await WaitForLostEndingAsync(lostEnding, cancellationToken).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
+        }
+
         ForgetLostConnectionEnding();
 
         await ConnectCoreAsync(byLoop: false, cancellationToken);
+    }
+
+    /// <summary>
+    /// The ending a caller's connect waits for: one the caller did not ask for, still releasing a lost session. None when
+    /// there is no such ending, when the caller has ended the connection, or when the call runs inside the connection's
+    /// own event dispatch, which that release waits for.
+    /// </summary>
+    private bool TryGetLostEndingToWaitFor([NotNullWhen(true)] out Task? lostEnding)
+    {
+        lock (_endingLock)
+        {
+            lostEnding = !_closedByCaller && !InDispatch && _ending is { Task.IsCompleted: false } inFlight ? inFlight.Task : null;
+            return lostEnding is not null;
+        }
+    }
+
+    /// <summary>
+    /// Waits for <paramref name="lostEnding"/>, bounded by <see cref="AmiConnectionOptions.ConnectionTimeout"/>, the
+    /// caller's token and the caller's own ending, so that the connect which follows finds it finished and forgets it.
+    /// </summary>
+    /// <remarks>
+    /// When <see cref="AmiConnectionOptions.ConnectionTimeout"/> runs out the call returns, the ending is still in flight,
+    /// and the connect throws the <see cref="OperationCanceledException"/> a connect that meets an ending in progress
+    /// throws. The caller's token ends the wait with that token's cancellation; the caller's ending, which cancels
+    /// <c>_lifetime</c>, with <see cref="ObjectDisposedException"/>.
+    /// </remarks>
+    private async Task WaitForLostEndingAsync(Task lostEnding, CancellationToken cancellationToken)
+    {
+        using var bound = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+        try
+        {
+            await lostEnding.WaitAsync(_options.ConnectionTimeout, _timeProvider, bound.Token).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // The ending is left to finish on its own: its release may be waiting for a handler that waits for this call.
+        }
+        catch (OperationCanceledException) when (bound.IsCancellationRequested)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ObjectDisposedException.ThrowIf(true, this);
+            throw;
+        }
     }
 
     /// <summary>
@@ -915,6 +1009,10 @@ public sealed class AmiConnection : IAmiConnection
         ManagerAction action, CancellationToken cancellationToken = default) =>
         SendEventGeneratingActionAsync(action, outcome: null, cancellationToken);
 
+    /// <inheritdoc />
+    /// <remarks>The SDK's connection reports every outcome: <see langword="true"/>.</remarks>
+    public bool ReportsEventActionOutcome => true;
+
     /// <summary>
     /// <see cref="SendEventGeneratingActionAsync(ManagerAction, CancellationToken)"/>, which also writes to
     /// <paramref name="outcome"/> how the action ended, once its sequence has ended on its own.
@@ -923,20 +1021,25 @@ public sealed class AmiConnection : IAmiConnection
     /// <para>
     /// Asterisk may refuse the action with <c>Response: Error</c>, or its session may end before the action completes.
     /// The sequence then ends as it does when Asterisk completes the action: with the events received so far, and no
-    /// error. For a caller of the public overload a refusal, an ending and an empty answer are the same. With an
+    /// error. For a caller of the plain overload a refusal, an ending and an empty answer are the same. With an
     /// <paramref name="outcome"/>, the caller can tell them apart: <see cref="EventActionOutcome.Rejection"/> holds
     /// the refusal's <c>Message</c>, and <see cref="EventActionOutcome.SessionEnded"/> says that the connection gave
     /// the action up because its session ended. Neither is set when Asterisk completed the action.
     /// </para>
     /// <para>
-    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
-    /// any newer Ami.
+    /// This connection reports every outcome (<see cref="ReportsEventActionOutcome"/> is <see langword="true"/>):
+    /// <see cref="EventActionOutcome.Reported"/> is set with the other two once the sequence has ended on its own, and
+    /// stays <see langword="false"/> when the enumeration throws or is abandoned.
+    /// </para>
+    /// <para>
+    /// Called by Verbara.Sdk.Live, which bound to it before it was public; kept with this signature until 3.0, because a
+    /// Live package of the 2.x line runs on any newer Ami.
     /// </para>
     /// </remarks>
     /// <param name="action">The action to send.</param>
     /// <param name="outcome">Receives how the action ended; <see langword="null"/> for a caller that does not ask.</param>
     /// <param name="cancellationToken">Cancels the enumeration.</param>
-    internal IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
+    public IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
         ManagerAction action, EventActionOutcome? outcome, CancellationToken cancellationToken = default) =>
         SendEventGeneratingCoreAsync(action, outcome, _options.DefaultEventTimeout, cancellationToken);
 
@@ -1022,6 +1125,7 @@ public sealed class AmiConnection : IAmiConnection
             {
                 outcome.Rejection = collector.Rejection;
                 outcome.SessionEnded = collector.SessionEnded;
+                outcome.Reported = true;
             }
 
             activity?.SetTag("ami.event_count", eventCount);
@@ -1274,9 +1378,13 @@ public sealed class AmiConnection : IAmiConnection
                     }
                     else
                     {
+                        // The ending is recorded here, in the same lock as the Disconnecting it writes, so no connect
+                        // ever reads Disconnecting without the ending that owns it.
+                        var lostEnding = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                        _ending = lostEnding;
                         SetStateLocked(AmiConnectionState.Disconnecting, cause, byCaller: false);
                         NotifyLost(cause);
-                        _ = Task.Run(() => EndLostConnectionAsync(cause), CancellationToken.None);
+                        _ = Task.Run(() => FinishLostEndingAsync(lostEnding, cause), CancellationToken.None);
                     }
                 }
             }
@@ -1307,15 +1415,42 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <summary>
-    /// Ends a connection lost for good — AutoReconnect is off, or the reconnect loop gave up — through the
-    /// same ending a caller's <see cref="DisconnectAsync"/> runs, without the Logoff. It runs on a task of
-    /// its own, never on the reader loop or the heartbeat, which <see cref="CleanupAsync"/> awaits.
+    /// Ends a connection the reconnect loop lost for good — it gave up, or its backoff failed — through the same
+    /// ending a caller's <see cref="DisconnectAsync"/> runs, without the Logoff, recording the ending and its
+    /// <see cref="AmiConnectionState.Disconnecting"/> in one lock. It runs on the loop's task, never on the reader loop
+    /// or the heartbeat, which <see cref="CleanupAsync"/> awaits. A loss without AutoReconnect is recorded by the reader
+    /// loop itself and released by <see cref="FinishLostEndingAsync"/>.
     /// </summary>
     /// <param name="cause">
     /// What ended the connection for good, announced on its final change to <see cref="AmiConnectionState.Disconnected"/>:
-    /// the loss's cause without AutoReconnect, the last failed attempt's exception for the give-up.
+    /// the last failed attempt's exception for the give-up, the backoff's failure otherwise.
     /// </param>
     private Task EndLostConnectionAsync(Exception? cause) => EndAsync(byCaller: false, CancellationToken.None, cause);
+
+    /// <summary>
+    /// Releases a connection lost without AutoReconnect, whose ending the reader loop has already recorded, in the same
+    /// lock as its <see cref="AmiConnectionState.Disconnecting"/>. It does what <see cref="EndAsync"/> does for the
+    /// connection's own ending: no Logoff, no reconnect loop to wait for, the release, then
+    /// <see cref="AmiConnectionState.Disconnected"/> and the ending's completion. It runs on a task of its own, never
+    /// on the reader loop, which <see cref="CleanupAsync"/> awaits.
+    /// </summary>
+    /// <param name="mine">The ending the reader loop recorded; completed last, once the release has finished.</param>
+    /// <param name="cause">What ended the connection, announced on its change to <see cref="AmiConnectionState.Disconnected"/>.</param>
+    private async Task FinishLostEndingAsync(TaskCompletionSource mine, Exception? cause)
+    {
+        try
+        {
+            await CleanupAsync(byEnding: true);
+        }
+        finally
+        {
+            lock (_endingLock)
+                SetStateLocked(AmiConnectionState.Disconnected, cause, byCaller: false);
+
+            AmiConnectionLog.Disconnected(_logger);
+            mine.TrySetResult();
+        }
+    }
 
     /// <summary>
     /// Reconnects with backoff until a connect succeeds, the loop gives up at
@@ -1351,8 +1486,11 @@ public sealed class AmiConnection : IAmiConnection
 
             try
             {
-                // The options are held by reference and can change after construction, so the rule the constructor
-                // checked is checked again here; Compute and the delay throw on what it rejects.
+                // The options are held by reference and can change after construction, so the rules the constructor
+                // checked are checked again here: a ConnectionTimeout that cannot bound the attempt's connect would fail
+                // every attempt (or leave it unbounded), and Compute and the delay throw on what the backoff rule rejects.
+                // Either ends the loop once, below, instead of being retried as a failed attempt.
+                ConnectTimeoutRule.ThrowIfUnusable(_options);
                 ReconnectRule.ThrowIfUnusable(_options);
                 var delay = Verbara.Sdk.Resilience.BackoffSchedule.Compute(
                     attempt,
@@ -1984,44 +2122,6 @@ public sealed class AmiConnection : IAmiConnection
             }
         }
     }
-}
-
-/// <summary>
-/// How an event-generating action ended, besides its events: written by
-/// <see cref="AmiConnection.SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome, CancellationToken)"/>
-/// once the action's sequence has ended on its own. Both stay at their defaults when Asterisk completed the action.
-/// </summary>
-internal sealed class EventActionOutcome
-{
-    /// <summary>An outcome that nothing has written yet, for the caller to pass in.</summary>
-    /// <remarks>
-    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
-    /// any newer Ami.
-    /// </remarks>
-    public EventActionOutcome()
-    {
-        // Nothing to set: an action that has not ended was neither refused nor abandoned.
-    }
-
-    /// <summary>
-    /// The <c>Message</c> of the <c>Response: Error</c> with which Asterisk refused the action, or
-    /// <see cref="string.Empty"/> for a refusal without one; <see langword="null"/> when Asterisk did not refuse it.
-    /// </summary>
-    /// <remarks>
-    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
-    /// any newer Ami.
-    /// </remarks>
-    public string? Rejection { get; internal set; }
-
-    /// <summary>
-    /// <see langword="true"/> when the connection gave the action up because its AMI session ended before Asterisk
-    /// completed it; the events received until then were delivered.
-    /// </summary>
-    /// <remarks>
-    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
-    /// any newer Ami.
-    /// </remarks>
-    public bool SessionEnded { get; internal set; }
 }
 
 /// <summary>

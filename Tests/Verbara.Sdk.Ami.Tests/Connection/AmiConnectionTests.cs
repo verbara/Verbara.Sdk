@@ -531,5 +531,91 @@ public sealed class AmiConnectionTests : IAsyncLifetime
         await connection.DisposeAsync();
     }
 
+    [Theory]
+    [MemberData(nameof(AmiConnectionOptionsValidatorTests.UnusableConnectionTimeouts), MemberType = typeof(AmiConnectionOptionsValidatorTests))]
+    public async Task Ctor_ShouldThrowNamingConnectionTimeout_WhenTheConnectionTimeoutIsUnusable(string value, bool autoReconnect)
+    {
+        var options = AmiConnectionOptionsValidatorTests.ConnectionTimeoutOptions(value, autoReconnect);
+        AmiConnection? created = null;
+
+        var act = () => created = new AmiConnection(
+            Options.Create(options), Substitute.For<ISocketConnectionFactory>(), NullLogger<AmiConnection>.Instance);
+
+        try
+        {
+            act.Should().Throw<ArgumentOutOfRangeException>(
+                    $"{value} cannot bound a connect (AutoReconnect = {autoReconnect}), and no validator runs on this path")
+                .Which.ParamName.Should().Be(nameof(AmiConnectionOptions.ConnectionTimeout), "the error names the option to fix");
+        }
+        finally
+        {
+            if (created is not null)
+                await created.DisposeAsync();
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(AmiConnectionOptionsValidatorTests.UsableConnectionTimeouts), MemberType = typeof(AmiConnectionOptionsValidatorTests))]
+    public async Task Ctor_ShouldSucceed_WhenTheConnectionTimeoutIsAtABoundOfTheUsableRange(string value, bool autoReconnect)
+    {
+        var options = AmiConnectionOptionsValidatorTests.ConnectionTimeoutOptions(value, autoReconnect);
+
+        var connection = new AmiConnection(
+            Options.Create(options), Substitute.For<ISocketConnectionFactory>(), NullLogger<AmiConnection>.Instance);
+
+        connection.State.Should().Be(AmiConnectionState.Initial, $"{value} is positive and finite");
+        await connection.DisposeAsync();
+    }
+
+    /// <summary>
+    /// The options are held by reference: a <see cref="AmiConnectionOptions.ConnectionTimeout"/> changed after
+    /// construction to a value that cannot bound a connect is rejected by the next <see cref="AmiConnection.ConnectAsync"/>
+    /// before it dials or writes a state, naming the option, instead of dialling with no bound (or a bound that
+    /// <see cref="CancellationTokenSource.CancelAfter(TimeSpan)"/> rejects under its own parameter name).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AmiConnectionOptionsValidatorTests.UnusableConnectionTimeouts), MemberType = typeof(AmiConnectionOptionsValidatorTests))]
+    public async Task ConnectAsync_ShouldThrowNamingConnectionTimeoutBeforeItDials_WhenTheConnectionTimeoutIsMadeUnusableAfterConstruction(
+        string value, bool autoReconnect)
+    {
+        var options = AmiConnectionOptionsValidatorTests.ConnectionTimeoutOptions("ConnectionTimeout = 5 s", autoReconnect);
+        var factory = new PipedSocketFactory();
+        var connection = new AmiConnection(Options.Create(options), factory, NullLogger<AmiConnection>.Instance);
+        var changes = 0;
+        connection.StateChanged += _ => Interlocked.Increment(ref changes);
+        // Changed after construction, so the constructor's check never saw it.
+        options.ConnectionTimeout = AmiConnectionOptionsValidatorTests.ConnectionTimeoutOptions(value, autoReconnect).ConnectionTimeout;
+        Exception? outcome = null;
+
+        try
+        {
+            await connection.ConnectAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            outcome = ex;
+        }
+
+        var rejection = outcome switch
+        {
+            null => "no exception",
+            ArgumentOutOfRangeException rejected => $"ArgumentOutOfRangeException naming {rejected.ParamName}",
+            _ => $"{outcome.GetType().Name}: {outcome.Message}",
+        };
+
+        try
+        {
+            rejection.Should().Be($"ArgumentOutOfRangeException naming {nameof(AmiConnectionOptions.ConnectionTimeout)}",
+                $"{value} cannot bound a connect (AutoReconnect = {autoReconnect}), the connect checks the option it uses, and the error names the option to fix");
+            factory.Created.Should().BeEmpty("the option is checked before the connect dials");
+            Volatile.Read(ref changes).Should().Be(0, "the rejected connect writes no state");
+            connection.State.Should().Be(AmiConnectionState.Initial);
+        }
+        finally
+        {
+            await connection.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
+        }
+    }
+
     private sealed class TestAction : ManagerAction;
 }

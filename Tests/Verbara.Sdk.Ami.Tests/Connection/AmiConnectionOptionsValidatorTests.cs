@@ -269,6 +269,98 @@ public class AmiConnectionOptionsValidatorTests
         }
     }
 
+    // ── ConnectionTimeout ───────────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The <see cref="AmiConnectionOptions.ConnectionTimeout"/> values no connect can use, each with <c>AutoReconnect</c> on
+    /// and off: the option bounds every connect and the wait of a caller's connect for a lost session's release, whether
+    /// or not the connection reconnects on its own, so it must be positive and no longer than .NET can wait.
+    /// </summary>
+    public static TheoryData<string, bool> UnusableConnectionTimeouts
+    {
+        get
+        {
+            var data = new TheoryData<string, bool>();
+            string[] values = ["ConnectionTimeout = 0", "ConnectionTimeout = -1 s",
+                "ConnectionTimeout = Timeout.InfiniteTimeSpan", "ConnectionTimeout = int.MaxValue ms + 1 ms"];
+            foreach (var value in values)
+            {
+                data.Add(value, true);
+                data.Add(value, false);
+            }
+
+            return data;
+        }
+    }
+
+    /// <summary>The bounds of the usable range, each with <c>AutoReconnect</c> on and off.</summary>
+    public static TheoryData<string, bool> UsableConnectionTimeouts
+    {
+        get
+        {
+            var data = new TheoryData<string, bool>();
+            string[] values = ["ConnectionTimeout = 1 tick", "ConnectionTimeout = 5 s", "ConnectionTimeout = int.MaxValue ms"];
+            foreach (var value in values)
+            {
+                data.Add(value, true);
+                data.Add(value, false);
+            }
+
+            return data;
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(UnusableConnectionTimeouts))]
+    public void Validate_ShouldFailNamingConnectionTimeout_WhenTheConnectionTimeoutIsUnusable(string value, bool autoReconnect)
+    {
+        var options = ConnectionTimeoutOptions(value, autoReconnect);
+
+        var result = _validator.Validate(null, options);
+
+        result.Succeeded.Should().BeFalse(
+            $"{value} cannot bound a connect, nor the wait of a connect for a lost session's release (AutoReconnect = {autoReconnect})");
+        if (result.Failed)
+            result.FailureMessage.Should().Contain(nameof(AmiConnectionOptions.ConnectionTimeout), "the failure names the option to fix");
+    }
+
+    [Theory]
+    [MemberData(nameof(UsableConnectionTimeouts))]
+    public void Validate_ShouldSucceed_WhenTheConnectionTimeoutIsAtABoundOfTheUsableRange(string value, bool autoReconnect)
+    {
+        var options = ConnectionTimeoutOptions(value, autoReconnect);
+
+        var result = _validator.Validate(null, options);
+
+        result.Succeeded.Should().BeTrue($"{value} is positive and finite; failure: {result.FailureMessage}");
+    }
+
+    /// <summary>Valid options with <paramref name="autoReconnect"/>, whose <see cref="AmiConnectionOptions.ConnectionTimeout"/> is the value named.</summary>
+    internal static AmiConnectionOptions ConnectionTimeoutOptions(string value, bool autoReconnect)
+    {
+        var options = new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Port = 5038,
+            Username = "admin",
+            Password = "secret",
+            AutoReconnect = autoReconnect,
+            ConnectionTimeout = value switch
+            {
+                "ConnectionTimeout = 0" => TimeSpan.Zero,
+                "ConnectionTimeout = -1 s" => TimeSpan.FromSeconds(-1),
+                "ConnectionTimeout = Timeout.InfiniteTimeSpan" => Timeout.InfiniteTimeSpan,
+                "ConnectionTimeout = int.MaxValue ms + 1 ms" => WaitLimit + TimeSpan.FromMilliseconds(1),
+                "ConnectionTimeout = 1 tick" => TimeSpan.FromTicks(1),
+                "ConnectionTimeout = 5 s" => TimeSpan.FromSeconds(5),
+                "ConnectionTimeout = int.MaxValue ms" => WaitLimit,
+                _ => throw new ArgumentOutOfRangeException(nameof(value), value, "Not a ConnectionTimeout value of these tests."),
+            },
+        };
+
+        return options;
+    }
+
     /// <summary>The longest delay .NET can wait: <see cref="int.MaxValue"/> ms, about 24.8 days (owner ruling Q2).</summary>
     internal static readonly TimeSpan WaitLimit = TimeSpan.FromMilliseconds(int.MaxValue);
 
