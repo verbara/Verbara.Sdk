@@ -285,6 +285,56 @@ public sealed class ReloadEndingProvenanceTests : IAsyncLifetime
             $"the state followed from the session, not from an invented cause. Measured: {Describe()}");
     }
 
+    /// <summary>
+    /// The answered twin of <see cref="Reconnect_ShouldEndTheCallAsFailed_WhenTheSessionNeverConnectedBeforeTheReload"/>:
+    /// the dialplan answered the leg in front of the SDK while the call was in its initial state, and no dial or
+    /// queue reached it. A call that was up took place, so a reload that proves it gone ends it completed, as it
+    /// ends a connected call, with the reload's marker, no cause, and the answer the SDK observed as its
+    /// connected time. The test waits for the ending itself, under a bound.
+    /// </summary>
+    [Fact]
+    public async Task Reconnect_ShouldEndTheCallAsCompletedFromItsObservedAnswer_WhenTheDialplanAnsweredItInItsInitialStateBeforeTheReload()
+    {
+        await GivenAStartedServer();
+        _server.Channels.OnNewChannel(LostCallerUid, "PJSIP/trunk-001", ChannelState.Ring,
+            callerIdNum: "5551234", context: "from-trunk", linkedId: LostLinkedId);
+        var session = SessionFor(LostLinkedId);
+        var justBeforeTheAnswer = DateTimeOffset.UtcNow;
+        _server.Channels.OnNewState(LostCallerUid, ChannelState.Up);
+        var justAfterTheAnswer = DateTimeOffset.UtcNow;
+        session.State.Should().Be(CallSessionState.Created, "premise: nothing dialed or queued the answered call");
+        var ending = new TaskCompletionSource<CallEndedEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var endings = _sessions.Events.Subscribe(e =>
+        {
+            if (e is CallEndedEvent ended && ended.SessionId == session.SessionId)
+                ending.TrySetResult(ended);
+        });
+
+        await WhenTheConnectionReconnects();
+        var ended = await ending.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        new
+        {
+            session.State,
+            Marker = session.Metadata.GetValueOrDefault("cause"),
+            session.HangupCause,
+            ConnectedAtIsTheObservedAnswer = session.ConnectedAt >= justBeforeTheAnswer && session.ConnectedAt <= justAfterTheAnswer,
+            Endings = _sessionEvents.OfType<CallEndedEvent>().Count(e => e.SessionId == session.SessionId),
+            EndingCarriesATalkTime = ended.TalkTime.HasValue,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                State = CallSessionState.Completed,
+                Marker = "reload",
+                HangupCause = (HangupCause?)null,
+                ConnectedAtIsTheObservedAnswer = true,
+                Endings = 1,
+                EndingCarriesATalkTime = true,
+            },
+            "the SDK observed this call's answer, so a reload that proves it gone ends a call that took place: "
+            + $"completed, marked as a reload ending, with no cause and its observed answer. Measured: {Describe()}");
+    }
+
     // --- scenario: an observed hangup is unchanged -----------------------------------------------
 
     [Fact]
