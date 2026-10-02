@@ -2,10 +2,12 @@
 
 Required by the release cadence: a minor that carries a breaking change ships a migration guide.
 
-Four behaviours changed in `Verbara.Sdk.Push`, `Verbara.Sdk.Push.AspNetCore` and `Verbara.Sdk.Push.Webhooks`:
-**which SSE stream requests are served**, **how the stream writes**, **which trace a delivery belongs to**, and
-**which webhook delivery options are accepted**. One public type was added, `SsePushStreamOptions`, with one
-property, `MaxQueuedBytesPerConnection`; no existing signature changed, so nothing stops compiling.
+Five behaviours changed in `Verbara.Sdk.Push`, `Verbara.Sdk.Push.AspNetCore` and `Verbara.Sdk.Push.Webhooks`:
+**which SSE stream requests are served**, **which events a served stream delivers and to whom**, **how the stream
+writes**, **which trace a delivery belongs to**, and **which webhook delivery options are accepted**. One public
+type was added, `SsePushStreamOptions`, with five properties: `MaxQueuedBytesPerConnection` and four claim-type
+lists, `TenantIdClaimTypes`, `UserIdClaimTypes`, `RoleClaimTypes` and `PermissionClaimTypes`. No existing
+signature changed, so nothing stops compiling.
 
 ## What happened
 
@@ -15,6 +17,16 @@ property, `MaxQueuedBytesPerConnection`; no existing signature changed, so nothi
   the rest), asking exactly for `billing.**` delivered `billing.**` and everything else. The package README stated
   this fallback as the contract. Tenant and user isolation held: the delivery filter never let another tenant's
   event, or an event targeted at another user, through.
+- **An event published without a topic path reached every admitted stream of its tenant.** The stream matched an
+  event's `TopicPath` against the topics the client was allowed; an event whose `TopicPath` was null passed every
+  pattern. A client allowed only `queue.**` therefore also received every topic-less event of its tenant, whatever
+  its type. An event whose `TopicPath` was not a valid topic (for example `a..b`) was skipped by every stream, and
+  nothing said so.
+- **The authorizer never saw the subscriber's roles or permissions, and on a default `JwtBearer` host no user.**
+  The stream built the subscriber from the literal claims `tenantId` and `sub`, and always with empty `Roles` and
+  `Permissions`. ASP.NET Core's `JwtBearer` handler renames `sub` to `ClaimTypes.NameIdentifier` by default
+  (`MapInboundClaims = true`), so the user was null: no event targeted at a user, and no `{self}` pattern, was ever
+  delivered on such a host, and an authorizer that decides by role or permission had nothing to decide on.
 - **On a default Kestrel host the stream did not work at all.** The endpoint flushed synchronously, which Kestrel
   refuses unless `AllowSynchronousIO = true`, so every stream request answered `500`. The authorization defect was
   therefore reachable only on hosts that had turned synchronous I/O on; fixing the write path alone would have
@@ -42,10 +54,10 @@ wider pattern.
 
 | Request | Status | Body / stream |
 |---------|--------|---------------|
-| No `tenantId` claim | `400 Bad Request` | `Missing tenantId claim.` (unchanged) |
+| No tenant claim (no value under any of `TenantIdClaimTypes`, `tenantId` by default) | `400 Bad Request` | `Missing tenantId claim.` (unchanged text, whatever the list holds) |
 | Any `topic` fails to parse, alone or next to valid ones | `400 Bad Request` | `text/plain`, the invalid topics percent-encoded; the authorizer is asked nothing |
 | Every requested topic denied (no topic = `**` denied) | `403 Forbidden` | `text/plain`, the fixed text `Subscription denied.` |
-| At least one requested topic allowed | `200 OK` | `text/event-stream`, the events of the allowed topics only |
+| At least one requested topic allowed | `200 OK` | `text/event-stream`, the events whose name matches an allowed topic only (section 2) |
 
 What each case answered before and answers now (`AllowSynchronousIO = true`; on a default Kestrel host every row
 answered `500` before):
@@ -76,7 +88,54 @@ answered `500` before):
 per refused request (category `Verbara.Sdk.Push.AspNetCore.SsePushEndpoints`) with the tenant, the user, the denied
 topics percent-encoded and the authorizer's first reason.
 
-### 2. The stream writes asynchronously, through one bounded writer per connection
+### 2. A topic-less event reaches only the streams allowed to see its type
+
+An event is matched by its **name**: its `TopicPath`, or its `EventType` when the topic path is null or empty.
+
+| The event's `TopicPath` | Matched by | When that name is not a valid topic |
+|-------------------------|------------|-------------------------------------|
+| a valid topic | the topic path | — |
+| null or empty | the event type, `{self}` resolved as in a topic path | delivered only to streams allowed `**` |
+| non-empty, not a valid topic | — | delivered to no stream, `**` included; one `Warning` |
+
+- A topic-less `billing.invoice.created` reaches a stream allowed `billing.**`, and no longer a stream allowed only
+  `queue.**`.
+- An event type that is not a valid topic (for example `billing..x`) is never matched by its text: a topic-less
+  event of that type reaches only `**` streams.
+- An event whose non-empty `TopicPath` does not parse never falls back to its event type. The endpoint logs one
+  `Warning` per such event, however many streams evaluated it (category
+  `Verbara.Sdk.Push.AspNetCore.SsePushEndpoints`, EventId 4), with the tenant and the event type and topic path
+  percent-encoded. An event no stream evaluated is not logged.
+- The `event:` name on the wire is the name the event was matched by, so a topic-less event is named by its type
+  (as before for a null topic path; an empty one is now named by its type too).
+- Tenant and user isolation are unchanged: the delivery filter still decides first.
+
+For a **null** topic path this is the convention the NATS bridge already used to build its subject
+(`TopicPath ?? EventType`). It is not the same for an **empty** one: the bridge publishes an event with an empty
+topic path to the bare subject prefix, not under its event type. **Webhooks are not changed**: a webhook
+subscription still never receives an event whose topic path is null or empty.
+
+### 3. The stream knows who the subscriber is, from claim types you can configure
+
+The tenant, user, roles and permissions handed to `ISubscriptionAuthorizer` and `IEventDeliveryFilter` are read
+from the authenticated principal through four lists on `SsePushStreamOptions`:
+
+| Option | Default | Read as |
+|--------|---------|---------|
+| `TenantIdClaimTypes` | `tenantId` | the first listed type, in list order, with a non-empty value |
+| `UserIdClaimTypes` | `sub`, `ClaimTypes.NameIdentifier` | the first listed type, in list order, with a non-empty value |
+| `RoleClaimTypes` | `ClaimTypes.Role`, `role`, `roles` | every value of every listed type, plus every value of each identity's own `RoleClaimType` |
+| `PermissionClaimTypes` | `permission` | every value of every listed type |
+
+Claim types are compared ignoring case, values ordinally and whole (never split on spaces or commas); empty values
+are ignored. With the defaults, `JwtBearer` finds the user and the roles whether `MapInboundClaims` is true or
+false. `AddVerbaraPushAspNetCore` validates the lists at start: the tenant and user lists must not be empty, and
+no list may hold a null, empty or whitespace entry. The role and permission lists may be empty.
+
+`tid` is deliberately not a default tenant claim type: in Microsoft Entra ID it names the directory, not your
+application's tenant.
+
+### 4. The stream writes asynchronously, through one bounded writer per connection
 
 The response headers are sent as soon as the request is admitted, and every write is asynchronous, so the stream
 works on a default Kestrel host. Each connection has one writer: events and the `: heartbeat` comment (every 15
@@ -96,7 +155,8 @@ data: {"dropped":3413}
 - Heartbeats are outside the bound: one is not queued while drops are waiting to be reported or while it does not
   fit, and it is never counted in `dropped`.
 - A single event larger than the bound is still delivered, alone; what was queued before it is dropped and reported.
-- `.gap` is reserved: an event whose name would be `.gap` is written as `event: %2Egap`.
+- `.gap` is reserved: an event whose name would be `.gap` is written as `event: %2Egap`. `.gap` is not a valid
+  topic, so a topic-less event of that type reaches only `**` streams.
 - A CR or LF in an `event:` value is written percent-encoded (`%0D`, `%0A`), so an event can never add lines to its
   frame.
 - Operators see the drops on the `asterisk.push.sse.events.dropped` counter of the `Verbara.Sdk.Push` meter, one per
@@ -107,7 +167,7 @@ data: {"dropped":3413}
 The bound is the new public option `SsePushStreamOptions.MaxQueuedBytesPerConnection` (bytes, at least 1).
 `AddVerbaraPushAspNetCore` validates it when the host starts.
 
-### 3. A delivery continues the publisher's trace
+### 5. A delivery continues the publisher's trace
 
 `push deliver <eventType>` is now a child of the event's `Metadata.TraceContext`, the W3C `traceparent` that
 `PublishAsync` records from the publisher's activity. Every span a subscriber starts while handling the event is
@@ -126,7 +186,7 @@ trace 2  push deliver order.created  (root)    └── push deliver order.crea
 - The dispatch loop no longer inherits the activity of whoever built the bus.
 - With no listener on the `Verbara.Sdk.Push` source, nothing is started and nothing is parsed.
 
-### 4. A webhook option that could never deliver is rejected
+### 6. A webhook option that could never deliver is rejected
 
 `WebhookDeliveryOptions` is checked when the options are resolved (at the latest when the host builds the
 `WebhookDeliveryService` hosted service at start) and by both `WebhookDeliveryService` constructors:
@@ -179,7 +239,50 @@ public sealed class AgentScopedAuthorizer : ISubscriptionAuthorizer
 With that authorizer a client that asks for its own topics is served them; one that asks for nothing, or for
 `billing.**`, gets `403` instead of an empty stream that never delivers.
 
-### 2. Your clients assumed every request is answered `200`
+### 2. You publish events without a topic path
+
+A topic-less event now reaches only the streams whose allowed topics match its event type. If a client should
+keep receiving it:
+
+- publish it with a `TopicPath` the client's topics match (`PushEventMetadata.TopicPath`); or
+- have the client subscribe to the event type (`?topic=billing.invoice.created`, or `billing.**`), and let your
+  authorizer allow it.
+
+An event type that is not a valid topic reaches only `**` streams; give such events a `TopicPath`. Watch for the
+new `Warning` (EventId 4): it names events whose `TopicPath` does not parse and that no stream received.
+
+**Your authorizer now governs event types too.** It is still asked only about the topics a client requested, but
+a topic-less event is then matched by its type against those topics, so an authorizer that reasons by prefix
+(`billing.` is for finance) also decides which topic-less events of a `billing.`-prefixed type a client sees.
+Choose event types that read as topics.
+
+### 3. Your authorizer or tokens use roles, permissions or other claim names
+
+- **An authorizer that decides by role or permission starts working**, and one written in the negative form
+  ("deny when the subscriber has role X") **starts denying**: until now `Roles` and `Permissions` were always
+  empty. Review it before you update.
+- **On a default `JwtBearer` host the user is now found**, so events targeted at a user and `{self}` patterns are
+  delivered.
+- **Your tokens carry the tenant or permissions under other names?** Add them deliberately:
+
+  ```csharp
+  builder.Services.AddVerbaraPushAspNetCore();
+  builder.Services.Configure<SsePushStreamOptions>(o =>
+  {
+      o.TenantIdClaimTypes = ["tenant_id", "tid"];                    // first match wins, in this order
+      o.PermissionClaimTypes = ["permission", "permissions", "scp"]; // a plural permissions claim, OAuth scopes
+  });
+  ```
+
+  Values are taken whole: an `scp` claim of `read write` is one permission, `read write`, not two.
+
+  Assigning a list replaces its default. **Binding from configuration appends** the configured entries after the
+  default ones (the configuration binder's array behaviour): a configuration entry `TenantIdClaimTypes:0 = tid` (a
+  one-element array in `appsettings.json`) gives `["tenantId", "tid"]`. Set the list in code when the default must
+  go.
+- A host set up with `AddVerbaraPush()` only is not validated: an unusable tenant list there answers `400`.
+
+### 4. Your clients assumed every request is answered `200`
 
 Handle the refusals:
 
@@ -191,7 +294,7 @@ Handle the refusals:
 
 An `EventSource` client treats a non-`200` answer as a failure and closes; it does not retry a `403` or `400`.
 
-### 3. Your clients read the stream
+### 5. Your clients read the stream
 
 - **Listen for `.gap`** if missing events matters: `source.addEventListener('.gap', e => …)`, where
   `JSON.parse(e.data).dropped` is the number of events lost before the next one. A client that does not listen ignores
@@ -208,7 +311,7 @@ An `EventSource` client treats a non-`200` answer as a failure and closes; it do
   `AddVerbaraPush()` only gets the defaults, or the value it configures, without the start-up check.
 - If you had turned on `AllowSynchronousIO` only to make the stream work, you can turn it off again.
 
-### 4. You read push traces
+### 6. You read push traces
 
 Deliveries now appear inside the publishing request's trace instead of as one trace per event (or all inside one
 long-gone request). Dashboards or alerts that counted `push deliver` root spans will see fewer roots.
@@ -216,7 +319,7 @@ long-gone request). Dashboards or alerts that counted `push deliver` root spans 
 **Sampling:** with a parent-based sampler, a delivery now follows the publisher's sampling decision instead of being
 decided afresh at a root.
 
-### 5. Your webhook host no longer starts, or a construction throws
+### 7. Your webhook host no longer starts, or a construction throws
 
 Fix the value the exception names. For example, a `MaxDelay` of `00:00:00.5` under an `InitialDelay` of `00:00:01`
 was accepted before, and every delivery that failed once was lost without a trace. Now the start fails naming
@@ -239,8 +342,9 @@ If you build the service yourself, the constructor is the check.
 
 ## What did not change
 
-- The `tenantId` claim check and its `400`.
+- The default tenant claim, `tenantId`, and the text of its `400` (the claim type is now configurable).
 - Tenant and user isolation: the delivery filter decides per event, as before.
+- Webhooks: an event whose topic path is null or empty is still not delivered to any webhook subscription.
 - `ISubscriptionAuthorizer`, `IEventDeliveryFilter` and their signatures; the default authorizer still allows
   everything.
 - The SSE frame format for every event whose name has no CR or LF and is not `.gap`.
@@ -253,12 +357,18 @@ If you build the service yourself, the constructor is the check.
 
 - Request the stream with a topic your authorizer denies: the answer is `403`, and the log shows one `Warning` from
   `Verbara.Sdk.Push.AspNetCore.SsePushEndpoints` with the reason.
+- Publish a topic-less event of type `billing.invoice.created` with one stream open on `queue.**` and one on
+  `billing.**`: only the second receives it, named `billing.invoice.created`.
+- Publish an event whose `TopicPath` is `a..b`: no stream receives it and the log shows one `Warning` (EventId 4).
+- With an authorizer that records the `SubscriberContext` it is handed, open a stream with your real token: the
+  tenant, user, roles and permissions are the ones the token carries.
 - On a host with `AllowSynchronousIO` off, request an allowed topic: the answer is `200 text/event-stream` and a
   `: heartbeat` arrives about 15 seconds later.
 - Publish an event inside a request with tracing on and `AddSource("Verbara.Sdk.Push")`: `push deliver` and the
   webhook's HTTP span are in that request's trace.
 - Start the webhook host: if it starts, every webhook delivery option is usable.
 
-Details per package: [`Verbara.Sdk.Push.AspNetCore` README](../../src/Verbara.Sdk.Push.AspNetCore/README.md),
+Details per package: [`Verbara.Sdk.Push.AspNetCore` README](../../src/Verbara.Sdk.Push.AspNetCore/README.md) (its
+[claim types](../../src/Verbara.Sdk.Push.AspNetCore/README.md#who-a-connection-belongs-to)),
 [`Verbara.Sdk.Push` README](../../src/Verbara.Sdk.Push/README.md#tracing),
 [`Verbara.Sdk.Push.Webhooks` README](../../src/Verbara.Sdk.Push.Webhooks/README.md#accepted-option-values).
