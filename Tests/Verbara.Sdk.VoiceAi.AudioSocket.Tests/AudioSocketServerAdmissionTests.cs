@@ -350,6 +350,155 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         await read.WaitAsync(SignalTimeout);
     }
 
+    /// <summary>
+    /// The stop runs, start to finish, after a connection's entry was added to the registry and before
+    /// the registration checks for the stop. The stop leaves that entry to its registrant, which
+    /// withdraws it and refuses the connection itself, so the peer still reads a hangup frame and then
+    /// the end of the connection: a stop that ended the entry itself would close it with no frame.
+    /// </summary>
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldRefuseWithAHangupFrame_WhenTheStopRunsBetweenTheRegistryAddAndItsCheck()
+    {
+        var clock = new SeamClock();
+        var logger = new CapturingLogger();
+        await using var server = NewServer(clock, logger, maxConcurrentSessions: 10);
+        var announced = new TaskCompletionSource<AudioSocketSession>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.OnSessionStarted += session =>
+        {
+            announced.TrySetResult(session);
+            return ValueTask.CompletedTask;
+        };
+
+        var activeInsideTheWindow = -1;
+        server.AfterRegistryAdd = () =>
+        {
+            Interlocked.Exchange(ref activeInsideTheWindow, server.ActiveSessionCount);
+            server.StopAsync(CancellationToken.None).WaitAsync(SignalTimeout).GetAwaiter().GetResult();
+        };
+        await server.StartAsync(CancellationToken.None);
+
+        using var peer = await ConnectAndIdentifyAsync(server, Guid.NewGuid());
+        var read = ReadUntilClosedAsync(peer);
+        await Task.WhenAny(read, announced.Task).WaitAsync(SignalTimeout);
+
+        using (new AssertionScope())
+        {
+            Volatile.Read(ref activeInsideTheWindow).Should().Be(1, "the stop ran with the entry already in the registry");
+            announced.Task.IsCompleted.Should().BeFalse("a connection withdrawn for the stop is never announced");
+            read.IsCompleted.Should().BeTrue("the connection is refused: a hangup frame, then the end of the connection");
+            if (read.IsCompleted)
+            {
+                var refusal = await read;
+                refusal.Bytes.Should().Equal(HangupFrame, "the registrant refuses it with the frame the stop would not have written");
+                refusal.ClosedByServer.Should().BeTrue();
+            }
+
+            server.ActiveSessionCount.Should().Be(0, "the withdrawn entry is gone from the registry");
+            server.PlacesHeld.Should().Be(0, "the refused connection gave its place back");
+            logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning, "a stop is not a refusal the client caused");
+        }
+    }
+
+    /// <summary>
+    /// Every way a session ends gives its place back: the far end's hangup frame and the server side's
+    /// own hangup. With the server still running, K fresh sessions are then admitted and the (K+1)-th is
+    /// refused for the limit.
+    /// </summary>
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldAdmitTheLimitAgain_WhenEverySessionEndedByEitherSide()
+    {
+        const int limit = 2;
+        var logger = new CapturingLogger();
+        await using var server = NewServer(new SeamClock(), logger, limit);
+        var announcements = new AnnouncementLog(server);
+        await server.StartAsync(CancellationToken.None);
+
+        var peers = new List<TcpClient>();
+        try
+        {
+            var farEndId = Guid.NewGuid();
+            peers.Add(await ConnectAndIdentifyAsync(server, farEndId));
+            var endedByFarEnd = await announcements.Next(farEndId).WaitAsync(SignalTimeout);
+            var serverSideId = Guid.NewGuid();
+            peers.Add(await ConnectAndIdentifyAsync(server, serverSideId));
+            var endedByServerSide = await announcements.Next(serverSideId).WaitAsync(SignalTimeout);
+
+            await SendFrameAsync(peers[0], AudioSocketFrameType.Hangup, []);
+            await endedByServerSide.HangupAsync();
+            await Task.WhenAll(endedByFarEnd.HungUp, endedByServerSide.HungUp).WaitAsync(SignalTimeout);
+
+            for (var i = 0; i < limit; i++)
+            {
+                var id = Guid.NewGuid();
+                peers.Add(await ConnectAndIdentifyAsync(server, id));
+                await announcements.Next(id).WaitAsync(SignalTimeout);
+            }
+
+            var extra = Guid.NewGuid();
+            var extraPeer = await ConnectAndIdentifyAsync(server, extra);
+            peers.Add(extraPeer);
+            var refused = await ReadUntilClosedAsync(extraPeer).WaitAsync(SignalTimeout);
+
+            using (new AssertionScope())
+            {
+                refused.Bytes.Should().Equal(HangupFrame, "the place past the limit is refused with a hangup frame");
+                announcements.CountFor(extra).Should().Be(0);
+                server.ActiveSessionCount.Should().Be(limit);
+                server.PlacesHeld.Should().Be(limit, "each live session holds one place and the ended ones hold none");
+                logger.Entries.Where(e => e.Level >= LogLevel.Warning).Select(e => e.EventName).Should().Equal(
+                    ["SessionLimitReached"], "only the connection past the limit was refused");
+            }
+        }
+        finally
+        {
+            await server.DisposeAsync();
+            foreach (var peer in peers)
+                peer.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A stop clears the registry before the sessions it ends are released, and those releases still
+    /// give every place back: once each session's hangup has run, no place is held.
+    /// </summary>
+    [Fact]
+    public async Task StopAsync_ShouldLeaveNoPlaceHeld_WhenTheSessionsItEndedAreReleasedAfterItClearedTheRegistry()
+    {
+        const int limit = 3;
+        await using var server = NewServer(new SeamClock(), new CapturingLogger(), limit);
+        var announcements = new AnnouncementLog(server);
+        await server.StartAsync(CancellationToken.None);
+
+        var peers = new List<TcpClient>();
+        var sessions = new List<AudioSocketSession>();
+        try
+        {
+            for (var i = 0; i < limit; i++)
+            {
+                var id = Guid.NewGuid();
+                peers.Add(await ConnectAndIdentifyAsync(server, id));
+                sessions.Add(await announcements.Next(id).WaitAsync(SignalTimeout));
+            }
+
+            server.PlacesHeld.Should().Be(limit);
+
+            await server.StopAsync(CancellationToken.None);
+            await Task.WhenAll(sessions.Select(s => s.HungUp)).WaitAsync(SignalTimeout);
+
+            using (new AssertionScope())
+            {
+                server.ActiveSessionCount.Should().Be(0);
+                server.PlacesHeld.Should().Be(0, "every session the stop ended gave its place back on its release");
+            }
+        }
+        finally
+        {
+            await server.DisposeAsync();
+            foreach (var peer in peers)
+                peer.Dispose();
+        }
+    }
+
     // ---- Harness ----
 
     private static AudioSocketServer NewServer(SeamClock clock, CapturingLogger logger, int maxConcurrentSessions) =>

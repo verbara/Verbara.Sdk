@@ -357,6 +357,38 @@ public sealed class AudioSocketSessionTests : IAsyncLifetime
             "a session whose socket is gone is not connected, and its owner has already forgotten it");
     }
 
+    /// <summary>
+    /// A session torn down before its read loop starts (a server stop that reaches it right after its
+    /// registration) still runs the loop's ending once the loop starts: its hangup fires and its release
+    /// runs, so the server's registry entry and its place against the limit are given back.
+    /// </summary>
+    [Fact]
+    public async Task StartReadLoop_ShouldFireTheHangupAndTheRelease_WhenTheSessionWasDisposedBeforeTheLoopStarted()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        using var peer = new System.Net.Sockets.TcpClient();
+        await peer.ConnectAsync(System.Net.IPAddress.Loopback, ((System.Net.IPEndPoint)listener.LocalEndpoint).Port);
+        using var accepted = await listener.AcceptTcpClientAsync();
+        var session = new AudioSocketSession(
+            Guid.NewGuid(),
+            accepted,
+            System.IO.Pipelines.PipeReader.Create(accepted.GetStream()),
+            new AudioSocketOptions().DefaultFormat,
+            NullLogger.Instance);
+        var hangups = 0;
+        var releases = 0;
+        session.OnHangup += () => Interlocked.Increment(ref hangups);
+        session.Released = () => Interlocked.Increment(ref releases);
+
+        await session.DisposeAsync();
+        session.StartReadLoop();
+        await session.HungUp.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Volatile.Read(ref hangups).Should().Be(1, "the loop's ending raises the hangup once, even for a session already torn down");
+        Volatile.Read(ref releases).Should().Be(1, "the release runs, so the server gives back the entry and the place");
+    }
+
     /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
     private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
 

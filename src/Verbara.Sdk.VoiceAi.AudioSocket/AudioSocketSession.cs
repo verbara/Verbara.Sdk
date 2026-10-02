@@ -19,6 +19,14 @@ public sealed class AudioSocketSession : IAsyncDisposable
     private readonly PipeReader _reader;
     private readonly Channel<ReadOnlyMemory<byte>> _audioChannel;
     private readonly CancellationTokenSource _cts;
+
+    /// <summary>
+    /// <c>_cts</c>'s token, read once while the source is alive. The read loop starts from it, so a
+    /// session torn down before its loop starts (a stop that reached it right after its registration)
+    /// still runs the loop's ending, and with it <see cref="Released"/>, instead of failing on the
+    /// released source.
+    /// </summary>
+    private readonly CancellationToken _lifetime;
     private readonly ILogger _logger;
 
     /// <summary>
@@ -80,6 +88,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
         _client = client;
         _logger = logger;
         _cts = new CancellationTokenSource();
+        _lifetime = _cts.Token;
         _audioChannel = Channel.CreateBounded<ReadOnlyMemory<byte>>(
             new BoundedChannelOptions(256)
             {
@@ -94,7 +103,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
 
     /// <summary>Start the background read loop (called by the server after session creation).</summary>
     internal void StartReadLoop() =>
-        _ = Task.Run(() => ReadLoopAsync(_cts.Token));
+        _ = Task.Run(() => ReadLoopAsync(_lifetime));
 
     /// <summary>Read incoming audio frames from Asterisk.</summary>
     /// <remarks>

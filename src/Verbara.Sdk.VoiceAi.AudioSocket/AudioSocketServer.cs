@@ -34,6 +34,20 @@ namespace Verbara.Sdk.VoiceAi.AudioSocket;
 /// connection over <see cref="AudioSocketOptions.MaxConcurrentSessions"/> is refused the same way and
 /// logged as the limit. A refused connection is never announced, counted or traced as a session.
 /// </para>
+/// <para>
+/// <b>The limit is never passed.</b> Each channel id the server serves holds one place against
+/// <see cref="AudioSocketOptions.MaxConcurrentSessions"/>, taken after the connection has identified
+/// itself, in the same atomic step that checks the limit, so a burst of connections that identify at
+/// once on many threads admits exactly the limit and refuses the rest. A connection that presents the id
+/// of a session still ending shares that session's place: it is not refused for the limit while the
+/// holder ends, and the two never count as two places. The place is given back exactly once, when the
+/// last connection sharing it is released or refused, including a release that runs after a stop.
+/// </para>
+/// <para>
+/// <b>Nothing is registered once the stop has begun.</b> A connection whose registration is attempted
+/// after <see cref="StopAsync"/> began, including one that identified itself before, is refused with a
+/// hangup frame, never announced or counted, and not logged as a refusal: the client missed nothing.
+/// </para>
 /// </remarks>
 public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
 {
@@ -48,7 +62,23 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     private readonly TimeProvider _timeProvider;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
-    private readonly ConcurrentDictionary<Guid, AudioSocketSession> _sessions = new();
+    private readonly ConcurrentDictionary<Guid, RegistryEntry> _sessions = new();
+
+    /// <summary>The places <see cref="AudioSocketOptions.MaxConcurrentSessions"/> bounds.</summary>
+    private readonly AudioSocketAdmission _admission = new();
+
+    /// <summary>
+    /// Guards <see cref="_placeShares"/>: whether a connection joins its id's place or takes a new one,
+    /// and whether a release passes its place on or gives it back, are each decided under it.
+    /// </summary>
+    private readonly Lock _placesGate = new();
+
+    /// <summary>
+    /// For each channel id that holds a place, how many connections share it: the registered session
+    /// and any connection presenting the same id that is waiting for it. The place is given back when
+    /// the count reaches zero.
+    /// </summary>
+    private readonly Dictionary<Guid, int> _placeShares = [];
 
     /// <summary>
     /// How long a connection that presents the id of a live session waits for that session to be
@@ -106,6 +136,16 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// </summary>
     internal Func<CancellationToken, ValueTask<TcpClient>>? AcceptOverride { get; set; }
 
+    /// <summary>
+    /// Runs right after a connection's entry was added to the registry and before the server checks
+    /// whether its stop has begun. Settable by tests (via InternalsVisibleTo), so a test can run the stop
+    /// inside that window instead of hoping a race lands there.
+    /// </summary>
+    internal Action? AfterRegistryAdd { get; set; }
+
+    /// <summary>The places currently taken against <see cref="AudioSocketOptions.MaxConcurrentSessions"/>.</summary>
+    internal int PlacesHeld => _admission.Held;
+
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -143,8 +183,14 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
 
         _listener?.Stop();
 
-        foreach (var session in _sessions.Values)
-            await session.DisposeAsync().ConfigureAwait(false);
+        // The cancel above comes first: a registration whose entry this loop does not see reads it after
+        // its add and withdraws. An entry still pending is left to its registrant, which sees the cancel
+        // and refuses the connection with a hangup frame; ending it here would close it frameless.
+        foreach (var entry in _sessions.Values)
+        {
+            if (entry.ClaimForStop())
+                await entry.Session.DisposeAsync().ConfigureAwait(false);
+        }
 
         _sessions.Clear();
         AudioSocketLog.ServerStopped(_logger);
@@ -259,41 +305,59 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
             // Two refusals, each logged as what it is. Neither connection was ever a session, so neither
             // is counted, traced or timed: the accepted count moves only for a connection whose close
             // will move the closed count.
-            // A connection that presents a held id is that call coming back. It waits for its holder
-            // below and takes the holder's place, so it never raises the count, and the limit must not
-            // turn it away while the holder is still ending.
-            if (_sessions.Count >= _options.MaxConcurrentSessions && !_sessions.ContainsKey(channelId))
+            // A connection that presents a held id is that call coming back. It shares its holder's
+            // place, waits for the holder below and takes over from it, so it never raises the count,
+            // and the limit must not turn it away while the holder is still ending.
+            var place = TakePlace(channelId);
+            if (place is null)
             {
                 AudioSocketLog.SessionLimitReached(_logger, _options.MaxConcurrentSessions);
                 await RefuseAsync(session).ConfigureAwait(false);
                 return;
             }
 
-            var waitStart = _timeProvider.GetTimestamp();
-            switch (await RegisterAsync(channelId, session, waitStart, ct).ConfigureAwait(false))
+            var registered = false;
+            try
             {
-                case Registration.Registered:
-                    break;
-                case Registration.StillHeld:
-                    AudioSocketLog.ChannelIdInUse(
-                        _logger, channelId, (long)_timeProvider.GetElapsedTime(waitStart).TotalMilliseconds);
-                    await RefuseAsync(session).ConfigureAwait(false);
-                    return;
-                default:
-                    // The server is stopping: nothing to log, the client missed nothing. The hangup
-                    // frame still lets the call go on in the dialplan.
-                    await RefuseAsync(session).ConfigureAwait(false);
-                    return;
+                var waitStart = _timeProvider.GetTimestamp();
+                switch (await RegisterAsync(channelId, session, waitStart, ct).ConfigureAwait(false))
+                {
+                    case Registration.Registered:
+                        // Set before the read loop starts, so no hangup can fire without it. The session
+                        // invokes it after every OnHangup handler, so a same-id connection waiting on
+                        // HungUp is let in only once the consumer has finished with this one. The place
+                        // goes back there whatever removed the entry, a stop's clearing included.
+                        session.Released = () =>
+                        {
+                            ReleaseSession(session);
+                            place.GiveBack();
+                        };
+                        registered = true;
+                        break;
+                    case Registration.StillHeld:
+                        AudioSocketLog.ChannelIdInUse(
+                            _logger, channelId, (long)_timeProvider.GetElapsedTime(waitStart).TotalMilliseconds);
+                        await RefuseAsync(session).ConfigureAwait(false);
+                        return;
+                    default:
+                        // The server is stopping: nothing to log, the client missed nothing. The hangup
+                        // frame still lets the call go on in the dialplan.
+                        await RefuseAsync(session).ConfigureAwait(false);
+                        return;
+                }
+            }
+            finally
+            {
+                // A connection that never became a session gives its share of the place back here; a
+                // registered one gives it back when it is released.
+                if (!registered)
+                    place.GiveBack();
             }
 
             var sessionStart = Stopwatch.GetTimestamp();
             AudioSocketMetrics.ConnectionsAccepted.Add(1);
             using var activity = AudioSocketActivitySource.StartSession(channelId);
 
-            // Set before the read loop starts, so no hangup can fire without it. The session invokes it
-            // after every OnHangup handler, so a same-id connection waiting on HungUp is let in only
-            // once the consumer has finished with this one.
-            session.Released = () => ReleaseSession(session);
             session.OnHangup += () =>
             {
                 AudioSocketMetrics.ConnectionsClosed.Add(1);
@@ -318,16 +382,95 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     private enum Registration { Registered, StillHeld, Stopping }
 
     /// <summary>
+    /// Takes the place <paramref name="channelId"/> needs, or returns <see langword="null"/> when the
+    /// limit is reached. A connection whose id already holds a place (its session is still ending, or
+    /// another connection presenting it is on its way in) shares that place and takes no new one; any
+    /// other takes a new place, in the one atomic step that checks the limit.
+    /// </summary>
+    private Place? TakePlace(Guid channelId)
+    {
+        lock (_placesGate)
+        {
+            if (_placeShares.TryGetValue(channelId, out var shares))
+            {
+                _placeShares[channelId] = shares + 1;
+            }
+            else
+            {
+                if (!_admission.TryEnter(_options.MaxConcurrentSessions))
+                    return null;
+
+                _placeShares[channelId] = 1;
+            }
+        }
+
+        return new Place(this, channelId);
+    }
+
+    /// <summary>
+    /// Drops one connection's share of <paramref name="channelId"/>'s place, and gives the place back
+    /// when no connection shares it any more. A release that finds a same-id connection still sharing
+    /// the place passes it on to that connection instead, in the same step.
+    /// </summary>
+    private void ReturnShare(Guid channelId)
+    {
+        lock (_placesGate)
+        {
+            if (!_placeShares.TryGetValue(channelId, out var shares))
+                return; // unreachable: every share is returned once, through its own Place
+
+            if (shares > 1)
+            {
+                _placeShares[channelId] = shares - 1;
+                return;
+            }
+
+            _placeShares.Remove(channelId);
+            _admission.Exit();
+        }
+    }
+
+    /// <summary>Whether the server's stop has begun, as the connection's token or the server's own says.</summary>
+    private bool IsStopping(CancellationToken ct) =>
+        ct.IsCancellationRequested || (_cts?.IsCancellationRequested ?? false);
+
+    /// <summary>
     /// Registers <paramref name="session"/> under <paramref name="channelId"/>. While another session
     /// holds the id, it waits for that session's release, up to <see cref="SameIdGrace"/> from
     /// <paramref name="waitStart"/> in all, and tries again: the holder of a re-entered id is already
     /// ending, and its release is the edge that lets this one in.
     /// </summary>
+    /// <remarks>
+    /// The stop is read before every attempt and again right after a successful one. The entry enters
+    /// the registry pending and is admitted only once that second read finds the stop not begun: the
+    /// stop cancels its token before it walks the registry, so an add the stop's walk does not see is
+    /// one whose second read sees the cancel. A stop that reaches a pending entry leaves it to this
+    /// method, which withdraws it and has the connection refused with a hangup frame; exactly one of the
+    /// two ends the connection, and a refused one always gets its frame.
+    /// </remarks>
     private async ValueTask<Registration> RegisterAsync(
         Guid channelId, AudioSocketSession session, long waitStart, CancellationToken ct)
     {
-        while (!_sessions.TryAdd(channelId, session))
+        var entry = new RegistryEntry(session);
+        while (true)
         {
+            if (IsStopping(ct))
+                return Registration.Stopping;
+
+            if (_sessions.TryAdd(channelId, entry))
+            {
+                AfterRegistryAdd?.Invoke();
+
+                // The add must be visible before the stop is read, or this read and the stop's walk of
+                // the registry could each miss the other's write.
+                Interlocked.MemoryBarrier();
+                if (!IsStopping(ct) && entry.TryAdmit())
+                    return Registration.Registered;
+
+                _sessions.TryRemove(new KeyValuePair<Guid, RegistryEntry>(channelId, entry));
+                return Registration.Stopping;
+            }
+
             if (!_sessions.TryGetValue(channelId, out var holder))
                 continue; // released between the two calls: try again
 
@@ -337,7 +480,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
 
             try
             {
-                await holder.HungUp.WaitAsync(left, _timeProvider, ct).ConfigureAwait(false);
+                await holder.Session.HungUp.WaitAsync(left, _timeProvider, ct).ConfigureAwait(false);
             }
             catch (TimeoutException)
             {
@@ -350,8 +493,6 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
                 return Registration.Stopping;
             }
         }
-
-        return Registration.Registered;
     }
 
     /// <summary>
@@ -377,8 +518,49 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// session registered under. A same-id connection waiting on this session is let in once the
     /// session's hangup has finished (<see cref="AudioSocketSession.HungUp"/>), not by anything here.
     /// </remarks>
-    internal void ReleaseSession(AudioSocketSession session) =>
-        _sessions.TryRemove(new KeyValuePair<Guid, AudioSocketSession>(session.ChannelId, session));
+    internal void ReleaseSession(AudioSocketSession session)
+    {
+        if (_sessions.TryGetValue(session.ChannelId, out var entry) && ReferenceEquals(entry.Session, session))
+            _sessions.TryRemove(new KeyValuePair<Guid, RegistryEntry>(session.ChannelId, entry));
+    }
+
+    /// <summary>
+    /// A registry entry: the session and where its registration stands. It enters pending, and moves
+    /// once, either to admitted by its registrant or to claimed by a stop.
+    /// </summary>
+    private sealed class RegistryEntry(AudioSocketSession session)
+    {
+        private const int Pending = 0;
+        private const int Admitted = 1;
+        private const int ClaimedByStop = 2;
+
+        private int _state = Pending;
+
+        public AudioSocketSession Session { get; } = session;
+
+        /// <summary>The registrant's move: true when the entry is now admitted, false when a stop claimed it first.</summary>
+        public bool TryAdmit() =>
+            Interlocked.CompareExchange(ref _state, Admitted, Pending) == Pending;
+
+        /// <summary>
+        /// The stop's move: claims a pending entry for its registrant to refuse, and returns true only for
+        /// an admitted entry, which the stop itself ends.
+        /// </summary>
+        public bool ClaimForStop() =>
+            Interlocked.CompareExchange(ref _state, ClaimedByStop, Pending) == Admitted;
+    }
+
+    /// <summary>One connection's share of its channel id's place, returned at most once.</summary>
+    private sealed class Place(AudioSocketServer server, Guid channelId)
+    {
+        private int _returned;
+
+        public void GiveBack()
+        {
+            if (Interlocked.Exchange(ref _returned, 1) == 0)
+                server.ReturnShare(channelId);
+        }
+    }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
