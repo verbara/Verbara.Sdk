@@ -30,6 +30,7 @@ public sealed class WebhookDeliveryOptionsRuleTests
         { "MaxRetries -1", nameof(WebhookDeliveryOptions.MaxRetries) },
         { "TimeoutPerAttempt zero", nameof(WebhookDeliveryOptions.TimeoutPerAttempt) },
         { "TimeoutPerAttempt -1 s", nameof(WebhookDeliveryOptions.TimeoutPerAttempt) },
+        { "TimeoutPerAttempt 30 days", nameof(WebhookDeliveryOptions.TimeoutPerAttempt) },
     };
 
     /// <summary>The defaults and the boundary values the rule accepts.</summary>
@@ -42,6 +43,7 @@ public sealed class WebhookDeliveryOptionsRuleTests
         "MaxRetries 0",
         "TimeoutPerAttempt infinite",
         "TimeoutPerAttempt 1 tick",
+        "TimeoutPerAttempt int.MaxValue ms",
     };
 
     [Theory]
@@ -183,6 +185,7 @@ public sealed class WebhookDeliveryOptionsRuleTests
             case "MaxRetries -1": o.MaxRetries = -1; break;
             case "TimeoutPerAttempt zero": o.TimeoutPerAttempt = TimeSpan.Zero; break;
             case "TimeoutPerAttempt -1 s": o.TimeoutPerAttempt = TimeSpan.FromSeconds(-1); break;
+            case "TimeoutPerAttempt 30 days": o.TimeoutPerAttempt = TimeSpan.FromDays(30); break;
             case "defaults": break;
             case "InitialDelay = MaxDelay = 0":
                 o.InitialDelay = TimeSpan.Zero;
@@ -196,6 +199,7 @@ public sealed class WebhookDeliveryOptionsRuleTests
             case "MaxRetries 0": o.MaxRetries = 0; break;
             case "TimeoutPerAttempt infinite": o.TimeoutPerAttempt = Timeout.InfiniteTimeSpan; break;
             case "TimeoutPerAttempt 1 tick": o.TimeoutPerAttempt = TimeSpan.FromTicks(1); break;
+            case "TimeoutPerAttempt int.MaxValue ms": o.TimeoutPerAttempt = waitLimit; break;
             default: throw new ArgumentOutOfRangeException(nameof(setting), setting, "unknown setting");
         }
     }
