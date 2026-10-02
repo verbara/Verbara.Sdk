@@ -31,9 +31,19 @@ public static class PushActivitySource
         activity.SetStatus(ActivityStatusCode.Ok);
     }
 
-    internal static Activity? StartDelivery(string eventType, int subscriberCount)
+    /// <summary>
+    /// Starts the <c>push deliver</c> span. When <paramref name="traceContext"/> parses as a W3C
+    /// <c>traceparent</c> the span is its child, so the delivery and every span a subscriber starts
+    /// inside it continue the publisher's trace; otherwise the span is a root.
+    /// </summary>
+    internal static Activity? StartDelivery(string eventType, int subscriberCount, string? traceContext = null)
     {
-        var activity = Source.StartActivity($"push deliver {eventType}", ActivityKind.Internal);
+        // Parse only when someone listens to the source: the no-listener path stays allocation-free.
+        if (!Source.HasListeners()) return null;
+
+        var activity = traceContext is not null && ActivityContext.TryParse(traceContext, null, out var parent)
+            ? Source.StartActivity($"push deliver {eventType}", ActivityKind.Internal, parent)
+            : Source.StartActivity($"push deliver {eventType}", ActivityKind.Internal);
         if (activity is not null)
         {
             activity.SetTag("push.event_type", eventType);

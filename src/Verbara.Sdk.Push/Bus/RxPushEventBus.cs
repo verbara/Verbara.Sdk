@@ -58,7 +58,13 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
         // The channel evicts under DropOldest/DropNewest inside TryWrite, which still returns true;
         // itemDropped is the only place that sees an eviction, so the count is taken there.
         _channel = Channel.CreateBounded<PushEvent>(channelOptions, OnItemDropped);
-        _dispatchLoop = Task.Run(DispatchLoopAsync);
+        // The loop must not inherit the constructing code's ambient activity (a host start-up span, or
+        // the first HTTP request that resolved the bus): each delivery is parented on its own event's
+        // TraceContext instead (PushActivitySource.StartDelivery).
+        using (ExecutionContext.SuppressFlow())
+        {
+            _dispatchLoop = Task.Run(DispatchLoopAsync);
+        }
     }
 
     public async ValueTask PublishAsync<TEvent>(TEvent pushEvent, CancellationToken ct = default)
@@ -68,11 +74,11 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
         ObjectDisposedException.ThrowIf(_disposed != 0, this);
 
         // Capture the ambient W3C traceparent so it survives the async Channel hop between
-        // PublishAsync and DispatchLoopAsync. Without this, Activity.Current flow is broken
-        // at the Channel boundary (the dispatch loop runs under the ExecutionContext that the
-        // constructor's Task.Run captured, not the publisher's), preventing downstream transports — SSE, Pro.Push backplanes —
-        // from linking receiver spans back to the publisher's trace. Only applied when the
-        // event's metadata has no explicit TraceContext yet (publisher opt-in overrides).
+        // PublishAsync and DispatchLoopAsync. Activity.Current does not flow across the Channel
+        // boundary (the dispatch loop starts with no ambient activity), so the dispatch loop parents
+        // each push deliver span on this value, and downstream transports — webhooks, NATS, SSE,
+        // Pro.Push backplanes — forward it. Only applied when the event's metadata has no explicit
+        // TraceContext yet (publisher opt-in overrides).
         if (pushEvent.Metadata is { TraceContext: null } meta
             && System.Diagnostics.Activity.Current?.Id is { } traceparent)
         {
@@ -120,7 +126,7 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
             {
                 if (_observers.IsEmpty) continue;
                 var subscriberCount = _observers.Count;
-                using var deliveryActivity = PushActivitySource.StartDelivery(evt.EventType, subscriberCount);
+                using var deliveryActivity = PushActivitySource.StartDelivery(evt.EventType, subscriberCount, evt.Metadata?.TraceContext);
                 var deliveredCount = 0;
                 var droppedCount = 0;
                 foreach (var kv in _observers)

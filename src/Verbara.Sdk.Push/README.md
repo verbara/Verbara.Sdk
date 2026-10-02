@@ -108,6 +108,36 @@ The package exposes a `System.Diagnostics.Metrics.Meter` named **`Verbara.Sdk.Pu
 
 Wire into OpenTelemetry with `meterProvider.AddMeter("Verbara.Sdk.Push")`.
 
+### Tracing
+
+The bus also starts spans on an `ActivitySource` named **`Verbara.Sdk.Push`**; register it with
+`tracerProvider.AddSource("Verbara.Sdk.Push")`.
+
+- **Publish.** `PublishAsync` starts `push publish <eventType>` (`Producer`) under the publisher's current
+  activity, and records that activity's W3C `traceparent` in the event's `Metadata.TraceContext` when the
+  publisher left it empty. A `TraceContext` the publisher set explicitly is kept as it is.
+- **Deliver.** The dispatch loop starts `push deliver <eventType>` (`Internal`) as a **child of the event's
+  `TraceContext`**. Every span a subscriber starts while handling the event — a webhook POST's HTTP client
+  span, a NATS publish — is therefore in the publisher's trace, and the `traceparent` written on the wire
+  (HTTP header, NATS header) belongs to that trace:
+
+  ```text
+  api.handler (your activity)
+  ├── push publish order.created
+  └── push deliver order.created
+      └── subscriber spans (HTTP POST, NATS publish, …)
+  ```
+
+- **Root case.** An event with no `TraceContext`, or one that does not parse as a W3C `traceparent`, is
+  delivered under a root `push deliver` span, as before; the event is never dropped for it.
+- **Who built the bus does not matter.** The dispatch loop starts without the constructing code's ambient
+  activity, so a bus first resolved inside a host start-up span or inside the first HTTP request never puts
+  later deliveries in that trace.
+- **Sampling.** Because the delivery is now a child of the publisher's span, a parent-based sampler makes
+  the delivery (and the subscriber spans inside it) follow the publisher's sampling decision instead of
+  deciding afresh at a root.
+- **Cost.** With no listener on the source, no span is started and the trace context is not parsed.
+
 ## AOT
 
 This package is **Native AOT compatible**. The shipping build verifies zero trim warnings (`IL2026` / `IL2070` / `IL2075` / `IL3050` / ...) via the repo's `AotCanary` publish (`tools/verify-aot.sh`). No reflection, no `DataAnnotations` runtime validator, no dynamic code.
