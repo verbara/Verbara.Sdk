@@ -51,6 +51,8 @@ public sealed class AmiConnectionConnectAfterLossTests
         await rig.ConnectFirstAsync();
         await rig.LoseTheFirstSessionAsync();
         var connect = await started.Task.WaitAsync(Bound);
+        rig.Connection.State.Should().Be(AmiConnectionState.Disconnecting,
+            "the loss's release is still held when the handler's connect has started");
 
         await AssertWaitsThenConnectsAsync(rig, connect, "a StateChanged handler on the loss's Disconnecting");
     }
@@ -66,6 +68,8 @@ public sealed class AmiConnectionConnectAfterLossTests
         await rig.ConnectFirstAsync();
         await rig.LoseTheFirstSessionAsync();
         var connect = await started.Task.WaitAsync(Bound);
+        rig.Connection.State.Should().Be(AmiConnectionState.Disconnecting,
+            "the loss's release is still held when the handler's connect has started");
 
         await AssertWaitsThenConnectsAsync(rig, connect, "a Lost handler");
     }
