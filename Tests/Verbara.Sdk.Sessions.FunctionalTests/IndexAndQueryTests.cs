@@ -53,6 +53,11 @@ public sealed class IndexAndQueryTests : IAsyncLifetime
         _fixture.SessionManager.GetByLinkedId("nonexistent").Should().BeNull();
     }
 
+    /// <summary>
+    /// One call still in progress, one that ends completed and one that ends failed. The completed call's second
+    /// leg is answered in front of the manager (<c>Ring</c> then <c>Up</c>), so its answer is observed; the failed
+    /// call is never answered.
+    /// </summary>
     [Fact]
     public void ActiveSessions_ShouldExcludeCompletedAndFailed()
     {
@@ -60,7 +65,7 @@ public sealed class IndexAndQueryTests : IAsyncLifetime
         _fixture.SimulateNewChannel("iq-act-1", "PJSIP/trunk-004",
             ChannelState.Ring, linkedId: "iq-linked-4", context: "from-trunk");
 
-        // Completed session
+        // Completed session: answered, then both legs hang up normally
         _fixture.SimulateNewChannel("iq-cmp-1", "PJSIP/trunk-005",
             ChannelState.Ring, linkedId: "iq-linked-5", context: "from-trunk");
         _fixture.SimulateNewChannel("iq-cmp-2", "PJSIP/100-005",
@@ -69,12 +74,19 @@ public sealed class IndexAndQueryTests : IAsyncLifetime
         _fixture.SimulateHangup("iq-cmp-2");
         _fixture.SimulateHangup("iq-cmp-1");
 
-        var completed = _fixture.SessionManager.GetByLinkedId("iq-linked-5")!;
-        completed.State.Should().BeOneOf(CallSessionState.Completed, CallSessionState.Failed);
+        // Failed session: never answered
+        _fixture.SimulateNewChannel("iq-fail-1", "PJSIP/trunk-006",
+            ChannelState.Ring, linkedId: "iq-linked-6", context: "from-trunk");
+        _fixture.SimulateHangup("iq-fail-1");
 
-        var active = _fixture.SessionManager.ActiveSessions.ToList();
-        active.Should().Contain(s => s.LinkedId == "iq-linked-4");
-        active.Should().NotContain(s => s.LinkedId == "iq-linked-5");
+        new
+        {
+            Completed = _fixture.SessionManager.GetByLinkedId("iq-linked-5")!.State,
+            Failed = _fixture.SessionManager.GetByLinkedId("iq-linked-6")!.State,
+            Active = string.Join(",", _fixture.SessionManager.ActiveSessions.Select(s => s.LinkedId)),
+        }.Should().BeEquivalentTo(
+            new { Completed = CallSessionState.Completed, Failed = CallSessionState.Failed, Active = "iq-linked-4" },
+            "the answered call ends completed and the unanswered one failed, and neither ended call is active");
     }
 
     /// <summary>

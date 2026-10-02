@@ -39,7 +39,8 @@ public sealed class SessionLifecycleSmokeTests : IAsyncLifetime
         _fixture.SimulateHangup(agentUid);
         _fixture.SimulateHangup(callerUid);
 
-        session.State.Should().BeOneOf(CallSessionState.Completed, CallSessionState.Failed);
+        session.State.Should().Be(CallSessionState.Completed,
+            "the call was dialed to the agent, connected, and both legs hung up normally");
         session.CompletedAt.Should().NotBeNull();
     }
 
