@@ -394,6 +394,91 @@ public class ChannelManagerReconcileTests
         MarkNow(manager).Should().Be(before + admissions);
     }
 
+    // --- a departure during the read --------------------------------------------------------------
+
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldNotAdmitTheChannelAgain_WhenItsHangupWasObservedWhileTheSnapshotWasRead()
+    {
+        _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
+        using var window = _sut.OpenReadWindow();
+        // The hangup is observed after the snapshot was requested; Asterisk answered before it hung up.
+        _sut.OnHangup("1700000000.1", HangupCause.NormalClearing);
+        _added.Clear();
+
+        _sut.ReconcileWithSnapshot([Entry("1700000000.1", "PJSIP/2000-0001")], window);
+
+        new { Added = _added.Count, Held = _sut.ChannelCount }.Should().BeEquivalentTo(
+            new { Added = 0, Held = 0 },
+            "the snapshot is older than the hangup the SDK observed, so listing the channel says only that it "
+            + "had not hung up yet when Asterisk answered; admitting it again brings back a call that ended");
+    }
+
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldNotAdmitTheChannelAgain_WhenItHangsUpWhileTheReconciliationAdmitsAnother()
+    {
+        _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
+        using var window = _sut.OpenReadWindow();
+        // The hangup lands between the removals and the held channel's turn in the admissions: the
+        // subscriber of the unseen channel's announcement is what delivers it, on this same thread.
+        _sut.ChannelAdded += channel =>
+        {
+            if (channel.UniqueId == "1700000000.9")
+                _sut.OnHangup("1700000000.1", HangupCause.NormalClearing);
+        };
+        _added.Clear();
+
+        _sut.ReconcileWithSnapshot(
+        [
+            Entry("1700000000.9", "PJSIP/9000-0009"),
+            Entry("1700000000.1", "PJSIP/2000-0001"),
+        ], window);
+
+        new
+        {
+            AddedHeldChannel = _added.Count(c => c.UniqueId == "1700000000.1"),
+            HeldChannelStillHeld = _sut.GetByUniqueId("1700000000.1") is not null,
+        }.Should().BeEquivalentTo(
+            new { AddedHeldChannel = 0, HeldChannelStillHeld = false },
+            "the channel hung up after the snapshot was requested, so the snapshot's entry for it is stale even "
+            + "though the hangup arrived while the reconciliation was already running");
+    }
+
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldNotAdmitAChannelNeverHeld_WhenItsHangupWasObservedWhileTheSnapshotWasRead()
+    {
+        // A call that started while the connection was down: the SDK never held it.
+        using var window = _sut.OpenReadWindow();
+        _sut.OnHangup("1700000000.3", HangupCause.NormalClearing);
+
+        _sut.ReconcileWithSnapshot([Entry("1700000000.3", "PJSIP/3000-0003")], window);
+
+        new { Added = _added.Count, Held = _sut.ChannelCount }.Should().BeEquivalentTo(
+            new { Added = 0, Held = 0 },
+            "the SDK observed this channel hang up after the snapshot was requested; no hangup will ever follow "
+            + "an admission from the stale snapshot, so admitting it would hold a ghost channel until the next reload");
+    }
+
+    // --- one admission per channel -----------------------------------------------------------------
+
+    [Fact]
+    public void OnNewChannel_ShouldAnnounceNothingAndKeepTheHeldInstance_WhenTheSnapshotAdmittedTheChannelFirst()
+    {
+        // The snapshot reports a call whose live NewChannel is still queued behind it.
+        ReconcileAgainst([Entry("1700000000.4", "PJSIP/4000-0004")]);
+        var admitted = _sut.GetByUniqueId("1700000000.4");
+
+        _sut.OnNewChannel("1700000000.4", "PJSIP/4000-0004", ChannelState.Ring);
+
+        new
+        {
+            Announcements = _added.Count(c => c.UniqueId == "1700000000.4"),
+            SameInstance = ReferenceEquals(_sut.GetByUniqueId("1700000000.4"), admitted),
+        }.Should().BeEquivalentTo(
+            new { Announcements = 1, SameInstance = true },
+            "the channel is admitted once while it is held, whichever route reports it first; a second "
+            + "announcement makes a subscriber count the leg twice, and its one hangup then leaves the copy behind");
+    }
+
     // --- provenance of an admission -------------------------------------------------------------
 
     [Fact]
