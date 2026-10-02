@@ -53,10 +53,18 @@ public sealed class ChannelManager
     private long _admissions;
 
     /// <summary>
-    /// Guards the read windows and the departures recorded for them: a window's opening and closing,
-    /// and each departure's stamp and record, happen under it, so a departure that found no window
-    /// open is ordered before any window opened after it. No subscriber is ever invoked under it,
-    /// and no channel's <c>SyncRoot</c> is ever taken under it.
+    /// The manager lock. It guards every change to the unique-id table — each admission's check,
+    /// stamp and insert into both indices, and each removal from both indices, by <c>Hangup</c> or
+    /// by a reload — together with the read windows and the departures recorded for them: a
+    /// window's opening and closing, and each departure's stamp and record. So a departure that
+    /// found no window open is ordered before any window opened after it, and no admission can
+    /// slip between another route's check and its insert.
+    /// <para>
+    /// Lock order: no subscriber is ever invoked under it, and no thread ever waits on a channel's
+    /// <c>SyncRoot</c> while holding it. An admitting thread takes the new channel's
+    /// <c>SyncRoot</c> first and this lock inside it; a removing thread releases this lock before
+    /// it takes the removed channel's <c>SyncRoot</c>.
+    /// </para>
     /// </summary>
     private readonly Lock _readWindowGate = new();
 
@@ -172,64 +180,115 @@ public sealed class ChannelManager
     /// <summary>
     /// Whether <paramref name="uniqueId"/> hung up, or was removed by another reload, after
     /// <paramref name="window"/>'s request was sent: the snapshot that window reads is then older
-    /// than the departure, and its entry for the channel is stale.
+    /// than the departure, and its entry for the channel is stale. The caller holds
+    /// <see cref="_readWindowGate"/>.
     /// </summary>
-    private bool DepartedDuring(string uniqueId, SnapshotReadWindow window)
-    {
-        lock (_readWindowGate)
-            return _departures.TryGetValue(uniqueId, out var stamp) && stamp > window.Mark;
-    }
+    private bool DepartedDuringLocked(string uniqueId, SnapshotReadWindow window) =>
+        _departures.TryGetValue(uniqueId, out var stamp) && stamp > window.Mark;
 
-    /// <summary>Handle a NewChannel event.</summary>
+    /// <summary>
+    /// Handle a NewChannel event.
+    /// <para>
+    /// A channel is admitted once while the table holds it, whichever route admitted it. A
+    /// <c>NewChannel</c> for a <c>UniqueId</c> the table already holds — admitted out of a reload's
+    /// snapshot that reached it first, or by an earlier <c>NewChannel</c> — raises nothing,
+    /// replaces nothing and records nothing: the held instance, and every reference a subscriber
+    /// kept to it, stays the channel's one instance until its removal.
+    /// </para>
+    /// </summary>
     public void OnNewChannel(string uniqueId, string channelName, ChannelState state,
         string? callerIdNum = null, string? callerIdName = null,
         string? context = null, string? exten = null, int priority = 1,
         string? linkedId = null) =>
-        Admit(uniqueId, channelName, state, callerIdNum, callerIdName, context, exten, priority,
-            linkedId, fromSnapshot: false);
+        Admit(new ChannelSnapshotEntry(uniqueId, channelName, state, callerIdNum, callerIdName,
+            context, exten, priority, linkedId), window: null);
+
+    /// <summary>What one attempt to admit a channel did.</summary>
+    private enum Admission
+    {
+        /// <summary>The channel entered the table and <see cref="ChannelAdded"/> was raised for it.</summary>
+        Admitted,
+
+        /// <summary>The table already held the <c>UniqueId</c>; nothing changed and nothing was raised.</summary>
+        AlreadyHeld,
+
+        /// <summary>The channel departed after the snapshot listing it was requested; it was not admitted.</summary>
+        DepartedDuringRead,
+    }
 
     /// <summary>
-    /// The one place a channel enters the table. <see cref="OnNewChannel"/> is the live
-    /// <c>NewChannel</c> route into it and <see cref="ReconcileWithSnapshot"/> the reload's; the
-    /// only difference between them is <paramref name="fromSnapshot"/>, which becomes
-    /// <see cref="AsteriskChannel.AdmittedFromSnapshot"/>.
+    /// The one place a channel enters the table, through either route: a live <c>NewChannel</c>
+    /// (<paramref name="window"/> is <c>null</c>) or a reload's snapshot (the window that snapshot
+    /// was read in, which becomes <see cref="AsteriskChannel.AdmittedFromSnapshot"/>).
     /// <para>
-    /// Private, and a separate method rather than an extra parameter on <see cref="OnNewChannel"/>,
-    /// because <see cref="OnNewChannel"/> is public API that two downstream repos consume: adding
-    /// even an optional parameter to it would change its signature and move
-    /// <c>PublicAPI.Shipped.txt</c>, which this change does not do (ADR-0062).
+    /// Atomic per <c>UniqueId</c> against the other route, against <c>Hangup</c> and against a
+    /// reload's removal: the check that the table does not hold the channel, the check that it did
+    /// not depart during the snapshot's read, the admission stamp and the insert into both indices
+    /// happen under the manager lock in one step. Without it two routes admitting one channel at
+    /// the same time could both pass the check and announce it twice, the second instance
+    /// replacing the first under every subscriber that kept it; and a departure could land between
+    /// the check and the insert and leave a channel no further <c>Hangup</c> would ever remove.
+    /// Contention tests reach those interleavings only some of the time, so the guarantee rests on
+    /// this structure — one lock around check and insert, and every removal from the table taken
+    /// under the same lock — rather than on a red rate.
+    /// </para>
+    /// <para>
+    /// The announcement cannot be overtaken by the channel's removal. The admitting thread takes
+    /// the new channel's <c>SyncRoot</c> — an object no other thread can see yet, so taking it never
+    /// blocks — before the manager lock, and keeps it until <see cref="ChannelAdded"/> has returned.
+    /// A <c>Hangup</c> of that channel on another thread removes it from the table under the
+    /// manager lock, releases that lock, and then waits on the channel's <c>SyncRoot</c> before it
+    /// sets the cause and raises <see cref="ChannelRemoved"/>, so <see cref="ChannelRemoved"/> always
+    /// follows <see cref="ChannelAdded"/>. The cost: a <see cref="ChannelAdded"/> subscriber that
+    /// blocks also delays that channel's removal on the thread that observed it.
+    /// </para>
+    /// <para>
+    /// A <see cref="ChannelAdded"/> subscriber may call back into this manager — hang up another
+    /// channel, for instance — because nothing it can reach waits on a <c>SyncRoot</c> under the
+    /// manager lock. What it must not do is make two threads each hold one freshly admitted
+    /// channel's <c>SyncRoot</c> while hanging up the other's: a subscriber that, on two threads at
+    /// once, hangs up the channel the other thread is admitting would wait on each other forever.
     /// </para>
     /// </summary>
-    private void Admit(string uniqueId, string channelName, ChannelState state,
-        string? callerIdNum, string? callerIdName,
-        string? context, string? exten, int priority,
-        string? linkedId, bool fromSnapshot)
+    private Admission Admit(ChannelSnapshotEntry entry, SnapshotReadWindow? window)
     {
-        // Stamped before the channel is published to either index, so a channel visible to a
-        // concurrent reconciliation always carries the mark that ordered it. Channels arrive on the
-        // AMI observer thread while a reload reads its snapshot, so the counter is interlocked.
-        var admissionMark = Interlocked.Increment(ref _admissions);
-
         var channel = new AsteriskChannel
         {
-            UniqueId = uniqueId,
-            Name = channelName,
-            State = state,
-            CallerIdNum = callerIdNum,
-            CallerIdName = callerIdName,
-            Context = context,
-            Extension = exten,
-            Priority = priority,
-            LinkedId = linkedId,
-            AdmissionMark = admissionMark,
-            AdmittedFromSnapshot = fromSnapshot
+            UniqueId = entry.UniqueId,
+            Name = entry.Name,
+            State = entry.State,
+            CallerIdNum = entry.CallerIdNum,
+            CallerIdName = entry.CallerIdName,
+            Context = entry.Context,
+            Extension = entry.Extension,
+            Priority = entry.Priority,
+            LinkedId = entry.LinkedId,
+            AdmittedFromSnapshot = window is not null
         };
 
-        _channelsByUniqueId[uniqueId] = channel;
-        _channelsByName[channelName] = channel;
-        LiveMetrics.ChannelsCreated.Add(1);
-        ChannelManagerLog.NewChannel(_logger, uniqueId, channelName, state);
-        ChannelAdded?.Invoke(channel);
+        lock (channel.SyncRoot)
+        {
+            lock (_readWindowGate)
+            {
+                if (_channelsByUniqueId.ContainsKey(entry.UniqueId))
+                    return Admission.AlreadyHeld;
+
+                if (window is not null && DepartedDuringLocked(entry.UniqueId, window))
+                    return Admission.DepartedDuringRead;
+
+                // Stamped before the channel is published to either index, so a channel visible to
+                // a concurrent reconciliation always carries the mark that ordered it.
+                channel.AdmissionMark = Interlocked.Increment(ref _admissions);
+                _channelsByUniqueId[entry.UniqueId] = channel;
+                _channelsByName[entry.Name] = channel;
+            }
+
+            LiveMetrics.ChannelsCreated.Add(1);
+            ChannelManagerLog.NewChannel(_logger, entry.UniqueId, entry.Name, entry.State);
+            ChannelAdded?.Invoke(channel);
+        }
+
+        return Admission.Admitted;
     }
 
     /// <summary>Handle a NewState event (channel state changed).</summary>
@@ -270,9 +329,12 @@ public sealed class ChannelManager
             RecordDepartureLocked(uniqueId);
             if (!_channelsByUniqueId.TryRemove(uniqueId, out channel))
                 return;
+            _channelsByName.TryRemove(channel.Name, out _);
         }
 
-        _channelsByName.TryRemove(channel.Name, out _);
+        // Taken after the manager lock is released: when the channel is still being admitted on
+        // another thread, this waits until its ChannelAdded has returned, so the removal is never
+        // announced before the admission.
         lock (channel.SyncRoot)
         {
             channel.HangupCause = cause;
@@ -493,27 +555,29 @@ public sealed class ChannelManager
                 removed++;
         }
 
-        // Where is lazy: each entry is tested only when the loop reaches it, after every earlier
-        // entry has been admitted, so an entry the snapshot repeats is admitted once.
+        // Each entry is checked and admitted in one step, after every earlier entry has been
+        // admitted, so an entry the snapshot repeats is admitted once and a channel held by now —
+        // admitted live while the snapshot was read — is left as it is.
         var added = 0;
         var departedDuringRead = 0;
-        foreach (var entry in snapshot.Where(reported => !_channelsByUniqueId.ContainsKey(reported.UniqueId)))
+        foreach (var entry in snapshot)
         {
-            // Listed, but the SDK saw it leave after the request was sent: Asterisk answered before
-            // the departure, and admitting it would bring back a call that ended.
-            if (DepartedDuring(entry.UniqueId, window))
-            {
-                departedDuringRead++;
-                continue;
-            }
-
             // fromSnapshot: the SDK never saw this channel start. A subscriber that opens a record
             // for it must be able to tell that from a live NewChannel, because the state the
-            // snapshot reports is the only history it will ever get.
-            Admit(entry.UniqueId, entry.Name, entry.State, entry.CallerIdNum,
-                entry.CallerIdName, entry.Context, entry.Extension, entry.Priority, entry.LinkedId,
-                fromSnapshot: true);
-            added++;
+            // snapshot reports is the only history it will ever get. A channel listed but seen to
+            // leave after the request was sent is not admitted: Asterisk answered before the
+            // departure, and admitting it would bring back a call that ended.
+            switch (Admit(entry, window))
+            {
+                case Admission.Admitted:
+                    added++;
+                    break;
+                case Admission.DepartedDuringRead:
+                    departedDuringRead++;
+                    break;
+                case Admission.AlreadyHeld:
+                    break;
+            }
         }
 
         ChannelManagerLog.Reconciled(_logger, snapshot.Count, added, removed, newerThanSnapshot, departedDuringRead);
@@ -665,7 +729,7 @@ public sealed class AsteriskChannel : LiveObjectBase
     /// really did prove gone.
     /// </para>
     /// </summary>
-    internal long AdmissionMark { get; init; }
+    internal long AdmissionMark { get; set; }
 
     /// <summary>
     /// True when this channel entered <see cref="ChannelManager"/>'s table out of a <c>Status</c>
