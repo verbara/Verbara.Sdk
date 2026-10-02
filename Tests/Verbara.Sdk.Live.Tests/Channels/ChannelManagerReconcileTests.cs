@@ -29,13 +29,23 @@ public class ChannelManagerReconcileTests
         new(uniqueId, name, state, CallerIdNum: callerIdNum, LinkedId: linkedId);
 
     /// <summary>
-    /// Reconcile the way the reload does: the admission mark is captured first, then the snapshot
-    /// is taken. Everything the test arranged before this call is therefore at or below the mark
-    /// and is judged by the snapshot; only a channel admitted <c>after</c> it is newer than the
-    /// snapshot. The tests that bind that window pass their own mark instead (ADR-0062, design D6).
+    /// Reconcile the way the reload does: the read window is opened first, then the snapshot is
+    /// taken. Everything the test arranged before this call is therefore at or below the window's
+    /// mark and is judged by the snapshot; only a channel admitted <c>after</c> it is newer than the
+    /// snapshot. The tests that bind that line open their own window instead.
     /// </summary>
-    private void ReconcileAgainst(params ChannelSnapshotEntry[] snapshot) =>
-        _sut.ReconcileWithSnapshot(snapshot, _sut.CaptureAdmissionMark());
+    private void ReconcileAgainst(params ChannelSnapshotEntry[] snapshot)
+    {
+        using var window = _sut.OpenReadWindow();
+        _sut.ReconcileWithSnapshot(snapshot, window);
+    }
+
+    /// <summary>The admission mark a read window opened now would carry.</summary>
+    private static long MarkNow(ChannelManager manager)
+    {
+        using var window = manager.OpenReadWindow();
+        return window.Mark;
+    }
 
     // --- added only -------------------------------------------------------------------------
 
@@ -289,11 +299,11 @@ public class ChannelManagerReconcileTests
     {
         // The reload reads the mark, then asks Asterisk for its snapshot. The call below starts
         // while that request is in flight: it is in the table and it cannot be in the snapshot.
-        var admittedThrough = _sut.CaptureAdmissionMark();
+        using var window = _sut.OpenReadWindow();
         _sut.OnNewChannel("1700000000.5", "PJSIP/2000-0005", ChannelState.Up);
         _added.Clear();
 
-        _sut.ReconcileWithSnapshot([], admittedThrough);
+        _sut.ReconcileWithSnapshot([], window);
 
         _sut.GetByUniqueId("1700000000.5").Should().NotBeNull(
             "the snapshot was requested before this channel existed, so it could not have reported "
@@ -314,10 +324,10 @@ public class ChannelManagerReconcileTests
         // equal case, which `>` and `<` both decide the same way.
         _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
         _sut.OnNewChannel("1700000000.2", "PJSIP/3000-0002", ChannelState.Up);
-        var admittedThrough = _sut.CaptureAdmissionMark();
+        using var window = _sut.OpenReadWindow();
         _added.Clear();
 
-        _sut.ReconcileWithSnapshot([Entry("1700000000.2", "PJSIP/3000-0002")], admittedThrough);
+        _sut.ReconcileWithSnapshot([Entry("1700000000.2", "PJSIP/3000-0002")], window);
 
         _sut.GetByUniqueId("1700000000.1").Should().BeNull(
             "the snapshot could have reported this channel and did not; that absence is the only "
@@ -329,11 +339,11 @@ public class ChannelManagerReconcileTests
     public void ReconcileWithSnapshot_ShouldJudgeTheOlderChannelAndSpareTheNewerOne_WhenTheMarkFallsBetweenThem()
     {
         _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
-        var admittedThrough = _sut.CaptureAdmissionMark();
+        using var window = _sut.OpenReadWindow();
         _sut.OnNewChannel("1700000000.5", "PJSIP/2000-0005", ChannelState.Up);
         _added.Clear();
 
-        _sut.ReconcileWithSnapshot([], admittedThrough);
+        _sut.ReconcileWithSnapshot([], window);
 
         _removed.Should().ContainSingle(
             "exactly one of the two is older than the snapshot").Which.UniqueId.Should()
@@ -344,9 +354,9 @@ public class ChannelManagerReconcileTests
     [Fact]
     public void OnNewChannel_ShouldStampEachAdmissionAboveTheMarkReadBeforeIt_WhenChannelsArriveInOrder()
     {
-        var beforeAny = _sut.CaptureAdmissionMark();
+        var beforeAny = MarkNow(_sut);
         _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
-        var afterFirst = _sut.CaptureAdmissionMark();
+        var afterFirst = MarkNow(_sut);
         _sut.OnNewChannel("1700000000.2", "PJSIP/3000-0002", ChannelState.Up);
 
         // The counter, not the clock: two admissions this close together share a CreatedAt on a
@@ -358,7 +368,7 @@ public class ChannelManagerReconcileTests
     }
 
     [Fact]
-    public async Task CaptureAdmissionMark_ShouldStampEveryChannelExactlyOnce_WhenAdmissionsRaceEachOther()
+    public async Task OnNewChannel_ShouldStampEveryChannelExactlyOnce_WhenAdmissionsRaceEachOther()
     {
         // Channels arrive on the AMI observer thread while a reload reads its snapshot, so the
         // counter has to be interlocked: a lost increment would give two channels one stamp and
@@ -369,7 +379,7 @@ public class ChannelManagerReconcileTests
         // concurrent ChannelAdded handlers would corrupt it, which would fail this test for a
         // reason that has nothing to do with the counter.
         var manager = new ChannelManager(NullLogger.Instance);
-        var before = manager.CaptureAdmissionMark();
+        var before = MarkNow(manager);
 
         await Parallel.ForAsync(0, admissions, (i, _) =>
         {
@@ -381,7 +391,7 @@ public class ChannelManagerReconcileTests
         marks.Should().HaveCount(admissions);
         marks.Distinct().Should().HaveCount(admissions, "a lost increment is a duplicated stamp");
         marks.Should().OnlyContain(m => m > before);
-        manager.CaptureAdmissionMark().Should().Be(before + admissions);
+        MarkNow(manager).Should().Be(before + admissions);
     }
 
     // --- provenance of an admission -------------------------------------------------------------

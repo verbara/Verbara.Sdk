@@ -68,17 +68,19 @@ public sealed class ChannelManager
         _channelsByName.GetValueOrDefault(name);
 
     /// <summary>
-    /// Read the admission mark a reload's snapshot is about to be taken at. Every channel admitted
-    /// from now on carries a stamp greater than the returned value, so
+    /// Open the window a reload reads its channel snapshot in. The window carries the admission
+    /// mark read now: every channel admitted from now on carries a stamp greater than it, so
     /// <see cref="ReconcileWithSnapshot"/> can tell "the snapshot omits it" from "the snapshot is
-    /// older than it" (ADR-0062, design D6).
+    /// older than it".
     /// <para>
-    /// The caller MUST read this <c>before</c> it issues the request whose answer it will
-    /// reconcile. Reading it afterwards would place every channel that arrived during the read at
-    /// or below the mark and hand the reconciliation the power to end a call that is up.
+    /// The caller MUST open the window <c>before</c> it issues the request whose answer it will
+    /// reconcile, keep it open until that reconciliation has returned, and dispose it on every
+    /// exit — completed, refused, failed or cancelled. Opening it after the request would place
+    /// every channel that arrived during the read at or below the mark and hand the reconciliation
+    /// the power to end a call that is up.
     /// </para>
     /// </summary>
-    internal long CaptureAdmissionMark() => Interlocked.Read(ref _admissions);
+    internal SnapshotReadWindow OpenReadWindow() => new(Interlocked.Read(ref _admissions));
 
     /// <summary>Handle a NewChannel event.</summary>
     public void OnNewChannel(string uniqueId, string channelName, ChannelState state,
@@ -294,12 +296,12 @@ public sealed class ChannelManager
     /// snapshot, and that is a decision rather than an omission. It was first taken because the
     /// snapshot's state was always <see cref="ChannelState.Unknown"/> — the reload read a header no
     /// Asterisk version sends — and refreshing would have overwritten a genuine <c>Up</c> with it.
-    /// ADR-0062 design D5 fixed the header, and the decision was re-taken on the same evidence that
-    /// produced D6: the snapshot is older than the events that arrived while it was being read, and
-    /// the admission mark orders <em>admissions</em> only, so nothing here can tell a snapshot state
-    /// from a <c>NewState</c> that overtook it. Refreshing would hand the reload the power to push a
-    /// call that answered during the read back to <c>Ringing</c> — the state defect D6 forbids for
-    /// existence, applied to state. The price is stated plainly: a call whose state changed while
+    /// The header is read correctly now, and the decision still holds on other evidence: the
+    /// snapshot is older than the events that arrived while it was being read, and the admission
+    /// mark orders <em>admissions</em> only, so nothing here can tell a snapshot state from a
+    /// <c>NewState</c> that overtook it. Refreshing would hand the reload the power to push a call
+    /// that answered during the read back to <c>Ringing</c> — the defect the admission mark forbids
+    /// for a channel's existence, applied to its state. The price is stated plainly: a call whose state changed while
     /// the link was down keeps the last state the SDK observed live, and the reload never corrects
     /// it. That is stale, but it is always a state Asterisk really reported, never an invented one.
     /// Refreshing safely needs a per-channel mutation mark, which is a design extension and not this
@@ -315,27 +317,29 @@ public sealed class ChannelManager
     /// <para>
     /// A channel removed here left because the snapshot proved Asterisk no longer has it, not
     /// because a <c>Hangup</c> was observed. It therefore carries
-    /// <see cref="AsteriskChannel.RemovedByReload"/> and is given no hangup cause — see
-    /// <c>ADR-0062</c>, design D2 and D3.
+    /// <see cref="AsteriskChannel.RemovedByReload"/> and is given no hangup cause: a subscriber
+    /// must be able to tell an ending nobody observed from one Asterisk reported.
     /// </para>
     /// <para>
     /// Absence from the snapshot is evidence only about channels the snapshot could have contained.
     /// Live events resume before a reload completes, so a call that starts while the snapshot is
     /// being read is admitted to this table and is legitimately missing from it; the snapshot is
-    /// older than that channel and says nothing about it. <paramref name="admittedThrough"/> is
-    /// where that line is drawn — see <see cref="CaptureAdmissionMark"/> (ADR-0062, design D6).
+    /// older than that channel and says nothing about it. The mark of <paramref name="window"/> is
+    /// where that line is drawn — see <see cref="OpenReadWindow"/>.
     /// </para>
     /// </summary>
     /// <param name="snapshot">Every channel the reload reported, already materialized.</param>
-    /// <param name="admittedThrough">
-    /// The admission mark read from <see cref="CaptureAdmissionMark"/> <c>before</c> the snapshot
-    /// was requested. A held channel stamped above it is skipped, not removed. There is deliberately
-    /// no default: a caller that cannot say when its snapshot was taken cannot be allowed to end
-    /// calls with it.
+    /// <param name="window">
+    /// The window opened with <see cref="OpenReadWindow"/> <c>before</c> the snapshot was
+    /// requested, and still open. A held channel stamped above its mark is skipped, not removed.
+    /// There is deliberately no overload without one: a caller that cannot say when its snapshot
+    /// was taken cannot be allowed to end calls with it.
     /// </param>
     internal void ReconcileWithSnapshot(
-        IReadOnlyCollection<ChannelSnapshotEntry> snapshot, long admittedThrough)
+        IReadOnlyCollection<ChannelSnapshotEntry> snapshot, SnapshotReadWindow window)
     {
+        var admittedThrough = window.Mark;
+
         var present = new HashSet<string>(snapshot.Count, StringComparer.Ordinal);
         foreach (var entry in snapshot)
             present.Add(entry.UniqueId);
@@ -353,7 +357,7 @@ public sealed class ChannelManager
             // The snapshot was requested before this channel was admitted, so it could not have
             // reported it and its silence is not evidence. Removing it here would end a call that
             // is up — the worst outcome this reconciliation can produce, and worse than the ghost
-            // sessions it exists to remove (ADR-0062, design D6).
+            // sessions it exists to remove.
             if (held.AdmissionMark > admittedThrough)
             {
                 newerThanSnapshot++;
@@ -371,7 +375,7 @@ public sealed class ChannelManager
         {
             // fromSnapshot: the SDK never saw this channel start. A subscriber that opens a record
             // for it must be able to tell that from a live NewChannel, because the state the
-            // snapshot reports is the only history it will ever get (ADR-0062, design D5/D6).
+            // snapshot reports is the only history it will ever get.
             Admit(entry.UniqueId, entry.Name, entry.State, entry.CallerIdNum,
                 entry.CallerIdName, entry.Context, entry.Extension, entry.Priority, entry.LinkedId,
                 fromSnapshot: true);
@@ -413,6 +417,29 @@ public sealed class ChannelManager
     {
         _channelsByUniqueId.Clear();
         _channelsByName.Clear();
+    }
+}
+
+/// <summary>
+/// The span of one channel snapshot's read: opened by <see cref="ChannelManager.OpenReadWindow"/>
+/// before the request is sent, handed to <see cref="ChannelManager.ReconcileWithSnapshot"/>, and
+/// disposed once the reconciliation has returned or the read has ended without one. A mark exists
+/// only inside a window, so no caller can reconcile against a mark it did not take before its
+/// request.
+/// </summary>
+internal sealed class SnapshotReadWindow : IDisposable
+{
+    internal SnapshotReadWindow(long mark) => Mark = mark;
+
+    /// <summary>
+    /// The admission count when the window was opened. A channel stamped above it was admitted
+    /// after the snapshot was requested, so the snapshot could not have reported it.
+    /// </summary>
+    internal long Mark { get; }
+
+    /// <summary>Close the window. Safe to call more than once.</summary>
+    public void Dispose()
+    {
     }
 }
 
