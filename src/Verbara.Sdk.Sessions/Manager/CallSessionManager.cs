@@ -280,43 +280,43 @@ public sealed partial class CallSessionManager : ICallSessionManager
         _ => null,
     };
 
+    /// <summary>
+    /// Puts an arriving leg into its call: the call its <c>linkedid</c> names, or a call of its own.
+    /// <para>
+    /// One call per <c>linkedid</c>, whichever thread reports each leg: the snapshot route and the live
+    /// route can deliver two legs of one call at the same moment, so finding the call and opening it
+    /// are one atomic step. The leg's would-be session is built first and then published with
+    /// <c>TryAdd</c> on the <c>linkedid</c> index; exactly one arrival wins, and the loser's session is
+    /// withdrawn unannounced and the leg looks again, this time finding the winner and joining it. The
+    /// look is repeated rather than assumed, because the release walk can let go of the call it found
+    /// in between. A session is written to the id index before it is published by <c>linkedid</c>, so a
+    /// leg that joins it never indexes or saves a session the manager does not hold.
+    /// </para>
+    /// <para>
+    /// A leg that arrives after its call has ended opens a new call: an ended call's state is terminal,
+    /// so it could never report that leg's ending. The ended call keeps its participants and its one
+    /// ending, and the <c>linkedid</c> resolves to the new call from then on. Whether the call has ended
+    /// is read under its lock, the lock its ending is taken under, so a leg never joins a call that ends
+    /// before it is added.
+    /// </para>
+    /// <para>
+    /// A leg that is already a present participant of the call — reported again, by a second server
+    /// watching the same channel — adds nothing: no participant, no audit entry, no save.
+    /// </para>
+    /// </summary>
     private void OnChannelAdded(AsteriskChannel channel, string serverId)
     {
         // Release rides arrivals as well as endings, so a process that keeps accepting calls but has
         // stopped completing them still lets go of what it holds past retention. It runs before the
-        // leg is correlated: a leg carrying the linkedid of an ended call past retention then finds
-        // that call released and opens its own, instead of joining a call this same evaluation lets
-        // go of. No timer is involved, so an idle process releases nothing (ADR-0063, D4).
+        // leg is correlated, so the leg is not put into a call this same evaluation lets go of. No
+        // timer is involved, so an idle process releases nothing.
         EvictStaleCompleted();
 
         var linkedId = channel.LinkedId;
         if (string.IsNullOrEmpty(linkedId)) linkedId = channel.UniqueId;
 
-        if (_byLinkedId.TryGetValue(linkedId, out var existing))
-        {
-            // Add participant to existing session
-            lock (existing.SyncRoot)
-            {
-                var role = SessionCorrelator.InferRole(channel.Name, existing.Participants.Count);
-                existing.AddParticipant(new SessionParticipant
-                {
-                    UniqueId = channel.UniqueId,
-                    Channel = channel.Name,
-                    Technology = SessionCorrelator.ExtractTechnology(channel.Name),
-                    Role = role,
-                    CallerIdNum = channel.CallerIdNum,
-                    CallerIdName = channel.CallerIdName,
-                    JoinedAt = DateTimeOffset.UtcNow
-                });
-                existing.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
-                    CallSessionEventType.ParticipantJoined, channel.Name, null, role.ToString()));
-            }
-            _byChannelId[channel.UniqueId] = existing;
-            _ = PersistAsync(existing);
-            return;
-        }
-
-        // Create new session
+        // The session this leg opens if it finds no live call to join. Built once, fully, before it can
+        // be published, so whoever finds it through the linkedid index sees a complete session.
         var direction = _correlator.InferDirection(channel.Context, channel.Extension);
         var session = new CallSession(Guid.NewGuid().ToString("N"), linkedId, serverId, direction);
 
@@ -328,7 +328,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
         // and the only one that will ever arrive: no NewState announcing it is coming, because it
         // already happened. Opening such a call in Created would report a live conversation as one
         // that has not started, and Created past a dialing timeout is exactly what
-        // SessionReconciler's orphan branch fails (ADR-0062, design D5).
+        // SessionReconciler's orphan branch fails.
         var reportedState = channel.AdmittedFromSnapshot ? ReportedSessionState(channel.State) : null;
         if (channel.AdmittedFromSnapshot)
         {
@@ -369,8 +369,31 @@ public sealed partial class CallSessionManager : ICallSessionManager
                 channel.Name, null, OriginReload));
         }
 
-        _sessions[session.SessionId] = session;
-        _byLinkedId[linkedId] = session;
+        while (true)
+        {
+            if (_byLinkedId.TryGetValue(linkedId, out var existing))
+            {
+                if (TryJoin(existing, channel))
+                    return;
+
+                // The call this leg's linkedid names has ended: the leg opens its own call in its place,
+                // provided the index still names that ended call.
+                _sessions[session.SessionId] = session;
+                if (_byLinkedId.TryUpdate(linkedId, session, existing))
+                    break;
+            }
+            else
+            {
+                _sessions[session.SessionId] = session;
+                if (_byLinkedId.TryAdd(linkedId, session))
+                    break;
+            }
+
+            // Another arrival published a call for this linkedid first, or the release walk let go of
+            // the ended one. This session was never announced, counted or saved; withdraw it and look again.
+            _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
+        }
+
         _byChannelId[channel.UniqueId] = session;
         SessionMetrics.SessionsCreated.Add(1);
 
@@ -378,6 +401,40 @@ public sealed partial class CallSessionManager : ICallSessionManager
             DateTimeOffset.UtcNow, direction, channel.CallerIdNum));
 
         _ = PersistAsync(session);
+    }
+
+    /// <summary>
+    /// Adds <paramref name="channel"/> to <paramref name="call"/> unless the call has ended, and answers
+    /// whether the leg now belongs to it. A leg already present in the call is not added again.
+    /// </summary>
+    private bool TryJoin(CallSession call, AsteriskChannel channel)
+    {
+        lock (call.SyncRoot)
+        {
+            if (HasEnded(call))
+                return false;
+
+            if (call.Participants.Any(p => p.UniqueId == channel.UniqueId && !p.LeftAt.HasValue))
+                return true;
+
+            var role = SessionCorrelator.InferRole(channel.Name, call.Participants.Count);
+            call.AddParticipant(new SessionParticipant
+            {
+                UniqueId = channel.UniqueId,
+                Channel = channel.Name,
+                Technology = SessionCorrelator.ExtractTechnology(channel.Name),
+                Role = role,
+                CallerIdNum = channel.CallerIdNum,
+                CallerIdName = channel.CallerIdName,
+                JoinedAt = DateTimeOffset.UtcNow
+            });
+            call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
+                CallSessionEventType.ParticipantJoined, channel.Name, null, role.ToString()));
+        }
+
+        _byChannelId[channel.UniqueId] = call;
+        _ = PersistAsync(call);
+        return true;
     }
 
     /// <summary>
@@ -423,7 +480,9 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
         lock (session.SyncRoot)
         {
-            var participant = session.Participants.FirstOrDefault(p => p.UniqueId == channel.UniqueId);
+            // The leg still present: a leg with this id that already left keeps its own departure.
+            var participant = session.Participants.FirstOrDefault(
+                p => p.UniqueId == channel.UniqueId && !p.LeftAt.HasValue);
             if (participant is not null)
             {
                 participant.LeftAt = DateTimeOffset.UtcNow;
@@ -796,13 +855,13 @@ public sealed partial class CallSessionManager : ICallSessionManager
     /// tracing span, its completion measurements and its <see cref="CallEndedEvent"/>. Runs under the
     /// session's lock, from <see cref="OnChannelRemoved"/>.
     /// <para>
-    /// Every participant can be found to have left more than once: a leg that joined the call after it
-    /// ended — reusing its <c>linkedid</c>, or admitted into it by the reload that ended it — leaves
-    /// too. The ending is delivered only the first time, keyed on the session's own delivery marker,
-    /// never on its state (<c>ADR-0063</c>, D2). A repeat saves the session, which now records the late
-    /// leg — and, like every save, only while this manager still holds that same object
-    /// (<see cref="PersistAsync"/>): once it has been released, a save would hand the store a call the
-    /// SDK has let go of.
+    /// Every participant can be found to have left more than once: a departure can still be reported
+    /// for a call that has already ended, through a channel id that still names it. A leg that arrives
+    /// after the call ended does not join it — it opens a call of its own (<see cref="OnChannelAdded"/>).
+    /// The ending is delivered only the first time, keyed on the session's own delivery marker, never on
+    /// its state. A repeat saves the session — and, like every save, only while this manager still holds
+    /// that same object (<see cref="PersistAsync"/>): once it has been released, a save would hand the
+    /// store a call the SDK has let go of.
     /// </para>
     /// </summary>
     private void OnSessionCompleted(CallSession session)
@@ -945,10 +1004,15 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
     public bool RegisterReconstructedSession(CallSession session)
     {
+        // Held by id before it is published by linkedid, as a session opened by an arriving leg is, so
+        // a leg that finds it by linkedid never indexes or saves a session the manager does not hold.
+        var added = _sessions.TryAdd(session.SessionId, session);
         if (!_byLinkedId.TryAdd(session.LinkedId, session))
+        {
+            if (added)
+                _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
             return false;
-
-        _sessions.TryAdd(session.SessionId, session);
+        }
 
         foreach (var participant in session.Participants)
             _byChannelId.TryAdd(participant.UniqueId, session);

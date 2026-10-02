@@ -16,15 +16,16 @@ namespace Verbara.Sdk.Sessions.Tests.Manager;
 
 /// <summary>
 /// Binds the two halves of a call's ending that the functional tests (<c>EndingOnceTests</c>) do not
-/// read: the completion measurements and span, and the save a repeat departure triggers.
+/// read: the completion measurements and span, and the saves a late leg's departure triggers.
 ///
-/// <para>The manager ends a call when every participant has left, and reaches that point again when
-/// a leg that joined the ended call — carrying its <c>linkedid</c> — leaves too. The ending is
-/// delivered once: the <c>CallEndedEvent</c>, the release-queue entry, the <c>sessions.completed</c>
-/// count, the duration and talk-time recordings and the <c>session completed</c> span all belong to
-/// it, so none of them may be produced again by the repeat. What the repeat still does is save the
-/// call, which now records the late leg as joined and left — but only while the manager still holds
-/// the call: a save after its release would hand a store a call the SDK has let go of.</para>
+/// <para>The manager ends a call when every participant has left. A leg that arrives afterwards
+/// carrying the ended call's <c>linkedid</c> opens a call of its own, and its departure ends that
+/// call. The ended call's ending is delivered once: the <c>CallEndedEvent</c>, the release-queue
+/// entry, the <c>sessions.completed</c> count, the duration and talk-time recordings and the
+/// <c>session completed</c> span all belong to it, so none of them may be produced again by the late
+/// leg; the late leg's own call is measured once, as any call is. The late leg's departure is saved on
+/// its own call, never on the ended one — whether the ended call is still held or already released:
+/// a save after its release would hand a store a call the SDK has let go of.</para>
 ///
 /// <para>The session instruments carry no tags and are process-wide, and this assembly runs classes in
 /// parallel, so the capture counts only what is recorded on the test's own thread while it drives
@@ -91,29 +92,37 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
     }
 
     [Fact]
-    public void OnSessionCompleted_ShouldSaveTheLateLegsDeparture_WhenTheEndedCallIsStillHeld()
+    public void OnSessionCompleted_ShouldSaveTheLateLegsDepartureOnItsOwnCall_WhenTheEndedCallIsStillHeld()
     {
         var call = EndedCall("h");
         LegJoins("x-h", "h");
+        var lateCall = _sut.GetByChannelId("x-h")
+            ?? throw new InvalidOperationException("premise: the late leg is held in a call");
         var savesBefore = _store.SavesOf(call.SessionId);
+        var lateSavesBefore = _store.SavesOf(lateCall.SessionId);
 
         LegLeaves("x-h");
 
         new
         {
-            SavedAgain = _store.SavesOf(call.SessionId) - savesBefore,
-            LateLegLeft = call.Participants.Single(p => p.UniqueId == "x-h").LeftAt.HasValue,
+            LateLegOpenedItsOwnCall = !ReferenceEquals(lateCall, call),
+            EndedCallSavedAgain = _store.SavesOf(call.SessionId) - savesBefore,
+            LateCallSaved = _store.SavesOf(lateCall.SessionId) - lateSavesBefore,
+            LateLegLeft = lateCall.Participants.Single(p => p.UniqueId == "x-h").LeftAt.HasValue,
+            EndedCallHoldsTheLateLeg = call.Participants.Any(p => p.UniqueId == "x-h"),
         }.Should().BeEquivalentTo(
-            new { SavedAgain = 1, LateLegLeft = true },
-            "the late leg's departure delivers no ending, but it is recorded on the call, and while the "
-            + "manager still holds the call that record is saved like any other change to it");
+            new { LateLegOpenedItsOwnCall = true, EndedCallSavedAgain = 0, LateCallSaved = 1, LateLegLeft = true, EndedCallHoldsTheLateLeg = false },
+            "the late leg opened a call of its own, so its departure is recorded and saved on that call, "
+            + "once, and the ended call is neither changed nor saved again");
     }
 
     [Fact]
-    public void OnSessionCompleted_ShouldNotSaveTheCall_WhenALegThatJoinedItLeavesAfterItsRelease()
+    public void OnSessionCompleted_ShouldNotSaveTheCall_WhenALegReusingItsLinkedIdLeavesAfterItsRelease()
     {
         var call = EndedCall("v");
         LegJoins("x-v", "v");
+        _sut.GetByChannelId("x-v").Should().NotBeNull().And.NotBeSameAs(call,
+            "premise: the leg opened a call of its own while the ended call was retained");
         _clock.Advance(_options.CompletedRetention + TimeSpan.FromHours(1));
         EndedCall("n");
         _sut.GetById(call.SessionId).Should().BeNull(

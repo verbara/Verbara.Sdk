@@ -9,12 +9,12 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// Binds that a call's ending is reported once and queued for release once, however many times its
 /// participants are later found to have all left.
 ///
-/// <para>The manager ends a call when every participant has left, and it reaches that point again
-/// whenever a participant that joined afterwards leaves too — <b>whatever the call already was</b>.
-/// Three routes get there: a leg that arrives with an ended call's <c>linkedid</c> joins it and then
-/// hangs up; a reconnect reload that ends a call admits, from the same snapshot, a leg of it the SDK
-/// never saw, which then hangs up; and a leg that joined an ended call is still up when the call is
-/// released, and hangs up afterwards. Each would deliver the ending again: a second
+/// <para>Three routes bring a leg carrying an ended call's <c>linkedid</c> to the manager after the
+/// call ended: a leg that arrives with that <c>linkedid</c> and then hangs up; a reconnect reload that
+/// ends a call and admits, from the same snapshot, a leg of it the SDK never saw, which then hangs up;
+/// and such a leg still up when the ended call is released, hanging up afterwards. The leg opens a
+/// call of its own — an ended call's state is terminal, so it could never report that leg's ending —
+/// and its hangup ends that call. None of them may deliver the ended call's ending again: a second
 /// <see cref="CallEndedEvent"/>, a second queue entry, and — because the agent statistics count on
 /// that event — a second handled call for the agent.</para>
 ///
@@ -25,7 +25,7 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// </summary>
 public sealed class EndingOnceTests
 {
-    // --- the routes that deliver an ending twice ------------------------------------------------
+    // --- the routes that once delivered an ending twice -------------------------------------------
 
     [Fact]
     public async Task CallEnded_ShouldBeRaisedAndQueuedOnce_WhenALegReusingTheEndedCallsLinkedIdHangsUp()
@@ -34,15 +34,21 @@ public sealed class EndingOnceTests
         var call = rig.Call("g");
 
         rig.LegJoins("x-g", "g");
-        (rig.Manager.GetByChannelId("x-g")?.SessionId).Should().Be(call.SessionId,
-            "premise: a leg carrying an ended call's linkedid joins that call while it is retained");
+        var lateCall = rig.Manager.GetByChannelId("x-g")?.SessionId ?? string.Empty;
+        lateCall.Should().NotBeEmpty().And.NotBe(call.SessionId,
+            "premise: a leg carrying an ended call's linkedid opens a call of its own while the ended call is retained");
         rig.LegLeaves("x-g");
 
-        new { Endings = rig.EndingsFor(call.SessionId), QueueEntries = rig.QueueEntriesFor(call.SessionId) }
-            .Should().BeEquivalentTo(
-                new { Endings = 1, QueueEntries = 1 },
-                "the call ended once; a leg that joined it afterwards and left does not end it again. "
-                + $"Measured: {rig.Describe()}");
+        new
+        {
+            Endings = rig.EndingsFor(call.SessionId),
+            QueueEntries = rig.QueueEntriesFor(call.SessionId),
+            LateCallEndings = rig.EndingsFor(lateCall),
+            LateCallQueueEntries = rig.QueueEntriesFor(lateCall),
+        }.Should().BeEquivalentTo(
+                new { Endings = 1, QueueEntries = 1, LateCallEndings = 1, LateCallQueueEntries = 1 },
+                "the call ended once; a leg that arrived afterwards with its linkedid and left ends its own "
+                + $"call, once, and not the ended one again. Measured: {rig.Describe()}");
     }
 
     [Fact]
@@ -56,26 +62,33 @@ public sealed class EndingOnceTests
 
         await rig.ReconnectAsync(ResidencyRig.StatusLeg("x-f", "f"));
         var afterReload = new { Endings = rig.EndingsFor(call.SessionId), QueueEntries = rig.QueueEntriesFor(call.SessionId) };
-        new { call.State, JoinedBy = rig.Manager.GetByChannelId("x-f")?.SessionId }.Should().BeEquivalentTo(
-            new { State = CallSessionState.Completed, JoinedBy = call.SessionId },
-            $"premise: the reload ended the call and admitted the unseen leg into it. Measured: {rig.Describe()}");
+        var unseenLegsCall = rig.Manager.GetByChannelId("x-f")?.SessionId;
+        new { call.State, OpenedItsOwnCall = unseenLegsCall is not null && unseenLegsCall != call.SessionId }
+            .Should().BeEquivalentTo(
+                new { State = CallSessionState.Completed, OpenedItsOwnCall = true },
+                $"premise: the reload ended the call and the unseen leg it admitted opened a call of its own. Measured: {rig.Describe()}");
         rig.LegLeaves("x-f");
 
-        new { Endings = rig.EndingsFor(call.SessionId), QueueEntries = rig.QueueEntriesFor(call.SessionId) }
-            .Should().BeEquivalentTo(
-                new { Endings = 1, QueueEntries = 1 },
+        new
+        {
+            Endings = rig.EndingsFor(call.SessionId),
+            QueueEntries = rig.QueueEntriesFor(call.SessionId),
+            UnseenLegsCallEndings = rig.EndingsFor(unseenLegsCall!),
+        }.Should().BeEquivalentTo(
+                new { Endings = 1, QueueEntries = 1, UnseenLegsCallEndings = 1 },
                 $"the reload delivered the call's ending (after it: {afterReload.Endings} endings, {afterReload.QueueEntries} queue entries); the unseen leg's "
-                + $"hangup does not deliver it again. Measured: {rig.Describe()}");
+                + $"hangup ends its own call and does not deliver the ended call's again. Measured: {rig.Describe()}");
     }
 
     [Fact]
-    public async Task CallEnded_ShouldNotBeRaisedOrHeldAgain_WhenALegThatJoinedTheEndedCallLeavesAfterItsRelease()
+    public async Task CallEnded_ShouldNotBeRaisedOrHeldAgain_WhenALegReusingTheEndedCallsLinkedIdLeavesAfterItsRelease()
     {
         await using var rig = new ResidencyRig();
         var call = rig.Call("v");
         rig.LegJoins("x-v", "v");
-        (rig.Manager.GetByChannelId("x-v")?.SessionId).Should().Be(call.SessionId,
-            "premise: the leg joined the ended call while it was retained");
+        var lateCall = rig.Manager.GetByChannelId("x-v")?.SessionId ?? string.Empty;
+        lateCall.Should().NotBeEmpty().And.NotBe(call.SessionId,
+            "premise: the leg opened a call of its own while the ended call was retained");
 
         rig.MovePastRetention();
         rig.Call("n");
@@ -89,7 +102,7 @@ public sealed class EndingOnceTests
             Endings = rig.EndingsFor(call.SessionId),
             QueueEntries = rig.QueueEntriesFor(call.SessionId),
             HeldById = rig.Manager.GetById(call.SessionId) is not null,
-            HeldByLinkedId = rig.Manager.GetByLinkedId(ResidencyRig.LinkedIdOf("v")) is not null,
+            HeldByLinkedId = rig.Manager.GetByLinkedId(ResidencyRig.LinkedIdOf("v"))?.SessionId == call.SessionId,
         }.Should().BeEquivalentTo(
             new { Endings = 1, QueueEntries = 0, HeldById = false, HeldByLinkedId = false },
             "a call already ended and released is not ended again, nor queued again, by a leg that "
@@ -122,7 +135,7 @@ public sealed class EndingOnceTests
 
         new { agent.CallsHandled, agent.TotalTalkTime }.Should().BeEquivalentTo(
             new { CallsHandled = 1, TotalTalkTime = talkTime },
-            "the agent handled one call with one talk time; a leg that joined it after it ended does "
+            "the agent handled one call with one talk time; a leg reusing its linkedid after it ended does "
             + $"not make it two. Measured: {rig.Describe()}");
     }
 

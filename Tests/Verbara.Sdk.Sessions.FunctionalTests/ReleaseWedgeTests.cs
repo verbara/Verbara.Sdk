@@ -15,11 +15,12 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// walk that only removes what it can evaluate stops there, on every later call, for the life of the
 /// process: every call that ends afterwards is held forever.</para>
 ///
-/// <para><b>How the head goes bad.</b> Three ordinary routes put an unusable entry at the head: a
-/// leg that arrives with the correlation (<c>linkedid</c>) of a call that already ended joins it and,
-/// when it hangs up, ends it a second time, so its id is queued twice and the second copy outlives
-/// the first; a reconnect reload that ends a call and, from the same snapshot, admits a leg of it the
-/// SDK never saw, which then hangs up — the same double entry; and a consumer clearing an ended
+/// <para><b>How the head could go bad.</b> Three ordinary routes once put, or still can put, an
+/// unusable entry at the head: a leg that arrives with the correlation (<c>linkedid</c>) of a call
+/// that already ended and then hangs up — which used to join the ended call and end it a second time,
+/// queueing its id twice so the second copy outlived the first, and now opens and ends a call of its
+/// own; a reconnect reload that ends a call and, from the same snapshot, admits a leg of it the SDK
+/// never saw, which then hangs up — the same route through a reload; and a consumer clearing an ended
 /// call's <see cref="CallSession.CompletedAt"/>, which the public setter allows and which no
 /// comparison with a cutoff can ever be true for. The control has no trigger at all.</para>
 ///
@@ -63,8 +64,8 @@ public sealed class ReleaseWedgeTests
         var victim = rig.Call("v");
 
         rig.LegJoins("x-v", "v");
-        (rig.Manager.GetByChannelId("x-v")?.SessionId).Should().Be(victim.SessionId,
-            "premise: a leg carrying an ended call's linkedid joins that call while it is retained");
+        rig.Manager.GetByChannelId("x-v").Should().NotBeNull().And.NotBeSameAs(victim,
+            "premise: a leg carrying an ended call's linkedid opens a call of its own while the ended call is retained");
         rig.LegLeaves("x-v");
 
         rig.MovePastRetention();
@@ -76,7 +77,7 @@ public sealed class ReleaseWedgeTests
             EndedHeldPastRetention = rig.EndedHeldPastRetention(),
         }.Should().BeEquivalentTo(
             new { VictimHeld = false, EndedHeldPastRetention = 0 },
-            "a late leg ending a call a second time must not stop release for every call after it. "
+            "a late leg reusing an ended call's linkedid must not stop release for every call after it. "
             + $"Measured: {rig.Describe()}");
     }
 
@@ -88,11 +89,13 @@ public sealed class ReleaseWedgeTests
         var victim = rig.OpenAnsweredCall("v");
 
         // During the outage both legs the SDK knew hung up, while a leg it never saw, with the same
-        // linkedid, is still up: the reload ends the call and admits that leg into it.
+        // linkedid, is still up: the reload ends the call and admits that leg, which opens a call of its own.
         await rig.ReconnectAsync(ResidencyRig.StatusLeg("x-v", "v"));
-        new { victim.State, JoinedBy = rig.Manager.GetByChannelId("x-v")?.SessionId }.Should().BeEquivalentTo(
-            new { State = CallSessionState.Completed, JoinedBy = victim.SessionId },
-            $"premise: the reload ended the call and admitted the unseen leg into it. Measured: {rig.Describe()}");
+        var unseenLegsCall = rig.Manager.GetByChannelId("x-v")?.SessionId;
+        new { victim.State, OpenedItsOwnCall = unseenLegsCall is not null && unseenLegsCall != victim.SessionId }
+            .Should().BeEquivalentTo(
+                new { State = CallSessionState.Completed, OpenedItsOwnCall = true },
+                $"premise: the reload ended the call and the unseen leg it admitted opened a call of its own. Measured: {rig.Describe()}");
         rig.LegLeaves("x-v");
 
         rig.MovePastRetention();
@@ -104,7 +107,7 @@ public sealed class ReleaseWedgeTests
             EndedHeldPastRetention = rig.EndedHeldPastRetention(),
         }.Should().BeEquivalentTo(
             new { VictimHeld = false, EndedHeldPastRetention = 0 },
-            "the unseen leg's hangup ending the call a second time must not stop release for every call "
+            "the unseen leg's hangup after the reload ended its call must not stop release for every call "
             + $"after it. Measured: {rig.Describe()}");
     }
 
