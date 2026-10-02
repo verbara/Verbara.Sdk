@@ -86,6 +86,17 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     // (via InternalsVisibleTo); a private value, not an option, for the close bound's reason.
     internal TimeSpan ConnectTimeout { get; set; } = WebSocketConnectBound.Default;
 
+    // Settable by tests (via InternalsVisibleTo); null in production. Awaited when the caller has hung up
+    // and the session is about to take its write lock to send its close to the vendor, before it waits
+    // for that lock: a test cancels the session there, the one instant at which a host's cancellation
+    // lands after the caller's hangup and before the close is out.
+    internal Func<ValueTask>? HangupCloseStarting { get; set; }
+
+    // Settable by tests (via InternalsVisibleTo); null in production. Invoked when a session, on its way
+    // out, starts waiting for its two loops to end, so a test can tell that wait from the session having
+    // returned without reading a clock.
+    internal Action? AwaitingLoopsOnExit { get; set; }
+
     /// <summary>Observable stream of Realtime bridge events from all active sessions.</summary>
     public IObservable<RealtimeEvent> Events => _events;
 
@@ -189,6 +200,8 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 // second concurrent receive on the socket OutputLoop is reading.
                 if (first == input && !input.IsCanceled && !output.IsCompleted)
                 {
+                    if (HangupCloseStarting is { } hangupCloseStarting)
+                        await hangupCloseStarting().ConfigureAwait(false);
                     await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
                     try
                     {
