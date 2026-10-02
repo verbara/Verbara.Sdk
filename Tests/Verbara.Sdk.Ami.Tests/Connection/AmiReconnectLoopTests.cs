@@ -433,10 +433,14 @@ public sealed class AmiReconnectLoopTests
         var connection = new AmiConnection(Options.Create(options), factory, logger);
         var changes = new List<AmiConnectionStateChange>();
         var changesGate = new Lock();
+        // The final change is announced on the notification queue, after the log line: wait for the change itself.
+        var announcedDisconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         connection.StateChanged += change =>
         {
             lock (changesGate)
                 changes.Add(change);
+            if (change.Current == AmiConnectionState.Disconnected)
+                announcedDisconnected.TrySetResult();
         };
         var first = await ConnectAsync(connection, factory, peerCts);
         // Changed after construction, so the constructor's check never saw it.
@@ -444,7 +448,8 @@ public sealed class AmiReconnectLoopTests
         var disconnected = logger.Logged("[AMI] Disconnected");
 
         first.CloseFromPeer();
-        var ended = await CompletesWithinBoundAsync(disconnected);
+        var ended = await CompletesWithinBoundAsync(disconnected)
+            && await CompletesWithinBoundAsync(announcedDisconnected.Task);
 
         var sockets = factory.Created;
         var backoffFailed = logger.Named("ReconnectBackoffFailed");
