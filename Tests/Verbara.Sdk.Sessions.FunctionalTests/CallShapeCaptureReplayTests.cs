@@ -85,6 +85,39 @@ public sealed class CallShapeCaptureReplayTests
         EndingOf(replay.Call("S4")).Should().Be(ivr, "S4, an originate to a local IVR, ends as S1 does");
     }
 
+    /// <summary>
+    /// The calls the dialplan answered and that no dial or queue reached: two IVRs (S1, the PBX hangs up;
+    /// S2, the caller does), an originate answered and never dialed onward (S3), an originate to a local
+    /// IVR (S4), and a long IVR (S8, a plain answered IVR here, since a replay runs no sweep). Each was
+    /// answered and hung up at normal clearing, so each is a completed call: it ends <c>Completed</c> with
+    /// its cause, the connected time the SDK observed, and one ending that carries a talk time. Nothing
+    /// connected the call while it was live, so its audit trail gains no <c>Connected</c> step.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallShapeCaptures))]
+    public async Task AnsweredCallsNoDialOrQueueReached_ShouldEndCompletedWithATalkTime_WhenACallShapeCaptureIsReplayed(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayAsync(fixture);
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+
+        foreach (var scenario in AnsweredWithNoDialOrQueue)
+        {
+            var call = replay.Call(scenario);
+            call.Session.State.Should().Be(CallSessionState.Completed,
+                "{0} was answered and hung up at normal clearing, which is a completed call", call.Scenario);
+            call.Session.HangupCause.Should().Be(HangupCause.NormalClearing, "{0} hung up normally", call.Scenario);
+            call.Session.ConnectedAt.Should().NotBeNull("{0}'s answer was observed", call.Scenario);
+            call.DomainEvents.OfType<CallEndedEvent>().Should().ContainSingle("{0} ends once", call.Scenario)
+                .Which.TalkTime.Should().NotBeNull("{0} talked from its answer to its hangup", call.Scenario);
+            call.Trail.Should().NotContain(CallSessionEventType.Connected,
+                "nothing connected {0} while it was live; its answer is applied only at its ending", call.Scenario);
+        }
+    }
+
+    /// <summary>The scenarios the dialplan answers and no dial or queue reaches.</summary>
+    private static readonly string[] AnsweredWithNoDialOrQueue = ["S1", "S2", "S3", "S4", "S8"];
+
     private static void ShouldHaveBeenQueued(ReplayedCall call, CallSessionState state, bool withQueuedEvent)
     {
         call.Session.State.Should().Be(state, "{0} ends as it does today", call.Scenario);
