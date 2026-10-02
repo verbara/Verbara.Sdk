@@ -531,5 +531,41 @@ public sealed class AmiConnectionTests : IAsyncLifetime
         await connection.DisposeAsync();
     }
 
+    [Theory]
+    [MemberData(nameof(AmiConnectionOptionsValidatorTests.UnusableConnectionTimeouts), MemberType = typeof(AmiConnectionOptionsValidatorTests))]
+    public async Task Ctor_ShouldThrowNamingConnectionTimeout_WhenTheConnectionTimeoutIsUnusable(string value, bool autoReconnect)
+    {
+        var options = AmiConnectionOptionsValidatorTests.ConnectionTimeoutOptions(value, autoReconnect);
+        AmiConnection? created = null;
+
+        var act = () => created = new AmiConnection(
+            Options.Create(options), Substitute.For<ISocketConnectionFactory>(), NullLogger<AmiConnection>.Instance);
+
+        try
+        {
+            act.Should().Throw<ArgumentOutOfRangeException>(
+                    $"{value} cannot bound a connect (AutoReconnect = {autoReconnect}), and no validator runs on this path")
+                .Which.ParamName.Should().Be(nameof(AmiConnectionOptions.ConnectionTimeout), "the error names the option to fix");
+        }
+        finally
+        {
+            if (created is not null)
+                await created.DisposeAsync();
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(AmiConnectionOptionsValidatorTests.UsableConnectionTimeouts), MemberType = typeof(AmiConnectionOptionsValidatorTests))]
+    public async Task Ctor_ShouldSucceed_WhenTheConnectionTimeoutIsAtABoundOfTheUsableRange(string value, bool autoReconnect)
+    {
+        var options = AmiConnectionOptionsValidatorTests.ConnectionTimeoutOptions(value, autoReconnect);
+
+        var connection = new AmiConnection(
+            Options.Create(options), Substitute.For<ISocketConnectionFactory>(), NullLogger<AmiConnection>.Instance);
+
+        connection.State.Should().Be(AmiConnectionState.Initial, $"{value} is positive and finite");
+        await connection.DisposeAsync();
+    }
+
     private sealed class TestAction : ManagerAction;
 }
