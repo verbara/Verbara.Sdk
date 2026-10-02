@@ -391,6 +391,10 @@ public sealed class AmiConnection : IAmiConnection
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_state == AmiConnectionState.Disconnected && _closedByCaller, this);
+        // The options are held by reference and can change after construction: the rule the constructor checked is
+        // checked again before the option bounds the wait below and the connect, so an unusable value is rejected here,
+        // naming the option, before anything is waited for, dialled or written.
+        ConnectTimeoutRule.ThrowIfUnusable(_options);
         if (TryGetLostEndingToWaitFor(out var lostEnding))
         {
             // Always resumes on the thread pool, never on the caller's context, even when the ending has finished by
@@ -1472,8 +1476,11 @@ public sealed class AmiConnection : IAmiConnection
 
             try
             {
-                // The options are held by reference and can change after construction, so the rule the constructor
-                // checked is checked again here; Compute and the delay throw on what it rejects.
+                // The options are held by reference and can change after construction, so the rules the constructor
+                // checked are checked again here: a ConnectionTimeout that cannot bound the attempt's connect would fail
+                // every attempt (or leave it unbounded), and Compute and the delay throw on what the backoff rule rejects.
+                // Either ends the loop once, below, instead of being retried as a failed attempt.
+                ConnectTimeoutRule.ThrowIfUnusable(_options);
                 ReconnectRule.ThrowIfUnusable(_options);
                 var delay = Verbara.Sdk.Resilience.BackoffSchedule.Compute(
                     attempt,

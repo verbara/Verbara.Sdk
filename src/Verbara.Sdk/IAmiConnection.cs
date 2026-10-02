@@ -33,6 +33,11 @@ public interface IAmiConnection : IAsyncDisposable
     /// <see cref="AmiConnectionState.Reconnecting"/> or <see cref="AmiConnectionState.Connecting"/>. Nothing is dialled
     /// and the session goes on; a lost connection reconnects on its own.
     /// </exception>
+    /// <exception cref="System.ArgumentOutOfRangeException">
+    /// The configured connect timeout cannot bound a connect: the SDK's connection rejects a <c>ConnectionTimeout</c>
+    /// that is zero, negative or infinite, including one changed after construction, naming that option, before it
+    /// waits, dials or writes a state.
+    /// </exception>
     /// <exception cref="System.ArgumentException">
     /// The configured username contains a line break (CR or LF), which would split the login action
     /// into several on the wire. The login action is not sent.
