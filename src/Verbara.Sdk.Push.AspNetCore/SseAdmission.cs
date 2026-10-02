@@ -53,11 +53,8 @@ internal static class SseAdmission
         var parsed = new List<(string Raw, TopicPattern Pattern)>();
         List<string>? invalid = null;
 
-        foreach (var raw in requestedTopics)
+        foreach (var raw in requestedTopics.OfType<string>().Where(static t => !string.IsNullOrWhiteSpace(t)))
         {
-            if (string.IsNullOrWhiteSpace(raw))
-                continue;
-
             try
             {
                 parsed.Add((raw, TopicPattern.Parse(raw)));

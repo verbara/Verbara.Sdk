@@ -246,7 +246,7 @@ public sealed class WebhookDeliveryGuardTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref _calls);
-            return Task.FromResult(new HttpResponseMessage(Status));
+            return Task.FromResult(new HttpResponseMessage { StatusCode = Status });
         }
     }
 
@@ -317,10 +317,10 @@ internal sealed class UnobservedTaskExceptions : IDisposable
     {
         for (var i = 0; i < 3; i++)
         {
-            GC.Collect();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
             GC.WaitForPendingFinalizers();
         }
-        GC.Collect();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
     }
 }
 

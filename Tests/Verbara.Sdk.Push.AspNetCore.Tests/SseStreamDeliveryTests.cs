@@ -205,7 +205,8 @@ public sealed class SseFrameTests
                 var sawLast = await reader.ReadUntilAsync(static f => LoadFrames.Sequence(f) == n - 1, TimeSpan.FromSeconds(60));
                 var lastEvent = reader.Frames.Count;
                 var heartbeatAfter = sawLast && await reader.ReadUntilAsync(static f => f.IsHeartbeat, TimeSpan.FromSeconds(5));
-                return ((IReadOnlyList<SseFrame>)[.. reader.Frames], sawLast, heartbeatAfter && reader.Frames.Count > lastEvent);
+                IReadOnlyList<SseFrame> frames = [.. reader.Frames];
+                return (frames, sawLast, heartbeatAfter && reader.Frames.Count > lastEvent);
             });
         }
 
@@ -394,9 +395,9 @@ public sealed class SseAbortTests
 
     private static void FlushFinalizers()
     {
-        GC.Collect();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
         GC.WaitForPendingFinalizers();
-        GC.Collect();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
     }
 }
 

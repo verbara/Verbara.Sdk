@@ -107,7 +107,7 @@ public sealed partial class WebhookDeliveryService : BackgroundService
         {
             // shutdown
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             LogDispatchFailed(_logger, ex, evt.EventType);
         }
@@ -160,7 +160,7 @@ public sealed partial class WebhookDeliveryService : BackgroundService
         {
             // shutdown
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _metrics.DeadLetter.Add(1);
             LogDeliveryFailed(_logger, ex, sub.Id, evt.EventType);
@@ -261,7 +261,7 @@ public sealed partial class WebhookDeliveryService : BackgroundService
             {
                 return;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 _metrics.DeadLetter.Add(1);
                 LogBackoffFailed(_logger, ex, sub.Id, evt.EventType);

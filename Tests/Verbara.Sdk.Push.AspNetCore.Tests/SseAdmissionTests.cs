@@ -128,13 +128,13 @@ public sealed class SseAdmissionTests
 
             if (expected.Status == HttpStatusCode.OK)
             {
-                contentType.Should().Be("text/event-stream");
+                (contentType ?? "<none>").Should().Be("text/event-stream");
                 subscribed.Should().BeTrue("an admitted stream subscribes to the bus");
-                deniedHeader.Should().Be(expected.DeniedHeader, "X-Push-Denied-Topics lists the denied topics percent-encoded, and is absent when nothing was denied");
+                (deniedHeader ?? "<absent>").Should().Be(expected.DeniedHeader ?? "<absent>", "X-Push-Denied-Topics lists the denied topics percent-encoded, and is absent when nothing was denied");
             }
             else
             {
-                contentType.Should().NotBe("text/event-stream", "a refusal is written before any event-stream byte");
+                (contentType ?? "<none>").Should().NotBe("text/event-stream", "a refusal is written before any event-stream byte");
                 host.Bus.Subscribers.Value.Should().Be(0, "a refused request never subscribes to the bus");
                 body.Should().NotContain("internal rule 42", "a refusal does not echo the authorizer's reason");
             }
