@@ -31,11 +31,16 @@ All metrics are emitted on Meter name `Verbara.Sdk.VoiceAi.Tts`.
 | Metric | Type | Unit | Description |
 |--------|------|------|-------------|
 | `tts.syntheses.started` | Counter | syntheses | Synthesis attempts started |
-| `tts.syntheses.completed` | Counter | syntheses | Syntheses completed successfully |
+| `tts.syntheses.completed` | Counter | syntheses | Syntheses whose audio was all written to the session |
 | `tts.syntheses.failed` | Counter | syntheses | Syntheses failed with error |
+| `tts.syntheses.cancelled` | Counter | syntheses | Syntheses cut short by someone outside the synthesizer. Tags: `voiceai.ending` = `session-cancelled` (the session's token — the host's, or the session broker's stop or disposal), `barge-in`, `disposal` (the pipeline was disposed) or `far-end` (a write found the session already ended) |
 | `tts.synthesis.characters` | Counter | {characters} | Total characters synthesized |
 | `tts.synthesis.latency_ms` | Histogram | ms | Total synthesis latency (start → last frame). Buckets: 5/10/25/50/100/250/500/1000/2500/5000 ms |
 | `tts.synthesis.ttfa_ms` | Histogram | ms | **Time-to-first-audio**: elapsed from synthesis start until first audio frame yielded to caller. Tags: `voiceai.provider`. Buckets: 5/10/25/50/100/250/500/1000/2500/5000 ms |
+
+Every synthesis the pipeline starts is counted in exactly one of `tts.syntheses.completed`, `.failed` or
+`.cancelled`, so `started - completed - failed - cancelled` is what is still in flight. A barge-in, a pipeline
+disposal and a far-end hang-up are `cancelled`, not `completed`.
 
 The `tts.synthesis.ttfa_ms` histogram is the key metric for evaluating provider responsiveness in interactive voice agents. Compare across providers using the `voiceai.provider` tag.
 

@@ -19,6 +19,20 @@ public static class SpeechRecognitionMetrics
     public static readonly Counter<long> TranscriptionsFailed =
         Meter.CreateCounter<long>("stt.transcriptions.failed", "transcriptions", "Transcriptions failed with error");
 
+    /// <summary>
+    /// Transcriptions cut short by someone outside the recognizer: the token the session runs under was
+    /// cancelled, by the host that called <c>HandleSessionAsync</c> or by the session broker's stop or
+    /// disposal. Tagged <c>voiceai.ending</c> = <c>session-cancelled</c>.
+    /// </summary>
+    /// <remarks>
+    /// Every transcription the pipeline starts is counted in exactly one of
+    /// <see cref="TranscriptionsCompleted"/>, <see cref="TranscriptionsFailed"/> or this counter, so
+    /// <c>started - completed - failed - cancelled</c> is what is still in flight.
+    /// </remarks>
+    public static readonly Counter<long> TranscriptionsCancelled =
+        Meter.CreateCounter<long>("stt.transcriptions.cancelled", "transcriptions",
+            "Transcriptions ended because their caller or the session's owner stopped them");
+
     public static readonly Histogram<double> TranscriptionLatencyMs =
         Meter.CreateHistogram<double>("stt.transcription.latency_ms", "ms", "Transcription latency");
 }

@@ -18,6 +18,25 @@ public static class SpeechSynthesisMetrics
         Meter.CreateCounter<long>("tts.syntheses.completed", "syntheses", "Syntheses completed successfully");
     public static readonly Counter<long> SynthesesFailed =
         Meter.CreateCounter<long>("tts.syntheses.failed", "syntheses", "Syntheses failed with error");
+
+    /// <summary>
+    /// Syntheses cut short by someone outside the synthesizer. Tagged <c>voiceai.ending</c>, whose value
+    /// names what ended the synthesis: <c>session-cancelled</c> (the token the session runs under was
+    /// cancelled, by the host that called <c>HandleSessionAsync</c> or by the session broker's stop or
+    /// disposal), <c>barge-in</c> (the caller spoke over it), <c>disposal</c> (the pipeline was
+    /// disposed) or <c>far-end</c> (a write found the session already ended).
+    /// </summary>
+    /// <remarks>
+    /// Every synthesis the pipeline starts is counted in exactly one of
+    /// <see cref="SynthesesCompleted"/>, <see cref="SynthesesFailed"/> or this counter, and
+    /// <see cref="SynthesesCompleted"/> counts only a synthesis whose audio was all written to the
+    /// session. A barge-in, a disposal and a far-end hang-up were counted completed before this counter
+    /// existed; that number is <see cref="SynthesesCompleted"/> plus the increments here whose
+    /// <c>voiceai.ending</c> is not <c>session-cancelled</c>.
+    /// </remarks>
+    public static readonly Counter<long> SynthesesCancelled =
+        Meter.CreateCounter<long>("tts.syntheses.cancelled", "syntheses",
+            "Syntheses ended because their caller, the session's owner or the far end stopped them");
     public static readonly Counter<long> SynthesisCharacters =
         Meter.CreateCounter<long>("tts.synthesis.characters", "{characters}", "Total characters synthesized");
 
@@ -33,9 +52,10 @@ public static class SpeechSynthesisMetrics
     /// SDK, or anyone else's subclass — that returns silence without raising anything. A caller watching
     /// only <see cref="SynthesesCompleted"/> cannot see that; this counter is where it shows up.
     /// <para>
-    /// Note what is <em>not</em> counted here: a synthesis cut short by barge-in yields the chunks it
-    /// managed and is recorded as completed. That the cancelled case is counted as a completed synthesis
-    /// is recorded as adjacent debt under the same ADR, not fixed by this counter.
+    /// Note what is <em>not</em> counted here: a synthesis cut short — by a barge-in, a disposal, the far
+    /// end leaving or the session's token — is counted in <see cref="SynthesesCancelled"/>, never in
+    /// <see cref="SynthesesCompleted"/>, so it never reaches this counter either, however few chunks it
+    /// yielded.
     /// </para>
     /// </remarks>
     public static readonly Counter<long> SynthesesSilent =

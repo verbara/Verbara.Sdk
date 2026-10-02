@@ -1,4 +1,6 @@
 #nullable enable
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.TranscriptionsCancelled -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesesCancelled -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesesSilent -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesisTtfaMs -> System.Diagnostics.Metrics.Histogram<double>!
 static Verbara.Sdk.VoiceAi.SpeechProviderFailureException.FromCloseStatus(string! provider, System.Net.WebSockets.WebSocketCloseStatus? closeStatus, string? closeStatusDescription) -> Verbara.Sdk.VoiceAi.SpeechProviderFailureException?
