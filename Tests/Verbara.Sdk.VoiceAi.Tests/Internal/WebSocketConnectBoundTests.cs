@@ -66,6 +66,39 @@ public sealed class WebSocketConnectBoundTests : IDisposable
         }
     }
 
+    public static TheoryData<TimeSpan> UnusableLimits =>
+    [
+        TimeSpan.Zero,
+        TimeSpan.FromSeconds(-1),
+        TimeSpan.FromMilliseconds(int.MaxValue) + TimeSpan.FromMilliseconds(1),
+    ];
+
+    /// <summary>
+    /// A backstop for any caller that hands the bound an unusable limit: it is rejected, naming the limit, before
+    /// anything is dialled. Before it, zero failed the dial at once as an upgrade that timed out, and a negative or
+    /// too-long limit threw from the timer's own source naming its <c>delay</c>.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(UnusableLimits))]
+    public async Task ConnectAsync_ShouldThrowNamingTheLimitBeforeDialling_WhenTheLimitIsUnusable(TimeSpan limit)
+    {
+        // Arrange
+        var clock = new FakeTimeProvider();
+        using var ws = new ClientWebSocket();
+
+        // Act
+        var fault = await Record.ExceptionAsync(
+            () => WebSocketConnectBound.ConnectAsync(ws, MuteUri, limit, clock, CancellationToken.None).WaitAsync(SignalTimeout));
+
+        // Assert
+        using (new AssertionScope())
+        {
+            fault.Should().BeOfType<ArgumentOutOfRangeException>("an unusable limit is the caller's error, not a failed upgrade")
+                .Which.ParamName.Should().Be("limit");
+            ws.State.Should().Be(WebSocketState.None, "nothing was dialled");
+        }
+    }
+
     [Fact]
     public async Task ConnectAsync_ShouldThrowOperationCanceled_WhenTheCallerCancelsBeforeTheLimit()
     {
