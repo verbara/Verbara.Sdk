@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: a lost AMI connection can be connected again (#375)
+
+With `AutoReconnect` off, or after the reconnect gave up, a `ConnectAsync` made on seeing the loss raced the loss's
+cleanup: it failed (300 of 300 from a `StateChanged` handler on `Disconnecting`), leaked the lost session's socket
+(26–43 of 300), failed even on seeing `Disconnected` (3–7 of 300), and in about 1 of 3,100 runs returned success
+before the old cleanup tore the new session down. The loss's ending is now recorded together with its
+`Disconnecting`, and a `ConnectAsync` made while the lost session is being released waits for that release, then
+connects (1,800 of 1,800, no leaks). Three observable changes:
+- a `ConnectAsync` that threw at once can now wait up to `ConnectionTimeout` before connecting, or before throwing the
+  same `OperationCanceledException` as before if the release does not finish;
+- a `DisconnectAsync`/`DisposeAsync` during that wait gives the waiting connect `ObjectDisposedException`;
+- a `StateChanged` or `Lost` handler that blocks on `ConnectAsync` holds the notification queue for up to that bound.
+
+A connect from inside the connection's own event dispatch still throws at once.
+
+**Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
+
+### Changed — BREAKING: `AmiConnectionOptions.ConnectionTimeout` must be positive and finite (#375)
+
+It must be greater than zero and at most `int.MaxValue` ms, whether or not `AutoReconnect` is on: the options
+validator and the constructor reject anything else, naming the option. A value changed after construction is rejected
+by the next `ConnectAsync` (`ArgumentOutOfRangeException`) and ends a running reconnect once instead of retrying for
+ever. The option also bounds the wait above, so a connect can take up to twice its value.
+
+**Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
+
+### Changed — BREAKING: the `ami` health check reads like `live` (#375)
+
+`AmiHealthCheck` reported `Unhealthy` on every reconnect attempt and at start-up while `live` reported `Degraded`:
+during a 20 s Asterisk outage where the host's address disappeared, `/health` answered 503 for about 6.3 s, and a
+liveness probe with a 1 s period failed every time. Now `Connected` is `Healthy`; `Reconnecting`, `Connecting` and
+`Initial` are `Degraded`; `Disconnecting` and `Disconnected` are `Unhealthy`. Its data gains `amiState`.
+
+**Migration guide:** [`docs/guides/ami-connection-state-and-health-migration.md`](docs/guides/ami-connection-state-and-health-migration.md)
+
+### Added: an event-generating action's outcome through `IAmiConnection` (#375)
+
+`IAmiConnection.SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome?, CancellationToken)` and
+`IAmiConnection.ReportsEventActionOutcome`, as default members, public on `AmiConnection`. `EventActionOutcome` is now
+public in `Verbara.Sdk` (same namespace, forwarded from `Verbara.Sdk.Ami` so Live 2.6.x binaries still bind) and gains
+`Reported`. A wrapper that does not forward, or a mock (which does not run default members), answers
+`ReportsEventActionOutcome == false`; read it before calling the outcome overload.
+
+### Fixed: Live trusts a refused or cut-short `Status` the same way through a wrapped connection (#375)
+
+Through a forwarding wrapper of `IAmiConnection`, a refused `Status` and a `Status` cut short by the end of the session
+now end no channel and no call, as they already did over `AmiConnection`.
+
 ### Added: an SSE event whose topic path does not parse is logged once (#374)
 
 An event whose non-empty `TopicPath` is not a valid topic (for example `a..b`) was skipped by every stream without a
