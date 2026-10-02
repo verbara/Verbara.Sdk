@@ -174,6 +174,41 @@ public sealed class CallShapeCaptureReplayTests
     }
 
     /// <summary>
+    /// The queued arm of the rule that a channel's answer does not connect a call waiting on an application. The
+    /// calls a member takes (S6, the dialer; S10, after an IVR) reach <c>Connected</c> when the queue reports the
+    /// member's connection: they end completed, with their queued time kept, connected no earlier than they were
+    /// queued, announced connected once, and their trail records the agent's connection. The calls no member takes
+    /// (S7, S11) end failed with their queued time and no connected time.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallShapeCaptures))]
+    public async Task QueuedCalls_ShouldConnectWhenTheQueueReportsAMemberAndOnlyThen_WhenACallShapeCaptureIsReplayed(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayAsync(fixture);
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+
+        foreach (var taken in new[] { "S6", "S10" })
+        {
+            var call = replay.Call(taken);
+            call.Session.State.Should().Be(CallSessionState.Completed, "a member took {0}", call.Scenario);
+            call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
+            call.Session.ConnectedAt.Should().NotBeNull("{0} connected", call.Scenario)
+                .And.BeOnOrAfter(call.Session.QueuedAt ?? DateTimeOffset.MaxValue, "{0} connected after it was queued", call.Scenario);
+            call.Trail.Should().Contain(CallSessionEventType.AgentConnected, "the queue reported {0}'s connection", call.Scenario);
+            call.DomainEvents.OfType<CallConnectedEvent>().Should().ContainSingle("{0} is announced connected once", call.Scenario);
+        }
+
+        foreach (var abandoned in new[] { "S7", "S11" })
+        {
+            var call = replay.Call(abandoned);
+            call.Session.State.Should().Be(CallSessionState.Failed, "no member took {0}", call.Scenario);
+            call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
+            call.Session.ConnectedAt.Should().BeNull("{0} never connected", call.Scenario);
+        }
+    }
+
+    /// <summary>
     /// The kinds of domain event each scenario published on <c>9866b2ef</c>, identical on the three captures.
     /// The calls answered with no dial or queue keep theirs too: nothing is published at their answer.
     /// </summary>

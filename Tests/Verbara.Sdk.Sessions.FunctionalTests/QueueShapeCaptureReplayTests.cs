@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
@@ -70,4 +71,46 @@ public sealed class QueueShapeCaptureReplayTests
                 "{0} is announced connected as it was before, in number, queue and agent", shape.Shape.Name);
         }
     }
+
+    /// <summary>
+    /// The queued calls no member took although a member's leg reached the up state: <c>AX</c>, whose pooled
+    /// agent must acknowledge the call and never does (the agent's leg answers and enters a bridge carrying the
+    /// caller's <c>Linkedid</c>), and <c>XC</c>, whose member's phone answers and a confirmation step rejects the
+    /// call. app_queue reports no connection for either, only the caller's abandon. Neither call ever connected:
+    /// it ends failed, queued, with no connected time, no talk time, no <see cref="CallConnectedEvent"/>, and no
+    /// <c>Connected</c> step in its trail other than the record a dial's outcome always leaves.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(QueueShapeCaptures))]
+    public async Task QueuedCallsNoMemberTook_ShouldEndFailedWithoutEverConnecting_WhenAQueueShapeCaptureIsReplayed(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayQueueShapesAsync(fixture);
+        using var scope = new AssertionScope();
+        scope.AddReportable("calls", DescribeCalls(replay, NobodyTook));
+
+        foreach (var id in NobodyTook)
+        {
+            var shape = replay.Shape(id);
+            shape.AsteriskConnects.Should().Be(0, "premise: app_queue connected {0}'s caller to no member", shape.Shape.Name);
+            var call = shape.Sessions.Should().ContainSingle("{0} is one call", shape.Shape.Name).Subject;
+
+            call.State.Should().Be(CallSessionState.Failed, "no member took {0}", shape.Shape.Name);
+            call.QueuedAt.Should().NotBeNull("{0} waited in a queue", shape.Shape.Name);
+            call.ConnectedAt.Should().BeNull("{0} never connected", shape.Shape.Name);
+            call.TalkTime.Should().BeNull("{0} never talked", shape.Shape.Name);
+            shape.ConnectedEvents.Should().BeEmpty("{0} is never announced connected", shape.Shape.Name);
+            call.Events.Where(e => e.Type == CallSessionEventType.Connected
+                    && e.Detail?.StartsWith("dial:", StringComparison.Ordinal) != true)
+                .Should().BeEmpty("no leg reaching the up state, or entering a bridge, connected {0}", shape.Shape.Name);
+        }
+    }
+
+    /// <summary>The queue shapes whose caller no member took while a member's leg reached the up state.</summary>
+    private static readonly string[] NobodyTook = ["AX", "XC"];
+
+    private static string DescribeCalls(QueueShapeReplay replay, IEnumerable<string> ids) =>
+        replay.Fixture + Environment.NewLine + string.Join(Environment.NewLine, ids
+            .Select(replay.Shape)
+            .SelectMany(shape => shape.Sessions.Select(call => string.Create(CultureInfo.InvariantCulture,
+                $"{shape.Shape.Name}: state={call.State} queuedAt={call.QueuedAt:O} connectedAt={call.ConnectedAt:O} talk={call.TalkTime} connectedEvents={shape.ConnectedEvents.Count} trail=[{string.Join(">", call.Events.Select(e => $"{e.Type}({e.Detail})"))}]"))));
 }

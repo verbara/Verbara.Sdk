@@ -159,7 +159,11 @@ internal static class AmiCaptureReplay
             if (evt is CallStartedEvent started
                 && QueueShapes.Of(started.CallerIdNum, FirstChannel(manager.GetById(started.SessionId))) is { } startedShape)
             {
-                shapeBySessionId.TryAdd(started.SessionId, startedShape);
+                if (shapeBySessionId.TryAdd(started.SessionId, startedShape)
+                    && manager.GetById(started.SessionId) is { } startedSession)
+                {
+                    scores[startedShape.Id].RecordSession(startedSession);
+                }
             }
 
             var score = shapeBySessionId.TryGetValue(evt.SessionId, out var shape) ? scores[shape.Id] : null;
@@ -855,6 +859,7 @@ internal readonly record struct QueueCounters(int Offered, int Answered, int Aba
 internal sealed class QueueShapeScore(QueueShape shape)
 {
     private readonly List<CallConnectedEvent> _connected = [];
+    private readonly List<CallSession> _sessions = [];
     private QueueCounters _tracker;
 
     public QueueShape Shape { get; } = shape;
@@ -890,7 +895,15 @@ internal sealed class QueueShapeScore(QueueShape shape)
     public bool AgreesWithAsterisk =>
         Answered == AsteriskConnects && Abandoned == AsteriskAbandons && WaitingLeak == 0;
 
+    /// <summary>
+    /// The sessions the shape's calls opened, in the order they started, as the manager holds them once the
+    /// replay has ended: a reader sees each call's final state, timestamps and audit trail.
+    /// </summary>
+    public IReadOnlyList<CallSession> Sessions => _sessions;
+
     internal void RecordConnected(CallConnectedEvent evt) => _connected.Add(evt);
+
+    internal void RecordSession(CallSession session) => _sessions.Add(session);
 
     internal void RecordTrackerChange(QueueCounters change) => _tracker += change;
 
