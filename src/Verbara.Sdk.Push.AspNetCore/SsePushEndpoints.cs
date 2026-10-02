@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Logging;
 using Verbara.Sdk.Push.Authz;
 using Verbara.Sdk.Push.Bus;
 using Verbara.Sdk.Push.Delivery;
@@ -17,6 +18,12 @@ using Verbara.Sdk.Push.Topics;
 /// </summary>
 public static class SsePushEndpoints
 {
+    /// <summary>The response header that lists, percent-encoded and comma-joined, the requested topics that were denied.</summary>
+    internal const string DeniedTopicsHeader = "X-Push-Denied-Topics";
+
+    /// <summary>The fixed 403 body: the authorizer's reason is logged, never returned.</summary>
+    internal const string SubscriptionDeniedBody = "Subscription denied.";
+
     /// <summary>
     /// Maps the push event stream endpoint at <c>{prefix}/stream</c>.
     /// </summary>
@@ -53,6 +60,7 @@ public static class SsePushEndpoints
         IPushEventBus bus,
         ISubscriptionAuthorizer authorizer,
         IEventDeliveryFilter deliveryFilter,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var tenantId = ctx.User.FindFirst("tenantId")?.Value;
@@ -72,8 +80,38 @@ public static class SsePushEndpoints
             Roles: new HashSet<string>(StringComparer.Ordinal),
             Permissions: new HashSet<string>(StringComparer.Ordinal));
 
-        // Parse and authorize topic patterns from ?topic= query params.
-        var patterns = BuildAuthorizedPatterns(ctx.Request.Query, subscriber, authorizer);
+        // Admission is decided before the response starts (spec push-sse-admission): a refusal is written
+        // as text/plain before any event-stream byte and before subscribing to the bus.
+        var admission = SseAdmission.Decide(ctx.Request.Query["topic"], subscriber, authorizer);
+        switch (admission.Outcome)
+        {
+            case SseAdmissionOutcome.InvalidTopic:
+                ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+                ctx.Response.ContentType = "text/plain; charset=utf-8";
+                await ctx.Response.WriteAsync(
+                    "Invalid topic pattern: " + SseAdmission.EncodeTopics(admission.RefusedTopics), ct).ConfigureAwait(false);
+                return;
+
+            case SseAdmissionOutcome.Denied:
+                SsePushLog.StreamRefused(
+                    loggerFactory.CreateLogger(SsePushLog.Category),
+                    tenantId,
+                    userId,
+                    SseAdmission.EncodeTopics(admission.RefusedTopics),
+                    admission.FirstDenialReason);
+                ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                ctx.Response.ContentType = "text/plain; charset=utf-8";
+                await ctx.Response.WriteAsync(SubscriptionDeniedBody, ct).ConfigureAwait(false);
+                return;
+
+            case SseAdmissionOutcome.Admitted:
+            default:
+                break;
+        }
+
+        var patterns = admission.AllowedPatterns;
+        if (admission.RefusedTopics.Count > 0)
+            ctx.Response.Headers[DeniedTopicsHeader] = SseAdmission.EncodeTopics(admission.RefusedTopics);
 
         ctx.Response.ContentType = "text/event-stream";
         ctx.Response.Headers.CacheControl = "no-cache";
@@ -107,47 +145,7 @@ public static class SsePushEndpoints
         await heartbeatTask.ConfigureAwait(false);
     }
 
-    private static List<TopicPattern> BuildAuthorizedPatterns(
-        IQueryCollection query,
-        SubscriberContext subscriber,
-        ISubscriptionAuthorizer authorizer)
-    {
-        var patterns = new List<TopicPattern>();
-
-        foreach (var topicStr in query["topic"].OfType<string>().Where(static t => !string.IsNullOrWhiteSpace(t)))
-        {
-            TopicPattern pattern;
-            try
-            {
-                pattern = TopicPattern.Parse(topicStr);
-            }
-            catch (ArgumentException)
-            {
-                // Invalid pattern — skip silently rather than rejecting the whole connection.
-                continue;
-            }
-
-            var subscriberWithTopic = subscriber with { RequestedTopicPattern = topicStr };
-            var authResult = authorizer.CanSubscribe(subscriberWithTopic, pattern);
-            if (authResult.Allowed)
-                patterns.Add(pattern);
-        }
-
-        if (patterns.Count == 0)
-        {
-            // No explicit topics requested (or all were denied) — subscribe to everything
-            // the authorizer allows. The AllowAll default in the MIT SDK permits this.
-            var catchAll = TopicPattern.Parse("**");
-            var subscriberDefault = subscriber with { RequestedTopicPattern = "**" };
-            var authResult = authorizer.CanSubscribe(subscriberDefault, catchAll);
-            if (authResult.Allowed)
-                patterns.Add(catchAll);
-        }
-
-        return patterns;
-    }
-
-    private static bool MatchesAnyPattern(PushEvent evt, List<TopicPattern> patterns, string? userId)
+    private static bool MatchesAnyPattern(PushEvent evt, IReadOnlyList<TopicPattern> patterns, string? userId)
     {
         if (patterns.Count == 0)
             return false;
