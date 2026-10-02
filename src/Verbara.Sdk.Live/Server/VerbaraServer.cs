@@ -353,8 +353,10 @@ public sealed class VerbaraServer : IVerbaraServer
             // only do that if nothing was mutated while it was being read.
             // A Status Asterisk refused yields no snapshot: a refusal is no evidence that any channel is gone, so the
             // table is left as it is and the load goes on to the queues and the agents.
-            // The read window opens before Status is sent and covers the read and the reconciliation only; it is
-            // closed on every way out of them, so nothing it keeps outlives this snapshot.
+            // The read window opens before Status is sent and covers the read and the reconciliation only. While it is
+            // open, every hangup the event observer delivers is recorded for it, so a channel the answer still lists
+            // after it hung up is not brought back. It is closed on every way out of them — completed, refused, thrown,
+            // cancelled or ended with the session — so nothing it keeps outlives this snapshot.
             using (var window = Channels.OpenReadWindow())
             {
                 var channelSnapshot = await ReadChannelSnapshotAsync(session, states, activity, cancellationToken);

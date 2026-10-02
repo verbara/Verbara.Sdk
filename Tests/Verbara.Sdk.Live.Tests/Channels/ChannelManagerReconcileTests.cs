@@ -1,5 +1,6 @@
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Channels;
+using Verbara.Sdk.Live.Tests.Harness;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -483,6 +484,93 @@ public class ChannelManagerReconcileTests
             new { Added = 0, Removed = 1, Held = 0 },
             "a newer read already proved the channel gone after the older read was requested, so the older "
             + "snapshot listing it is stale; admitting it again brings back a call whose ending was announced");
+    }
+
+    // --- what the read windows keep, and when they drop it ---------------------------------------------
+
+    [Fact]
+    public void OnHangup_ShouldRecordNoDeparture_WhenNoReadWindowIsOpen()
+    {
+        const int hangups = 64;
+        for (var i = 0; i < hangups; i++)
+            _sut.OnNewChannel($"1700000000.{i}", $"PJSIP/2000-{i}", ChannelState.Up);
+        using (var window = _sut.OpenReadWindow())
+            _sut.ReconcileWithSnapshot([], window);
+
+        // Held channels and channels never held alike, with no read in progress.
+        _sut.OnNewChannel("1700000001.1", "PJSIP/3000-0001", ChannelState.Up);
+        _sut.OnHangup("1700000001.1", HangupCause.NormalClearing);
+        for (var i = 0; i < hangups; i++)
+            _sut.OnHangup($"1700000002.{i}", HangupCause.NormalClearing);
+
+        new
+        {
+            Departures = ReadWindowRecord.Departures(_sut),
+            OpenWindows = ReadWindowRecord.OpenWindows(_sut),
+        }.Should().BeEquivalentTo(
+            new { Departures = 0, OpenWindows = 0 },
+            "a departure matters only to a read in progress, so with none open nothing is kept and the record "
+            + "cannot grow between reloads");
+    }
+
+    [Fact]
+    public void Dispose_ShouldKeepOnlyTheDeparturesAnOpenWindowStillNeeds_WhenAnOlderWindowClosesFirst()
+    {
+        // Closed explicitly below, in the order under test; the using declarations only cover a throw.
+        using var older = _sut.OpenReadWindow();
+        _sut.OnHangup("1700000000.1", HangupCause.NormalClearing);
+        using var newer = _sut.OpenReadWindow();
+        _sut.OnHangup("1700000000.2", HangupCause.NormalClearing);
+        var bothOpen = ReadWindowRecord.Departures(_sut);
+
+        older.Dispose();
+        older.Dispose();
+        var newerOpen = (Departures: ReadWindowRecord.Departures(_sut), Windows: ReadWindowRecord.OpenWindows(_sut));
+        newer.Dispose();
+
+        new
+        {
+            BothOpen = bothOpen,
+            NewerOpen = newerOpen.Departures,
+            WindowsWhileNewerOpen = newerOpen.Windows,
+            NoneOpen = ReadWindowRecord.Departures(_sut),
+            WindowsAtTheEnd = ReadWindowRecord.OpenWindows(_sut),
+        }.Should().BeEquivalentTo(
+            new { BothOpen = 2, NewerOpen = 1, WindowsWhileNewerOpen = 1, NoneOpen = 0, WindowsAtTheEnd = 0 },
+            "the first hangup happened before the newer window's request was sent, so once the older window closes "
+            + "no open read can need it; a window closed twice closes once, and the last close drops everything");
+    }
+
+    [Fact]
+    public void Clear_ShouldDropEveryRecordedDeparture_WhenAReadWindowIsOpen()
+    {
+        _sut.OnNewChannel("1700000000.1", "PJSIP/2000-0001", ChannelState.Up);
+        using var window = _sut.OpenReadWindow();
+        _sut.OnHangup("1700000000.1", HangupCause.NormalClearing);
+        _sut.OnHangup("1700000000.2", HangupCause.NormalClearing);
+        var beforeClear = ReadWindowRecord.Departures(_sut);
+
+        _sut.Clear();
+
+        new { BeforeClear = beforeClear, AfterClear = ReadWindowRecord.Departures(_sut) }.Should().BeEquivalentTo(
+            new { BeforeClear = 2, AfterClear = 0 },
+            "a cleared table starts over, and nothing it recorded outlives the reset");
+    }
+
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldThrowAndAdmitNothing_WhenItsWindowIsAlreadyClosed()
+    {
+        using var window = _sut.OpenReadWindow();
+        _sut.OnHangup("1700000000.1", HangupCause.NormalClearing);
+        window.Dispose();
+
+        var outcome = Record.Exception(
+            () => _sut.ReconcileWithSnapshot([Entry("1700000000.1", "PJSIP/2000-0001")], window));
+
+        outcome.Should().BeOfType<ObjectDisposedException>(
+            "a closed window has dropped the departures it recorded, so its snapshot can no longer be told from a "
+            + "stale one");
+        new { Added = _added.Count, Held = _sut.ChannelCount }.Should().BeEquivalentTo(new { Added = 0, Held = 0 });
     }
 
     // --- one admission per channel -----------------------------------------------------------------

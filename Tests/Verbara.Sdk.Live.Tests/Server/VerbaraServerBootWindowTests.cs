@@ -361,6 +361,52 @@ public sealed class VerbaraServerBootWindowTests
     }
 
     [Fact]
+    public async Task RequestInitialStateAsync_ShouldKeepNoDeparture_WhenTheSessionEndsWhileTheChannelSnapshotIsRead()
+    {
+        var peer = new BootingAsterisk
+        {
+            BootedAtLogin = true,
+            StatusChannels =
+            [
+                new StatusChannel("1700000000.1", "PJSIP/1001-00000001", LinkedId: "1700000000.1"),
+                new StatusChannel("1700000000.2", "PJSIP/1002-00000002", LinkedId: "1700000000.2"),
+            ],
+        };
+        await using var run = await Run.StartAsync(peer);
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.Close = PeerClose.DuringStatus;
+        peer.StatusChannelsBeforeClose = 1;
+        peer.StatusAnsweredAfter = answer.Task;
+        try
+        {
+            var load = run.Server.RequestInitialStateAsync().AsTask();
+            // The peer counts the Status before it answers, and the load opened its window before it sent it.
+            var readOpen = await CompletesWithinBoundAsync(peer.AskedAtLeast("Status", 2));
+            run.Server.Channels.OnHangup("1700000000.2", HangupCause.NormalClearing);
+            run.Server.Channels.OnHangup("1700000000.9", HangupCause.NormalClearing);
+            var recordedWhileOpen = ReadWindowRecord.Departures(run.Server.Channels);
+            answer.SetResult();
+            var outcome = await Record.ExceptionAsync(() => load.WaitAsync(Run.Bound));
+
+            using (new AssertionScope())
+            {
+                readOpen.Should().BeTrue("the load asked Status a second time");
+                recordedWhileOpen.Should().Be(2,
+                    "a held channel and a channel never held hung up while the read was open, and both were recorded");
+                outcome.Should().BeOfType<AmiNotConnectedException>("the session ended before the snapshot completed");
+                ReadWindowRecord.Departures(run.Server.Channels).Should().Be(0,
+                    "the read ended with its session, and nothing it recorded outlives it");
+                ReadWindowRecord.OpenWindows(run.Server.Channels).Should().Be(0, "the ended read's window is closed");
+                peer.Fault.Should().BeNull("the peer served the session without failing");
+            }
+        }
+        finally
+        {
+            answer.TrySetResult();
+        }
+    }
+
+    [Fact]
     public async Task StartAsync_ShouldThrowNotConnected_WhenTheSessionEndsDuringAnEarlierRequestAndAutoReconnectIsOff()
     {
         var peer = new BootingAsterisk

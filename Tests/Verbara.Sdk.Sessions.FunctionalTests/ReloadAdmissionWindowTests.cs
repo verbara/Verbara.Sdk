@@ -1,4 +1,7 @@
+using System.Collections;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -71,7 +74,7 @@ public sealed class ReloadAdmissionWindowTests : IAsyncLifetime
         _connection.AsteriskVersion.Returns("21.0.0");
         _connection
             .SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
-            .Returns(ci => Reply(ci.ArgAt<ManagerAction>(0)));
+            .Returns(ci => Reply(ci.ArgAt<ManagerAction>(0), ci.ArgAt<CancellationToken>(1)));
 
         _server = new VerbaraServer(_connection, _serverLog.For<VerbaraServer>());
         _sessions = new CallSessionManager(
@@ -89,9 +92,11 @@ public sealed class ReloadAdmissionWindowTests : IAsyncLifetime
     /// Answers the three actions the load sends. The <c>Status</c> leg first lets the test push a
     /// live arrival into the table: this body only runs once the enumeration has started, which is
     /// strictly after <c>VerbaraServer</c> read the admission mark the snapshot will be judged
-    /// against, so the ordering the requirement is about needs no clock to arrange.
+    /// against, so the ordering the requirement is about needs no clock to arrange. Like a real
+    /// connection, it stops with the load's cancellation once that is requested.
     /// </summary>
-    private async IAsyncEnumerable<ManagerEvent> Reply(ManagerAction action)
+    private async IAsyncEnumerable<ManagerEvent> Reply(
+        ManagerAction action, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         await Task.Yield();
 
@@ -106,6 +111,7 @@ public sealed class ReloadAdmissionWindowTests : IAsyncLifetime
 
         var arrival = Interlocked.Exchange(ref _whileTheSnapshotIsRead, null);
         arrival?.Invoke();
+        cancellationToken.ThrowIfCancellationRequested();
 
         foreach (var status in _statusReply)
             yield return status;
@@ -329,6 +335,106 @@ public sealed class ReloadAdmissionWindowTests : IAsyncLifetime
             new { Announced = 0, Held = false, Sessions = 0 },
             "the SDK observed the hangup after the snapshot was requested; no hangup will ever follow an "
             + $"admission from the stale snapshot, so it would be a call that never ends. Measured: {Describe()}");
+    }
+
+    // --- what a read keeps once it has ended, by each way it can end --------------------------------
+
+    /// <summary>
+    /// A load of the state, as <see cref="WhenTheConnectionReconnectsWhile"/> drives one but awaited directly, with
+    /// <paramref name="whileTheSnapshotIsRead"/> run inside the <c>Status</c> reply. Returns how many departures the
+    /// channel table kept while the read was open, and what the load ended with.
+    /// </summary>
+    private async Task<(int RecordedWhileOpen, Exception? Outcome)> WhenAStateLoadEndsAfter(
+        Action whileTheSnapshotIsRead, CancellationToken cancellationToken = default)
+    {
+        var recordedWhileOpen = -1;
+        _statusReply = [Leg(CallerUid, "PJSIP/trunk-001"), Leg(AgentUid, "PJSIP/100-001")];
+        _whileTheSnapshotIsRead = () =>
+        {
+            // A held leg and a channel never held hang up while the read is open.
+            _server.Channels.OnHangup(CallerUid, HangupCause.NormalClearing);
+            _server.Channels.OnHangup("never-held-001", HangupCause.NormalClearing);
+            recordedWhileOpen = RecordedDepartures(_server.Channels);
+            whileTheSnapshotIsRead();
+        };
+
+        var outcome = await Record.ExceptionAsync(
+            () => _server.RequestInitialStateAsync(cancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+        return (recordedWhileOpen, outcome);
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldKeepNoDeparture_WhenTheReadItWasRecordedForCompleted()
+    {
+        await GivenAStartedServer();
+        GivenAnAnsweredCall();
+
+        var (recordedWhileOpen, outcome) = await WhenAStateLoadEndsAfter(static () => { });
+
+        new
+        {
+            RecordedWhileOpen = recordedWhileOpen,
+            Threw = outcome is not null,
+            KeptAfter = RecordedDepartures(_server.Channels),
+            OpenWindows = OpenReadWindows(_server.Channels),
+        }.Should().BeEquivalentTo(
+            new { RecordedWhileOpen = 2, Threw = false, KeptAfter = 0, OpenWindows = 0 },
+            $"both departures were recorded for the read, and none outlives it once it completed. Measured: {Describe()}");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldKeepNoDeparture_WhenTheReadItWasRecordedForThrew()
+    {
+        await GivenAStartedServer();
+        GivenAnAnsweredCall();
+
+        var (recordedWhileOpen, outcome) = await WhenAStateLoadEndsAfter(
+            static () => throw new InvalidOperationException("the connection failed while Status was read"));
+
+        new
+        {
+            RecordedWhileOpen = recordedWhileOpen,
+            Failure = outcome?.GetType().Name,
+            KeptAfter = RecordedDepartures(_server.Channels),
+            OpenWindows = OpenReadWindows(_server.Channels),
+        }.Should().BeEquivalentTo(
+            new { RecordedWhileOpen = 2, Failure = nameof(InvalidOperationException), KeptAfter = 0, OpenWindows = 0 },
+            $"a read that throws still closes its window, and nothing it recorded outlives it. Measured: {Describe()}");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldKeepNoDeparture_WhenTheReadItWasRecordedForWasCancelled()
+    {
+        await GivenAStartedServer();
+        GivenAnAnsweredCall();
+        using var cancellation = new CancellationTokenSource();
+
+        var (recordedWhileOpen, outcome) = await WhenAStateLoadEndsAfter(cancellation.Cancel, cancellation.Token);
+
+        new
+        {
+            RecordedWhileOpen = recordedWhileOpen,
+            Cancelled = outcome is OperationCanceledException,
+            KeptAfter = RecordedDepartures(_server.Channels),
+            OpenWindows = OpenReadWindows(_server.Channels),
+        }.Should().BeEquivalentTo(
+            new { RecordedWhileOpen = 2, Cancelled = true, KeptAfter = 0, OpenWindows = 0 },
+            $"a cancelled read still closes its window, and nothing it recorded outlives it. Measured: {Describe()}");
+    }
+
+    /// <summary>How many departures the channel table keeps for its open read windows; private, read by reflection.</summary>
+    private static int RecordedDepartures(ChannelManager channels) => PrivateCount(channels, "_departures");
+
+    /// <summary>How many read windows the channel table holds open; private, read by reflection.</summary>
+    private static int OpenReadWindows(ChannelManager channels) => PrivateCount(channels, "_openReadMarks");
+
+    private static int PrivateCount(ChannelManager channels, string fieldName)
+    {
+        var field = typeof(ChannelManager).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"ChannelManager has no private field {fieldName}.");
+        var collection = field.GetValue(channels) as ICollection
+            ?? throw new InvalidOperationException($"ChannelManager.{fieldName} is not a collection.");
+        return collection.Count;
     }
 
     /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>

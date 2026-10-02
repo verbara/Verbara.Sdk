@@ -162,6 +162,14 @@ internal sealed class BootingAsterisk
     /// <summary>The channels the peer lists on <c>Status</c>. Settable between two loads.</summary>
     public IReadOnlyList<StatusChannel> StatusChannels { get; set; } = [];
 
+    /// <summary>
+    /// When set, the peer answers <c>Status</c> — with its list, its refusal or its close — only once this task has
+    /// completed, so a test can act while the connection's read of it is open. The peer counts the ask before it waits,
+    /// so <see cref="AskedAtLeast"/> says when the read is open. A wait that outlives <see cref="Run.Bound"/> fails the
+    /// peer. Settable between two loads.
+    /// </summary>
+    public Task? StatusAnsweredAfter { get; set; }
+
     /// <summary>Whether the peer answers as booted.</summary>
     public bool IsBooted => Volatile.Read(ref _booted);
 
@@ -321,6 +329,9 @@ internal sealed class BootingAsterisk
 
         if (string.Equals(name, "Status", StringComparison.OrdinalIgnoreCase))
         {
+            if (StatusAnsweredAfter is { } answerAfter)
+                await answerAfter.WaitAsync(Run.Bound);
+
             if (StatusRefusedFromAsk > 0 && Asked(name) >= StatusRefusedFromAsk)
             {
                 await socket.RespondAsync("Error", id, [new("Message", PermissionDenied)]);
