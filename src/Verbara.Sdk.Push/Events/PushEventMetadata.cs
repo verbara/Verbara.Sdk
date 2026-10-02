@@ -7,7 +7,13 @@ namespace Verbara.Sdk.Push.Events;
 /// <param name="UserId">Optional user identifier the event pertains to.</param>
 /// <param name="OccurredAt">When the event originated.</param>
 /// <param name="CorrelationId">Optional business correlation identifier.</param>
-/// <param name="TopicPath">Optional resolved topic path (e.g. <c>calls/42</c>).</param>
+/// <param name="TopicPath">
+/// Optional topic the event is published under: a dotted topic name (e.g. <c>queue.42.updated</c>) that
+/// subscribers' topic patterns are matched against. When it is null or empty, the SSE stream matches the event
+/// by its <see cref="PushEvent.EventType"/> instead (an event type that is not a valid topic reaches only streams
+/// allowed <c>**</c>), and webhooks do not deliver it. A non-empty value that is not a valid topic is delivered
+/// to no SSE stream.
+/// </param>
 /// <param name="TraceContext">
 /// Optional W3C traceparent (<c>00-{trace-id}-{span-id}-{flags}</c>) for cross-boundary
 /// distributed tracing. When present, transports that cross process/network boundaries

@@ -18,13 +18,15 @@ internal static class SseFrameFormat
     internal static readonly byte[] Heartbeat = Encoding.UTF8.GetBytes(": heartbeat\n\n");
 
     /// <summary>
-    /// The event frame: one <c>event:</c> line (the topic path, else the event type) and one <c>data:</c> line
+    /// The event frame: one <c>event:</c> line (the topic path, or the event type when the topic path is null or
+    /// empty — the name the stream matched the event by) and one <c>data:</c> line
     /// of JSON. CR and LF in the name are percent-encoded, and the reserved gap-marker name is escaped.
     /// </summary>
     internal static byte[] Event(PushEvent evt)
     {
         ArgumentNullException.ThrowIfNull(evt);
-        var name = EventName(evt.Metadata?.TopicPath ?? evt.EventType);
+        var topicPath = evt.Metadata?.TopicPath;
+        var name = EventName(string.IsNullOrEmpty(topicPath) ? evt.EventType : topicPath);
         var data = JsonSerializer.Serialize(evt, SseJsonContext.Default.PushEvent);
         return Encoding.UTF8.GetBytes("event: " + name + "\ndata: " + data + "\n\n");
     }

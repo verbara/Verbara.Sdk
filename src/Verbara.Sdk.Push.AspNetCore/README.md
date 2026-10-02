@@ -5,7 +5,8 @@ ASP.NET Core SSE delivery endpoints for Verbara.Sdk.Push. First SDK package with
 ## Features
 
 - SSE streaming endpoint (`GET {prefix}/stream`) with topic filtering
-- Tenant isolation via `tenantId` JWT claim
+- Tenant isolation via the `tenantId` claim by default; the tenant, user, role and permission claim types are
+  configurable (see *Who a connection belongs to*)
 - Authorization check via `ISubscriptionAuthorizer`
 - Delivery check via `IEventDeliveryFilter`
 - 15-second heartbeat to keep connections alive through proxies
@@ -43,15 +44,25 @@ other topic.
 
 | Request | Status | Body / stream |
 |---------|--------|---------------|
-| No `tenantId` claim | `400 Bad Request` | `Missing tenantId claim.` |
+| No tenant claim (no value under any of `SsePushStreamOptions.TenantIdClaimTypes`, `tenantId` by default) | `400 Bad Request` | `Missing tenantId claim.` (the text names the default whatever the list holds) |
 | Any `topic` fails to parse (alone or next to valid ones) | `400 Bad Request` | `text/plain`, the invalid topics percent-encoded; the authorizer is asked nothing |
 | Every requested topic denied (no topic = `**` denied) | `403 Forbidden` | `text/plain`, the fixed text `Subscription denied.` |
-| At least one requested topic allowed | `200 OK` | `text/event-stream` with the events of the allowed topics only |
+| At least one requested topic allowed | `200 OK` | `text/event-stream` with the events whose name matches an allowed topic only (see below) |
 
 A denied topic is never replaced by a wider pattern: an authorizer that denies `billing.**` keeps the client
 off `billing.**` even when it would allow `**`. The authorizer's `Reason` is never returned to the client; the
 endpoint logs one `Warning` per refused request (category `Verbara.Sdk.Push.AspNetCore.SsePushEndpoints`) with
 the tenant, the user, the denied topics percent-encoded and the first reason.
+
+An event is matched by its **name**: its `TopicPath`, or its `EventType` when the topic path is null or
+empty. A topic-less `billing.invoice.created` event therefore reaches a stream allowed `billing.**` and no
+stream allowed only `queue.**`, and `{self}` resolves in the event type as it does in a topic path. An event
+type that is not a valid topic (for example `billing..x`, or `.gap`) is never matched by its text: a topic-less
+event of such a type reaches only streams allowed `**`. An event whose non-empty `TopicPath` is not a valid
+topic (for example `a..b`) reaches no stream, `**` included, and never falls back to its event type; the
+endpoint logs one `Warning` per such event, however many streams evaluated it, with the tenant and the event
+type and topic path percent-encoded. For a **null** topic path this is the convention the NATS bridge uses to
+build its subject (`TopicPath ?? EventType`).
 
 When some requested topics are allowed and others denied, the stream is served and the response header
 `X-Push-Denied-Topics` lists the denied topics exactly as requested, each percent-encoded (`Uri.EscapeDataString`),
@@ -73,8 +84,51 @@ data: {"eventType":"queue.42.updated","metadata":{...},...}
 : heartbeat
 ```
 
-The `event:` value is the event's topic path, or its event type when it has none. A CR or LF in it is written
+The `event:` value is the name the event was matched by: its topic path, or its event type when the topic
+path is null or empty. A CR or LF in it is written
 percent-encoded (`%0D`, `%0A`), so an event can never add lines to its frame; `data:` is JSON on one line.
+
+### Who a connection belongs to
+
+The endpoint reads the connection's tenant, user, roles and permissions from the authenticated principal
+(`HttpContext.User`, every identity), through four claim-type lists on `SsePushStreamOptions`. The authorizer and
+the delivery filter are handed the same subscriber.
+
+| Option | Default | Read as |
+|--------|---------|---------|
+| `TenantIdClaimTypes` | `tenantId` | the first listed type, in list order, that carries a non-empty value; must not be empty |
+| `UserIdClaimTypes` | `sub`, `ClaimTypes.NameIdentifier` | the first listed type, in list order, that carries a non-empty value; must not be empty |
+| `RoleClaimTypes` | `ClaimTypes.Role`, `role`, `roles` | every value of every listed type, plus every value of each identity's own `RoleClaimType`; may be empty |
+| `PermissionClaimTypes` | `permission` | every value of every listed type; may be empty |
+
+Claim types are compared ignoring case; values are compared ordinally, taken whole (never split on spaces or
+commas), and empty values are ignored. The roles are every role `IsInRole` accepts, plus any `role`/`roles`
+claim: each identity's own `RoleClaimType` is always read, even when `RoleClaimTypes` is empty, and the listed
+types may add values that `IsInRole` would reject.
+
+**`JwtBearer`.** With ASP.NET Core's default `MapInboundClaims = true`, the handler renames `sub` to
+`ClaimTypes.NameIdentifier` and `role` to `ClaimTypes.Role`; with `MapInboundClaims = false` the token's names are
+kept. The defaults find the user and the roles either way.
+
+`tid` is deliberately not a default tenant claim type: in Microsoft Entra ID it names the directory, not your
+application's tenant. A host whose tokens carry the tenant or the permissions under other names adds them
+explicitly:
+
+```csharp
+builder.Services.AddVerbaraPushAspNetCore();
+builder.Services.Configure<SsePushStreamOptions>(o =>
+{
+    o.TenantIdClaimTypes = ["tenant_id", "tid"];            // first match wins, in this order
+    o.PermissionClaimTypes = ["permission", "permissions"]; // add a plural permissions claim
+});
+```
+
+Assigning a list replaces its default. Binding the options from configuration **appends** the configured entries
+after the default ones (the configuration binder's array behaviour), so a host that must replace a default sets
+the list in code. `AddVerbaraPushAspNetCore` validates the lists when the host starts: a null or empty tenant or
+user list, or a null, empty or whitespace entry in any list, stops the host with an `OptionsValidationException`
+naming the option. A host set up with `AddVerbaraPush()` only is not validated; an unusable tenant list there
+yields the `400` above, and an unusable user, role or permission list contributes nothing.
 
 ### Heartbeat, the per-connection bound and `.gap`
 
@@ -102,7 +156,7 @@ written before the drops, so a client that keeps falling behind keeps receiving 
 - **A single event larger than the bound is still delivered**, alone: everything queued before it is dropped
   and reported.
 - **`.gap` is reserved.** An event whose name would be `.gap` (an `EventType` of `.gap` with no topic path) is
-  written as `event: %2Egap`. An `EventSource` client listens with `addEventListener('.gap', …)`; a client
+  written as `event: %2Egap`. `.gap` is not a valid topic, so such an event reaches only streams allowed `**`. An `EventSource` client listens with `addEventListener('.gap', …)`; a client
   that does not listen ignores it.
 - **Operators see the drops** on the `asterisk.push.sse.events.dropped` counter of the `Verbara.Sdk.Push` meter
   (one per dropped event frame) and in one `Warning` per run of drops (category

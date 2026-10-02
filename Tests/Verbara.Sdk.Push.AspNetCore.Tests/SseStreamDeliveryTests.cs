@@ -63,8 +63,7 @@ internal static class LoadFrames
 }
 
 /// <summary>
-/// Spec <c>push-sse-stream-delivery</c>, requirement <i>The stream works on a host that forbids synchronous
-/// I/O</i>: default Kestrel serves 200 with the headers before any frame, also for a host set up with
+/// The stream works on a host that forbids synchronous I/O: default Kestrel serves 200 with the headers before any frame, also for a host set up with
 /// <c>AddVerbaraPush()</c> only.
 /// </summary>
 public sealed class SseDefaultKestrelTests
@@ -126,8 +125,7 @@ public sealed class SseDefaultKestrelTests
 }
 
 /// <summary>
-/// Spec <c>push-sse-stream-delivery</c>, requirements <i>Frames are written whole and one at a time</i> and
-/// <i>The heartbeat keeps running under a slow reader</i>.
+/// Frames are written whole and one at a time, and the heartbeat keeps running while a slow reader is written to.
 /// </summary>
 public sealed class SseFrameTests
 {
@@ -252,8 +250,7 @@ public sealed class SseFrameTests
 }
 
 /// <summary>
-/// Spec <c>push-sse-stream-delivery</c>, requirement <i>One slow connection never stalls the bus or grows
-/// without limit</i>, policy-agnostic half: a stopped reader does not stall another subscriber, and the
+/// One slow connection never stalls the bus or grows without limit, whatever the drop policy: a stopped reader does not stall another subscriber, and the
 /// connection's queue never holds more than the bound (read through the stream's internal queue-depth hook).
 /// </summary>
 public sealed class SseStoppedReaderTests
@@ -313,7 +310,7 @@ public sealed class SseStoppedReaderTests
 }
 
 /// <summary>
-/// Spec <c>push-sse-stream-delivery</c>, requirement <i>A disconnect ends the stream cleanly</i>. Runs alone:
+/// A client disconnect ends the stream cleanly. Runs alone:
 /// it asserts on <c>TaskScheduler.UnobservedTaskException</c>, which is process-wide.
 /// </summary>
 [Collection(SseProcessWideStateGroup.Name)]

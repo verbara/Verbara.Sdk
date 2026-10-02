@@ -29,7 +29,7 @@ internal sealed record SseAdmissionDecision(
     string? FirstDenialReason);
 
 /// <summary>
-/// The SSE push stream's admission rule (spec <c>push-sse-admission</c>): a pure function of the
+/// The SSE push stream's admission rule: a pure function of the
 /// requested topics, the subscriber and the authorizer. It never widens a request to a pattern the
 /// client did not name; a request with no topic is a request for <c>**</c>, authorized like any other.
 /// </summary>

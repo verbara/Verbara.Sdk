@@ -4,7 +4,8 @@ using System.Net;
 using FluentAssertions.Execution;
 
 /// <summary>
-/// Spec <c>push-sse-admission</c>: the measured scenarios of C7 (S0a–S5, X2–X4) on a real Kestrel host,
+/// The stream's admission answer for each measured request (which topics were asked, what the authorizer
+/// allows, the status, the topics the authorizer was asked about, the events delivered) on a real Kestrel host,
 /// each with <c>AllowSynchronousIO</c> false (the default) and true.
 /// </summary>
 public sealed class SseAdmissionTests
@@ -30,7 +31,7 @@ public sealed class SseAdmissionTests
 
     private static bool OnlyQueue(string p) => p.StartsWith("queue.", StringComparison.Ordinal);
 
-    /// <summary>One admission scenario (S0a–S5, X2–X4) and the answer it is expected to get.</summary>
+    /// <summary>One admission scenario and the answer it is expected to get.</summary>
     private sealed record Row(
         string Query,
         Func<string, bool> Allow,
@@ -41,18 +42,18 @@ public sealed class SseAdmissionTests
 
     private static readonly Dictionary<string, Row> Rows = new(StringComparer.Ordinal)
     {
-        ["S0a"] = new(string.Empty, AllowAll, HttpStatusCode.OK, ["**"], Broadcasts, null),
-        ["S0b"] = new("?topic=billing.**", OnlyStarStar, HttpStatusCode.Forbidden, ["billing.**"], [], null),
-        ["S1a"] = new("?topic=billing.**", DenyBillingAndQueue, HttpStatusCode.Forbidden, ["billing.**"], [], null),
-        ["S1b"] = new("?topic=queue.**&topic=billing.**", OnlyStarStar, HttpStatusCode.Forbidden, ["queue.**", "billing.**"], [], null),
-        ["S2"] = new("?topic=billing.**", OnlyAgentU1, HttpStatusCode.Forbidden, ["billing.**"], [], null),
-        ["S3a"] = new(string.Empty, AllowAll, HttpStatusCode.OK, ["**"], Broadcasts, null),
-        ["S3b"] = new(string.Empty, OnlyAgentU1, HttpStatusCode.Forbidden, ["**"], [], null),
-        ["S4"] = new("?topic=queue.**&topic=billing.**", OnlyQueue, HttpStatusCode.OK, ["queue.**", "billing.**"], ["queue.1.updated"], "billing.%2A%2A"),
-        ["S5"] = new("?topic=a..b", AllowAll, HttpStatusCode.BadRequest, [], [], null),
-        ["X2"] = new("?topic=queue.**&topic=a..b", AllowAll, HttpStatusCode.BadRequest, [], [], null),
-        ["X3"] = new("?topic=a..b&topic=billing.**", DenyBillingAndQueue, HttpStatusCode.BadRequest, [], [], null),
-        ["X4"] = new("?topic=queue.**&topic=bill%0D%0Aing%2Cx.**", OnlyQueue, HttpStatusCode.OK, ["queue.**", "bill\r\ning,x.**"], ["queue.1.updated"], "bill%0D%0Aing%2Cx.%2A%2A"),
+        ["no-topic, allow all"] = new(string.Empty, AllowAll, HttpStatusCode.OK, ["**"], Broadcasts, null),
+        ["billing, allow only **"] = new("?topic=billing.**", OnlyStarStar, HttpStatusCode.Forbidden, ["billing.**"], [], null),
+        ["billing, deny billing and queue"] = new("?topic=billing.**", DenyBillingAndQueue, HttpStatusCode.Forbidden, ["billing.**"], [], null),
+        ["queue + billing, allow only **"] = new("?topic=queue.**&topic=billing.**", OnlyStarStar, HttpStatusCode.Forbidden, ["queue.**", "billing.**"], [], null),
+        ["billing, allow only agent.u1"] = new("?topic=billing.**", OnlyAgentU1, HttpStatusCode.Forbidden, ["billing.**"], [], null),
+        ["no-topic, allow all, again"] = new(string.Empty, AllowAll, HttpStatusCode.OK, ["**"], Broadcasts, null),
+        ["no-topic, allow only agent.u1"] = new(string.Empty, OnlyAgentU1, HttpStatusCode.Forbidden, ["**"], [], null),
+        ["queue + billing, allow only queue"] = new("?topic=queue.**&topic=billing.**", OnlyQueue, HttpStatusCode.OK, ["queue.**", "billing.**"], ["queue.1.updated"], "billing.%2A%2A"),
+        ["unparseable topic"] = new("?topic=a..b", AllowAll, HttpStatusCode.BadRequest, [], [], null),
+        ["queue + unparseable topic"] = new("?topic=queue.**&topic=a..b", AllowAll, HttpStatusCode.BadRequest, [], [], null),
+        ["unparseable topic + billing, deny billing and queue"] = new("?topic=a..b&topic=billing.**", DenyBillingAndQueue, HttpStatusCode.BadRequest, [], [], null),
+        ["queue + CR/LF and comma topic, allow only queue"] = new("?topic=queue.**&topic=bill%0D%0Aing%2Cx.**", OnlyQueue, HttpStatusCode.OK, ["queue.**", "bill\r\ning,x.**"], ["queue.1.updated"], "bill%0D%0Aing%2Cx.%2A%2A"),
     };
 
     public static TheoryData<string, bool> Scenarios()

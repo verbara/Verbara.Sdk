@@ -3,13 +3,19 @@ namespace Verbara.Sdk.Push.AspNetCore.Tests;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
+using System.Net;
+using System.Net.Http.Headers;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using Verbara.Sdk.Push.Diagnostics;
 
 /// <summary>How the test host registers the push services before mapping the endpoint.</summary>
@@ -22,10 +28,33 @@ public enum PushRegistration
     PushOnly,
 }
 
+/// <summary>How the test host decides who a stream request is.</summary>
+public enum SseIdentityMode
+{
+    /// <summary>
+    /// A middleware sets the principal: the one a test registered for the request through
+    /// <see cref="SseTestHost.OpenStreamAsync(string, ClaimsPrincipal, CancellationToken)"/>, else the fixed principal
+    /// <c>tenantId=T1</c>, <c>sub=u1</c>.
+    /// </summary>
+    Principal,
+
+    /// <summary>
+    /// Real <c>JwtBearer</c> authentication: the principal is whatever the handler builds from a token the host
+    /// minted (<see cref="SseTestHost.MintToken"/>); no middleware sets one.
+    /// </summary>
+    JwtBearer,
+}
+
 /// <summary>A push event the SSE tests publish; its SSE name is its topic path.</summary>
 public sealed record SseTestEvent(string Name) : PushEvent
 {
     public override string EventType => "sse.test";
+}
+
+/// <summary>A push event whose <see cref="PushEvent.EventType"/> each test chooses per instance.</summary>
+public sealed record TypedTestEvent(string Type) : PushEvent
+{
+    public override string EventType => Type;
 }
 
 /// <summary>An event whose type is the stream's reserved gap-marker name and which carries no topic path.</summary>
@@ -34,22 +63,65 @@ public sealed record ReservedNameEvent : PushEvent
     public override string EventType => ".gap";
 }
 
-/// <summary>Authorizer that records every pattern it is asked about and denies with an internal-looking reason.</summary>
-public sealed class RecordingAuthorizer(Func<string, bool> allow) : ISubscriptionAuthorizer
+/// <summary>
+/// Authorizer that records every pattern it is asked about, and the subscriber it was handed with it, and denies
+/// with an internal-looking reason.
+/// </summary>
+public sealed class RecordingAuthorizer : ISubscriptionAuthorizer
 {
     /// <summary>The reason every denial carries; a 403 body must never contain it.</summary>
     public const string DenyReason = "internal rule 42: finance group only";
 
+    private readonly Func<SubscriberContext, string, bool> _allow;
     private readonly ConcurrentQueue<string> _asked = new();
+    private readonly ConcurrentQueue<SubscriberContext> _subscribers = new();
+
+    /// <summary>Decides by the requested pattern alone.</summary>
+    public RecordingAuthorizer(Func<string, bool> allow)
+    {
+        ArgumentNullException.ThrowIfNull(allow);
+        _allow = (_, raw) => allow(raw);
+    }
+
+    /// <summary>Decides by the subscriber it is handed and the requested pattern.</summary>
+    public RecordingAuthorizer(Func<SubscriberContext, string, bool> allow)
+    {
+        ArgumentNullException.ThrowIfNull(allow);
+        _allow = allow;
+    }
 
     /// <summary>Every pattern asked, in order, as <see cref="TopicPattern.ToString"/> renders it.</summary>
     public IReadOnlyList<string> Asked => [.. _asked];
 
+    /// <summary>The subscriber handed with each ask, in the order of <see cref="Asked"/>.</summary>
+    public IReadOnlyList<SubscriberContext> Subscribers => [.. _subscribers];
+
     public AuthorizationResult CanSubscribe(SubscriberContext subscriber, TopicPattern requestedPattern)
     {
+        ArgumentNullException.ThrowIfNull(subscriber);
         var raw = requestedPattern.ToString();
         _asked.Enqueue(raw);
-        return allow(raw) ? AuthorizationResult.Allow() : AuthorizationResult.Deny(DenyReason);
+        _subscribers.Enqueue(subscriber);
+        return _allow(subscriber, raw) ? AuthorizationResult.Allow() : AuthorizationResult.Deny(DenyReason);
+    }
+}
+
+/// <summary>
+/// The default delivery filter, recording every subscriber it is handed; it decides exactly as
+/// <see cref="DefaultDeliveryFilter"/> does.
+/// </summary>
+public sealed class RecordingDeliveryFilter : IEventDeliveryFilter
+{
+    private readonly DefaultDeliveryFilter _inner = new();
+    private readonly ConcurrentQueue<SubscriberContext> _seen = new();
+
+    /// <summary>Every subscriber handed so far, one entry per evaluated event and connection.</summary>
+    public IReadOnlyList<SubscriberContext> Seen => [.. _seen];
+
+    public bool IsDeliverableToSubscriber(PushEvent pushEvent, SubscriberContext subscriber)
+    {
+        _seen.Enqueue(subscriber);
+        return _inner.IsDeliverableToSubscriber(pushEvent, subscriber);
     }
 }
 
@@ -191,7 +263,8 @@ public sealed class CountingObserver : IObserver<PushEvent>
     public void OnNext(PushEvent value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        _names.Enqueue(value.Metadata.TopicPath ?? value.EventType);
+        // The stream's naming rule: a null or empty topic path is named by the event type.
+        _names.Enqueue(string.IsNullOrEmpty(value.Metadata.TopicPath) ? value.EventType : value.Metadata.TopicPath);
         Received.Add(1);
     }
 }
@@ -294,17 +367,37 @@ public sealed record SseHostOptions
 
     /// <summary>When set, records the high-water mark of the connection's queue (the stream's internal hook).</summary>
     public QueueDepthProbe? QueueDepth { get; init; }
+
+    /// <summary>How a request's principal is decided; the fixed-principal middleware by default.</summary>
+    public SseIdentityMode Identity { get; init; } = SseIdentityMode.Principal;
+
+    /// <summary>In <see cref="SseIdentityMode.JwtBearer"/> mode, the handler's <c>MapInboundClaims</c> (its default is true).</summary>
+    public bool MapInboundClaims { get; init; } = true;
+
+    /// <summary>When set, replaces the registered <see cref="IEventDeliveryFilter"/>.</summary>
+    public IEventDeliveryFilter? DeliveryFilter { get; init; }
+
+    /// <summary>When set, configures <see cref="SsePushStreamOptions"/> after the test's other stream settings.</summary>
+    public Action<SsePushStreamOptions>? ConfigureStream { get; init; }
 }
 
 /// <summary>
-/// A real Kestrel host on <c>127.0.0.1:0</c> (an IPv4 literal, never <c>localhost</c>) serving <c>MapPushEndpoints()</c> to a
-/// principal of tenant <c>T1</c>, user <c>u1</c>.
+/// A real Kestrel host on <c>127.0.0.1:0</c> (an IPv4 literal, never <c>localhost</c>) serving <c>MapPushEndpoints()</c>.
+/// By default every request is a principal of tenant <c>T1</c>, user <c>u1</c>; a test may hand a principal per
+/// request, or run the host on real <c>JwtBearer</c> authentication with tokens it mints.
 /// </summary>
 public sealed class SseTestHost : IAsyncDisposable
 {
     public const string StreamPath = "/api/v1/push/stream";
 
-    private SseTestHost(WebApplication app, CapturingLoggerProvider logs, HttpClient client, CountSignal completed)
+    /// <summary>The test-only request header naming the principal a test registered for the request.</summary>
+    public const string PrincipalHeader = "X-Test-Principal";
+
+    private readonly ConcurrentDictionary<string, ClaimsPrincipal> _principals;
+    private readonly JwtSettings _jwt;
+    private readonly SseIdentityMode _identity;
+
+    private SseTestHost(WebApplication app, CapturingLoggerProvider logs, HttpClient client, CountSignal completed, HostIdentity identity)
     {
         App = app;
         Logs = logs;
@@ -312,6 +405,9 @@ public sealed class SseTestHost : IAsyncDisposable
         StreamRequestsCompleted = completed;
         Bus = app.Services.GetRequiredService<CountingPushEventBus>();
         BusDrops = new BusDropListener(app.Services.GetRequiredService<PushMetrics>());
+        _principals = identity.Principals;
+        _jwt = identity.Jwt;
+        _identity = identity.Mode;
     }
 
     public WebApplication App { get; }
@@ -348,12 +444,38 @@ public sealed class SseTestHost : IAsyncDisposable
         if (options.Authorizer is { } authorizer)
             builder.Services.AddSingleton(authorizer);
 
+        var jwt = JwtSettings.Create();
+        if (options.Identity == SseIdentityMode.JwtBearer)
+        {
+            builder.Services
+                .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(o =>
+                {
+                    o.MapInboundClaims = options.MapInboundClaims;
+                    o.TokenValidationParameters = new TokenValidationParameters
+                    {
+                        ValidateIssuer = true,
+                        ValidIssuer = jwt.Issuer,
+                        ValidateAudience = true,
+                        ValidAudience = jwt.Audience,
+                        ValidateIssuerSigningKey = true,
+                        IssuerSigningKey = jwt.Key,
+                        ValidateLifetime = true,
+                    };
+                });
+        }
+
         if (options.Registration == PushRegistration.AspNetCore)
             builder.Services.AddVerbaraPushAspNetCore(o => o.BufferCapacity = options.BusCapacity);
         else
             builder.Services.AddVerbaraPush(o => o.BufferCapacity = options.BusCapacity);
 
         SseStreamSettings.Configure(builder.Services, options.HeartbeatInterval, options.PerConnectionBoundBytes, options.QueueDepth is { } probe ? probe.Observe : null);
+        if (options.ConfigureStream is { } configureStream)
+            builder.Services.Configure(configureStream);
+
+        if (options.DeliveryFilter is { } deliveryFilter)
+            builder.Services.AddSingleton(deliveryFilter);
 
         // The endpoint's bus, wrapped so the tests can count its subscriptions.
         builder.Services.AddSingleton<RxPushEventBus>();
@@ -362,10 +484,18 @@ public sealed class SseTestHost : IAsyncDisposable
 
         var app = builder.Build();
         var completed = new CountSignal();
-        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim("tenantId", "T1"), new Claim("sub", "u1")], "test"));
+        var principals = new ConcurrentDictionary<string, ClaimsPrincipal>(StringComparer.Ordinal);
+        var fixedPrincipal = Principal(null, ("tenantId", "T1"), ("sub", "u1"));
         app.Use(async (ctx, next) =>
         {
-            ctx.User = principal;
+            if (options.Identity == SseIdentityMode.Principal)
+            {
+                var id = ctx.Request.Headers[PrincipalHeader].ToString();
+                ctx.User = id.Length == 0
+                    ? fixedPrincipal
+                    : principals.TryGetValue(id, out var registered) ? registered : new ClaimsPrincipal(new ClaimsIdentity());
+            }
+
             try
             {
                 await next(ctx);
@@ -376,20 +506,92 @@ public sealed class SseTestHost : IAsyncDisposable
                     completed.Add(1);
             }
         });
+        if (options.Identity == SseIdentityMode.JwtBearer)
+            app.UseAuthentication();
         app.MapPushEndpoints();
         await app.StartAsync();
 
         var address = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First();
         var client = new HttpClient { BaseAddress = new Uri(address), Timeout = Timeout.InfiniteTimeSpan };
-        return new SseTestHost(app, logs, client, completed);
+        return new SseTestHost(app, logs, client, completed, new HostIdentity(options.Identity, principals, jwt));
+    }
+
+    /// <summary>
+    /// A hand-built principal: one authenticated identity carrying <paramref name="claims"/>, whose
+    /// <c>RoleClaimType</c> is <paramref name="roleType"/> (<see cref="ClaimTypes.Role"/> when null).
+    /// </summary>
+    public static ClaimsPrincipal Principal(string? roleType, params (string Type, string Value)[] claims)
+    {
+        ArgumentNullException.ThrowIfNull(claims);
+        return new ClaimsPrincipal(new ClaimsIdentity(
+            claims.Select(static c => new Claim(c.Type, c.Value)),
+            "test",
+            ClaimTypes.Name,
+            roleType ?? ClaimTypes.Role));
     }
 
     /// <summary>Sends <c>GET /stream{query}</c> and returns when the response headers arrive.</summary>
     public Task<HttpResponseMessage> OpenStreamAsync(string query, CancellationToken ct) =>
         Client.GetAsync(new Uri(StreamPath + query, UriKind.Relative), HttpCompletionOption.ResponseHeadersRead, ct);
 
+    /// <summary>
+    /// Sends <c>GET /stream{query}</c> as <paramref name="principal"/> (the middleware hands it to this request only)
+    /// and returns when the response headers arrive.
+    /// </summary>
+    public async Task<HttpResponseMessage> OpenStreamAsync(string query, ClaimsPrincipal principal, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(principal);
+        if (_identity != SseIdentityMode.Principal)
+            throw new InvalidOperationException("A hand-built principal needs the Principal identity mode.");
+
+        var id = Guid.NewGuid().ToString("N");
+        _principals[id] = principal;
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(StreamPath + query, UriKind.Relative));
+        request.Headers.Add(PrincipalHeader, id);
+        return await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+    }
+
+    /// <summary>
+    /// Sends <c>GET /stream{query}</c> with <c>Authorization: Bearer</c> and a token minted for this request from
+    /// <paramref name="claims"/>, and returns when the response headers arrive.
+    /// </summary>
+    public async Task<HttpResponseMessage> OpenStreamWithTokenAsync(string query, IReadOnlyDictionary<string, object> claims, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(StreamPath + query, UriKind.Relative));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", MintToken(claims));
+        return await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+    }
+
+    /// <summary>
+    /// An HS256 token carrying <paramref name="claims"/>, signed with this host's per-run key and issued for its
+    /// issuer and audience; valid for ten minutes.
+    /// </summary>
+    public string MintToken(IReadOnlyDictionary<string, object> claims)
+    {
+        ArgumentNullException.ThrowIfNull(claims);
+        var descriptor = new SecurityTokenDescriptor
+        {
+            Issuer = _jwt.Issuer,
+            Audience = _jwt.Audience,
+            Claims = claims.ToDictionary(static c => c.Key, static c => c.Value, StringComparer.Ordinal),
+            IssuedAt = DateTime.UtcNow,
+            NotBefore = DateTime.UtcNow.AddMinutes(-1),
+            Expires = DateTime.UtcNow.AddMinutes(10),
+            SigningCredentials = new SigningCredentials(_jwt.Key, SecurityAlgorithms.HmacSha256),
+        };
+        return new JsonWebTokenHandler().CreateToken(descriptor);
+    }
+
     public ValueTask PublishAsync(string topic, string tenant = "T1", string? user = null, string? correlationId = null) =>
         Bus.PublishAsync(new SseTestEvent(topic) { Metadata = new PushEventMetadata(tenant, user, DateTimeOffset.UtcNow, correlationId, topic) });
+
+    /// <summary>Publishes an event of type <paramref name="eventType"/> with no topic path.</summary>
+    public ValueTask PublishTopicLessAsync(string eventType, string tenant = "T1", string? user = null) =>
+        Bus.PublishAsync(new TypedTestEvent(eventType) { Metadata = new PushEventMetadata(tenant, user, DateTimeOffset.UtcNow, null) });
+
+    /// <summary>Publishes an event of type <paramref name="eventType"/> whose topic path is <paramref name="topicPath"/>, verbatim (empty or unparseable included).</summary>
+    public ValueTask PublishTypedAsync(string eventType, string topicPath, string tenant = "T1", string? user = null) =>
+        Bus.PublishAsync(new TypedTestEvent(eventType) { Metadata = new PushEventMetadata(tenant, user, DateTimeOffset.UtcNow, null, topicPath) });
 
     public async ValueTask DisposeAsync()
     {
@@ -408,6 +610,86 @@ public sealed class SseTestHost : IAsyncDisposable
         }
 
         await App.DisposeAsync();
+    }
+}
+
+/// <summary>The per-host signing key, issuer and audience of the tokens a <see cref="SseTestHost"/> accepts.</summary>
+internal sealed record JwtSettings(SymmetricSecurityKey Key, string Issuer, string Audience)
+{
+    /// <summary>A fresh 32-byte random key (HS256's minimum) and a unique issuer and audience, generated per host.</summary>
+    public static JwtSettings Create()
+    {
+        var unique = Guid.NewGuid().ToString("N");
+        return new JwtSettings(new SymmetricSecurityKey(RandomNumberGenerator.GetBytes(32)), "sse-test-issuer-" + unique, "sse-test-audience-" + unique);
+    }
+}
+
+/// <summary>What a <see cref="SseTestHost"/> needs to decide who a request is.</summary>
+internal sealed record HostIdentity(SseIdentityMode Mode, ConcurrentDictionary<string, ClaimsPrincipal> Principals, JwtSettings Jwt);
+
+/// <summary>
+/// One stream request: its response, a reader over its frames, and the token that aborts it, released together.
+/// </summary>
+public sealed class SseStreamClient : IAsyncDisposable
+{
+    private readonly CancellationTokenSource _abort;
+    private SseReader? _reader;
+
+    private SseStreamClient(CancellationTokenSource abort, HttpResponseMessage? response)
+    {
+        _abort = abort;
+        Response = response;
+    }
+
+    /// <summary>The response, or <see langword="null"/> when its headers did not arrive within the bound.</summary>
+    public HttpResponseMessage? Response { get; }
+
+    public HttpStatusCode? Status => Response?.StatusCode;
+
+    /// <summary>Opens a stream request through <paramref name="open"/>; <paramref name="bound"/> is the failure bound on its headers.</summary>
+    public static async Task<SseStreamClient> OpenAsync(Func<CancellationToken, Task<HttpResponseMessage>> open, TimeSpan bound)
+    {
+        ArgumentNullException.ThrowIfNull(open);
+        var abort = new CancellationTokenSource();
+        try
+        {
+            return new SseStreamClient(abort, await open(abort.Token).WaitAsync(bound));
+        }
+        catch (TimeoutException)
+        {
+            return new SseStreamClient(abort, null);
+        }
+    }
+
+    /// <summary>
+    /// Reads frames until one is named <paramref name="sentinel"/> (the failure bound is <paramref name="bound"/>), and
+    /// returns whether it arrived and the names of the event frames read before it in this call, heartbeats skipped.
+    /// </summary>
+    public async Task<(bool SawSentinel, IReadOnlyList<string> Names)> ReadUntilAsync(string sentinel, TimeSpan bound)
+    {
+        if (Response?.StatusCode != HttpStatusCode.OK)
+            return (false, []);
+
+        _reader ??= new SseReader(await Response.Content.ReadAsStreamAsync(_abort.Token));
+        var start = _reader.Frames.Count;
+        var saw = await _reader.ReadUntilAsync(f => string.Equals(f.EventName, sentinel, StringComparison.Ordinal), bound);
+        var names = _reader.Frames.Skip(start)
+            .Where(f => !f.IsHeartbeat && !string.Equals(f.EventName, sentinel, StringComparison.Ordinal))
+            .Select(static f => f.EventName ?? f.ToString())
+            .ToList();
+        return (saw, names);
+    }
+
+    /// <summary>The whole body of a refused (non-stream) answer.</summary>
+    public async Task<string> ReadBodyAsync(TimeSpan bound) =>
+        Response is null ? string.Empty : await Response.Content.ReadAsStringAsync(_abort.Token).WaitAsync(bound);
+
+    public async ValueTask DisposeAsync()
+    {
+        await _abort.CancelAsync();
+        _reader?.Dispose();
+        Response?.Dispose();
+        _abort.Dispose();
     }
 }
 
