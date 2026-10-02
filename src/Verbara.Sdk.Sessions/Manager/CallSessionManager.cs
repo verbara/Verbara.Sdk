@@ -508,15 +508,21 @@ public sealed partial class CallSessionManager : ICallSessionManager
 
                     // No cause exists, so the outcome follows from what the session already was: a
                     // call that was up really took place and is over; one that never connected
-                    // never became a call. Transferring is deliberately absent — it has no valid
-                    // transition to Completed — and falls to the Failed arm below.
-                    var reloadTarget = session.State is CallSessionState.Connected
-                        or CallSessionState.OnHold or CallSessionState.Conference
-                        ? CallSessionState.Completed
-                        : CallSessionState.Failed;
+                    // never became a call. A call is up when it connected, and also when the SDK
+                    // observed its answer while it was still in its initial state, with no dial or
+                    // queue reaching it (an IVR, an originate answered with no dial onward): that one
+                    // ends completed from its observed answer. Transferring is deliberately absent —
+                    // it has no valid transition to Completed — and falls to the Failed arm below.
+                    if (!session.TryCompleteAnsweredInInitialState())
+                    {
+                        var reloadTarget = session.State is CallSessionState.Connected
+                            or CallSessionState.OnHold or CallSessionState.Conference
+                            ? CallSessionState.Completed
+                            : CallSessionState.Failed;
 
-                    if (!session.TryTransition(reloadTarget))
-                        session.TryTransition(CallSessionState.Failed);
+                        if (!session.TryTransition(reloadTarget))
+                            session.TryTransition(CallSessionState.Failed);
+                    }
 
                     LogEndedByReload(session.SessionId, session.LinkedId, session.State);
                 }
@@ -526,10 +532,14 @@ public sealed partial class CallSessionManager : ICallSessionManager
                         ? CallSessionState.Completed
                         : CallSessionState.Failed;
 
-                    // Try the natural progression if needed
+                    // Try the natural progression if needed. A call still in its initial state ends
+                    // failed, unless the SDK observed its answer and it hung up normally: then the
+                    // dialplan answered it, no dial or queue reached it, and it is a completed call.
                     if (session.State == CallSessionState.Created)
                     {
-                        session.TryTransition(CallSessionState.Failed);
+                        if (targetState != CallSessionState.Completed
+                            || !session.TryCompleteAnsweredInInitialState())
+                            session.TryTransition(CallSessionState.Failed);
                     }
                     else if (!session.TryTransition(targetState))
                     {
@@ -572,11 +582,24 @@ public sealed partial class CallSessionManager : ICallSessionManager
                     break;
 
                 case ChannelState.Up:
+                    // A queued call waits on app_queue: a member's leg that answers, carrying the
+                    // caller's linked id, is not the queue connecting it. Only app_queue's own report
+                    // does that (OnQueueCallerConnected, OnAgentConnected).
+                    if (session.State == CallSessionState.Queued)
+                        break;
+
                     if (session.TryTransition(CallSessionState.Connected))
                     {
                         session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                             CallSessionEventType.Connected, channel.Name, null, null));
                         changed = true;
+                    }
+                    else
+                    {
+                        // The answer of a call still in its initial state (an IVR, an originate
+                        // answered with no dial onward) moves nothing: it is recorded, and read only
+                        // when the call ends. Nothing is published, counted or saved here.
+                        session.RecordAnswerInInitialState(DateTimeOffset.UtcNow);
                     }
                     break;
             }
@@ -628,6 +651,12 @@ public sealed partial class CallSessionManager : ICallSessionManager
         {
             session.BridgeId = bridge.BridgeUniqueid;
             _bridgeToSession[bridge.BridgeUniqueid] = session.SessionId;
+
+            // A queued call is connected only by app_queue's report of it (OnQueueCallerConnected,
+            // OnAgentConnected): a member leg can enter a bridge that app_queue never connects, as a
+            // pooled agent that never acknowledges does. The bridge is still recorded above.
+            if (session.State == CallSessionState.Queued)
+                return;
 
             if (session.TryTransition(CallSessionState.Connected))
             {
@@ -1129,7 +1158,11 @@ public sealed partial class CallSessionManager : ICallSessionManager
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.Connected, channel.Name, null, $"dial:{channel.DialStatus}"));
 
-            if (channel.DialStatus == "ANSWER")
+            // app_queue's own Dial() reports ANSWER on the caller before it connects the member, and
+            // it can still give up between the two. A queued call is connected only by app_queue's
+            // report of the connection (OnQueueCallerConnected, OnAgentConnected); the dial outcome
+            // stays in the trail above.
+            if (channel.DialStatus == "ANSWER" && session.State != CallSessionState.Queued)
                 session.TryTransition(CallSessionState.Connected);
         }
         _ = PersistAsync(session);
