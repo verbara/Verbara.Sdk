@@ -45,6 +45,8 @@ public sealed partial class WebhookDeliveryService : BackgroundService
         _signer = signer;
         _serializer = serializer;
         _httpFactory = httpFactory;
+        ArgumentNullException.ThrowIfNull(options);
+        WebhookDeliveryRule.ThrowIfUnusable(options.Value);
         _options = options.Value;
         _metrics = metrics;
         _logger = logger;
@@ -52,6 +54,9 @@ public sealed partial class WebhookDeliveryService : BackgroundService
     }
 
     /// <summary>Constructor used by DI.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A <see cref="WebhookDeliveryOptions"/> value webhook delivery cannot use; <c>ParamName</c> names the option.
+    /// </exception>
     public WebhookDeliveryService(
         IPushEventBus bus,
         IWebhookSubscriptionStore store,
@@ -90,7 +95,25 @@ public sealed partial class WebhookDeliveryService : BackgroundService
         }
     }
 
+    // Fired without awaiting from the bus observer: it must never fault, or the failure would sit in an
+    // unobserved task. Anything the dispatch throws (an unparsable TopicPath, a pattern that throws) is logged.
     private async Task DispatchEventAsync(PushEvent evt, CancellationToken ct)
+    {
+        try
+        {
+            await DispatchEventCoreAsync(evt, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // shutdown
+        }
+        catch (Exception ex)
+        {
+            LogDispatchFailed(_logger, ex, evt.EventType);
+        }
+    }
+
+    private async Task DispatchEventCoreAsync(PushEvent evt, CancellationToken ct)
     {
         IReadOnlyList<WebhookSubscription> subs;
         try
@@ -125,7 +148,26 @@ public sealed partial class WebhookDeliveryService : BackgroundService
         return TopicName.Parse(path);
     }
 
+    // Fired without awaiting from the dispatch: it must never fault. A failure outside the attempt loop's own
+    // handling (the serializer, the circuit lookup) ends the delivery as a dead letter with one Error entry.
     private async Task DeliverAsync(WebhookSubscription sub, PushEvent evt, CancellationToken ct)
+    {
+        try
+        {
+            await DeliverCoreAsync(sub, evt, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // shutdown
+        }
+        catch (Exception ex)
+        {
+            _metrics.DeadLetter.Add(1);
+            LogDeliveryFailed(_logger, ex, sub.Id, evt.EventType);
+        }
+    }
+
+    private async Task DeliverCoreAsync(WebhookSubscription sub, PushEvent evt, CancellationToken ct)
     {
         var body = _serializer.Serialize(evt);
         var maxRetries = sub.MaxRetries ?? _options.MaxRetries;
@@ -203,17 +245,26 @@ public sealed partial class WebhookDeliveryService : BackgroundService
             // attempt is 0-based here, but BackoffSchedule is 1-based.
             // Next delay: delay BEFORE attempt (attempt+2), using the "current" iteration's back-off.
             // Attempt 0 just failed → now sleep delay for attempt 1 (= baseDelay). Hence attempt+1 is correct.
-            var delay = Verbara.Sdk.Resilience.BackoffSchedule.Compute(
-                attempt + 1,
-                _options.InitialDelay,
-                multiplier: 2.0,
-                _options.MaxDelay);
+            // Computing or waiting the delay throws only on options the rule rejects at construction, i.e. after
+            // they were changed on the shared options object. That delivery ends here as a dead letter with its own
+            // Error entry; it does not fall through to LogRetriesExhausted, which would claim retries that never ran.
             try
             {
+                var delay = Verbara.Sdk.Resilience.BackoffSchedule.Compute(
+                    attempt + 1,
+                    _options.InitialDelay,
+                    multiplier: 2.0,
+                    _options.MaxDelay);
                 await Task.Delay(delay, ct).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _metrics.DeadLetter.Add(1);
+                LogBackoffFailed(_logger, ex, sub.Id, evt.EventType);
                 return;
             }
         }
@@ -242,6 +293,15 @@ public sealed partial class WebhookDeliveryService : BackgroundService
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Webhook circuit opened for {TargetUrl} after {Threshold} consecutive failures")]
     private static partial void LogCircuitOpened(ILogger logger, string targetUrl, int threshold);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Webhook delivery {SubscriptionId} dead-lettered for event {EventType}: its retry delay could not be computed or waited")]
+    private static partial void LogBackoffFailed(ILogger logger, Exception ex, string subscriptionId, string eventType);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "Webhook dispatch failed for event {EventType}")]
+    private static partial void LogDispatchFailed(ILogger logger, Exception ex, string eventType);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Error, Message = "Webhook delivery {SubscriptionId} dead-lettered for event {EventType}: it failed outside its attempts")]
+    private static partial void LogDeliveryFailed(ILogger logger, Exception ex, string subscriptionId, string eventType);
 
     private void RecordCircuitFailure(CircuitBreakerState? circuit, WebhookSubscription sub)
     {
