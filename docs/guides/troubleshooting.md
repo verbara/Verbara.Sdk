@@ -155,6 +155,16 @@ Measured on 2026-09-28 against Asterisk 20.20.1, 22.9.0 and 23.4.1, with raw AMI
 
 **A channel that ended during an outage stays in Live.** With an AMI user that may not run `Status`, no load can reconcile the channel table: a call that ended while the connection was down stays held until its own `Hangup` is seen, which never comes for a hangup lost in the outage. The only sign is the `[LIVE] Status refused` Warning on every load. Grant the user `Status` as above.
 
+**A call that ended during a reload came back, or a call was opened twice** (up to 2.6.1). A load reads the channels with `Status` while events keep arriving. When a channel hung up while that answer was being read, the load took the older snapshot for the newer news and put the channel back: Live raised `ChannelAdded` for it again, and in `Verbara.Sdk.Sessions` it came back as a second copy of a leg in its call, or, for a channel the SDK had never held, as a ghost call of its own. Its hangup had already been seen, so a call with such a leg still up never ended. A call that started during a reload could also be opened twice for one `linkedid`. Upgrade:
+
+- A hangup seen while a load reads `Status`, and a channel another load removed meanwhile, are newer than the snapshot: the snapshot no longer brings that channel back.
+- A channel is admitted once, whether the snapshot or its `Newchannel` comes first. A second `Newchannel` for a channel Live already holds raises nothing.
+- A `linkedid` holds one call. A leg that arrives after its call ended opens a new call, which `GetByLinkedId` then returns; the ended call keeps its participants and its ending.
+
+**A call ended by a reload carries `cause` = `reload` although it was hung up.** When events back up — handlers slower than the rate Asterisk sends them — a reload can end a call before its `Hangup` is processed, because the answer to `Status` does not wait behind the events already queued. The call ends on time, with the reload marker (`cause` = `reload` in its metadata) and without the hangup's cause; when the channel's answer was still queued too, the call's state does not reflect it either. Keep event handlers short so the event queue does not fall behind.
+
+**How long a reload remembers what it saw.** While a load reads `Status`, Live records every hangup it sees so the snapshot cannot bring the channel back; the record is dropped when the read ends. Over an `AmiConnection` the read lasts at most `DefaultEventTimeout` (5 s by default). With `DefaultEventTimeout` set to `TimeSpan.Zero`, or with an `IAmiConnection` of your own, the read, and what it keeps, lasts as long as that connection lets a `Status` go unanswered.
+
 ### Detecting an AMI loss
 
 **Symptoms:** after a PBX crash or a network cut, `VerbaraServer`'s managers show calls, queue callers or agents that Asterisk no longer has, until the connection is back.
