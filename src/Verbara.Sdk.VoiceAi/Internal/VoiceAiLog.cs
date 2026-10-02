@@ -22,4 +22,10 @@ internal static partial class VoiceAiLog
 
     [LoggerMessage(LogLevel.Error, "VoiceAi session error [{ChannelId}]")]
     internal static partial void SessionError(ILogger logger, Guid channelId, Exception exception);
+
+    [LoggerMessage(LogLevel.Information, "VoiceAi session [{ChannelId}] ended by the broker while the line was still live")]
+    internal static partial void SessionEndedByBroker(ILogger logger, Guid channelId);
+
+    [LoggerMessage(LogLevel.Debug, "VoiceAi session [{ChannelId}]: the broker's ending did not complete")]
+    internal static partial void SessionEndFailed(ILogger logger, Guid channelId, Exception exception);
 }

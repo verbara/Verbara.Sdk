@@ -20,6 +20,14 @@ public sealed class AudioSocketSession : IAsyncDisposable
     private readonly Channel<ReadOnlyMemory<byte>> _audioChannel;
     private readonly CancellationTokenSource _cts;
     private readonly ILogger _logger;
+
+    /// <summary>
+    /// Serialises every frame written to <c>_writer</c>, which is not safe for concurrent writes: a hangup
+    /// issued while an audio write is in flight waits for that write, so the far end never reads two
+    /// frames interleaved. It is never disposed, because a writer may still be waiting on it when the
+    /// session tears down; it holds no handle unless one is asked for, and none is.
+    /// </summary>
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
     private int _disposed; // 0 = live, 1 = torn down — by any cause
     private int _consumerDisposed; // 1 once the owner called DisposeAsync(); see ADR-0053
     private int _hangupFired; // 0 = not fired, 1 = fired
@@ -133,42 +141,82 @@ public sealed class AudioSocketSession : IAsyncDisposable
     /// Use <see cref="AudioSocketFrameType.Audio"/> (8 kHz) for standard Asterisk configurations,
     /// or a high-rate type (e.g., <see cref="AudioSocketFrameType.AudioSlin16"/>) for Asterisk 23+.
     /// </summary>
+    /// <remarks>
+    /// Frames are written one at a time: a write waits for any other write or hangup in flight on the
+    /// same session, so every frame reaches the far end whole.
+    /// </remarks>
     public async ValueTask WriteAudioAsync(ReadOnlyMemory<byte> pcmData, AudioSocketFrameType frameType, CancellationToken ct = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed == 1, this);
-        AudioSocketFrameCodec.WriteFrame(_writer, frameType, pcmData.Span);
-        await _writer.FlushAsync(ct).ConfigureAwait(false);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
+        await _writeLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            // Re-read under the lock: a hangup that held it may have ended the session meanwhile.
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
+            AudioSocketFrameCodec.WriteFrame(_writer, frameType, pcmData.Span);
+            await _writer.FlushAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+
         AudioSocketMetrics.FramesSent.Add(1);
         AudioSocketMetrics.BytesSent.Add(pcmData.Length);
     }
 
-    /// <summary>Signal hangup to Asterisk.</summary>
-    public async ValueTask HangupAsync(CancellationToken ct = default)
-    {
-        ObjectDisposedException.ThrowIf(_disposed == 1, this);
-        AudioSocketFrameCodec.WriteFrame(_writer, AudioSocketFrameType.Hangup, []);
-        await _writer.FlushAsync(ct).ConfigureAwait(false);
-        await TerminateAsync().ConfigureAwait(false);
-    }
+    /// <summary>
+    /// Signal hangup to Asterisk: writes one hangup frame, then ends the session. On Asterisk 20 and
+    /// later, app_audiosocket reads the hangup frame as the end of the AudioSocket turn and the call
+    /// continues in the dialplan, where a bare close with the caller's audio still unread resets the
+    /// connection and fails the call. On Asterisk 18 any end from the server fails the application,
+    /// frame or not.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Idempotent. On a session that has already ended — the far end hung up or closed, the session was
+    /// hung up before, or its owner disposed it — the call completes and writes nothing. When the
+    /// transport fails under the frame (the far end is already gone, or a teardown raced this call) the
+    /// frame is skipped and the session still ends.
+    /// </para>
+    /// <para>
+    /// A hangup issued while an audio write is in flight waits for that write to finish, so the far end
+    /// reads the whole audio frame and then the whole hangup frame, never parts of both. Cancelling
+    /// <paramref name="ct"/> while it waits, or while the frame is flushed, abandons the hangup with an
+    /// <see cref="OperationCanceledException"/>.
+    /// </para>
+    /// </remarks>
+    public ValueTask HangupAsync(CancellationToken ct = default) => EndCoreAsync(ct);
 
     /// <summary>
-    /// Ends the connection from the server's side: a hangup frame if the transport still takes one, then
-    /// the teardown every ending runs. On Asterisk 20 and later, app_audiosocket reads the hangup frame
-    /// as the end of the AudioSocket turn and the call continues in the dialplan, where a bare close with
-    /// the caller's audio still unread resets the connection and fails the call. On Asterisk 18 any end
-    /// from the server fails the application, frame or not.
+    /// Ends the connection from the server's side, exactly as <see cref="HangupAsync"/> does: a hangup
+    /// frame if the session is still live, then the teardown every ending runs.
     /// </summary>
-    internal async ValueTask EndFromServerAsync()
+    internal ValueTask EndFromServerAsync() => EndCoreAsync(CancellationToken.None);
+
+    private async ValueTask EndCoreAsync(CancellationToken ct)
     {
-        if (Volatile.Read(ref _disposed) == 0)
+        if (Volatile.Read(ref _disposed) != 0)
+            return; // already ended, by whichever side: nothing to tell the far end, nothing to release
+
+        await _writeLock.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            try
+            // Re-read under the lock: the session may have ended while this call waited for a write.
+            if (Volatile.Read(ref _disposed) == 0)
             {
-                AudioSocketFrameCodec.WriteFrame(_writer, AudioSocketFrameType.Hangup, []);
-                await _writer.FlushAsync().ConfigureAwait(false);
+                try
+                {
+                    AudioSocketFrameCodec.WriteFrame(_writer, AudioSocketFrameType.Hangup, []);
+                    await _writer.FlushAsync(ct).ConfigureAwait(false);
+                }
+                catch (IOException) { /* the far end is already gone: nothing to tell it */ }
+                catch (ObjectDisposedException) { /* a teardown raced this one: the transport is closed */ }
             }
-            catch (IOException) { /* the far end is already gone: nothing to tell it */ }
-            catch (ObjectDisposedException) { /* a teardown raced this one: the transport is closed */ }
+        }
+        finally
+        {
+            _writeLock.Release();
         }
 
         await TerminateAsync().ConfigureAwait(false);

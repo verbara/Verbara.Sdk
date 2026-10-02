@@ -121,6 +121,54 @@ public sealed class VoiceAiSessionBrokerEndingTests
         }
     }
 
+    [Fact]
+    public async Task HandleSessionAsync_ShouldBeLoggedOnceAtInformation_WhenTheBrokerEndsASessionThatWasStillLive()
+    {
+        var handler = new PlayingHandler(HandlerEnding.Return);
+        await using var rig = await EndingRig.StartAsync(handler);
+
+        using var peer = await RawPeer.ConnectAsync(rig.Server.BoundPort);
+        var read = await peer.ReadToEndAsync(SignalTimeout);
+        await rig.StopBrokerAsync();
+
+        using (new AssertionScope())
+        {
+            read.ReachedEnd.Should().BeTrue($"the broker ended the line (read so far: {read.Describe()})");
+            rig.Logger.Entries.Count(e => e.Level == LogLevel.Information).Should().Be(
+                1, "the broker says once, at Information, that it ended a session its handler had left live");
+            rig.Logger.Entries.Where(e => e.Level >= LogLevel.Warning).Should().BeEmpty(
+                "ending a line the handler is done with is not a fault");
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task HandleSessionAsync_ShouldLogNothingAtInformation_WhenTheSessionHadAlreadyEnded(bool handlerHungUp)
+    {
+        ISessionHandler handler = handlerHungUp
+            ? new PlayingHandler(HandlerEnding.HangUpThenReturn)
+            : new WaitForCallerHandler();
+        await using var rig = await EndingRig.StartAsync(handler);
+
+        using var peer = await RawPeer.ConnectAsync(rig.Server.BoundPort);
+        if (handler is WaitForCallerHandler waiting)
+        {
+            await waiting.Watching.WaitAsync(SignalTimeout);
+            await peer.SendHangupAsync();
+        }
+
+        var read = await peer.ReadToEndAsync(SignalTimeout);
+        await rig.StopBrokerAsync();
+
+        using (new AssertionScope())
+        {
+            read.ReachedEnd.Should().BeTrue($"the session ended (read so far: {read.Describe()})");
+            rig.Logger.Entries.Where(e => e.Level >= LogLevel.Information).Should().BeEmpty(
+                "the broker logs nothing at Information or above for a session that had already ended");
+        }
+    }
+
     private static void AssertOneHangupThenClose(PeerRead read, int expectedAudioFrames, string because)
     {
         using var scope = new AssertionScope();

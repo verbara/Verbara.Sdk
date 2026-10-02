@@ -97,14 +97,22 @@ public sealed class VoiceAiSessionBrokerTests
         await using var rig = await BrokerRig.StartServerAsync();
         await rig.Broker.StartAsync(CancellationToken.None);
         var call = await rig.HandOneSessionOnAsync();
+        var waiting = rig.Broker.WaitingForHandlers;
         using var grace = new CancellationTokenSource();
 
-        await rig.Broker.StopAsync(grace.Token);
+        // Started and not awaited: a graceful stop waits for the handler, which parks until released.
+        var stop = rig.Broker.StopAsync(grace.Token);
+        await waiting.WaitAsync(SignalTimeout);
 
         call.Token.IsCancellationRequested.Should().BeFalse(
-            "a stop within its budget does not cut a session short: the server's own stop, which a " +
-            "host runs after the broker's, ends the sessions a graceful shutdown ends");
+            "a stop within its budget does not cut a session short: it ends the session and waits for the " +
+            "handler, whose token stays uncancelled");
         call.Ended.IsCompleted.Should().BeFalse("the handler is still running its session");
+
+        rig.Handler.Release();
+        await stop.WaitAsync(SignalTimeout);
+        (await call.Ended.WaitAsync(SignalTimeout)).Should().Be(
+            ParkedCallEnding.Released, "the handler returned on its own, never through its token");
     }
 
     [Fact]
@@ -124,21 +132,24 @@ public sealed class VoiceAiSessionBrokerTests
     }
 
     [Fact]
-    public async Task StopAsync_ShouldCancelTheHandlerToken_WhenTheStopTokenIsCancelledAfterTheStopReturned()
+    public async Task StopAsync_ShouldCancelTheHandlerTokenAndReturn_WhenTheStopTokenIsCancelledWhileTheStopWaits()
     {
         await using var rig = await BrokerRig.StartServerAsync();
         await rig.Broker.StartAsync(CancellationToken.None);
         var call = await rig.HandOneSessionOnAsync();
+        var waiting = rig.Broker.WaitingForHandlers;
         using var grace = new CancellationTokenSource();
-        await rig.Broker.StopAsync(grace.Token);
+        var stop = rig.Broker.StopAsync(grace.Token);
+        await waiting.WaitAsync(SignalTimeout);
         call.Token.IsCancellationRequested.Should().BeFalse(
-            "the stop returned within its budget, so the handler still runs");
+            "the stop is still within its budget, so the handler still runs");
 
-        // The host's shutdown budget runs out after the broker's stop has returned.
+        // The host's shutdown budget runs out while the broker's stop waits for the handler.
         await grace.CancelAsync();
 
+        await stop.WaitAsync(SignalTimeout);
         call.Token.IsCancellationRequested.Should().BeTrue(
-            "the host withdrawing its grace after the stop returned still ends the running handlers");
+            "the host withdrawing its grace while the stop waits ends the running handlers");
         (await call.Ended.WaitAsync(SignalTimeout)).Should().Be(
             ParkedCallEnding.Cancelled, "the handler's token is what ended it");
     }
@@ -177,7 +188,7 @@ public sealed class VoiceAiSessionBrokerTests
     }
 
     [Fact]
-    public async Task ServiceProviderDisposeAsync_ShouldCancelAHandlerThatOutlivedAGracefulStop_WhenRegisteredByAddVoiceAiPipeline()
+    public async Task ServiceProviderDisposeAsync_ShouldCancelARunningHandlerWithoutWaiting_WhenRegisteredByAddVoiceAiPipeline()
     {
         var handler = new ParkingSessionHandler();
         var services = new ServiceCollection();
@@ -201,21 +212,19 @@ public sealed class VoiceAiSessionBrokerTests
             await using var peer = await AudioSocketPeer.ConnectAsync(server, Guid.NewGuid());
             var call = await handler.FirstCall.WaitAsync(SignalTimeout);
 
-            // A graceful stop in the host's order: the broker, then the server, whose stop ends the
-            // session. The parked handler ignores its session ending, like a handler stuck in a
-            // provider call, so only its token can end it.
-            foreach (var service in Enumerable.Reverse(hosted))
-                await service.StopAsync(CancellationToken.None);
-            call.Token.IsCancellationRequested.Should().BeFalse("a graceful stop does not cancel the handler");
+            // The container is released with the handler still running and no stop before it: a
+            // graceful stop would wait for this handler, which ignores its session ending like a handler
+            // stuck in a provider call, so only its token can end it.
+            call.Token.IsCancellationRequested.Should().BeFalse("nothing has cancelled the handler yet");
 
-            var dispose = async () => await provider.DisposeAsync();
+            var dispose = async () => await provider.DisposeAsync().AsTask().WaitAsync(SignalTimeout);
 
             await dispose.Should().NotThrowAsync(
-                "the container disposes the broker once per registration, and every disposal after " +
-                "the first is ignored");
+                "the container disposes the broker once per registration, every disposal after the " +
+                "first is ignored, and the disposal does not wait for the handler");
             call.Token.IsCancellationRequested.Should().BeTrue(
-                "teardown cancels the broker's token before releasing it, so a handler that outlived " +
-                "the stop is not left under a token nothing can cancel");
+                "teardown cancels the broker's token before releasing it, so a handler still running is " +
+                "not left under a token nothing can cancel");
             (await call.Ended.WaitAsync(SignalTimeout)).Should().Be(
                 ParkedCallEnding.Cancelled, "the handler's token is what ended it");
         }

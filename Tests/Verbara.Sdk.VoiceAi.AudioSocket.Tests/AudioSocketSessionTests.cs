@@ -53,7 +53,7 @@ public sealed class AudioSocketSessionTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task HangupAsync_ShouldThrow_WhenAlreadyDisposed()
+    public async Task HangupAsync_ShouldCompleteAsANoOp_WhenAlreadyDisposed()
     {
         var (session, client) = await CreateSessionAsync();
 
@@ -61,7 +61,9 @@ public sealed class AudioSocketSessionTests : IAsyncLifetime
 
         var act = async () => await session.HangupAsync();
 
-        await act.Should().ThrowAsync<ObjectDisposedException>();
+        // A hangup on a session that already ended has nothing left to do. What reaches the far end
+        // is asserted in AudioSocketSessionHangupTests.
+        await act.Should().NotThrowAsync();
 
         await client.DisposeAsync();
     }
