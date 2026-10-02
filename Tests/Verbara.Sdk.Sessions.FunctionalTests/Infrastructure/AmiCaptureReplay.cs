@@ -157,13 +157,11 @@ internal static class AmiCaptureReplay
         using var scoring = manager.Events.Subscribe(evt =>
         {
             if (evt is CallStartedEvent started
-                && QueueShapes.Of(started.CallerIdNum, FirstChannel(manager.GetById(started.SessionId))) is { } startedShape)
+                && QueueShapes.Of(started.CallerIdNum, FirstChannel(manager.GetById(started.SessionId))) is { } startedShape
+                && shapeBySessionId.TryAdd(started.SessionId, startedShape)
+                && manager.GetById(started.SessionId) is { } startedSession)
             {
-                if (shapeBySessionId.TryAdd(started.SessionId, startedShape)
-                    && manager.GetById(started.SessionId) is { } startedSession)
-                {
-                    scores[startedShape.Id].RecordSession(startedSession);
-                }
+                scores[startedShape.Id].RecordSession(startedSession);
             }
 
             var score = shapeBySessionId.TryGetValue(evt.SessionId, out var shape) ? scores[shape.Id] : null;

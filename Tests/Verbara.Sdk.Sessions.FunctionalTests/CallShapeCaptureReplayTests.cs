@@ -101,9 +101,8 @@ public sealed class CallShapeCaptureReplayTests
         using var scope = new AssertionScope();
         scope.AddReportable("replay", replay.Describe());
 
-        foreach (var scenario in AnsweredWithNoDialOrQueue)
+        foreach (var call in AnsweredWithNoDialOrQueue.Select(replay.Call))
         {
-            var call = replay.Call(scenario);
             call.Session.State.Should().Be(CallSessionState.Completed,
                 "{0} was answered and hung up at normal clearing, which is a completed call", call.Scenario);
             call.Session.HangupCause.Should().Be(HangupCause.NormalClearing, "{0} hung up normally", call.Scenario);
@@ -136,9 +135,8 @@ public sealed class CallShapeCaptureReplayTests
         s5.Session.State.Should().Be(CallSessionState.Failed, "S5 is an originate the far end never answers");
         s5.Session.HangupCause.Should().Be(HangupCause.NoAnswer, "S5's originate gives up unanswered");
 
-        foreach (var taken in new[] { "S6", "S10" })
+        foreach (var call in TakenByAMember.Select(replay.Call))
         {
-            var call = replay.Call(taken);
             call.Session.State.Should().Be(CallSessionState.Completed, "a member took {0}", call.Scenario);
             call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
             call.Trail.Should().Contain(CallSessionEventType.QueueJoined, "{0} joined a queue", call.Scenario);
@@ -146,16 +144,14 @@ public sealed class CallShapeCaptureReplayTests
                 CallSessionEventType.QueueJoined, "{0} is queued before anything connects it", call.Scenario);
         }
 
-        foreach (var abandoned in new[] { "S7", "S11" })
+        foreach (var call in AbandonedInTheQueue.Select(replay.Call))
         {
-            var call = replay.Call(abandoned);
             call.Session.State.Should().Be(CallSessionState.Failed, "no member took {0}", call.Scenario);
             call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
         }
 
-        foreach (var dialed in new[] { "S9", "S12" })
+        foreach (var call in DialedToAnAgent.Select(replay.Call))
         {
-            var call = replay.Call(dialed);
             call.Session.State.Should().Be(CallSessionState.Completed, "{0} is dialed to an agent who answers", call.Scenario);
             call.Session.DialingAt.Should().NotBeNull("{0}'s dial names its calling channel", call.Scenario);
             call.Trail.TakeWhile(t => t != CallSessionEventType.Connected).Should().Contain(
@@ -188,9 +184,8 @@ public sealed class CallShapeCaptureReplayTests
         using var scope = new AssertionScope();
         scope.AddReportable("replay", replay.Describe());
 
-        foreach (var taken in new[] { "S6", "S10" })
+        foreach (var call in TakenByAMember.Select(replay.Call))
         {
-            var call = replay.Call(taken);
             call.Session.State.Should().Be(CallSessionState.Completed, "a member took {0}", call.Scenario);
             call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
             call.Session.ConnectedAt.Should().NotBeNull("{0} connected", call.Scenario)
@@ -199,9 +194,8 @@ public sealed class CallShapeCaptureReplayTests
             call.DomainEvents.OfType<CallConnectedEvent>().Should().ContainSingle("{0} is announced connected once", call.Scenario);
         }
 
-        foreach (var abandoned in new[] { "S7", "S11" })
+        foreach (var call in AbandonedInTheQueue.Select(replay.Call))
         {
-            var call = replay.Call(abandoned);
             call.Session.State.Should().Be(CallSessionState.Failed, "no member took {0}", call.Scenario);
             call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
             call.Session.ConnectedAt.Should().BeNull("{0} never connected", call.Scenario);
@@ -230,6 +224,15 @@ public sealed class CallShapeCaptureReplayTests
 
     /// <summary>The <see cref="CallConnectedEvent"/>s each capture published on <c>9866b2ef</c>: S6's and S10's.</summary>
     private const int ConnectedEventsPerCaptureToday = 2;
+
+    /// <summary>The queued scenarios a member takes.</summary>
+    private static readonly string[] TakenByAMember = ["S6", "S10"];
+
+    /// <summary>The queued scenarios no member takes.</summary>
+    private static readonly string[] AbandonedInTheQueue = ["S7", "S11"];
+
+    /// <summary>The scenarios dialed to an agent who answers.</summary>
+    private static readonly string[] DialedToAnAgent = ["S9", "S12"];
 
     /// <summary>The scenarios the dialplan answers and no dial or queue reaches.</summary>
     private static readonly string[] AnsweredWithNoDialOrQueue = ["S1", "S2", "S3", "S4", "S8"];

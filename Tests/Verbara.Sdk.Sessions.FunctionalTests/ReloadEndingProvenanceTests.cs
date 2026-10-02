@@ -317,7 +317,7 @@ public sealed class ReloadEndingProvenanceTests : IAsyncLifetime
         {
             session.State,
             Marker = session.Metadata.GetValueOrDefault("cause"),
-            session.HangupCause,
+            HangupCauseIsSet = session.HangupCause.HasValue,
             ConnectedAtIsTheObservedAnswer = session.ConnectedAt >= justBeforeTheAnswer && session.ConnectedAt <= justAfterTheAnswer,
             Endings = _sessionEvents.OfType<CallEndedEvent>().Count(e => e.SessionId == session.SessionId),
             EndingCarriesATalkTime = ended.TalkTime.HasValue,
@@ -326,7 +326,7 @@ public sealed class ReloadEndingProvenanceTests : IAsyncLifetime
             {
                 State = CallSessionState.Completed,
                 Marker = "reload",
-                HangupCause = (HangupCause?)null,
+                HangupCauseIsSet = false,
                 ConnectedAtIsTheObservedAnswer = true,
                 Endings = 1,
                 EndingCarriesATalkTime = true,

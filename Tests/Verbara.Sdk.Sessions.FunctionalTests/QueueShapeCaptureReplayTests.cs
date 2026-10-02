@@ -88,9 +88,8 @@ public sealed class QueueShapeCaptureReplayTests
         using var scope = new AssertionScope();
         scope.AddReportable("calls", DescribeCalls(replay, NobodyTook));
 
-        foreach (var id in NobodyTook)
+        foreach (var shape in NobodyTook.Select(replay.Shape))
         {
-            var shape = replay.Shape(id);
             shape.AsteriskConnects.Should().Be(0, "premise: app_queue connected {0}'s caller to no member", shape.Shape.Name);
             var call = shape.Sessions.Should().ContainSingle("{0} is one call", shape.Shape.Name).Subject;
 
