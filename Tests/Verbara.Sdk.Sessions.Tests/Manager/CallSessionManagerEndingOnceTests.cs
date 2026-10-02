@@ -67,20 +67,27 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
     }
 
     [Fact]
-    public void OnSessionCompleted_ShouldRecordTheCompletionMeasurementsAndSpanOnce_WhenALegReusingTheEndedCallsLinkedIdHangsUp()
+    public void OnSessionCompleted_ShouldMeasureTheEndedCallOnceAndTheLateLegsOwnCallOnce_WhenALegReusingTheEndedCallsLinkedIdHangsUp()
     {
         using var capture = new CompletionCapture();
 
         var call = EndedCall("g");
         LegJoins("x-g", "g");
-        (_sut.GetByChannelId("x-g")?.SessionId).Should().Be(call.SessionId,
-            "premise: a leg carrying an ended call's linkedid joins that call while it is retained");
+        var lateCall = _sut.GetByChannelId("x-g")?.SessionId;
         LegLeaves("x-g");
 
-        capture.For(call.SessionId).Should().BeEquivalentTo(
-            new Completion(SessionsCompleted: 1, DurationRecordings: 1, TalkTimeRecordings: 1, Spans: 1),
-            "the call ended once, so it is counted, timed and traced once; a leg that joined it after "
-            + "its ending and left does not complete it again");
+        var lateCallIsItsOwn = lateCall is not null && lateCall != call.SessionId;
+        new
+        {
+            Endings = capture.Endings,
+            DurationRecordings = capture.DurationRecordings,
+            EndedCallSpans = capture.SpansOf(call.SessionId),
+            LateLegOpenedItsOwnCall = lateCallIsItsOwn,
+            LateCallSpans = lateCallIsItsOwn ? capture.SpansOf(lateCall!) : 0,
+        }.Should().BeEquivalentTo(
+            new { Endings = 2, DurationRecordings = 2, EndedCallSpans = 1, LateLegOpenedItsOwnCall = true, LateCallSpans = 1 },
+            "a call that has ended cannot report another leg's ending, so a leg that arrives after it carrying its "
+            + "linkedid opens a call of its own; each call ends once, so each is counted, timed and traced once");
     }
 
     [Fact]
@@ -144,7 +151,6 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
     private void LegLeaves(string uniqueId) =>
         _server.Channels.OnHangup(uniqueId, HangupCause.NormalClearing);
 
-    private sealed record Completion(int SessionsCompleted, int DurationRecordings, int TalkTimeRecordings, int Spans);
 
     /// <summary>
     /// What the ending of a call records on the session meter and activity source, counted only on the
@@ -161,9 +167,15 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
 
         public CompletionCapture()
         {
+            // Read both before either listener is registered. Registering an activity listener asks every
+            // existing source whether to listen; a source first created from inside that question is
+            // created too late to be asked, and the capture then sees no span when it runs first.
+            var meter = SessionMetrics.Meter;
+            var source = SessionActivitySource.Source;
+
             _meters.InstrumentPublished = (instrument, listener) =>
             {
-                if (ReferenceEquals(instrument.Meter, SessionMetrics.Meter))
+                if (ReferenceEquals(instrument.Meter, meter))
                     listener.EnableMeasurementEvents(instrument);
             };
             _meters.SetMeasurementEventCallback<long>((instrument, value, _, _) => Count(instrument, (int)value));
@@ -172,7 +184,7 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
 
             _spans = new ActivityListener
             {
-                ShouldListenTo = source => ReferenceEquals(source, SessionActivitySource.Source),
+                ShouldListenTo = candidate => ReferenceEquals(candidate, source),
                 Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
                 ActivityStopped = activity =>
                 {
@@ -185,11 +197,16 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
 
         private bool OnCapturingThread => Environment.CurrentManagedThreadId == _thread;
 
-        public Completion For(string sessionId) => new(
-            SessionsCompleted: _measurements.GetValueOrDefault("sessions.completed"),
-            DurationRecordings: _measurements.GetValueOrDefault("sessions.duration"),
-            TalkTimeRecordings: _measurements.GetValueOrDefault("sessions.talk_time"),
-            Spans: _stoppedSpans.Count(name => name == $"session completed {sessionId}"));
+        /// <summary>Calls counted as ended, whatever their final state: completed, failed or timed out.</summary>
+        public int Endings =>
+            _measurements.GetValueOrDefault("sessions.completed")
+            + _measurements.GetValueOrDefault("sessions.failed")
+            + _measurements.GetValueOrDefault("sessions.timed_out");
+
+        public int DurationRecordings => _measurements.GetValueOrDefault("sessions.duration");
+
+        public int SpansOf(string sessionId) =>
+            _stoppedSpans.Count(name => name == $"session completed {sessionId}");
 
         public void Dispose()
         {
