@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: an SSE event whose topic path does not parse is logged once (#374)
+
+An event whose non-empty `TopicPath` is not a valid topic (for example `a..b`) was skipped by every stream without a
+trace. It is still delivered to no stream, and never falls back to its event type; the endpoint now logs one Warning
+per such event (EventId 4, category `Verbara.Sdk.Push.AspNetCore.SsePushEndpoints`), however many streams evaluated
+it, with the event type and topic path percent-encoded.
+
+### Fixed: the SSE stream hands its authorizer and delivery filter the subscriber's user, roles and permissions (#374)
+
+`SubscriberContext.Roles` and `Permissions` were always empty, so an authorizer that decides by role or permission
+denied every grant; and under `JwtBearer`'s default `MapInboundClaims = true`, which renames `sub`, the user was null,
+so no user-targeted event and no `{self}` pattern was ever delivered. The stream now reads all four from the
+authenticated principal (next entry). An authorizer written in the negative form ("deny when the subscriber has
+role X") starts denying.
+
+**Migration guide:** [`docs/guides/push-stream-and-webhook-options-migration.md`](docs/guides/push-stream-and-webhook-options-migration.md)
+
+### Added: `SsePushStreamOptions` claim-type lists for the SSE subscriber (#374)
+
+`TenantIdClaimTypes` (default `tenantId`), `UserIdClaimTypes` (`sub`, `ClaimTypes.NameIdentifier`), `RoleClaimTypes`
+(`ClaimTypes.Role`, `role`, `roles`, plus each identity's own `RoleClaimType`) and `PermissionClaimTypes`
+(`permission`). Tenant and user take the first listed type with a value; roles and permissions are unions; claim types
+compare ignoring case, values ordinally and whole. `AddVerbaraPushAspNetCore` validates them at start (tenant and user
+lists non-empty, no blank entry). `tid` is deliberately not a default. Configuration binding appends to the defaults;
+assign the list in code to replace them.
+
 ### Changed — BREAKING: a voice session ends when its handler does, and the broker's stop ends live sessions and waits for them (#373)
 
 When `HandleSessionAsync` returned, threw, or the Realtime vendor closed, `VoiceAiSessionBroker` left the line open:
@@ -68,6 +94,9 @@ held throughout. The endpoint now decides before it writes or subscribes:
 - only the named topics are authorized; a request with no topic asks for `**`;
 - every topic denied → `403 Subscription denied.`, with the authorizer's reason logged once at Warning and never sent;
 - a partial denial is served, with `X-Push-Denied-Topics` listing the denied topics, percent-encoded.
+- an event published without a topic path no longer reaches every admitted stream of its tenant: it is matched by its
+  event type against the allowed topics, and reaches only streams allowed `**` when its type is not a valid topic; an
+  event whose topic path is not a valid topic is delivered to no stream (#374).
 
 This withdraws the contract the package README stated in 2.6.1 (an authorizer that scopes subscribers "must therefore
 also decide `**`").
