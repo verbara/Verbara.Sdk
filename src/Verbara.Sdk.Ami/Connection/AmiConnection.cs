@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -349,12 +350,99 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <inheritdoc path="/remarks/node()" />
+    /// <para>
+    /// A connect made while the connection is still ending a session it lost on its own — a loss with
+    /// <c>AutoReconnect</c> off, or a reconnect loop that gave up — first waits for that ending to release the lost
+    /// session: its socket, its reader and heartbeat, and the delivery of every event it had buffered. It then connects
+    /// as it does from <see cref="AmiConnectionState.Disconnected"/>, whether the caller acts on
+    /// <see cref="AmiConnectionState.Disconnecting"/>, on <see cref="AmiConnectionState.Disconnected"/>, on
+    /// <see cref="Lost"/> or by polling <see cref="State"/>. The wait writes no state and acquires nothing, and it never
+    /// resumes on the caller's <see cref="SynchronizationContext"/>.
+    /// </para>
+    /// <para>
+    /// The wait is bounded by the first of <see cref="AmiConnectionOptions.ConnectionTimeout"/>, the caller's
+    /// <paramref name="cancellationToken"/> and the caller's own ending. When <c>ConnectionTimeout</c> runs out first, the
+    /// call throws <see cref="OperationCanceledException"/> ("The connection was ended during the connect.") and the lost
+    /// ending finishes on its own; a later call waits again. The caller's token ends it with an
+    /// <see cref="OperationCanceledException"/> for that token. A <see cref="DisconnectAsync"/> or
+    /// <see cref="DisposeAsync"/> ends it at once with <see cref="ObjectDisposedException"/>. A connect can therefore take
+    /// up to twice <c>ConnectionTimeout</c>: the wait, then the connect itself. A lost session that takes longer than
+    /// <c>ConnectionTimeout</c> to deliver its buffered events makes the call fail that way.
+    /// </para>
+    /// <para>
+    /// A call made from inside the connection's own event dispatch does not wait, because that dispatch is part of what
+    /// the release waits for: an <see cref="OnEvent"/> handler that awaits it, an observer's <c>OnNext</c> that waits on
+    /// it, or anything they call from there. It throws that same <see cref="OperationCanceledException"/> at once and
+    /// writes no state; a connect made from outside once the handler has returned connects. A task a dispatch started
+    /// counts as inside it until that dispatch returns, so whether such a task's call waits depends on whether it is made
+    /// before or after the dispatch has returned (as <see cref="DisposeAsync"/> describes).
+    /// </para>
+    /// <para>
+    /// An event handler must not await, without a token, external work that reconnects — a worker or queue that calls
+    /// this method: that connect fails after <c>ConnectionTimeout</c>, because the release it waits for waits for the
+    /// handler. Likewise, a <see cref="StateChanged"/> or <see cref="Lost"/> handler that blocks on this method holds the
+    /// notification queue, so no later notification is delivered, for up to that bound.
+    /// </para>
+    /// </remarks>
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_state == AmiConnectionState.Disconnected && _closedByCaller, this);
+        if (TryGetLostEndingToWaitFor(out var lostEnding))
+        {
+            // Always resumes on the thread pool, never on the caller's context, even when the ending has finished by
+            // the time this await runs: a caller that blocks on this call from a single-threaded context holds the only
+            // thread that context could resume on.
+            await WaitForLostEndingAsync(lostEnding, cancellationToken).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
+        }
+
         ForgetLostConnectionEnding();
 
         await ConnectCoreAsync(byLoop: false, cancellationToken);
+    }
+
+    /// <summary>
+    /// The ending a caller's connect waits for: one the caller did not ask for, still releasing a lost session. None when
+    /// there is no such ending, when the caller has ended the connection, or when the call runs inside the connection's
+    /// own event dispatch, which that release waits for.
+    /// </summary>
+    private bool TryGetLostEndingToWaitFor([NotNullWhen(true)] out Task? lostEnding)
+    {
+        lock (_endingLock)
+        {
+            lostEnding = !_closedByCaller && !InDispatch && _ending is { Task.IsCompleted: false } inFlight ? inFlight.Task : null;
+            return lostEnding is not null;
+        }
+    }
+
+    /// <summary>
+    /// Waits for <paramref name="lostEnding"/>, bounded by <see cref="AmiConnectionOptions.ConnectionTimeout"/>, the
+    /// caller's token and the caller's own ending, so that the connect which follows finds it finished and forgets it.
+    /// </summary>
+    /// <remarks>
+    /// When <see cref="AmiConnectionOptions.ConnectionTimeout"/> runs out the call returns, the ending is still in flight,
+    /// and the connect throws the <see cref="OperationCanceledException"/> a connect that meets an ending in progress
+    /// throws. The caller's token ends the wait with that token's cancellation; the caller's ending, which cancels
+    /// <c>_lifetime</c>, with <see cref="ObjectDisposedException"/>.
+    /// </remarks>
+    private async Task WaitForLostEndingAsync(Task lostEnding, CancellationToken cancellationToken)
+    {
+        using var bound = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+        try
+        {
+            await lostEnding.WaitAsync(_options.ConnectionTimeout, _timeProvider, bound.Token).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            // The ending is left to finish on its own: its release may be waiting for a handler that waits for this call.
+        }
+        catch (OperationCanceledException) when (bound.IsCancellationRequested)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ObjectDisposedException.ThrowIf(true, this);
+            throw;
+        }
     }
 
     /// <summary>

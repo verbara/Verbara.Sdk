@@ -20,6 +20,13 @@ public interface IAmiConnection : IAsyncDisposable
     /// <see cref="AmiConnectionState.Disconnected"/> before its exception reaches the caller, unchanged; the connection
     /// can be connected again. A connect overtaken by the caller's <c>DisconnectAsync</c> or <c>DisposeAsync</c> yields to
     /// that ending and throws <see cref="System.OperationCanceledException"/>.
+    /// <para>
+    /// An implementation may wait, before it connects, for the release of a session the connection lost on its own and
+    /// is still ending. The SDK's connection does, bounded by its <c>ConnectionTimeout</c> option, the caller's token and
+    /// the caller's own ending; it never waits inside its own event dispatch. A connect still waiting for that release
+    /// when the caller's <c>DisconnectAsync</c> or <c>DisposeAsync</c> lands throws
+    /// <see cref="System.ObjectDisposedException"/> at once.
+    /// </para>
     /// </remarks>
     /// <exception cref="System.InvalidOperationException">
     /// The connection has a live session: <see cref="State"/> reads <see cref="AmiConnectionState.Connected"/>,
