@@ -1,2 +1,9 @@
 #nullable enable
 Verbara.Sdk.Ami.Connection.AmiConnection.StateChanged -> System.Action<Verbara.Sdk.AmiConnectionStateChange!>?
+Verbara.Sdk.Ami.Connection.AmiConnection.ReportsEventActionOutcome.get -> bool
+Verbara.Sdk.Ami.Connection.AmiConnection.SendEventGeneratingActionAsync(Verbara.Sdk.ManagerAction! action, Verbara.Sdk.Ami.Connection.EventActionOutcome? outcome, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.ManagerEvent!>!
+Verbara.Sdk.Ami.Connection.EventActionOutcome (forwarded, contained in Verbara.Sdk)
+Verbara.Sdk.Ami.Connection.EventActionOutcome.EventActionOutcome() -> void (forwarded, contained in Verbara.Sdk)
+Verbara.Sdk.Ami.Connection.EventActionOutcome.Rejection.get -> string? (forwarded, contained in Verbara.Sdk)
+Verbara.Sdk.Ami.Connection.EventActionOutcome.Reported.get -> bool (forwarded, contained in Verbara.Sdk)
+Verbara.Sdk.Ami.Connection.EventActionOutcome.SessionEnded.get -> bool (forwarded, contained in Verbara.Sdk)

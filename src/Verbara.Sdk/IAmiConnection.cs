@@ -1,3 +1,4 @@
+using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Enums;
 
 namespace Verbara.Sdk;
@@ -111,6 +112,57 @@ public interface IAmiConnection : IAsyncDisposable
     /// </exception>
     IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
         ManagerAction action, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether this connection reports, on an <see cref="EventActionOutcome"/>, how an event-generating action ended:
+    /// <see langword="true"/> when
+    /// <see cref="SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome, CancellationToken)"/> writes the
+    /// outcome once the sequence has ended on its own.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The SDK's AMI connection answers <see langword="true"/>. The default is <see langword="false"/>: an implementation
+    /// that does not provide it cannot say how an action ended. A wrapper or decorator around another connection forwards
+    /// the inner connection's answer together with the outcome overload, or forwards neither.
+    /// </para>
+    /// <para>
+    /// Read it before calling the outcome overload. A proxy or a mock (such as an NSubstitute substitute) does not run a
+    /// default member's body: an unconfigured substitute answers <see langword="false"/> here, which is the truth for it,
+    /// and its outcome overload yields whatever it was configured to yield — nothing, when only the plain overload was
+    /// configured. A caller that reads <see langword="false"/> calls
+    /// <see cref="SendEventGeneratingActionAsync(ManagerAction, CancellationToken)"/> instead.
+    /// </para>
+    /// </remarks>
+    bool ReportsEventActionOutcome => false;
+
+    /// <summary>
+    /// <see cref="SendEventGeneratingActionAsync(ManagerAction, CancellationToken)"/>, which also writes to
+    /// <paramref name="outcome"/> how the action ended, once its sequence has ended on its own, when this connection
+    /// <see cref="ReportsEventActionOutcome">reports it</see>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A refusal (<c>Response: Error</c>), the end of the session before the action completed, and an empty answer all
+    /// end the sequence the same way, with the events received so far and no error. A connection that reports the
+    /// outcome sets <see cref="EventActionOutcome.Reported"/> and, with it, <see cref="EventActionOutcome.Rejection"/>
+    /// and <see cref="EventActionOutcome.SessionEnded"/>, so the caller can tell them apart. Neither is set when Asterisk
+    /// completed the action.
+    /// </para>
+    /// <para>
+    /// The default implementation only forwards: it returns the plain overload's sequence and writes nothing on
+    /// <paramref name="outcome"/>, which stays not <see cref="EventActionOutcome.Reported"/>. A proxy or mock does not
+    /// run this body at all, so read <see cref="ReportsEventActionOutcome"/> first and, when it is
+    /// <see langword="false"/>, call the plain overload.
+    /// </para>
+    /// </remarks>
+    /// <param name="action">The action to send.</param>
+    /// <param name="outcome">Receives how the action ended; <see langword="null"/> for a caller that does not ask.</param>
+    /// <param name="cancellationToken">Cancels the enumeration.</param>
+    /// <exception cref="System.ArgumentException">As for <see cref="SendEventGeneratingActionAsync(ManagerAction, CancellationToken)"/>.</exception>
+    /// <exception cref="AsteriskException">As for <see cref="SendEventGeneratingActionAsync(ManagerAction, CancellationToken)"/>.</exception>
+    IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
+        ManagerAction action, EventActionOutcome? outcome, CancellationToken cancellationToken = default) =>
+        SendEventGeneratingActionAsync(action, cancellationToken);
 
     /// <summary>Subscribe to all AMI events via IObservable.</summary>
     IDisposable Subscribe(IObserver<ManagerEvent> observer);

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Verbara.Sdk;
+using Verbara.Sdk.Ami;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Enums;
@@ -16,7 +17,8 @@ namespace Verbara.Sdk.Live.Tests.Server;
 /// <summary>
 /// A load of live state over a connection that is not an <see cref="Verbara.Sdk.Ami.Connection.AmiConnection"/> but wraps
 /// one, whose <c>Status</c> Asterisk refuses. A wrapper that forwards how the action ended lets the load read the refusal
-/// as it does over the real connection: the channel table is left alone and the refusal is logged once at Warning. A
+/// as it does over the real connection: the channel table is left alone and the refusal is logged once at Warning; a
+/// <c>Status</c> cut short by the end of the session ends no call and the load throws, as over the real connection. A
 /// wrapper that cannot say how the action ended is read as before: its empty answer reconciles the table. A test double
 /// configured only on the plain overload keeps receiving its configured <c>Status</c>.
 /// </summary>
@@ -59,6 +61,48 @@ public sealed class VerbaraServerWrappedConnectionStatusTests
             server.Channels.ChannelCount.Should().Be(2, "both legs Asterisk still holds are still held");
             refusals.Should().ContainSingle("the load says once that Asterisk refused its Status")
                 .Which.Level.Should().Be(LogLevel.Warning);
+            peer.Fault.Should().BeNull("the peer served the session without failing");
+        }
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldEndNoCall_WhenTheSessionEndsWhileAForwardingWrappersStatusIsRead()
+    {
+        // Two calls, one channel each, held from the start. The next snapshot lists the first channel and the session
+        // ends before StatusComplete: through a wrapper that forwards how the action ended, the second channel's absence
+        // from an unfinished snapshot proves nothing, as over the real connection.
+        var peer = new BootingAsterisk
+        {
+            BootedAtLogin = true,
+            StatusChannels =
+            [
+                new StatusChannel("1700000000.1", "PJSIP/1001-00000001", LinkedId: "1700000000.1"),
+                new StatusChannel("1700000000.2", "PJSIP/1002-00000002", LinkedId: "1700000000.2"),
+            ],
+        };
+        await using var run = await Run.ConnectAsync(peer);
+        var log = new SignalingLogger<VerbaraServer>();
+        await using var server = new VerbaraServer(new ForwardingAmiConnectionWrapper(run.Connection), log) { TimeProvider = run.Clock };
+        await server.StartAsync().WaitAsync(Run.Bound);
+        var heldAtStart = server.Channels.ChannelCount;
+        var removed = new ConcurrentQueue<string>();
+        server.Channels.ChannelRemoved += channel => removed.Enqueue(channel.UniqueId);
+
+        peer.Close = PeerClose.DuringStatus;
+        peer.StatusChannelsBeforeClose = 1;
+        var outcome = await Record.ExceptionAsync(() => server.RequestInitialStateAsync().AsTask().WaitAsync(Run.Bound));
+
+        using (new AssertionScope())
+        {
+            removed.Should().BeEmpty("a snapshot the session ended before it completed ends no call, through a forwarding wrapper too");
+            server.Channels.ChannelCount.Should().Be(2, "both channels are still held");
+            server.Channels.GetByUniqueId("1700000000.1").Should().NotBeNull("the listed channel is still held");
+            server.Channels.GetByUniqueId("1700000000.2").Should().NotBeNull(
+                "the channel the unfinished snapshot never reached is still held");
+            outcome.Should().BeOfType<AmiNotConnectedException>(
+                "a direct call to the load throws when its session ends, and returns no partial state");
+            heldAtStart.Should().Be(2, "the start loaded both channels");
+            peer.Asked("Status").Should().Be(2, "the start's snapshot and the reload's");
             peer.Fault.Should().BeNull("the peer served the session without failing");
         }
     }

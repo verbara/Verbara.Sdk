@@ -85,3 +85,10 @@ Verbara.Sdk.AmiConnectionStateChange.IsFinal.get -> bool
 Verbara.Sdk.AmiConnectionStateChange.IsLoss.get -> bool
 Verbara.Sdk.AmiConnectionStateChange.Previous.get -> Verbara.Sdk.Enums.AmiConnectionState
 Verbara.Sdk.IAmiConnection.StateChanged -> System.Action<Verbara.Sdk.AmiConnectionStateChange!>?
+Verbara.Sdk.Ami.Connection.EventActionOutcome
+Verbara.Sdk.Ami.Connection.EventActionOutcome.EventActionOutcome() -> void
+Verbara.Sdk.Ami.Connection.EventActionOutcome.Rejection.get -> string?
+Verbara.Sdk.Ami.Connection.EventActionOutcome.Reported.get -> bool
+Verbara.Sdk.Ami.Connection.EventActionOutcome.SessionEnded.get -> bool
+Verbara.Sdk.IAmiConnection.ReportsEventActionOutcome.get -> bool
+Verbara.Sdk.IAmiConnection.SendEventGeneratingActionAsync(Verbara.Sdk.ManagerAction! action, Verbara.Sdk.Ami.Connection.EventActionOutcome? outcome, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.ManagerEvent!>!

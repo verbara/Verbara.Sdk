@@ -9,10 +9,11 @@
     <InternalsVisibleTo Include="Verbara.Sdk.Benchmarks" />
     <InternalsVisibleTo Include="Verbara.Sdk.FunctionalTests" />
     <InternalsVisibleTo Include="Verbara.Sdk.Sessions.FunctionalTests" />
-    <!-- Verbara.Sdk.Live's load of live state calls AmiConnection.FullyBooted, the SendEventGeneratingActionAsync
-         overload that takes an EventActionOutcome, and EventActionOutcome's constructor, Rejection and SessionEnded,
-         to tell a refusal from an Asterisk still loading its modules, or an action whose session ended, from an empty
-         answer. Its OriginateAsync calls the overload that also takes a TimeSpan, to wait for the outcome as long as
+    <!-- Verbara.Sdk.Live's load of live state calls AmiConnection.FullyBooted, to tell a refusal from an Asterisk still
+         loading its modules. Live packages up to 2.6.x also call the SendEventGeneratingActionAsync overload that takes
+         an EventActionOutcome, and EventActionOutcome's constructor, Rejection and SessionEnded, which were internal
+         then: the overload is now public with the same signature, and the type lives in Verbara.Sdk under the same
+         full name, forwarded from here (EventActionOutcomeForward.cs). Its OriginateAsync calls the overload that also takes a TimeSpan, to wait for the outcome as long as
          the originate's own Timeout lets the destination ring. VerbaraServer raises its public ConnectionLost from AmiConnection.Lost, the reader loop's announcement of
          a loss nobody asked for, which a patch could not add as public API. Those members keep their signatures until
          3.0, because a Live package of the 2.x line runs on any newer Ami: NuGet resolves Live's dependency on Ami as a

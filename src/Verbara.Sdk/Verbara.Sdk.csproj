@@ -5,6 +5,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- EventActionOutcome lives here, its setters internal: only the AMI connection writes how an action ended, so no
+         caller can forge an outcome. -->
+    <InternalsVisibleTo Include="Verbara.Sdk.Ami" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>

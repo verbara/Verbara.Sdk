@@ -1009,6 +1009,10 @@ public sealed class AmiConnection : IAmiConnection
         ManagerAction action, CancellationToken cancellationToken = default) =>
         SendEventGeneratingActionAsync(action, outcome: null, cancellationToken);
 
+    /// <inheritdoc />
+    /// <remarks>The SDK's connection reports every outcome: <see langword="true"/>.</remarks>
+    public bool ReportsEventActionOutcome => true;
+
     /// <summary>
     /// <see cref="SendEventGeneratingActionAsync(ManagerAction, CancellationToken)"/>, which also writes to
     /// <paramref name="outcome"/> how the action ended, once its sequence has ended on its own.
@@ -1017,20 +1021,25 @@ public sealed class AmiConnection : IAmiConnection
     /// <para>
     /// Asterisk may refuse the action with <c>Response: Error</c>, or its session may end before the action completes.
     /// The sequence then ends as it does when Asterisk completes the action: with the events received so far, and no
-    /// error. For a caller of the public overload a refusal, an ending and an empty answer are the same. With an
+    /// error. For a caller of the plain overload a refusal, an ending and an empty answer are the same. With an
     /// <paramref name="outcome"/>, the caller can tell them apart: <see cref="EventActionOutcome.Rejection"/> holds
     /// the refusal's <c>Message</c>, and <see cref="EventActionOutcome.SessionEnded"/> says that the connection gave
     /// the action up because its session ended. Neither is set when Asterisk completed the action.
     /// </para>
     /// <para>
-    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
-    /// any newer Ami.
+    /// This connection reports every outcome (<see cref="ReportsEventActionOutcome"/> is <see langword="true"/>):
+    /// <see cref="EventActionOutcome.Reported"/> is set with the other two once the sequence has ended on its own, and
+    /// stays <see langword="false"/> when the enumeration throws or is abandoned.
+    /// </para>
+    /// <para>
+    /// Called by Verbara.Sdk.Live, which bound to it before it was public; kept with this signature until 3.0, because a
+    /// Live package of the 2.x line runs on any newer Ami.
     /// </para>
     /// </remarks>
     /// <param name="action">The action to send.</param>
     /// <param name="outcome">Receives how the action ended; <see langword="null"/> for a caller that does not ask.</param>
     /// <param name="cancellationToken">Cancels the enumeration.</param>
-    internal IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
+    public IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
         ManagerAction action, EventActionOutcome? outcome, CancellationToken cancellationToken = default) =>
         SendEventGeneratingCoreAsync(action, outcome, _options.DefaultEventTimeout, cancellationToken);
 
@@ -1116,6 +1125,7 @@ public sealed class AmiConnection : IAmiConnection
             {
                 outcome.Rejection = collector.Rejection;
                 outcome.SessionEnded = collector.SessionEnded;
+                outcome.Reported = true;
             }
 
             activity?.SetTag("ami.event_count", eventCount);
@@ -2112,44 +2122,6 @@ public sealed class AmiConnection : IAmiConnection
             }
         }
     }
-}
-
-/// <summary>
-/// How an event-generating action ended, besides its events: written by
-/// <see cref="AmiConnection.SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome, CancellationToken)"/>
-/// once the action's sequence has ended on its own. Both stay at their defaults when Asterisk completed the action.
-/// </summary>
-internal sealed class EventActionOutcome
-{
-    /// <summary>An outcome that nothing has written yet, for the caller to pass in.</summary>
-    /// <remarks>
-    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
-    /// any newer Ami.
-    /// </remarks>
-    public EventActionOutcome()
-    {
-        // Nothing to set: an action that has not ended was neither refused nor abandoned.
-    }
-
-    /// <summary>
-    /// The <c>Message</c> of the <c>Response: Error</c> with which Asterisk refused the action, or
-    /// <see cref="string.Empty"/> for a refusal without one; <see langword="null"/> when Asterisk did not refuse it.
-    /// </summary>
-    /// <remarks>
-    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
-    /// any newer Ami.
-    /// </remarks>
-    public string? Rejection { get; internal set; }
-
-    /// <summary>
-    /// <see langword="true"/> when the connection gave the action up because its AMI session ended before Asterisk
-    /// completed it; the events received until then were delivered.
-    /// </summary>
-    /// <remarks>
-    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
-    /// any newer Ami.
-    /// </remarks>
-    public bool SessionEnded { get; internal set; }
 }
 
 /// <summary>

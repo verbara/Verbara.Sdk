@@ -59,7 +59,13 @@ internal class PlainAmiConnectionWrapper(AmiConnection inner) : IAmiConnection
 /// here implements the interface's member of the same signature, in place of the interface's default.
 /// </summary>
 /// <remarks>
-/// Before the interface declares those members it forwards exactly what <see cref="PlainAmiConnectionWrapper"/> does.
-/// When they are added (the capability and the overload that takes an outcome), they are forwarded here, and only here.
+/// Those members (the capability and the overload that takes an outcome) are forwarded here, and only here.
 /// </remarks>
-internal sealed class ForwardingAmiConnectionWrapper(AmiConnection inner) : PlainAmiConnectionWrapper(inner), IAmiConnection;
+internal sealed class ForwardingAmiConnectionWrapper(AmiConnection inner) : PlainAmiConnectionWrapper(inner), IAmiConnection
+{
+    public bool ReportsEventActionOutcome => Inner.ReportsEventActionOutcome;
+
+    public IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(ManagerAction action, EventActionOutcome? outcome,
+        CancellationToken cancellationToken = default) =>
+        Inner.SendEventGeneratingActionAsync(action, outcome, cancellationToken);
+}
