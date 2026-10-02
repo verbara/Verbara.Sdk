@@ -449,9 +449,15 @@ public sealed class AmiReconnectLoopTests
         var sockets = factory.Created;
         var backoffFailed = logger.Named("ReconnectBackoffFailed");
         var attemptsFailed = logger.Named("ReconnectAttemptFailed");
-        AmiConnectionStateChange? last;
+        string ending;
         lock (changesGate)
-            last = changes.LastOrDefault();
+        {
+            ending = changes.Count == 0
+                ? "no change"
+                : changes[^1] is { Cause: ArgumentOutOfRangeException rejected } last
+                    ? $"{last.Current} carrying ArgumentOutOfRangeException naming {rejected.ParamName}"
+                    : $"{changes[^1].Current} carrying {changes[^1].Cause?.GetType().Name ?? "no cause"}";
+        }
         using (new AssertionScope())
         {
             ended.Should().BeTrue("a loop whose ConnectionTimeout cannot bound a connect ends the connection instead of retrying it");
@@ -464,10 +470,9 @@ public sealed class AmiReconnectLoopTests
                     .Which.ParamName.Should().Be(nameof(AmiConnectionOptions.ConnectionTimeout), "the entry names the option to fix");
             }
 
-            last.Should().NotBeNull();
-            last?.Current.Should().Be(AmiConnectionState.Disconnected);
-            last?.Cause.Should().BeOfType<ArgumentOutOfRangeException>("the give-up carries the rejection")
-                .Which.ParamName.Should().Be(nameof(AmiConnectionOptions.ConnectionTimeout));
+            ending.Should().Be(
+                $"{AmiConnectionState.Disconnected} carrying ArgumentOutOfRangeException naming {nameof(AmiConnectionOptions.ConnectionTimeout)}",
+                "the last change ends the connection and carries the rejection");
             sockets.Should().HaveCount(1, "the loop makes no connect with an option that cannot bound it");
             Unreleased(sockets).Should().BeEmpty("the lost socket is released exactly once when the loop ends");
         }

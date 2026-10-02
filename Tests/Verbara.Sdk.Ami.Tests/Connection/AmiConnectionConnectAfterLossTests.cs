@@ -247,15 +247,15 @@ public sealed class AmiConnectionConnectAfterLossTests
             parked.Should().BeTrue(
                 $"a connect made from {who} while the loss's release is held waits for that release; it {LostSessionRig.Describe(outcome)} before the release");
             completedBeforeTheRelease.Should().BeFalse("the connect does not complete before the release");
-            outcome.Should().BeNull("once the release has finished the connect connects");
+            LostSessionRig.Describe(outcome).Should().Be(LostSessionRig.Describe(null), "once the release has finished the connect connects");
             stateOnReturn.Should().Be(AmiConnectionState.Connected, "a connect that returns leaves a session");
-            ping.Should().BeNull("a Ping is answered on the new session");
+            LostSessionRig.Describe(ping).Should().Be(LostSessionRig.Describe(null), "a Ping is answered on the new session");
             stateAfterPing.Should().Be(AmiConnectionState.Connected);
             lossDisconnecting.Should().BeGreaterThanOrEqualTo(0, "the loss is announced");
             callerConnecting.Should().BeGreaterThan(lossDisconnected,
                 "the caller's Connecting is announced after the loss's Disconnected, never in its window; changes: "
                 + string.Join(", ", changes.Select(c => $"{c.Previous}->{c.Current}{(c.ByCaller ? " (caller)" : "")}")));
-            afterConnected.Should().NotBeNull("the caller's session is announced Connected");
+            (afterConnected is not null).Should().BeTrue("the caller's session is announced Connected");
             if (afterConnected is not null)
             {
                 afterConnected.ByCaller.Should().BeTrue(

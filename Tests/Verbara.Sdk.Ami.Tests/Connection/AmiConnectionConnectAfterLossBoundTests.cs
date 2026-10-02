@@ -251,7 +251,8 @@ public sealed class AmiConnectionConnectAfterLossBoundTests
             parked.Should().BeTrue(
                 $"the blocked connect waits for the lost release, bounded; it {LostSessionRig.Describe(outcome)} at clock 0");
             ended.Should().BeTrue("the blocked call ends once the clock has passed the bound: the wait does not need the blocked thread");
-            outcome.Should().BeOfType<OperationCanceledException>().Which.Message.Should().Be(EndedDuringTheConnect);
+            LostSessionRig.Describe(outcome).Should().Be($"OperationCanceledException: \"{EndedDuringTheConnect}\"",
+                "past the bound the blocked call gets the exception of a connect that meets an ending in progress");
             released.Should().Be(created, "every socket the connection created is released after DisposeAsync");
         }
     }

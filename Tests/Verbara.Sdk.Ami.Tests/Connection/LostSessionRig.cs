@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.ExceptionServices;
 using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Enums;
 using FluentAssertions;
@@ -50,6 +51,10 @@ internal sealed class LostSessionRig : IAsyncDisposable
     private volatile bool _holdArmed;
     private bool _disposed;
 
+    /// <summary>
+    /// A connection with <c>AutoReconnect</c> off on <see cref="Clock"/>, every socket it creates served by a peer that
+    /// completes the login.
+    /// </summary>
     /// <param name="configure">Changes the options before the connection is built; <see langword="null"/> keeps them.</param>
     public LostSessionRig(Action<AmiConnectionOptions>? configure = null)
     {
@@ -220,16 +225,26 @@ internal sealed class LostSessionRig : IAsyncDisposable
 
         _disposed = true;
         OpenTheGate();
+        // Each step runs whether or not the one before it failed, so the peers always stop and the token source is
+        // always released; the first failure is rethrown after that.
+        var connectionEnded = await FailureOfAsync(Connection.DisposeAsync().AsTask().WaitAsync(Bound));
+        await _peerCts.CancelAsync();
+        var peersEnded = await FailureOfAsync(Task.WhenAll(_accepting, Task.WhenAll(_serving)).WaitAsync(Bound));
+        _peerCts.Dispose();
+        (connectionEnded ?? peersEnded)?.Throw();
+    }
+
+    /// <summary>How <paramref name="step"/> failed, or <see langword="null"/> when it completed.</summary>
+    private static async Task<ExceptionDispatchInfo?> FailureOfAsync(Task step)
+    {
         try
         {
-            await Connection.DisposeAsync().AsTask().WaitAsync(Bound);
+            await step;
+            return null;
         }
-        finally
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            await _peerCts.CancelAsync();
-            await _accepting.WaitAsync(Bound);
-            await Task.WhenAll(_serving).WaitAsync(Bound);
-            _peerCts.Dispose();
+            return ExceptionDispatchInfo.Capture(ex);
         }
     }
 

@@ -596,11 +596,17 @@ public sealed class AmiConnectionTests : IAsyncLifetime
             outcome = ex;
         }
 
+        var rejection = outcome switch
+        {
+            null => "no exception",
+            ArgumentOutOfRangeException rejected => $"ArgumentOutOfRangeException naming {rejected.ParamName}",
+            _ => $"{outcome.GetType().Name}: {outcome.Message}",
+        };
+
         try
         {
-            outcome.Should().BeOfType<ArgumentOutOfRangeException>(
-                    $"{value} cannot bound a connect (AutoReconnect = {autoReconnect}), and the connect checks the option it uses")
-                .Which.ParamName.Should().Be(nameof(AmiConnectionOptions.ConnectionTimeout), "the error names the option to fix");
+            rejection.Should().Be($"ArgumentOutOfRangeException naming {nameof(AmiConnectionOptions.ConnectionTimeout)}",
+                $"{value} cannot bound a connect (AutoReconnect = {autoReconnect}), the connect checks the option it uses, and the error names the option to fix");
             factory.Created.Should().BeEmpty("the option is checked before the connect dials");
             Volatile.Read(ref changes).Should().Be(0, "the rejected connect writes no state");
             connection.State.Should().Be(AmiConnectionState.Initial);

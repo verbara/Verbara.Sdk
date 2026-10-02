@@ -281,8 +281,9 @@ public class AmiConnectionOptionsValidatorTests
         get
         {
             var data = new TheoryData<string, bool>();
-            foreach (var value in (string[])["ConnectionTimeout = 0", "ConnectionTimeout = -1 s",
-                         "ConnectionTimeout = Timeout.InfiniteTimeSpan", "ConnectionTimeout = int.MaxValue ms + 1 ms"])
+            string[] values = ["ConnectionTimeout = 0", "ConnectionTimeout = -1 s",
+                "ConnectionTimeout = Timeout.InfiniteTimeSpan", "ConnectionTimeout = int.MaxValue ms + 1 ms"];
+            foreach (var value in values)
             {
                 data.Add(value, true);
                 data.Add(value, false);
@@ -298,7 +299,8 @@ public class AmiConnectionOptionsValidatorTests
         get
         {
             var data = new TheoryData<string, bool>();
-            foreach (var value in (string[])["ConnectionTimeout = 1 tick", "ConnectionTimeout = 5 s", "ConnectionTimeout = int.MaxValue ms"])
+            string[] values = ["ConnectionTimeout = 1 tick", "ConnectionTimeout = 5 s", "ConnectionTimeout = int.MaxValue ms"];
+            foreach (var value in values)
             {
                 data.Add(value, true);
                 data.Add(value, false);
