@@ -394,3 +394,314 @@ public sealed class SseAbortTests
         GC.Collect();
     }
 }
+
+/// <summary>
+/// Spec <c>push-sse-stream-delivery</c>, the policy Q1 ruled (design <i>Owner answers</i>, Q1 2026-10-01):
+/// drop oldest at a byte bound (1 MiB per connection by default), then one <c>event: .gap</c> carrying the
+/// count of dropped event frames; heartbeats outside the bound; a metric and one Warning per gap episode;
+/// <c>.gap</c> reserved. Runs alone: the drop metric is read by meter name, process-wide. The queue-depth
+/// assertion, the public option's non-default value and a single frame larger than the bound are task 2.2's.
+/// </summary>
+[Collection(SseProcessWideStateGroup.Name)]
+public sealed class SseStreamBoundTests
+{
+    private static readonly TimeSpan Bound = TimeSpan.FromSeconds(20);
+
+    /// <summary>The bus's own instruments; the stream's drop metric is any other counter on the push meter.</summary>
+    private static readonly HashSet<string> BusInstruments = new(StringComparer.Ordinal)
+    {
+        "asterisk.push.events.published",
+        "asterisk.push.events.delivered",
+        "asterisk.push.events.dropped",
+        "asterisk.push.subscribers.active",
+    };
+
+    /// <summary>What a stopped-then-resumed reader saw, and what the host recorded.</summary>
+    private sealed record Episode(
+        HttpStatusCode? Status,
+        bool Subscribed,
+        bool BusDelivered,
+        int BusReceived,
+        bool SawLast,
+        IReadOnlyList<SseFrame> Frames,
+        long BusDropped,
+        IReadOnlyDictionary<string, long> StreamMetric,
+        IReadOnlyList<CapturedLog> Logs,
+        string Pad,
+        int Published);
+
+    public static TheoryData<int, bool> PayloadsAndSettings() => new()
+    {
+        { 16_000, false },
+        { 16_000, true },
+        { 500, false },
+        { 500, true },
+    };
+
+    public static TheoryData<bool> Settings() => new() { false, true };
+
+    [Theory]
+    [MemberData(nameof(PayloadsAndSettings))]
+    public async Task Stream_ShouldSendOneGapWithTheDroppedEventCount_WhenStoppedReaderResumesAfterTheBound(int payload, bool allowSynchronousIO)
+    {
+        var episode = await RunStoppedReaderEpisodeAsync(payload, allowSynchronousIO, heartbeat: null);
+        var gaps = GapAnalysis.Of(episode.Frames, episode.Published);
+
+        using (new AssertionScope($"payload={payload} (AllowSynchronousIO={allowSynchronousIO})"))
+        {
+            AssertEpisodeRan(episode);
+            gaps.Gaps.Should().NotBeEmpty("events were dropped at the bound, and the client is told");
+            gaps.BackToBackGaps.Should().Be(0, "a slow client gets exactly one .gap before the next event frame, never two in a row");
+            gaps.Gaps.Select(static g => g.Count).Should().Equal(gaps.Gaps.Select(static g => (long?)g.DroppedBetweenNeighbours),
+                "each .gap carries the number of event frames dropped since the previous frame, heartbeats excluded, so every frame after it is newer than every dropped one");
+            gaps.Gaps.Sum(static g => g.Count ?? 0).Should().Be(gaps.Missing, "every event that never arrived is reported by a .gap ({0} of {1} never arrived)", gaps.Missing, episode.Published);
+            gaps.EventSequence.Should().BeInAscendingOrder().And.OnlyHaveUniqueItems("events still arrive in publish order, none repeated");
+            gaps.EventBytesAfterLastGap.Should().BeLessThanOrEqualTo(SseStreamSettings.DefaultBoundBytes,
+                "the bytes queued for the connection (what the last .gap is followed by) never exceed the 1 MiB default");
+            gaps.EventBytesAfterLastGap.Should().BeGreaterThan(SseStreamSettings.DefaultBoundBytes - (2 * gaps.LargestEventFrameBytes),
+                "the default bound is 1 MiB of UTF-8 frames, not less (one frame is {0} bytes)", gaps.LargestEventFrameBytes);
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Settings))]
+    public async Task Stream_ShouldKeepHeartbeatsOutOfTheBound_WhenTheQueueIsFull(bool allowSynchronousIO)
+    {
+        var episode = await RunStoppedReaderEpisodeAsync(500, allowSynchronousIO, heartbeat: TimeSpan.FromMilliseconds(10));
+        var gaps = GapAnalysis.Of(episode.Frames, episode.Published);
+
+        using (new AssertionScope($"AllowSynchronousIO={allowSynchronousIO}"))
+        {
+            AssertEpisodeRan(episode);
+            gaps.Gaps.Should().NotBeEmpty("events were dropped at the bound");
+            gaps.Gaps.Sum(static g => g.Count ?? 0).Should().Be(gaps.Missing, "dropped heartbeats are not counted in a .gap");
+            gaps.HeartbeatsBetweenLastGapAndNewestEvent.Should().Be(0,
+                "a heartbeat that falls due while the queue is at the bound (a drop not yet reported) is not queued");
+            gaps.HeartbeatsAfterNewestEvent.Should().BePositive("a connection below the bound still gets its heartbeats");
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Settings))]
+    public async Task Stream_ShouldCountDropsOnAMetricAndWarnOncePerEpisode_WhenTheBoundDropsFrames(bool allowSynchronousIO)
+    {
+        var episode = await RunStoppedReaderEpisodeAsync(16_000, allowSynchronousIO, heartbeat: null);
+        var gaps = GapAnalysis.Of(episode.Frames, episode.Published);
+        var reported = gaps.Gaps.Sum(static g => g.Count ?? 0);
+        var warnings = episode.Logs
+            .Where(static l => l.Level == LogLevel.Warning && !l.Category.StartsWith("Microsoft.", StringComparison.Ordinal))
+            .Select(static l => $"{l.Category}: {l.Message}")
+            .ToList();
+
+        using (new AssertionScope($"AllowSynchronousIO={allowSynchronousIO}"))
+        {
+            AssertEpisodeRan(episode);
+            reported.Should().BePositive("the episode dropped event frames");
+            episode.StreamMetric.Values.Sum().Should().Be(reported,
+                "a push metric counts the dropped event frames, as many as the .gap frames report (instruments seen: [{0}])", string.Join(",", episode.StreamMetric.Keys));
+            warnings.Should().HaveCount(gaps.Gaps.Count, "one Warning is logged per gap episode ({0} .gap frames), never per frame", gaps.Gaps.Count);
+            warnings.Should().NotBeEmpty("an episode that dropped frames is logged");
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(Settings))]
+    public async Task Stream_ShouldNeverWriteAnEventAsTheGapMarker_WhenItsTypeIsTheReservedName(bool allowSynchronousIO)
+    {
+        const string sentinel = "queue.9.sentinel";
+        await using var host = await SseTestHost.StartAsync(new SseHostOptions { AllowSynchronousIO = allowSynchronousIO });
+
+        using var abort = new CancellationTokenSource();
+        var responseTask = host.OpenStreamAsync(string.Empty, abort.Token);
+        var headersArrived = await Task.WhenAny(responseTask, Task.Delay(Bound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+        using var response = headersArrived ? await responseTask : null;
+        var subscribed = response?.StatusCode == HttpStatusCode.OK
+            && await host.Bus.Subscribers.WaitUntilAsync(static c => c >= 1, Bound);
+
+        // No topic path: today's frame names it by its EventType, ".gap".
+        await host.Bus.PublishAsync(new ReservedNameEvent { Metadata = new PushEventMetadata("T1", null, DateTimeOffset.UtcNow, null) });
+        await host.PublishAsync(sentinel);
+
+        IReadOnlyList<SseFrame> frames = [];
+        if (subscribed)
+        {
+            using var reader = new SseReader(await response!.Content.ReadAsStreamAsync(abort.Token));
+            await reader.ReadUntilAsync(static f => f.EventName == sentinel, Bound);
+            frames = [.. reader.Frames.Where(static f => !f.IsHeartbeat && f.EventName != sentinel)];
+        }
+
+        await abort.CancelAsync();
+
+        using (new AssertionScope($"AllowSynchronousIO={allowSynchronousIO}"))
+        {
+            response?.StatusCode.Should().Be(HttpStatusCode.OK);
+            subscribed.Should().BeTrue("the admitted stream subscribes to the bus");
+            frames.Should().ContainSingle("the event is still delivered, under another name");
+            frames.Select(static f => f.EventName).Should().NotContain(".gap", "only the stream's own gap marker uses that name");
+        }
+    }
+
+    private static void AssertEpisodeRan(Episode episode)
+    {
+        episode.Status.Should().Be(HttpStatusCode.OK);
+        episode.Subscribed.Should().BeTrue("the stopped reader's stream is admitted and subscribed");
+        episode.BusDelivered.Should().BeTrue("the bus hands every event on while the reader is stopped (it delivered {0} of {1})", episode.BusReceived, episode.Published);
+        episode.BusDropped.Should().Be(0, "the bus dropped nothing, so every missing event was dropped by the connection's bound");
+        episode.SawLast.Should().BeTrue("the resumed reader receives the newest event");
+        episode.Frames.Where(f => !f.IsHeartbeat && f.EventName != ".gap" && !LoadFrames.IsWellFormed(f, episode.Pad))
+            .Select(static f => f.ToString()).Should().BeEmpty("every frame is a heartbeat, the gap marker or one whole event frame");
+    }
+
+    /// <summary>One <c>.gap</c> frame: what it reports and what its neighbouring event frames say was dropped.</summary>
+    private sealed record Gap(long? Count, long DroppedBetweenNeighbours);
+
+    /// <summary>The <c>.gap</c> frames of a resumed stream, read against the sequence numbers around them.</summary>
+    private sealed record GapAnalysis(
+        IReadOnlyList<Gap> Gaps,
+        int BackToBackGaps,
+        IReadOnlyList<int> EventSequence,
+        int Missing,
+        long EventBytesAfterLastGap,
+        long LargestEventFrameBytes,
+        int HeartbeatsBetweenLastGapAndNewestEvent,
+        int HeartbeatsAfterNewestEvent)
+    {
+        public static GapAnalysis Of(IReadOnlyList<SseFrame> frames, int published)
+        {
+            var gaps = new List<Gap>();
+            var backToBack = 0;
+            var lastGapIndex = -1;
+            var newestIndex = -1;
+            var previousSequence = -1;
+            long? pending = null;
+            var previousWasGap = false;
+            for (var i = 0; i < frames.Count; i++)
+            {
+                var frame = frames[i];
+                if (frame.EventName == ".gap")
+                {
+                    if (previousWasGap)
+                        backToBack++;
+                    pending = GapCount(frame);
+                    previousWasGap = true;
+                    lastGapIndex = i;
+                    continue;
+                }
+
+                var sequence = LoadFrames.Sequence(frame);
+                if (sequence < 0)
+                    continue;
+
+                if (previousWasGap)
+                    gaps.Add(new Gap(pending, sequence - previousSequence - 1));
+                previousWasGap = false;
+                previousSequence = sequence;
+                if (sequence == published - 1)
+                    newestIndex = i;
+            }
+
+            if (previousWasGap)
+                gaps.Add(new Gap(pending, published - previousSequence - 1));
+
+            var sequenceNumbers = frames.Select(LoadFrames.Sequence).Where(static s => s >= 0).ToList();
+            var afterLastGap = lastGapIndex < 0 ? [] : frames.Skip(lastGapIndex + 1).Where(static f => LoadFrames.Sequence(f) >= 0).ToList();
+            return new GapAnalysis(
+                gaps,
+                backToBack,
+                sequenceNumbers,
+                published - sequenceNumbers.Distinct().Count(),
+                afterLastGap.Sum(static f => (long)f.Utf8Bytes),
+                afterLastGap.Count == 0 ? 0 : afterLastGap.Max(static f => (long)f.Utf8Bytes),
+                lastGapIndex >= 0 && newestIndex > lastGapIndex ? frames.Skip(lastGapIndex + 1).Take(newestIndex - lastGapIndex).Count(static f => f.IsHeartbeat) : -1,
+                newestIndex < 0 ? 0 : frames.Skip(newestIndex + 1).Count(static f => f.IsHeartbeat));
+        }
+    }
+
+    /// <summary>The count a gap frame carries: a bare integer, or a JSON object with a <c>dropped</c> number.</summary>
+    private static long? GapCount(SseFrame? gap)
+    {
+        if (gap?.Data is not { } data)
+            return null;
+        if (long.TryParse(data, NumberStyles.None, CultureInfo.InvariantCulture, out var bare))
+            return bare;
+        try
+        {
+            using var doc = JsonDocument.Parse(data);
+            return doc.RootElement.TryGetProperty("dropped", out var dropped) && dropped.TryGetInt64(out var n) ? n : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// A client that stops reading after the headers while events are published far past the 1 MiB bound
+    /// and the transport's buffers (≈32 MB at 16 KB, ≈20 MB at 0.5 KB), then reads everything.
+    /// </summary>
+    private static async Task<Episode> RunStoppedReaderEpisodeAsync(int payload, bool allowSynchronousIO, TimeSpan? heartbeat)
+    {
+        var count = payload >= 16_000 ? 2_000 : 40_000;
+        var pad = new string('x', payload);
+
+        var streamMetric = new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
+        using var meterListener = new MeterListener();
+        meterListener.InstrumentPublished = (instrument, listener) =>
+        {
+            if (instrument.Meter.Name.StartsWith(PushMetrics.MeterName, StringComparison.Ordinal) && !BusInstruments.Contains(instrument.Name))
+                listener.EnableMeasurementEvents(instrument);
+        };
+        meterListener.SetMeasurementEventCallback<long>((instrument, value, _, _) => streamMetric.AddOrUpdate(instrument.Name, value, (_, v) => v + value));
+        meterListener.SetMeasurementEventCallback<int>((instrument, value, _, _) => streamMetric.AddOrUpdate(instrument.Name, value, (_, v) => v + value));
+        meterListener.Start();
+
+        await using var host = await SseTestHost.StartAsync(new SseHostOptions
+        {
+            AllowSynchronousIO = allowSynchronousIO,
+            BusCapacity = count + 16, // ≥ the events published (design D7)
+            HeartbeatInterval = heartbeat,
+        });
+
+        var probe = new CountingObserver();
+        using var probeSubscription = host.Bus.AsObservable().Subscribe(probe);
+
+        using var abort = new CancellationTokenSource();
+        var responseTask = host.OpenStreamAsync(string.Empty, abort.Token);
+        var headersArrived = await Task.WhenAny(responseTask, Task.Delay(Bound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+        using var response = headersArrived ? await responseTask : null;
+        var status = response?.StatusCode;
+        var subscribed = status == HttpStatusCode.OK
+            && await host.Bus.Subscribers.WaitUntilAsync(static c => c >= 2, Bound);
+
+        // The reader is stopped: nothing reads the body while the events are published.
+        for (var i = 0; i < count; i++)
+            await host.PublishAsync(LoadFrames.Topic(i), correlationId: LoadFrames.Correlation(i, pad));
+
+        // A last event the stream never receives (another tenant): once the probe has it, the bus has
+        // finished handing the stream every load event, so the queue holds its final content.
+        await host.PublishAsync("queue.0.flush", tenant: "T2");
+        var busDelivered = await probe.Received.WaitUntilAsync(c => c >= count + 1, Bound);
+        var busReceived = probe.Received.Value;
+
+        // The reader resumes and reads until the newest event.
+        IReadOnlyList<SseFrame> frames = [];
+        var sawLast = false;
+        if (subscribed && busDelivered)
+        {
+            using var reader = new SseReader(await response!.Content.ReadAsStreamAsync(abort.Token));
+            sawLast = await reader.ReadUntilAsync(f => LoadFrames.Sequence(f) == count - 1, TimeSpan.FromSeconds(60));
+            if (sawLast && heartbeat is not null)
+                await reader.ReadUntilAsync(static f => f.IsHeartbeat, Bound);
+            frames = [.. reader.Frames];
+        }
+
+        var logs = host.Logs.Snapshot();
+        var busDropped = host.BusDrops.Dropped;
+
+        // Unblock a stream the unfixed code left writing synchronously, so the host can stop.
+        await abort.CancelAsync();
+        response?.Dispose();
+
+        return new Episode(status, subscribed, busDelivered, busReceived, sawLast, frames, busDropped, new Dictionary<string, long>(streamMetric, StringComparer.Ordinal), logs, pad, count);
+    }
+}
