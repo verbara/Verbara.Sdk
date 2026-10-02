@@ -156,7 +156,7 @@ public sealed class QueueSessionTrackerTests : IDisposable
     }
 
     [Fact]
-    public void OnCallEnded_ShouldIncrementCallsAbandoned_WhenCallerLeftWithoutAnswer()
+    public void OnCallEnded_ShouldIncrementCallsAbandoned_WhenTheVisitWasStillOpen()
     {
         EmitQueued("session-1", "sales", T0);
         EmitEnded("session-1");
@@ -166,7 +166,7 @@ public sealed class QueueSessionTrackerTests : IDisposable
     }
 
     [Fact]
-    public void OnCallEnded_ShouldDecrementCallsWaiting_WhenAbandoned()
+    public void OnCallEnded_ShouldDecrementCallsWaiting_WhenTheVisitWasStillOpen()
     {
         EmitQueued("session-1", "sales", T0);
         EmitQueued("session-2", "sales", T0.AddSeconds(1));
@@ -247,11 +247,12 @@ public sealed class QueueSessionTrackerTests : IDisposable
     }
 
     /// <summary>
-    /// The first queue's metrics window has expired when the caller leaves it for a second queue. The
-    /// visit it left closes as abandoned in a new window, which does not carry the expired window's offer.
+    /// The first queue's metrics window has expired when the caller joins a second queue while its visit in the first
+    /// is still open (no leave was observed). That visit closes as abandoned in a new window, which does not carry the
+    /// expired window's offer.
     /// </summary>
     [Fact]
-    public void OnCallQueued_ShouldCloseTheLeftVisitInANewWindow_WhenTheFirstQueuesWindowHadExpired()
+    public void OnCallQueued_ShouldCloseTheStillOpenVisitInANewWindow_WhenTheFirstQueuesWindowHadExpired()
     {
         EmitQueued("session-1", "first", T0);
         var first = _sut.GetByQueueName("first")!;
