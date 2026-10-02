@@ -1274,9 +1274,13 @@ public sealed class AmiConnection : IAmiConnection
                     }
                     else
                     {
+                        // The ending is recorded here, in the same lock as the Disconnecting it writes, so no connect
+                        // ever reads Disconnecting without the ending that owns it.
+                        var lostEnding = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                        _ending = lostEnding;
                         SetStateLocked(AmiConnectionState.Disconnecting, cause, byCaller: false);
                         NotifyLost(cause);
-                        _ = Task.Run(() => EndLostConnectionAsync(cause), CancellationToken.None);
+                        _ = Task.Run(() => FinishLostEndingAsync(lostEnding, cause), CancellationToken.None);
                     }
                 }
             }
@@ -1307,15 +1311,42 @@ public sealed class AmiConnection : IAmiConnection
     }
 
     /// <summary>
-    /// Ends a connection lost for good — AutoReconnect is off, or the reconnect loop gave up — through the
-    /// same ending a caller's <see cref="DisconnectAsync"/> runs, without the Logoff. It runs on a task of
-    /// its own, never on the reader loop or the heartbeat, which <see cref="CleanupAsync"/> awaits.
+    /// Ends a connection the reconnect loop lost for good — it gave up, or its backoff failed — through the same
+    /// ending a caller's <see cref="DisconnectAsync"/> runs, without the Logoff, recording the ending and its
+    /// <see cref="AmiConnectionState.Disconnecting"/> in one lock. It runs on the loop's task, never on the reader loop
+    /// or the heartbeat, which <see cref="CleanupAsync"/> awaits. A loss without AutoReconnect is recorded by the reader
+    /// loop itself and released by <see cref="FinishLostEndingAsync"/>.
     /// </summary>
     /// <param name="cause">
     /// What ended the connection for good, announced on its final change to <see cref="AmiConnectionState.Disconnected"/>:
-    /// the loss's cause without AutoReconnect, the last failed attempt's exception for the give-up.
+    /// the last failed attempt's exception for the give-up, the backoff's failure otherwise.
     /// </param>
     private Task EndLostConnectionAsync(Exception? cause) => EndAsync(byCaller: false, CancellationToken.None, cause);
+
+    /// <summary>
+    /// Releases a connection lost without AutoReconnect, whose ending the reader loop has already recorded, in the same
+    /// lock as its <see cref="AmiConnectionState.Disconnecting"/>. It does what <see cref="EndAsync"/> does for the
+    /// connection's own ending: no Logoff, no reconnect loop to wait for, the release, then
+    /// <see cref="AmiConnectionState.Disconnected"/> and the ending's completion. It runs on a task of its own, never
+    /// on the reader loop, which <see cref="CleanupAsync"/> awaits.
+    /// </summary>
+    /// <param name="mine">The ending the reader loop recorded; completed last, once the release has finished.</param>
+    /// <param name="cause">What ended the connection, announced on its change to <see cref="AmiConnectionState.Disconnected"/>.</param>
+    private async Task FinishLostEndingAsync(TaskCompletionSource mine, Exception? cause)
+    {
+        try
+        {
+            await CleanupAsync(byEnding: true);
+        }
+        finally
+        {
+            lock (_endingLock)
+                SetStateLocked(AmiConnectionState.Disconnected, cause, byCaller: false);
+
+            AmiConnectionLog.Disconnected(_logger);
+            mine.TrySetResult();
+        }
+    }
 
     /// <summary>
     /// Reconnects with backoff until a connect succeeds, the loop gives up at
