@@ -3,14 +3,15 @@
 Required by ADR-0028: a minor that carries a breaking change ships a migration guide.
 
 An AMI connection now announces every state it takes, on `IAmiConnection.StateChanged`, and the
-Live health checks read that state. No signature you call changes, so nothing stops compiling, but
-four behaviours move: what the `live` health check answers, a new `verbara-pool` health check on a
-multi-server host, the state a failed `ConnectAsync` leaves, and when an ending started from a task
-an event handler left running waits.
+health checks read that state. No signature you call changes, so nothing stops compiling, but
+seven behaviours move: what the `live` health check answers, a new `verbara-pool` health check on a
+multi-server host, what the `ami` health check answers, the state a failed `ConnectAsync` leaves, a
+`ConnectAsync` made while a lost session is still being released, the values `ConnectionTimeout`
+accepts, and when an ending started from a task an event handler left running waits.
 
 ## What you have to do
 
-**Update the package.** Then look at the four places below where your code may depend on the old
+**Update the package.** Then look at the places below where your code may depend on the old
 behaviour:
 
 1. A liveness probe pointed at an unfiltered health endpoint. The `live` check now reports a lost
@@ -23,6 +24,26 @@ behaviour:
    tells you instead. See [watching the state](#watching-the-state-instead-of-polling-it).
 4. An event handler that awaits the stored task of a `DisposeAsync` or `DisconnectAsync` that it
    did not call. See [an ending started from a detached task](#an-ending-started-from-a-task-a-handler-left-running).
+5. A probe or alert that reads the `ami` health check. It now reports `Degraded`, not `Unhealthy`,
+   while the connection is `Connecting` or not yet connected, and agrees with `live` on every
+   state. See [the `ami` health check](#the-ami-health-check).
+6. An `AmiConnectionOptions.ConnectionTimeout` of zero, a negative value or
+   `Timeout.InfiniteTimeSpan`. It is now rejected, by the options validator when `ValidateOnStart`
+   runs and by the `AmiConnection` constructor, naming the option. Set a positive, finite value
+   (the default is 5 s); it also bounds the wait described in item 7. See
+   [connecting again after a loss](#connecting-again-after-a-loss).
+7. Code that calls `ConnectAsync` after a loss with `AutoReconnect` off, or after the reconnect
+   gave up. That call now waits, up to `ConnectionTimeout`, for the lost session to be released,
+   then connects. Two things follow:
+   - a `StateChanged` or `Lost` handler that blocks on `ConnectAsync` holds the notification queue
+     for up to `ConnectionTimeout`: no later notification is delivered until it returns. Start the
+     connect without blocking the handler on it;
+   - a connect raced by your own `DisconnectAsync` or `DisposeAsync` while it waits now throws
+     `ObjectDisposedException`, where it threw `OperationCanceledException`. A `catch` that treats
+     `OperationCanceledException` as "my own shutdown won" must also catch
+     `ObjectDisposedException`.
+
+   See [connecting again after a loss](#connecting-again-after-a-loss).
 
 ## The `live` health check
 
@@ -74,6 +95,35 @@ Its data maps each server id to its connection's state name.
 - **An endpoint filtered by tag** sees no change: `verbara-pool` and `live` carry none.
 - **An alert on `Degraded`** fires during every reconnect now, for as long as the reconnect takes.
 
+## The `ami` health check
+
+**Before:** `AmiHealthCheck` (registered as `ami` by `AddVerbara`) answered `Healthy` for
+`Connected`, `Degraded` for `Reconnecting` and `Unhealthy` for every other state, including
+`Connecting` and a connection nobody had connected yet. During an outage each reconnect attempt
+writes `Connecting`, so `ami` flickered between 200 and 503 while `live` reported `Degraded` for
+the same connection, and an unfiltered `/health` went 503 because of `ami` alone.
+
+**Now:** `ami` reads the state with the same table as `live`, so the two never disagree on a
+state:
+
+| AMI connection `State` | `ami` before | `ami` now | `live` | `verbara-pool` (every server in that state) |
+|---|---|---|---|---|
+| `Connected` | `Healthy` | `Healthy` | from the state Live holds | `Healthy` |
+| `Reconnecting` | `Degraded` | `Degraded` | `Degraded` | `Degraded` |
+| `Connecting`, `Initial` | `Unhealthy` | `Degraded` | `Degraded` | `Degraded` |
+| `Disconnecting`, `Disconnected` | `Unhealthy` | `Unhealthy` | `Unhealthy` | `Unhealthy` |
+
+A connection nobody has connected reads `Degraded` for as long as it stays `Initial`, as `live`
+does: it is not failing, but it does not connect on its own either. The check's data gains
+`amiState`, the state's name as a string, and its description names the state.
+
+### What this means for code you may have written
+
+- **A readiness probe on `ami`** stays ready during a reconnect attempt: ASP.NET Core's health
+  endpoint answers 200 for `Degraded` unless you map it otherwise.
+- **An alert on `Unhealthy` from `ami`** now fires only once the connection has ended; alert on
+  `Degraded` to see a reconnect in progress.
+
 ## `State` after a failed `ConnectAsync`
 
 **Before:** a `ConnectAsync` that threw (nothing listening, the login refused, the connect timed
@@ -88,8 +138,11 @@ attempt's socket until the next ending. A `ConnectAsync` on a connection that wa
   `Cause` (no cause when your own cancellation token withdrew the attempt). The exception you catch
   is unchanged. Call `ConnectAsync` again to retry.
 - A `ConnectAsync` on a connection that is `Connected`, `Reconnecting` or `Connecting` throws
-  `InvalidOperationException` and changes nothing. A lost connection reconnects on its own; to
-  connect again after a give-up, call `ConnectAsync` once the connection reads `Disconnected`.
+  `InvalidOperationException` and changes nothing. With `AutoReconnect` on, a lost connection
+  reconnects on its own. With it off, or after the reconnect gave up, nothing reconnects it: call
+  `ConnectAsync` as soon as you see the loss, whether on `Disconnecting`, on `Disconnected`, on
+  `Lost` or by polling `State`; it waits for the lost session's release, then connects. See
+  [connecting again after a loss](#connecting-again-after-a-loss).
 
 ### What this means for code you may have written
 
@@ -99,6 +152,53 @@ attempt's socket until the next ending. A `ConnectAsync` on a connection that wa
   socket open.
 - **A second `ConnectAsync` "to be sure"** on a connection that is up now throws. Read `State`
   first, or drop the call.
+
+## Connecting again after a loss
+
+**Before:** with `AutoReconnect` off, a `ConnectAsync` made while the connection was still
+releasing the session it had lost failed almost always: from a handler that saw `Disconnecting` it
+threw `OperationCanceledException` ("The connection was ended during the connect."), could leave
+the lost session's socket open for good, and in rare runs returned success and then had its new
+session torn down by the loss's cleanup. Even a connect made on seeing `Disconnected` failed now
+and then, because the release had not finished yet.
+
+**Now:** a `ConnectAsync` that finds a lost session still being released waits for that release
+(its socket, its reader and heartbeat, and the delivery of every event it had buffered), then
+connects as it does from `Disconnected`. The wait is bounded by the first of:
+
+| Bound | What the connect does |
+|---|---|
+| `ConnectionTimeout` runs out | throws `OperationCanceledException` ("The connection was ended during the connect."), as before; the release finishes on its own and a later call waits again |
+| your `cancellationToken` is cancelled | throws `OperationCanceledException` for your token |
+| your `DisconnectAsync` or `DisposeAsync` | throws `ObjectDisposedException` at once |
+
+A connect can therefore take up to twice `ConnectionTimeout`: the wait, then the connect itself.
+The wait never resumes on your `SynchronizationContext`.
+
+A connect made from inside the connection's own event dispatch (an `OnEvent` handler, an
+observer's `OnNext`, or anything they call) does not wait, because the release waits for that
+dispatch: it throws the same `OperationCanceledException` at once. A task such a handler started
+counts as inside the dispatch until the dispatch returns, so a connect it makes waits only if it
+runs after the handler has returned.
+
+```csharp
+connection.StateChanged += change =>
+{
+    // AutoReconnect off: reconnect on the loss without blocking the notification queue.
+    if (change.IsLoss)
+        _ = Task.Run(() => connection.ConnectAsync(shutdownToken).AsTask());
+};
+```
+
+### What this means for code you may have written
+
+- **An event handler must not await, without a token, external work that reconnects** — a worker
+  or a queue that calls `ConnectAsync`. That connect waits for a release that waits for the
+  handler, so it fails after `ConnectionTimeout`; retry it once the handler has returned.
+- **A retry loop around `ConnectAsync`** after a loss now usually succeeds on its first attempt.
+- **`ConnectionTimeout`** must be positive and finite: zero, a negative value and
+  `Timeout.InfiniteTimeSpan` are rejected by the options validator and by the `AmiConnection`
+  constructor, with `AutoReconnect` on or off.
 
 ## Watching the state instead of polling it
 

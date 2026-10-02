@@ -7,7 +7,7 @@ The recommended entry point to the [Verbara.Sdk](https://github.com/verbara/Verb
 - **`AddVerbara(IConfiguration | Action<VerbaraOptions>)`** — registers `IAmiConnection`, `IAriClient`, `IAgiServer`, the Live API (`VerbaraServer`), `IActivityRegistry`, `ISessionEngine`, and the supporting hosted services. Idempotent and source-generator-validated.
 - **`VerbaraOptions`** — strongly-typed configuration model with `[OptionsValidator]` source-generated validation (no runtime reflection). Bind directly from `appsettings.json` or configure inline.
 - **Hosted lifecycle** — `IHostedService` implementations connect AMI on `StartAsync`, drain on `StopAsync`. AGI server, ARI WebSocket, and `VerbaraServer` (Live aggregate) follow the same pattern.
-- **Health checks** — `AmiHealthCheck` (`ami`), `LiveHealthCheck` (`live`) and `AgiHealthCheck` (`agi`) auto-registered, `AriHealthCheck` (`ari`) with an `Ari` section; `AddVerbaraMultiServer` adds `VerbaraServerPoolHealthCheck` (`verbara-pool`). Expose at `/health` for Kubernetes probes.
+- **Health checks** — `AmiHealthCheck` (`ami`, the same state table as `live`), `LiveHealthCheck` (`live`) and `AgiHealthCheck` (`agi`) auto-registered, `AriHealthCheck` (`ari`) with an `Ari` section; `AddVerbaraMultiServer` adds `VerbaraServerPoolHealthCheck` (`verbara-pool`). Expose at `/health` for Kubernetes probes.
 - **Multi-server support** — register multiple `VerbaraServer` instances via `VerbaraServerPool` for federated deployments.
 
 This is a **meta-package**: it does not contain its own runtime types. It transitively pulls in `Verbara.Sdk`, `Verbara.Sdk.Ami`, `Verbara.Sdk.Agi`, `Verbara.Sdk.Ari`, `Verbara.Sdk.Live`, `Verbara.Sdk.Activities`, `Verbara.Sdk.Sessions`, and `Verbara.Sdk.Config`. Add Voice AI / Push / OpenTelemetry packages on top as needed.
@@ -74,6 +74,8 @@ builder.Services.AddHealthChecks();
 // ...
 app.MapHealthChecks("/health");
 ```
+
+The `ami` check reads the AMI connection's state: `Connected` is `Healthy`, `Reconnecting`, `Connecting` or not yet connected is `Degraded` (the connection may come back, or nobody has connected it yet), and `Disconnecting` or `Disconnected` is `Unhealthy`; its data carries the state as `amiState`. It uses the same table as `live`, so the two never disagree on a state ([migration guide](../../docs/guides/ami-connection-state-and-health-migration.md#the-ami-health-check)).
 
 The `live` check reads the AMI connection before the state it holds: `Connected` reports on the state as before, `Reconnecting`, `Connecting` or not yet connected is `Degraded` (the state is not being updated, but the connection may come back), and `Disconnecting` or `Disconnected` is `Unhealthy`; its data carries the connection's state as `amiState`.
 
