@@ -29,11 +29,8 @@ internal sealed record SseSubscriberIdentity(
 
         foreach (var identity in principal.Identities)
         {
-            foreach (var claim in identity.Claims)
+            foreach (var claim in identity.Claims.Where(c => !string.IsNullOrEmpty(c.Value)))
             {
-                if (string.IsNullOrEmpty(claim.Value))
-                    continue;
-
                 if (string.Equals(claim.Type, identity.RoleClaimType, StringComparison.OrdinalIgnoreCase)
                     || IsListed(claim.Type, options.RoleClaimTypes))
                 {
@@ -57,11 +54,8 @@ internal sealed record SseSubscriberIdentity(
         if (claimTypes is null)
             return null;
 
-        foreach (var claimType in claimTypes)
+        foreach (var claimType in claimTypes.Where(t => !string.IsNullOrWhiteSpace(t)))
         {
-            if (string.IsNullOrWhiteSpace(claimType))
-                continue;
-
             foreach (var identity in principal.Identities)
             {
                 foreach (var claim in identity.Claims)

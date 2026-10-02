@@ -491,10 +491,9 @@ public sealed class SseTestHost : IAsyncDisposable
             if (options.Identity == SseIdentityMode.Principal)
             {
                 var id = ctx.Request.Headers[PrincipalHeader].ToString();
-                if (id.Length == 0)
-                    ctx.User = fixedPrincipal;
-                else
-                    ctx.User = principals.TryGetValue(id, out var registered) ? registered : new ClaimsPrincipal(new ClaimsIdentity());
+                ctx.User = id.Length == 0
+                    ? fixedPrincipal
+                    : principals.TryGetValue(id, out var registered) ? registered : new ClaimsPrincipal(new ClaimsIdentity());
             }
 
             try
