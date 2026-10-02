@@ -1,6 +1,9 @@
+using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using System.Globalization;
 using FluentAssertions;
 using Verbara.Sdk.Enums;
+using Verbara.Sdk.Sessions.Diagnostics;
 using Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
 using Verbara.Sdk.Sessions.Manager;
 
@@ -145,5 +148,116 @@ public sealed class AnsweredWithNoDialTests : IAsyncLifetime
             },
             "no answer was ever observed, so whatever the cause the call never became one: it ends failed, once, "
             + $"with no connected time and no talk time. Measured: {Describe(session)}");
+    }
+
+    // --- the answer itself moves nothing --------------------------------------------------------
+
+    /// <summary>
+    /// Across the dialplan's answer — from just before it to just after — the call stays in its initial state
+    /// with no connected time, and nothing leaves the manager: no domain event, no measurement on any session
+    /// instrument, no save. Read while it talks, the call is a call that has not connected.
+    /// </summary>
+    [Fact]
+    public void Answer_ShouldPublishMeasureAndSaveNothing_WhenTheDialplanAnswersACallInItsInitialState()
+    {
+        var session = GivenAnInboundCallInItsInitialState();
+        var eventsBefore = _events.Count;
+        var savesBefore = _store.SavesOf(session.SessionId);
+
+        using (var measurements = new SessionMeasurements())
+        {
+            _fixture.SimulateAnswer(CallerUid);
+
+            new
+            {
+                session.State,
+                ConnectedAtIsSet = session.ConnectedAt.HasValue,
+                ConnectedEvents = _events.Skip(eventsBefore).OfType<CallConnectedEvent>().Count(),
+                DomainEvents = string.Join(",", _events.Skip(eventsBefore).Select(e => e.GetType().Name)),
+                Measurements = measurements.Describe(),
+                Saves = _store.SavesOf(session.SessionId) - savesBefore,
+            }.Should().BeEquivalentTo(
+                new
+                {
+                    State = CallSessionState.Created,
+                    ConnectedAtIsSet = false,
+                    ConnectedEvents = 0,
+                    DomainEvents = "",
+                    Measurements = "",
+                    Saves = 0,
+                },
+                "an answer that no dial or queue connected is recorded and nothing else: the live call reads as one that "
+                + $"has not connected, and nothing is published, measured or saved. Measured: {Describe(session)}");
+        }
+    }
+
+    /// <summary>
+    /// The dialplan answers, then queues the call, and an agent takes it. The dialplan's answer is not the call's
+    /// connection, so the connected time stays unset through the answer and the queue join, and is set only when
+    /// the agent answers and the queue application reports the connection.
+    /// </summary>
+    [Fact]
+    public void ConnectedAt_ShouldBeSetOnlyWhenTheAgentAnswers_WhenTheDialplanAnswersAndThenQueuesTheCall()
+    {
+        const string agentId = "1001";
+        const string agentUid = "ivr-agent-001";
+        const string agentChannel = "PJSIP/agent1-001";
+        _fixture.Server.Agents.OnAgentLogin(agentId, "PJSIP/agent1");
+        var session = GivenAnInboundCallInItsInitialState();
+
+        _fixture.SimulateAnswer(CallerUid);
+        var afterTheDialplansAnswer = session.ConnectedAt;
+        _fixture.SimulateQueueCallerJoined("support", CallerChannel, "5551234");
+        var afterTheQueueJoin = session.ConnectedAt;
+
+        var justBeforeTheAgentAnswers = DateTimeOffset.UtcNow;
+        _fixture.SimulateNewChannel(agentUid, agentChannel, ChannelState.Ring, linkedId: LinkedId);
+        _fixture.SimulateAnswer(agentUid);
+        _fixture.Server.Agents.OnAgentConnect(agentId, CallerChannel, LinkedId, "PJSIP/agent1");
+
+        new
+        {
+            AfterTheDialplansAnswer = afterTheDialplansAnswer.HasValue,
+            AfterTheQueueJoin = afterTheQueueJoin.HasValue,
+            AfterTheAgentAnswers = session.ConnectedAt >= justBeforeTheAgentAnswers,
+        }.Should().BeEquivalentTo(
+            new { AfterTheDialplansAnswer = false, AfterTheQueueJoin = false, AfterTheAgentAnswers = true },
+            "the call connects when the agent answers it, not when the dialplan did, so its wait and talk time are "
+            + $"measured from the agent's answer. Measured: {Describe(session)}");
+    }
+
+    /// <summary>
+    /// What the session meter records on the test's thread while it is open: one entry per instrument that moved,
+    /// as <c>name=sum</c> for a counter and <c>name×count</c> for a histogram. The instruments are process-wide and
+    /// carry no tags, and other classes run in parallel on other threads, so only the test's own thread counts.
+    /// </summary>
+    private sealed class SessionMeasurements : IDisposable
+    {
+        private readonly int _thread = Environment.CurrentManagedThreadId;
+        private readonly MeterListener _listener = new();
+        private readonly ConcurrentDictionary<string, string> _moved = new(StringComparer.Ordinal);
+
+        public SessionMeasurements()
+        {
+            _listener.InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == SessionMetrics.Meter.Name)
+                    listener.EnableMeasurementEvents(instrument);
+            };
+            _listener.SetMeasurementEventCallback<long>((instrument, value, _, _) => Moved(instrument, $"={value}"));
+            _listener.SetMeasurementEventCallback<int>((instrument, value, _, _) => Moved(instrument, $"={value}"));
+            _listener.SetMeasurementEventCallback<double>((instrument, _, _, _) => Moved(instrument, "×1"));
+            _listener.Start();
+        }
+
+        public string Describe() => string.Join(",", _moved.OrderBy(m => m.Key, StringComparer.Ordinal).Select(m => m.Key + m.Value));
+
+        private void Moved(Instrument instrument, string how)
+        {
+            if (Environment.CurrentManagedThreadId == _thread)
+                _moved.AddOrUpdate(instrument.Name, how, (_, before) => before + how);
+        }
+
+        public void Dispose() => _listener.Dispose();
     }
 }

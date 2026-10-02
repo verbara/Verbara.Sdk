@@ -115,6 +115,87 @@ public sealed class CallShapeCaptureReplayTests
         }
     }
 
+    /// <summary>
+    /// Pins the flows recording an answer must not move: the unanswered originate (S5), the queued calls that
+    /// a member takes (S6, S10) or that are abandoned (S7, S11), and the dialed calls (S9, S12) — four of them
+    /// answered by the dialplan before they are queued or dialed. States, the queued and dialing times, the order
+    /// of <c>QueueJoined</c> or <c>Dialing</c> before any <c>Connected</c> entry, the kinds of domain event each
+    /// call publishes, and how many <see cref="CallConnectedEvent"/>s the capture publishes, all as before; never
+    /// an exact audit trail, which a recorded ring would legitimately lengthen. Each of these was observed red
+    /// with <c>Connected</c> admitted from the initial state, the shape that moves them.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallShapeCaptures))]
+    public async Task QueuedDialedAndUnansweredCalls_ShouldKeepTheirFlowAndTheirEvents_WhenACallShapeCaptureIsReplayed(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayAsync(fixture);
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+
+        var s5 = replay.Call("S5");
+        s5.Session.State.Should().Be(CallSessionState.Failed, "S5 is an originate the far end never answers");
+        s5.Session.HangupCause.Should().Be(HangupCause.NoAnswer, "S5's originate gives up unanswered");
+
+        foreach (var taken in new[] { "S6", "S10" })
+        {
+            var call = replay.Call(taken);
+            call.Session.State.Should().Be(CallSessionState.Completed, "a member took {0}", call.Scenario);
+            call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
+            call.Trail.Should().Contain(CallSessionEventType.QueueJoined, "{0} joined a queue", call.Scenario);
+            call.Trail.TakeWhile(t => t != CallSessionEventType.Connected).Should().Contain(
+                CallSessionEventType.QueueJoined, "{0} is queued before anything connects it", call.Scenario);
+        }
+
+        foreach (var abandoned in new[] { "S7", "S11" })
+        {
+            var call = replay.Call(abandoned);
+            call.Session.State.Should().Be(CallSessionState.Failed, "no member took {0}", call.Scenario);
+            call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
+        }
+
+        foreach (var dialed in new[] { "S9", "S12" })
+        {
+            var call = replay.Call(dialed);
+            call.Session.State.Should().Be(CallSessionState.Completed, "{0} is dialed to an agent who answers", call.Scenario);
+            call.Session.DialingAt.Should().NotBeNull("{0}'s dial names its calling channel", call.Scenario);
+            call.Trail.TakeWhile(t => t != CallSessionEventType.Connected).Should().Contain(
+                CallSessionEventType.Dialing, "{0} passes through Dialing before it connects", call.Scenario);
+        }
+
+        foreach (var (scenario, kinds) in DomainEventKindsToday)
+        {
+            var call = replay.Call(scenario);
+            call.DomainEvents.Select(e => e.GetType().Name).Should().Equal(kinds,
+                "{0} publishes the kinds of domain event it published before", call.Scenario);
+        }
+
+        replay.Calls.Sum(c => c.DomainEvents.OfType<CallConnectedEvent>().Count()).Should().Be(ConnectedEventsPerCaptureToday,
+            "the capture announces as many connections as before: only the two calls a queue member took");
+    }
+
+    /// <summary>
+    /// The kinds of domain event each scenario published on <c>9866b2ef</c>, identical on the three captures.
+    /// The calls answered with no dial or queue keep theirs too: nothing is published at their answer.
+    /// </summary>
+    private static readonly (string Scenario, string[] Kinds)[] DomainEventKindsToday =
+    [
+        ("S1", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S2", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S3", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S4", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S5", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S8", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S6", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallConnectedEvent), nameof(CallEndedEvent)]),
+        ("S7", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallEndedEvent)]),
+        ("S9", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S10", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallConnectedEvent), nameof(CallEndedEvent)]),
+        ("S11", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallEndedEvent)]),
+        ("S12", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+    ];
+
+    /// <summary>The <see cref="CallConnectedEvent"/>s each capture published on <c>9866b2ef</c>: S6's and S10's.</summary>
+    private const int ConnectedEventsPerCaptureToday = 2;
+
     /// <summary>The scenarios the dialplan answers and no dial or queue reaches.</summary>
     private static readonly string[] AnsweredWithNoDialOrQueue = ["S1", "S2", "S3", "S4", "S8"];
 
