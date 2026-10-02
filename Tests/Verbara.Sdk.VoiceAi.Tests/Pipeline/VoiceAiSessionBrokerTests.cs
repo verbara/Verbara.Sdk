@@ -271,6 +271,71 @@ public sealed class VoiceAiSessionBrokerTests
     }
 
     [Fact]
+    public async Task StopAsync_ShouldCompleteWithoutThrowing_WhenTheBrokerWasDisposedAndTheStopTokenIsAlreadyCancelled()
+    {
+        await using var rig = await BrokerRig.StartServerAsync();
+        await rig.Broker.StartAsync(CancellationToken.None);
+        rig.Broker.Dispose();
+
+        var stop = async () => await rig.Broker.StopAsync(new CancellationToken(canceled: true));
+
+        await stop.Should().NotThrowAsync(
+            "a stop after disposal has nothing left to cancel, so a host whose shutdown is no longer graceful " +
+            "can still call it on a broker its container already released");
+    }
+
+    [Fact]
+    public async Task StopAsync_ShouldRaiseNothingAtTheCanceller_WhenTheBrokerWasDisposedAndTheStopTokenIsCancelledLater()
+    {
+        await using var rig = await BrokerRig.StartServerAsync();
+        await rig.Broker.StartAsync(CancellationToken.None);
+        rig.Broker.Dispose();
+        using var grace = new CancellationTokenSource();
+        await rig.Broker.StopAsync(grace.Token);
+
+        // The host's shutdown budget runs out after a stop the disposed broker accepted.
+        var cancel = () => grace.Cancel();
+
+        cancel.Should().NotThrow(
+            "a stop after disposal leaves nothing wired to the stop token, so cancelling it later raises " +
+            "nothing at whoever cancels it");
+    }
+
+    [Fact]
+    public async Task StopAsync_ShouldCompleteWithoutThrowing_WhenTheBrokerWasDisposedAndTheStopTokenIsNeverCancelled()
+    {
+        await using var rig = await BrokerRig.StartServerAsync();
+        await rig.Broker.StartAsync(CancellationToken.None);
+        rig.Broker.Dispose();
+
+        var stop = async () => await rig.Broker.StopAsync(CancellationToken.None).WaitAsync(SignalTimeout);
+
+        await stop.Should().NotThrowAsync("a graceful stop after disposal has nothing to wait for");
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldNotHandASessionOn_WhenTheBrokerWasDisposedWithoutEverBeingStarted()
+    {
+        await using var rig = await BrokerRig.StartServerAsync();
+        rig.Broker.Dispose();
+
+        // Whether a start after disposal throws ObjectDisposedException or completes is not what this
+        // row pins; either way it must not subscribe to the server.
+        var start = await Record.ExceptionAsync(() => rig.Broker.StartAsync(CancellationToken.None));
+        var probe = SessionStartedProbe.SubscribeTo(rig.Server);
+        var channel = await rig.ConnectPeerAsync();
+        await probe.Started(channel).WaitAsync(SignalTimeout);
+
+        (start is null or ObjectDisposedException).Should().BeTrue(
+            $"a start after disposal either completes or reports the disposal (it raised {start?.GetType().Name ?? "nothing"})");
+        rig.Handler.Calls.Count.Should().Be(
+            0,
+            "a disposed broker hands no session on whatever is called on it afterwards, even when it was never " +
+            "started before it was disposed, and the probe, subscribed after that start, fires only once the " +
+            "broker's dispatch has run or never will");
+    }
+
+    [Fact]
     public async Task StartAsync_ShouldHandBothSessionsToTheHandlerAndLetBothFinish_WhenTheSameChannelIdConnectsTwiceInSuccession()
     {
         // A re-entered AudioSocket(), a redirect or a transfer brings a call back with the id it had,
