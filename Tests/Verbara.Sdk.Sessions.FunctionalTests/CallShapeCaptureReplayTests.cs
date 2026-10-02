@@ -203,6 +203,36 @@ public sealed class CallShapeCaptureReplayTests
     }
 
     /// <summary>
+    /// The queue's report is the only thing that connects a queued call. The calls a member takes (S6, S10) are
+    /// replayed with app_queue's <c>AgentConnect</c> frames withheld, and everything else the member's leg did kept:
+    /// its answer, its bridge entry and the caller's <c>DialEnd</c> with <c>ANSWER</c>. Without the queue's report,
+    /// neither call ever connects: each ends failed, with no connected time, no talk time and no
+    /// <see cref="CallConnectedEvent"/>.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallShapeCaptures))]
+    public async Task QueuedCalls_ShouldStayQueued_WhenTheQueueNeverReportsTheConnection(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayAsync(fixture,
+            drop: evt => string.Equals(evt.EventType, "AgentConnect", StringComparison.OrdinalIgnoreCase));
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+
+        foreach (var call in TakenByAMember.Select(replay.Call))
+        {
+            call.Session.State.Should().Be(CallSessionState.Failed,
+                "the queue never reported {0}'s connection, so it never connected", call.Scenario);
+            call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
+            call.Session.ConnectedAt.Should().BeNull(
+                "neither the member's answer, nor its bridge entry, nor the caller's dial outcome is the queue's report for {0}",
+                call.Scenario);
+            call.DomainEvents.OfType<CallEndedEvent>().Should().ContainSingle("{0} ends once", call.Scenario)
+                .Which.TalkTime.Should().BeNull("{0} never talked", call.Scenario);
+            call.DomainEvents.OfType<CallConnectedEvent>().Should().BeEmpty("{0} is never announced connected", call.Scenario);
+        }
+    }
+
+    /// <summary>
     /// The kinds of domain event each scenario published on <c>9866b2ef</c>, identical on the three captures.
     /// The calls answered with no dial or queue keep theirs too: nothing is published at their answer.
     /// </summary>

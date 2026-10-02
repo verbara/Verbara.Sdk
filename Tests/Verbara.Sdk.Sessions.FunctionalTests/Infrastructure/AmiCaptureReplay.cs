@@ -84,7 +84,14 @@ internal static class AmiCaptureReplay
     /// Replays <paramref name="fixture"/> (a file name in <c>Recordings/asterisk-ami/</c>) into a
     /// fresh server and session manager, with the default in-memory session store.
     /// </summary>
-    public static async Task<CaptureReplay> ReplayAsync(string fixture, SessionOptions? options = null)
+    /// <param name="fixture">The capture's file name.</param>
+    /// <param name="options">The session manager's options; the defaults when omitted.</param>
+    /// <param name="drop">
+    /// Optional. A frame for which it returns <see langword="true"/> is read but not delivered, as if Asterisk
+    /// had never sent it; a marker frame still names the scenario that follows it.
+    /// </param>
+    public static async Task<CaptureReplay> ReplayAsync(
+        string fixture, SessionOptions? options = null, Func<ManagerEvent, bool>? drop = null)
     {
         await using var rig = await ReplayRig.StartAsync(options ?? new SessionOptions());
         var manager = rig.Manager;
@@ -114,6 +121,9 @@ internal static class AmiCaptureReplay
         {
             if (TryReadMarker(evt, out var next))
                 scenario = next;
+
+            if (drop?.Invoke(evt) == true)
+                continue;
 
             if (rig.Deliver(evt) is { } thrown)
                 swallowed.Add(new SwallowedObserverException(scenario, evt.EventType ?? "", thrown));
