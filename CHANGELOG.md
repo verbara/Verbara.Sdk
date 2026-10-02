@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a snapshot never brings back a call that ended, and a call is opened once (#376)
+
+A state reload reads the channels with `Status` while events keep arriving. Up to 2.6.1, a channel that hung up while
+that answer was read was put back from the older snapshot: Live raised `ChannelAdded` for it again, and Sessions held it
+as a second copy of a leg in its call, or as a ghost call for a channel it had never held; with that leg up the call
+never ended. Measured at 5,000 channels and 50 calls/s: 292 channels re-admitted and 147 sessions holding one leg twice
+per run. A call that started during a reload could also be opened twice for one `linkedid`. Now every hangup seen
+while a reload reads `Status`, and a channel another reload removed meanwhile, is newer than the snapshot and stays
+gone; a channel is admitted once, whether the snapshot or its `Newchannel` comes first; a `linkedid` holds one call
+(0 re-admissions, 0 duplicate legs, 0 missed endings on the same runs).
+
+What a consumer observes changes:
+- a second `Newchannel` for a channel Live already holds raises nothing (no second `ChannelAdded`, the held instance kept);
+- a leg that arrives after its call ended opens a new call, and `GetByLinkedId` returns that live call; the ended call
+  keeps its participants and its ending.
+
+Not changed: under event backlog a reload can still end a call before its `Hangup` is processed — on time, with
+`cause` = `reload`, without the hangup's cause. See `docs/guides/troubleshooting.md`.
+
 ### Fixed — BREAKING: a lost AMI connection can be connected again (#375)
 
 With `AutoReconnect` off, or after the reconnect gave up, a `ConnectAsync` made on seeing the loss raced the loss's
