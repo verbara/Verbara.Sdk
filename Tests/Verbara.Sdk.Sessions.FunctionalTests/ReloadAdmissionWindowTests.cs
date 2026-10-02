@@ -54,6 +54,7 @@ public sealed class ReloadAdmissionWindowTests : IAsyncLifetime
 
     private readonly List<SessionDomainEvent> _sessionEvents = [];
     private readonly List<AsteriskChannel> _removed = [];
+    private readonly List<AsteriskChannel> _added = [];
     private readonly IDisposable _sessionSubscription;
 
     private IReadOnlyList<StatusEvent> _statusReply = [];
@@ -81,6 +82,7 @@ public sealed class ReloadAdmissionWindowTests : IAsyncLifetime
         _sessions.AttachToServer(_server, ServerId);
         _sessionSubscription = _sessions.Events.Subscribe(_sessionEvents.Add);
         _server.Channels.ChannelRemoved += _removed.Add;
+        _server.Channels.ChannelAdded += _added.Add;
     }
 
     /// <summary>
@@ -134,10 +136,19 @@ public sealed class ReloadAdmissionWindowTests : IAsyncLifetime
     /// Raises <c>Reconnected</c> and waits for the reload to end — at its last action when it
     /// completed, at the catch-all's log line when it failed.
     /// </summary>
-    private async Task WhenTheConnectionReconnects(params StatusEvent[] channelsAsteriskStillHas)
+    private Task WhenTheConnectionReconnects(params StatusEvent[] channelsAsteriskStillHas) =>
+        WhenTheConnectionReconnectsWhile(ACallArrivesLive, channelsAsteriskStillHas);
+
+    /// <summary>
+    /// <see cref="WhenTheConnectionReconnects"/> with what happens live while the snapshot is read
+    /// chosen by the test: <paramref name="whileTheSnapshotIsRead"/> runs once, from inside the
+    /// <c>Status</c> reply, before the reply's first frame is handed back.
+    /// </summary>
+    private async Task WhenTheConnectionReconnectsWhile(
+        Action? whileTheSnapshotIsRead, params StatusEvent[] channelsAsteriskStillHas)
     {
         _statusReply = channelsAsteriskStillHas;
-        _whileTheSnapshotIsRead = ACallArrivesLive;
+        _whileTheSnapshotIsRead = whileTheSnapshotIsRead;
         _serverLog.RearmReloadSignals();
         _connection.Reconnected += Raise.Event<Action>();
 
@@ -167,11 +178,11 @@ public sealed class ReloadAdmissionWindowTests : IAsyncLifetime
     /// <c>ChannelState</c> header in <c>RawFields</c>, never as <c>StatusEvent.State</c>, which no
     /// supported Asterisk version populates (ADR-0062, design D5).
     /// </summary>
-    private static StatusEvent Leg(string uniqueId, string channel) => new()
+    private static StatusEvent Leg(string uniqueId, string channel, string linkedId = LinkedId) => new()
     {
         UniqueId = uniqueId,
         Channel = channel,
-        LinkedId = LinkedId,
+        LinkedId = linkedId,
         RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["ChannelState"] = "6",       // AST_STATE_UP, exactly as the frame carries it
@@ -235,6 +246,89 @@ public sealed class ReloadAdmissionWindowTests : IAsyncLifetime
             + $"two, nothing else does. Measured: {Describe()}");
         _sessions.ActiveSessions.Select(s => s.LinkedId).Should().Contain(LateLinkedId,
             $"Measured: {Describe()}");
+    }
+
+    // --- scenario: a leg hangs up while the snapshot is read, and the snapshot still lists it --------
+
+    [Fact]
+    public async Task Reconnect_ShouldEndTheCallOnItsLastHangup_WhenALegHungUpWhileTheSnapshotListingItWasRead()
+    {
+        await GivenAStartedServer();
+        GivenAnAnsweredCall();
+        var call = _sessions.ActiveSessions.Single();
+
+        // The caller hangs up after Status was sent; Asterisk's answer was written before that and
+        // still lists both legs.
+        await WhenTheConnectionReconnectsWhile(
+            () => _server.Channels.OnHangup(CallerUid, HangupCause.NormalClearing),
+            Leg(CallerUid, "PJSIP/trunk-001"),
+            Leg(AgentUid, "PJSIP/100-001"));
+        _server.Channels.OnHangup(AgentUid, HangupCause.NormalClearing);
+
+        new
+        {
+            Participants = call.Participants.Count,
+            Left = call.Participants.Count(p => p.LeftAt.HasValue),
+            Ended = _sessionEvents.OfType<CallEndedEvent>().Count(e => e.SessionId == call.SessionId),
+        }.Should().BeEquivalentTo(
+            new { Participants = 2, Left = 2, Ended = 1 },
+            "both legs hung up, so the call has its two legs, both left, and ended once; a leg the stale "
+            + $"snapshot brought back would never leave and hold the call forever. Measured: {Describe()}");
+    }
+
+    [Fact]
+    public async Task Reconnect_ShouldHoldEachLegOnceAndEndTheCall_WhenTheSnapshotReportedTheCallBeforeItsLiveArrival()
+    {
+        const string first = "fresh-001";
+        const string second = "fresh-002";
+        const string freshLinkedId = "linked-fresh";
+        await GivenAStartedServer();
+
+        // The answer lists a call whose live NewChannel events are still queued behind it.
+        await WhenTheConnectionReconnectsWhile(
+            whileTheSnapshotIsRead: null,
+            Leg(first, "PJSIP/trunk-fresh", freshLinkedId),
+            Leg(second, "PJSIP/100-fresh", freshLinkedId));
+        _server.Channels.OnNewChannel(first, "PJSIP/trunk-fresh", ChannelState.Up,
+            context: "from-trunk", linkedId: freshLinkedId);
+        _server.Channels.OnNewChannel(second, "PJSIP/100-fresh", ChannelState.Up, linkedId: freshLinkedId);
+        var calls = _sessions.ActiveSessions.Where(s => s.LinkedId == freshLinkedId).ToList();
+        _server.Channels.OnHangup(first, HangupCause.NormalClearing);
+        _server.Channels.OnHangup(second, HangupCause.NormalClearing);
+
+        new
+        {
+            Sessions = calls.Count,
+            Participants = calls.Sum(s => s.Participants.Count),
+            Ended = _sessionEvents.OfType<CallEndedEvent>().Count(e => calls.Any(s => s.SessionId == e.SessionId)),
+        }.Should().BeEquivalentTo(
+            new { Sessions = 1, Participants = 2, Ended = 1 },
+            "a channel is admitted once whichever route reports it first, so the call holds each leg once and "
+            + $"its two hangups end it. Measured: {Describe()}");
+    }
+
+    [Fact]
+    public async Task Reconnect_ShouldOpenNoCall_WhenAChannelNeverHeldHungUpWhileTheSnapshotListingItWasRead()
+    {
+        const string unseen = "unseen-001";
+        const string unseenLinkedId = "linked-unseen";
+        await GivenAStartedServer();
+        _added.Clear();
+
+        // A call that started while the connection was down hangs up after Status was sent.
+        await WhenTheConnectionReconnectsWhile(
+            () => _server.Channels.OnHangup(unseen, HangupCause.NormalClearing),
+            Leg(unseen, "PJSIP/trunk-unseen", unseenLinkedId));
+
+        new
+        {
+            Announced = _added.Count(c => c.UniqueId == unseen),
+            Held = _server.Channels.GetByUniqueId(unseen) is not null,
+            Sessions = _sessions.ActiveSessions.Count(s => s.LinkedId == unseenLinkedId),
+        }.Should().BeEquivalentTo(
+            new { Announced = 0, Held = false, Sessions = 0 },
+            "the SDK observed the hangup after the snapshot was requested; no hangup will ever follow an "
+            + $"admission from the stale snapshot, so it would be a call that never ends. Measured: {Describe()}");
     }
 
     /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
