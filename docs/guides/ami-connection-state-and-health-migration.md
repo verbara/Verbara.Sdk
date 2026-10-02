@@ -29,8 +29,11 @@ behaviour:
    state. See [the `ami` health check](#the-ami-health-check).
 6. An `AmiConnectionOptions.ConnectionTimeout` of zero, a negative value or
    `Timeout.InfiniteTimeSpan`. It is now rejected, by the options validator when `ValidateOnStart`
-   runs and by the `AmiConnection` constructor, naming the option. Set a positive, finite value
-   (the default is 5 s); it also bounds the wait described in item 7. See
+   runs and by the `AmiConnection` constructor, naming the option. The connection keeps the options
+   object it was given, so a value changed to one of those afterwards is rejected where it is used:
+   the next `ConnectAsync` throws `ArgumentOutOfRangeException` before it dials, and a reconnect in
+   progress ends the connection once with that exception instead of retrying. Set a positive, finite
+   value (the default is 5 s); it also bounds the wait described in item 7. See
    [connecting again after a loss](#connecting-again-after-a-loss).
 7. Code that calls `ConnectAsync` after a loss with `AutoReconnect` off, or after the reconnect
    gave up. That call now waits, up to `ConnectionTimeout`, for the lost session to be released,
@@ -198,7 +201,8 @@ connection.StateChanged += change =>
 - **A retry loop around `ConnectAsync`** after a loss now usually succeeds on its first attempt.
 - **`ConnectionTimeout`** must be positive and finite: zero, a negative value and
   `Timeout.InfiniteTimeSpan` are rejected by the options validator and by the `AmiConnection`
-  constructor, with `AutoReconnect` on or off.
+  constructor, with `AutoReconnect` on or off, and a value changed to one of them afterwards is
+  rejected by the next `ConnectAsync` and ends a reconnect in progress.
 
 ## Watching the state instead of polling it
 
