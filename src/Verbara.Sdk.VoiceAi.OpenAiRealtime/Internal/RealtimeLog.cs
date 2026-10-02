@@ -37,4 +37,7 @@ internal static partial class RealtimeLog
 
     [LoggerMessage(Level = LogLevel.Information, Message = "[{ChannelId}] Function '{FunctionName}' returned after the caller hung up; its result was not sent")]
     public static partial void FunctionResultNotSent(ILogger logger, Guid channelId, string functionName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[{ChannelId}] {EventType} raised after the bridge was disposed; dropped")]
+    public static partial void EventDroppedAfterDisposal(ILogger logger, Guid channelId, string eventType);
 }
