@@ -641,29 +641,28 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         var handlerSource = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var handlerToken = handlerSource.Token;
 
-        // The bound is armed before the call starts, so it is the first timer the call puts on the clock.
-        var bound = new CancellationTokenSource(timeout, TimeProvider);
-
         // Task.Run: a handler that blocks its thread before it first yields never hands back a task, and the wait
-        // below would never be reached. The ValueTask is turned into a Task exactly once; that one task is both
-        // awaited and observed.
-        var call = Task.Run(() => handler.ExecuteAsync(fnEvt.Arguments, handlerToken).AsTask(), CancellationToken.None);
-
-        using (var wait = CancellationTokenSource.CreateLinkedTokenSource(ct, bound.Token))
+        // would never be reached. The ValueTask is turned into a Task exactly once; that one task is both awaited and
+        // observed.
+        Task<string> call;
+        bool boundElapsed;
+        try
         {
-            // Ends when the call ends, the bound elapses or the host cancels; never throws, so nothing here is
-            // classified by an exception's type.
-            await ((Task)call).WaitAsync(wait.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            (call, boundElapsed) = await StartWithinBoundAsync(
+                () => Task.Run(() => handler.ExecuteAsync(fnEvt.Arguments, handlerToken).AsTask(), CancellationToken.None),
+                timeout,
+                ct).ConfigureAwait(false);
         }
-
-        // Decide, then act. The bound's flag is read first: a handler that stops the instant its token is cancelled,
-        // or that completes in the same clock step as the bound, still finds the call decided as timed out.
-        var boundElapsed = bound.IsCancellationRequested;
-        bound.Dispose();
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The call never started (the wait itself never throws): nothing will use the handler's source.
+            ReleaseHandlerSource(handlerSource);
+            throw;
+        }
 
         if (call.IsCompleted && !boundElapsed)
         {
-            handlerSource.Dispose();
+            ReleaseHandlerSource(handlerSource);
             try
             {
                 return await call.ConfigureAwait(false);
@@ -700,6 +699,31 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         return JsonSerializer.Serialize(
             new FunctionCallErrorOutput { Error = "timeout" },
             ReadableOutputContext.FunctionCallErrorOutput);
+    }
+
+    // The handler's source, once nothing can use it any more: the call ended inside its bound, or never started.
+    // An abandoned call's source is released by Abandon's continuation instead, once that call has ended.
+    private static void ReleaseHandlerSource(CancellationTokenSource handlerSource) => handlerSource.Dispose();
+
+    /// <summary>
+    /// Arms the bound, starts the call, and waits until the call ends, the bound elapses or <paramref name="ct"/> is
+    /// cancelled, whichever comes first. Returns the call and whether the bound had elapsed when the wait ended, read
+    /// before anything looks at the call's outcome. The bound covers the call only: it is released here, before the
+    /// answer is serialized or written. It is armed before the call starts, so it is the first timer the call puts on
+    /// the clock.
+    /// </summary>
+    private async Task<(Task<string> Call, bool BoundElapsed)> StartWithinBoundAsync(
+        Func<Task<string>> start, TimeSpan timeout, CancellationToken ct)
+    {
+        using var bound = new CancellationTokenSource(timeout, TimeProvider);
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct, bound.Token);
+        var call = start();
+
+        // Never throws, so nothing here is classified by an exception's type. Awaited as a plain Task:
+        // SuppressThrowing is not allowed on a Task with a result.
+        Task ended = call;
+        await ended.WaitAsync(wait.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        return (call, bound.IsCancellationRequested);
     }
 
     /// <summary>

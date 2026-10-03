@@ -181,26 +181,7 @@ public sealed class AriClient : IAriClient
         // reconnecting it) is taken out and released here instead of being dropped: its source is linked to that
         // caller's token and stays registered on it until disposed. An attempt that ended without a connection
         // already released its own. What a loop or another dial still runs on is theirs, and is left to them.
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var socket = new ClientWebSocket();
-        var othersDialing = Interlocked.Increment(ref _dialsInFlight) > 1;
-        var previousCts = Interlocked.Exchange(ref _cts, cts);
-        var previousSocket = Interlocked.Exchange(ref _webSocket, socket);
-        if (!othersDialing && _eventLoop is null or { IsCompleted: true })
-        {
-            previousCts?.Dispose();
-            previousSocket?.Dispose();
-        }
-
-        var authBytes = Encoding.UTF8.GetBytes($"{_options.Username}:{_options.Password}");
-        socket.Options.SetRequestHeader("Authorization",
-            "Basic " + Convert.ToBase64String(authBytes));
-
-        var wsUrl = _options.BaseUrl.TrimEnd('/')
-            .Replace("http://", "ws://", StringComparison.OrdinalIgnoreCase)
-            .Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase);
-        var uri = new Uri($"{wsUrl}/ari/events?api_key={Uri.EscapeDataString(_options.Username)}:{Uri.EscapeDataString(_options.Password)}&app={Uri.EscapeDataString(_options.Application)}");
-
+        //
         // Nothing is caught here: the exception, its type and its stack reach the caller exactly as
         // they did before. The flag is the only thing the dial reports back, and it is set after the
         // await, so the finally can tell an attempt that ended without a connection from one that did
@@ -212,9 +193,27 @@ public sealed class AriClient : IAriClient
         // TimeoutException) instead of holding it for as long as the caller's token allows. It runs on the
         // attempt's own token, linked to the caller's, so a DisconnectAsync or DisposeAsync during the dial
         // ends it at once instead of leaving it to the bound.
+        var othersDialing = Interlocked.Increment(ref _dialsInFlight) > 1;
         var connected = false;
+        CancellationTokenSource? cts = null;
+        ClientWebSocket? socket = null;
         try
         {
+            cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            socket = new ClientWebSocket();
+            var releasePrevious = !othersDialing && _eventLoop is null or { IsCompleted: true };
+            ReleaseIf(releasePrevious, Interlocked.Exchange(ref _cts, cts));
+            ReleaseIf(releasePrevious, Interlocked.Exchange(ref _webSocket, socket));
+
+            var authBytes = Encoding.UTF8.GetBytes($"{_options.Username}:{_options.Password}");
+            socket.Options.SetRequestHeader("Authorization",
+                "Basic " + Convert.ToBase64String(authBytes));
+
+            var wsUrl = _options.BaseUrl.TrimEnd('/')
+                .Replace("http://", "ws://", StringComparison.OrdinalIgnoreCase)
+                .Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase);
+            var uri = new Uri($"{wsUrl}/ari/events?api_key={Uri.EscapeDataString(_options.Username)}:{Uri.EscapeDataString(_options.Password)}&app={Uri.EscapeDataString(_options.Application)}");
+
             await AriConnectBound.ConnectAsync(socket, uri, ConnectTimeout, TimeProvider, cts.Token);
             connected = true;
 
@@ -236,17 +235,10 @@ public sealed class AriClient : IAriClient
                 // here held, so neither the exception's type nor its own CancellationToken can say
                 // whether the attempt was withdrawn. A withdrawal is not a failure, and rests where
                 // DisconnectAsync leaves the client; anything else, the bound's expiry included, faulted.
-                SetState(cts.IsCancellationRequested
+                SetState(cts?.IsCancellationRequested == true
                     ? AriConnectionState.Disconnected
                     : AriConnectionState.Faulted);
-
-                // The attempt is over, so its source (registered on the caller's token) and its socket are
-                // released now, not left for the next attempt or for disposal. Each field is cleared only
-                // while it still holds this attempt's, since a concurrent ConnectAsync may have replaced it.
-                Interlocked.CompareExchange(ref _cts, null, cts);
-                Interlocked.CompareExchange(ref _webSocket, null, socket);
-                cts.Dispose();
-                socket.Dispose();
+                ReleaseAttempt(cts, socket);
             }
         }
 
@@ -262,10 +254,36 @@ public sealed class AriClient : IAriClient
         Volatile.Write(ref _pump, pump);
 
         // Reached only when the dial connected, so the source is still this attempt's and undisposed.
-        var loopToken = cts.Token;
+        var loopToken = cts!.Token;
         _eventLoop = Task.Run(() => EventLoopAsync(pump, loopToken), CancellationToken.None);
 
         AriClientLog.Connected(_logger, _options.BaseUrl, _options.Application);
+    }
+
+    // What a previous connection left in a field this attempt has just replaced: released only when nothing still
+    // runs on it (no events loop, no other dial), otherwise left to whoever does.
+    private static void ReleaseIf(bool release, IDisposable? previous)
+    {
+        if (release)
+            previous?.Dispose();
+    }
+
+    // An attempt that ended without a connection is over, so its source (registered on the caller's token) and its
+    // socket are released now, not left for the next attempt or for disposal. Each field is cleared only while it
+    // still holds this attempt's, since a concurrent ConnectAsync may have replaced it.
+    private void ReleaseAttempt(CancellationTokenSource? cts, ClientWebSocket? socket)
+    {
+        if (cts is not null)
+        {
+            Interlocked.CompareExchange(ref _cts, null, cts);
+            cts.Dispose();
+        }
+
+        if (socket is not null)
+        {
+            Interlocked.CompareExchange(ref _webSocket, null, socket);
+            socket.Dispose();
+        }
     }
 
     private ValueTask DispatchAsync(AriEvent evt)
