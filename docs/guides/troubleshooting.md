@@ -96,7 +96,7 @@ See [High-Load Tuning Guide](high-load-tuning.md) for sizing recommendations.
 **Symptoms:** Expected events never arrive.
 
 **Checklist:**
-1. Verify AMI user has `read = all` (or specific classes like `read = system,call,agent`: queue events are in the `agent` class, since `queue` is not an AMI class, and `system` carries `FullyBooted`, which the live state's load waits for)
+1. Verify AMI user has `read = all` (or specific classes like `read = system,call,agent`: queue events are in the `agent` class, since `queue` is not an AMI class, and `system` carries `FullyBooted`, which the live state's load waits for). Without the `agent` class Asterisk sends none of app_queue's events, so the SDK sees a queued call as a plain dial: no `CallQueuedEvent`, no `QueuedAt`, no queue metrics, and no member in `CallSession.AgentInterface`
 2. Check ARI application name matches your Stasis app
 3. Ensure you subscribe before the events fire (subscribe before `ConnectAsync` or use `ReplaySubject`)
 4. Events with both an `Event` and a `Response` header (`OriginateResponse`, `ChallengeResponseFailed`, a `UserEvent` sent with a `Response` header) were taken for responses and never delivered up to 2.6.1. Upgrade.
