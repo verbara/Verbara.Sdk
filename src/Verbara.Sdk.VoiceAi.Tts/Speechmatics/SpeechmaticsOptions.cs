@@ -70,7 +70,12 @@ public sealed class SpeechmaticsOptions
     /// <summary>Output sample rate in Hz. Defaults to 16000.</summary>
     public int SampleRate { get; set; } = 16000;
 
-    /// <summary>HTTP connect / request timeout in seconds.</summary>
+    /// <summary>
+    /// HTTP connect / request timeout in seconds. Accepts whole seconds from 1 to 600: the options validator
+    /// rejects any other value, and the constructor throws <see cref="ArgumentOutOfRangeException"/> naming this
+    /// option before it builds its HTTP client. Defaults to 10.
+    /// </summary>
+    [Range(1, 600)]
     public int ConnectTimeoutSeconds { get; set; } = 10;
 }
 

@@ -44,7 +44,12 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
     /// the shape <see cref="Speechmatics.SpeechmaticsSpeechRecognizer"/> has carried all along.
     /// </remarks>
     public CartesiaSpeechRecognizer(IOptions<CartesiaOptions> options)
-        => _options = options.Value;
+    {
+        _options = options.Value;
+
+        // Checked here, naming the option, because no validator runs for Options.Create or a hand-made registration.
+        _ = TimeoutSecondsRule.ToLimit(_options.ConnectTimeoutSeconds);
+    }
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<SpeechRecognitionResult> StreamAsync(
@@ -72,8 +77,10 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
 
         try
         {
+            // The range is checked again right before the dial, naming the option: the options object is held
+            // by reference and can change after construction.
             await WebSocketConnectBound.ConnectAsync(
-                ws, wsUri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
+                ws, wsUri, TimeoutSecondsRule.ToLimit(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {

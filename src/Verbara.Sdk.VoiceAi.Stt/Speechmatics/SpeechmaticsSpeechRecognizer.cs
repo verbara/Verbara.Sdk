@@ -44,7 +44,12 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
     /// regional endpoint — so the suite drives the production path rather than one built for it.
     /// </remarks>
     public SpeechmaticsSpeechRecognizer(IOptions<SpeechmaticsOptions> options)
-        => _options = options.Value;
+    {
+        _options = options.Value;
+
+        // Checked here, naming the option, because no validator runs for Options.Create or a hand-made registration.
+        _ = TimeoutSecondsRule.ToLimit(_options.ConnectTimeoutSeconds);
+    }
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<SpeechRecognitionResult> StreamAsync(
@@ -67,8 +72,10 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
 
         try
         {
+            // The range is checked again right before the dial, naming the option: the options object is held
+            // by reference and can change after construction.
             await WebSocketConnectBound.ConnectAsync(
-                ws, wsUri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
+                ws, wsUri, TimeoutSecondsRule.ToLimit(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {

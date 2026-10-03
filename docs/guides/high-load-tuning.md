@@ -70,7 +70,7 @@ Use `dotnet-counters`, OpenTelemetry, or Prometheus to track these metrics.
 | Metric | Type | Alert Threshold | Description |
 |--------|------|-----------------|-------------|
 | `ari.events.received` | Counter | — | Total WebSocket events received |
-| `ari.events.dropped` | Counter | > 0 | Events dropped due to full buffer |
+| `ari.events.dropped` | Counter | > 0 with `reason=buffer_full` | Events the observers never saw, tagged `reason`: `buffer_full` — discarded by a full buffer (the oldest buffered event, one per event). **Action:** speed up or offload the observers; `caller_ending` — still buffered when the caller's `DisposeAsync`/`DisconnectAsync` ended the connection, one measurement per ending with the count. Expected; alert and tune on `reason=buffer_full` only ([migration](ari-connection-state-and-accept-loop-migration.md#the-dropped-events-counter-counts-a-full-buffer-and-carries-a-reason)) |
 | `ari.events.dispatched` | Counter | — | Events dispatched to observers |
 | `ari.event.dispatch` | Histogram (ms) | p99 > 50ms | Event dispatch time |
 | `ari.rest.roundtrip` | Histogram (ms) | p99 > 5000ms | REST API roundtrip time |

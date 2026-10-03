@@ -51,12 +51,24 @@ internal static class WebSocketConnectBound
     /// did not complete it within <paramref name="limit"/>.
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="limit"/> is zero or less, or longer than <see cref="int.MaxValue"/> milliseconds; nothing is dialled.
+    /// </exception>
     internal static async Task ConnectAsync(
         ClientWebSocket ws, Uri uri, TimeSpan limit, TimeProvider timeProvider, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(ws);
         ArgumentNullException.ThrowIfNull(uri);
         ArgumentNullException.ThrowIfNull(timeProvider);
+
+        // A backstop for any caller that hands an unusable limit: each speech client checks its own option first,
+        // naming it, but a limit of zero or less would fail every dial as a timed-out upgrade, and one past what a
+        // timer accepts would throw from the timer naming its own parameter.
+        if (limit <= TimeSpan.Zero || limit.TotalMilliseconds > int.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(limit), limit, "The connect limit must be greater than zero and at most int.MaxValue milliseconds.");
+        }
 
         using var bound = new CancellationTokenSource(limit, timeProvider);
         using var connect = CancellationTokenSource.CreateLinkedTokenSource(ct, bound.Token);

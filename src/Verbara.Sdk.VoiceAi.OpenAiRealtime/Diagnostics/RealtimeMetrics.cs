@@ -46,9 +46,19 @@ public static class RealtimeMetrics
             "Total function calls dispatched by the OpenAI Realtime model");
 
     /// <summary>
+    /// Function calls the bridge stopped waiting for because they outlasted
+    /// <see cref="OpenAiRealtimeOptions.FunctionCallTimeout"/>: each was answered <c>{"error":"timeout"}</c>
+    /// (unless the caller had already hung up) and is also counted in <see cref="FunctionCallsTotal"/>.
+    /// </summary>
+    public static readonly Counter<long> FunctionCallsTimedOut =
+        Meter.CreateCounter<long>("openai_realtime.function_calls.timed_out", "calls",
+            "Function calls that outlasted FunctionCallTimeout and were answered as timed out; each is also counted in function_calls.total");
+
+    /// <summary>
     /// OpenAI Realtime sessions the caller ended whose close OpenAI did not answer in time: once the
     /// caller hangs up, the bridge closes toward OpenAI and waits 10 seconds for the answer, counted
-    /// from its own close, or from the return of a function call still running then. Each is also
+    /// from its own close, or from the return of a function call still running then, or its abandonment
+    /// at its <see cref="OpenAiRealtimeOptions.FunctionCallTimeout"/>. Each is also
     /// counted in <see cref="SessionsCompleted"/>, because the caller ended the session; what was lost
     /// is OpenAI's close code.
     /// </summary>

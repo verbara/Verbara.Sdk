@@ -178,3 +178,6 @@ const Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntVoices.Lily = "lily" -> string!
 static Verbara.Sdk.VoiceAi.Tts.DependencyInjection.TtsServiceCollectionExtensions.AddLmntSpeechSynthesizer(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.VoiceAi.Tts.Lmnt.LmntTtsOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.ConnectTimeoutSeconds.get -> int
 Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions.ConnectTimeoutSeconds.set -> void
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptionsValidator
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptionsValidator.ElevenLabsOptionsValidator() -> void
+Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptionsValidator.Validate(string? name, Verbara.Sdk.VoiceAi.Tts.ElevenLabs.ElevenLabsOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!

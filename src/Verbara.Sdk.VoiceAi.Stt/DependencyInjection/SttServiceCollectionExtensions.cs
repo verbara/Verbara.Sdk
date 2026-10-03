@@ -24,7 +24,10 @@ public static class SttServiceCollectionExtensions
     {
         if (configure is not null)
             services.Configure(configure);
+        else
+            services.AddOptions<DeepgramOptions>();
 
+        services.AddSingleton<IValidateOptions<DeepgramOptions>, DeepgramOptionsValidator>();
         services.TryAddSingleton<SpeechRecognizer, DeepgramSpeechRecognizer>();
         services.AddHealthChecks().AddCheck<SttHealthCheck>("stt");
         return services;

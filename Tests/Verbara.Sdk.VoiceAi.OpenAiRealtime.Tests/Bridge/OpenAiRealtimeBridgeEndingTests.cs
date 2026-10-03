@@ -74,6 +74,12 @@ public sealed class OpenAiRealtimeBridgeEndingTests
     /// </summary>
     private static readonly TimeSpan ConnectBound = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// How long a function call may hold the session: the default <c>FunctionCallTimeout</c>, 30 seconds. Its arm
+    /// comes when the call starts.
+    /// </summary>
+    private static readonly TimeSpan FunctionCallBound = TimeSpan.FromSeconds(30);
+
     [Fact]
     public async Task HandleSessionAsync_ShouldCloseTheVendorSessionAndComplete_WhenTheCallerHangsUpOnAHealthySession()
     {
@@ -762,6 +768,7 @@ public sealed class OpenAiRealtimeBridgeEndingTests
 
             function.Release();
             PassOverTheConnectArm(clock);
+            PassOverTheFunctionArm(clock);
             var armedDue = await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(SignalTimeout);
             clock.Advance(CloseAnswerBound);
 
@@ -1283,6 +1290,17 @@ public sealed class OpenAiRealtimeBridgeEndingTests
     private static void PassOverTheConnectArm(FakeTimeProvider clock)
     {
         if (clock.TimersArmed.TryPeek(out var due) && due == ConnectBound)
+            clock.TimersArmed.TryRead(out _);
+    }
+
+    /// <summary>
+    /// Passes over the arm of a function call's own bound (<c>FunctionCallTimeout</c>, 30 s by default), when the
+    /// clock holds one: the bridge makes it when the call starts, before the call returns and before any close
+    /// bound's arm, so the next arm read is the close bound's. Called after <see cref="PassOverTheConnectArm"/>.
+    /// </summary>
+    private static void PassOverTheFunctionArm(FakeTimeProvider clock)
+    {
+        if (clock.TimersArmed.TryPeek(out var due) && due == FunctionCallBound)
             clock.TimersArmed.TryRead(out _);
     }
 

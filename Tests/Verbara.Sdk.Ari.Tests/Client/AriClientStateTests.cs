@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
+using System.Reflection;
 using System.Text;
 using System.Threading.Channels;
 using Verbara.Sdk.Ari.Audio;
@@ -25,6 +26,9 @@ public sealed class AriClientStateTests
 
     // How long a disconnect waits for the far end to answer its close, as the requirement states it.
     private static readonly TimeSpan CloseBound = TimeSpan.FromSeconds(5);
+
+    // The caller's own dial bound, as the requirement states it: the reconnect dial's.
+    private static readonly TimeSpan CallerDialBound = TimeSpan.FromSeconds(5);
 
     private static AriClient CreateClient()
     {
@@ -610,6 +614,7 @@ public sealed class AriClientStateTests
         try
         {
             await sut.ConnectAsync();
+            var callerDial = DrainTheCallerDialBound(clock);
 
             // Each dial's bound is on the clock before its request goes out: read what it was armed
             // with, then run it out.
@@ -626,6 +631,8 @@ public sealed class AriClientStateTests
 
             using (new AssertionScope())
             {
+                callerDial.Should().Be(CallerDialBound, "the caller's own dial armed its bound first, and only that one");
+                clock.TimersCreated.TryRead(out _).Should().BeFalse("no timer was created beyond the dials' bounds");
                 sut.State.Should().Be(AriConnectionState.Faulted, "the loop gave up after its last attempt");
                 peer.ReconnectDials.Should().Be(2, "two expired dials use up both attempts, and no third is made");
                 bounds.Should().Equal(
@@ -875,6 +882,7 @@ public sealed class AriClientStateTests
         try
         {
             await sut.ConnectAsync();
+            var callerDial = DrainTheCallerDialBound(clock);
             await logger.HeldAsync();
             var disconnect = sut.DisconnectAsync().AsTask();
             logger.Release();
@@ -888,6 +896,7 @@ public sealed class AriClientStateTests
 
             using (new AssertionScope())
             {
+                callerDial.Should().Be(CallerDialBound, "the caller's own dial armed its bound first, and only that one");
                 armed.Should().Be(CloseBound, "the wait for Asterisk's answer is bounded at five seconds, on the client's clock");
                 sut.State.Should().Be(
                     AriConnectionState.Disconnected, "a close the far end never answers ends at the bound, as a disconnect");
@@ -913,9 +922,11 @@ public sealed class AriClientStateTests
         };
 
         Task dispose;
+        TimeSpan? callerDial;
         try
         {
             await sut.ConnectAsync();
+            callerDial = DrainTheCallerDialBound(clock);
             await logger.HeldAsync();
             dispose = sut.DisposeAsync().AsTask();
         }
@@ -931,6 +942,7 @@ public sealed class AriClientStateTests
 
         using (new AssertionScope())
         {
+            callerDial.Should().Be(CallerDialBound, "the caller's own dial armed its bound first, and only that one");
             armed.Should().Be(CloseBound, "disposal disconnects first, and that close is bounded too");
             sut.State.Should().Be(AriConnectionState.Disconnected, "disposal returned through an ordinary disconnect");
         }
@@ -1020,6 +1032,427 @@ public sealed class AriClientStateTests
 
         sut.IsConnected.Should().BeFalse();
     }
+
+    // ── The caller's dial is bounded like the reconnect dial ─────────────────────────────────────────
+
+    [Fact]
+    public async Task ConnectAsync_ShouldFaultWithinItsBound_WhenTheUpgradeIsNeverAnswered()
+    {
+        // The far end takes the caller's dial, reads its upgrade request and never answers it; the caller's
+        // token is never cancelled. Before the bound the attempt stayed Connecting for as long as that token
+        // allowed: for good, here.
+        var clock = new FakeTimeProvider();
+        await using var peer = new DialPeer(answer: _ => false);
+        using var caller = new CancellationTokenSource();
+        var sut = new AriClient(CloseOptions(peer.Port), NullLogger<AriClient>.Instance) { TimeProvider = clock };
+        var connect = sut.ConnectAsync(caller.Token).AsTask();
+
+        try
+        {
+            await peer.NextDialAsync();
+            var armed = clock.TimersCreated.TryRead(out var bound) ? bound.DueTime : (TimeSpan?)null;
+            clock.Advance(CallerDialBound);
+
+            var fault = await Record.ExceptionAsync(() => connect.WaitAsync(WaitLimit));
+
+            using (new AssertionScope())
+            {
+                armed.Should().Be(CallerDialBound, "the caller's dial is bounded at five seconds, on the client's clock");
+                fault.Should().BeOfType<WebSocketException>(
+                    "a dial that ran out is reported like every other failed connect, never as a cancellation nobody asked for")
+                    .Which.InnerException.Should().BeOfType<TimeoutException>();
+                sut.State.Should().Be(AriConnectionState.Faulted, "the caller did not withdraw, so the attempt faulted");
+                sut.EventLoop.Should().BeNull("an attempt that did not connect starts no events loop");
+            }
+        }
+        finally
+        {
+            await ObserveConnectAsync(connect, caller);
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldStillBeConnecting_WhenTheBoundHasNotElapsed()
+    {
+        // Control: one tick short of the bound the attempt is still in progress.
+        var clock = new FakeTimeProvider();
+        await using var peer = new DialPeer(answer: _ => false);
+        using var caller = new CancellationTokenSource();
+        var sut = new AriClient(CloseOptions(peer.Port), NullLogger<AriClient>.Instance) { TimeProvider = clock };
+        var connect = sut.ConnectAsync(caller.Token).AsTask();
+
+        try
+        {
+            await peer.NextDialAsync();
+            clock.Advance(CallerDialBound - TimeSpan.FromTicks(1));
+
+            using (new AssertionScope())
+            {
+                connect.IsCompleted.Should().BeFalse("the far end still has a tick left to answer");
+                sut.State.Should().Be(AriConnectionState.Connecting);
+            }
+        }
+        finally
+        {
+            await ObserveConnectAsync(connect, caller);
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldLeaveStateDisconnected_WhenTheCallerCancelsBeforeTheBound()
+    {
+        // Control: the caller's own cancellation of a held dial is a withdrawal, as before the bound.
+        var clock = new FakeTimeProvider();
+        var logger = new RecordingLogger();
+        await using var peer = new DialPeer(answer: _ => false);
+        using var caller = new CancellationTokenSource();
+        var sut = new AriClient(CloseOptions(peer.Port), logger) { TimeProvider = clock };
+        var connect = sut.ConnectAsync(caller.Token).AsTask();
+
+        try
+        {
+            await peer.NextDialAsync();
+            await caller.CancelAsync();
+
+            var fault = await Record.ExceptionAsync(() => connect.WaitAsync(WaitLimit));
+
+            using (new AssertionScope())
+            {
+                fault.Should().BeAssignableTo<OperationCanceledException>("the caller withdrew the attempt");
+                sut.State.Should().Be(AriConnectionState.Disconnected, "an ending the caller asked for is not a fault");
+                logger.Entries.Should().NotContain(e => e.Level == LogLevel.Error, "a withdrawal is not an error");
+            }
+        }
+        finally
+        {
+            await ObserveConnectAsync(connect, caller);
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldConnect_WhenRetriedAfterTheBoundElapsed()
+    {
+        // The first dial is held and runs out; the caller dials again and the far end answers.
+        var clock = new FakeTimeProvider();
+        await using var peer = new DialPeer(answer: dial => dial >= 2);
+        using var caller = new CancellationTokenSource();
+        var sut = new AriClient(CloseOptions(peer.Port), NullLogger<AriClient>.Instance) { TimeProvider = clock };
+        var first = sut.ConnectAsync(caller.Token).AsTask();
+
+        try
+        {
+            await peer.NextDialAsync();
+            clock.Advance(CallerDialBound);
+            var firstFault = await Record.ExceptionAsync(() => first.WaitAsync(WaitLimit));
+            var afterFirst = sut.State;
+
+            var secondFault = await Record.ExceptionAsync(() => sut.ConnectAsync(caller.Token).AsTask().WaitAsync(WaitLimit));
+
+            using (new AssertionScope())
+            {
+                firstFault.Should().BeOfType<WebSocketException>("the first dial ran out");
+                afterFirst.Should().Be(AriConnectionState.Faulted);
+                secondFault.Should().BeNull("the far end answered the second dial");
+                sut.State.Should().Be(AriConnectionState.Connected, "a timed-out attempt is no gate on the next one");
+            }
+        }
+        finally
+        {
+            await ObserveConnectAsync(first, caller);
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldEndDisconnectedAtOnce_WhenTheClientIsDisconnectedDuringAHeldDial()
+    {
+        // A disconnect during the held dial ends it without waiting for the bound, and the bound's later
+        // expiry does not overwrite the Disconnected that the disconnect wrote.
+        var clock = new FakeTimeProvider();
+        await using var peer = new DialPeer(answer: _ => false);
+        using var caller = new CancellationTokenSource();
+        var sut = new AriClient(CloseOptions(peer.Port), NullLogger<AriClient>.Instance) { TimeProvider = clock };
+        var connect = sut.ConnectAsync(caller.Token).AsTask();
+
+        try
+        {
+            await peer.NextDialAsync();
+            await sut.DisconnectAsync().AsTask().WaitAsync(WaitLimit);
+
+            var fault = await Record.ExceptionAsync(() => connect.WaitAsync(WaitLimit));
+            var beforeTheBound = sut.State;
+            clock.Advance(CallerDialBound + TimeSpan.FromSeconds(1));
+
+            using (new AssertionScope())
+            {
+                fault.Should().BeAssignableTo<OperationCanceledException>("the client's own disconnect ended the dial");
+                beforeTheBound.Should().Be(AriConnectionState.Disconnected);
+                sut.State.Should().Be(AriConnectionState.Disconnected, "the bound's expiry no longer has a dial to fault");
+            }
+        }
+        finally
+        {
+            await ObserveConnectAsync(connect, caller);
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldEndDisconnectedAtOnce_WhenTheClientIsDisposedDuringAHeldDial()
+    {
+        // Disposal during the held dial ends it without waiting for the bound: the clock is never moved.
+        var clock = new FakeTimeProvider();
+        await using var peer = new DialPeer(answer: _ => false);
+        using var caller = new CancellationTokenSource();
+        var sut = new AriClient(CloseOptions(peer.Port), NullLogger<AriClient>.Instance) { TimeProvider = clock };
+        var connect = sut.ConnectAsync(caller.Token).AsTask();
+
+        try
+        {
+            await peer.NextDialAsync();
+            var disposal = await Record.ExceptionAsync(() => sut.DisposeAsync().AsTask().WaitAsync(WaitLimit));
+
+            var fault = await Record.ExceptionAsync(() => connect.WaitAsync(WaitLimit));
+
+            using (new AssertionScope())
+            {
+                disposal.Should().BeNull("disposal returns without waiting for the bound");
+                fault.Should().BeAssignableTo<OperationCanceledException>("the client's own disposal ended the dial");
+                sut.State.Should().Be(AriConnectionState.Disconnected, "an ending the client asked for is not a fault");
+                sut.EventLoop.Should().BeNull("no events loop and no reconnect loop runs");
+            }
+        }
+        finally
+        {
+            await ObserveConnectAsync(connect, caller);
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldReleaseEachAttemptsSocketAndSource_WhenItsBoundElapses()
+    {
+        // Three attempts against a far end that never answers, each run out on the clock. Each attempt's
+        // events socket and its cancellation source (linked to the caller's token) are released once the
+        // attempt has ended, so a caller that retries accumulates nothing.
+        const int attempts = 3;
+        var clock = new FakeTimeProvider();
+        await using var peer = new DialPeer(answer: _ => false);
+        using var caller = new CancellationTokenSource();
+        var sut = new AriClient(CloseOptions(peer.Port), NullLogger<AriClient>.Instance) { TimeProvider = clock };
+        List<(CancellationTokenSource Source, ClientWebSocket Socket)> held = [];
+        Task connect = Task.CompletedTask;
+
+        try
+        {
+            for (var attempt = 1; attempt <= attempts; attempt++)
+            {
+                connect = sut.ConnectAsync(caller.Token).AsTask();
+                await peer.NextDialAsync();
+                held.Add((
+                    (CancellationTokenSource)AttemptSourceField.GetValue(sut)!,
+                    (ClientWebSocket)AttemptSocketField.GetValue(sut)!));
+                clock.Advance(CallerDialBound);
+                _ = await Record.ExceptionAsync(() => connect.WaitAsync(WaitLimit));
+            }
+
+            var undisposedSources = held.Count(h => !IsDisposed(h.Source));
+            var undisposedSockets = 0;
+            foreach (var (_, socket) in held)
+            {
+                if (!await IsDisposedAsync(socket, peer.Port))
+                    undisposedSockets++;
+            }
+
+            using (new AssertionScope())
+            {
+                held.Should().HaveCount(attempts);
+                undisposedSources.Should().Be(0,
+                    "each attempt's source, linked to the caller's token, is released when its attempt ended");
+                undisposedSockets.Should().Be(0, "each attempt's events socket is released when its attempt ended");
+            }
+        }
+        finally
+        {
+            await ObserveConnectAsync(connect, caller);
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectAsync_ShouldReleaseEachAttemptsSocketAndSource_WhenTheDialIsRefused()
+    {
+        // The same release with no bound involved: three dials refused at once by a port with no listener.
+        // Before the release each refused attempt left its source registered on the caller's token.
+        const int attempts = 3;
+        int port;
+        using (var vacated = new TcpListener(IPAddress.Loopback, 0))
+        {
+            vacated.Start();
+            port = ((IPEndPoint)vacated.LocalEndpoint).Port;
+        }
+
+        using var caller = new CancellationTokenSource();
+        var sut = new AriClient(CloseOptions(port), NullLogger<AriClient>.Instance);
+        List<(CancellationTokenSource? Source, ClientWebSocket? Socket)> held = [];
+
+        try
+        {
+            for (var attempt = 1; attempt <= attempts; attempt++)
+            {
+                var connect = sut.ConnectAsync(caller.Token).AsTask();
+                // The fields are read the moment ConnectAsync has set them up: before its first await yields.
+                held.Add((
+                    (CancellationTokenSource?)AttemptSourceField.GetValue(sut),
+                    (ClientWebSocket?)AttemptSocketField.GetValue(sut)));
+                _ = await Record.ExceptionAsync(() => connect.WaitAsync(WaitLimit));
+            }
+
+            var undisposedSources = held.Count(h => h.Source is not null && !IsDisposed(h.Source));
+            var undisposedSockets = 0;
+            foreach (var (_, socket) in held)
+            {
+                if (socket is not null && !await IsDisposedAsync(socket, port))
+                    undisposedSockets++;
+            }
+
+            using (new AssertionScope())
+            {
+                held.Should().OnlyContain(h => h.Source != null && h.Socket != null, "each attempt opened a source and a socket");
+                undisposedSources.Should().Be(0,
+                    "each refused attempt's source, linked to the caller's token, is released when its attempt ended");
+                undisposedSockets.Should().Be(0, "each refused attempt's events socket is released when its attempt ended");
+            }
+        }
+        finally
+        {
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task CreateAndConnectAsync_ShouldDisposeTheClientAndRethrow_WhenItsConnectFails()
+    {
+        // The factory never hands a client whose connect threw to its caller, so it releases it itself.
+        // The dial is refused at once: a port taken and given up has no listener.
+        int port;
+        using (var vacated = new TcpListener(IPAddress.Loopback, 0))
+        {
+            vacated.Start();
+            port = ((IPEndPoint)vacated.LocalEndpoint).Port;
+        }
+
+        var sut = new AriClientFactory(NullLoggerFactory.Instance);
+        AriClient? created = null;
+        sut.ClientCreated = client => created = client;
+
+        var fault = await Record.ExceptionAsync(() => sut.CreateAndConnectAsync(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}",
+            Username = "asterisk",
+            Password = "asterisk",
+            Application = "test-app",
+        }).AsTask().WaitAsync(WaitLimit));
+
+        // Read at once: whatever releases the client has run before the error reached this caller.
+        var subscribe = Record.Exception(() => created?.Subscribe(new NullObserver()).Dispose());
+
+        try
+        {
+            using (new AssertionScope())
+            {
+                fault.Should().BeOfType<WebSocketException>("the connect's own error reaches the caller unchanged");
+                created.Should().NotBeNull("the factory created a client");
+                subscribe.Should().BeOfType<ObjectDisposedException>(
+                    "the client whose connect failed was disposed before the error reached the caller");
+            }
+        }
+        finally
+        {
+            if (created is not null)
+                await created.DisposeAsync();
+        }
+    }
+
+    private static readonly FieldInfo AttemptSourceField =
+        typeof(AriClient).GetField("_cts", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+    private static readonly FieldInfo AttemptSocketField =
+        typeof(AriClient).GetField("_webSocket", BindingFlags.NonPublic | BindingFlags.Instance)!;
+
+    /// <summary>A disposed source refuses its token.</summary>
+    private static bool IsDisposed(CancellationTokenSource source)
+    {
+        try
+        {
+            _ = source.Token;
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// A disposed <see cref="ClientWebSocket"/> refuses a connect with <see cref="ObjectDisposedException"/>; one
+    /// that is only spent refuses it with <see cref="InvalidOperationException"/>. Nothing is dialled either way.
+    /// </summary>
+    private static async Task<bool> IsDisposedAsync(ClientWebSocket socket, int port)
+    {
+        try
+        {
+            await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/"), CancellationToken.None).WaitAsync(WaitLimit);
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Ends a caller's <c>ConnectAsync</c> that a test may have left running (on code without the bound it
+    /// never ends by itself): cancels the caller's token and waits for the attempt, with its own limit, so
+    /// it cannot fault into another test.
+    /// </summary>
+    private static async Task ObserveConnectAsync(Task connect, CancellationTokenSource caller)
+    {
+        await caller.CancelAsync();
+        try
+        {
+            await connect.WaitAsync(WaitLimit);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or ObjectDisposedException
+            or TimeoutException)
+        {
+            // The attempt's own ending, already asserted (or not under test) where it mattered.
+        }
+    }
+
+    private sealed class NullObserver : IObserver<AriEvent>
+    {
+        public void OnCompleted() { }
+
+        public void OnError(Exception error) { }
+
+        public void OnNext(AriEvent value) { }
+    }
+
+    /// <summary>
+    /// Reads the one timer the caller's own dial created, right after <c>ConnectAsync</c> returned: its bound,
+    /// created before the dial and so first on the clock. The reads that follow in a test are then the timers
+    /// it is about (a reconnect dial's, a close's), never the caller dial's, which has the same five seconds.
+    /// Returns <see langword="null"/> when the caller's dial created none.
+    /// </summary>
+    private static TimeSpan? DrainTheCallerDialBound(FakeTimeProvider clock) =>
+        clock.TimersCreated.TryRead(out var bound) ? bound.DueTime : null;
 
     /// <summary>
     /// Reads the upgrade request of an accepted dial and answers it with <paramref name="status"/>
@@ -1153,6 +1586,95 @@ public sealed class AriClientStateTests
         {
             // What arrives, or whether anything does, does not matter: the first byte, an end of
             // stream or an abort all mean the client is done with this connection.
+            var received = new byte[1];
+            try
+            {
+                _ = await connection.GetStream().ReadAsync(received, ct);
+            }
+            catch (IOException)
+            {
+                // The client aborted the socket instead of closing it: the connection is already gone.
+            }
+
+            connection.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The Asterisk side of the caller-dial tests. It takes every dial in turn: it counts it, reads its upgrade
+    /// request, answers it only when <c>answer</c> says so, and publishes its number on
+    /// <see cref="NextDialAsync"/>. A dial it does not answer is held open, never refused, until the peer is
+    /// disposed. An answered dial is dropped as soon as the client sends anything on it, its close frame
+    /// included, so no disposal waits on a close answer this peer never gives.
+    /// </summary>
+    private sealed class DialPeer : IAsyncDisposable
+    {
+        private readonly TcpListener _server = new(IPAddress.Loopback, 0);
+        private readonly CancellationTokenSource _stop = new();
+        private readonly Channel<int> _dialed = Channel.CreateUnbounded<int>();
+        private readonly List<TcpClient> _connections = [];
+        private readonly List<Task> _answered = [];
+        private readonly Func<int, bool> _answer;
+        private readonly Task _run;
+        private int _dials;
+
+        public DialPeer(Func<int, bool> answer)
+        {
+            _answer = answer;
+            _server.Start();
+            Port = ((IPEndPoint)_server.LocalEndpoint).Port;
+            _run = Task.Run(RunAsync);
+        }
+
+        public int Port { get; }
+
+        /// <summary>
+        /// The number of the next dial, once its upgrade request has been read (and, for an answered dial,
+        /// answered). Faults with <see cref="TimeoutException"/> when none comes.
+        /// </summary>
+        public Task<int> NextDialAsync() => _dialed.Reader.ReadAsync().AsTask().WaitAsync(WaitLimit);
+
+        public async ValueTask DisposeAsync()
+        {
+            await _stop.CancelAsync();
+            await _run.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            lock (_connections)
+            {
+                foreach (var connection in _connections)
+                    connection.Dispose();
+            }
+
+            foreach (var answered in _answered)
+                await answered.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+
+            _server.Stop();
+            _stop.Dispose();
+        }
+
+        private async Task RunAsync()
+        {
+            var ct = _stop.Token;
+            while (!ct.IsCancellationRequested)
+            {
+                var dial = await _server.AcceptTcpClientAsync(ct);
+                lock (_connections)
+                    _connections.Add(dial);
+
+                var number = Interlocked.Increment(ref _dials);
+                var stream = dial.GetStream();
+                var (wsKey, _) = await WebSocketAudioServer.ReadUpgradeRequestAsync(stream, ct);
+                if (_answer(number))
+                {
+                    await WebSocketAudioServer.SendUpgradeResponseAsync(stream, wsKey!, ct);
+                    _answered.Add(DropOnFirstByteAsync(dial, ct));
+                }
+
+                _dialed.Writer.TryWrite(number);
+            }
+        }
+
+        private static async Task DropOnFirstByteAsync(TcpClient connection, CancellationToken ct)
+        {
             var received = new byte[1];
             try
             {

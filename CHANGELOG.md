@@ -4,6 +4,60 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: the caller's first ARI connect is bounded (#378)
+
+`AriClient.ConnectAsync` (and `CreateAndConnectAsync`, and the ARI hosted service) waited for as long as the caller's
+token allowed when Asterisk took the connection and never answered the WebSocket upgrade. It now dials through the
+same 5 s bound as the reconnect loop: such a call fails with `WebSocketException` (inner `TimeoutException`) and
+`State = Faulted`, so a host start against a mute Asterisk fails in about 5 s. A failed attempt releases its socket and
+cancellation source, and `AriClientFactory.CreateAndConnectAsync` disposes the client whose connect threw.
+
+**Migration guide:** [`docs/guides/ari-connection-state-and-accept-loop-migration.md`](docs/guides/ari-connection-state-and-accept-loop-migration.md)
+
+### Changed — BREAKING: the `ari` health check reads like the AMI checks (#378)
+
+`Connected` is `Healthy`; `Reconnecting`, `Connecting` and `Initial` are `Degraded` (they were `Unhealthy`, except
+`Reconnecting`); `Disconnecting`, `Disconnected` and `Faulted` are `Unhealthy`. Its data carries `ariState`, and its
+description reads `ARI <State>…` (was `ARI state: <State>`).
+
+**Migration guide:** [`docs/guides/ari-connection-state-and-accept-loop-migration.md`](docs/guides/ari-connection-state-and-accept-loop-migration.md)
+
+### Changed — BREAKING: a caller's ARI `DisconnectAsync` or `DisposeAsync` delivers none of the events still buffered (#378)
+
+`DisposeAsync` delivered the whole buffer before returning (200 events at 250 ms each took about 50 s), and
+`DisconnectAsync` returned while the buffer kept flowing. Both now wait for the event in progress, then skip the rest,
+count them once on `ari.events.dropped` with `reason=caller_ending`, and log `[ARI] Discarded on caller ending:
+count=<n>` at Warning. A lost connection still delivers its buffer in order. Each connection now has its own buffer: a
+`ConnectAsync` after a `DisconnectAsync` started a second consumer on the same buffer, and events were reordered in 5
+of 10 measured runs.
+
+**Migration guide:** [`docs/guides/ari-connection-state-and-accept-loop-migration.md`](docs/guides/ari-connection-state-and-accept-loop-migration.md)
+
+### Fixed: a full ARI event buffer is counted (#378)
+
+`ari.events.dropped`, `AriEventPump.DroppedEvents` and `OnEventDropped` could never fire on the drop-oldest buffer.
+They now count each event the full buffer drops, with `reason=buffer_full`.
+
+### Changed — BREAKING: a Realtime function call is bounded by `FunctionCallTimeout` (#378)
+
+A function handler that ignored its token held the session for ever, with the caller in silence. New
+`OpenAiRealtimeOptions.FunctionCallTimeout` (default 30 s, validated positive and finite): a function that outlasts it
+is answered `{"error":"timeout"}`, logged at Warning, counted on `openai_realtime.function_calls.timed_out`
+(`RealtimeMetrics.FunctionCallsTimedOut`), published once on `RealtimeFunctionCalledEvent`, its token cancelled, and no
+longer awaited. A conversation the host cancels no longer waits for a function still running.
+
+**Migration guide:** [`docs/guides/voice-bounds-migration.md`](docs/guides/voice-bounds-migration.md)
+
+### Changed — BREAKING: speech-provider timeouts accept only 1–600 seconds (#378)
+
+The providers' `ConnectTimeoutSeconds` and LMNT's `HttpTimeoutSeconds` accepted any value: `0` failed every call and
+`-1` threw from a timer. They are now rejected, naming the option, by the options validator (when first resolved), the
+public constructors and before each connect. New `DeepgramOptionsValidator` (STT) and `ElevenLabsOptionsValidator`,
+registered by `AddDeepgramSpeechRecognizer` and `AddElevenLabsSpeechSynthesizer`, also enforce the `ws(s)://`
+`BaseUri` both options already declared.
+
+**Migration guide:** [`docs/guides/voice-bounds-migration.md`](docs/guides/voice-bounds-migration.md)
+
 ### Fixed — BREAKING: a call answered without a dial ends `Completed`, and a queued call is connected only when the queue reports it (#377)
 
 When the dialplan or an AMI originate answered a call and nothing dialed it onward or queued it, the session stayed
