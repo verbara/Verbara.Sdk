@@ -33,10 +33,11 @@ public sealed class QueueSession
     /// <para>
     /// A leave with no abandon report counts as a key exit only while the SDK lost no event since the visit opened: no
     /// reconnect, and no event dropped by the AMI connection's full event buffer (readable only over the SDK's own
-    /// <c>AmiConnection</c>; over another connection only reconnects count). Otherwise the visit is counted abandoned at
-    /// the leave. A visit whose leave the SDK never received (it fell in an outage) is counted abandoned when the
-    /// reload's completed queue snapshot no longer lists the caller, or at the caller's next join or hang-up, whichever
-    /// comes first; an answer during an outage cannot be observed, so such a visit counts abandoned.
+    /// <c>AmiConnection</c>; over another connection only reconnects count). Otherwise the visit is counted abandoned
+    /// when the caller joins a queue again or hangs up, unless the queue connects it first. A visit whose leave the SDK
+    /// never received (it fell in an outage) is counted abandoned when the reload's completed queue snapshot no longer
+    /// lists the caller, or at the caller's next join or hang-up, whichever comes first; an answer during an outage
+    /// cannot be observed, so such a visit counts abandoned.
     /// </para>
     /// <para>
     /// Over an <see cref="Manager.ICallSessionManager"/> other than the SDK's own, Asterisk's reports do not reach the

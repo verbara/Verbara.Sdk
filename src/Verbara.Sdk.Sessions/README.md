@@ -72,7 +72,8 @@ two land in different windows.
 A key exit is a leave with no abandon report before it. The tracker can tell it from an abandon whose report it
 missed only while it has lost no event since the visit started. After a reconnect, or after the AMI connection's
 event buffer dropped an event (`ami.events.dropped`, `reason=buffer_full`), a leave with no report is counted
-abandoned. Over an `IAmiConnection` other than `AmiConnection` only reconnects are seen.
+abandoned when the caller joins a queue again or hangs up, unless the queue connects it first. Over an
+`IAmiConnection` other than `AmiConnection` only reconnects are seen.
 
 A caller whose leave fell inside an outage stops counting as waiting when the reload's queue snapshot (`QueueStatus`)
 completes without it, and is counted abandoned there; a reload whose snapshot did not complete closes nothing. An
