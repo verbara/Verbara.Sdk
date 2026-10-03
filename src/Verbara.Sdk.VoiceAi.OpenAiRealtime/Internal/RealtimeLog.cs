@@ -38,6 +38,18 @@ internal static partial class RealtimeLog
     [LoggerMessage(Level = LogLevel.Information, Message = "[{ChannelId}] Function '{FunctionName}' returned after the caller hung up; its result was not sent")]
     public static partial void FunctionResultNotSent(ILogger logger, Guid channelId, string functionName);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[{ChannelId}] Function '{FunctionName}' did not return within its FunctionCallTimeout of {TimeoutMs} ms; answered as timed out and no longer awaited")]
+    public static partial void FunctionCallTimedOut(ILogger logger, Guid channelId, string functionName, double timeoutMs);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[{ChannelId}] Function '{FunctionName}', no longer awaited, returned late; its result was discarded")]
+    public static partial void AbandonedFunctionReturned(ILogger logger, Guid channelId, string functionName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[{ChannelId}] Function '{FunctionName}', no longer awaited, ended with an exception; discarded")]
+    public static partial void AbandonedFunctionFaulted(ILogger logger, Exception exception, Guid channelId, string functionName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[{ChannelId}] Function '{FunctionName}', no longer awaited, ended cancelled; discarded")]
+    public static partial void AbandonedFunctionCanceled(ILogger logger, Guid channelId, string functionName);
+
     [LoggerMessage(Level = LogLevel.Debug, Message = "[{ChannelId}] {EventType} raised after the bridge was disposed; dropped")]
     public static partial void EventDroppedAfterDisposal(ILogger logger, Guid channelId, string eventType);
 }

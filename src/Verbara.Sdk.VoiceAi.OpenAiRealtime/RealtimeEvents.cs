@@ -49,7 +49,9 @@ public sealed record RealtimeResponseEndedEvent(
 /// <param name="FunctionName">The name of the function tool that was invoked.</param>
 /// <param name="ArgumentsJson">The JSON-encoded arguments passed by OpenAI to the function.</param>
 /// <param name="ResultJson">The JSON-encoded result of the call: what the function returned, or the error
-/// output the bridge wrote for a function that threw.</param>
+/// output the bridge wrote for a function that threw, or <c>{"error":"timeout"}</c> for a function that outlasted
+/// <see cref="OpenAiRealtimeOptions.FunctionCallTimeout"/> (published once, at the bound; what it returns later is
+/// not published).</param>
 public sealed record RealtimeFunctionCalledEvent(
     Guid ChannelId, DateTimeOffset Timestamp,
     string FunctionName, string ArgumentsJson, string ResultJson)

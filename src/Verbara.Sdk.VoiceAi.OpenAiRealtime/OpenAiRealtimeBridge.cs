@@ -107,6 +107,10 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         ILogger<OpenAiRealtimeBridge> logger)
     {
         _options = options.Value;
+
+        // No validator runs for Options.Create or a hand-made registration: a FunctionCallTimeout that cannot bound
+        // a call is rejected here, naming the option, and again before each call (the options are held by reference).
+        FunctionCallTimeoutRule.ThrowIfUnusable(_options);
         _registry = registry;
         _logger = logger;
     }
@@ -508,11 +512,12 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 }
 
                 case RealtimeProtocol.ResponseFunctionCallArgumentsDone:
-                    // The function runs on the session token, never on the bound's: a caller hanging up
-                    // does not cancel work the model already started. Nothing reads the socket while it
-                    // runs, so a vendor answer that lands meanwhile waits there, and the bound is held
-                    // rather than taking the loop's own silence for the vendor's. It restarts in full
-                    // once the function returns; a close sent while the function ran starts it then.
+                    // The function runs on a token linked to the session's, never on the close-answer bound's:
+                    // a caller hanging up does not cancel work the model already started. Nothing reads the
+                    // socket while it runs, so a vendor answer that lands meanwhile waits there, and the bound is
+                    // held rather than taking the loop's own silence for the vendor's. It restarts in full once
+                    // the function returns or is abandoned at its FunctionCallTimeout; a close sent while the
+                    // function ran starts it then.
                     silence.Pause();
                     try
                     {
@@ -559,6 +564,10 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         var fnEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.FunctionCallArgumentsDoneEvent);
         if (fnEvt is null) return;
 
+        // Checked again before each call, naming the option: the options object is held by reference, and an
+        // InfiniteTimeSpan set after construction would otherwise switch the bound off without a word.
+        var timeout = FunctionCallTimeoutRule.ThrowIfUnusable(_options);
+
         RealtimeMetrics.FunctionCallsTotal.Add(1);
 
         if (!_registry.TryGetHandler(fnEvt.Name, out var handler))
@@ -567,18 +576,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             return;
         }
 
-        string resultJson;
-        try
-        {
-            resultJson = await handler.ExecuteAsync(fnEvt.Arguments, ct).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            // Message is overridable and may return null; the type name still tells the model the call failed.
-            resultJson = JsonSerializer.Serialize(
-                new FunctionCallErrorOutput { Error = ex.Message ?? ex.GetType().Name },
-                ReadableOutputContext.FunctionCallErrorOutput);
-        }
+        var resultJson = await RunFunctionAsync(handler, fnEvt, timeout, channelId, ct).ConfigureAwait(false);
 
         var itemCreate = new ConversationItemCreateRequest
         {
@@ -622,6 +620,108 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         // auditing tool calls sees every call that executed.
         Publish(new RealtimeFunctionCalledEvent(
             channelId, DateTimeOffset.UtcNow, fnEvt.Name, fnEvt.Arguments, resultJson));
+    }
+
+    /// <summary>
+    /// Runs one function call for at most <paramref name="timeout"/> on <see cref="TimeProvider"/> and returns the
+    /// output to answer it with: the function's result, the error output for a function that threw inside the bound,
+    /// or <c>{"error":"timeout"}</c> when the bound elapsed first — a function that returns at exactly the bound
+    /// included, since the bound's flag is read before the function's outcome is looked at. A call the bound or the
+    /// host's cancellation ends is abandoned: no longer awaited, its later outcome observed and logged at Debug.
+    /// </summary>
+    private async Task<string> RunFunctionAsync(
+        IRealtimeFunctionHandler handler,
+        FunctionCallArgumentsDoneEvent fnEvt,
+        TimeSpan timeout,
+        Guid channelId,
+        CancellationToken ct)
+    {
+        // The handler's token: linked to the session's, and cancelled at the bound's expiry once the call has been
+        // decided as timed out, so a handler that honours it releases what it holds.
+        var handlerSource = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var handlerToken = handlerSource.Token;
+
+        // The bound is armed before the call starts, so it is the first timer the call puts on the clock.
+        var bound = new CancellationTokenSource(timeout, TimeProvider);
+
+        // Task.Run: a handler that blocks its thread before it first yields never hands back a task, and the wait
+        // below would never be reached. The ValueTask is turned into a Task exactly once; that one task is both
+        // awaited and observed.
+        var call = Task.Run(() => handler.ExecuteAsync(fnEvt.Arguments, handlerToken).AsTask(), CancellationToken.None);
+
+        using (var wait = CancellationTokenSource.CreateLinkedTokenSource(ct, bound.Token))
+        {
+            // Ends when the call ends, the bound elapses or the host cancels; never throws, so nothing here is
+            // classified by an exception's type.
+            await ((Task)call).WaitAsync(wait.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
+
+        // Decide, then act. The bound's flag is read first: a handler that stops the instant its token is cancelled,
+        // or that completes in the same clock step as the bound, still finds the call decided as timed out.
+        var boundElapsed = bound.IsCancellationRequested;
+        bound.Dispose();
+
+        if (call.IsCompleted && !boundElapsed)
+        {
+            handlerSource.Dispose();
+            try
+            {
+                return await call.ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Message is overridable and may return null; the type name still tells the model the call failed.
+                return JsonSerializer.Serialize(
+                    new FunctionCallErrorOutput { Error = ex.Message ?? ex.GetType().Name },
+                    ReadableOutputContext.FunctionCallErrorOutput);
+            }
+        }
+
+        if (ct.IsCancellationRequested)
+        {
+            // The host ended the session while the call ran: abandoned without a word, as the session's own
+            // cancellation already says it all. Nothing is sent, warned, counted or published.
+            Abandon(call, handlerSource, channelId, fnEvt.Name);
+            ct.ThrowIfCancellationRequested();
+        }
+
+        RealtimeLog.FunctionCallTimedOut(_logger, channelId, fnEvt.Name, timeout.TotalMilliseconds);
+        RealtimeMetrics.FunctionCallsTimedOut.Add(1);
+        Abandon(call, handlerSource, channelId, fnEvt.Name);
+
+        // Cancelled after the call was decided as timed out. Its callbacks run off this thread, and whatever they
+        // throw is observed rather than reaching the session.
+        _ = handlerSource.CancelAsync().ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+        return JsonSerializer.Serialize(
+            new FunctionCallErrorOutput { Error = "timeout" },
+            ReadableOutputContext.FunctionCallErrorOutput);
+    }
+
+    /// <summary>
+    /// Stops waiting for <paramref name="call"/>: its result or fault, whenever it comes, is observed and logged at
+    /// Debug, never sent or published, and the handler's token source is released once the call has ended.
+    /// </summary>
+    private void Abandon(Task<string> call, CancellationTokenSource handlerSource, Guid channelId, string functionName)
+    {
+        _ = call.ContinueWith(
+            t =>
+            {
+                if (t.Exception is { } fault)
+                    RealtimeLog.AbandonedFunctionFaulted(_logger, fault, channelId, functionName);
+                else if (t.IsCanceled)
+                    RealtimeLog.AbandonedFunctionCanceled(_logger, channelId, functionName);
+                else
+                    RealtimeLog.AbandonedFunctionReturned(_logger, channelId, functionName);
+                handlerSource.Dispose();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     // ── session.update builder (Utf8JsonWriter — NOT JsonSerializer) ─────────

@@ -161,7 +161,7 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
     }
 
     [Fact]
-    public async Task HandleSessionAsync_ShouldReturnOnlyAfterBothLoopsEnded_WhenTheHostCancelsBeforeTheCloseAfterTheCallerHungUp()
+    public async Task HandleSessionAsync_ShouldReturnAfterBothLoopsEndedWithoutWaitingForTheFunction_WhenTheHostCancelsBeforeTheCloseAfterTheCallerHungUp()
     {
         await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
         fakeOpenAi.EventsToSend.Add(ParkedFunction.CallEvent);
@@ -205,26 +205,28 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
             await function.Started.WaitAsync(SignalTimeout);
 
             // The caller hangs up while the function runs; the hook cancels the session just before the
-            // session waits for its write lock to send its close.
+            // session waits for its write lock to send its close. The function ignores its token: the
+            // vendor-to-caller loop abandons it at the host's cancellation instead of waiting for it, so the
+            // session returns with the function still parked.
             await caller.SendHangupAsync();
             await closeStarting.Task.WaitAsync(SignalTimeout);
-            var first = await Task.WhenAny(sessionTask, awaitingLoops.Task).WaitAsync(SignalTimeout);
-            var sessionReturnedWithTheFunctionRunning = sessionTask.IsCompleted;
+            var ended = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+            var waitedForItsLoops = awaitingLoops.Task.IsCompleted;
 
             function.Release();
-            await sessionTask.WaitAsync(SignalTimeout);
+            await function.Returned.WaitAsync(SignalTimeout);
             var functionReturned = await functionReturnedAtSessionEnd.WaitAsync(SignalTimeout);
             UnobservedServerFaults.CollectDiscardedTasks();
 
             using (new AssertionScope())
             {
-                first.Should().BeSameAs(
-                    awaitingLoops.Task,
-                    "the session waits for its loops on its way out, with the function still holding one of them");
-                sessionReturnedWithTheFunctionRunning.Should().BeFalse(
-                    "a session does not return while its vendor-to-caller loop still runs");
-                functionReturned.Should().BeTrue(
-                    "the session returned only after the function, and so its loop, had returned");
+                ended.Should().BeNull("the session returns at the host's cancellation without waiting for the function");
+                waitedForItsLoops.Should().BeTrue("the session waited for both of its loops on its way out");
+                functionReturned.Should().BeFalse(
+                    "the abandoned function, which ignores its token, was still running when the session returned");
+                fakeOpenAi.ReceivedMessages.Should().NotContain(
+                    m => m.Contains("conversation.item.create", StringComparison.Ordinal),
+                    "nothing is sent for a call the host's cancellation abandoned, not even once it returns");
                 unobserved.Faults.Should().BeEmpty(
                     "nothing of the session is left to fault where nobody awaits it");
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(

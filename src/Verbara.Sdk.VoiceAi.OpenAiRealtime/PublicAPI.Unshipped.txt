@@ -1,2 +1,5 @@
 #nullable enable
 static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsCloseUnanswered -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.FunctionCallsTimedOut -> System.Diagnostics.Metrics.Counter<long>!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.FunctionCallTimeout.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.FunctionCallTimeout.set -> void
