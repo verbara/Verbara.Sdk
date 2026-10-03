@@ -4,8 +4,30 @@ namespace Verbara.Sdk.Sessions.Manager;
 
 public sealed class SessionOptions
 {
+    /// <summary>
+    /// How often the reconciliation sweep that <c>AddVerbaraSessions</c> registers runs. At each run, when a held
+    /// call is older than <see cref="DialingTimeout"/>, the sweep checks the held calls once against the channels
+    /// Asterisk reports. <see cref="Timeout.InfiniteTimeSpan"/> switches the sweep off: no timer is started and
+    /// nothing is sent. Any other value of zero or less fails the host's start with
+    /// <see cref="ArgumentOutOfRangeException"/>. Default: 30 seconds.
+    /// </summary>
     public TimeSpan ReconciliationInterval { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// The age, measured from when the session was opened, after which the reconciliation sweep checks the
+    /// held calls against the channels Asterisk reports. The sweep never ends a call because of its age: a
+    /// call whose channels Asterisk still reports is left alone, and a call whose channels it no longer
+    /// reports ends as a reload ends it — <c>Completed</c> if it was answered, <c>Failed</c> otherwise, with no
+    /// hangup cause. Default: 60 seconds.
+    /// </summary>
     public TimeSpan DialingTimeout { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Not read: nothing in the SDK reads this value since 2.7.0, and no call is ended because it has rung
+    /// for longer, at any setting; <see cref="DialingTimeout"/> is the only age the reconciliation sweep
+    /// reads.
+    /// <para>Kept, with its default, so that existing configuration keeps binding.</para>
+    /// </summary>
     public TimeSpan RingingTimeout { get; set; } = TimeSpan.FromSeconds(120);
 
     /// <summary>

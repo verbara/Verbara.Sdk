@@ -212,21 +212,22 @@ A value outside these ranges fails the host's start with an `OptionsValidationEx
 
 ---
 
-## Session Reconciliation (v1.7.0+)
+## Session Reconciliation
 
-`Verbara.Sdk.Sessions` runs a `SessionReconciliationService` (`IHostedService` with `PeriodicTimer`) that scans in-flight sessions every `SessionOptions.ReconciliationInterval` (default **30s**) to detect orphans and timeouts.
+`AddVerbaraSessions` registers a reconciliation sweep that runs every `SessionOptions.ReconciliationInterval` (default **30s**). When at least one held call is older than `SessionOptions.DialingTimeout` (default **60s**) and the channel table holds one of its channels, the sweep reconciles the server's channels once against Asterisk's `Status` snapshot (`VerbaraServer.ReconcileChannelsAsync`); a call whose channels the snapshot no longer lists ends as a reload ends it. In a contact center with traffic some call is nearly always older than the dialing timeout, so count on one `Status` snapshot per interval. It does not ask for the queues or the agents, and it never ends a call for its age.
 
-**High-load impact:** after an AMI reconnect, the first reconciliation pass re-validates every active session in a single tick. At 100K active sessions this can enqueue a burst of `SessionStateChanged` events that competes with the normal AMI event stream and may trigger `ami.events.dropped`.
+**High-load impact:** the cost is one snapshot per sweep, which grows with the number of channels Asterisk holds. Measured on 2026-10-03 against Asterisk 22.10.1 (a container limited to 4 CPUs, `Local` channels, no traffic, 25 reconciliations per run, two runs per size): at 1,000 channels one reconciliation took 5.5 ms of wall time at the median, sent 703 KiB over AMI and allocated 4.3 MB in the SDK; at 5,000 channels, 27–28 ms, 3.3 MiB and 21.4–21.5 MB, with a median of 22–23 ms of Asterisk CPU. No AMI event was dropped. The sweep skips a tick while a load of the same server is running, rather than reading a second snapshot beside it.
 
 **Tuning levers:**
 
 | Option | Default | When to change |
 |--------|---------|----------------|
-| `SessionOptions.ReconciliationInterval` | 30s | Increase to 1-2min under very heavy load to smooth the burst |
+| `SessionOptions.ReconciliationInterval` | 30s | Lengthen it to send fewer snapshots: a call whose hangup was lost then ends up to one interval later. `Timeout.InfiniteTimeSpan` switches the sweep off |
+| `SessionOptions.DialingTimeout` | 60s | The age a held call must reach before the sweep asks about it; it never ends a call by itself |
 | `SessionOptions.SlaThreshold` | 20s | Align with your contact-center SLA |
 | `SessionOptions.QueueMetricsWindow` | 30min | Rolling window for `QueueSessionTracker` — reduce if per-queue RAM matters |
 | `SessionOptions.WrapUpDuration` | 30s | Not a lever: nothing in the SDK reads it, and the SDK raises no `CallWrapUpEvent`. An agent that `IAgentSessionTracker` moves to wrap-up when its call ends stays there until its next call connects, whatever this is set to |
-| `AmiConnectionOptions.EventPumpCapacity` | 20,000 | Size to absorb 10s of peak event rate **plus** the expected reconcile burst |
+| `AmiConnectionOptions.EventPumpCapacity` | 20,000 | Size to absorb 10s of peak event rate |
 
 ```csharp
 var services = new ServiceCollection();
@@ -240,7 +241,7 @@ services.AddVerbaraSessions(options =>
 });
 ```
 
-**Observability:** `Verbara.Sdk.Sessions` `ActivitySource` emits a `reconcile` span per scan with tags `sessions.scanned` and `sessions.marked_orphaned`. Correlate these tags with `ami.reconnections` counter to identify whether a spike in `ami.events.dropped` came from reconciliation or from Asterisk itself.
+**Observability:** the `Verbara.Sdk.Sessions` `ActivitySource` emits a `session reconciliation` span per sweep, tagged `sessions.candidates` (held calls old enough, with a channel the table holds), `sessions.unverifiable` (held calls old enough, none of whose channels the table holds: left alone), `sessions.ended` (candidates that had ended when the sweep finished) and `verification` (`run`, or `skipped:<reason>`). The snapshot itself is a `live channel-reconcile` span of the `Verbara.Sdk.Live` source. A call the sweep ends is counted in `sessions.completed` or `sessions.failed` and carries `Metadata["cause"] == "reload"`.
 
 ---
 

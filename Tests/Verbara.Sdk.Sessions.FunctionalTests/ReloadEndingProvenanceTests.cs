@@ -26,9 +26,10 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// plus no cause is the only shape that claims no knowledge the SDK does not have.</para>
 ///
 /// <para><b>What a consumer reads.</b> The session carries <c>Metadata["cause"] == "reload"</c> —
-/// the same key <c>SessionReconciler</c> already writes <c>"orphaned"</c> into, so this opens no
-/// second vocabulary — and <c>HangupCause</c> is <c>null</c> on the session, on every departing
-/// participant and on <c>CallEndedEvent.Cause</c>. <c>CallEndedEvent</c> gains no field: it is a
+/// the key under which a session read back from a store written by an earlier version may carry
+/// <c>"orphaned"</c>, so this opens no second vocabulary — and <c>HangupCause</c> is <c>null</c> on
+/// the session, on every departing participant and on <c>CallEndedEvent.Cause</c>.
+/// <c>CallEndedEvent</c> gains no field: it is a
 /// positional record, so a new member would move the public API this change claims it does not
 /// touch. A consumer reaches the marker from the event's <c>SessionId</c> via
 /// <c>ICallSessionManager.GetById</c>, which is the path
@@ -206,7 +207,7 @@ public sealed class ReloadEndingProvenanceTests : IAsyncLifetime
             "a consumer must be able to read the provenance of the ending as a present value, not "
             + $"deduce it from something missing. Measured: {Describe()}")
             .WhoseValue.Should().Be("reload",
-            "the SDK already writes 'orphaned' under this key for an ending it did not observe; "
+            "earlier versions wrote 'orphaned' under this key for an ending they did not observe; "
             + $"'reload' is the sibling value, not a second vocabulary. Measured: {Describe()}");
 
         session.HangupCause.Should().BeNull(

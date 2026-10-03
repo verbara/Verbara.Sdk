@@ -23,11 +23,21 @@ internal sealed class SessionManagerHostedService(
     private CancellationTokenRegistration _stopRegistration;
 
     /// <summary>
-    /// Guards <see cref="Dispose"/>. <see cref="IDisposable"/> requires a second call to be ignored
-    /// rather than throw, and <c>Cancel</c> on an already-released source throws
-    /// <see cref="ObjectDisposedException"/> — so the release needs a gate, not just an ordering.
+    /// Serializes <see cref="StopAsync"/> against <see cref="Dispose"/>. A stop reads
+    /// <see cref="_disposed"/> and wires the stop token onto <see cref="_shutdown"/> under it, and the
+    /// disposal sets the flag and releases both under it; a check of the flag without the lock lets a stop
+    /// pass the check, the disposal release the source, and the stop then register on a released source
+    /// that a later cancel of the host's token would hit.
     /// </summary>
-    private int _disposed;
+    private readonly Lock _lifecycleGate = new();
+
+    /// <summary>
+    /// Set by <see cref="Dispose"/> under <see cref="_lifecycleGate"/>. <see cref="IDisposable"/> requires
+    /// a second call to be ignored rather than throw, and <c>Cancel</c> on an already-released source throws
+    /// <see cref="ObjectDisposedException"/> — so the release needs a gate, not just an ordering. A stop
+    /// that finds it set does nothing.
+    /// </summary>
+    private bool _disposed;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -41,31 +51,53 @@ internal sealed class SessionManagerHostedService(
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Detaches the manager and wires the host's stop token onto the persistence token. A stop after
+    /// disposal does nothing: it registers nothing on the token, so a later cancel of it reaches no
+    /// released source.
+    /// </summary>
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        // Detach first, so no server event can start a new save while the shutdown budget runs.
-        if (sessionManager is CallSessionManager csm)
-            csm.DetachFromServer("default");
+        lock (_lifecycleGate)
+        {
+            if (_disposed)
+                return Task.CompletedTask;
 
-        // The source is not cancelled here — a graceful stop is exactly the case in which an
-        // in-flight save is still worth its budget. The registration cancels it when the host says
-        // the shutdown is no longer graceful, and runs inline when that token arrives already
-        // cancelled. Static callback with the source as state: no closure, no ExecutionContext.
-        _stopRegistration.Dispose();
-        _stopRegistration = cancellationToken.UnsafeRegister(
-            static state => ((CancellationTokenSource)state!).Cancel(), _shutdown);
+            // Detach first, so no server event can start a new save while the shutdown budget runs.
+            if (sessionManager is CallSessionManager csm)
+                csm.DetachFromServer("default");
+
+            // The source is not cancelled here — a graceful stop is exactly the case in which an
+            // in-flight save is still worth its budget. The registration cancels it when the host says
+            // the shutdown is no longer graceful, and runs inline when that token arrives already
+            // cancelled — under the lock, so on a source the disposal has not released. Static callback
+            // with the source as state: no closure, no ExecutionContext.
+            _stopRegistration.Dispose();
+            _stopRegistration = cancellationToken.UnsafeRegister(
+                static state => ((CancellationTokenSource)state!).Cancel(), _shutdown);
+        }
+
         return Task.CompletedTask;
     }
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 1)
-            return;
+        lock (_lifecycleGate)
+        {
+            if (_disposed)
+                return;
 
-        _stopRegistration.Dispose();
-        // Cancel before releasing: a save that outlived the whole stop ends here, instead of being
-        // left holding a token nothing could ever cancel.
-        _shutdown.Cancel();
-        _shutdown.Dispose();
+            // Set first: the cancel below runs the persistence token's callbacks inline, and a stop one
+            // of them makes on this thread re-enters the lock and must find the service disposed.
+            _disposed = true;
+
+            // Released before the source, and it waits for a callback another thread is running: once it
+            // returns, nothing cancels the source but this method.
+            _stopRegistration.Dispose();
+            // Cancel before releasing: a save that outlived the whole stop ends here, instead of being
+            // left holding a token nothing could ever cancel.
+            _shutdown.Cancel();
+            _shutdown.Dispose();
+        }
     }
 }

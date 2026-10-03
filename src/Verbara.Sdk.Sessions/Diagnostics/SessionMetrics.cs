@@ -12,8 +12,21 @@ public static class SessionMetrics
         Meter.CreateCounter<long>("sessions.completed", "sessions", "Total sessions completed");
     public static readonly Counter<long> SessionsFailed =
         Meter.CreateCounter<long>("sessions.failed", "sessions", "Total sessions failed");
+
+    /// <summary>
+    /// The <c>sessions.timed_out</c> counter. Not incremented: the SDK adds nothing to it since 2.7.0, since
+    /// it ends no call in <see cref="CallSessionState.TimedOut"/>.
+    /// <para>Kept, and still published, so that code and dashboards that read it keep binding.</para>
+    /// </summary>
     public static readonly Counter<long> SessionsTimedOut =
         Meter.CreateCounter<long>("sessions.timed_out", "sessions", "Total sessions timed out");
+
+    /// <summary>
+    /// The <c>sessions.orphaned</c> counter. Not incremented: the SDK adds nothing to it since 2.7.0. A call
+    /// the reconciliation sweep finds gone ends as a reload ends it and is counted in
+    /// <c>sessions.completed</c> or <c>sessions.failed</c>.
+    /// <para>Kept, and still published, so that code and dashboards that read it keep binding.</para>
+    /// </summary>
     public static readonly Counter<long> SessionsOrphaned =
         Meter.CreateCounter<long>("sessions.orphaned", "sessions", "Orphaned sessions detected");
 

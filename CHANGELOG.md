@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: the reconciliation sweep asks Asterisk before it ends a call (#380)
+
+The sweep `AddVerbaraSessions` registers ended calls on its clock alone: a call dialing past `DialingTimeout` (60 s) or
+ringing past `RingingTimeout` (120 s) became `TimedOut`, and a call still in `Created` past `DialingTimeout` became
+`Failed` with `cause=orphaned`, while Asterisk still had it — so every IVR, voicemail or Voice AI call answered with no
+dial and longer than 60–90 s was marked ended while up, and a call that rang long and then talked was reported with no
+talk time. It reported nothing at that moment (no `CallEndedEvent` until the legs left) and counted `sessions.timed_out`
+twice. A call whose hangup was lost was held for the life of the process. Now the clock only decides when to ask: once a
+held call is older than `DialingTimeout` and the channel table holds one of its channels, the sweep reconciles the
+server's channels once against Asterisk's `Status` snapshot. A call Asterisk still lists is left exactly as it is; a call
+it no longer lists ends as a reconnect's reload ends it — `Completed` if answered, `Failed` otherwise, no `HangupCause`,
+`Metadata["cause"] == "reload"`, one `CallEndedEvent`, saved and released after `CompletedRetention`; a queued one is
+counted abandoned once. Measured on Asterisk 20.20.1, 22.10.1 and 23.4.1: 0 of 120 live calls ended by the sweep, 120 of
+120 calls whose `Hangup` was filtered out ended once and released; at 5,000 channels one snapshot costs 27–31 ms and
+3.3 MiB of AMI, with 0 false or missed endings under 2,000 calls at 50/s.
+- `sessions.timed_out` and `sessions.orphaned` no longer move; a call the sweep ends is counted once in
+  `sessions.completed` or `sessions.failed`.
+- Kept and documented as no longer produced: `CallSessionState.TimedOut`, `CallSessionEventType.TimedOut`,
+  `SessionMetrics.SessionsTimedOut`, `SessionMetrics.SessionsOrphaned`; `SessionOptions.RingingTimeout` is no longer read.
+  Stores still read `TimedOut` as ended.
+- The AMI user needs `Status` (`write` with `system`, `call` or `reporting`); a refusal ends nothing and is logged at
+  Warning once per AMI session. The sweep skips while the connection is down, over a connection that does not report how
+  an action ended (`IAmiConnection.ReportsEventActionOutcome`), and while a load of the same server runs. A held call none
+  of whose channels the table holds is left alone.
+- `ReconciliationInterval = Timeout.InfiniteTimeSpan` switches the sweep off; any other value of zero or less still fails
+  the start. `AddVerbaraSessionsMultiServer` still registers no sweep.
+
+**Migration guide:** [`docs/guides/call-session-ending-migration.md`](docs/guides/call-session-ending-migration.md#the-reconciliation-sweep-and-long-answered-calls)
+
+### Added: `VerbaraServer.ReconcileChannelsAsync` (#380)
+
+Asks Asterisk for its channel snapshot (`Status`), reads it to completion and reconciles the channel table against it —
+the channel part of a state load, with no `QueueStatus` or `Agents`. A channel the snapshot omits is removed as a reload
+removes it (its call ends with no hangup cause); one that arrives or hangs up during the read is left as the live events
+made it. Exceptions are `RequestInitialStateAsync`'s; a refused `Status` reconciles nothing, does not throw, and is a
+Warning once per AMI session. Traced as `live channel-reconcile` (`live.channels`, `live.status.refused`), logged at Debug.
+See `src/Verbara.Sdk.Live/README.md` § Reconciling the channels.
+
+### Fixed: a stop after disposal does nothing in the session engine's hosted service and the reconciliation sweep (#380)
+
+`SessionManagerHostedService.StopAsync` after `Dispose` threw `ObjectDisposedException` with an already-cancelled token,
+or registered on a released source so that a later cancel of the stop token threw; the reconciliation sweep's own
+`StopAsync` after disposal cancelled a released source. Both now return at once after disposal; a stop and a disposal
+that race take one lifecycle lock. A start after disposal still throws `ObjectDisposedException`.
+
 ### Fixed: a queue counts what Asterisk counts — timeouts, the end of a wait, and key exits (#379)
 
 `QueueSession.CallsTimedOut` was never counted, a caller kept counting in `CallsWaiting` after leaving the queue until

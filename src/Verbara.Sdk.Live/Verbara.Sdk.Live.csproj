@@ -12,6 +12,9 @@
          member on a type two downstream repos consume, which would have written a line into
          PublicAPI.Unshipped.txt; this change adds no public API. -->
     <InternalsVisibleTo Include="Verbara.Sdk.Sessions" />
+    <!-- The session reconciliation sweep skips a tick while a load of its server is running, and reads that through
+         VerbaraServer.IsLoadInFlight rather than a public member nobody else needs. -->
+    <InternalsVisibleTo Include="Verbara.Sdk.Hosting" />
   </ItemGroup>
 
   <ItemGroup>

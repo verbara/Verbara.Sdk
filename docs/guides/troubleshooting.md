@@ -318,27 +318,23 @@ Open the resulting `.nettrace` in PerfView or Chromium `about:tracing`.
 
 ---
 
-## Session Reconciliation Backpressure (v1.7.0+)
+## Session Reconciliation Sweep
 
-**Symptoms:**
-- After an AMI reconnect, a large spike in `asterisk.sdk.sessions.state_changed` counter over 5-30 seconds.
-- Transient climb of `ami.events.dropped` (`reason=buffer_full`) during the same window.
-- `SessionReconciliationService` background task logs a large batch of `Reconciling orphaned session ...` entries.
+The sweep `AddVerbaraSessions` registers checks the held calls against Asterisk's channel snapshot once a held call is older than `SessionOptions.DialingTimeout`, and ends a call whose channels Asterisk no longer reports. See [the migration guide](call-session-ending-migration.md#the-reconciliation-sweep-and-long-answered-calls) for what changed in 2.7.0.
 
-**Cause:** `SessionReconciliationService` runs every `SessionOptions.ReconciliationInterval` (default 30s). After a reconnect it has to re-scan all active sessions to detect orphans / timeouts; if the previous connection was lost with many sessions in flight, the scan enqueues a burst of state-change events.
+**Calls end with no hangup cause and `Metadata["cause"] == "reload"`, outside any reconnect.** The sweep found their channels gone: their `Hangup` never reached the SDK, most often because the AMI user filters it out or because the event pump dropped it (`ami.events.dropped`). Each such call ends once, `Completed` if it was answered and `Failed` otherwise. If they are frequent, find out why the hangups are missing; the sweep is what ends those calls at all.
 
-**Solutions:**
-1. **Increase EventPumpCapacity** to absorb the burst (see [high-load-tuning.md](high-load-tuning.md)):
-   ```json
-   { "Asterisk": { "Ami": { "EventPumpCapacity": 50000 } } }
-   ```
-2. **Stagger reconciliation** if the burst is disruptive — lengthen the interval and accept slightly slower orphan detection:
-   ```json
-   { "Sessions": { "ReconciliationInterval": "00:01:00" } }
-   ```
-3. **Opt out entirely** in non-critical deployments by not registering `SessionReconciliationService` (skip `AddSessions(reconcile: true)` and call the reconciler manually on demand).
+**Calls whose hangup was lost are never ended.** Check, in this order:
+- the server log for `[LIVE] Status refused: …` (Warning, once per AMI session): the AMI user may not run `Status`. Put `system`, `call` or `reporting` in its `write` line in `manager.conf` (`write = all` includes them);
+- the `verification` tag on the `session reconciliation` span: `skipped:not-connected` while the connection is down, `skipped:outcome-not-reported` when the server's `IAmiConnection` does not report how an action ended (`ReportsEventActionOutcome` is false: a connection of your own that does not forward it and the outcome overload), `skipped:load-in-flight` while a load of the same server runs (the next tick verifies);
+- `sessions.unverifiable` on the same span: a held call none of whose channels the channel table holds cannot be proved gone by a snapshot and is left alone;
+- the registration: `AddVerbaraSessionsMultiServer` registers no sweep. Call `VerbaraServer.ReconcileChannelsAsync()` per server on a schedule of your own.
 
-**Observability:** watch the `Verbara.Sdk.Sessions` activity source — `reconcile` spans carry a `sessions.scanned` tag so you can correlate burst size with reconnect events.
+**The snapshots are too heavy for the PBX.** One `Status` per interval is sent whenever some held call is older than the dialing timeout; its size grows with the channels Asterisk holds (see [high-load-tuning.md](high-load-tuning.md#session-reconciliation)). Lengthen the interval:
+```json
+{ "Sessions": { "ReconciliationInterval": "00:01:00" } }
+```
+or switch the sweep off with `ReconciliationInterval = Timeout.InfiniteTimeSpan` — no timer, no snapshot; calls whose hangup was lost then stay held until a reconnect's reload. Any other interval of zero or less fails the host's start with `ArgumentOutOfRangeException`.
 
 ---
 

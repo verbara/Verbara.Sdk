@@ -37,6 +37,29 @@ await pool.AddServerAsync("pbx-west", westOptions);
 var server = pool.GetServerForAgent("Agent/1001");
 ```
 
+## Reconciling the channels
+
+`VerbaraServer.ReconcileChannelsAsync()` asks Asterisk for its channel snapshot (`Status`), reads it to the end and
+reconciles the channel table against it: the channel part of a state load, and nothing else. It asks for no queue or
+agent state.
+
+```csharp
+await server.ReconcileChannelsAsync(cancellationToken);
+```
+
+- A channel the snapshot no longer lists is removed as a reload removes it, so a session manager attached to the server
+  ends its call with no hangup cause. A channel the snapshot lists and the table lacks is admitted as reported.
+- A channel that arrives, or hangs up, while the snapshot is being read is left as the live events made it.
+- A snapshot that did not complete reconciles nothing: a cancelled read throws `OperationCanceledException`, and a read
+  whose AMI session ended, or a connection that is not established, throws `AmiNotConnectedException`.
+- A `Status` that Asterisk refuses (an AMI user whose `write` has none of `system`, `call` or `reporting`) reconciles
+  nothing and does not throw. It is logged at Warning the first time in an AMI session and at Debug after that.
+- Each run is traced as a `live channel-reconcile` activity, tagged `live.channels` and, on a refusal,
+  `live.status.refused`, and logged at Debug. It is not reported as a state load.
+
+The session engine's reconciliation sweep (`AddVerbaraSessions`) calls it. A host can also call it on a schedule of its
+own: for each server of a multi-server host, for instance, since `AddVerbaraSessionsMultiServer` registers no sweep.
+
 ## Documentation
 
 - [High-Load Tuning Guide](../../docs/guides/high-load-tuning.md)
