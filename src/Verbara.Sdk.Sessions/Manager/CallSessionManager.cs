@@ -886,7 +886,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
                 session.QueueVisitLeft = true;
                 VisitLeft?.Invoke(new QueueVisitSignal(session.SessionId, session.QueueName!, visit,
-                    session.QueueVisitAbandonReported, EventsMayHaveBeenLost: true));
+                    session.QueueVisitAbandonReported, EventsMayHaveBeenLost: true, LeaveMissed: true));
             }
         }
     }

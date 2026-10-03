@@ -136,9 +136,11 @@ public sealed class QueueVisitSignalTests
         rig.Deliver(CallerQueued());
         await rig.ReconnectAsync([CallerStatus("Wait", "30")], [QueueParams(Queue, calls: 0)]);
 
+        using var scope = new AssertionScope();
         left.Should().ContainSingle("the completed snapshot no longer lists the caller: its leave fell in the outage");
         Signal(left[0]).Should().Be(new VisitSignal(Queue, rig.Queued.Single().Timestamp, AbandonReported: false,
             EventsMayHaveBeenLost: true));
+        InternalEventProbe.Read(left[0], "LeaveMissed").Should().Be(true, "the leave itself was never received");
     }
 
     [Fact]

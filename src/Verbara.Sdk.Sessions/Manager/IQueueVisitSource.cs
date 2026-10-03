@@ -38,5 +38,10 @@ internal interface IQueueVisitSource
 /// On a leave: whether the SDK may have lost events since the visit opened (a reconnect, or an event its buffer
 /// dropped), so the absence of an abandon report says nothing.
 /// </param>
+/// <param name="LeaveMissed">
+/// On a leave: whether the leave itself was never received, and the visit is closed because a queue snapshot that
+/// completed no longer lists the caller. No connection can follow it.
+/// </param>
 internal sealed record QueueVisitSignal(
-    string SessionId, string QueueName, DateTimeOffset Visit, bool AbandonReported = false, bool EventsMayHaveBeenLost = false);
+    string SessionId, string QueueName, DateTimeOffset Visit, bool AbandonReported = false, bool EventsMayHaveBeenLost = false,
+    bool LeaveMissed = false);
