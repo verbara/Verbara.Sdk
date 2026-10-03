@@ -85,11 +85,11 @@ See [High-Load Tuning Guide](high-load-tuning.md) for sizing recommendations.
 
 ### Events dropped (ARI)
 
-**Symptoms:** `ari.events.dropped` counter increasing.
+**Symptoms:** `ari.events.dropped` counter increasing with `reason=buffer_full`.
 
-**Cause:** Same as AMI — ARI event pump buffer full.
+**Cause:** Same as AMI — the ARI event buffer was full, and each new event discarded the oldest one buffered. Measurements tagged `reason=caller_ending` are not this: they count the events still buffered when your own `DisconnectAsync` or `DisposeAsync` ended the connection, are expected, and need no tuning ([migration](ari-connection-state-and-accept-loop-migration.md#the-dropped-events-counter-counts-a-full-buffer-and-carries-a-reason)).
 
-**Solutions:** Same approach as AMI. ARI typically has lower event volume than AMI.
+**Solutions:** Speed up or offload the observers, as for AMI; the ARI buffer's capacity is fixed. ARI typically has lower event volume than AMI. Alert on `reason=buffer_full` only.
 
 ### Missing events
 
