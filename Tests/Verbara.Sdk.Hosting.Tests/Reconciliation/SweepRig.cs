@@ -295,6 +295,9 @@ internal sealed class SweepRig : IAsyncDisposable
 
     public int EndingsOf(CallSession session) => _endings.Count(e => e.SessionId == session.SessionId);
 
+    /// <summary>The unique ids of the call <paramref name="id"/>'s legs.</summary>
+    public IReadOnlyList<string> UniqueIdsOf(string id) => [.. _legsByCall[id].Select(leg => leg.UniqueId)];
+
     /// <summary>Waits until <paramref name="condition"/> holds, re-checked at each pulse; false at the bound.</summary>
     public Task<bool> WaitUntilAsync(Func<bool> condition) => _pulse.WaitUntilAsync(condition, Bound);
 
