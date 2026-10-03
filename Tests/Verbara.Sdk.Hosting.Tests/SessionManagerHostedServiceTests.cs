@@ -372,6 +372,171 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
             "a save the shutdown cut short is not a persistence failure");
     }
 
+    // --- A stop after disposal (spec: hosted-service-lifetime) ---
+    //
+    // The host may stop a service it has already disposed (a failed start disposes the provider and then stops,
+    // and a consumer may stop in any order). A stop after disposal does nothing, and nothing it leaves behind can
+    // throw later. Each order is driven by the test itself, never by a clock.
+
+    [Fact]
+    public async Task StopAsync_ShouldNotThrow_WhenTheServiceWasDisposedAndTheStopTokenIsAlreadyCancelled()
+    {
+        await using var manager = CreateCallSessionManager(new PendingSaveStore(), new RecordingLogger());
+        var sut = new SessionManagerHostedService(manager, _server);
+        await sut.StartAsync(CancellationToken.None);
+        sut.Dispose();
+        using var withdrawn = new CancellationTokenSource();
+        await withdrawn.CancelAsync();
+
+        var error = await Record.ExceptionAsync(() => sut.StopAsync(withdrawn.Token));
+
+        error.Should().BeNull(
+            "a stop after disposal is a no-op: it must not wire the stop token onto the source the disposal released, "
+            + "and an already-cancelled token would run that wiring inline, cancelling the released source");
+    }
+
+    [Fact]
+    public async Task StopTokenCancel_ShouldNotThrow_WhenTheStopCameAfterTheDisposal()
+    {
+        await using var manager = CreateCallSessionManager(new PendingSaveStore(), new RecordingLogger());
+        var sut = new SessionManagerHostedService(manager, _server);
+        await sut.StartAsync(CancellationToken.None);
+        sut.Dispose();
+        using var stop = new CancellationTokenSource();
+        var stopError = await Record.ExceptionAsync(() => sut.StopAsync(stop.Token));
+
+        var cancelError = Record.Exception(() => stop.Cancel());
+
+        new { Stop = stopError, Cancel = cancelError }.Should().BeEquivalentTo(
+            new { Stop = (Exception?)null, Cancel = (Exception?)null },
+            "a stop after disposal leaves nothing registered on the host's token, so the host cancelling that token "
+            + "later reaches no released source");
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldThrowAndAttachNothing_WhenTheServiceWasDisposed()
+    {
+        var store = new PendingSaveStore();
+        await using var manager = CreateCallSessionManager(store, new RecordingLogger());
+        var sut = new SessionManagerHostedService(manager, _server);
+        sut.Dispose();
+
+        var error = await Record.ExceptionAsync(() => sut.StartAsync(CancellationToken.None));
+        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
+
+        error.Should().BeOfType<ObjectDisposedException>("a disposed service cannot be started again");
+        manager.GetByLinkedId("linked-1").Should().BeNull("the refused start attached the manager to nothing");
+        store.Saves.Should().BeEmpty("no session was opened, so nothing was saved");
+    }
+
+    [Fact]
+    public async Task StopAndDispose_ShouldNotThrowNorLeaveACancelThatThrows_WhenTheStopComesFirst()
+    {
+        await using var manager = CreateCallSessionManager(new PendingSaveStore(), new RecordingLogger());
+        var sut = new SessionManagerHostedService(manager, _server);
+        await sut.StartAsync(CancellationToken.None);
+        using var stop = new CancellationTokenSource();
+
+        var errors = new
+        {
+            Stop = await Record.ExceptionAsync(() => sut.StopAsync(stop.Token)),
+            Dispose = Record.Exception(sut.Dispose),
+            Cancel = Record.Exception(() => stop.Cancel()),
+        };
+
+        errors.Should().BeEquivalentTo(
+            new { Stop = (Exception?)null, Dispose = (Exception?)null, Cancel = (Exception?)null },
+            "stop, then dispose, then the host cancels its stop token: the disposal released the registration with "
+            + "the source, so the cancel reaches nothing");
+    }
+
+    [Fact]
+    public async Task StopAndDispose_ShouldNotThrowNorLeaveACancelThatThrows_WhenTheDisposalComesFirst()
+    {
+        await using var manager = CreateCallSessionManager(new PendingSaveStore(), new RecordingLogger());
+        var sut = new SessionManagerHostedService(manager, _server);
+        await sut.StartAsync(CancellationToken.None);
+        using var stop = new CancellationTokenSource();
+
+        var errors = new
+        {
+            Dispose = Record.Exception(sut.Dispose),
+            Stop = await Record.ExceptionAsync(() => sut.StopAsync(stop.Token)),
+            Cancel = Record.Exception(() => stop.Cancel()),
+        };
+
+        errors.Should().BeEquivalentTo(
+            new { Dispose = (Exception?)null, Stop = (Exception?)null, Cancel = (Exception?)null },
+            "dispose, then stop, then the host cancels its stop token: the stop after disposal registered nothing, so "
+            + "the cancel reaches no released source");
+    }
+
+    [Fact]
+    public async Task StopAsync_ShouldNotThrowNorLeaveACancelThatThrows_WhenItRunsInsideTheDisposal()
+    {
+        var store = new PendingSaveStore();
+        await using var manager = CreateCallSessionManager(store, new RecordingLogger());
+        var sut = new SessionManagerHostedService(manager, _server);
+        await sut.StartAsync(CancellationToken.None);
+        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
+        var save = store.Saves.Should().ContainSingle().Subject;
+        using var stop = new CancellationTokenSource();
+        Exception? stopError = null;
+        var stopRan = false;
+
+        // The seam inside the disposal: the disposal cancels the persistence token before it releases its source, and
+        // this callback runs on that cancellation, so the stop below runs while the disposal is between the two. No
+        // clock decides the interleaving.
+        save.Token.Register(() =>
+        {
+            stopRan = true;
+            stopError = Record.Exception(() => sut.StopAsync(stop.Token).GetAwaiter().GetResult());
+        });
+
+        var disposeError = Record.Exception(sut.Dispose);
+        var cancelError = Record.Exception(() => stop.Cancel());
+
+        stopRan.Should().BeTrue("premise: the disposal cancelled the persistence token, so the stop ran inside it");
+        new { Dispose = disposeError, Stop = stopError, Cancel = cancelError }.Should().BeEquivalentTo(
+            new { Dispose = (Exception?)null, Stop = (Exception?)null, Cancel = (Exception?)null },
+            "a stop that runs while the disposal is releasing the source registers nothing on it, so the host "
+            + "cancelling its stop token afterwards reaches no released source");
+    }
+
+    [Fact]
+    public async Task StopAsync_ShouldNotThrow_WhenItsTokenIsCancelledInsideTheDisposal()
+    {
+        var store = new PendingSaveStore();
+        await using var manager = CreateCallSessionManager(store, new RecordingLogger());
+        var sut = new SessionManagerHostedService(manager, _server);
+        await sut.StartAsync(CancellationToken.None);
+        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
+        var save = store.Saves.Should().ContainSingle().Subject;
+        using var stop = new CancellationTokenSource();
+        Exception? seamError = null;
+        var seamRan = false;
+
+        // The same seam, and this time the stop's own token is cancelled inside it, after the stop wired it.
+        save.Token.Register(() =>
+        {
+            seamRan = true;
+            seamError = Record.Exception(() =>
+            {
+                sut.StopAsync(stop.Token).GetAwaiter().GetResult();
+                stop.Cancel();
+            });
+        });
+
+        var disposeError = Record.Exception(sut.Dispose);
+        var laterCancelError = Record.Exception(() => stop.Cancel());
+
+        seamRan.Should().BeTrue("premise: the disposal cancelled the persistence token, so the seam ran inside it");
+        new { Dispose = disposeError, Seam = seamError, LaterCancel = laterCancelError }.Should().BeEquivalentTo(
+            new { Dispose = (Exception?)null, Seam = (Exception?)null, LaterCancel = (Exception?)null },
+            "a stop token cancelled while the disposal is releasing the source throws nowhere: not from the stop, not "
+            + "from the disposal, not from a later cancel");
+    }
+
     private static CallSessionManager CreateCallSessionManager()
     {
         var options = Options.Create(new SessionOptions());
