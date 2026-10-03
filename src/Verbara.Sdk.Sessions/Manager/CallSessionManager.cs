@@ -15,7 +15,7 @@ using Microsoft.Extensions.Options;
 
 namespace Verbara.Sdk.Sessions.Manager;
 
-public sealed partial class CallSessionManager : ICallSessionManager
+public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisitSource
 {
     private readonly ConcurrentDictionary<string, CallSession> _sessions = new();
     private readonly ConcurrentDictionary<string, CallSession> _byLinkedId = new();
@@ -201,8 +201,11 @@ public sealed partial class CallSessionManager : ICallSessionManager
         Action<AsteriskBridge, string> onBridgeEntered = OnBridgeChannelEntered;
         Action<AsteriskBridge> onBridgeDestroyed = OnBridgeDestroyed;
         Action<BridgeTransferInfo> onTransfer = OnTransfer;
-        Action<string, AsteriskQueueEntry> onCallerJoined = OnQueueCallerJoined;
-        Action<string, AsteriskQueueEntry> onCallerLeft = OnQueueCallerLeft;
+        Action<string, AsteriskQueueEntry> onCallerJoined = (queueName, entry) => OnQueueCallerJoined(queueName, entry, server);
+        Action<QueueCallerLeaveReport> onCallerLeft = OnQueueCallerLeft;
+        Action<string, string> onAbandonReported = OnQueueCallerAbandonReported;
+        Action<string, string, string> onQueueStatus = OnCallerQueueStatus;
+        Action<QueueSnapshotCompletion> onSnapshotCompleted = completion => OnQueueSnapshotCompleted(completion, serverId);
         Action<string, string?, string?> onAgentConnected = OnAgentConnected;
         Action<string?, string?, string?> onQueueCallerConnected = OnQueueCallerConnected;
 
@@ -217,14 +220,17 @@ public sealed partial class CallSessionManager : ICallSessionManager
         server.Bridges.BridgeDestroyed += onBridgeDestroyed;
         server.Bridges.TransferOccurred += onTransfer;
         server.Queues.CallerJoined += onCallerJoined;
-        server.Queues.CallerLeft += onCallerLeft;
+        server.Queues.CallerLeaveReported += onCallerLeft;
+        server.Queues.CallerAbandonReported += onAbandonReported;
+        server.Queues.CallerQueueStatus += onQueueStatus;
+        server.Queues.QueueSnapshotCompleted += onSnapshotCompleted;
         server.Agents.AgentConnected += onAgentConnected;
         server.Agents.QueueCallerConnected += onQueueCallerConnected;
 
         _serverSubs[serverId] = new ServerSubscriptions(server,
             onAdded, onRemoved, onStateChanged, onDialBegin, onDialEnd,
             onHeld, onUnheld, onBridgeEntered, onBridgeDestroyed, onTransfer, onCallerJoined,
-            onCallerLeft, onAgentConnected, onQueueCallerConnected);
+            onCallerLeft, onAbandonReported, onQueueStatus, onSnapshotCompleted, onAgentConnected, onQueueCallerConnected);
     }
 
     public void DetachFromServer(string serverId)
@@ -693,7 +699,7 @@ public sealed partial class CallSessionManager : ICallSessionManager
         }
     }
 
-    private void OnQueueCallerJoined(string queueName, AsteriskQueueEntry entry)
+    private void OnQueueCallerJoined(string queueName, AsteriskQueueEntry entry, VerbaraServer server)
     {
         var session = FindByChannelName(entry.Channel);
         if (session is null) return;
@@ -718,7 +724,13 @@ public sealed partial class CallSessionManager : ICallSessionManager
             session.QueueName = queueName;
             session.QueueVisitAnnounced = false;
             session.QueueVisitLeft = false;
+            session.QueueVisitAbandonReported = false;
             session.QueueVisitStartedAt = visitStartedAt;
+            session.QueueVisitLossEpoch = entry.LossEpoch ?? server.ReadEventLossEpoch();
+            session.QueueVisitJoinOrdinal = entry.JoinOrdinal;
+            session.QueueVisitCallerChannel = entry.Channel;
+            session.QueueVisitCallerUniqueId = entry.UniqueId
+                ?? session.Participants.FirstOrDefault(p => p.Channel == entry.Channel)?.UniqueId;
             session.TryTransition(CallSessionState.Queued);
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.QueueJoined, entry.Channel, null, queueName));
@@ -729,27 +741,153 @@ public sealed partial class CallSessionManager : ICallSessionManager
         _ = PersistAsync(session);
     }
 
+    /// <inheritdoc/>
+    internal event Action<QueueVisitSignal>? VisitLeft;
+
+    /// <inheritdoc/>
+    internal event Action<QueueVisitSignal>? VisitAbandonReported;
+
+    /// <inheritdoc/>
+    internal event Action<QueueVisitSignal>? VisitTimedOut;
+
+    event Action<QueueVisitSignal>? IQueueVisitSource.VisitLeft
+    {
+        add => VisitLeft += value;
+        remove => VisitLeft -= value;
+    }
+
+    event Action<QueueVisitSignal>? IQueueVisitSource.VisitAbandonReported
+    {
+        add => VisitAbandonReported += value;
+        remove => VisitAbandonReported -= value;
+    }
+
+    event Action<QueueVisitSignal>? IQueueVisitSource.VisitTimedOut
+    {
+        add => VisitTimedOut += value;
+        remove => VisitTimedOut -= value;
+    }
+
     /// <summary>
-    /// Marks the caller's current queue visit as left when Asterisk reports the caller leaving that visit's
-    /// queue. Only <see cref="IsHeldVisit"/> reads the mark. The leave closes nothing in the queue's metrics,
-    /// which still close an unanswered visit at the next join or at the hangup; and app_queue sends the leave
-    /// before it connects the caller, so the mark never keeps a visit from being announced.
+    /// The caller's current queue visit, under the session's lock, when <paramref name="queueName"/> (if given) is its
+    /// queue and this manager opened it: the visit's start, which names it in every signal. A session registered
+    /// already in a queue carries the queue's name but no visit this manager opened, and gets <see langword="null"/>.
+    /// </summary>
+    private static DateTimeOffset? CurrentVisit(CallSession session, string? queueName) =>
+        session.QueueName is not null
+        && (queueName is null || string.Equals(session.QueueName, queueName, StringComparison.OrdinalIgnoreCase))
+            ? session.QueueVisitStartedAt
+            : null;
+
+    /// <summary>
+    /// Asterisk's report that the caller left a queue (<c>QueueCallerLeave</c>), read from the report itself whether or
+    /// not Live's queue table still held the caller, and found by the caller's Uniqueid. When it is the queue of the
+    /// call's current visit, the visit is marked left (<see cref="CallSession.QueueVisitLeft"/>, which
+    /// <see cref="IsHeldVisit"/> reads) and <see cref="VisitLeft"/> is raised, once per visit: the leave ends the visit's
+    /// wait in the queue's metrics. The signal carries whether app_queue reported the visit abandoned before it, and
+    /// whether the SDK may have lost events since the visit opened: the event-loss epoch of the leave differs from the
+    /// one recorded when the visit opened (a reconnect, or an event the AMI connection's full buffer dropped).
     /// <para>
-    /// A reconnect clears Live's queue table without raising <see cref="QueueManager.CallerLeft"/>, so a
-    /// caller the reload then finds still waiting keeps its visit open, which is what lets the reload
-    /// recognise it. A reconnect that announced those removals as departures would mark every open visit
-    /// left, and every caller a reload finds waiting would count as an abandon and a second offer.
+    /// A reconnect clears Live's queue table without any leave, raw or public, so a caller the reload then finds still
+    /// waiting keeps its visit open, which is what lets the reload recognise it. app_queue sends the leave before it
+    /// connects the caller, so the mark never keeps a visit from being announced.
     /// </para>
     /// </summary>
-    private void OnQueueCallerLeft(string queueName, AsteriskQueueEntry entry)
+    private void OnQueueCallerLeft(QueueCallerLeaveReport report)
     {
-        var session = FindByChannelName(entry.Channel);
-        if (session is null) return;
+        if (!_byChannelId.TryGetValue(report.UniqueId, out var session)) return;
 
         lock (session.SyncRoot)
         {
-            if (string.Equals(session.QueueName, queueName, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(session.QueueName, report.Queue, StringComparison.OrdinalIgnoreCase)
+                || session.QueueVisitLeft)
+            {
+                return;
+            }
+
+            session.QueueVisitLeft = true;
+            if (CurrentVisit(session, report.Queue) is not { } visit)
+                return;
+
+            var mayHaveLostEvents = session.QueueVisitLossEpoch is not { } opened || opened != report.LossEpoch;
+            VisitLeft?.Invoke(new QueueVisitSignal(session.SessionId, session.QueueName!, visit,
+                session.QueueVisitAbandonReported, mayHaveLostEvents));
+        }
+    }
+
+    /// <summary>
+    /// app_queue's report that it counted the caller's visit abandoned (<c>QueueCallerAbandon</c>), found by the
+    /// caller's Uniqueid: the current visit, when it is in that queue and not connected, is marked abandon-reported and
+    /// <see cref="VisitAbandonReported"/> is raised, once per visit.
+    /// </summary>
+    private void OnQueueCallerAbandonReported(string uniqueId, string queueName)
+    {
+        if (!_byChannelId.TryGetValue(uniqueId, out var session)) return;
+
+        lock (session.SyncRoot)
+        {
+            if (CurrentVisit(session, queueName) is not { } visit
+                || session.QueueVisitAnnounced
+                || session.QueueVisitAbandonReported)
+            {
+                return;
+            }
+
+            session.QueueVisitAbandonReported = true;
+            VisitAbandonReported?.Invoke(new QueueVisitSignal(session.SessionId, session.QueueName!, visit));
+        }
+    }
+
+    /// <summary>
+    /// app_queue's <c>QUEUESTATUS</c> on a channel, found by its Uniqueid: <c>TIMEOUT</c> on the caller of a visit the
+    /// queue never connected raises <see cref="VisitTimedOut"/> for that visit. Every other value raises nothing.
+    /// </summary>
+    private void OnCallerQueueStatus(string uniqueId, string channel, string status)
+    {
+        if (!string.Equals(status, "TIMEOUT", StringComparison.Ordinal)
+            || !_byChannelId.TryGetValue(uniqueId, out var session))
+        {
+            return;
+        }
+
+        lock (session.SyncRoot)
+        {
+            if (CurrentVisit(session, queueName: null) is not { } visit || session.QueueVisitAnnounced)
+                return;
+
+            VisitTimedOut?.Invoke(new QueueVisitSignal(session.SessionId, session.QueueName!, visit));
+        }
+    }
+
+    /// <summary>
+    /// A load's <c>QueueStatus</c> snapshot of <paramref name="serverId"/> completed: every call of that server whose
+    /// current visit is still open (not left, not connected, not ended), which joined before the snapshot was asked for
+    /// and which the snapshot does not list, was no longer waiting when Asterisk answered. Its leave was never received
+    /// (it fell in an outage), so the visit is marked left and <see cref="VisitLeft"/> is raised for it, as a leave
+    /// after which events may have been lost. A snapshot that did not complete raises no completion, and a visit that
+    /// joined after the request is not closed by it: the snapshot could not list it.
+    /// </summary>
+    private void OnQueueSnapshotCompleted(QueueSnapshotCompletion completion, string serverId)
+    {
+        foreach (var session in _sessions.Values)
+        {
+            lock (session.SyncRoot)
+            {
+                if (session.ServerId != serverId
+                    || HasEnded(session)
+                    || CurrentVisit(session, queueName: null) is not { } visit
+                    || session.QueueVisitLeft
+                    || session.QueueVisitAnnounced
+                    || completion.JoinedAfterRequest(session.QueueVisitJoinOrdinal)
+                    || completion.Lists(session.QueueVisitCallerUniqueId, session.QueueVisitCallerChannel))
+                {
+                    continue;
+                }
+
                 session.QueueVisitLeft = true;
+                VisitLeft?.Invoke(new QueueVisitSignal(session.SessionId, session.QueueName!, visit,
+                    session.QueueVisitAbandonReported, EventsMayHaveBeenLost: true));
+            }
         }
     }
 
@@ -1197,7 +1335,10 @@ public sealed partial class CallSessionManager : ICallSessionManager
         Action<AsteriskBridge> onBridgeDestroyed,
         Action<BridgeTransferInfo> onTransfer,
         Action<string, AsteriskQueueEntry> onCallerJoined,
-        Action<string, AsteriskQueueEntry> onCallerLeft,
+        Action<QueueCallerLeaveReport> onCallerLeft,
+        Action<string, string> onAbandonReported,
+        Action<string, string, string> onQueueStatus,
+        Action<QueueSnapshotCompletion> onSnapshotCompleted,
         Action<string, string?, string?> onAgentConnected,
         Action<string?, string?, string?> onQueueCallerConnected)
     {
@@ -1214,7 +1355,10 @@ public sealed partial class CallSessionManager : ICallSessionManager
             server.Bridges.BridgeDestroyed -= onBridgeDestroyed;
             server.Bridges.TransferOccurred -= onTransfer;
             server.Queues.CallerJoined -= onCallerJoined;
-            server.Queues.CallerLeft -= onCallerLeft;
+            server.Queues.CallerLeaveReported -= onCallerLeft;
+            server.Queues.CallerAbandonReported -= onAbandonReported;
+            server.Queues.CallerQueueStatus -= onQueueStatus;
+            server.Queues.QueueSnapshotCompleted -= onSnapshotCompleted;
             server.Agents.AgentConnected -= onAgentConnected;
             server.Agents.QueueCallerConnected -= onQueueCallerConnected;
         }
