@@ -197,11 +197,6 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
             var session = await sessionReady.Task.WaitAsync(SignalTimeout);
 
             var sessionTask = bridge.HandleSessionAsync(session, host.Token).AsTask();
-            var functionReturnedAtSessionEnd = sessionTask.ContinueWith(
-                _ => function.Returned.IsCompleted,
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
             await function.Started.WaitAsync(SignalTimeout);
 
             // The caller hangs up while the function runs; the hook cancels the session just before the
@@ -212,10 +207,12 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
             await closeStarting.Task.WaitAsync(SignalTimeout);
             var ended = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
             var waitedForItsLoops = awaitingLoops.Task.IsCompleted;
+            // Read before the release: the function is parked until then, so this is its state when the session
+            // returned, whatever thread ran the session's completion and when.
+            var functionReturned = function.Returned.IsCompleted;
 
             function.Release();
             await function.Returned.WaitAsync(SignalTimeout);
-            var functionReturned = await functionReturnedAtSessionEnd.WaitAsync(SignalTimeout);
             UnobservedServerFaults.CollectDiscardedTasks();
 
             using (new AssertionScope())
