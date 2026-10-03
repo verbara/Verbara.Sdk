@@ -176,6 +176,17 @@ public sealed class VerbaraServer : IVerbaraServer
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
 
+    // How many loads of this server are running: the start's, a reconnect's reload, RequestInitialStateAsync's. A
+    // channel reconciliation alone is not counted.
+    private int _loadsInFlight;
+
+    /// <summary>
+    /// Whether a load of this server — the start's, the reload after a reconnect, or
+    /// <see cref="RequestInitialStateAsync"/> — is running now. Read by a caller that would rather not reconcile the
+    /// channels while a load reads them anyway; nothing waits on it, and a load may begin right after it was read.
+    /// </summary>
+    internal bool IsLoadInFlight => Volatile.Read(ref _loadsInFlight) > 0;
+
     // 1 once ReconcileChannelsAsync has logged a refused Status at Warning in the current AMI session; the reload after
     // a reconnect sets it back to 0, so the first refusal of every session is a Warning and the ones after it are Debug.
     private int _statusRefusalWarned;
@@ -471,8 +482,23 @@ public sealed class VerbaraServer : IVerbaraServer
     /// The load behind <see cref="RequestInitialStateAsync"/>, <see cref="StartAsync"/> and the reload after a
     /// reconnect. It records in <paramref name="states"/> the connection's state when it began and, when it stops
     /// because its AMI session ended, the state then: what the start reads to tell whether a reload will follow.
+    /// It is counted in <see cref="IsLoadInFlight"/> from its first step to its last, however it ends.
     /// </summary>
     private async ValueTask LoadAsync(LoadConnectionStates states, CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref _loadsInFlight);
+        try
+        {
+            await ReadStateAsync(states, cancellationToken);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _loadsInFlight);
+        }
+    }
+
+    /// <summary>The steps of <see cref="LoadAsync"/>: the channels, then the queues, then the agents.</summary>
+    private async ValueTask ReadStateAsync(LoadConnectionStates states, CancellationToken cancellationToken)
     {
         using var activity = LiveActivitySource.StartStateLoad(_connection.AsteriskVersion ?? "unknown");
 

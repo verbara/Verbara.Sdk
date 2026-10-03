@@ -1,120 +1,61 @@
-using Verbara.Sdk.Hosting;
-using Verbara.Sdk.Sessions;
-using Verbara.Sdk.Sessions.Extensions;
-using Verbara.Sdk.Sessions.Manager;
+using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
-using NSubstitute;
+using Verbara.Sdk.Hosting.Tests.Reconciliation;
+using Verbara.Sdk.Sessions;
 
 namespace Verbara.Sdk.Hosting.Tests;
 
-public sealed class SessionReconciliationServiceTests : IDisposable
+/// <summary>
+/// The sweep leaves a call younger than the dialing timeout alone and asks nothing for it, and its loop stops when
+/// the host stops it. Built and run through the reconciliation rig's one sweep helper.
+/// </summary>
+[Collection(SweepCounterGroup.Name)]
+[SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
+public sealed class SessionReconciliationServiceTests : IAsyncLifetime
 {
-    private readonly SessionOptions _options;
-    private readonly SessionReconciliationService _sut;
-    private readonly ICallSessionManager _manager;
+    private readonly SweepRig _rig = new();
 
-    public SessionReconciliationServiceTests()
-    {
-        _options = new SessionOptions
-        {
-            DialingTimeout = TimeSpan.FromSeconds(5),
-            RingingTimeout = TimeSpan.FromSeconds(10),
-            ReconciliationInterval = TimeSpan.FromSeconds(30),
-        };
-        _manager = Substitute.For<ICallSessionManager>();
-        _manager.ActiveSessions.Returns([]);
+    public Task InitializeAsync() => Task.CompletedTask;
 
-        _sut = new SessionReconciliationService(
-            _manager,
-            Options.Create(_options),
-            NullLogger<SessionReconciliationService>.Instance);
-    }
-
-    public void Dispose() => _sut.Dispose();
+    public Task DisposeAsync() => _rig.DisposeAsync().AsTask().WaitAsync(SweepRig.Bound);
 
     [Fact]
-    public void Sweep_ShouldMarkTimedOut_WhenDialingExceedsTimeout()
+    public async Task Sweep_ShouldNotTouch_WhenSessionConnected()
     {
-        var session = new CallSession("s1", "l1", "srv1", CallDirection.Inbound);
-        session.TryTransition(CallSessionState.Dialing);
-        // Simulate DialingAt in the past beyond timeout
-        session.DialingAt = DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10);
-        _manager.ActiveSessions.Returns(new[] { session });
+        var session = _rig.ConnectedCall("connected");
+        var before = SweepRig.Look(session);
+        var sweep = _rig.BuildSweep();
 
-        _sut.Sweep();
+        await SweepRig.SweepOnceAsync(sweep);
 
-        session.State.Should().Be(CallSessionState.TimedOut);
-    }
-
-    [Fact]
-    public void Sweep_ShouldMarkTimedOut_WhenRingingExceedsTimeout()
-    {
-        var session = new CallSession("s2", "l2", "srv1", CallDirection.Inbound);
-        session.TryTransition(CallSessionState.Dialing);
-        session.TryTransition(CallSessionState.Ringing);
-        // Simulate RingingAt in the past beyond timeout
-        session.RingingAt = DateTimeOffset.UtcNow - TimeSpan.FromSeconds(15);
-        _manager.ActiveSessions.Returns(new[] { session });
-
-        _sut.Sweep();
-
-        session.State.Should().Be(CallSessionState.TimedOut);
-    }
-
-    [Fact]
-    public void Sweep_ShouldMarkOrphaned_WhenCreatedExceedsTimeout()
-    {
-        // CreatedAt is set via init in constructor to UtcNow, so we need a session
-        // created far enough in the past. We create one with a backdated CreatedAt.
-        var session = new CallSession("s3", "l3", "srv1", CallDirection.Inbound)
-        {
-            CreatedAt = DateTimeOffset.UtcNow - TimeSpan.FromSeconds(10),
-        };
-        // Session stays in Created state
-        _manager.ActiveSessions.Returns(new[] { session });
-
-        _sut.Sweep();
-
-        session.State.Should().Be(CallSessionState.Failed);
-        session.Metadata.Should().ContainKey("cause")
-            .WhoseValue.Should().Be("orphaned");
-    }
-
-    [Fact]
-    public void Sweep_ShouldNotTouch_WhenSessionConnected()
-    {
-        var session = new CallSession("s4", "l4", "srv1", CallDirection.Inbound);
-        session.TryTransition(CallSessionState.Dialing);
-        session.TryTransition(CallSessionState.Connected);
-        _manager.ActiveSessions.Returns(new[] { session });
-
-        _sut.Sweep();
-
+        new { Session = SweepRig.Look(session), Actions = _rig.ActionsSent().Count }.Should().BeEquivalentTo(
+            new { Session = before, Actions = 0 },
+            $"a connected call younger than the dialing timeout is not a candidate. Measured: {_rig.Describe()}");
         session.State.Should().Be(CallSessionState.Connected);
     }
 
     [Fact]
-    public void Sweep_ShouldNotTouch_WhenDialingWithinTimeout()
+    public async Task Sweep_ShouldNotTouch_WhenDialingWithinTimeout()
     {
-        var session = new CallSession("s5", "l5", "srv1", CallDirection.Inbound);
-        session.TryTransition(CallSessionState.Dialing);
-        // DialingAt is set automatically by TryTransition, should be recent
-        _manager.ActiveSessions.Returns(new[] { session });
+        var session = _rig.DialingCall("dialing");
+        var before = SweepRig.Look(session);
+        var sweep = _rig.BuildSweep();
 
-        _sut.Sweep();
+        await SweepRig.SweepOnceAsync(sweep);
 
+        new { Session = SweepRig.Look(session), Actions = _rig.ActionsSent().Count }.Should().BeEquivalentTo(
+            new { Session = before, Actions = 0 },
+            $"a dialing call younger than the dialing timeout is not a candidate. Measured: {_rig.Describe()}");
         session.State.Should().Be(CallSessionState.Dialing);
     }
 
     [Fact]
     public async Task StopAsync_ShouldStopGracefully()
     {
-        await _sut.StartAsync(CancellationToken.None);
+        var loop = await _rig.StartLoopAsync(_rig.BuildSweep());
 
-        var act = () => _sut.StopAsync(CancellationToken.None);
+        var error = await Record.ExceptionAsync(loop.StopAsync);
 
-        await act.Should().NotThrowAsync();
+        error.Should().BeNull("a stop of a started sweep cancels its loop and returns inside the bound");
     }
 }

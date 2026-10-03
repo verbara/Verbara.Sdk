@@ -4,6 +4,7 @@ using System.Diagnostics.Metrics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Verbara.Sdk.Ami.Actions;
+using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Server;
@@ -72,7 +73,15 @@ internal sealed class SweepRig : IAsyncDisposable
     private int _statusRequests;
     private IReadOnlyList<string> _listedCalls = [];
 
-    public SweepRig(SessionOptions? options = null, bool defaultStore = false)
+    /// <summary>Builds the pipeline over a substituted connection that is connected and lists no channel.</summary>
+    /// <param name="options">The session options; the loop's interval is set to 5 ms on them.</param>
+    /// <param name="defaultStore">Whether the manager saves to the default in-memory store instead of a recording one.</param>
+    /// <param name="reportsOutcome">
+    /// Whether the substituted connection reports how an action ended, as an <c>AmiConnection</c> does. When
+    /// <see langword="false"/> it is left as a substitute answers unconfigured: it reports nothing, and only the
+    /// two-argument send is answered.
+    /// </param>
+    public SweepRig(SessionOptions? options = null, bool defaultStore = false, bool reportsOutcome = true)
     {
         Options = options ?? new SessionOptions();
 
@@ -89,6 +98,16 @@ internal sealed class SweepRig : IAsyncDisposable
         _connection
             .SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
             .Returns(ci => Reply(ci.ArgAt<ManagerAction>(0), ci.ArgAt<CancellationToken>(1)));
+        if (reportsOutcome)
+        {
+            // Reports how an action ended, so the sweep verifies over it; the outcome itself is never set (its setters
+            // are internal to the SDK), which a reader takes as an answer that completed.
+            _connection.ReportsEventActionOutcome.Returns(true);
+            _connection
+                .SendEventGeneratingActionAsync(
+                    Arg.Any<ManagerAction>(), Arg.Any<EventActionOutcome?>(), Arg.Any<CancellationToken>())
+                .Returns(ci => Reply(ci.ArgAt<ManagerAction>(0), ci.ArgAt<CancellationToken>(2)));
+        }
 
         Server = new VerbaraServer(_connection, NullLogger<VerbaraServer>.Instance);
         Manager = new CallSessionManager(
@@ -106,7 +125,10 @@ internal sealed class SweepRig : IAsyncDisposable
 
     public CallSessionManager Manager { get; }
 
-    /// <summary>The manager's clock: its release cutoff. A session's own timestamps come from the wall clock.</summary>
+    /// <summary>
+    /// The manager's clock (its release cutoff) and the time the sweep measures a call's age at. A session's own
+    /// timestamps come from the wall clock, so a call this rig opens is younger than this clock's time until aged.
+    /// </summary>
     public ManualClock Clock { get; }
 
     /// <summary>The store the manager saves to, unless the rig was built on the default store.</summary>
@@ -249,23 +271,24 @@ internal sealed class SweepRig : IAsyncDisposable
 
     // --- The sweep -----------------------------------------------------------------------------------------
 
-    /// <summary>Builds the sweep over this rig's manager and server. Disposed with the rig.</summary>
+    /// <summary>
+    /// Builds the sweep over this rig's manager and server, measuring a call's age at <see cref="Clock"/>'s time.
+    /// Disposed with the rig.
+    /// </summary>
     public SessionReconciliationService BuildSweep()
     {
         var sweep = new SessionReconciliationService(
             Manager,
+            Server,
             Microsoft.Extensions.Options.Options.Create(Options),
-            NullLogger<SessionReconciliationService>.Instance);
+            NullLogger<SessionReconciliationService>.Instance,
+            Clock);
         _owned.Add(new DisposeSweep(sweep));
         return sweep;
     }
 
     /// <summary>Runs one sweep of <paramref name="sweep"/> to its end.</summary>
-    public static Task SweepOnceAsync(SessionReconciliationService sweep)
-    {
-        sweep.Sweep();
-        return Task.CompletedTask;
-    }
+    public static Task SweepOnceAsync(SessionReconciliationService sweep) => sweep.SweepAsync(CancellationToken.None);
 
     /// <summary>
     /// Starts the sweep's own loop, as the host does, and returns a handle that counts the sweeps it completes
