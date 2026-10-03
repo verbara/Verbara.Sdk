@@ -130,7 +130,7 @@ internal sealed class SweepRig : IAsyncDisposable
     /// <summary>How many <c>Status</c> requests the substitute received.</summary>
     public int StatusRequests => Volatile.Read(ref _statusRequests);
 
-    /// <summary>Fired on every <c>Status</c> request and every completed sweep; what bounded waits wait on.</summary>
+    /// <summary>Fired on every action the substitute receives and every completed sweep; what bounded waits wait on.</summary>
     public Pulse Pulse => _pulse;
 
     // --- Calls -------------------------------------------------------------------------------------------
@@ -203,6 +203,12 @@ internal sealed class SweepRig : IAsyncDisposable
         _legsByCall[id] = [];
         return session;
     }
+
+    /// <summary>
+    /// The connection announces that it reconnected, as it does once a new AMI session is logged in: the server
+    /// reloads its state from Asterisk.
+    /// </summary>
+    public void Reconnect() => _connection.Reconnected += Raise.Event<Action>();
 
     /// <summary>Every leg of the call <paramref name="id"/> hangs up, with <paramref name="cause"/>.</summary>
     public void HangUp(string id, HangupCause cause)
@@ -343,7 +349,10 @@ internal sealed class SweepRig : IAsyncDisposable
     private IAsyncEnumerable<ManagerEvent> Reply(ManagerAction action, CancellationToken cancellationToken)
     {
         if (action is not StatusAction)
+        {
+            _pulse.Fire();
             return Nothing();
+        }
 
         var number = Interlocked.Increment(ref _statusRequests);
         _pulse.Fire();
