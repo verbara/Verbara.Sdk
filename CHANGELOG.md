@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a queue counts what Asterisk counts — timeouts, the end of a wait, and key exits (#379)
+
+`QueueSession.CallsTimedOut` was never counted, a caller kept counting in `CallsWaiting` after leaving the queue until
+it hung up or joined again, and a caller that left with the queue's exit key was counted abandoned, which Asterisk does
+not do. The tracker now reads Asterisk's own reports on each queue visit: `CallsAbandoned` moves at app_queue's abandon
+report (`QueueCallerAbandon`), `CallsTimedOut` at `QUEUESTATUS` = `TIMEOUT` (inside `CallsAbandoned`), and
+`CallsWaiting` drops at the caller's `QueueCallerLeave`, at every exit. Measured on Asterisk 20.20.1, 22.9.0 and 23.4.1
+over every way of leaving a queue (320 calls per version): the counts equal app_queue's `Abandoned` and its
+`EXITWITHTIMEOUT` count on every call, and `CallsWaiting` equals app_queue's `Calls` 700 ms after every sampled leave.
+An older queue snapshot no longer reopens a visit the caller already left (it counted an answered call twice, once as
+abandoned), and the queue handlers find the call by `Uniqueid`.
+
+What a consumer observes changes:
+- `CallsTimedOut` goes from 0 to Asterisk's timeouts when the AMI user's `read` includes `dialplan` (it stays 0 without
+  it; a `manager.conf` `eventfilter` that keeps only `QUEUESTATUS` costs about 1.3 % more bytes — see
+  `docs/guides/troubleshooting.md` § Missing events);
+- `CallsWaiting` drops at the caller's leave, and, for a caller that left while the AMI connection was down, when the
+  reload's completed `QueueStatus` no longer lists it;
+- `CallsAbandoned` and `AbandonRate` drop by the key exits, and move at Asterisk's abandon report instead of at the
+  hang-up or the next join.
+
+Not changed: a timeout during an AMI outage is counted abandoned, not timed out; after lost events (a reconnect, or a
+full event buffer) a leave with no abandon report is counted abandoned at the caller's next join or hang-up unless the
+queue connects it, since the SDK cannot tell it from a lost one; over a custom `ICallSessionManager` the tracker counts
+as before. No public API changes. See `src/Verbara.Sdk.Sessions/README.md` § Queue metrics.
+
 ### Changed — BREAKING: the caller's first ARI connect is bounded (#378)
 
 `AriClient.ConnectAsync` (and `CreateAndConnectAsync`, and the ARI hosted service) waited for as long as the caller's
