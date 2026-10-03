@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-03
+
 ### Fixed: a queued call records the queue member who took it (#381)
 
 `CallSession.AgentInterface` was always `null` on a call app_queue connected (100 of 100 on Asterisk 20.20.1, 22.9.0
