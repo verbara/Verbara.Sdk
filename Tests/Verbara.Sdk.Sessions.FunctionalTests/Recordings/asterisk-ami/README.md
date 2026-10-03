@@ -1,9 +1,10 @@
 # Recordings — asterisk-ami
 
 Byte captures of the AMI stream a real Asterisk PBX sent to one manager client, one capture per
-Asterisk version for each of three runs: twelve call shapes (`call-shapes-*`), seventeen queue
-shapes (`queue-shapes-*`), and four queue calls with the PBX's own state snapshots taken while they
-waited (`queue-reload-*`). This suite replays them through the SDK's own parsing path, so a
+Asterisk version for each of five sets: twelve call shapes (`call-shapes-*`), seventeen queue
+shapes (`queue-shapes-*`), four queue calls with the PBX's own state snapshots taken while they
+waited (`queue-reload-*`), and, read with the `dialplan` class, one call for each way of leaving a
+queue (`queue-exits-*`) and one timeout loop (`queue-loop-*`). This suite replays them through the SDK's own parsing path, so a
 call-session assertion made here is checked against what Asterisk actually sent rather than against
 what a test author believed it sends.
 
@@ -18,8 +19,14 @@ what a test author believed it sends.
 | `queue-reload-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 122 799 |
 | `queue-reload-asterisk-22.9.0.raw` | 22.9.0 | `Asterisk Call Manager/11.0.0` | 122 800 |
 | `queue-reload-asterisk-23.4.1.raw` | 23.4.1 | `Asterisk Call Manager/12.0.0` | 122 800 |
+| `queue-exits-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 223 345 |
+| `queue-exits-asterisk-22.9.0.raw` | 22.9.0 | `Asterisk Call Manager/11.0.0` | 223 347 |
+| `queue-exits-asterisk-23.4.1.raw` | 23.4.1 | `Asterisk Call Manager/12.0.0` | 223 351 |
+| `queue-loop-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 131 612 |
+| `queue-loop-asterisk-22.9.0.raw` | 22.9.0 | `Asterisk Call Manager/11.0.0` | 131 612 |
+| `queue-loop-asterisk-23.4.1.raw` | 23.4.1 | `Asterisk Call Manager/12.0.0` | 131 610 |
 
-The call and queue shapes were captured 2026-09-27, the reload captures 2026-09-28. The
+The call and queue shapes were captured 2026-09-27, the reload, exit and loop captures 2026-09-28. The
 `.gitattributes` rule `**/Recordings/**/*.raw binary` keeps the CRLF framing byte-exact; never open
 and re-save these files in an editor.
 
@@ -27,7 +34,8 @@ The sections from *Topology* to *What was changed from the raw capture* describe
 captures. The queue-shape captures were made on a different topology and reduced differently; they
 are described in [The queue-shape captures](#the-queue-shape-captures). The reload captures reuse the
 queue-shape topology with a few additions; they are described in
-[The reload captures](#the-reload-captures).
+[The reload captures](#the-reload-captures). The exit and loop captures are described in
+[The queue-exit and queue-loop captures](#the-queue-exit-and-queue-loop-captures).
 
 ## Topology
 
@@ -621,3 +629,240 @@ below.
 The reduction was checked by reading the raw and the reduced capture with the same script: for every
 call, the lifecycle frames in order with their `Timestamp`, `HoldTime` and verdicts, and for every
 snapshot its marker, the caller's `Status` and `QueueEntry`, and the reported start, are identical.
+
+## The queue-exit and queue-loop captures
+
+Every way a caller leaves a queue, as Asterisk 20.20.1, 22.9.0 and 23.4.1 report it to a manager user that reads
+every event class, `dialplan` included: one call per exit in `queue-exits-*`, each in a queue of its own, and one
+caller that a queue times out three times before a member answers in `queue-loop-*`. They are replayed by
+`AmiCaptureReplay.ReplayQueueExitsAsync`, which holds each queue to Asterisk's own reports in the same file: its
+`QueueCallerAbandon` frames, and its `VarSet` of `QUEUESTATUS` to `TIMEOUT`, attributed to the queue the caller's
+channel last left.
+
+### Topology
+
+Two containers per version on a private Docker network, with no host ports published:
+
+- **`dut`** — the Asterisk the capture observes. Its PJSIP endpoint `far` is the trunk to the other container and
+  takes every inbound call (context `from-pstn`). Its endpoints `agent1`, `agent2` and `agent3` (context
+  `from-agents`) have their contact on the other container, where a dialplan extension plays the phone.
+- **`far`** — a second Asterisk: it places the inbound calls over its endpoint `dut` and plays the phones behind the
+  member endpoints (context `from-dut`).
+
+### How the capture was driven
+
+A raw TCP tap, not the SDK, logged in to the PBX's manager interface (a `read = all` account; `timestampevents = yes`)
+and wrote every frame the PBX sent on that connection. An SDK host was connected as a second manager client, and a
+third connection sent the driver's own actions; their action responses went to their own connections and do not
+appear here. Each call is an AMI `Originate` on the far end, `PJSIP/<exten>@dut` with the application `Wait`, or, for
+the key exit, into the far end's context `caller-key`, which waits 2 s after the PBX answers, sends the DTMF digit
+`1` and stays on the line. The calls of one exit ran one after another, each starting at least 1.8 s after the
+previous caller's channel hung up.
+
+- **Leave-empty.** Before the call the driver adds `PJSIP/agent2` to `q-lwe` (AMI `QueueAdd`) and removes it
+  (`QueueRemove`) 2 s after the caller joined.
+- **Redirect.** 2 s after the caller joined, an AMI `Redirect` of the caller's channel to `after-redirect,s,1`.
+- **Withdraw.** 2 s after the caller joined, an AMI `QueueWithdrawCaller` for the caller in `q-wd`.
+- **Loop.** The far end's `agent3` answers only once the driver has set its database key `h22/answer` to `1`, which
+  it does after the caller's third leave.
+
+The run that produced these files placed other calls on the same PBX at the same time (further calls of each exit,
+and bursts of ten concurrent callers), so calls of different exits overlap in time. The files keep one call of each.
+
+### The calls
+
+| File | Caller | Extension | Queue | What happens | Asterisk, on the caller's channel |
+|------|--------|-----------|-------|--------------|------------------------------------|
+| `queue-exits-*` | 50100 | 5001 | `q-ans` | `agent1` rings 1 s and answers. | join, leave, `AgentConnect` |
+| `queue-exits-*` | 50200 | 5002 | `q-abn` | The caller hangs up while `agent2` rings. | join, `ABANDONED`, abandon, leave |
+| `queue-exits-*` | 50300 | 5003 | `q-tmo` | `Queue(q-tmo,,,,4)` times out; the dialplan waits 1 s. | join, `ABANDONED`, abandon, leave, `QUEUESTATUS=TIMEOUT` |
+| `queue-exits-*` | 50600 | 5006 | `q-lwe` | The queue's only member is removed while the caller waits. | join, `ABANDONED`, abandon, leave, `QUEUESTATUS=LEAVEEMPTY` |
+| `queue-exits-*` | 50700 | 5007 | `q-key` | The caller presses `1`, a digit of the queue's exit context. | join, leave; no abandon, no `QUEUESTATUS` |
+| `queue-exits-*` | 50800 | 5008 | `q-redir` | An AMI `Redirect` moves the caller out of the queue. | join, `ABANDONED`, abandon, leave; no `QUEUESTATUS` |
+| `queue-exits-*` | 50900 | 5009 | `q-wd` | An AMI `QueueWithdrawCaller` withdraws the caller. | join, `ABANDONED`, abandon, leave, `QUEUESTATUS=WITHDRAW` |
+| `queue-loop-*` | 52100 | 5010 | `q-loop` | Three 4 s visits, each timed out and followed by a 2 s announcement, then a fourth that `agent3` answers. | three times join, `ABANDONED`, abandon, leave, `QUEUESTATUS=TIMEOUT`; then join, leave, `AgentConnect` |
+
+The sequence of each call is the same in the three versions. Asterisk counts every exit above abandoned except the
+answered one and the key exit, which it counts neither answered nor abandoned.
+
+### Dialplans and queues
+
+`dut`, `queues.conf` (the queues these files use):
+
+```ini
+[general]
+persistentmembers = no
+shared_lastcall = no
+
+[qdefaults](!)
+strategy = ringall
+timeout = 15
+retry = 1
+wrapuptime = 0
+servicelevel = 20
+joinempty = no
+leavewhenempty = no
+ringinuse = yes
+announce-frequency = 0
+periodic-announce-frequency = 0
+announce-holdtime = no
+announce-position = no
+setqueuevar = yes
+setqueueentryvar = yes
+
+[q-ans](qdefaults)
+member => PJSIP/agent1
+
+[q-abn](qdefaults)
+member => PJSIP/agent2
+
+[q-tmo](qdefaults)
+member => PJSIP/agent2
+
+[q-lwe](qdefaults)
+leavewhenempty = yes
+timeout = 2
+
+[q-key](qdefaults)
+context = queue-exit
+member => PJSIP/agent2
+
+[q-redir](qdefaults)
+member => PJSIP/agent2
+
+[q-wd](qdefaults)
+timeout = 2
+member => PJSIP/agent2
+
+[q-loop](qdefaults)
+member => PJSIP/agent3
+```
+
+`dut`, `extensions.conf` (the extensions these files use). After each `Queue()` the dialplan reports what app_queue
+left on the channel in a `UserEvent` named `H22Exit`; `H22` is only the name of the measurement.
+
+```ini
+[from-pstn]
+exten => 5001,1,Answer()
+ same => n,Queue(q-ans)
+ same => n,UserEvent(H22Exit,Queue: q-ans,QS: ${QUEUESTATUS},Abandoned: ${ABANDONED},Where: after-queue)
+ same => n,Hangup()
+exten => 5002,1,Answer()
+ same => n,Queue(q-abn)
+ same => n,UserEvent(H22Exit,Queue: q-abn,QS: ${QUEUESTATUS},Abandoned: ${ABANDONED},Where: after-queue)
+ same => n,Hangup()
+exten => 5003,1,Answer()
+ same => n,Queue(q-tmo,,,,4)
+ same => n,UserEvent(H22Exit,Queue: q-tmo,QS: ${QUEUESTATUS},Abandoned: ${ABANDONED},Where: after-queue)
+ same => n,Wait(1)
+ same => n,Hangup()
+exten => 5006,1,Answer()
+ same => n,Queue(q-lwe)
+ same => n,UserEvent(H22Exit,Queue: q-lwe,QS: ${QUEUESTATUS},Abandoned: ${ABANDONED},Where: after-queue)
+ same => n,Wait(1)
+ same => n,Hangup()
+exten => 5007,1,Answer()
+ same => n,Queue(q-key)
+ same => n,UserEvent(H22Exit,Queue: q-key,QS: ${QUEUESTATUS},Abandoned: ${ABANDONED},Where: after-queue)
+ same => n,Wait(1)
+ same => n,Hangup()
+exten => 5008,1,Answer()
+ same => n,Queue(q-redir)
+ same => n,UserEvent(H22Exit,Queue: q-redir,QS: ${QUEUESTATUS},Abandoned: ${ABANDONED},Where: after-queue)
+ same => n,Hangup()
+exten => 5009,1,Answer()
+ same => n,Queue(q-wd)
+ same => n,UserEvent(H22Exit,Queue: q-wd,QS: ${QUEUESTATUS},Abandoned: ${ABANDONED},Where: after-queue)
+ same => n,Wait(1)
+ same => n,Hangup()
+exten => 5010,1,Answer()
+ same => n,Set(LOOPN=0)
+ same => n(again),Queue(q-loop,,,,4)
+ same => n,UserEvent(H22Exit,Queue: q-loop,QS: ${QUEUESTATUS},Abandoned: ${ABANDONED},Where: loop-${LOOPN})
+ same => n,Wait(2)
+ same => n,Set(LOOPN=$[${LOOPN}+1])
+ same => n,GotoIf($[${LOOPN}<3]?again)
+ same => n,Queue(q-loop)
+ same => n,UserEvent(H22Exit,Queue: q-loop,QS: ${QUEUESTATUS},Abandoned: ${ABANDONED},Where: loop-final)
+ same => n,Hangup()
+
+[queue-exit]
+exten => 1,1,UserEvent(H22Exit,Queue: q-key,QS: ${QUEUESTATUS},Abandoned: ${ABANDONED},Where: queue-exit)
+ same => n,Wait(1)
+ same => n,Hangup()
+
+[after-redirect]
+exten => s,1,UserEvent(H22Exit,Queue: q-redir,QS: ${QUEUESTATUS},Abandoned: ${ABANDONED},Where: after-redirect)
+ same => n,Wait(1)
+ same => n,Hangup()
+
+[from-agents]
+exten => _X.,1,Hangup()
+```
+
+`far`, `extensions.conf`:
+
+```ini
+[from-dut]
+; the phone behind PJSIP/agent1: rings 1 s, answers, stays until the caller hangs up
+exten => agent1,1,Ringing()
+ same => n,Wait(1)
+ same => n,Answer()
+ same => n,Wait(120)
+ same => n,Hangup()
+; the phone behind PJSIP/agent2: rings and never answers
+exten => agent2,1,Ringing()
+ same => n,Wait(300)
+ same => n,Hangup()
+; the phone behind PJSIP/agent3: never answers unless DB(h22/answer) is 1
+exten => agent3,1,GotoIf($["${DB(h22/answer)}" = "1"]?ans)
+ same => n,Ringing()
+ same => n,Wait(300)
+ same => n,Hangup()
+ same => n(ans),Ringing()
+ same => n,Wait(${DB(h22/ring)})
+ same => n,Answer()
+ same => n,Wait(120)
+ same => n,Hangup()
+
+; the caller of the key exit: once the PBX answers, wait 2 s, press 1, and stay
+[caller-key]
+exten => s,1,Wait(2)
+ same => n,SendDTMF(1,250)
+ same => n,Wait(30)
+ same => n,Hangup()
+```
+
+`manager.conf` and `pjsip.conf` are not reproduced: they hold the containers' credentials and addresses.
+
+### What was changed from the raw capture
+
+Each raw capture held about 29 600 frames and 12.4 MB: every call of the run, the concurrent ones included. The tap
+read the stream line by line and wrote each frame as its header lines joined by CRLF, followed by the blank line;
+the banner line, which the tap read before the first frame, is put back as the file's first line. The files were
+reduced by keeping **whole frames**, so every frame that is left is the tap's, CRLF framing included, apart from the
+ids below.
+
+- **The channel rule.** A frame is kept when its `Uniqueid` is a kept call's caller channel, or a channel whose
+  `Linkedid` is that caller's `Uniqueid` (the member legs the queue dialed for it). A `BridgeCreate` or
+  `BridgeDestroy`, which carries no `Uniqueid`, is kept when a kept channel entered that bridge. Every other frame
+  is removed: the frames of channels that belong to no kept call (the run's other calls), and every frame that
+  names no channel (`QueueMemberStatus`, `DeviceStateChange`, `QueueMemberAdded`, `QueueMemberRemoved`).
+- **Removed besides:** `SuccessfulAuth` and `FullyBooted`, and the `VarSet` of `SIPDOMAIN` on a kept channel, which
+  carries the PBX container's address (7 in each `queue-exits-*` file, 1 in each `queue-loop-*` file).
+  `SuccessfulAuth` carries a container address, the manager account name and a manager session id.
+- **Kept** (each `queue-exits-*` file, the same counts in the three versions; 504 frames): `VarSet` 322, `Newexten`
+  44, `Newstate` 15, `Newchannel` 14, `Hangup` 14, `DialEnd` 13, `NewConnectedLine` 8, `QueueCallerJoin` 7,
+  `QueueCallerLeave` 7, `AgentCalled` 7, `DialBegin` 7, `DialState` 7, `NewCallerid` 7, `SoftHangupRequest` 7,
+  `QueueCallerAbandon` 5, `UserEvent` 5, `AgentRingNoAnswer` 3, `BridgeEnter` 2, `BridgeLeave` 2, `HangupRequest` 2,
+  and one each of `AgentConnect`, `AgentComplete`, `BridgeCreate`, `BridgeDestroy`, `DTMFBegin` and `DTMFEnd`.
+  Each `queue-loop-*` file keeps 301 frames: `VarSet` 204, `Newexten` 26, `DialEnd` 7, `Newstate` 6, `Newchannel` 5,
+  `Hangup` 5, `NewConnectedLine` 5, `QueueCallerJoin` 4, `QueueCallerLeave` 4, `AgentCalled` 4, `DialBegin` 4,
+  `DialState` 4, `NewCallerid` 4, `QueueCallerAbandon` 3, `AgentRingNoAnswer` 3, `UserEvent` 3, `BridgeEnter` 2,
+  `BridgeLeave` 2, and one each of `AgentConnect`, `AgentComplete`, `BridgeCreate`, `BridgeDestroy`, `HangupRequest`
+  and `SoftHangupRequest`. Every `VarSet` but `SIPDOMAIN` is kept, so a replay also sees the variables the SDK does
+  not read.
+- **Replaced:** each distinct UUID-shaped value (the `BridgeUniqueid` and the `BRIDGEPVTCALLID` values) is replaced
+  by a single-character fill of the same length, in order of first appearance: `11111111-1111-1111-1111-111111111111`,
+  then `22222222-…` and `33333333-…` (3 per file), for the recording redaction check.
+

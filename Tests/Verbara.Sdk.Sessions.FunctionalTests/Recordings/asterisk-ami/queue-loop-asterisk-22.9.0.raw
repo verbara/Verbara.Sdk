@@ -1,0 +1,6371 @@
+Asterisk Call Manager/11.0.0
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790615273.495498
+Channel: PJSIP/far-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615273.495586
+Channel: PJSIP/far-00000002
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790615273.495660
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615273.996370
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 2
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Set
+AppData: LOOPN=0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615273.996401
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 2
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: LOOPN
+Value: 0
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615273.996410
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Queue
+AppData: q-loop,,,,4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615273.996415
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615273.996418
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615273.996422
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615273.996427
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615273.996431
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615273.996437
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1790615273.996479
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Queue: q-loop
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790615273.996702
+Channel: PJSIP/agent3-00000003
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615273.3
+Linkedid: 1790615273.2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615273.996731
+Channel: PJSIP/agent3-00000003
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615273.3
+Linkedid: 1790615273.2
+Extension: s
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1790615273.996745
+Channel: PJSIP/agent3-00000003
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615273.3
+Linkedid: 1790615273.2
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615273.996754
+Channel: PJSIP/agent3-00000003
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615273.3
+Linkedid: 1790615273.2
+Variable: DIALEDPEERNUMBER
+Value: agent3
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1790615273.997145
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000003
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615273.3
+DestLinkedid: 1790615273.2
+Queue: q-loop
+Interface: PJSIP/agent3
+MemberName: PJSIP/agent3
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1790615273.997156
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000003
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790615273.3
+DestLinkedid: 1790615273.2
+DialString: PJSIP/agent3
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790615273.998016
+Channel: PJSIP/agent3-00000003
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615273.3
+Linkedid: 1790615273.2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615273.998027
+Channel: PJSIP/agent3-00000003
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615273.3
+Linkedid: 1790615273.2
+Extension: 5010
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1790615273.998031
+Channel: PJSIP/agent3-00000003
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615273.3
+Linkedid: 1790615273.2
+
+Event: DialState
+Privilege: call,all
+Timestamp: 1790615273.998038
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000003
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615273.3
+DestLinkedid: 1790615273.2
+DialStatus: RINGING
+
+Event: AgentRingNoAnswer
+Privilege: agent,all
+Timestamp: 1790615278.001996
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000003
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615273.3
+DestLinkedid: 1790615273.2
+Queue: q-loop
+Interface: PJSIP/agent3
+MemberName: PJSIP/agent3
+RingTime: 4000
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790615278.002029
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000003
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615273.3
+DestLinkedid: 1790615273.2
+DialStatus: NOANSWER
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790615278.002037
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000003
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615273.3
+DestLinkedid: 1790615273.2
+DialStatus: CANCEL
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002044
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ABANDONED
+Value: TRUE
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002054
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUENAME
+Value: q-loop
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002058
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEMAX
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002062
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTRATEGY
+Value: ringall
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002067
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECALLS
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002071
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEHOLDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002076
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUETALKTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002080
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECOMPLETED
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002083
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEABANDONED
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002087
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVEL
+Value: 20
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002091
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVELPERF
+Value: 0.0
+
+Event: QueueCallerAbandon
+Privilege: agent,all
+Timestamp: 1790615278.002097
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Queue: q-loop
+Position: 1
+OriginalPosition: 1
+HoldTime: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002102
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT
+Value: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002105
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT_MS
+Value: 4000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002110
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME
+Value: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002113
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME_MS
+Value: 4506
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002116
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002126
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME_MS
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002142
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUENAME
+Value: q-loop
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002158
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEMAX
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002189
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTRATEGY
+Value: ringall
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002196
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECALLS
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002200
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEHOLDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002205
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUETALKTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002210
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECOMPLETED
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002218
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEABANDONED
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002251
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVEL
+Value: 20
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002267
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVELPERF
+Value: 0.0
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1790615278.002282
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Queue: q-loop
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002288
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615278.002293
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTATUS
+Value: TIMEOUT
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615278.002300
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 4
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: UserEvent
+AppData: H22Exit,Queue: q-loop,QS: TIMEOUT,Abandoned: TRUE,Where: loop-0
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1790615278.002309
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 4
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+UserEvent: H22Exit
+Queue: q-loop
+QS: TIMEOUT
+Abandoned: TRUE
+Where: loop-0
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615278.002316
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 5
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Wait
+AppData: 2
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790615278.002322
+Channel: PJSIP/agent3-00000003
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615273.3
+Linkedid: 1790615273.2
+Cause: 0
+Cause-txt: Unknown
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615280.004113
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 6
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Set
+AppData: LOOPN=1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615280.004148
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 6
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: LOOPN
+Value: 1
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615280.004154
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 7
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: GotoIf
+AppData: 1?again
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615280.004160
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Queue
+AppData: q-loop,,,,4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615280.004164
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615280.004169
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615280.004176
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615280.004185
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615280.004194
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615280.004201
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615280.004208
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ABANDONED
+Value: 
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1790615280.004271
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Queue: q-loop
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790615280.004521
+Channel: PJSIP/agent3-00000006
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615280.6
+Linkedid: 1790615273.2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615280.004563
+Channel: PJSIP/agent3-00000006
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615280.6
+Linkedid: 1790615273.2
+Extension: s
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1790615280.004583
+Channel: PJSIP/agent3-00000006
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615280.6
+Linkedid: 1790615273.2
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615280.004599
+Channel: PJSIP/agent3-00000006
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615280.6
+Linkedid: 1790615273.2
+Variable: DIALEDPEERNUMBER
+Value: agent3
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1790615280.005030
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000006
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615280.6
+DestLinkedid: 1790615273.2
+Queue: q-loop
+Interface: PJSIP/agent3
+MemberName: PJSIP/agent3
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1790615280.005049
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000006
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790615280.6
+DestLinkedid: 1790615273.2
+DialString: PJSIP/agent3
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790615280.005889
+Channel: PJSIP/agent3-00000006
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615280.6
+Linkedid: 1790615273.2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615280.005906
+Channel: PJSIP/agent3-00000006
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615280.6
+Linkedid: 1790615273.2
+Extension: 5010
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1790615280.005918
+Channel: PJSIP/agent3-00000006
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615280.6
+Linkedid: 1790615273.2
+
+Event: DialState
+Privilege: call,all
+Timestamp: 1790615280.005933
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000006
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615280.6
+DestLinkedid: 1790615273.2
+DialStatus: RINGING
+
+Event: AgentRingNoAnswer
+Privilege: agent,all
+Timestamp: 1790615284.009688
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000006
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615280.6
+DestLinkedid: 1790615273.2
+Queue: q-loop
+Interface: PJSIP/agent3
+MemberName: PJSIP/agent3
+RingTime: 4000
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790615284.009718
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000006
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615280.6
+DestLinkedid: 1790615273.2
+DialStatus: NOANSWER
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790615284.009727
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000006
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615280.6
+DestLinkedid: 1790615273.2
+DialStatus: CANCEL
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009736
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ABANDONED
+Value: TRUE
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009741
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUENAME
+Value: q-loop
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009746
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEMAX
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009750
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTRATEGY
+Value: ringall
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009757
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECALLS
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009762
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEHOLDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009766
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUETALKTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009773
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECOMPLETED
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009777
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEABANDONED
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009779
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVEL
+Value: 20
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009784
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVELPERF
+Value: 0.0
+
+Event: QueueCallerAbandon
+Privilege: agent,all
+Timestamp: 1790615284.009795
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Queue: q-loop
+Position: 1
+OriginalPosition: 1
+HoldTime: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009801
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT
+Value: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009806
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT_MS
+Value: 4000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009814
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME
+Value: 10
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009819
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME_MS
+Value: 10514
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009826
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009832
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME_MS
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009839
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUENAME
+Value: q-loop
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009845
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEMAX
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009854
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTRATEGY
+Value: ringall
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009864
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECALLS
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009870
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEHOLDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009877
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUETALKTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009896
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECOMPLETED
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009903
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEABANDONED
+Value: 2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009917
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVEL
+Value: 20
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009924
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVELPERF
+Value: 0.0
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1790615284.009936
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Queue: q-loop
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009944
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615284.009953
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTATUS
+Value: TIMEOUT
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615284.009960
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 4
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: UserEvent
+AppData: H22Exit,Queue: q-loop,QS: TIMEOUT,Abandoned: TRUE,Where: loop-1
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1790615284.009969
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 4
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+UserEvent: H22Exit
+Queue: q-loop
+QS: TIMEOUT
+Abandoned: TRUE
+Where: loop-1
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615284.009980
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 5
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Wait
+AppData: 2
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790615284.009990
+Channel: PJSIP/agent3-00000006
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615280.6
+Linkedid: 1790615273.2
+Cause: 0
+Cause-txt: Unknown
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615286.011677
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 6
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Set
+AppData: LOOPN=2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615286.011716
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 6
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: LOOPN
+Value: 2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615286.011724
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 7
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: GotoIf
+AppData: 1?again
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615286.011730
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Queue
+AppData: q-loop,,,,4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615286.011735
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615286.011740
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615286.011744
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615286.011748
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615286.011753
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615286.011757
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615286.011764
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ABANDONED
+Value: 
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1790615286.011776
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Queue: q-loop
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790615286.012036
+Channel: PJSIP/agent3-00000009
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615286.9
+Linkedid: 1790615273.2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615286.012070
+Channel: PJSIP/agent3-00000009
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615286.9
+Linkedid: 1790615273.2
+Extension: s
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1790615286.012130
+Channel: PJSIP/agent3-00000009
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615286.9
+Linkedid: 1790615273.2
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615286.012142
+Channel: PJSIP/agent3-00000009
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615286.9
+Linkedid: 1790615273.2
+Variable: DIALEDPEERNUMBER
+Value: agent3
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1790615286.012605
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000009
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615286.9
+DestLinkedid: 1790615273.2
+Queue: q-loop
+Interface: PJSIP/agent3
+MemberName: PJSIP/agent3
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1790615286.012620
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000009
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790615286.9
+DestLinkedid: 1790615273.2
+DialString: PJSIP/agent3
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790615286.013431
+Channel: PJSIP/agent3-00000009
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615286.9
+Linkedid: 1790615273.2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615286.013448
+Channel: PJSIP/agent3-00000009
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615286.9
+Linkedid: 1790615273.2
+Extension: 5010
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1790615286.013453
+Channel: PJSIP/agent3-00000009
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615286.9
+Linkedid: 1790615273.2
+
+Event: DialState
+Privilege: call,all
+Timestamp: 1790615286.013460
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000009
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615286.9
+DestLinkedid: 1790615273.2
+DialStatus: RINGING
+
+Event: AgentRingNoAnswer
+Privilege: agent,all
+Timestamp: 1790615290.015686
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000009
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615286.9
+DestLinkedid: 1790615273.2
+Queue: q-loop
+Interface: PJSIP/agent3
+MemberName: PJSIP/agent3
+RingTime: 4000
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790615290.015737
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000009
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615286.9
+DestLinkedid: 1790615273.2
+DialStatus: NOANSWER
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790615290.015747
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-00000009
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615286.9
+DestLinkedid: 1790615273.2
+DialStatus: CANCEL
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015769
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ABANDONED
+Value: TRUE
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015786
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUENAME
+Value: q-loop
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015798
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEMAX
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015807
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTRATEGY
+Value: ringall
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015818
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECALLS
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015828
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEHOLDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015835
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUETALKTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015840
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECOMPLETED
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015844
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEABANDONED
+Value: 2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015850
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVEL
+Value: 20
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015855
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVELPERF
+Value: 0.0
+
+Event: QueueCallerAbandon
+Privilege: agent,all
+Timestamp: 1790615290.015862
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Queue: q-loop
+Position: 1
+OriginalPosition: 1
+HoldTime: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015868
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT
+Value: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015873
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT_MS
+Value: 4000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015878
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME
+Value: 16
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015892
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME_MS
+Value: 16520
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015898
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015903
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME_MS
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015920
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUENAME
+Value: q-loop
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015936
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEMAX
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015944
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTRATEGY
+Value: ringall
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015956
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECALLS
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015968
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEHOLDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015974
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUETALKTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015980
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECOMPLETED
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015984
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEABANDONED
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015987
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVEL
+Value: 20
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.015992
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVELPERF
+Value: 0.0
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1790615290.016004
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Queue: q-loop
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.016009
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615290.016015
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 3
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTATUS
+Value: TIMEOUT
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615290.016023
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 4
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: UserEvent
+AppData: H22Exit,Queue: q-loop,QS: TIMEOUT,Abandoned: TRUE,Where: loop-2
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1790615290.016040
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 4
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+UserEvent: H22Exit
+Queue: q-loop
+QS: TIMEOUT
+Abandoned: TRUE
+Where: loop-2
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790615290.016059
+Channel: PJSIP/agent3-00000009
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615286.9
+Linkedid: 1790615273.2
+Cause: 0
+Cause-txt: Unknown
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615290.016069
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 5
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Wait
+AppData: 2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615292.016059
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 6
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Set
+AppData: LOOPN=3
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615292.016095
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 6
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: LOOPN
+Value: 3
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615292.016104
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 7
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: GotoIf
+AppData: 0?again
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615292.016110
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Extension: 5010
+Application: Queue
+AppData: q-loop
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615292.016118
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615292.016126
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615292.016131
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615292.016136
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615292.016141
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615292.016146
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615292.016162
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ABANDONED
+Value: 
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1790615292.016187
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Queue: q-loop
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1790615292.016447
+Channel: PJSIP/agent3-0000000c
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615292.016478
+Channel: PJSIP/agent3-0000000c
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Extension: s
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1790615292.016488
+Channel: PJSIP/agent3-0000000c
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615292.016496
+Channel: PJSIP/agent3-0000000c
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: s
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: DIALEDPEERNUMBER
+Value: agent3
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1790615292.016908
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-0000000c
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615292.12
+DestLinkedid: 1790615273.2
+Queue: q-loop
+Interface: PJSIP/agent3
+MemberName: PJSIP/agent3
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1790615292.016921
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-0000000c
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1790615292.12
+DestLinkedid: 1790615273.2
+DialString: PJSIP/agent3
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790615292.017768
+Channel: PJSIP/agent3-0000000c
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1790615292.017781
+Channel: PJSIP/agent3-0000000c
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Extension: 5010
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1790615292.017791
+Channel: PJSIP/agent3-0000000c
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+
+Event: DialState
+Privilege: call,all
+Timestamp: 1790615292.017826
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-0000000c
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615292.12
+DestLinkedid: 1790615273.2
+DialStatus: RINGING
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1790615298.024271
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1790615298.024303
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-0000000c
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615292.12
+DestLinkedid: 1790615273.2
+DialStatus: ANSWER
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1790615298.024314
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024377
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QEHOLDTIME
+Value: 6
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024395
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QEORIGINALPOS
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024405
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QEHOLDTIME
+Value: 6
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024410
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QEORIGINALPOS
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024416
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUENAME
+Value: q-loop
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024424
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEMAX
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024433
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTRATEGY
+Value: ringall
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024439
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECALLS
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024446
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEHOLDTIME
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024453
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUETALKTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024460
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECOMPLETED
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024466
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEABANDONED
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024473
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVEL
+Value: 20
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024478
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVELPERF
+Value: 0.0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024483
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QUEUENAME
+Value: q-loop
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024490
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QUEUEMAX
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024515
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QUEUESTRATEGY
+Value: ringall
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024527
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QUEUECALLS
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024537
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QUEUEHOLDTIME
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024546
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QUEUETALKTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024553
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QUEUECOMPLETED
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024560
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QUEUEABANDONED
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024583
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVEL
+Value: 20
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024595
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVELPERF
+Value: 0.0
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1790615298.024612
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Queue: q-loop
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024623
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024629
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT
+Value: 6
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024638
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEWAIT_MS
+Value: 6000
+
+Event: AgentConnect
+Privilege: agent,all
+Timestamp: 1790615298.024651
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-0000000c
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615292.12
+DestLinkedid: 1790615273.2
+Queue: q-loop
+Interface: PJSIP/agent3
+MemberName: PJSIP/agent3
+HoldTime: 6
+RingTime: 6
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1790615298.024668
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1790615298.024729
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1790615298.024813
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024865
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: BRIDGEPEER
+Value: PJSIP/agent3-0000000c
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024880
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: BRIDGEPVTCALLID
+Value: 22222222-2222-2222-2222-222222222222
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024893
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: BRIDGEPEER
+Value: PJSIP/far-00000002
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024903
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: BRIDGEPVTCALLID
+Value: 33333333-3333-3333-3333-333333333333
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024913
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: BRIDGEPEER
+Value: PJSIP/agent3-0000000c
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024928
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: BRIDGEPVTCALLID
+Value: 22222222-2222-2222-2222-222222222222
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024938
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: BRIDGEPEER
+Value: PJSIP/far-00000002
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024952
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: BRIDGEPVTCALLID
+Value: 33333333-3333-3333-3333-333333333333
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024967
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: BRIDGEPEER
+Value: PJSIP/agent3-0000000c
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024976
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: BRIDGEPVTCALLID
+Value: 22222222-2222-2222-2222-222222222222
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.024990
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: BRIDGEPEER
+Value: PJSIP/far-00000002
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615298.025003
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: BRIDGEPVTCALLID
+Value: 33333333-3333-3333-3333-333333333333
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528241
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOS
+Value: ssrc=1691661096;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528280
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSBRIDGED
+Value: ssrc=1691661096;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528289
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528297
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSJITTERBRIDGED
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528303
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528309
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSLOSSBRIDGED
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528316
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528322
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSRTTBRIDGED
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528329
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528348
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSMESBRIDGED
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1790615305.528362
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528373
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528382
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: AgentComplete
+Privilege: agent,all
+Timestamp: 1790615305.528418
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+DestChannel: PJSIP/agent3-0000000c
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 5010
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 52100
+DestConnectedLineName: H22
+DestLanguage: en
+DestAccountCode: 
+DestContext: from-agents
+DestExten: 5010
+DestPriority: 1
+DestUniqueid: 1790615292.12
+DestLinkedid: 1790615273.2
+Queue: q-loop
+Interface: PJSIP/agent3
+MemberName: PJSIP/agent3
+HoldTime: 6
+TalkTime: 7
+Reason: caller
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528445
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528454
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1790615305.528488
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528519
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUENAME
+Value: q-loop
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528536
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEMAX
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528546
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTRATEGY
+Value: ringall
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528556
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECALLS
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528564
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEHOLDTIME
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528572
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUETALKTIME
+Value: 7
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528581
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECOMPLETED
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528617
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEABANDONED
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528637
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVEL
+Value: 20
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528651
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVELPERF
+Value: 100.0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528669
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME
+Value: 7
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528681
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: ANSWEREDTIME_MS
+Value: 7504
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528687
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME
+Value: 32
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528692
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: DIALEDTIME_MS
+Value: 32033
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528701
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUENAME
+Value: q-loop
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528706
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEMAX
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528713
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESTRATEGY
+Value: ringall
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528723
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECALLS
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528730
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEHOLDTIME
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528736
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUETALKTIME
+Value: 7
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528741
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUECOMPLETED
+Value: 1
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1790615305.528748
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528757
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUEABANDONED
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528763
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVEL
+Value: 20
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528770
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Variable: QUEUESRVLEVELPERF
+Value: 100.0
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1790615305.528777
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1790615305.528785
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790615305.528792
+Channel: PJSIP/far-00000002
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 52100
+CallerIDName: H22
+ConnectedLineNum: 5010
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: from-pstn
+Exten: 5010
+Priority: 8
+Uniqueid: 1790615273.2
+Linkedid: 1790615273.2
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528920
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOS
+Value: ssrc=610323377;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528938
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528946
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528953
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1790615305.528961
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1790615305.529044
+Channel: PJSIP/agent3-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5010
+CallerIDName: <unknown>
+ConnectedLineNum: 52100
+ConnectedLineName: H22
+Language: en
+AccountCode: 
+Context: from-agents
+Exten: 5010
+Priority: 1
+Uniqueid: 1790615292.12
+Linkedid: 1790615273.2
+Cause: 16
+Cause-txt: Normal Clearing
+

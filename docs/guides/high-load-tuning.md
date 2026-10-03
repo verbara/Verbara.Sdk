@@ -282,7 +282,7 @@ services.AddVerbara(options =>
 Key considerations:
 - **Multi-server:** Use `VerbaraServerPool` to federate N servers with agent routing
 - **Observer speed:** Keep event handlers fast (< 10ms). Offload heavy work to background queues
-- **VarSet filtering:** `VarSet` events are typically the largest single share of event volume on a busy dialplan. Filter early in observers
+- **VarSet filtering:** `VarSet` events are typically the largest single share of event volume on a busy dialplan. Filter early in observers, or better at the source, in `manager.conf`: the [`eventfilter` in Missing events](troubleshooting.md#the-cost-of-dialplan-and-a-filter-that-removes-it) drops them all except the `QUEUESTATUS` that the queue metrics read
 - **GC tuning:** Consider `ServerGC` and `gcServer=true` in `runtimeconfig.json`
 
 ```json

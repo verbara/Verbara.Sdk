@@ -65,7 +65,7 @@ internal sealed class QueueCallRig : IAsyncDisposable
     {
         var connection = new ReloadableConnection();
         var options = Options.Create(new SessionOptions());
-        var server = new VerbaraServer(connection.Connection, NullLogger<VerbaraServer>.Instance);
+        var server = new VerbaraServer(connection.Connection, connection.ServerLogger);
         var manager = new CallSessionManager(options, NullLogger<CallSessionManager>.Instance, new InMemorySessionStore(),
             clock ?? TimeProvider.System);
         var tracker = new QueueSessionTracker(manager, options);
@@ -124,6 +124,19 @@ internal sealed class QueueCallRig : IAsyncDisposable
         throw new InvalidOperationException("No frame left matches the one to deliver through.");
     }
 
+    /// <summary>
+    /// Like <see cref="ReconnectAsync"/>, and <paramref name="script"/> also delivers live frames while the reload runs,
+    /// or cuts its queue snapshot off before it completes (<see cref="ReloadScript"/>).
+    /// </summary>
+    public Task ReconnectAsync(IReadOnlyList<ManagerEvent> status, IReadOnlyList<ManagerEvent> queueStatus, ReloadScript script) =>
+        _connection.ReloadAsync(status, queueStatus, script);
+
+    /// <summary>Every count the tracker keeps for <paramref name="queue"/>, or zeros for a queue it never saw.</summary>
+    public QueueTally Tally(string queue) =>
+        Tracker.GetByQueueName(queue) is { } q
+            ? new QueueTally(q.CallsOffered, q.CallsAnswered, q.CallsAbandoned, q.CallsTimedOut, q.CallsWaiting)
+            : new QueueTally(0, 0, 0, 0, 0);
+
     /// <summary>The queue's answered, abandoned and waiting counts, or zeros for a queue the tracker never saw.</summary>
     public QueueOutcome Counts(string queue) =>
         Tracker.GetByQueueName(queue) is { } q
@@ -141,6 +154,9 @@ internal sealed class QueueCallRig : IAsyncDisposable
 
 /// <summary>A queue's answered, abandoned and waiting counts, as <see cref="QueueCallRig.Counts"/> reads them.</summary>
 internal readonly record struct QueueOutcome(int Answered, int Abandoned, int Waiting);
+
+/// <summary>Every count a queue keeps, as <see cref="QueueCallRig.Tally"/> reads them.</summary>
+internal readonly record struct QueueTally(int Offered, int Answered, int Abandoned, int TimedOut, int Waiting);
 
 /// <summary>
 /// Typed AMI frames of a queue call, carrying the fields <see cref="VerbaraServer"/>'s observer reads,
@@ -175,6 +191,40 @@ internal static class QueueFrames
                 ["Position"] = position.ToString(System.Globalization.CultureInfo.InvariantCulture),
             },
         };
+
+    /// <summary>
+    /// app_queue's report that it counted the caller's visit in <paramref name="queue"/> abandoned. Asterisk sends it,
+    /// in the <c>agent</c> class, just before the caller's <see cref="Leave"/> for every visit it counts abandoned: the
+    /// caller hanging up, the queue's timeout, the queue emptying, a withdrawal and a redirect. It sends none for a
+    /// caller that leaves by key, nor for a visit it connects.
+    /// </summary>
+    public static QueueCallerAbandonEvent Abandon(string queue, string channel, string uniqueId, int holdTime, string? linkedId = null) => new()
+    {
+        EventType = "QueueCallerAbandon", UniqueId = uniqueId, LinkedId = linkedId ?? uniqueId, HoldTime = holdTime,
+        Position = 1, OriginalPosition = 1,
+        RawFields = new Dictionary<string, string>
+        {
+            ["Queue"] = queue, ["Channel"] = channel, ["Uniqueid"] = uniqueId, ["Linkedid"] = linkedId ?? uniqueId,
+            ["HoldTime"] = holdTime.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["Position"] = "1", ["OriginalPosition"] = "1",
+        },
+    };
+
+    /// <summary>
+    /// A channel variable set on the caller's channel, in the <c>dialplan</c> class. app_queue sets
+    /// <c>ABANDONED</c> before its abandon report and, as the queue application returns, <c>QUEUESTATUS</c>
+    /// (<c>TIMEOUT</c>, <c>LEAVEEMPTY</c>, <c>WITHDRAW</c>, …) after the caller's leave.
+    /// </summary>
+    public static VarSetEvent VarSet(string uniqueId, string channel, string variable, string value, string? linkedId = null) => new()
+    {
+        EventType = "VarSet", UniqueId = uniqueId, Channel = channel, Variable = variable, Value = value,
+        LinkedId = linkedId ?? uniqueId,
+        RawFields = new Dictionary<string, string>
+        {
+            ["Channel"] = channel, ["Uniqueid"] = uniqueId, ["Linkedid"] = linkedId ?? uniqueId,
+            ["Variable"] = variable, ["Value"] = value,
+        },
+    };
 
     /// <summary>The caller leaving <paramref name="queue"/>; <paramref name="linkedId"/> as for <see cref="Join"/>.</summary>
     public static QueueCallerLeaveEvent Leave(string queue, string channel, string uniqueId, string? linkedId = null) => new()

@@ -156,48 +156,6 @@ public sealed class CallSessionManagerTests : IAsyncLifetime
     }
 
     [Fact]
-    public void OnQueueCallerLeft_ShouldMarkTheVisitLeft_WhenAsteriskReportsTheCallerLeavingItsQueue()
-    {
-        _sut.AttachToServer(_server, "srv-1");
-        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
-        _server.Queues.OnCallerJoined("sales", "PJSIP/100-001", "100", 1);
-        var session = _sut.GetByLinkedId("linked-1")!;
-        session.QueueVisitLeft.Should().BeFalse("premise: a visit the manager opens starts not left");
-
-        _server.Queues.OnCallerLeft("sales", "PJSIP/100-001");
-
-        session.QueueVisitLeft.Should().BeTrue("Asterisk reported the caller leaving the queue of its visit");
-    }
-
-    [Fact]
-    public void OnQueueCallerLeft_ShouldNotMarkTheVisitLeft_WhenTheLeaveIsForAnotherQueue()
-    {
-        _sut.AttachToServer(_server, "srv-1");
-        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
-        _server.Queues.OnCallerJoined("first", "PJSIP/100-001", "100", 1);
-        _server.Queues.OnCallerJoined("second", "PJSIP/100-001", "100", 1);
-
-        _server.Queues.OnCallerLeft("first", "PJSIP/100-001");
-
-        _sut.GetByLinkedId("linked-1")!.QueueVisitLeft.Should().BeFalse(
-            "the leave is for a queue the call's current visit is not in");
-    }
-
-    [Fact]
-    public void DetachFromServer_ShouldStopMarkingQueueVisitsLeft()
-    {
-        _sut.AttachToServer(_server, "srv-1");
-        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
-        _server.Queues.OnCallerJoined("sales", "PJSIP/100-001", "100", 1);
-        _sut.DetachFromServer("srv-1");
-
-        _server.Queues.OnCallerLeft("sales", "PJSIP/100-001");
-
-        _sut.GetByLinkedId("linked-1")!.QueueVisitLeft.Should().BeFalse(
-            "a detached manager no longer hears the server's queue departures");
-    }
-
-    [Fact]
     public async Task OnChannelAdded_ShouldDelegateToSessionStore()
     {
         var store = Substitute.For<SessionStoreBase>();

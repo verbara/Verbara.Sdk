@@ -1,7 +1,11 @@
 namespace Verbara.Sdk.Sessions.Manager;
 
 /// <summary>
-/// Tracks aggregate queue performance metrics from session domain events.
+/// Counts each queue's calls (<see cref="QueueSession"/>) from the session manager's domain events and, over the SDK's
+/// own session manager, from Asterisk's reports on each caller's queue visit as well: the leave, the abandon report and
+/// <c>QUEUESTATUS</c>. Over any other <see cref="ICallSessionManager"/> it reads the domain events only, and counts
+/// as before: a visit ends at its connection, at the caller's next join or at its hang-up, abandoned unless connected,
+/// and no timeout is counted.
 /// </summary>
 public interface IQueueSessionTracker
 {

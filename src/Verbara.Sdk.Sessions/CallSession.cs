@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Verbara.Sdk.Enums;
+using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Sessions.Exceptions;
 
 namespace Verbara.Sdk.Sessions;
@@ -149,6 +150,39 @@ public sealed class CallSession
     /// opens. Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
     internal bool QueueVisitLeft { get; set; }
+
+    /// <summary>
+    /// Whether app_queue reported the current visit abandoned (a <c>QueueCallerAbandon</c> for <see cref="QueueName"/>)
+    /// since the manager opened it. app_queue sends that report, just before the leave, for every visit it counts
+    /// abandoned, and none for a caller that leaves by key. Set at the report, cleared at each visit the manager opens.
+    /// Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal bool QueueVisitAbandonReported { get; set; }
+
+    /// <summary>
+    /// The server's event-loss epoch when the current visit opened (of its join, or of the snapshot that opened it). A
+    /// leave whose epoch differs may have lost the abandon report between the two, so it is not taken for a key exit.
+    /// Set at each visit the manager opens; <c>null</c> until then. Written only under <see cref="SyncRoot"/>; not
+    /// persisted.
+    /// </summary>
+    internal EventLossEpoch? QueueVisitLossEpoch { get; set; }
+
+    /// <summary>
+    /// The order, among the queue manager's joins, of the join that opened the current visit: a queue snapshot asked
+    /// for before it cannot list it. Set at each visit the manager opens. Written only under <see cref="SyncRoot"/>;
+    /// not persisted.
+    /// </summary>
+    internal long QueueVisitJoinOrdinal { get; set; }
+
+    /// <summary>
+    /// The Uniqueid of the caller channel whose join opened the current visit, and that channel's name, which is how a
+    /// queue snapshot lists the caller. Set at each visit the manager opens. Written only under
+    /// <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal string? QueueVisitCallerUniqueId { get; set; }
+
+    /// <inheritdoc cref="QueueVisitCallerUniqueId"/>
+    internal string? QueueVisitCallerChannel { get; set; }
 
     // State transitions (internal — only CallSessionManager drives transitions)
     internal bool TryTransition(CallSessionState newState)

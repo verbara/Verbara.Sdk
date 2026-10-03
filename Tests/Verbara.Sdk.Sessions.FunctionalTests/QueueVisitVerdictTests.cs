@@ -8,8 +8,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// <summary>
 /// Whether a queue visit counts as answered or abandoned, on three of the captured call shapes
 /// (<c>Recordings/asterisk-ami/queue-shapes-*</c>: P, AX and O) written as typed AMI frames: their
-/// channel, dial, queue, agent and bridge frames, in the order Asterisk 20.20.1, 22.9.0 and 23.4.1
-/// emitted them, delivered to <see cref="Live.Server.VerbaraServer"/>'s own observer. The reference is app_queue's verdict: a
+/// channel, dial, queue, agent and bridge frames and app_queue's abandon report, in the order Asterisk 20.20.1,
+/// 22.9.0 and 23.4.1 emitted them, delivered to <see cref="Live.Server.VerbaraServer"/>'s own observer. The reference is app_queue's verdict: a
 /// visit is answered when app_queue reports <c>AgentConnect</c> for the caller, and abandoned when it
 /// closes without one.
 /// </summary>
@@ -54,6 +54,7 @@ public sealed class QueueVisitVerdictTests
             NewState("l1", "5"),
             DialEnd("c2", "PJSIP/pstn-00000013", "l1", "Local/1002@agent-request-00000006;1", "CANCEL"),
             Hangup("l1", 0),
+            Abandon("q-agent-ack", "PJSIP/pstn-00000013", "c2", holdTime: 8),
             Leave("q-agent-ack", "PJSIP/pstn-00000013", "c2"),
             Hangup("l2", 16),
             Hangup("c2", 19),
@@ -78,6 +79,7 @@ public sealed class QueueVisitVerdictTests
             NewChannel("a2", "PJSIP/agent2-0000001e", "0", "c3"),
             DialBegin("c3", "PJSIP/pstn-0000001d", "a2", "PJSIP/agent2-0000001e"),
             NewState("a2", "5"),
+            Abandon("q-noans", "PJSIP/pstn-0000001d", "c3", holdTime: 4),
             Leave("q-noans", "PJSIP/pstn-0000001d", "c3"),
             Hangup("a2", 0),
             Join("q-pjsip3", "PJSIP/pstn-0000001d", "c3", "5550016"),

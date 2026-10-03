@@ -165,6 +165,22 @@ public sealed class VerbaraServer : IVerbaraServer
     // InternalsVisibleTo) to drive both on a manual clock.
     internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
+    // How many reconnects this server has started to reload after. Moves the event-loss epoch.
+    private long _reconnects;
+
+    /// <summary>
+    /// The server's event-loss epoch now (see <see cref="EventLossEpoch"/>). Read inside the event observer, it is the
+    /// epoch of the event being delivered: over an <see cref="AmiConnection"/>, its dropped count is the one its session
+    /// had when that event arrived, not when it is delivered, so an event dropped while that one waited in a full buffer
+    /// moves the epoch of the events after it, and not its own. Two reads that differ mean the SDK may have missed an
+    /// event between them; two that are equal mean it lost none it could know of.
+    /// </summary>
+    internal EventLossEpoch ReadEventLossEpoch()
+    {
+        var mark = _connection is AmiConnection ami ? ami.EventLossMark : default;
+        return new EventLossEpoch(Interlocked.Read(ref _reconnects), mark.Session, mark.DroppedBefore);
+    }
+
     public VerbaraServer(IAmiConnection connection, ILogger<VerbaraServer> logger)
     {
         _connection = connection;
@@ -259,6 +275,8 @@ public sealed class VerbaraServer : IVerbaraServer
     private async void OnReconnected()
 #pragma warning restore VSTHRD100
     {
+        // First, before anything is reloaded or delivered: every event the outage swallowed lies before it.
+        Interlocked.Increment(ref _reconnects);
         LoadConnectionStates? states = null;
         try
         {
@@ -386,9 +404,13 @@ public sealed class VerbaraServer : IVerbaraServer
     private async ValueTask LoadQueuesAsync(
         LoadSession? session, LoadConnectionStates states, CancellationToken cancellationToken)
     {
-        // Populate queues from QueueStatusAction
+        // Populate queues from QueueStatusAction. The window opens before the request is sent: a leave Asterisk reports
+        // after that moment is newer than the snapshot, which then does not bring that caller back, and a join after it
+        // is one the snapshot cannot list.
+        using var window = Queues.OpenSnapshotWindow();
+        var asked = new AskOutcome();
         await foreach (var evt in AskWhileAsteriskStartsAsync(
-            "QueueStatus", static () => new QueueStatusAction(), session, states, cancellationToken))
+            "QueueStatus", static () => new QueueStatusAction(), session, states, cancellationToken, asked))
         {
             switch (evt)
             {
@@ -407,12 +429,25 @@ public sealed class VerbaraServer : IVerbaraServer
                     // The entry is marked as a snapshot's, and carries the Wait Asterisk reported, so
                     // the session manager can tell a caller it already holds from a new one and date
                     // the visit from when Asterisk says the caller joined.
-                    Queues.OnCallerJoined(
-                        qe.Queue ?? "", qe.Channel ?? "", qe.CallerId, qe.Position ?? 0,
-                        fromSnapshot: true, reportedWaitSeconds: qe.Wait);
+                    Queues.OnSnapshotEntry(window,
+                        qe.Queue ?? "", qe.Channel ?? "", qe.Uniqueid, qe.CallerId, qe.Position ?? 0,
+                        reportedWaitSeconds: qe.Wait, lossEpoch: ReadEventLossEpoch());
                     break;
             }
         }
+
+        // Only a snapshot Asterisk answered to the end is evidence of who is waiting: one the token cut short, or one
+        // refused (the queue module not loaded, or still loading when the budget ran out), lists no one for a reason
+        // other than an empty queue. A session that ended under it threw above.
+        if (!cancellationToken.IsCancellationRequested && !asked.Refused)
+            Queues.CompleteSnapshot(window);
+    }
+
+    /// <summary>How a request asked through <see cref="AskWhileAsteriskStartsAsync"/> ended, read once it has.</summary>
+    private sealed class AskOutcome
+    {
+        /// <summary>Whether Asterisk's last answer to it was a refusal; never set over a connection that cannot tell.</summary>
+        public bool Refused { get; set; }
     }
 
     /// <summary>
@@ -616,9 +651,10 @@ public sealed class VerbaraServer : IVerbaraServer
     /// tell a refusal from an empty answer.</param>
     /// <param name="states">The load's record of the connection's state, which an ending of the session completes.</param>
     /// <param name="cancellationToken">Cancels the request and any wait between two asks.</param>
+    /// <param name="asked">Optional. Told, once the request has ended, whether Asterisk's last answer was a refusal.</param>
     private async IAsyncEnumerable<ManagerEvent> AskWhileAsteriskStartsAsync(
         string actionName, Func<ManagerAction> newAction, LoadSession? session, LoadConnectionStates states,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken, AskOutcome? asked = null)
     {
         if (session is null)
         {
@@ -646,11 +682,13 @@ public sealed class VerbaraServer : IVerbaraServer
                 || reportedBeforeAsk
                 || !rejection.StartsWith(UnknownCommandPrefix, StringComparison.OrdinalIgnoreCase))
             {
+                asked?.Refused = outcome.Rejection is not null;
                 yield break;
             }
 
             if (session.BudgetSpent())
             {
+                asked?.Refused = true;
                 VerbaraServerLog.ActionNeverRegistered(
                     _logger, actionName, (int)NotRegisteredRetryBudget.TotalSeconds, rejection);
                 yield break;
@@ -944,13 +982,35 @@ public sealed class VerbaraServer : IVerbaraServer
                         qcj.RawFields?.GetValueOrDefault("Queue") ?? "",
                         qcj.RawFields?.GetValueOrDefault("Channel") ?? "",
                         qcj.RawFields?.GetValueOrDefault("CallerIDNum"),
-                        qcj.Position ?? 0);
+                        qcj.Position ?? 0,
+                        qcj.UniqueId,
+                        server.ReadEventLossEpoch());
                     break;
 
+                // agent class. The table's leave (CallerLeft, raised only for a caller the table holds), then Asterisk's
+                // own report, raised whatever the table holds.
                 case QueueCallerLeaveEvent qcl:
                     server.Queues.OnCallerLeft(
                         qcl.RawFields?.GetValueOrDefault("Queue") ?? "",
                         qcl.RawFields?.GetValueOrDefault("Channel") ?? "");
+                    server.Queues.OnCallerLeaveReported(
+                        qcl.UniqueId ?? "",
+                        qcl.RawFields?.GetValueOrDefault("Queue") ?? "",
+                        qcl.RawFields?.GetValueOrDefault("Channel") ?? "",
+                        server.ReadEventLossEpoch());
+                    break;
+
+                // agent class. app_queue counted the caller's visit abandoned; sent just before its leave.
+                case QueueCallerAbandonEvent qca:
+                    server.Queues.OnCallerAbandonReported(
+                        qca.UniqueId ?? "",
+                        qca.RawFields?.GetValueOrDefault("Queue") ?? "");
+                    break;
+
+                // dialplan class. app_queue's account of why Queue() returned, set on the caller's channel right after
+                // its leave. Only QUEUESTATUS is read, by its exact name; every other VarSet is dropped here, as before.
+                case VarSetEvent vs when string.Equals(vs.Variable, "QUEUESTATUS", StringComparison.Ordinal):
+                    server.Queues.OnCallerQueueStatus(vs.UniqueId ?? "", vs.Channel ?? "", vs.Value ?? "");
                     break;
 
                 // Agent events

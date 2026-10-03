@@ -1,11 +1,17 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
+using System.Reflection;
 using Verbara.Sdk;
+using Verbara.Sdk.Ami.Actions;
+using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Ami.Events;
+using Verbara.Sdk.Ami.Internal;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Agents;
 using Verbara.Sdk.Live.Channels;
 using Verbara.Sdk.Live.Server;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -697,5 +703,254 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
         var channel = _sut.Channels.GetByUniqueId("ch.1");
         channel!.IsOnHold.Should().BeFalse();
         channel.HoldMusicClass.Should().BeNull();
+    }
+
+    // ==========================================================================
+    // app_queue's reports on a caller's queue visit -> QueueManager's internal events
+    // ==========================================================================
+    //
+    // The events are internal, so these tests find them by reflection: they compile whether or not the events exist,
+    // and a missing one fails the test that needs it.
+
+    private const string VisitQueue = "q-visit";
+    private const string VisitCaller = "1790615700.1";
+    private const string VisitChannel = "PJSIP/far-00000101";
+
+    [Fact]
+    public async Task EventObserver_ShouldRaiseCallerQueueStatus_WhenAVarSetOfQueueStatusArrives_AndNothingForAnotherVariable()
+    {
+        await StartAndGetObserverAsync();
+        var raised = InternalEventProbe.Capture(_sut.Queues, "CallerQueueStatus");
+
+        _observer!.OnNext(VisitVarSet("ABANDONED", "TRUE"));
+        _observer!.OnNext(VisitVarSet("QUEUESTATUS", "TIMEOUT"));
+        _observer!.OnNext(VisitVarSet("queuestatus", "TIMEOUT"));
+
+        raised.Should().ContainSingle("only the VarSet of QUEUESTATUS, spelled as app_queue spells it, is app_queue's report")
+            .Which.Should().Equal(VisitCaller, VisitChannel, "TIMEOUT");
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldRaiseCallerAbandonReported_WhenAQueueCallerAbandonArrives()
+    {
+        await StartAndGetObserverAsync();
+        var raised = InternalEventProbe.Capture(_sut.Queues, "CallerAbandonReported");
+
+        _observer!.OnNext(new QueueCallerAbandonEvent
+        {
+            UniqueId = VisitCaller, HoldTime = 3, Position = 1, OriginalPosition = 1,
+            RawFields = new Dictionary<string, string> { ["Queue"] = VisitQueue, ["Channel"] = VisitChannel, ["Uniqueid"] = VisitCaller },
+        });
+
+        raised.Should().ContainSingle().Which.Should().Equal(VisitCaller, VisitQueue);
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldRaiseCallerLeaveReported_WhenAQueueCallerLeaveArrivesForACallerTheQueueTableDoesNotHold()
+    {
+        await StartAndGetObserverAsync();
+        var raised = InternalEventProbe.Capture(_sut.Queues, "CallerLeaveReported");
+
+        _observer!.OnNext(VisitLeave());
+
+        raised.Should().ContainSingle("Asterisk's leave is reported whether or not Live's table still holds the caller");
+        var leave = raised[0][0];
+        using var scope = new AssertionScope();
+        InternalEventProbe.Read(leave, "UniqueId").Should().Be(VisitCaller);
+        InternalEventProbe.Read(leave, "Queue").Should().Be(VisitQueue);
+        InternalEventProbe.Read(leave, "Channel").Should().Be(VisitChannel);
+    }
+
+    [Fact]
+    public async Task QueueSnapshot_ShouldNotBringBackACaller_WhoseLeaveWasProcessedAfterTheSnapshotWasAskedFor()
+    {
+        AnswerQueueStatus(beforeTheAnswer: () => _observer!.OnNext(VisitLeave()), VisitParams(), VisitEntry());
+
+        await StartAndGetObserverAsync();
+
+        _sut.Queues.GetByName(VisitQueue)!.Entries.Should().NotContainKey(VisitChannel,
+            "the snapshot was read before the caller left; applying it after the leave would put the caller back");
+    }
+
+    [Fact]
+    public async Task QueueSnapshot_ShouldKeepACaller_WhoLeftAndJoinedAgainAfterTheSnapshotWasAskedFor()
+    {
+        AnswerQueueStatus(beforeTheAnswer: () =>
+        {
+            _observer!.OnNext(VisitLeave());
+            _observer!.OnNext(VisitJoin());
+        }, VisitParams(), VisitEntry());
+
+        await StartAndGetObserverAsync();
+
+        _sut.Queues.GetByName(VisitQueue)!.Entries.Should().ContainKey(VisitChannel, "the caller is waiting again");
+    }
+
+    [Fact]
+    public async Task QueueSnapshot_ShouldReportItsCompletion_WithTheCallersItListed()
+    {
+        AnswerQueueStatus(beforeTheAnswer: null, VisitParams(), VisitEntry());
+        var completed = InternalEventProbe.Capture(_sut.Queues, "QueueSnapshotCompleted");
+
+        await StartAndGetObserverAsync();
+
+        completed.Should().ContainSingle("the load's QueueStatus completed once");
+        var listed = InternalEventProbe.Invoke(completed[0][0], "Lists", VisitCaller, VisitChannel);
+        var notListed = InternalEventProbe.Invoke(completed[0][0], "Lists", "1790615700.9", "PJSIP/far-00000109");
+        using var scope = new AssertionScope();
+        listed.Should().Be(true, "the snapshot listed the caller");
+        notListed.Should().Be(false, "the snapshot did not list that one");
+    }
+
+    [Fact]
+    public async Task QueueSnapshot_ShouldReportNoCompletion_WhenItsAnswerWasCutOff()
+    {
+        _connection.SendEventGeneratingActionAsync(Arg.Is<ManagerAction>(a => a is QueueStatusAction), Arg.Any<CancellationToken>())
+            .Returns(_ => CutOff(VisitParams(), VisitEntry()));
+        var completed = InternalEventProbe.Capture(_sut.Queues, "QueueSnapshotCompleted");
+
+        var outcome = await Record.ExceptionAsync(() => _sut.StartAsync());
+
+        using var scope = new AssertionScope();
+        outcome.Should().BeOfType<InvalidOperationException>("premise: the answer was cut off before it completed");
+        completed.Should().BeEmpty("a snapshot that did not complete is no evidence of who is waiting");
+    }
+
+    [Fact]
+    public async Task EventLossEpoch_ShouldAdvance_WhenTheConnectionReconnects()
+    {
+        await StartAndGetObserverAsync();
+        var before = InternalEventProbe.Invoke(_sut, "ReadEventLossEpoch");
+
+        _connection.Reconnected += Raise.Event<Action>();
+        var after = InternalEventProbe.Invoke(_sut, "ReadEventLossEpoch");
+
+        after.Should().NotBe(before, "events sent while the connection was down never reached the SDK");
+    }
+
+    [Fact]
+    public async Task EventLossEpoch_ShouldAdvance_WhenTheConnectionDroppedAnEventFromAFullBuffer()
+    {
+        var connection = new AmiConnection(
+            Microsoft.Extensions.Options.Options.Create(new AmiConnectionOptions { Hostname = "localhost", Username = "u", Password = "p" }),
+            Substitute.For<Verbara.Sdk.Ami.Transport.ISocketConnectionFactory>(), NullLogger<AmiConnection>.Instance);
+        var server = new VerbaraServer(connection, NullLogger<VerbaraServer>.Instance);
+        var pump = new AsyncEventPump(capacity: 1);
+        try
+        {
+            typeof(AmiConnection).GetField("_eventPump", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(connection, pump);
+            var before = InternalEventProbe.Invoke(server, "ReadEventLossEpoch");
+
+            pump.TryEnqueue(VisitLeave()).Should().BeTrue("premise: the buffer had room for one event");
+            pump.TryEnqueue(VisitLeave()).Should().BeFalse("premise: the full buffer dropped the second");
+            var after = InternalEventProbe.Invoke(server, "ReadEventLossEpoch");
+
+            after.Should().NotBe(before, "the connection dropped an event the SDK never saw");
+        }
+        finally
+        {
+            typeof(AmiConnection).GetField("_eventPump", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(connection, null);
+            await pump.DisposeAsync();
+            await server.DisposeAsync();
+            await connection.DisposeAsync();
+        }
+    }
+
+    private static VarSetEvent VisitVarSet(string variable, string value) => new()
+    {
+        UniqueId = VisitCaller, Channel = VisitChannel, Variable = variable, Value = value,
+        RawFields = new Dictionary<string, string>
+        {
+            ["Channel"] = VisitChannel, ["Uniqueid"] = VisitCaller, ["Variable"] = variable, ["Value"] = value,
+        },
+    };
+
+    private static QueueCallerLeaveEvent VisitLeave() => new()
+    {
+        UniqueId = VisitCaller, Position = 1,
+        RawFields = new Dictionary<string, string> { ["Queue"] = VisitQueue, ["Channel"] = VisitChannel, ["Uniqueid"] = VisitCaller },
+    };
+
+    private static QueueCallerJoinEvent VisitJoin() => new()
+    {
+        UniqueId = VisitCaller, Position = 1,
+        RawFields = new Dictionary<string, string>
+        {
+            ["Queue"] = VisitQueue, ["Channel"] = VisitChannel, ["Uniqueid"] = VisitCaller, ["CallerIDNum"] = "52700",
+        },
+    };
+
+    private static QueueParamsEvent VisitParams() => new() { Queue = VisitQueue, Max = 0, Strategy = "ringall", Calls = 1 };
+
+    private static QueueEntryEvent VisitEntry() => new()
+    {
+        Queue = VisitQueue, Position = 1, Channel = VisitChannel, Uniqueid = VisitCaller, CallerIDNum = "52700", Wait = 3,
+    };
+
+    /// <summary>
+    /// Answers the load's <c>QueueStatus</c> with <paramref name="answer"/>, after running <paramref name="beforeTheAnswer"/>
+    /// once the request was sent: the order a pump that processed live frames in that gap gives.
+    /// </summary>
+    private void AnswerQueueStatus(Action? beforeTheAnswer, params ManagerEvent[] answer) =>
+        _connection.SendEventGeneratingActionAsync(Arg.Is<ManagerAction>(a => a is QueueStatusAction), Arg.Any<CancellationToken>())
+            .Returns(_ => Answer(beforeTheAnswer, answer));
+
+    private static async IAsyncEnumerable<ManagerEvent> Answer(Action? beforeTheAnswer, ManagerEvent[] answer)
+    {
+        await Task.Yield();
+        beforeTheAnswer?.Invoke();
+        foreach (var evt in answer)
+            yield return evt;
+    }
+
+    private static async IAsyncEnumerable<ManagerEvent> CutOff(params ManagerEvent[] answer)
+    {
+        await Task.Yield();
+        foreach (var evt in answer)
+            yield return evt;
+
+        throw new InvalidOperationException("The QueueStatus answer was cut off before QueueStatusComplete.");
+    }
+}
+
+/// <summary>Reaches a type's internal members by reflection, so a test compiles before they exist.</summary>
+[SuppressMessage("Trimming", "IL2075", Justification = "Test code: reflection over the SDK's own internal members, never trimmed here.")]
+[SuppressMessage("AOT", "IL3050", Justification = "Test code: the handler is compiled at run time, never AOT-compiled here.")]
+internal static class InternalEventProbe
+{
+    private const BindingFlags AnyInstance = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+    /// <summary>Subscribes to the event <paramref name="name"/> of <paramref name="source"/> and records each raise's arguments.</summary>
+    public static List<object?[]> Capture(object source, string name)
+    {
+        var info = source.GetType().GetEvent(name, AnyInstance)
+            ?? throw new InvalidOperationException($"Event not found: {source.GetType().Name}.{name}.");
+        var raised = new List<object?[]>();
+        var invoke = info.EventHandlerType!.GetMethod("Invoke")!;
+        var parameters = invoke.GetParameters().Select(p => Expression.Parameter(p.ParameterType, p.Name)).ToArray();
+        var record = (Action<object?[]>)raised.Add;
+        var body = Expression.Invoke(Expression.Constant(record),
+            Expression.NewArrayInit(typeof(object), parameters.Select(p => (Expression)Expression.Convert(p, typeof(object)))));
+        var handler = Expression.Lambda(info.EventHandlerType, body, parameters).Compile();
+        info.GetAddMethod(nonPublic: true)!.Invoke(source, [handler]);
+        return raised;
+    }
+
+    /// <summary>The value of the property <paramref name="name"/> of <paramref name="target"/>.</summary>
+    public static object? Read(object? target, string name)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var property = target.GetType().GetProperty(name, AnyInstance)
+            ?? throw new InvalidOperationException($"Property not found: {target.GetType().Name}.{name}.");
+        return property.GetValue(target);
+    }
+
+    /// <summary>Calls the method <paramref name="name"/> of <paramref name="target"/>.</summary>
+    public static object? Invoke(object? target, string name, params object?[] arguments)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var method = target.GetType().GetMethod(name, AnyInstance)
+            ?? throw new InvalidOperationException($"Method not found: {target.GetType().Name}.{name}.");
+        return method.Invoke(target, arguments);
     }
 }

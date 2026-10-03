@@ -3,6 +3,7 @@ using Verbara.Sdk.Enums;
 using Verbara.Sdk.Sessions;
 using Verbara.Sdk.Sessions.Manager;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 
@@ -156,7 +157,7 @@ public sealed class QueueSessionTrackerTests : IDisposable
     }
 
     [Fact]
-    public void OnCallEnded_ShouldIncrementCallsAbandoned_WhenCallerLeftWithoutAnswer()
+    public void OnCallEnded_ShouldIncrementCallsAbandoned_WhenTheVisitWasStillOpen()
     {
         EmitQueued("session-1", "sales", T0);
         EmitEnded("session-1");
@@ -166,7 +167,7 @@ public sealed class QueueSessionTrackerTests : IDisposable
     }
 
     [Fact]
-    public void OnCallEnded_ShouldDecrementCallsWaiting_WhenAbandoned()
+    public void OnCallEnded_ShouldDecrementCallsWaiting_WhenTheVisitWasStillOpen()
     {
         EmitQueued("session-1", "sales", T0);
         EmitQueued("session-2", "sales", T0.AddSeconds(1));
@@ -247,11 +248,12 @@ public sealed class QueueSessionTrackerTests : IDisposable
     }
 
     /// <summary>
-    /// The first queue's metrics window has expired when the caller leaves it for a second queue. The
-    /// visit it left closes as abandoned in a new window, which does not carry the expired window's offer.
+    /// The first queue's metrics window has expired when the caller joins a second queue while its visit in the first
+    /// is still open (no leave was observed). That visit closes as abandoned in a new window, which does not carry the
+    /// expired window's offer.
     /// </summary>
     [Fact]
-    public void OnCallQueued_ShouldCloseTheLeftVisitInANewWindow_WhenTheFirstQueuesWindowHadExpired()
+    public void OnCallQueued_ShouldCloseTheStillOpenVisitInANewWindow_WhenTheFirstQueuesWindowHadExpired()
     {
         EmitQueued("session-1", "first", T0);
         var first = _sut.GetByQueueName("first")!;
@@ -319,5 +321,264 @@ public sealed class QueueSessionTrackerTests : IDisposable
     {
         _events.OnNext(new CallEndedEvent(sessionId, "server-1",
             DateTimeOffset.UtcNow, HangupCause.NormalClearing, TimeSpan.FromSeconds(30), null));
+    }
+}
+
+/// <summary>
+/// The tracker over a manager that also tells it of Asterisk's reports on a visit (<see cref="IQueueVisitSource"/>):
+/// the leave, the abandon report and a timeout. A visit is open (waiting), left (not waiting) or gone (connected or
+/// closed), each counter moves at most once per visit, and every signal applies only to the visit its start names.
+/// </summary>
+public sealed class QueueSessionTrackerVisitSourceTests : IDisposable
+{
+    private static readonly DateTimeOffset T0 = new(2026, 10, 2, 9, 0, 0, TimeSpan.Zero);
+    private const string Queue = "sales";
+    private const string Session = "session-1";
+
+    private readonly VisitSourceManager _manager = new();
+    private readonly QueueSessionTracker _sut;
+
+    public QueueSessionTrackerVisitSourceTests()
+    {
+        _sut = new QueueSessionTracker(_manager, Options.Create(new SessionOptions
+        {
+            QueueMetricsWindow = TimeSpan.FromMinutes(30),
+            SlaThreshold = TimeSpan.FromSeconds(20),
+        }));
+    }
+
+    public void Dispose()
+    {
+        _sut.Dispose();
+        _manager.Dispose();
+    }
+
+    [Fact]
+    public void AbandonReport_ShouldCountTheVisitAbandonedOnce_AndTheLeaveShouldEndItsWait()
+    {
+        Queued(T0);
+
+        _manager.AbandonReported(Signal(T0));
+        var atTheReport = Tally();
+        _manager.AbandonReported(Signal(T0));
+        _manager.Left(Signal(T0, abandonReported: true));
+        var atTheLeave = Tally();
+        Ended();
+
+        using var scope = new AssertionScope();
+        atTheReport.Should().Be((1, 0, 1, 0, 1),
+            "app_queue counts the abandon at its report, which comes just before the leave");
+        atTheLeave.Should().Be((1, 0, 1, 0, 0), "the leave ends the wait; a second report counts nothing");
+        Tally().Should().Be((1, 0, 1, 0, 0), "the hang-up after a left visit counts nothing");
+    }
+
+    [Fact]
+    public void Leave_ShouldCountNothingButTheEndOfTheWait_WhenNoAbandonWasReportedAndNoEventWasLost()
+    {
+        Queued(T0);
+
+        _manager.Left(Signal(T0));
+        var atTheLeave = Tally();
+        Ended();
+
+        using var scope = new AssertionScope();
+        atTheLeave.Should().Be((1, 0, 0, 0, 0), "a key exit: neither answered nor abandoned");
+        Tally().Should().Be((1, 0, 0, 0, 0), "the hang-up does not make it an abandon");
+    }
+
+    [Fact]
+    public void Leave_ShouldCountTheVisitAbandonedAtTheEnd_WhenNoAbandonWasReportedButEventsMayHaveBeenLost()
+    {
+        Queued(T0);
+
+        _manager.Left(Signal(T0, eventsMayHaveBeenLost: true));
+        var atTheLeave = Tally();
+        Ended();
+
+        using var scope = new AssertionScope();
+        atTheLeave.Should().Be((1, 0, 0, 0, 0), "the leave ends the wait; the queue may still connect the caller");
+        Tally().Should().Be((1, 0, 1, 0, 0),
+            "with events lost since the visit opened, the missing abandon report is no evidence of a key exit");
+    }
+
+    [Fact]
+    public void Connect_ShouldCountAnsweredAndNoAbandon_WhenItFollowsALeaveAfterWhichEventsMayHaveBeenLost()
+    {
+        Queued(T0);
+
+        _manager.Left(Signal(T0, eventsMayHaveBeenLost: true));
+        _manager.Events.OnNext(new CallConnectedEvent(Session, "server-1", T0.AddSeconds(9), "agent-1", Queue, TimeSpan.FromSeconds(9)));
+        Ended();
+
+        Tally().Should().Be((1, 1, 0, 0, 0), "the connection after the leave shows that no abandon report was lost");
+    }
+
+    [Fact]
+    public void MissedLeave_ShouldCountTheVisitAbandonedAtOnce_WhenACompletedSnapshotNoLongerListsTheCaller()
+    {
+        Queued(T0);
+
+        _manager.Left(new QueueVisitSignal(Session, Queue, T0, EventsMayHaveBeenLost: true, LeaveMissed: true));
+
+        Tally().Should().Be((1, 0, 1, 0, 0), "a leave that was never received is past any connection");
+    }
+
+    [Fact]
+    public void Timeout_ShouldCountTimedOutOnceAndNoSecondAbandon_WhenTheAbandonWasReportedFirst()
+    {
+        Queued(T0);
+
+        _manager.AbandonReported(Signal(T0));
+        _manager.Left(Signal(T0, abandonReported: true));
+        _manager.TimedOut(Signal(T0));
+        _manager.TimedOut(Signal(T0));
+        Ended();
+
+        Tally().Should().Be((1, 0, 1, 1, 0), "a timeout is one abandon, counted at the report, and one timeout");
+    }
+
+    [Fact]
+    public void Timeout_ShouldCloseTheVisitAbandonedAndTimedOut_WhenItsLeaveWasNeverReceived()
+    {
+        Queued(T0);
+
+        _manager.TimedOut(Signal(T0));
+
+        Tally().Should().Be((1, 0, 1, 1, 0), "the timeout ends a visit whose leave and abandon report were lost");
+    }
+
+    [Fact]
+    public void Signals_ShouldCountNothing_WhenTheyNameAnotherVisitOfTheSameCall()
+    {
+        Queued(T0);
+
+        _manager.AbandonReported(Signal(T0.AddSeconds(-30)));
+        _manager.Left(Signal(T0.AddSeconds(-30), abandonReported: true, eventsMayHaveBeenLost: true));
+        _manager.TimedOut(Signal(T0.AddSeconds(-30)));
+
+        Tally().Should().Be((1, 0, 0, 0, 1), "every signal was for an earlier visit, not the one waiting");
+    }
+
+    [Fact]
+    public void ConnectAfterTheLeave_ShouldCountAnsweredWithTheVisitsOwnWait_AndNotEndTheWaitTwice()
+    {
+        Queued(T0);
+
+        _manager.Left(Signal(T0));
+        _manager.Events.OnNext(new CallConnectedEvent(Session, "server-1", T0.AddSeconds(7), "agent-1", Queue,
+            WaitTime: TimeSpan.FromSeconds(40)));
+
+        using var scope = new AssertionScope();
+        Tally().Should().Be((1, 1, 0, 0, 0), "every answered visit is a join, a leave and a connect: one visit, answered");
+        _sut.GetByQueueName(Queue)!.TotalWaitTime.Should().Be(TimeSpan.FromSeconds(7),
+            "the wait runs from the visit's start to the connect, not from the call's creation");
+    }
+
+    [Fact]
+    public void JoinOfAnotherQueue_ShouldCountNoAbandonInTheFirst_WhenItsVisitWasLeftWithNoAbandonReported()
+    {
+        Queued(T0);
+
+        _manager.Left(Signal(T0));
+        _manager.Events.OnNext(new CallQueuedEvent(Session, "server-1", T0.AddSeconds(5), "support", null));
+
+        Tally().Should().Be((1, 0, 0, 0, 0), "\"press 1 for another department\" is no abandon of the first queue");
+    }
+
+    [Fact]
+    public void CallEnded_ShouldRemoveTheVisit_WhateverItsState()
+    {
+        Queued(T0);
+        _manager.Left(Signal(T0));
+
+        Ended();
+
+        VisitCount().Should().Be(0, "a call that ended keeps no visit in the tracker");
+    }
+
+    [Fact]
+    public void Dispose_ShouldUnsubscribeFromTheVisitSignals()
+    {
+        _manager.Subscribers.Should().Be(3, "premise: the tracker listens to the three visit signals");
+
+        _sut.Dispose();
+
+        _manager.Subscribers.Should().Be(0);
+    }
+
+    // --- Helpers ---
+
+    private void Queued(DateTimeOffset at) => _manager.Events.OnNext(new CallQueuedEvent(Session, "server-1", at, Queue, null));
+
+    private void Ended() => _manager.Events.OnNext(new CallEndedEvent(Session, "server-1", T0.AddMinutes(1),
+        HangupCause.NormalClearing, TimeSpan.FromMinutes(1), null));
+
+    private static QueueVisitSignal Signal(DateTimeOffset visit, bool abandonReported = false, bool eventsMayHaveBeenLost = false) =>
+        new(Session, Queue, visit, abandonReported, eventsMayHaveBeenLost);
+
+    private (int Offered, int Answered, int Abandoned, int TimedOut, int Waiting) Tally() =>
+        _sut.GetByQueueName(Queue) is { } q
+            ? (q.CallsOffered, q.CallsAnswered, q.CallsAbandoned, q.CallsTimedOut, q.CallsWaiting)
+            : (0, 0, 0, 0, 0);
+
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075",
+        Justification = "Test code: reads the tracker's own private table by reflection.")]
+    private int VisitCount()
+    {
+        var field = _sut.GetType().GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            .Single(f => f.FieldType.IsGenericType && f.FieldType.GetGenericTypeDefinition() == typeof(Dictionary<,>));
+        return (int)field.FieldType.GetProperty("Count")!.GetValue(field.GetValue(_sut))!;
+    }
+
+    /// <summary>A session manager that is also a visit source, driven by the test.</summary>
+    private sealed class VisitSourceManager : ICallSessionManager, IQueueVisitSource, IDisposable
+    {
+        public Subject<SessionDomainEvent> Events { get; } = new();
+
+        IObservable<SessionDomainEvent> ICallSessionManager.Events => Events;
+
+        public event Action<QueueVisitSignal>? VisitLeft;
+
+        public event Action<QueueVisitSignal>? VisitAbandonReported;
+
+        public event Action<QueueVisitSignal>? VisitTimedOut;
+
+        public int Subscribers =>
+            (VisitLeft?.GetInvocationList().Length ?? 0)
+            + (VisitAbandonReported?.GetInvocationList().Length ?? 0)
+            + (VisitTimedOut?.GetInvocationList().Length ?? 0);
+
+        public void Left(QueueVisitSignal signal) => VisitLeft?.Invoke(signal);
+
+        public void AbandonReported(QueueVisitSignal signal) => VisitAbandonReported?.Invoke(signal);
+
+        public void TimedOut(QueueVisitSignal signal) => VisitTimedOut?.Invoke(signal);
+
+        public IEnumerable<CallSession> ActiveSessions => [];
+
+        public CallSession? GetById(string sessionId) => null;
+
+        public CallSession? GetByLinkedId(string linkedId) => null;
+
+        public CallSession? GetByChannelId(string uniqueId) => null;
+
+        public CallSession? GetByBridgeId(string bridgeId) => null;
+
+        public IEnumerable<CallSession> GetRecentCompleted(int count = 100) => [];
+
+        public void AttachToServer(Verbara.Sdk.Live.Server.VerbaraServer server, string serverId) =>
+            throw new NotSupportedException();
+
+        public void DetachFromServer(string serverId) => throw new NotSupportedException();
+
+        public bool RegisterReconstructedSession(CallSession session) => throw new NotSupportedException();
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+
+        public void Dispose() => Events.Dispose();
     }
 }

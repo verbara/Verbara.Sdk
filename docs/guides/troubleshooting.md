@@ -101,6 +101,21 @@ See [High-Load Tuning Guide](high-load-tuning.md) for sizing recommendations.
 3. Ensure you subscribe before the events fire (subscribe before `ConnectAsync` or use `ReplaySubject`)
 4. Events with both an `Event` and a `Response` header (`OriginateResponse`, `ChallengeResponseFailed`, a `UserEvent` sent with a `Response` header) were taken for responses and never delivered up to 2.6.1. Upgrade.
 5. Every event of a session stopped after one `OnEvent` handler threw: up to 2.6.1 a throwing or faulting handler ended delivery silently. Upgrade; a failing handler is now logged as `[AMI_EVENT] OnEvent handler threw on <EventType>` at Warning, counted on `ami.events.handler_faults`, and delivery goes on.
+6. `QueueSession.CallsTimedOut` stays 0 although callers time out of the queue: the AMI user lacks the `dialplan` class. app_queue reports a timeout only by setting `QUEUESTATUS` on the caller's channel, and Asterisk sends that `VarSet` only to a user whose `read` includes `dialplan` (`read = all` includes it). Without it the timed-out callers are still counted in `CallsAbandoned`; nothing else in the queue metrics needs the class. Add it behind the filter below. See [Queue metrics](../../src/Verbara.Sdk.Sessions/README.md#queue-metrics).
+7. A caller who left the queue while the AMI connection was down keeps counting in `QueueSession.CallsWaiting` until the reload after the reconnect has read the queues: a completed `QueueStatus` that no longer lists the caller ends the wait and counts the visit abandoned. A reload whose `QueueStatus` did not complete closes nothing. An answer during the outage cannot be observed, so such a visit counts abandoned too.
+
+#### The cost of `dialplan`, and a filter that removes it
+
+The class carries every `VarSet` and `Newexten` of every channel. Measured on a test dialplan, it was 44 % to 51 % of all the events a `read = all` user received (Asterisk 18.26.4, 22.9.0 and 23.4.1); on queues with `setqueuevar` and `setqueueentryvar` on, adding it to a user's `read` added 125.5 % bytes (Asterisk 20.20.1, 22.9.0 and 23.4.1).
+
+**Recommended:** read `dialplan` behind an `eventfilter` that drops the class's events except the `VarSet` of `QUEUESTATUS`, and passes every other event. The same text works on Asterisk 20, 22 and 23, whose `manager.conf.sample` documents this filter syntax. Put it in the AMI user's section of `manager.conf`:
+
+```ini
+eventfilter(action(exclude),name(Newexten)) =
+eventfilter(action(exclude),name(VarSet),header(Variable),method(regex)) = ^([^Q]|Q([^U]|$)|QU([^E]|$)|QUE([^U]|$)|QUEU([^E]|$)|QUEUE([^S]|$)|QUEUES([^T]|$)|QUEUEST([^A]|$)|QUEUESTA([^T]|$)|QUEUESTAT([^U]|$)|QUEUESTATU([^S]|$)|QUEUESTATUS.)
+```
+
+The second line excludes every `VarSet` whose variable is not `QUEUESTATUS`; the pattern spells "not `QUEUESTATUS`" out because the filter's regular expressions have no lookahead. Behind it, on Asterisk 20.20.1, 22.9.0 and 23.4.1, the user received 1.28 % more bytes than the same user without `dialplan` (4.36 % more on calls that time out), and `CallsTimedOut` counted every timeout. The consequence: the user receives no other `VarSet` and no `Newexten`, so your own `VarSetEvent` observers see only `QUEUESTATUS`. No feature of the SDK reads another `VarSet`.
 
 ### Every originate times out after 5 s
 

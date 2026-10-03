@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Verbara.Sdk.Live.Diagnostics;
+using Verbara.Sdk.Live.Server;
 using Microsoft.Extensions.Logging;
 
 namespace Verbara.Sdk.Live.Queues;
@@ -27,6 +28,9 @@ internal static partial class QueueManagerLog
     [LoggerMessage(Level = LogLevel.Debug, Message = "[QUEUE] Caller left: queue={QueueName} channel={Channel}")]
     public static partial void CallerLeft(ILogger logger, string queueName, string channel);
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[QUEUE] Snapshot entry dropped, the caller left after it was asked for: queue={QueueName} channel={Channel}")]
+    public static partial void SnapshotEntryAfterLeave(ILogger logger, string queueName, string channel);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "[QUEUE] Queue removed: queue={QueueName}")]
     public static partial void QueueRemoved(ILogger logger, string queueName);
 }
@@ -42,12 +46,52 @@ public sealed class QueueManager
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _queuesByMember = new();
     private readonly ILogger _logger;
 
+    // The snapshot windows open now: one per load reading QueueStatus. Replaced, never mutated, under _windowsLock.
+    private readonly Lock _windowsLock = new();
+    private QueueSnapshotWindow[] _windows = [];
+
+    // Numbers every join, live or from a snapshot, in the order this manager handled them.
+    private long _joinOrdinal;
+
     public event Action<AsteriskQueue>? QueueUpdated;
     public event Action<string, AsteriskQueueMember>? MemberAdded;
     public event Action<string, AsteriskQueueMember>? MemberRemoved;
     public event Action<string, AsteriskQueueMember>? MemberStatusChanged;
     public event Action<string, AsteriskQueueEntry>? CallerJoined;
     public event Action<string, AsteriskQueueEntry>? CallerLeft;
+
+    /// <summary>
+    /// Raised for each <c>VarSet</c> of <c>QUEUESTATUS</c> on a channel: app_queue's account of why <c>Queue()</c>
+    /// returned (<c>TIMEOUT</c>, <c>LEAVEEMPTY</c>, <c>WITHDRAW</c>, <c>FULL</c>, <c>JOINEMPTY</c>, ...), set on the
+    /// caller's channel right after its <c>QueueCallerLeave</c>. Carries the channel's Uniqueid, its name and the value.
+    /// Asterisk sends <c>VarSet</c> only to an AMI user whose read classes include <c>dialplan</c>; without it this is
+    /// never raised. Internal: the session layer reads it to count a visit app_queue's own timeout ended.
+    /// </summary>
+    internal event Action<string, string, string>? CallerQueueStatus;
+
+    /// <summary>
+    /// Raised for each <c>QueueCallerAbandon</c>: app_queue's report that it counted the caller's visit abandoned, sent
+    /// just before the caller's <c>QueueCallerLeave</c> for every visit it counts so (a hang-up, its timeout, an emptied
+    /// queue, a withdrawal, a redirect) and never for a caller that leaves by key. Carries the caller's Uniqueid and the
+    /// queue. Asterisk sends it in the <c>agent</c> class. Internal: the session layer reads it.
+    /// </summary>
+    internal event Action<string, string>? CallerAbandonReported;
+
+    /// <summary>
+    /// Raised for each <c>QueueCallerLeave</c> Asterisk sends, whether or not this manager's table holds the caller:
+    /// <see cref="CallerLeft"/> is raised only when it does, and a reconnect clears the table without raising it, so
+    /// a leave that arrives before the reload's queue snapshot is read would otherwise reach nobody. Asterisk sends it
+    /// in the <c>agent</c> class. Internal: the session layer reads it.
+    /// </summary>
+    internal event Action<QueueCallerLeaveReport>? CallerLeaveReported;
+
+    /// <summary>
+    /// Raised when a load's <c>QueueStatus</c> completed: Asterisk answered it to the end, it was not refused and it
+    /// was not cut short. Carries who the snapshot listed and the order point of its request, so that a reader can tell
+    /// a caller the snapshot did not list from one that joined after it was asked for. A snapshot that did not complete
+    /// raises nothing. Raised while the snapshot's window is still open, before the load reads the agents.
+    /// </summary>
+    internal event Action<QueueSnapshotCompletion>? QueueSnapshotCompleted;
 
     public QueueManager(ILogger logger) => _logger = logger;
 
@@ -150,7 +194,16 @@ public sealed class QueueManager
 
     /// <summary>Handle QueueCallerJoin event.</summary>
     public void OnCallerJoined(string queueName, string channel, string? callerId, int position) =>
-        Join(queueName, channel, callerId, position, fromSnapshot: false, reportedWaitSeconds: null);
+        Join(queueName, channel, callerId, position, fromSnapshot: false, reportedWaitSeconds: null, uniqueId: null,
+            lossEpoch: null);
+
+    /// <summary>
+    /// Handle a live <c>QueueCallerJoin</c> with the caller's Uniqueid and the event-loss epoch of the event, which the
+    /// entry carries (<see cref="AsteriskQueueEntry.UniqueId"/>, <see cref="AsteriskQueueEntry.LossEpoch"/>).
+    /// </summary>
+    internal void OnCallerJoined(string queueName, string channel, string? callerId, int position, string? uniqueId,
+        EventLossEpoch lossEpoch) =>
+        Join(queueName, channel, callerId, position, fromSnapshot: false, reportedWaitSeconds: null, uniqueId, lossEpoch);
 
     /// <summary>
     /// Handle a caller that a <c>QueueStatus</c> snapshot reports waiting in a queue, with the wait
@@ -165,10 +218,68 @@ public sealed class QueueManager
     /// </summary>
     internal void OnCallerJoined(string queueName, string channel, string? callerId, int position,
         bool fromSnapshot, long? reportedWaitSeconds) =>
-        Join(queueName, channel, callerId, position, fromSnapshot, reportedWaitSeconds);
+        Join(queueName, channel, callerId, position, fromSnapshot, reportedWaitSeconds, uniqueId: null, lossEpoch: null);
+
+    /// <summary>
+    /// Handle a caller that the <c>QueueStatus</c> snapshot read through <paramref name="window"/> reports waiting, as
+    /// <see cref="OnCallerJoined(string, string, string?, int, bool, long?)"/> does for a snapshot entry, unless Asterisk
+    /// reported that caller leaving after the snapshot was asked for and no live join followed that leave: the snapshot
+    /// is then older than the leave, and applying it would put back a caller who has gone. The entry is then dropped.
+    /// An entry applied is listed in the window, for the completion.
+    /// </summary>
+    internal void OnSnapshotEntry(QueueSnapshotWindow window, string queueName, string channel, string? uniqueId,
+        string? callerId, int position, long? reportedWaitSeconds, EventLossEpoch lossEpoch)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+
+        // Checked and applied under the window's gate, so a leave the pump processes meanwhile is either seen here
+        // (and the entry dropped) or processed after the join (and closes it).
+        lock (window.Gate)
+        {
+            if (window.LeftAfterRequestLocked(uniqueId, channel))
+            {
+                QueueManagerLog.SnapshotEntryAfterLeave(_logger, queueName, channel);
+                return;
+            }
+
+            window.ListLocked(uniqueId, channel);
+            Join(queueName, channel, callerId, position, fromSnapshot: true, reportedWaitSeconds, uniqueId, lossEpoch);
+        }
+    }
+
+    /// <summary>
+    /// Opens the window of a <c>QueueStatus</c> snapshot. Opened before the request is sent and disposed once the
+    /// snapshot was read: while it is open, every leave Asterisk reports is recorded in it, and every live join after
+    /// such a leave clears it.
+    /// </summary>
+    internal QueueSnapshotWindow OpenSnapshotWindow()
+    {
+        var window = new QueueSnapshotWindow(this, Interlocked.Read(ref _joinOrdinal));
+        lock (_windowsLock)
+        {
+            _windows = [.. _windows, window];
+        }
+
+        return window;
+    }
+
+    internal void CloseSnapshotWindow(QueueSnapshotWindow window)
+    {
+        lock (_windowsLock)
+        {
+            _windows = [.. _windows.Where(w => !ReferenceEquals(w, window))];
+        }
+    }
+
+    /// <summary>Raises <see cref="QueueSnapshotCompleted"/> for the snapshot read through <paramref name="window"/>.</summary>
+    internal void CompleteSnapshot(QueueSnapshotWindow window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        QueueSnapshotCompleted?.Invoke(window.Complete());
+    }
 
     private void Join(string queueName, string channel, string? callerId, int position,
-        bool fromSnapshot, long? reportedWaitSeconds)
+        bool fromSnapshot, long? reportedWaitSeconds, string? uniqueId, EventLossEpoch? lossEpoch)
     {
         var queue = _queues.GetOrAdd(queueName, _ => new AsteriskQueue { Name = queueName });
         var entry = new AsteriskQueueEntry
@@ -178,8 +289,20 @@ public sealed class QueueManager
             Position = position,
             JoinedAt = DateTimeOffset.UtcNow,
             FromSnapshot = fromSnapshot,
-            ReportedWaitSeconds = reportedWaitSeconds
+            ReportedWaitSeconds = reportedWaitSeconds,
+            UniqueId = string.IsNullOrEmpty(uniqueId) ? null : uniqueId,
+            LossEpoch = lossEpoch,
+            JoinOrdinal = Interlocked.Increment(ref _joinOrdinal),
         };
+
+        // A live join after a leave the open windows recorded: the caller is waiting again, and a snapshot that lists
+        // it is no longer older than its leave.
+        if (!fromSnapshot)
+        {
+            foreach (var window in Volatile.Read(ref _windows))
+                window.OnLiveJoin(entry.UniqueId, channel);
+        }
+
         queue.Entries[channel] = entry;
         LiveMetrics.QueueCallsJoined.Add(1);
         QueueManagerLog.CallerJoined(_logger, queueName, channel, position);
@@ -199,6 +322,27 @@ public sealed class QueueManager
             CallerLeft?.Invoke(queueName, entry);
         }
     }
+
+    /// <summary>
+    /// Handle a <c>QueueCallerLeave</c> as Asterisk reported it: recorded in every open snapshot window, then
+    /// <see cref="CallerLeaveReported"/>, whether or not the table holds the caller (<see cref="OnCallerLeft"/> handles
+    /// the table).
+    /// </summary>
+    internal void OnCallerLeaveReported(string uniqueId, string queueName, string channel, EventLossEpoch lossEpoch)
+    {
+        foreach (var window in Volatile.Read(ref _windows))
+            window.OnLeave(uniqueId, channel);
+
+        CallerLeaveReported?.Invoke(new QueueCallerLeaveReport(uniqueId, queueName, channel, lossEpoch));
+    }
+
+    /// <summary>Handle a <c>QueueCallerAbandon</c>: raises <see cref="CallerAbandonReported"/>.</summary>
+    internal void OnCallerAbandonReported(string uniqueId, string queueName) =>
+        CallerAbandonReported?.Invoke(uniqueId, queueName);
+
+    /// <summary>Handle a <c>VarSet</c> of <c>QUEUESTATUS</c> on a channel: raises <see cref="CallerQueueStatus"/>.</summary>
+    internal void OnCallerQueueStatus(string uniqueId, string channel, string status) =>
+        CallerQueueStatus?.Invoke(uniqueId, channel, status);
 
     /// <summary>Handle DeviceStateChange event. Updates member status in all queues where the device is registered.</summary>
     public void OnDeviceStateChanged(string device, string state)
@@ -325,4 +469,117 @@ public sealed class AsteriskQueueEntry
     /// </para>
     /// </summary>
     internal long? ReportedWaitSeconds { get; init; }
+
+    /// <summary>
+    /// The caller channel's Uniqueid, as the live join or the snapshot entry carried it; <c>null</c> when it carried
+    /// none, and for an entry added through the public <see cref="QueueManager.OnCallerJoined(string, string, string?, int)"/>.
+    /// </summary>
+    internal string? UniqueId { get; init; }
+
+    /// <summary>
+    /// The server's event-loss epoch for this join: of the <c>QueueCallerJoin</c> event, or, for a snapshot entry, at
+    /// the moment the load handled it. A later event with another epoch means the SDK may have lost events in between.
+    /// <c>null</c> for an entry added through the public <see cref="QueueManager.OnCallerJoined(string, string, string?, int)"/>.
+    /// </summary>
+    internal EventLossEpoch? LossEpoch { get; init; }
+
+    /// <summary>
+    /// The order in which the manager handled this join among all its joins, live or from a snapshot. A join whose
+    /// ordinal is above a snapshot's <see cref="QueueSnapshotCompletion.OrderPoint"/> was handled after that snapshot
+    /// was asked for.
+    /// </summary>
+    internal long JoinOrdinal { get; init; }
+}
+
+/// <summary>A <c>QueueCallerLeave</c> as Asterisk reported it, with the event-loss epoch of the event.</summary>
+internal sealed record QueueCallerLeaveReport(string UniqueId, string Queue, string Channel, EventLossEpoch LossEpoch);
+
+/// <summary>
+/// One load's <c>QueueStatus</c> snapshot, from before its request is sent until it was read: the leaves Asterisk
+/// reported meanwhile (so an older snapshot does not bring a caller back), and the callers the snapshot listed.
+/// </summary>
+internal sealed class QueueSnapshotWindow : IDisposable
+{
+    private readonly QueueManager _owner;
+    private readonly HashSet<string> _leftUniqueIds = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _leftChannels = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _listedUniqueIds = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _listedChannels = new(StringComparer.Ordinal);
+
+    internal QueueSnapshotWindow(QueueManager owner, long orderPoint)
+    {
+        _owner = owner;
+        OrderPoint = orderPoint;
+    }
+
+    /// <summary>Guards the sets; held while a snapshot entry is checked and applied.</summary>
+    internal Lock Gate { get; } = new();
+
+    /// <summary>The ordinal of the last join the manager had handled when the window opened, before the request.</summary>
+    internal long OrderPoint { get; }
+
+    internal void OnLeave(string? uniqueId, string channel)
+    {
+        lock (Gate)
+        {
+            if (!string.IsNullOrEmpty(uniqueId))
+                _leftUniqueIds.Add(uniqueId);
+            if (!string.IsNullOrEmpty(channel))
+                _leftChannels.Add(channel);
+        }
+    }
+
+    internal void OnLiveJoin(string? uniqueId, string channel)
+    {
+        lock (Gate)
+        {
+            if (!string.IsNullOrEmpty(uniqueId))
+                _leftUniqueIds.Remove(uniqueId);
+            if (!string.IsNullOrEmpty(channel))
+                _leftChannels.Remove(channel);
+        }
+    }
+
+    internal bool LeftAfterRequestLocked(string? uniqueId, string channel) =>
+        (!string.IsNullOrEmpty(uniqueId) && _leftUniqueIds.Contains(uniqueId))
+        || (!string.IsNullOrEmpty(channel) && _leftChannels.Contains(channel));
+
+    internal void ListLocked(string? uniqueId, string channel)
+    {
+        if (!string.IsNullOrEmpty(uniqueId))
+            _listedUniqueIds.Add(uniqueId);
+        if (!string.IsNullOrEmpty(channel))
+            _listedChannels.Add(channel);
+    }
+
+    internal QueueSnapshotCompletion Complete()
+    {
+        lock (Gate)
+        {
+            return new QueueSnapshotCompletion(
+                new HashSet<string>(_listedUniqueIds, StringComparer.Ordinal),
+                new HashSet<string>(_listedChannels, StringComparer.Ordinal), OrderPoint);
+        }
+    }
+
+    public void Dispose() => _owner.CloseSnapshotWindow(this);
+}
+
+/// <summary>
+/// A <c>QueueStatus</c> snapshot that completed: whom it listed, and its order point. A caller it does not list and
+/// whose join the manager handled at or before <see cref="OrderPoint"/> was not waiting when Asterisk answered.
+/// </summary>
+internal sealed class QueueSnapshotCompletion(
+    IReadOnlySet<string> listedUniqueIds, IReadOnlySet<string> listedChannels, long orderPoint)
+{
+    /// <summary>The ordinal of the last join the manager had handled before the snapshot was asked for.</summary>
+    internal long OrderPoint { get; } = orderPoint;
+
+    /// <summary>Whether the snapshot listed the caller with this Uniqueid or on this channel.</summary>
+    internal bool Lists(string? uniqueId, string? channel) =>
+        (!string.IsNullOrEmpty(uniqueId) && listedUniqueIds.Contains(uniqueId))
+        || (!string.IsNullOrEmpty(channel) && listedChannels.Contains(channel));
+
+    /// <summary>Whether a join with <paramref name="joinOrdinal"/> was handled after the snapshot was asked for.</summary>
+    internal bool JoinedAfterRequest(long joinOrdinal) => joinOrdinal > OrderPoint;
 }
