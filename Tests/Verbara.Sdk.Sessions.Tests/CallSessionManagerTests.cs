@@ -112,17 +112,24 @@ public sealed class CallSessionManagerTests : IAsyncLifetime
         _sut.GetByChannelId("uid-1").Should().NotBeNull();
     }
 
+    /// <summary>
+    /// The leg is answered in front of the manager (<c>Ring</c> then <c>Up</c>), so the answer is observed: a leg
+    /// whose <c>Newchannel</c> already reports <c>Up</c> is not an observed answer, and a call that never had one
+    /// ends failed.
+    /// </summary>
     [Fact]
     public void ChannelHangup_ShouldCompleteSession_WhenAllParticipantsLeft()
     {
         _sut.AttachToServer(_server, "srv-1");
 
-        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Up,
+        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring,
             linkedId: "linked-1");
-        _server.Channels.OnHangup("uid-1");
+        _server.Channels.OnNewState("uid-1", ChannelState.Up);
+        _server.Channels.OnHangup("uid-1", HangupCause.NormalClearing);
 
         var session = _sut.GetByLinkedId("linked-1")!;
-        session.State.Should().BeOneOf(CallSessionState.Completed, CallSessionState.Failed);
+        session.State.Should().Be(CallSessionState.Completed,
+            "the leg was answered and hung up normally, and it was the call's last participant");
     }
 
     [Fact]
@@ -217,33 +224,56 @@ public sealed class CallSessionManagerTests : IAsyncLifetime
         savedSession.LinkedId.Should().Be("linked-1");
     }
 
+    /// <summary>
+    /// The leg is answered in front of the manager (<c>Ring</c> then <c>Up</c>), so the call that ends is a
+    /// completed one. The test waits, under a bound, for the store to be handed the ended call.
+    /// </summary>
     [Fact]
     public async Task OnSessionCompleted_ShouldPersistToStore()
     {
-        var store = Substitute.For<SessionStoreBase>();
-#pragma warning disable CA2012 // NSubstitute setup requires evaluating the ValueTask
-        store.SaveAsync(Arg.Any<CallSession>(), Arg.Any<CancellationToken>())
-            .Returns(ValueTask.CompletedTask);
-#pragma warning restore CA2012
-
+        var store = new EndingRecordingStore();
         var options = Options.Create(new SessionOptions());
         await using var manager = new CallSessionManager(options, NullLogger<CallSessionManager>.Instance, store);
         manager.AttachToServer(_server, "srv-1");
 
-        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Up,
+        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring,
             linkedId: "linked-1");
-        _server.Channels.OnHangup("uid-1");
+        _server.Channels.OnNewState("uid-1", ChannelState.Up);
+        _server.Channels.OnHangup("uid-1", HangupCause.NormalClearing);
 
-        // Allow fire-and-forget tasks to complete
-        await Task.Delay(50);
+        var ended = await store.EndedCallSaved.WaitAsync(TimeSpan.FromSeconds(5));
 
-        // At least 2 saves: one on creation, one on completion
-        var saveCalls = store.ReceivedCalls()
-            .Where(c => c.GetMethodInfo().Name == nameof(SessionStoreBase.SaveAsync))
-            .ToList();
-        saveCalls.Should().HaveCountGreaterOrEqualTo(2, "expected at least creation + completion saves");
-        var lastSavedSession = (CallSession)saveCalls[^1].GetArguments()[0]!;
-        lastSavedSession.State.Should().BeOneOf(CallSessionState.Completed, CallSessionState.Failed);
+        new { ended.LinkedId, ended.State, Saves = store.Saves }.Should().BeEquivalentTo(
+            new { LinkedId = "linked-1", State = CallSessionState.Completed, Saves = 2 },
+            "the store is handed the call when it opens and when it ends, and the call it is handed at the ending is "
+            + "the completed one; the answer itself is saved nowhere");
+    }
+
+    /// <summary>
+    /// A store that keeps nothing, counts the saves it is handed, and completes <see cref="EndedCallSaved"/> with
+    /// the first save of an ended call, read at the moment of the save.
+    /// </summary>
+    private sealed class EndingRecordingStore : SessionStoreBase
+    {
+        private readonly TaskCompletionSource<(string LinkedId, CallSessionState State)> _ended =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private int _saves;
+
+        public Task<(string LinkedId, CallSessionState State)> EndedCallSaved => _ended.Task;
+
+        public int Saves => Volatile.Read(ref _saves);
+
+        public override ValueTask SaveAsync(CallSession session, CancellationToken ct)
+        {
+            Interlocked.Increment(ref _saves);
+            if (session.State is CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut)
+                _ended.TrySetResult((session.LinkedId, session.State));
+            return ValueTask.CompletedTask;
+        }
+
+        public override ValueTask<CallSession?> GetAsync(string sessionId, CancellationToken ct) =>
+            ValueTask.FromResult<CallSession?>(null);
     }
 
     /// <summary>How a store reports a save that was cut short.</summary>

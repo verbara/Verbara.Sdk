@@ -60,7 +60,8 @@ public sealed class SessionIntegrationTests : IAsyncLifetime
 
         using var sub = _sessionManager!.Events.Subscribe(new DomainEventObserver(created, ended));
 
-        // Act — originate a call that will fail quickly (no real extension)
+        // Act — originate into the test PBX's default context, whose catch-all answers, waits 5 s and hangs up:
+        // a call the dialplan answers and that no dial or queue reaches
         await _connection!.SendActionAsync(new OriginateAction
         {
             Channel = "Local/101@default",
@@ -82,16 +83,16 @@ public sealed class SessionIntegrationTests : IAsyncLifetime
         session.State.Should().NotBe(CallSessionState.Completed,
             "session should be in an active state right after creation");
 
-        // Wait for the call to end (it should fail/complete quickly since there is no real destination)
+        // Wait for the call to end: the dialplan hangs it up 5 s after its answer
         var endedEvent = await ended.Task.WaitAsync(TimeSpan.FromSeconds(15));
         endedEvent.Should().NotBeNull();
         endedEvent.SessionId.Should().Be(startedEvent.SessionId);
 
         var completedSession = _sessionManager.GetById(endedEvent.SessionId);
         completedSession.Should().NotBeNull();
-        completedSession!.State.Should().BeOneOf(
-            [CallSessionState.Completed, CallSessionState.Failed],
-            "session should reach a terminal state after hangup");
+        completedSession!.State.Should().Be(CallSessionState.Completed,
+            "the dialplan answered the call and hung it up normally, so the call took place and is over");
+        endedEvent.TalkTime.Should().NotBeNull("the call talked from its answer to its hangup");
     }
 
     [Fact]

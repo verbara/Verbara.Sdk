@@ -84,7 +84,14 @@ internal static class AmiCaptureReplay
     /// Replays <paramref name="fixture"/> (a file name in <c>Recordings/asterisk-ami/</c>) into a
     /// fresh server and session manager, with the default in-memory session store.
     /// </summary>
-    public static async Task<CaptureReplay> ReplayAsync(string fixture, SessionOptions? options = null)
+    /// <param name="fixture">The capture's file name.</param>
+    /// <param name="options">The session manager's options; the defaults when omitted.</param>
+    /// <param name="drop">
+    /// Optional. A frame for which it returns <see langword="true"/> is read but not delivered, as if Asterisk
+    /// had never sent it; a marker frame still names the scenario that follows it.
+    /// </param>
+    public static async Task<CaptureReplay> ReplayAsync(
+        string fixture, SessionOptions? options = null, Func<ManagerEvent, bool>? drop = null)
     {
         await using var rig = await ReplayRig.StartAsync(options ?? new SessionOptions());
         var manager = rig.Manager;
@@ -114,6 +121,9 @@ internal static class AmiCaptureReplay
         {
             if (TryReadMarker(evt, out var next))
                 scenario = next;
+
+            if (drop?.Invoke(evt) == true)
+                continue;
 
             if (rig.Deliver(evt) is { } thrown)
                 swallowed.Add(new SwallowedObserverException(scenario, evt.EventType ?? "", thrown));
@@ -157,9 +167,11 @@ internal static class AmiCaptureReplay
         using var scoring = manager.Events.Subscribe(evt =>
         {
             if (evt is CallStartedEvent started
-                && QueueShapes.Of(started.CallerIdNum, FirstChannel(manager.GetById(started.SessionId))) is { } startedShape)
+                && QueueShapes.Of(started.CallerIdNum, FirstChannel(manager.GetById(started.SessionId))) is { } startedShape
+                && shapeBySessionId.TryAdd(started.SessionId, startedShape)
+                && manager.GetById(started.SessionId) is { } startedSession)
             {
-                shapeBySessionId.TryAdd(started.SessionId, startedShape);
+                scores[startedShape.Id].RecordSession(startedSession);
             }
 
             var score = shapeBySessionId.TryGetValue(evt.SessionId, out var shape) ? scores[shape.Id] : null;
@@ -855,6 +867,7 @@ internal readonly record struct QueueCounters(int Offered, int Answered, int Aba
 internal sealed class QueueShapeScore(QueueShape shape)
 {
     private readonly List<CallConnectedEvent> _connected = [];
+    private readonly List<CallSession> _sessions = [];
     private QueueCounters _tracker;
 
     public QueueShape Shape { get; } = shape;
@@ -890,7 +903,15 @@ internal sealed class QueueShapeScore(QueueShape shape)
     public bool AgreesWithAsterisk =>
         Answered == AsteriskConnects && Abandoned == AsteriskAbandons && WaitingLeak == 0;
 
+    /// <summary>
+    /// The sessions the shape's calls opened, in the order they started, as the manager holds them once the
+    /// replay has ended: a reader sees each call's final state, timestamps and audit trail.
+    /// </summary>
+    public IReadOnlyList<CallSession> Sessions => _sessions;
+
     internal void RecordConnected(CallConnectedEvent evt) => _connected.Add(evt);
+
+    internal void RecordSession(CallSession session) => _sessions.Add(session);
 
     internal void RecordTrackerChange(QueueCounters change) => _tracker += change;
 

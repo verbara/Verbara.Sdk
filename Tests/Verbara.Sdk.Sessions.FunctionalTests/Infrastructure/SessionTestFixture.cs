@@ -2,6 +2,7 @@ using Verbara.Sdk;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Extensions;
 using Verbara.Sdk.Sessions.Internal;
 using Verbara.Sdk.Sessions.Manager;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -31,14 +32,17 @@ public sealed class SessionTestFixture : IAsyncLifetime
     {
     }
 
-    /// <summary>Builds the fixture with <paramref name="options"/> and, optionally, a release clock.</summary>
+    /// <summary>Builds the fixture with <paramref name="options"/> and, optionally, a release clock and a store.</summary>
     /// <param name="options">The session options the manager runs with.</param>
     /// <param name="releaseClock">
     /// The clock the manager reads its release cutoff from, so a test can move past
     /// <see cref="SessionOptions.CompletedRetention"/> without waiting; <c>null</c> builds the manager
     /// the way a consumer does, on the wall clock.
     /// </param>
-    public SessionTestFixture(SessionOptions options, TimeProvider? releaseClock = null)
+    /// <param name="store">
+    /// The store the manager saves sessions to; <c>null</c> builds the manager on the default in-memory store.
+    /// </param>
+    public SessionTestFixture(SessionOptions options, TimeProvider? releaseClock = null, SessionStoreBase? store = null)
     {
         Options = options;
         _connection = Substitute.For<IAmiConnection>();
@@ -49,11 +53,11 @@ public sealed class SessionTestFixture : IAsyncLifetime
             ? new CallSessionManager(
                 Microsoft.Extensions.Options.Options.Create(options),
                 NullLogger<CallSessionManager>.Instance,
-                new InMemorySessionStore())
+                store ?? new InMemorySessionStore())
             : new CallSessionManager(
                 Microsoft.Extensions.Options.Options.Create(options),
                 NullLogger<CallSessionManager>.Instance,
-                new InMemorySessionStore(),
+                store ?? new InMemorySessionStore(),
                 releaseClock);
 
         SessionManager.AttachToServer(Server, DefaultServerId);

@@ -85,6 +85,198 @@ public sealed class CallShapeCaptureReplayTests
         EndingOf(replay.Call("S4")).Should().Be(ivr, "S4, an originate to a local IVR, ends as S1 does");
     }
 
+    /// <summary>
+    /// The calls the dialplan answered and that no dial or queue reached: two IVRs (S1, the PBX hangs up;
+    /// S2, the caller does), an originate answered and never dialed onward (S3), an originate to a local
+    /// IVR (S4), and a long IVR (S8, a plain answered IVR here, since a replay runs no sweep). Each was
+    /// answered and hung up at normal clearing, so each is a completed call: it ends <c>Completed</c> with
+    /// its cause, the connected time the SDK observed, and one ending that carries a talk time. Nothing
+    /// connected the call while it was live, so its audit trail gains no <c>Connected</c> step.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallShapeCaptures))]
+    public async Task AnsweredCallsNoDialOrQueueReached_ShouldEndCompletedWithATalkTime_WhenACallShapeCaptureIsReplayed(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayAsync(fixture);
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+
+        foreach (var call in AnsweredWithNoDialOrQueue.Select(replay.Call))
+        {
+            call.Session.State.Should().Be(CallSessionState.Completed,
+                "{0} was answered and hung up at normal clearing, which is a completed call", call.Scenario);
+            call.Session.HangupCause.Should().Be(HangupCause.NormalClearing, "{0} hung up normally", call.Scenario);
+            call.Session.ConnectedAt.Should().NotBeNull("{0}'s answer was observed", call.Scenario);
+            call.DomainEvents.OfType<CallEndedEvent>().Should().ContainSingle("{0} ends once", call.Scenario)
+                .Which.TalkTime.Should().NotBeNull("{0} talked from its answer to its hangup", call.Scenario);
+            call.Trail.Should().NotContain(CallSessionEventType.Connected,
+                "nothing connected {0} while it was live; its answer is applied only at its ending", call.Scenario);
+        }
+    }
+
+    /// <summary>
+    /// Pins the flows recording an answer must not move: the unanswered originate (S5), the queued calls that
+    /// a member takes (S6, S10) or that are abandoned (S7, S11), and the dialed calls (S9, S12) — four of them
+    /// answered by the dialplan before they are queued or dialed. States, the queued and dialing times, the order
+    /// of <c>QueueJoined</c> or <c>Dialing</c> before any <c>Connected</c> entry, the kinds of domain event each
+    /// call publishes, and how many <see cref="CallConnectedEvent"/>s the capture publishes, all as before; never
+    /// an exact audit trail, which a recorded ring would legitimately lengthen. Each of these was observed red
+    /// with <c>Connected</c> admitted from the initial state, the shape that moves them.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallShapeCaptures))]
+    public async Task QueuedDialedAndUnansweredCalls_ShouldKeepTheirFlowAndTheirEvents_WhenACallShapeCaptureIsReplayed(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayAsync(fixture);
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+
+        var s5 = replay.Call("S5");
+        s5.Session.State.Should().Be(CallSessionState.Failed, "S5 is an originate the far end never answers");
+        s5.Session.HangupCause.Should().Be(HangupCause.NoAnswer, "S5's originate gives up unanswered");
+
+        foreach (var call in TakenByAMember.Select(replay.Call))
+        {
+            call.Session.State.Should().Be(CallSessionState.Completed, "a member took {0}", call.Scenario);
+            call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
+            call.Trail.Should().Contain(CallSessionEventType.QueueJoined, "{0} joined a queue", call.Scenario);
+            call.Trail.TakeWhile(t => t != CallSessionEventType.Connected).Should().Contain(
+                CallSessionEventType.QueueJoined, "{0} is queued before anything connects it", call.Scenario);
+        }
+
+        foreach (var call in AbandonedInTheQueue.Select(replay.Call))
+        {
+            call.Session.State.Should().Be(CallSessionState.Failed, "no member took {0}", call.Scenario);
+            call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
+        }
+
+        foreach (var call in DialedToAnAgent.Select(replay.Call))
+        {
+            call.Session.State.Should().Be(CallSessionState.Completed, "{0} is dialed to an agent who answers", call.Scenario);
+            call.Session.DialingAt.Should().NotBeNull("{0}'s dial names its calling channel", call.Scenario);
+            call.Trail.TakeWhile(t => t != CallSessionEventType.Connected).Should().Contain(
+                CallSessionEventType.Dialing, "{0} passes through Dialing before it connects", call.Scenario);
+        }
+
+        foreach (var (scenario, kinds) in DomainEventKindsToday)
+        {
+            var call = replay.Call(scenario);
+            call.DomainEvents.Select(e => e.GetType().Name).Should().Equal(kinds,
+                "{0} publishes the kinds of domain event it published before", call.Scenario);
+        }
+
+        replay.Calls.Sum(c => c.DomainEvents.OfType<CallConnectedEvent>().Count()).Should().Be(ConnectedEventsPerCaptureToday,
+            "the capture announces as many connections as before: only the two calls a queue member took");
+    }
+
+    /// <summary>
+    /// The queued arm of the rule that a channel's answer does not connect a call waiting on an application. The
+    /// calls a member takes (S6, the dialer; S10, after an IVR) reach <c>Connected</c> when the queue reports the
+    /// member's connection: they end completed, with their queued time kept, connected no earlier than they were
+    /// queued, announced connected once, and their trail records the agent's connection; their connected time is taken
+    /// while the queue's report is handled, no earlier than the report and no later than the announcement it makes. The
+    /// calls no member takes (S7, S11) end failed with their queued time and no connected time.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallShapeCaptures))]
+    public async Task QueuedCalls_ShouldConnectWhenTheQueueReportsAMemberAndOnlyThen_WhenACallShapeCaptureIsReplayed(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayAsync(fixture);
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+
+        foreach (var call in TakenByAMember.Select(replay.Call))
+        {
+            call.Session.State.Should().Be(CallSessionState.Completed, "a member took {0}", call.Scenario);
+            call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
+            call.Session.ConnectedAt.Should().NotBeNull("{0} connected", call.Scenario)
+                .And.BeOnOrAfter(call.Session.QueuedAt ?? DateTimeOffset.MaxValue, "{0} connected after it was queued", call.Scenario);
+            call.Trail.Should().Contain(CallSessionEventType.AgentConnected, "the queue reported {0}'s connection", call.Scenario);
+            var announced = call.DomainEvents.OfType<CallConnectedEvent>().Should()
+                .ContainSingle("{0} is announced connected once", call.Scenario).Subject;
+
+            // The connected time is the queue's report, the one its announcement carries: taken while that report
+            // is handled, after the report is recorded in the trail and before the announcement is made, never at
+            // an earlier frame such as the member's answer or the caller's dial outcome.
+            var reportedAt = call.Session.Events.First(e => e.Type == CallSessionEventType.AgentConnected).Timestamp;
+            call.Session.ConnectedAt.Should().NotBeNull("{0} connected", call.Scenario)
+                .And.BeOnOrAfter(reportedAt, "{0} connected when the queue reported it", call.Scenario)
+                .And.BeOnOrBefore(announced.Timestamp, "{0}'s announcement carries the same connection", call.Scenario);
+        }
+
+        foreach (var call in AbandonedInTheQueue.Select(replay.Call))
+        {
+            call.Session.State.Should().Be(CallSessionState.Failed, "no member took {0}", call.Scenario);
+            call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
+            call.Session.ConnectedAt.Should().BeNull("{0} never connected", call.Scenario);
+        }
+    }
+
+    /// <summary>
+    /// The queue's report is the only thing that connects a queued call. The calls a member takes (S6, S10) are
+    /// replayed with app_queue's <c>AgentConnect</c> frames withheld, and everything else the member's leg did kept:
+    /// its answer, its bridge entry and the caller's <c>DialEnd</c> with <c>ANSWER</c>. Without the queue's report,
+    /// neither call ever connects: each ends failed, with no connected time, no talk time and no
+    /// <see cref="CallConnectedEvent"/>.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CallShapeCaptures))]
+    public async Task QueuedCalls_ShouldStayQueued_WhenTheQueueNeverReportsTheConnection(string fixture)
+    {
+        var replay = await AmiCaptureReplay.ReplayAsync(fixture,
+            drop: evt => string.Equals(evt.EventType, "AgentConnect", StringComparison.OrdinalIgnoreCase));
+        using var scope = new AssertionScope();
+        scope.AddReportable("replay", replay.Describe());
+
+        foreach (var call in TakenByAMember.Select(replay.Call))
+        {
+            call.Session.State.Should().Be(CallSessionState.Failed,
+                "the queue never reported {0}'s connection, so it never connected", call.Scenario);
+            call.Session.QueuedAt.Should().NotBeNull("{0} joined a queue", call.Scenario);
+            call.Session.ConnectedAt.Should().BeNull(
+                "neither the member's answer, nor its bridge entry, nor the caller's dial outcome is the queue's report for {0}",
+                call.Scenario);
+            call.DomainEvents.OfType<CallEndedEvent>().Should().ContainSingle("{0} ends once", call.Scenario)
+                .Which.TalkTime.Should().BeNull("{0} never talked", call.Scenario);
+            call.DomainEvents.OfType<CallConnectedEvent>().Should().BeEmpty("{0} is never announced connected", call.Scenario);
+        }
+    }
+
+    /// <summary>
+    /// The kinds of domain event each scenario published on <c>9866b2ef</c>, identical on the three captures.
+    /// The calls answered with no dial or queue keep theirs too: nothing is published at their answer.
+    /// </summary>
+    private static readonly (string Scenario, string[] Kinds)[] DomainEventKindsToday =
+    [
+        ("S1", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S2", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S3", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S4", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S5", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S8", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S6", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallConnectedEvent), nameof(CallEndedEvent)]),
+        ("S7", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallEndedEvent)]),
+        ("S9", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S10", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallConnectedEvent), nameof(CallEndedEvent)]),
+        ("S11", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallEndedEvent)]),
+        ("S12", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+    ];
+
+    /// <summary>The <see cref="CallConnectedEvent"/>s each capture published on <c>9866b2ef</c>: S6's and S10's.</summary>
+    private const int ConnectedEventsPerCaptureToday = 2;
+
+    /// <summary>The queued scenarios a member takes.</summary>
+    private static readonly string[] TakenByAMember = ["S6", "S10"];
+
+    /// <summary>The queued scenarios no member takes.</summary>
+    private static readonly string[] AbandonedInTheQueue = ["S7", "S11"];
+
+    /// <summary>The scenarios dialed to an agent who answers.</summary>
+    private static readonly string[] DialedToAnAgent = ["S9", "S12"];
+
+    /// <summary>The scenarios the dialplan answers and no dial or queue reaches.</summary>
+    private static readonly string[] AnsweredWithNoDialOrQueue = ["S1", "S2", "S3", "S4", "S8"];
+
     private static void ShouldHaveBeenQueued(ReplayedCall call, CallSessionState state, bool withQueuedEvent)
     {
         call.Session.State.Should().Be(state, "{0} ends as it does today", call.Scenario);

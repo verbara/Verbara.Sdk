@@ -337,6 +337,63 @@ public sealed class ReloadAdmissionWindowTests : IAsyncLifetime
             + $"admission from the stale snapshot, so it would be a call that never ends. Measured: {Describe()}");
     }
 
+    // --- scenario: an answered call in its initial state hangs up while the snapshot is read ---------
+
+    /// <summary>
+    /// The dialplan answered the leg in front of the SDK and nothing dialed or queued it, so the call is still
+    /// in its initial state. It hangs up at normal clearing after <c>Status</c> was sent; Asterisk's answer was
+    /// written before that and still lists the leg. The observed hangup ends the call, completed, once; the
+    /// stale snapshot brings no leg back, and the next reload, which no longer lists it, changes nothing. The
+    /// test waits for the ending itself, under a bound.
+    /// </summary>
+    [Fact]
+    public async Task Reconnect_ShouldKeepTheObservedCompletedEnding_WhenAnAnsweredCallInItsInitialStateHungUpWhileTheSnapshotListingItWasRead()
+    {
+        const string ivrUid = "ivr-001";
+        const string ivrName = "PJSIP/trunk-ivr";
+        const string ivrLinkedId = "linked-ivr";
+        await GivenAStartedServer();
+        _server.Channels.OnNewChannel(ivrUid, ivrName, ChannelState.Ring,
+            callerIdNum: "5551234", context: "from-trunk", linkedId: ivrLinkedId);
+        _server.Channels.OnNewState(ivrUid, ChannelState.Up);
+        var call = _sessions.ActiveSessions.Single(s => s.LinkedId == ivrLinkedId);
+        call.State.Should().Be(CallSessionState.Created, "premise: nothing dialed or queued the answered call");
+        var ending = new TaskCompletionSource<CallEndedEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var endings = _sessions.Events.Subscribe(e =>
+        {
+            if (e is CallEndedEvent ended && ended.SessionId == call.SessionId)
+                ending.TrySetResult(ended);
+        });
+
+        await WhenTheConnectionReconnectsWhile(
+            () => _server.Channels.OnHangup(ivrUid, HangupCause.NormalClearing),
+            Leg(ivrUid, ivrName, ivrLinkedId));
+        await ending.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var afterTheReload = Outcome(call);
+
+        await WhenTheConnectionReconnectsWhile(whileTheSnapshotIsRead: null);
+
+        new { AfterTheReload = afterTheReload, AfterTheNextReload = Outcome(call) }.Should().BeEquivalentTo(
+            new
+            {
+                AfterTheReload = new CallOutcome(CallSessionState.Completed, HangupCause.NormalClearing, Marker: null, Participants: 1, Endings: 1),
+                AfterTheNextReload = new CallOutcome(CallSessionState.Completed, HangupCause.NormalClearing, Marker: null, Participants: 1, Endings: 1),
+            },
+            "the SDK observed the answer and the normal hangup, so the call ends completed with that cause and no reload "
+            + "marker, once, holding its one leg; the stale snapshot brings no leg back, and the next reload leaves the "
+            + $"ended call as it is. Measured: {Describe()}");
+    }
+
+    /// <summary>How a call stands: its state, cause and reload marker, its participants and its endings.</summary>
+    private sealed record CallOutcome(CallSessionState State, HangupCause? Cause, string? Marker, int Participants, int Endings);
+
+    private CallOutcome Outcome(CallSession call) => new(
+        call.State,
+        call.HangupCause,
+        call.Metadata.GetValueOrDefault("cause"),
+        call.Participants.Count,
+        _sessionEvents.OfType<CallEndedEvent>().Count(e => e.SessionId == call.SessionId));
+
     // --- what a read keeps once it has ended, by each way it can end --------------------------------
 
     /// <summary>

@@ -62,6 +62,13 @@ public sealed class CallSession
     public DateTimeOffset? DialingAt { get; set; }
     public DateTimeOffset? RingingAt { get; set; }
     public DateTimeOffset? QueuedAt { get; set; }
+
+    /// <summary>
+    /// When the SDK observed the call connected. For a call answered while still in its initial state
+    /// (an IVR, an originate answered with no dial onward) and ended there, it is applied at the ending,
+    /// from the observed answer. It is <c>null</c> while such a call is live, and <c>null</c> for a call
+    /// opened from a reload whose answer the SDK never observed.
+    /// </summary>
     public DateTimeOffset? ConnectedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
 
@@ -189,6 +196,60 @@ public sealed class CallSession
             return;
 
         State = state;
+    }
+
+    /// <summary>
+    /// When a leg of this call was observed answering while the session was still in its initial state
+    /// (<see cref="CallSessionState.Created"/>): the dialplan answered it, and no dial or queue had reached
+    /// it yet. Only the first such answer is kept. It is a record, not a state: nothing is published,
+    /// counted or saved when it is taken, and it is not persisted. It is read only at the call's ending
+    /// (<see cref="TryCompleteAnsweredInInitialState"/>). Written only under <see cref="SyncRoot"/>.
+    /// </summary>
+    internal DateTimeOffset? AnsweredInInitialStateAt { get; private set; }
+
+    /// <summary>
+    /// Records that a leg answered while the session was in its initial state. Keeps the first answer and
+    /// does nothing for a session in any other state. Called under <see cref="SyncRoot"/>.
+    /// </summary>
+    internal void RecordAnswerInInitialState(DateTimeOffset answeredAt)
+    {
+        if (State != CallSessionState.Created)
+            return;
+
+        AnsweredInInitialStateAt ??= answeredAt;
+    }
+
+    /// <summary>
+    /// Ends, as <see cref="CallSessionState.Completed"/>, a call that was answered while still in its
+    /// initial state and is over without anything having moved it out of that state. Returns <c>true</c>
+    /// if it did; otherwise it changes nothing and returns <c>false</c>.
+    /// <para>
+    /// This is not a transition and deliberately does not go through <see cref="TryTransition"/>.
+    /// <see cref="CallSessionStateTransitions"/> lets <see cref="CallSessionState.Created"/> end only as
+    /// <c>Failed</c>, because a call that never left its initial state is, by the table, a call that never
+    /// connected. A call whose answer the SDK observed did take place: the dialplan answered it and it was
+    /// over before any dial or queue reached it. Adding <c>Created → Completed</c> or
+    /// <c>Created → Connected</c> to the table would move every other call that starts by being answered
+    /// and is queued or dialed afterwards, so the outcome is decided here, at the ending, instead.
+    /// </para>
+    /// <para>
+    /// It guards its own state rather than trusting its caller: it acts only on a session that is still
+    /// <see cref="CallSessionState.Created"/> and holds an observed answer. A session that is already
+    /// terminal — ended by another route before the last leg left — keeps its ending. When it acts,
+    /// <see cref="ConnectedAt"/> takes the observed answer unless it already holds a time, and
+    /// <see cref="CompletedAt"/> takes the current time unless it already holds one. Called under
+    /// <see cref="SyncRoot"/>.
+    /// </para>
+    /// </summary>
+    internal bool TryCompleteAnsweredInInitialState()
+    {
+        if (State != CallSessionState.Created || AnsweredInInitialStateAt is not { } answeredAt)
+            return false;
+
+        ConnectedAt ??= answeredAt;
+        State = CallSessionState.Completed;
+        CompletedAt ??= DateTimeOffset.UtcNow;
+        return true;
     }
 
     // Hold time tracking
