@@ -70,7 +70,7 @@ public sealed class CallSessionAnsweredInInitialStateTests
         var acted = session.TryCompleteAnsweredInInitialState();
 
         new { Acted = acted, session.State, session.ConnectedAt, CompletedAtIsSet = session.CompletedAt.HasValue }
-            .Should().BeEquivalentTo(new { Acted = true, State = CallSessionState.Completed, ConnectedAt = (DateTimeOffset?)Answer, CompletedAtIsSet = true },
+            .Should().BeEquivalentTo(new { Acted = true, State = CallSessionState.Completed, ConnectedAt = Answer, CompletedAtIsSet = true },
                 "the call was answered and is over, so it completed, connected from its first observed answer");
     }
 }
