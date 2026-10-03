@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: a call answered without a dial ends `Completed`, and a queued call is connected only when the queue reports it (#377)
+
+When the dialplan or an AMI originate answered a call and nothing dialed it onward or queued it, the session stayed
+`Created` and ended `Failed` even at `NormalClearing`, with no talk time — measured on Asterisk 20.20.1, 22.9.0 and
+23.4.1 for an IVR hung up by either side and for an originate answered by an endpoint or a `Local` channel. Other
+calls of that shape follow the same rule: Voice AI handed to the `AudioSocket()` application or to Stasis after
+`Answer()`, or a voice broadcast. Such a call now ends `Completed` at `NormalClearing`, with `ConnectedAt` taken from
+the observed answer, so `TalkTime` is reported. A state reload that proves it gone ends it `Completed` with the reload
+marker and no cause, as it does a connected call. Dialed calls, queued calls a member took, and calls that were never
+answered end exactly as before.
+
+A queued call that no member took no longer passes through `Connected` when a member's leg answers or joins the bridge
+without the queue reporting a connection (measured with a pooled agent that never acknowledged): it ends `Failed`, with
+no `ConnectedAt`, no `TalkTime` and no `Connected` step. The `ConnectedAt` of a queued call a member took is now
+app_queue's `AgentConnect` — the same instant `CallConnectedEvent` carries — no longer the member leg's answer.
+
+**BREAKING:** the answered-without-a-dial calls move from `sessions.failed` to `sessions.completed` and carry a talk
+time; the queued calls nobody took lose the talk time they reported.
+
+**Migration guide:** [`docs/guides/call-session-ending-migration.md`](docs/guides/call-session-ending-migration.md)
+
 ### Fixed: a snapshot never brings back a call that ended, and a call is opened once (#376)
 
 A state reload reads the channels with `Status` while events keep arriving. Up to 2.6.1, a channel that hung up while
