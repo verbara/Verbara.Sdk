@@ -40,6 +40,15 @@ internal sealed partial class SessionReconciliationService : IHostedService, IDi
     private Task? _runningTask;
     private CancellationTokenSource? _cts;
 
+    /// <summary>
+    /// Serializes <see cref="StopAsync"/> against <see cref="Dispose"/>: whichever takes <see cref="_cts"/> under it
+    /// owns that source, so a stop never cancels a source the disposal released.
+    /// </summary>
+    private readonly Lock _lifecycleGate = new();
+
+    /// <summary>Set by <see cref="Dispose"/> under <see cref="_lifecycleGate"/>; a stop that finds it set does nothing.</summary>
+    private bool _disposed;
+
     public SessionReconciliationService(
         ICallSessionManager manager,
         VerbaraServer server,
@@ -173,29 +182,61 @@ internal sealed partial class SessionReconciliationService : IHostedService, IDi
     private static bool HasEnded(CallSession session) =>
         session.State is CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut;
 
+    /// <summary>
+    /// Ends the loop and waits for it. A stop after disposal does nothing: it cancels and awaits nothing the disposal
+    /// released.
+    /// </summary>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_cts is not null)
-            await _cts.CancelAsync();
+        CancellationTokenSource? cts;
+        Task? runningTask;
+        lock (_lifecycleGate)
+        {
+            if (_disposed)
+                return;
 
-        if (_runningTask is not null)
+            // Taken, not read: from here this stop owns the source and releases it, and a disposal that comes while
+            // the loop is ending finds nothing of it to release.
+            cts = _cts;
+            _cts = null;
+            runningTask = _runningTask;
+        }
+
+        if (cts is null)
+            return;
+
+        await cts.CancelAsync().ConfigureAwait(false);
+
+        if (runningTask is not null)
         {
             try
             {
-                await _runningTask.ConfigureAwait(false);
+                await runningTask.ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
-                // Expected on shutdown
+                // The loop's own cancellation, which this stop requested.
             }
         }
 
+        cts.Dispose();
         _timer?.Dispose();
     }
 
     public void Dispose()
     {
-        _cts?.Dispose();
+        CancellationTokenSource? cts;
+        lock (_lifecycleGate)
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            cts = _cts;
+            _cts = null;
+        }
+
+        cts?.Dispose();
         _timer?.Dispose();
     }
 
