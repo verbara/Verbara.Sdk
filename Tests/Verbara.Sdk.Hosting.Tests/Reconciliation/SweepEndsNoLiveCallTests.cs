@@ -88,12 +88,12 @@ public sealed class SweepEndsNoLiveCallTests : IAsyncLifetime
                 AfterTheSweep = new
                 {
                     Session = before,
-                    CompletedAt = (DateTimeOffset?)null,
+                    CompletedAt = default(DateTimeOffset?),
                     CallEndedEvents = 0,
                 },
                 State = CallSessionState.Completed,
                 HangupCause = (HangupCause?)HangupCause.NormalClearing,
-                Cause = (string?)null,
+                Cause = default(string),
                 CompletedAtTheHangup = true,
                 CallEndedEvents = 1,
             },
