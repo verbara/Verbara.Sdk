@@ -67,6 +67,8 @@ public sealed class AriClient : IAriClient
     private readonly Subject<AriEvent> _eventSubject = new();
     private readonly AriEventPump _pump = new();
     private int _state = (int)AriConnectionState.Initial;
+    private int _dialsInFlight;
+    private int _disposed;
 
     public AriConnectionState State => (AriConnectionState)Volatile.Read(ref _state);
     public bool IsConnected => State == AriConnectionState.Connected;
@@ -78,14 +80,15 @@ public sealed class AriClient : IAriClient
     /// </summary>
     internal Task? EventLoop => _eventLoop;
 
-    // The clock this client's bounds on Asterisk run on: the reconnect loop's dial, and the wait for
-    // Asterisk to answer a disconnect's close. Settable by tests (via InternalsVisibleTo) to drive them on
-    // a manual clock.
+    // The clock this client's bounds on Asterisk run on: both dials of the events socket (the caller's own
+    // in ConnectAsync and the reconnect loop's), and the wait for Asterisk to answer a disconnect's close.
+    // Settable by tests (via InternalsVisibleTo) to drive them on a manual clock.
     internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
-    // How long a dial of the events socket made by the reconnect loop may take before it counts as a
-    // failed attempt. The reconnect loop's dial only: the caller's own dial in ConnectAsync is not
-    // bounded by it. Settable by tests (via InternalsVisibleTo); see AriConnectBound for the value.
+    // How long a dial of the events socket may take before it counts as failed: the caller's own dial in
+    // ConnectAsync, which then faults, and each dial of the reconnect loop, which then counts as a failed
+    // attempt. Not an option: one fixed bound governs both dials. Settable by tests (via InternalsVisibleTo);
+    // see AriConnectBound for the value.
     internal TimeSpan ConnectTimeout { get; set; } = AriConnectBound.Default;
 
     // How long DisconnectAsync waits for Asterisk to answer its close frame before it lets the socket go.
@@ -149,11 +152,24 @@ public sealed class AriClient : IAriClient
     {
         SetState(AriConnectionState.Connecting);
 
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _webSocket = new ClientWebSocket();
+        // This attempt's own source and socket, in the fields before anything is awaited. What a previous
+        // connection left there (one that connected and has since ended: disconnected, or lost with nothing
+        // reconnecting it) is taken out and released here instead of being dropped: its source is linked to that
+        // caller's token and stays registered on it until disposed. An attempt that ended without a connection
+        // already released its own. What a loop or another dial still runs on is theirs, and is left to them.
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var socket = new ClientWebSocket();
+        var othersDialing = Interlocked.Increment(ref _dialsInFlight) > 1;
+        var previousCts = Interlocked.Exchange(ref _cts, cts);
+        var previousSocket = Interlocked.Exchange(ref _webSocket, socket);
+        if (!othersDialing && _eventLoop is null or { IsCompleted: true })
+        {
+            previousCts?.Dispose();
+            previousSocket?.Dispose();
+        }
 
         var authBytes = Encoding.UTF8.GetBytes($"{_options.Username}:{_options.Password}");
-        _webSocket.Options.SetRequestHeader("Authorization",
+        socket.Options.SetRequestHeader("Authorization",
             "Basic " + Convert.ToBase64String(authBytes));
 
         var wsUrl = _options.BaseUrl.TrimEnd('/')
@@ -166,10 +182,16 @@ public sealed class AriClient : IAriClient
         // await, so the finally can tell an attempt that ended without a connection from one that did
         // connect. An attempt that ended without a connection is over — a first dial starts no
         // reconnect loop — so it leaves a terminal state instead of reading as one still dialling.
+        //
+        // The dial is bounded by ConnectTimeout, as the reconnect loop's is: an Asterisk that takes the
+        // connection and never answers the upgrade faults the attempt (a WebSocketException carrying a
+        // TimeoutException) instead of holding it for as long as the caller's token allows. It runs on the
+        // attempt's own token, linked to the caller's, so a DisconnectAsync or DisposeAsync during the dial
+        // ends it at once instead of leaving it to the bound.
         var connected = false;
         try
         {
-            await _webSocket.ConnectAsync(uri, cancellationToken);
+            await AriConnectBound.ConnectAsync(socket, uri, ConnectTimeout, TimeProvider, cts.Token);
             connected = true;
 
             // Written inside the try, not after it. A finally runs BEFORE the statement that
@@ -181,17 +203,26 @@ public sealed class AriClient : IAriClient
         }
         finally
         {
+            Interlocked.Decrement(ref _dialsInFlight);
             if (!connected)
             {
-                // Which terminal state is decided by who ended the attempt, read from the caller's
-                // own token — never from the exception. A cancellation raised inside the transport
-                // carries a token the caller never held (ADR-0053 records that trap for a bridge's
-                // ConnectAsync), so neither the exception's type nor its own CancellationToken can
-                // say whether the caller withdrew. A withdrawal the caller asked for is not a
-                // failure, and rests where DisconnectAsync leaves the client; anything else faulted.
-                SetState(cancellationToken.IsCancellationRequested
+                // Which terminal state is decided by who ended the attempt, read from the attempt's own
+                // source — cancelled by the caller's token, by DisconnectAsync or by DisposeAsync — never
+                // from the exception. A cancellation raised inside the transport carries a token nobody
+                // here held, so neither the exception's type nor its own CancellationToken can say
+                // whether the attempt was withdrawn. A withdrawal is not a failure, and rests where
+                // DisconnectAsync leaves the client; anything else, the bound's expiry included, faulted.
+                SetState(cts.IsCancellationRequested
                     ? AriConnectionState.Disconnected
                     : AriConnectionState.Faulted);
+
+                // The attempt is over, so its source (registered on the caller's token) and its socket are
+                // released now, not left for the next attempt or for disposal. Each field is cleared only
+                // while it still holds this attempt's, since a concurrent ConnectAsync may have replaced it.
+                Interlocked.CompareExchange(ref _cts, null, cts);
+                Interlocked.CompareExchange(ref _webSocket, null, socket);
+                cts.Dispose();
+                socket.Dispose();
             }
         }
 
@@ -205,7 +236,9 @@ public sealed class AriClient : IAriClient
             return ValueTask.CompletedTask;
         });
 
-        _eventLoop = Task.Run(() => EventLoopAsync(_cts.Token), CancellationToken.None);
+        // Reached only when the dial connected, so the source is still this attempt's and undisposed.
+        var loopToken = cts.Token;
+        _eventLoop = Task.Run(() => EventLoopAsync(loopToken), CancellationToken.None);
 
         AriClientLog.Connected(_logger, _options.BaseUrl, _options.Application);
     }
@@ -465,9 +498,10 @@ public sealed class AriClient : IAriClient
     {
         SetState(AriConnectionState.Disconnecting);
 
-        if (_cts is not null) await _cts.CancelAsync();
+        await CancelQuietlyAsync(Volatile.Read(ref _cts));
 
-        if (_webSocket?.State == WebSocketState.Open)
+        var socket = Volatile.Read(ref _webSocket);
+        if (socket?.State == WebSocketState.Open)
         {
             // CloseAsync waits for Asterisk to answer the close frame and has no deadline of its own, so an
             // Asterisk that never answered held this call, and DisposeAsync behind it, for as long as the
@@ -478,7 +512,7 @@ public sealed class AriClient : IAriClient
             using var close = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, closeBound.Token);
             try
             {
-                await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", close.Token);
+                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", close.Token);
             }
             catch { /* Best effort */ }
         }
@@ -492,20 +526,39 @@ public sealed class AriClient : IAriClient
 
     public async ValueTask DisposeAsync()
     {
+        // Idempotent: a second disposal (a factory that released a client whose connect failed, then its
+        // caller's own cleanup) finds everything released already.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
         if (IsConnected) await DisconnectAsync();
 
         // DisconnectAsync only runs for a connected client. Between connections the reconnect
         // loop is still waiting on _cts: stop it here, or it dials again after disposal and the
         // ClientWebSocket it opens is never disposed.
-        if (_cts is not null) await _cts.CancelAsync();
+        await CancelQuietlyAsync(Volatile.Read(ref _cts));
         if (_eventLoop is not null)
             await _eventLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
         await _pump.DisposeAsync();
         _eventSubject.OnCompleted();
         _eventSubject.Dispose();
-        _webSocket?.Dispose();
+        Interlocked.Exchange(ref _webSocket, null)?.Dispose();
         _httpClient.Dispose();
-        _cts?.Dispose();
+        Interlocked.Exchange(ref _cts, null)?.Dispose();
+    }
+
+    // Cancels an attempt's source. A dial that ended without a connection disposes its own source, and can do so
+    // between the read of the field and this cancel: that attempt is over already, so there is nothing to cancel.
+    private static async ValueTask CancelQuietlyAsync(CancellationTokenSource? cts)
+    {
+        if (cts is null) return;
+        try
+        {
+            await cts.CancelAsync();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Released by its own attempt: already ended.
+        }
     }
 }

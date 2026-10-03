@@ -37,7 +37,19 @@ public sealed class AriClientFactory : IAriClientFactory
         CancellationToken cancellationToken = default)
     {
         var client = Create(options);
-        await client.ConnectAsync(cancellationToken);
+        try
+        {
+            await client.ConnectAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The caller never receives a client whose connect failed, so nobody else could release it:
+            // its HTTP client and whatever the attempt held are disposed here, and the connect's own
+            // error reaches the caller unchanged.
+            await client.DisposeAsync();
+            throw;
+        }
+
         return client;
     }
 }

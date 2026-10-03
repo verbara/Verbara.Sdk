@@ -4,29 +4,28 @@ using System.Net.WebSockets;
 namespace Verbara.Sdk.Ari.Internal;
 
 /// <summary>
-/// Bounds a dial of the ARI events socket made by the reconnect loop — the TCP dial and the HTTP
-/// upgrade — so an Asterisk that accepts the connection and never answers the upgrade fails the
-/// attempt instead of holding it.
+/// Bounds a dial of the ARI events socket — the TCP dial and the HTTP upgrade — so an Asterisk that
+/// accepts the connection and never answers the upgrade fails the dial instead of holding it. Both
+/// dials go through here: the caller's own in <c>AriClient.ConnectAsync</c> and each dial of the
+/// reconnect loop.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="ClientWebSocket.ConnectAsync(Uri, CancellationToken)"/> has no deadline of its own. Before
-/// this bound a stalled upgrade held the reconnect loop on its first dial for good: one attempt, state
+/// <see cref="ClientWebSocket.ConnectAsync(Uri, CancellationToken)"/> has no deadline of its own. Without
+/// this bound a stalled upgrade held the caller's <c>ConnectAsync</c> in <c>Connecting</c> for as long as
+/// its token allowed, and held the reconnect loop on its first dial for good: one attempt, state
 /// <c>Reconnecting</c>, no further dial even after the far end recovered.
 /// </para>
 /// <para>
-/// An expiry while the caller's token is still live is reported as a failed upgrade — a
+/// An expiry while the token handed in is still live is reported as a failed upgrade — a
 /// <see cref="WebSocketException"/> carrying a <see cref="TimeoutException"/>, the shape a refused dial
-/// already takes — so the reconnect loop logs it, counts it as an attempt and dials again on its backoff.
-/// A cancellation the caller asked for still arrives as <see cref="OperationCanceledException"/>, which
-/// is what stops the loop. Which of the two ended the dial is read from the caller's token, never from
-/// the exception (<c>ADR-0053</c>). The same rule as <c>Verbara.Sdk.VoiceAi.Internal.WebSocketConnectBound</c>;
-/// a copy because this package does not reference that one.
-/// </para>
-/// <para>
-/// Only the reconnect loop's dial goes through here. The caller's own dial in
-/// <c>AriClient.ConnectAsync</c> is not bounded by it: that one still waits for as long as the caller's
-/// token allows.
+/// already takes — so the caller's dial faults and the reconnect loop logs it, counts it as an attempt
+/// and dials again on its backoff. A cancellation of that token still arrives as
+/// <see cref="OperationCanceledException"/>, which is what a withdrawn dial and a stopped loop expect.
+/// Which of the two ended the dial is read from that token, never from the exception: a cancellation
+/// raised inside the transport carries a token nobody here held. The same rule as
+/// <c>Verbara.Sdk.VoiceAi.Internal.WebSocketConnectBound</c>; a copy because this package does not
+/// reference that one.
 /// </para>
 /// <para>
 /// The limit runs on a <see cref="TimeProvider"/>, the client's own, so a test drives it with a manual
@@ -48,7 +47,7 @@ internal static class AriConnectBound
     /// <param name="uri">Where to connect it.</param>
     /// <param name="limit">How long the dial and the upgrade may take together.</param>
     /// <param name="timeProvider">The clock <paramref name="limit"/> runs on.</param>
-    /// <param name="ct">The caller's token.</param>
+    /// <param name="ct">The dial's own token: the caller's, or a source linked to it.</param>
     /// <exception cref="WebSocketException">
     /// The upgrade failed, including, with a <see cref="TimeoutException"/> inside, because the far end
     /// did not complete it within <paramref name="limit"/>.
@@ -69,8 +68,8 @@ internal static class AriConnectBound
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
-            // The bound fired, not the caller: the far end took the dial and never finished the
-            // upgrade. Read from the caller's own token, never from the exception's (ADR-0053).
+            // The bound fired, not the token handed in: the far end took the dial and never finished
+            // the upgrade. Read from that token, never from the exception's own.
             var seconds = limit.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture);
             throw new WebSocketException(
                 WebSocketError.Faulted,
