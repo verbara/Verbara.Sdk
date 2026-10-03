@@ -173,8 +173,9 @@ public sealed class CallShapeCaptureReplayTests
     /// The queued arm of the rule that a channel's answer does not connect a call waiting on an application. The
     /// calls a member takes (S6, the dialer; S10, after an IVR) reach <c>Connected</c> when the queue reports the
     /// member's connection: they end completed, with their queued time kept, connected no earlier than they were
-    /// queued, announced connected once, and their trail records the agent's connection. The calls no member takes
-    /// (S7, S11) end failed with their queued time and no connected time.
+    /// queued, announced connected once, and their trail records the agent's connection; their connected time is taken
+    /// while the queue's report is handled, no earlier than the report and no later than the announcement it makes. The
+    /// calls no member takes (S7, S11) end failed with their queued time and no connected time.
     /// </summary>
     [Theory]
     [MemberData(nameof(CallShapeCaptures))]
@@ -191,7 +192,16 @@ public sealed class CallShapeCaptureReplayTests
             call.Session.ConnectedAt.Should().NotBeNull("{0} connected", call.Scenario)
                 .And.BeOnOrAfter(call.Session.QueuedAt ?? DateTimeOffset.MaxValue, "{0} connected after it was queued", call.Scenario);
             call.Trail.Should().Contain(CallSessionEventType.AgentConnected, "the queue reported {0}'s connection", call.Scenario);
-            call.DomainEvents.OfType<CallConnectedEvent>().Should().ContainSingle("{0} is announced connected once", call.Scenario);
+            var announced = call.DomainEvents.OfType<CallConnectedEvent>().Should()
+                .ContainSingle("{0} is announced connected once", call.Scenario).Subject;
+
+            // The connected time is the queue's report, the one its announcement carries: taken while that report
+            // is handled, after the report is recorded in the trail and before the announcement is made, never at
+            // an earlier frame such as the member's answer or the caller's dial outcome.
+            var reportedAt = call.Session.Events.First(e => e.Type == CallSessionEventType.AgentConnected).Timestamp;
+            call.Session.ConnectedAt.Should().NotBeNull("{0} connected", call.Scenario)
+                .And.BeOnOrAfter(reportedAt, "{0} connected when the queue reported it", call.Scenario)
+                .And.BeOnOrBefore(announced.Timestamp, "{0}'s announcement carries the same connection", call.Scenario);
         }
 
         foreach (var call in AbandonedInTheQueue.Select(replay.Call))
