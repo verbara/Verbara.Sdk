@@ -58,6 +58,8 @@ public sealed class SweepWhileALoadIsInFlightTests : IAsyncLifetime
         var described = _rig.Describe();
         _held.TrySetResult();
         await load.WaitAsync(SweepRig.Bound);
+        await SweepRig.SweepOnceAsync(sweep).WaitAsync(SweepRig.Bound);
+        var later = new { Status = _rig.StatusRequests, CallEndedEvents = _rig.Endings.Count, Call = SweepRig.Look(old) };
 
         using var scope = new AssertionScope();
         sweepError.Should().BeNull("the sweep returns, without waiting for the load, inside the bound");
@@ -66,6 +68,10 @@ public sealed class SweepWhileALoadIsInFlightTests : IAsyncLifetime
             "while a load of the same server is in flight the sweep skips: it sends no Status of its own (the one "
             + "counted is the load's), returns without waiting for the load, and changes no session. "
             + $"Measured while the load was held: {described}");
+        later.Should().BeEquivalentTo(
+            new { Status = 2, CallEndedEvents = 0, Call = before },
+            "once the load finished, the next sweep verifies as usual: it sends its own Status, which still lists "
+            + $"the call, and leaves it as it was. Measured: {_rig.Describe()}");
     }
 
     [Fact]

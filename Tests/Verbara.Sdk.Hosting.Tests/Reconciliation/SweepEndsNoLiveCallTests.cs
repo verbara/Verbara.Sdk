@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
+using Verbara.Sdk.Enums;
 using Verbara.Sdk.Sessions;
 
 namespace Verbara.Sdk.Hosting.Tests.Reconciliation;
@@ -57,5 +58,47 @@ public sealed class SweepEndsNoLiveCallTests : IAsyncLifetime
             new { Session = before, CallEndedEvents = 0, Counters = CounterDeltas.None },
             $"Asterisk still lists every channel of the {shape} call, so nothing proves it ended: its age only "
             + $"chooses when the sweep asks. Measured: {_rig.Describe()}");
+    }
+
+    [Fact]
+    public async Task Sweep_ShouldLetTheDialplanAnsweredCallRunToItsHangup_WhenAsteriskStillListsItsChannel()
+    {
+        var call = _rig.AnsweredByDialplanCall("ivr");
+        _rig.Age(call);
+        _rig.AsteriskLists("ivr");
+        var before = SweepRig.Look(call);
+        var sweep = _rig.BuildSweep();
+        await SweepRig.SweepOnceAsync(sweep);
+        var afterTheSweep = new { Session = SweepRig.Look(call), call.CompletedAt, CallEndedEvents = _rig.EndingsOf(call) };
+        var beforeTheHangup = DateTimeOffset.UtcNow;
+
+        _rig.HangUp("ivr", HangupCause.NormalClearing);
+
+        new
+        {
+            AfterTheSweep = afterTheSweep,
+            call.State,
+            call.HangupCause,
+            Cause = call.Metadata.GetValueOrDefault("cause"),
+            CompletedAtTheHangup = call.CompletedAt >= beforeTheHangup,
+            CallEndedEvents = _rig.EndingsOf(call),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                AfterTheSweep = new
+                {
+                    Session = before,
+                    CompletedAt = (DateTimeOffset?)null,
+                    CallEndedEvents = 0,
+                },
+                State = CallSessionState.Completed,
+                HangupCause = (HangupCause?)HangupCause.NormalClearing,
+                Cause = (string?)null,
+                CompletedAtTheHangup = true,
+                CallEndedEvents = 1,
+            },
+            "a call the dialplan answered and Asterisk still lists is neither ended nor marked by the sweep, so its "
+            + "duration runs to the hangup that ends it, once, with that hangup's cause. "
+            + $"Measured: {_rig.Describe()}");
     }
 }
