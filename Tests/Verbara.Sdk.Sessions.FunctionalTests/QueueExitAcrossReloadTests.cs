@@ -73,6 +73,35 @@ public sealed class QueueExitAcrossReloadTests
     }
 
     /// <summary>
+    /// The snapshot is asked for while the caller still waits; before its answer is read, Asterisk reports the caller
+    /// leaving the queue and the member answering. Applied after them, the older snapshot would open a visit nobody is
+    /// in: one more offer, and an abandon at the hang-up.
+    /// </summary>
+    [Fact]
+    public async Task StaleQueueSnapshot_ShouldOpenNoSecondVisit_WhenTheCallerWasAnsweredAfterTheSnapshotWasAskedFor()
+    {
+        await using var rig = await QueueCallRig.StartAsync();
+        const string member = "1790615500.21";
+        const string memberChannel = "PJSIP/agent1-000000a1";
+        const string bridge = "44444444-4444-4444-4444-444444444444";
+
+        rig.Deliver(CallerQueued());
+        await rig.ReconnectAsync([CallerStatus("Queue", Queue)], [QueueParams(Queue, calls: 1), CallerEntry(wait: 3)],
+            new ReloadScript(WhileQueueStatusIsAsked: () => rig.Deliver([
+                NewChannel(member, memberChannel, "0", Caller), DialBegin(Caller, CallerChannel, member, memberChannel),
+                NewState(member, "5"), NewState(member, "6"), DialEnd(Caller, CallerChannel, member, memberChannel, "ANSWER"),
+                Leave(Queue, CallerChannel, Caller),
+                AgentConnect(Queue, Caller, CallerChannel, Caller, "PJSIP/agent1", member, memberChannel, holdTime: 3),
+                BridgeCreate(bridge), BridgeEnter(bridge, member), BridgeEnter(bridge, Caller)])));
+        rig.Deliver([Hangup(Caller, 16), Hangup(member, 16)]);
+
+        using var scope = new AssertionScope();
+        rig.Queued.Should().ContainSingle("the snapshot is older than the leave and the answer: it opens no second visit");
+        rig.Tally(Queue).Should().Be(new QueueTally(Offered: 1, Answered: 1, Abandoned: 0, TimedOut: 0, Waiting: 0),
+            "one visit, answered; the hang-up after the conversation is no abandon");
+    }
+
+    /// <summary>
     /// The abandon report is lost (here: withheld) and the connection reconnected between the join and the leave, so the
     /// leave cannot be read as a key exit.
     /// </summary>

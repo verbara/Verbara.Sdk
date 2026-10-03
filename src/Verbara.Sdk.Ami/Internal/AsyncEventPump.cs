@@ -10,13 +10,14 @@ namespace Verbara.Sdk.Ami.Internal;
 /// </summary>
 public sealed class AsyncEventPump : IAsyncDisposable
 {
-    private readonly Channel<ManagerEvent> _channel;
+    private readonly Channel<BufferedEvent> _channel;
     private readonly CancellationTokenSource _cts = new();
     private Task? _consumerTask;
 
     private long _droppedEvents;
     private long _processedEvents;
     private long _droppedOnDispose;
+    private long _droppedBeforeCurrent;
 
     /// <summary>Maximum events that can be buffered before backpressure is applied.</summary>
     public const int DefaultCapacity = 20_000;
@@ -26,6 +27,14 @@ public sealed class AsyncEventPump : IAsyncDisposable
 
     /// <summary>Number of events successfully dispatched to handlers.</summary>
     public long ProcessedEvents => Volatile.Read(ref _processedEvents);
+
+    /// <summary>
+    /// How many events this pump had dropped (<see cref="DroppedEvents"/>) when the event its handler is running for, or
+    /// ran for last, was enqueued; 0 before the first. The consumer writes it before it calls the handler, so a handler
+    /// reads the count as of its own event's arrival, not as of its dispatch: an event dropped while that event waited
+    /// in a full buffer arrived after it, and is not counted here.
+    /// </summary>
+    internal long DroppedBeforeCurrentEvent => Volatile.Read(ref _droppedBeforeCurrent);
 
     /// <summary>Pending event count in the buffer.</summary>
     public int PendingCount => _channel.Reader.Count;
@@ -52,7 +61,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
 
     public AsyncEventPump(int capacity = DefaultCapacity)
     {
-        _channel = Channel.CreateBounded<ManagerEvent>(new BoundedChannelOptions(capacity)
+        _channel = Channel.CreateBounded<BufferedEvent>(new BoundedChannelOptions(capacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
@@ -76,10 +85,11 @@ public sealed class AsyncEventPump : IAsyncDisposable
             // buffer is non-empty, so without it the consumer would spin.
             while (!Stopped && await reader.WaitToReadAsync(_cts.Token).ConfigureAwait(false))
             {
-                while (!Stopped && reader.TryRead(out var evt))
+                while (!Stopped && reader.TryRead(out var buffered))
                 {
                     Interlocked.Increment(ref _processedEvents);
-                    await handler(evt).ConfigureAwait(false);
+                    Volatile.Write(ref _droppedBeforeCurrent, buffered.DroppedBefore);
+                    await handler(buffered.Event).ConfigureAwait(false);
                 }
             }
         }
@@ -93,7 +103,8 @@ public sealed class AsyncEventPump : IAsyncDisposable
     /// <summary>Enqueue an event for async dispatch. Returns false if the event was dropped.</summary>
     public bool TryEnqueue(ManagerEvent evt)
     {
-        if (!_channel.Writer.TryWrite(evt))
+        // The pump has one writer, so no drop can be counted between this read and the write: the stamp is exact.
+        if (!_channel.Writer.TryWrite(new BufferedEvent(evt, Volatile.Read(ref _droppedEvents))))
         {
             Interlocked.Increment(ref _droppedEvents);
             OnEventDropped?.Invoke(evt);
@@ -152,4 +163,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
         Interlocked.Add(ref _droppedOnDispose, undelivered);
         _cts.Dispose();
     }
+
+    /// <summary>An event in the buffer, with the pump's dropped count when it was enqueued.</summary>
+    private readonly record struct BufferedEvent(ManagerEvent Event, long DroppedBefore);
 }

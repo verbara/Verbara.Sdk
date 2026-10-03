@@ -123,6 +123,10 @@ public sealed class AmiConnection : IAmiConnection
     private AmiProtocolReader? _reader;
     private AmiProtocolWriter? _writer;
     private AsyncEventPump? _eventPump;
+
+    // The ordinal of the current AMI session's event pump: 1 for the first session, one more at each session started.
+    // Written under _endingLock by StartSession; read without it.
+    private long _sessionOrdinal;
     private Task? _readerLoop;
     private Task? _heartbeatTask;
     private CancellationTokenSource? _cts;
@@ -174,10 +178,13 @@ public sealed class AmiConnection : IAmiConnection
     private readonly AsyncLocal<DispatchFrame?> _dispatchFrame = new();
 
     /// <summary>One event's dispatch, as an ending started from it sees it.</summary>
-    private sealed class DispatchFrame
+    private sealed class DispatchFrame(AmiEventLossMark lossMark)
     {
         // Written once, by the dispatch's own finally; read by an ending on any thread.
         public volatile bool Finished;
+
+        // The session that delivered this event and what its pump had dropped when the event arrived.
+        public AmiEventLossMark LossMark { get; } = lossMark;
     }
 
     // True when the current execution context runs inside a dispatch that has not returned yet.
@@ -229,6 +236,22 @@ public sealed class AmiConnection : IAmiConnection
     /// </para>
     /// </remarks>
     internal Task FullyBooted => _fullyBooted.Task;
+
+    /// <summary>
+    /// What this connection may have lost before the event being delivered, for a reader that compares two such marks
+    /// to learn whether any event was lost between them: the AMI session that delivered the event, and how many events
+    /// that session's buffer had dropped because it was full when the event arrived. Read inside an observer's
+    /// <c>OnNext</c> (or anything it calls), it is the mark of the event being delivered; read anywhere else, it is the
+    /// current session's mark now. Two marks that differ mean a reconnect or a dropped event lies between them.
+    /// </summary>
+    /// <remarks>
+    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
+    /// any newer Ami.
+    /// </remarks>
+    internal AmiEventLossMark EventLossMark =>
+        _dispatchFrame.Value is { Finished: false } frame
+            ? frame.LossMark
+            : new AmiEventLossMark(Volatile.Read(ref _sessionOrdinal), Volatile.Read(ref _eventPump)?.DroppedEvents ?? 0);
 
     /// <summary>
     /// Raised once for each loss of an established connection that its caller did not ask for, with what ended it:
@@ -604,7 +627,8 @@ public sealed class AmiConnection : IAmiConnection
                 AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
             };
             _eventPump = pump;
-            pump.Start(DispatchEventAsync);
+            var ordinal = Interlocked.Increment(ref _sessionOrdinal);
+            pump.Start(evt => DispatchEventAsync(evt, new AmiEventLossMark(ordinal, pump.DroppedBeforeCurrentEvent)));
             _readerLoop = Task.Run(() => ReaderLoopAsync(fullyBooted, sessionToken), CancellationToken.None);
 
             if (_options.EnableHeartbeat && _options.HeartbeatInterval > TimeSpan.Zero)
@@ -1676,7 +1700,7 @@ public sealed class AmiConnection : IAmiConnection
             AmiConnectionLog.NotificationHandlerStuck(owner._logger, eventName, StuckNotificationBound.TotalSeconds);
     }
 
-    private ValueTask DispatchEventAsync(ManagerEvent evt)
+    private ValueTask DispatchEventAsync(ManagerEvent evt, AmiEventLossMark lossMark)
     {
         // The caller ended the connection from inside a dispatch, which the pump may still be finishing: the pump
         // dispatches nothing after the event in progress, and stops once that dispatch returns.
@@ -1688,7 +1712,7 @@ public sealed class AmiConnection : IAmiConnection
         // in. It is marked finished only once every handler has returned, faulted or not (AwaitHandlersAsync's
         // finally when one is still running, the finally below otherwise): a handler that awaits an ending while
         // another one is still running is inside the dispatch for as long as the dispatch waits for it.
-        var frame = new DispatchFrame();
+        var frame = new DispatchFrame(lossMark);
         _dispatchFrame.Value = frame;
         var handedOff = false;
         try

@@ -146,6 +146,42 @@ public class AsyncEventPumpTests
     }
 
     [Fact]
+    public async Task DroppedBeforeCurrentEvent_ShouldBeTheDroppedCountWhenTheEventArrived_NotWhenItIsDispatched()
+    {
+        var pump = new AsyncEventPump(capacity: 2);
+        await using var _ = pump;
+        var seen = new List<(string Type, long DroppedBefore)>();
+        var fourth = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        pump.TryEnqueue(CreateEvent("E1")).Should().BeTrue();
+        pump.TryEnqueue(CreateEvent("E2")).Should().BeTrue();
+        pump.TryEnqueue(CreateEvent("E3")).Should().BeFalse("premise: the full buffer drops the third");
+        var second = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        pump.Start(evt =>
+        {
+            lock (seen)
+            {
+                seen.Add((evt.EventType!, pump.DroppedBeforeCurrentEvent));
+            }
+
+            if (evt.EventType == "E2")
+                second.TrySetResult();
+            if (evt.EventType == "E4")
+                fourth.TrySetResult();
+            return ValueTask.CompletedTask;
+        });
+        await second.Task.WaitAsync(Bound);
+        pump.TryEnqueue(CreateEvent("E4")).Should().BeTrue();
+        await fourth.Task.WaitAsync(Bound);
+
+        lock (seen)
+        {
+            seen.Should().Equal([("E1", 0L), ("E2", 0L), ("E4", 1L)],
+                "E1 and E2 were enqueued before E3 was dropped, though dispatched after it; E4 after");
+        }
+    }
+
+    [Fact]
     public async Task DroppedEvents_ShouldIncrement_WhenCapacityExceeded()
     {
         await using var pump = new AsyncEventPump(2);
