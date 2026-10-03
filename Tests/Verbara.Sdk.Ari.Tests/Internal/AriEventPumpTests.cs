@@ -42,8 +42,8 @@ public class AriEventPumpTests
             return ValueTask.CompletedTask;
         });
 
-        // Enqueue more than capacity — DropOldest means all TryWrite succeed
-        // but oldest items are discarded silently by the channel
+        // Enqueue more than capacity — DropOldest means all TryWrite succeed;
+        // the oldest items are discarded by the channel, each counted in DroppedEvents
         for (var i = 0; i < 5; i++)
             pump.TryEnqueue(new AriEvent { Type = $"Event-{i}" });
 

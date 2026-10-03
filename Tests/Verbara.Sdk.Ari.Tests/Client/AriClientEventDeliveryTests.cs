@@ -197,6 +197,38 @@ public sealed class AriClientEventDeliveryTests
     }
 
     [Fact]
+    public async Task DisconnectAsync_ShouldNotWaitForTheCallingDispatch_WhenAnObserverCallsItFromItsOnNext()
+    {
+        // An observer that ends the client from inside its own OnNext and blocks on it. The disconnect does not wait
+        // for that dispatch, which is waiting for it; the buffer behind it is released, and reported, once the
+        // dispatch has returned.
+        using var dropped = new DroppedCapture();
+        await using var peer = new EventPeer(Buffered + 1);
+        var logger = new RecordingLogger();
+        var sut = new AriClient(Options(peer.Port), logger);
+        using var observer = new DisconnectingObserver(sut);
+        using var subscription = sut.Subscribe(observer);
+        try
+        {
+            await sut.ConnectAsync();
+            var returned = await observer.Disconnected.WaitAsync(WaitLimit);
+            var reported = await WaitForAsync(() => dropped.Tagged("caller_ending").Count == 1);
+
+            using (new AssertionScope())
+            {
+                returned.Should().BeTrue("the disconnect returned while the dispatch that called it was still running");
+                sut.State.Should().Be(AriConnectionState.Disconnected);
+                reported.Should().BeTrue("the buffer behind the calling dispatch is reported once that dispatch returned");
+                observer.Total.Should().Be(1, "no buffered event is delivered after the caller's disconnect");
+            }
+        }
+        finally
+        {
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task EventLoop_ShouldDeliverEveryBufferedEventInOrder_WhenTheConnectionIsLost()
     {
         // Control: a loss nobody asked for keeps delivering the buffer, in the order received.
@@ -434,6 +466,41 @@ public sealed class AriClientEventDeliveryTests
             _gate.Set();
             _gate.Dispose();
         }
+    }
+
+    /// <summary>
+    /// An observer whose first <c>OnNext</c> waits until <see cref="Buffered"/> events are pending behind it, then
+    /// disconnects the client and blocks on the disconnect, with its own limit. <see cref="Disconnected"/> carries
+    /// whether the disconnect returned inside that limit.
+    /// </summary>
+    private sealed class DisconnectingObserver(AriClient client) : IObserver<AriEvent>, IDisposable
+    {
+        private readonly TaskCompletionSource<bool> _disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _total;
+
+        public Task<bool> Disconnected => _disconnected.Task;
+
+        public int Total => Volatile.Read(ref _total);
+
+        public void OnNext(AriEvent value)
+        {
+            if (Interlocked.Increment(ref _total) != 1)
+                return;
+
+            var pump = (AriEventPump)PumpField.GetValue(client)!;
+            SpinWait.SpinUntil(() => pump.PendingCount == Buffered, WaitLimit); // fence-allow: LOOP-DRIVER — the pump exposes no signal for its buffer's state; bounded by WaitLimit
+            _disconnected.TrySetResult(client.DisconnectAsync().AsTask().Wait(WaitLimit));
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void OnCompleted()
+        {
+        }
+
+        public void Dispose() => _disconnected.TrySetResult(false);
     }
 
     /// <summary>Keeps every measurement of <c>ari.events.dropped</c>, by its <c>reason</c> tag.</summary>

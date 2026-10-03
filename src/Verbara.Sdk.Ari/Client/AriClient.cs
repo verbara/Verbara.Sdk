@@ -51,6 +51,11 @@ internal static partial class AriClientLog
     // nobody sees it. Tests match it by its event name.
     [LoggerMessage(Level = LogLevel.Error, Message = "[ARI] Reconnect backoff failed: the reconnect loop ends")]
     public static partial void ReconnectBackoffFailed(ILogger logger, Exception exception);
+
+    // The caller's DisconnectAsync or DisposeAsync left buffered events undelivered. Not "[ARI] Event dropped": a full
+    // buffer, whose action (a larger buffer or a faster observer) is the wrong one for a caller's close.
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[ARI] Discarded on caller ending: count={Count}")]
+    public static partial void EventsDiscardedOnCallerEnding(ILogger logger, long count);
 }
 
 /// <summary>
@@ -65,7 +70,26 @@ public sealed class AriClient : IAriClient
     private CancellationTokenSource? _cts;
     private Task? _eventLoop;
     private readonly Subject<AriEvent> _eventSubject = new();
-    private readonly AriEventPump _pump = new();
+    // The buffer of the current connection, between the events socket and the observers. Created by each
+    // ConnectAsync that connects, kept by the reconnect loop across a loss, and released by the caller's
+    // DisconnectAsync or DisposeAsync, which deliver none of what it still holds. Null between connections.
+    private AriEventPump? _pump;
+
+    // The dispatch the current execution context runs in, if any: set for every event the pump hands the observers,
+    // and marked finished once they have returned. A caller's ending started from inside an observer's OnNext reads
+    // it, and does not wait for the dispatch that is waiting for it.
+    private readonly AsyncLocal<DispatchFrame?> _dispatchFrame = new();
+
+    private sealed class DispatchFrame
+    {
+        // Written once, by the dispatch's own finally; read by an ending on any thread.
+        public volatile bool Finished;
+    }
+
+    private bool InDispatch => _dispatchFrame.Value is { Finished: false };
+
+    private static readonly KeyValuePair<string, object?> BufferFullReason = new("reason", "buffer_full");
+    private static readonly KeyValuePair<string, object?> CallerEndingReason = new("reason", "caller_ending");
     private int _state = (int)AriConnectionState.Initial;
     private int _dialsInFlight;
     private int _disposed;
@@ -226,24 +250,43 @@ public sealed class AriClient : IAriClient
             }
         }
 
-        _pump.OnEventDropped = evt => AriMetrics.EventsDropped.Add(1);
-        _pump.Start(evt =>
+        // This connection's own buffer, with one consumer. One a previous connection left (lost, with nothing
+        // reconnecting it, and never ended by its caller) is drained first: its events are delivered, in order,
+        // before any of this connection's.
+        if (Interlocked.Exchange(ref _pump, null) is { } previousPump)
+            await previousPump.DrainAndDisposeAsync();
+
+        var pump = new AriEventPump();
+        pump.OnEventDropped = _ => AriMetrics.EventsDropped.Add(1, BufferFullReason);
+        pump.Start(DispatchAsync);
+        Volatile.Write(ref _pump, pump);
+
+        // Reached only when the dial connected, so the source is still this attempt's and undisposed.
+        var loopToken = cts.Token;
+        _eventLoop = Task.Run(() => EventLoopAsync(pump, loopToken), CancellationToken.None);
+
+        AriClientLog.Connected(_logger, _options.BaseUrl, _options.Application);
+    }
+
+    private ValueTask DispatchAsync(AriEvent evt)
+    {
+        var frame = new DispatchFrame();
+        _dispatchFrame.Value = frame;
+        try
         {
             var sw = Stopwatch.StartNew();
             _eventSubject.OnNext(evt);
             AriMetrics.EventsDispatched.Add(1);
             AriMetrics.EventDispatchMs.Record(sw.Elapsed.TotalMilliseconds);
             return ValueTask.CompletedTask;
-        });
-
-        // Reached only when the dial connected, so the source is still this attempt's and undisposed.
-        var loopToken = cts.Token;
-        _eventLoop = Task.Run(() => EventLoopAsync(loopToken), CancellationToken.None);
-
-        AriClientLog.Connected(_logger, _options.BaseUrl, _options.Application);
+        }
+        finally
+        {
+            frame.Finished = true;
+        }
     }
 
-    private async Task EventLoopAsync(CancellationToken ct)
+    private async Task EventLoopAsync(AriEventPump pump, CancellationToken ct)
     {
         var bufferWriter = new ArrayBufferWriter<byte>(8192);
 
@@ -274,7 +317,7 @@ public sealed class AriClient : IAriClient
                     {
                         AriMetrics.EventsReceived.Add(1);
                         AriClientLog.EventReceived(_logger, evt.Type);
-                        _pump.TryEnqueue(evt);
+                        pump.TryEnqueue(evt);
                     }
                 }
             }
@@ -297,11 +340,11 @@ public sealed class AriClient : IAriClient
         // Auto-reconnect with exponential backoff
         if (_options.AutoReconnect && !ct.IsCancellationRequested)
         {
-            await ReconnectLoopAsync(ct);
+            await ReconnectLoopAsync(pump, ct);
         }
     }
 
-    private async Task ReconnectLoopAsync(CancellationToken ct)
+    private async Task ReconnectLoopAsync(AriEventPump pump, CancellationToken ct)
     {
         SetState(AriConnectionState.Reconnecting);
 
@@ -375,7 +418,7 @@ public sealed class AriClient : IAriClient
                 AriClientLog.ReconnectedSuccess(_logger, attempt);
 
                 // Restart event loop (recursive but tail-position — runs the receive loop again)
-                await EventLoopAsync(ct);
+                await EventLoopAsync(pump, ct);
                 return;
             }
             catch (OperationCanceledException)
@@ -500,6 +543,12 @@ public sealed class AriClient : IAriClient
 
         await CancelQuietlyAsync(Volatile.Read(ref _cts));
 
+        // The connection's buffer is told to stop at once: the dispatch in progress completes and nothing buffered
+        // is delivered after it. It is released, and what it held counted, once the events loop has ended.
+        var pump = Interlocked.Exchange(ref _pump, null);
+        if (pump is not null)
+            await pump.StopAsync();
+
         var socket = Volatile.Read(ref _webSocket);
         if (socket?.State == WebSocketState.Open)
         {
@@ -520,6 +569,9 @@ public sealed class AriClient : IAriClient
         if (_eventLoop is not null)
             await _eventLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
+        if (pump is not null)
+            await ReleaseOnCallerEndingAsync(pump);
+
         SetState(AriConnectionState.Disconnected);
         AriClientLog.Disconnected(_logger);
     }
@@ -539,12 +591,48 @@ public sealed class AriClient : IAriClient
         if (_eventLoop is not null)
             await _eventLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
-        await _pump.DisposeAsync();
+        // A buffer DisconnectAsync did not release: the client was reconnecting, or lost with nothing reconnecting it.
+        if (Interlocked.Exchange(ref _pump, null) is { } pump)
+        {
+            await pump.StopAsync();
+            await ReleaseOnCallerEndingAsync(pump);
+        }
+
         _eventSubject.OnCompleted();
         _eventSubject.Dispose();
         Interlocked.Exchange(ref _webSocket, null)?.Dispose();
         _httpClient.Dispose();
         Interlocked.Exchange(ref _cts, null)?.Dispose();
+    }
+
+    /// <summary>
+    /// Releases a connection's buffer at the caller's ending, after it was told to stop: waits for the dispatch in
+    /// progress, if any, and counts what it left undelivered once, on <c>ari.events.dropped</c> with
+    /// <c>reason=caller_ending</c>, with one Warning carrying the count. Called from inside an observer's dispatch, it
+    /// does not wait for that dispatch, which is waiting for this call: the release finishes, and is reported, once
+    /// the dispatch has returned.
+    /// </summary>
+    private async ValueTask ReleaseOnCallerEndingAsync(AriEventPump pump)
+    {
+        if (InDispatch)
+        {
+            _ = ReleaseAndReportAsync(pump);
+            return;
+        }
+
+        await ReleaseAndReportAsync(pump);
+    }
+
+    private async Task ReleaseAndReportAsync(AriEventPump pump)
+    {
+        await pump.DisposeAsync();
+
+        var discarded = pump.DroppedOnDispose;
+        if (discarded > 0)
+        {
+            AriMetrics.EventsDropped.Add(discarded, CallerEndingReason);
+            AriClientLog.EventsDiscardedOnCallerEnding(_logger, discarded);
+        }
     }
 
     // Cancels an attempt's source. A dial that ended without a connection disposes its own source, and can do so
