@@ -699,10 +699,16 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         }
     }
 
+    /// <summary>
+    /// A caller joined <paramref name="queueName"/>, live or as a queue snapshot reports it. The call is found by the
+    /// caller channel's Uniqueid, which the join and the snapshot entry carry and a channel rename does not change. An
+    /// entry added through Live's public join, which carries none, is resolved through Live's channel table by the
+    /// channel's current name.
+    /// </summary>
     private void OnQueueCallerJoined(string queueName, AsteriskQueueEntry entry, VerbaraServer server)
     {
-        var session = FindByChannelName(entry.Channel);
-        if (session is null) return;
+        var uniqueId = entry.UniqueId ?? server.Channels.GetByName(entry.Channel)?.UniqueId;
+        if (uniqueId is null || !_byChannelId.TryGetValue(uniqueId, out var session)) return;
 
         DateTimeOffset visitStartedAt;
         lock (session.SyncRoot)
@@ -729,8 +735,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             session.QueueVisitLossEpoch = entry.LossEpoch ?? server.ReadEventLossEpoch();
             session.QueueVisitJoinOrdinal = entry.JoinOrdinal;
             session.QueueVisitCallerChannel = entry.Channel;
-            session.QueueVisitCallerUniqueId = entry.UniqueId
-                ?? session.Participants.FirstOrDefault(p => p.Channel == entry.Channel)?.UniqueId;
+            session.QueueVisitCallerUniqueId = uniqueId;
             session.TryTransition(CallSessionState.Queued);
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.QueueJoined, entry.Channel, null, queueName));
@@ -890,13 +895,6 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             }
         }
     }
-
-    /// <summary>
-    /// The session one of whose participants is on the channel named <paramref name="channel"/>, which is how
-    /// Live's queue events name the caller; <c>null</c> when this manager holds none.
-    /// </summary>
-    private CallSession? FindByChannelName(string channel) =>
-        _byChannelId.Values.FirstOrDefault(s => s.Participants.Any(p => p.Channel == channel));
 
     /// <summary>
     /// How far after the start of the visit this manager holds open a queue snapshot may place the caller's
