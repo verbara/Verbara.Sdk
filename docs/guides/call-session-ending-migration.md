@@ -134,5 +134,87 @@ class (`read = all`, or a list that includes `agent`); see
 
 ## The reconciliation sweep and long answered calls
 
-The sweep's treatment of long answered calls changes in this release, under its own entry in the changelog. This
-section is completed by that change.
+`AddVerbaraSessions` registers a sweep that runs every `SessionOptions.ReconciliationInterval` (30 s by default).
+Before 2.7.0 it ended calls by their age alone: a call still dialing after `DialingTimeout` (60 s) or ringing after
+`RingingTimeout` (120 s) became `TimedOut`, and a call still in `Created` after `DialingTimeout` became `Failed` with
+`Metadata["cause"] == "orphaned"`, whether or not Asterisk still had it. A call answered with no dial (an IVR, a
+voicemail, a Voice AI bot) is in `Created` for its whole life, so every such call that lasted longer than 60 to 90 s
+was marked ended while it was still up. The sweep's ending also reported nothing at the time: no `CallEndedEvent` until the
+call's legs left, and none ever if they never did.
+
+Since 2.7.0 the clock only decides **when to ask**. When a held call is older than `DialingTimeout` and the channel
+table holds one of its channels, the sweep asks Asterisk once for its channel snapshot (`Status`) and reconciles the
+channels against it (`VerbaraServer.ReconcileChannelsAsync`, new in `Verbara.Sdk.Live`). A call whose channels Asterisk
+still reports is left exactly as it is, whatever its age or state. A call whose channels it no longer reports — a call
+whose hangup the SDK never received — ends the way a reconnect's reload ends it.
+
+### What changes
+
+| | Before | Now |
+|---|---|---|
+| A call Asterisk still has, older than the timeouts (a long IVR, a long ring, a long dial) | ended by the sweep: `TimedOut`, or `Failed` with `cause=orphaned`; its `Duration` cut at the sweep | untouched; it ends at its hangup, with that hangup's state, cause, talk time and duration |
+| A call that rang past the timeouts and was then answered | `TimedOut`, no talk time, no `CallConnectedEvent` | `Completed` with its talk time, as any answered call |
+| A call whose hangup was lost (Asterisk dropped it, the SDK never saw it go) | held for the life of the process, still active in a durable store; a connected call was never ended | ended at the first sweep after Asterisk dropped it: `Completed` if it was answered, `Failed` otherwise, no `HangupCause`, `Metadata["cause"] == "reload"`, one `CallEndedEvent`, saved to the store and released after `CompletedRetention` |
+| A queued call whose hangup was lost | held | ended as above (`Failed`), and its queue visit counted abandoned once |
+| `sessions.timed_out`, `sessions.orphaned` | moved by the sweep (`sessions.timed_out` twice per call) | never move; a call the sweep ends is counted once, in `sessions.completed` or `sessions.failed` |
+
+**How late.** A call whose hangup was lost ends at the first sweep after Asterisk dropped it once it is older than
+`DialingTimeout`: at worst `DialingTimeout` plus one interval after the call was opened, 90 s with the defaults.
+
+**Kept, no longer produced.** `CallSessionState.TimedOut`, `CallSessionEventType.TimedOut`,
+`SessionMetrics.SessionsTimedOut` and `SessionMetrics.SessionsOrphaned` stay, so that code, dashboards and sessions
+stored by earlier versions keep binding; the SDK no longer produces them, and the stores still read `TimedOut` as an
+ended state. `SessionOptions.RingingTimeout` is not read any more and is kept so that configuration keeps binding. A
+session read back from a store may still carry `cause=orphaned`; the SDK no longer writes it.
+
+### What you have to do
+
+1. **The AMI user needs `Status`.** Put `system`, `call` or `reporting` in its `write` line in `manager.conf`
+   (`write = all` includes them). Without it Asterisk refuses the snapshot, the sweep ends nothing, and the server logs
+   `[LIVE] Status refused: …` at Warning once per AMI session (Debug after that).
+2. **Dashboards and alerts on `sessions.timed_out` or `sessions.orphaned`.** They stay at zero. A call whose hangup
+   was lost now shows up in `sessions.completed` or `sessions.failed`, with `Metadata["cause"] == "reload"` and no
+   `HangupCause`; a consumer cannot tell it from a call a reconnect's reload ended, by design.
+3. **Code that reads `TimedOut` or `cause=orphaned` as "the call went too long".** Long calls are no longer cut; read
+   `Duration`, `RingingAt` and `ConnectedAt` instead.
+
+### When the sweep does not verify
+
+- **The connection is not established**, or it **does not report how an action ended**
+  (`IAmiConnection.ReportsEventActionOutcome` is false): without that the sweep could not tell a refused snapshot from an
+  empty one, which would end every call. `AmiConnection` reports it; a wrapper of your own must forward that member and
+  the outcome overload, or the sweep skips.
+- **A load of the same server is running** (the start's, a reconnect's, or `RequestInitialStateAsync`): the sweep skips
+  that tick without waiting.
+- **A held call none of whose channels the channel table holds** cannot be proved gone by a snapshot: the sweep leaves
+  it alone, does not ask Asterisk for it alone, and counts it in the `sessions.unverifiable` tag of its span.
+
+Each sweep is a `session reconciliation` span of the `Verbara.Sdk.Sessions` source, tagged `sessions.candidates`,
+`sessions.unverifiable`, `sessions.ended` and `verification` (`run`, or `skipped:<reason>`), and one Debug line.
+
+### Switching it off, or running your own
+
+`ReconciliationInterval = Timeout.InfiniteTimeSpan` switches the sweep off: no timer, no snapshot. Calls whose hangup
+was lost then stay held until a reconnect's reload. Any other interval of zero or less fails the host's start with
+`ArgumentOutOfRangeException`, as before.
+
+A host that wants another bound, or that registers sessions with `AddVerbaraSessionsMultiServer` (which registers no
+sweep), can call the same reconciliation itself:
+
+```csharp
+// Every server of the pool, on a schedule of your own.
+foreach (var (_, server) in pool.Servers)
+    await server.ReconcileChannelsAsync(cancellationToken);
+```
+
+It requests only the channel snapshot, reconciles nothing when the snapshot did not complete (it throws
+`OperationCanceledException` or `AmiNotConnectedException`), and reconciles nothing, without throwing, when Asterisk
+refuses `Status`.
+
+**Measured** on 2026-10-03 against Asterisk 20.20.1, 22.10.1 and 23.4.1, with a host wired as a consumer wires it and
+`DialingTimeout` 3 s, a 1 s interval: ten calls per shape and version — a call that rings 8 s and talks 5 s, one that
+only rings, an IVR that answers with no dial, a dial that is never answered. With every event delivered, the sweep
+ended none of the 120 calls; each ended at its hangup with its own state and cause. With an AMI user that filters out
+`Hangup`, it ended all 120, the talked and the IVR calls `Completed` with a talk time and the others `Failed`, all with
+`cause=reload`, and none was held past the retention. With the default timeouts, on 22.10.1, an IVR that lasts 100 s
+and a call that rings 160 s and talks 5 s ran to their hangups, 5 of 5 each.

@@ -10,7 +10,7 @@ The Session Engine tracks live call sessions (`CallSession`) from AMI/ARI events
 | **`Verbara.Sdk.Sessions.Redis`** | `RedisSessionStore` | ✅ | ✅ (with `completedRetention`) | Network round trip: one `GET` for `GetAsync`, two for `GetByLinkedIdAsync` | HA deployments, low-latency SLAs |
 | **`Verbara.Sdk.Sessions.Postgres`** | `PostgresSessionStore` | ✅ | ✅ (durable) | Network I/O: one `SELECT` per read; by default each single save also waits for a WAL flush | Teams already running Postgres, regulatory/audit workloads |
 
-All three implement the public **`ISessionStore`** interface and derive from **`SessionStoreBase`** — the `SessionReconciliationService` and `CallSessionManager` are agnostic to the backend choice. Switching is a one-line DI change; no code outside the registration needs to move.
+All three implement the public **`ISessionStore`** interface and derive from **`SessionStoreBase`** — the session manager (`CallSessionManager`) and the reconciliation sweep are agnostic to the backend choice. Switching is a one-line DI change; no code outside the registration needs to move.
 
 ---
 
