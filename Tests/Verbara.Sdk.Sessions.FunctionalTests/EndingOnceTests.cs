@@ -18,10 +18,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// <see cref="CallEndedEvent"/>, a second queue entry, and — because the agent statistics count on
 /// that event — a second handled call for the agent.</para>
 ///
-/// <para>The guards pass today and must keep passing: a normal hangup, a duplicate <c>Hangup</c>, a
-/// reload's ending followed by late hangups, and a call the timeout sweep made terminal while its
-/// legs were still up — which has had no ending delivered and must get exactly one when they leave,
-/// so the once-only rule cannot be keyed on the call's state.</para>
+/// <para>The guards pass today and must keep passing: a normal hangup, a duplicate <c>Hangup</c>, and a
+/// reload's ending followed by late hangups.</para>
 /// </summary>
 public sealed class EndingOnceTests
 {
@@ -182,28 +180,5 @@ public sealed class EndingOnceTests
             .Should().BeEquivalentTo(
                 new { Endings = 1, QueueEntries = 1 },
                 $"the reload delivered the ending; late hangups do not add one. Measured: {rig.Describe()}");
-    }
-
-    [Fact]
-    public async Task CallEnded_ShouldBeRaisedAndQueuedOnce_WhenTheTimeoutSweepEndedTheCallWhileItsLegsWereUp()
-    {
-        await using var rig = new ResidencyRig();
-        rig.Server.Channels.OnNewChannel("c-i", "PJSIP/trunk-c-i", ChannelState.Ring,
-            context: "from-trunk", linkedId: ResidencyRig.LinkedIdOf("i"));
-        rig.Server.Channels.OnNewChannel("a-i", "PJSIP/100-a-i", ChannelState.Ring,
-            linkedId: ResidencyRig.LinkedIdOf("i"));
-        rig.Server.Channels.OnDialBegin("c-i", "a-i", "PJSIP/100-a-i", null);
-        var call = rig.Manager.GetByLinkedId(ResidencyRig.LinkedIdOf("i"))!;
-
-        SessionReconciler.TryMarkTimedOut(call).Should().BeTrue(
-            "premise: the sweep moves a call still dialling to TimedOut");
-        rig.HangUp("i");
-
-        new { Endings = rig.EndingsFor(call.SessionId), QueueEntries = rig.QueueEntriesFor(call.SessionId) }
-            .Should().BeEquivalentTo(
-                new { Endings = 1, QueueEntries = 1 },
-                "the sweep made the call terminal without delivering its ending, so it is delivered "
-                + "once when the legs leave — the once-only rule is about delivery, not about the "
-                + $"state the call was already in. Measured: {rig.Describe()}");
     }
 }

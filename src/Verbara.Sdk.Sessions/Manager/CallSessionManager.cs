@@ -166,8 +166,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// the values of the <c>sessions.retained</c> and <c>sessions.active</c> gauges.
     /// <para>
     /// The ended count is of the sessions held, not of the release queue's entries. The queue holds
-    /// the ended calls whose release is pending, and some ended calls are held with no entry: one the
-    /// timeout sweep ended while its legs were still up, and whose legs are never seen to leave; one
+    /// the ended calls whose release is pending, and some ended calls are held with no entry: one
     /// whose entry carried no completion time and was dropped with the call kept; one registered
     /// already ended. A count of the queue would report those released while the process keeps them
     /// — a bound that looks as if it works while the memory stays held, which is what these gauges
@@ -333,8 +332,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         // is a call the SDK never saw start. The state on it is Asterisk's own account of the call
         // and the only one that will ever arrive: no NewState announcing it is coming, because it
         // already happened. Opening such a call in Created would report a live conversation as one
-        // that has not started, and Created past a dialing timeout is exactly what
-        // SessionReconciler's orphan branch fails.
+        // that has not started.
         var reportedState = channel.AdmittedFromSnapshot ? ReportedSessionState(channel.State) : null;
         if (channel.AdmittedFromSnapshot)
         {
@@ -445,9 +443,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     /// <summary>
     /// The metadata key under which the SDK records how a session ended when it did <em>not</em>
-    /// observe the ending. Already carries <c>"orphaned"</c> from
-    /// <see cref="SessionReconciler.TryMarkOrphaned"/>; <see cref="EndingProvenanceReload"/> joins
-    /// it rather than opening a second vocabulary for the same question.
+    /// observe the ending. The SDK writes one value under it, <see cref="EndingProvenanceReload"/>. A
+    /// session that a version before 2.7.0 ended from its reconciliation sweep, read back from a store,
+    /// may carry <c>"orphaned"</c> under the same key; the SDK no longer writes that value.
     /// </summary>
     private const string EndingProvenanceKey = "cause";
 
@@ -1057,9 +1055,6 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 break;
             case CallSessionState.Failed:
                 SessionMetrics.SessionsFailed.Add(1);
-                break;
-            case CallSessionState.TimedOut:
-                SessionMetrics.SessionsTimedOut.Add(1);
                 break;
         }
 

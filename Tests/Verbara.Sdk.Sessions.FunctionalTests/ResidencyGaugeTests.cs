@@ -15,8 +15,7 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// <para>A bound that cannot be observed cannot be told apart from a bound that has stopped working —
 /// the release queue wedged for the life of a process and nothing reported it. So the gauges count
 /// what the manager holds, not the queue that drives its release: an ended call the queue does not
-/// hold (the timeout sweep's route, when its legs are never seen to leave) is still memory the process
-/// keeps, and counting the queue would report it gone.</para>
+/// hold is still memory the process keeps, and counting the queue would report it gone.</para>
 ///
 /// <para>Every manager publishes its own gauges under the <c>Verbara.Sdk.Sessions</c> meter name, and
 /// this assembly runs classes in parallel, so the reader enables only the instruments of its own
@@ -79,36 +78,6 @@ public sealed class ResidencyGaugeTests
     }
 
     [Fact]
-    public async Task RetainedGauge_ShouldCountAnEndedCallWithNoReleaseQueueEntry_WhenTheTimeoutSweepEndedItAndItsLegsNeverLeft()
-    {
-        await using var rig = new ResidencyRig();
-        var swept = OpenDialingCall(rig, "t");
-        SessionReconciler.TryMarkTimedOut(swept).Should().BeTrue("premise: the sweep times out a dialing call");
-        rig.QueueEntriesFor(swept.SessionId).Should().Be(0,
-            "premise: the sweep ends a call without delivering its ending, so it is never queued for release");
-        using var gauges = new GaugeReader(rig.Manager.ResidencyMeter);
-        var whileSwept = gauges.Read();
-
-        // Past retention, and a new call arrives: the release runs and finds nothing of it to release.
-        rig.MovePastRetention();
-        rig.LegJoins("c-n", "n");
-        rig.Manager.GetById(swept.SessionId).Should().BeSameAs(swept,
-            "premise: a call the release queue does not hold is not released; it stays held");
-
-        new { Swept = whileSwept, AfterRelease = gauges.Read(), PublicReadsAfter = PublicReads(rig) }.Should().BeEquivalentTo(
-            new
-            {
-                Swept = new Reading(Active: 0, Retained: 1),
-                AfterRelease = new Reading(Active: 1, Retained: 1),
-                PublicReadsAfter = new Reading(1, 1),
-            },
-            "the gauge counts the ended calls the manager holds, not the entries of its release queue: a call "
-            + "the timeout sweep ended while its legs were still up has no entry, and the manager keeps it past "
-            + "retention, so a count of the queue would report it gone while its memory stays held. "
-            + $"Measured: {rig.Describe()}");
-    }
-
-    [Fact]
     public async Task Gauges_ShouldBePublishedUnderTheSessionsMeter_WhenAManagerIsCreated()
     {
         await using var rig = new ResidencyRig();
@@ -145,20 +114,6 @@ public sealed class ResidencyGaugeTests
     {
         for (var i = 0; i < Live; i++)
             rig.OpenAnsweredCall($"live{i}");
-    }
-
-    /// <summary>One leg of <c>L-{tag}</c> that has begun dialling and is not answered: state Dialing.</summary>
-    private static CallSession OpenDialingCall(ResidencyRig rig, string tag)
-    {
-        var linkedId = ResidencyRig.LinkedIdOf(tag);
-        rig.Server.Channels.OnNewChannel($"c-{tag}", $"PJSIP/trunk-c-{tag}", ChannelState.Ring,
-            callerIdNum: "5551234", context: "from-trunk", linkedId: linkedId);
-        rig.Server.Channels.OnDialBegin($"c-{tag}", $"a-{tag}", $"PJSIP/100-a-{tag}", null);
-
-        var session = rig.Manager.GetByLinkedId(linkedId)
-            ?? throw new InvalidOperationException($"no session for '{linkedId}'. Measured: {rig.Describe()}");
-        session.State.Should().Be(CallSessionState.Dialing, "premise: the call is dialling");
-        return session;
     }
 
     /// <summary>The same two sets read through the manager's public members.</summary>

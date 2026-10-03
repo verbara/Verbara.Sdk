@@ -15,7 +15,8 @@ namespace Verbara.Sdk.Hosting.Tests.Reconciliation;
 /// completed snapshot that no longer lists the caller's channel, the route the sweep ends a call by — closes its queue
 /// visit exactly once: <see cref="QueueSession.CallsWaiting"/> back to 0, one abandon for a visit still open, none more
 /// for a visit already left with its abandon counted at app_queue's report, none for a key exit left with no event lost,
-/// none more when the leave arrives after the ending, and no visit entry left in the tracker.
+/// none more when the leave arrives after the ending, and no visit entry left in the tracker. The open, abandoned and
+/// key-exit visits are pinned again with the reconciliation sweep ending the call, which ends it by that member.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -130,7 +131,73 @@ public sealed class VerificationClosesAQueueVisitOnceTests : IAsyncLifetime
             + $"and count nothing. Measured: {_rig.Describe()}");
     }
 
+    // --- the same visits, ended by the sweep ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task Sweep_ShouldCountAnOpenVisitAbandonedOnceAndKeepNoTrackerEntry_WhenItEndsTheQueuedCall()
+    {
+        using var tracker = NewTracker();
+        var call = _rig.QueuedCall("swept-open", Queue);
+        _rig.Age(call);
+        _rig.AsteriskLists();
+
+        await SweepTwiceAsync();
+
+        ClosedOf(tracker, call).Should().BeEquivalentTo(
+            new Closed(CallEndedEvents: 1, Offered: 1, Waiting: 0, Abandoned: 1, TrackerEntries: 0),
+            "the sweep ends the call through the verification, so its ending reaches the tracker once: one abandon, "
+            + $"the wait closed, and the visit's entry removed rather than kept for the life of the process. Measured: {_rig.Describe()}");
+    }
+
+    [Fact]
+    public async Task Sweep_ShouldCountNoSecondAbandon_WhenTheVisitLeftWithItsAbandonReported()
+    {
+        using var tracker = NewTracker();
+        var call = _rig.QueuedCall("swept-abandoned", Queue);
+        ReportAbandon("swept-abandoned");
+        ReportLeave("swept-abandoned");
+        var abandonedAtTheLeave = tracker.GetByQueueName(Queue)?.CallsAbandoned;
+        _rig.Age(call);
+        _rig.AsteriskLists();
+
+        await SweepTwiceAsync();
+
+        new { AbandonedAtTheLeave = abandonedAtTheLeave, Closed = ClosedOf(tracker, call) }.Should().BeEquivalentTo(
+            new
+            {
+                AbandonedAtTheLeave = (int?)1,
+                Closed = new Closed(CallEndedEvents: 1, Offered: 1, Waiting: 0, Abandoned: 1, TrackerEntries: 0),
+            },
+            "app_queue's abandon report counted the visit and its leave closed the wait; the sweep's ending counts "
+            + $"nothing more and removes the entry. Measured: {_rig.Describe()}");
+    }
+
+    [Fact]
+    public async Task Sweep_ShouldCountNoAbandon_WhenTheVisitWasAKeyExitWithNoEventLost()
+    {
+        using var tracker = NewTracker();
+        var call = _rig.QueuedCall("swept-keyexit", Queue);
+        ReportLeave("swept-keyexit");
+        _rig.Age(call);
+        _rig.AsteriskLists();
+
+        await SweepTwiceAsync();
+
+        ClosedOf(tracker, call).Should().BeEquivalentTo(
+            new Closed(CallEndedEvents: 1, Offered: 1, Waiting: 0, Abandoned: 0, TrackerEntries: 0),
+            "a key exit under an unchanged event-loss epoch is counted neither answered nor abandoned, and the "
+            + $"sweep's ending does not turn it into one. Measured: {_rig.Describe()}");
+    }
+
     private QueueSessionTracker NewTracker() => new(_rig.Manager, Options.Create(_rig.Options));
+
+    /// <summary>Two sweeps: the first ends the call, the second finds nothing more to end.</summary>
+    private async Task SweepTwiceAsync()
+    {
+        var sweep = _rig.BuildSweep();
+        await SweepRig.SweepOnceAsync(sweep).WaitAsync(SweepRig.Bound);
+        await SweepRig.SweepOnceAsync(sweep).WaitAsync(SweepRig.Bound);
+    }
 
     private Task VerifyAsync() => _rig.Server.ReconcileChannelsAsync().AsTask().WaitAsync(SweepRig.Bound);
 

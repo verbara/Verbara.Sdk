@@ -176,8 +176,8 @@ public sealed class ReloadedSessionStateTests : IAsyncLifetime
             "Asterisk reported this channel up, so the call it opened is a conversation in "
             + $"progress. Measured: {Describe()}");
         session.State.Should().NotBe(CallSessionState.Created,
-            "a live conversation reported as newly created is what SessionReconciler's orphan "
-            + $"branch fails past a dialing timeout. Measured: {Describe()}");
+            "a live conversation reported as newly created would report a call in progress as one "
+            + $"that has not started. Measured: {Describe()}");
     }
 
     // --- scenario: the reload reports a ringing call ----------------------------------------------
