@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Live.Server;
+using Verbara.Sdk.Sessions.Extensions;
 using Verbara.Sdk.Sessions.Internal;
 using Verbara.Sdk.Sessions.Manager;
 
@@ -11,7 +12,7 @@ namespace Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
 /// The path a queue call's AMI events take, for tests that write those events by hand: a
 /// <see cref="VerbaraServer"/> over a substitute connection, the event observer that server
 /// subscribed in <see cref="VerbaraServer.StartAsync"/>, a <see cref="CallSessionManager"/> on the
-/// default <see cref="InMemorySessionStore"/>, and a <see cref="QueueSessionTracker"/> on that manager.
+/// default <see cref="InMemorySessionStore"/> or a store the test gives it, and a <see cref="QueueSessionTracker"/> on that manager.
 /// </summary>
 /// <remarks>
 /// Every frame goes to the server's own observer, not to the managers' entry points, so a test sees
@@ -61,12 +62,16 @@ internal sealed class QueueCallRig : IAsyncDisposable
     /// system clock when omitted, as in production. A test that moves it between deliveries fixes how
     /// much time the manager sees pass between two frames.
     /// </param>
-    public static async Task<QueueCallRig> StartAsync(TimeProvider? clock = null)
+    /// <param name="store">
+    /// Optional. The manager's session store; a fresh <see cref="InMemorySessionStore"/> when omitted. A test that
+    /// reads what the manager saved passes a <see cref="RecordingSessionStore"/>.
+    /// </param>
+    public static async Task<QueueCallRig> StartAsync(TimeProvider? clock = null, SessionStoreBase? store = null)
     {
         var connection = new ReloadableConnection();
         var options = Options.Create(new SessionOptions());
         var server = new VerbaraServer(connection.Connection, connection.ServerLogger);
-        var manager = new CallSessionManager(options, NullLogger<CallSessionManager>.Instance, new InMemorySessionStore(),
+        var manager = new CallSessionManager(options, NullLogger<CallSessionManager>.Instance, store ?? new InMemorySessionStore(),
             clock ?? TimeProvider.System);
         var tracker = new QueueSessionTracker(manager, options);
         try

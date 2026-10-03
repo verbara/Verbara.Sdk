@@ -200,7 +200,9 @@ internal static class AmiCaptureReplay
             var score = shapeBySessionId.TryGetValue(evt.SessionId, out var shape) ? scores[shape.Id] : null;
             if (evt is CallConnectedEvent connected)
             {
-                score?.RecordConnected(connected);
+                // The member the call records is read as the event is delivered, which is when a consumer of
+                // the event reads it; the session is mutable, so a read after the replay could not tell.
+                score?.RecordConnected(connected, manager.GetById(connected.SessionId)?.AgentInterface);
                 dispatch?.OnConnected(shape?.Id);
             }
 
@@ -223,7 +225,12 @@ internal static class AmiCaptureReplay
                 // Asterisk's own verdict, on the queue caller's channel: app_queue's AgentConnect is an
                 // answered visit and its QueueCallerAbandon an abandoned one.
                 if (string.Equals(evt.EventType, "AgentConnect", StringComparison.OrdinalIgnoreCase))
-                    scores[callerShape.Id].AsteriskConnects++;
+                {
+                    var connectScore = scores[callerShape.Id];
+                    connectScore.AsteriskConnects++;
+                    connectScore.RecordAsteriskConnect(evt.RawFields?.GetValueOrDefault("Interface"),
+                        evt.RawFields?.ContainsKey("Agent") == true);
+                }
                 else if (string.Equals(evt.EventType, "QueueCallerAbandon", StringComparison.OrdinalIgnoreCase))
                     scores[callerShape.Id].AsteriskAbandons++;
             }
@@ -955,6 +962,8 @@ internal readonly record struct QueueCounters(int Offered, int Answered, int Aba
 internal sealed class QueueShapeScore(QueueShape shape)
 {
     private readonly List<CallConnectedEvent> _connected = [];
+    private readonly List<string?> _agentInterfacesAtConnected = [];
+    private readonly List<string?> _asteriskConnectInterfaces = [];
     private readonly List<CallSession> _sessions = [];
     private QueueCounters _tracker;
 
@@ -966,8 +975,23 @@ internal sealed class QueueShapeScore(QueueShape shape)
     /// <summary>app_queue's <c>QueueCallerAbandon</c> frames on the shape's caller channel.</summary>
     public int AsteriskAbandons { get; internal set; }
 
+    /// <summary>
+    /// The <c>Interface</c> header of each of app_queue's <c>AgentConnect</c> frames on the shape's caller channel,
+    /// in capture order: the member app_queue reports it connected the caller to.
+    /// </summary>
+    public IReadOnlyList<string?> AsteriskConnectInterfaces => _asteriskConnectInterfaces;
+
+    /// <summary>How many of app_queue's <c>AgentConnect</c> frames on the shape's caller channel carry an <c>Agent</c> header.</summary>
+    public int AsteriskConnectsNamingAnAgent { get; private set; }
+
     /// <summary>The <see cref="CallConnectedEvent"/>s the manager published for the shape's calls, in order.</summary>
     public IReadOnlyList<CallConnectedEvent> ConnectedEvents => _connected;
+
+    /// <summary>
+    /// For each of <see cref="ConnectedEvents"/>, at the same index, the <see cref="CallSession.AgentInterface"/> of
+    /// the event's call as it stood when the event was delivered.
+    /// </summary>
+    public IReadOnlyList<string?> AgentInterfacesAtConnected => _agentInterfacesAtConnected;
 
     /// <summary>How far the tracker's offered count moved on the shape's calls' events.</summary>
     public int Offered => _tracker.Offered;
@@ -997,7 +1021,18 @@ internal sealed class QueueShapeScore(QueueShape shape)
     /// </summary>
     public IReadOnlyList<CallSession> Sessions => _sessions;
 
-    internal void RecordConnected(CallConnectedEvent evt) => _connected.Add(evt);
+    internal void RecordConnected(CallConnectedEvent evt, string? agentInterfaceAtDelivery)
+    {
+        _connected.Add(evt);
+        _agentInterfacesAtConnected.Add(agentInterfaceAtDelivery);
+    }
+
+    internal void RecordAsteriskConnect(string? memberInterface, bool namesAnAgent)
+    {
+        _asteriskConnectInterfaces.Add(memberInterface);
+        if (namesAnAgent)
+            AsteriskConnectsNamingAnAgent++;
+    }
 
     internal void RecordSession(CallSession session) => _sessions.Add(session);
 

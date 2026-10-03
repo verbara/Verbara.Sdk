@@ -5,7 +5,7 @@ namespace Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
 
 /// <summary>
 /// A store that keeps nothing and records every save as the session read at that moment: its id, its
-/// state and its connected time. A session is mutable, so the record is taken inside the save, not read
+/// state, its connected time and its agent interface. A session is mutable, so the record is taken inside the save, not read
 /// back afterwards.
 /// </summary>
 /// <remarks>
@@ -24,7 +24,7 @@ internal sealed class RecordingSessionStore : SessionStoreBase
 
     public override ValueTask SaveAsync(CallSession session, CancellationToken ct)
     {
-        _saves.Enqueue(new SavedSession(session.SessionId, session.State, session.ConnectedAt));
+        _saves.Enqueue(new SavedSession(session.SessionId, session.State, session.ConnectedAt, session.AgentInterface));
         return ValueTask.CompletedTask;
     }
 
@@ -32,5 +32,5 @@ internal sealed class RecordingSessionStore : SessionStoreBase
         ValueTask.FromResult<CallSession?>(null);
 }
 
-/// <summary>A session as a store was handed it: its id, its state and its connected time.</summary>
-internal sealed record SavedSession(string SessionId, CallSessionState State, DateTimeOffset? ConnectedAt);
+/// <summary>A session as a store was handed it: its id, its state, its connected time and its agent interface.</summary>
+internal sealed record SavedSession(string SessionId, CallSessionState State, DateTimeOffset? ConnectedAt, string? AgentInterface);
