@@ -48,6 +48,14 @@ internal static partial class VerbaraServerLog
         Message = "[LIVE] Status refused: {Message}; the channel table was not reconciled, so no held channel was removed and no call was ended. The AMI user needs 'system', 'call' or 'reporting' in write for a load to reconcile the channels")]
     public static partial void StatusRefused(ILogger logger, string message);
 
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "[LIVE] Status refused again in this AMI session: {Message}; the channel table was not reconciled")]
+    public static partial void StatusRefusedAgain(ILogger logger, string message);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "[LIVE] Channels reconciled: channels={Channels} status_refused={StatusRefused}")]
+    public static partial void ChannelsReconciled(ILogger logger, int channels, bool statusRefused);
+
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "[LIVE] Initial state load interrupted: its AMI session ended and the connection is {State}, so the start returns and the reload that follows the reconnect loads the state ({Reason})")]
     public static partial void InitialLoadInterrupted(ILogger logger, AmiConnectionState state, string reason);
@@ -168,6 +176,10 @@ public sealed class VerbaraServer : IVerbaraServer
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
 
+    // 1 once ReconcileChannelsAsync has logged a refused Status at Warning in the current AMI session; the reload after
+    // a reconnect sets it back to 0, so the first refusal of every session is a Warning and the ones after it are Debug.
+    private int _statusRefusalWarned;
+
     /// <summary>
     /// The server's event-loss epoch now (see <see cref="EventLossEpoch"/>). Read inside the event observer, it is the
     /// epoch of the event being delivered: over an <see cref="AmiConnection"/>, its dropped count is the one its session
@@ -277,6 +289,9 @@ public sealed class VerbaraServer : IVerbaraServer
     {
         // First, before anything is reloaded or delivered: every event the outage swallowed lies before it.
         Interlocked.Increment(ref _reconnects);
+
+        // A new AMI session: the channel reconciliation's first refusal on it is a Warning again.
+        Volatile.Write(ref _statusRefusalWarned, 0);
         LoadConnectionStates? states = null;
         try
         {
@@ -351,6 +366,108 @@ public sealed class VerbaraServer : IVerbaraServer
         LoadAsync(new LoadConnectionStates(_connection), cancellationToken);
 
     /// <summary>
+    /// Asks Asterisk for its channel snapshot (<c>Status</c>), reads it to completion and reconciles the channel table
+    /// against it: the channel part of <see cref="RequestInitialStateAsync"/>, and nothing else. It requests neither the
+    /// queues nor the agents, and clears no manager.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The reconciliation holds to the rules of a load's channels. A channel the completed snapshot omits is removed, as
+    /// a reload removes it: <see cref="ChannelManager.ChannelRemoved"/> is raised for it and its hangup cause is left as
+    /// it was, since no hangup was observed, so a session manager attached to this server ends its call with no cause.
+    /// A channel the snapshot lists and the table does not hold is admitted as the snapshot reports it, not as a new
+    /// channel. A channel admitted after the snapshot was requested is not removed, since the snapshot could not list
+    /// it, and a channel seen to hang up after the request is not brought back.
+    /// </para>
+    /// <para>
+    /// A snapshot that did not complete reconciles nothing: one the token cancelled throws
+    /// <see cref="OperationCanceledException"/>, and one whose AMI session ended throws
+    /// <see cref="AmiNotConnectedException"/>. A <c>Status</c> Asterisk refused, as it does for an AMI user whose write
+    /// classes allow none of <c>system</c>, <c>call</c> or <c>reporting</c>, reconciles nothing and does not throw. The
+    /// refusal is logged at <c>Warning</c> the first time in an AMI session and at <c>Debug</c> after that, so a caller
+    /// that runs this periodically is warned once per session. Only a connection that reports how an action ended (an
+    /// <see cref="AmiConnection"/>, or a wrapper that forwards <see cref="IAmiConnection.ReportsEventActionOutcome"/> and
+    /// the outcome overload) tells a refusal or an ended session from an empty answer; over any other
+    /// <see cref="IAmiConnection"/> both read as a snapshot with the channels listed so far.
+    /// </para>
+    /// <para>
+    /// It checks nothing about the server's own life, exactly as <see cref="RequestInitialStateAsync"/> does: before
+    /// <see cref="StartAsync"/> and after <see cref="DisposeAsync"/> it reconciles the table over the connection as
+    /// it would at any other time. It is not serialized with a load, the reload after a reconnect, or another call of
+    /// itself: each read keeps its own window, so neither removes a channel the other's snapshot could not list, nor
+    /// brings back one the other saw leave.
+    /// </para>
+    /// <para>
+    /// It is traced as a <c>live channel-reconcile</c> activity, tagged with the channels held once it has reconciled
+    /// (<c>live.channels</c>) and, for a refused <c>Status</c>, with Asterisk's message (<c>live.status.refused</c>); its
+    /// result is logged at <c>Debug</c>. It is never reported as a state load.
+    /// </para>
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the read; a cancelled read reconciles nothing.</param>
+    /// <exception cref="AmiNotConnectedException">
+    /// The connection is not established, or its AMI session ended before the snapshot completed.
+    /// </exception>
+    public async ValueTask ReconcileChannelsAsync(CancellationToken cancellationToken = default)
+    {
+        using var activity = LiveActivitySource.StartChannelReconcile(_connection.AsteriskVersion ?? "unknown");
+
+        var states = new LoadConnectionStates(_connection);
+        var session = _connection is AmiConnection ami ? new LoadSession(ami, TimeProvider) : null;
+        bool reconciled;
+        try
+        {
+            reconciled = await ReconcileChannelTableAsync(
+                session, states, activity, ChannelReader.Reconciliation, cancellationToken);
+        }
+        catch (AmiNotConnectedException) when (states.AtStop is null && states.BeganOnASession)
+        {
+            // The connection refused the send because the session had ended: the reconciliation stops, as a load does,
+            // in the same words. One that began on no session keeps the connection's own exception.
+            throw states.Stop("the live channel reconciliation could not send Status, because its AMI session had ended");
+        }
+
+        VerbaraServerLog.ChannelsReconciled(_logger, Channels.ChannelCount, statusRefused: !reconciled);
+        LiveActivitySource.SetChannelReconcileResult(activity, Channels.ChannelCount);
+    }
+
+    /// <summary>Who reads a channel snapshot: a load, or <see cref="ReconcileChannelsAsync"/>.</summary>
+    /// <param name="Name">What the reader is called in the exception a session ending under it throws.</param>
+    /// <param name="WarnsOncePerSession">
+    /// Whether a refused <c>Status</c> is a <c>Warning</c> only the first time in an AMI session: a load warns every time.
+    /// </param>
+    private sealed record ChannelReader(string Name, bool WarnsOncePerSession)
+    {
+        public static readonly ChannelReader Load = new("live state load", WarnsOncePerSession: false);
+
+        public static readonly ChannelReader Reconciliation = new("live channel reconciliation", WarnsOncePerSession: true);
+    }
+
+    /// <summary>
+    /// The channel half shared by a load and <see cref="ReconcileChannelsAsync"/>: open the read window, read the
+    /// <c>Status</c> snapshot inside it and reconcile the table against it. Returns <see langword="false"/> when Asterisk
+    /// refused the <c>Status</c>, which reconciles nothing.
+    /// </summary>
+    private async ValueTask<bool> ReconcileChannelTableAsync(LoadSession? session, LoadConnectionStates states,
+        Activity? activity, ChannelReader reader, CancellationToken cancellationToken)
+    {
+        // Buffer first, then reconcile: a snapshot that throws, is cancelled or never completes must leave every held
+        // channel alone, and it can only do that if nothing was mutated while it was being read.
+        // A Status Asterisk refused yields no snapshot: a refusal is no evidence that any channel is gone, so the table
+        // is left as it is.
+        // The read window opens before Status is sent and covers the read and the reconciliation only. While it is open,
+        // every hangup the event observer delivers is recorded for it, so a channel the answer still lists after it hung
+        // up is not brought back. It is closed on every way out of them — completed, refused, thrown, cancelled or ended
+        // with the session — so nothing it keeps outlives this snapshot.
+        using var window = Channels.OpenReadWindow();
+        var channelSnapshot = await ReadChannelSnapshotAsync(session, states, activity, reader, cancellationToken);
+        if (channelSnapshot is null)
+            return false;
+
+        Channels.ReconcileWithSnapshot(channelSnapshot, window);
+        return true;
+    }
+
+    /// <summary>
     /// The load behind <see cref="RequestInitialStateAsync"/>, <see cref="StartAsync"/> and the reload after a
     /// reconnect. It records in <paramref name="states"/> the connection's state when it began and, when it stops
     /// because its AMI session ended, the state then: what the start reads to tell whether a reload will follow.
@@ -366,21 +483,9 @@ public sealed class VerbaraServer : IVerbaraServer
         var request = "Status";
         try
         {
-            // Populate channels from StatusAction. Buffer first, then reconcile: a snapshot that
-            // throws, is cancelled or never completes must leave every held channel alone, and it can
-            // only do that if nothing was mutated while it was being read.
-            // A Status Asterisk refused yields no snapshot: a refusal is no evidence that any channel is gone, so the
-            // table is left as it is and the load goes on to the queues and the agents.
-            // The read window opens before Status is sent and covers the read and the reconciliation only. While it is
-            // open, every hangup the event observer delivers is recorded for it, so a channel the answer still lists
-            // after it hung up is not brought back. It is closed on every way out of them — completed, refused, thrown,
-            // cancelled or ended with the session — so nothing it keeps outlives this snapshot.
-            using (var window = Channels.OpenReadWindow())
-            {
-                var channelSnapshot = await ReadChannelSnapshotAsync(session, states, activity, cancellationToken);
-                if (channelSnapshot is not null)
-                    Channels.ReconcileWithSnapshot(channelSnapshot, window);
-            }
+            // The channels first, then the queues and the agents. A Status Asterisk refused leaves the table as it is
+            // and the load goes on to the queues and the agents.
+            await ReconcileChannelTableAsync(session, states, activity, ChannelReader.Load, cancellationToken);
 
             request = "QueueStatus";
             await LoadQueuesAsync(session, states, cancellationToken);
@@ -483,13 +588,14 @@ public sealed class VerbaraServer : IVerbaraServer
     /// A <c>Status</c> Asterisk refused (<c>Response: Error</c>, such as <c>Permission denied</c> for an AMI user whose
     /// write classes allow none of <c>system</c>, <c>call</c> or <c>reporting</c>) lists no channel, and that is no
     /// evidence that any channel is gone. Over a connection that reports how the action ended, as above, it returns no
-    /// snapshot (<see langword="null"/>), logs the refusal once at <c>Warning</c> and tags the load's activity with it;
-    /// the caller then reconciles nothing. Any other <see cref="IAmiConnection"/> cannot tell a refusal from an empty
+    /// snapshot (<see langword="null"/>), logs the refusal and tags the reader's activity with it; the caller then
+    /// reconciles nothing. A load logs it at <c>Warning</c>; the channel reconciliation at <c>Warning</c> the first time
+    /// in an AMI session and at <c>Debug</c> after that. Any other <see cref="IAmiConnection"/> cannot tell a refusal from an empty
     /// answer and is read as before.
     /// </para>
     /// </summary>
-    private async ValueTask<List<ChannelSnapshotEntry>?> ReadChannelSnapshotAsync(
-        LoadSession? session, LoadConnectionStates states, Activity? activity, CancellationToken cancellationToken)
+    private async ValueTask<List<ChannelSnapshotEntry>?> ReadChannelSnapshotAsync(LoadSession? session,
+        LoadConnectionStates states, Activity? activity, ChannelReader reader, CancellationToken cancellationToken)
     {
         var snapshot = new List<ChannelSnapshotEntry>();
 
@@ -544,13 +650,16 @@ public sealed class VerbaraServer : IVerbaraServer
 
         // Nor is the end of the session: reconciling what it cut short would end every call it had not listed yet.
         if (outcome is { Reported: true, SessionEnded: true })
-            throw states.Stop("the AMI session ended while the live state load was reading Status");
+            throw states.Stop($"the AMI session ended while the {reader.Name} was reading Status");
 
         // Nor is a refusal: Asterisk listed nothing because it would not answer, not because nothing is up.
         if (outcome is { Reported: true, Rejection: { } rejection })
         {
             var message = rejection.Length == 0 ? "(Asterisk sent no message)" : rejection;
-            VerbaraServerLog.StatusRefused(_logger, message);
+            if (!reader.WarnsOncePerSession || Interlocked.Exchange(ref _statusRefusalWarned, 1) == 0)
+                VerbaraServerLog.StatusRefused(_logger, message);
+            else
+                VerbaraServerLog.StatusRefusedAgain(_logger, message);
             LiveActivitySource.SetStatusRefused(activity, message);
             return null;
         }

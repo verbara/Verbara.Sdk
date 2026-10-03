@@ -4,7 +4,7 @@ namespace Verbara.Sdk.Live.Diagnostics;
 
 /// <summary>
 /// OpenTelemetry-compatible ActivitySource for distributed tracing of Live state operations.
-/// Produces spans for initial state loading and originate requests.
+/// Produces spans for state loads, channel reconciliations and originate requests.
 /// <para>
 /// To enable tracing, register the source name with your OpenTelemetry tracer:
 /// <c>builder.AddSource("Verbara.Sdk.Live")</c>
@@ -35,9 +35,24 @@ public static class LiveActivitySource
         activity.SetStatus(ActivityStatusCode.Ok);
     }
 
+    internal static Activity? StartChannelReconcile(string serverIdentifier)
+    {
+        var activity = Source.StartActivity("live channel-reconcile", ActivityKind.Client);
+        activity?.SetTag("live.server", serverIdentifier);
+        return activity;
+    }
+
+    internal static void SetChannelReconcileResult(Activity? activity, int channels)
+    {
+        if (activity is null) return;
+
+        activity.SetTag("live.channels", channels);
+        activity.SetStatus(ActivityStatusCode.Ok);
+    }
+
     /// <summary>
-    /// Tags a state load whose <c>Status</c> Asterisk refused with Asterisk's message, so a trace shows why the load
-    /// left the channel table as it was.
+    /// Tags a state load or a channel reconciliation whose <c>Status</c> Asterisk refused with Asterisk's message, so a
+    /// trace shows why it left the channel table as it was.
     /// </summary>
     internal static void SetStatusRefused(Activity? activity, string message) =>
         activity?.SetTag("live.status.refused", message);
