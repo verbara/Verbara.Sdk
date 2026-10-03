@@ -41,7 +41,7 @@ public sealed class SweepNeighbourPinsTests : IAsyncLifetime
             {
                 State = CallSessionState.Failed,
                 HangupCause = (HangupCause?)HangupCause.UserBusy,
-                Cause = (string?)null,
+                Cause = default(string),
                 Endings = 1,
                 Counters = new CounterDeltas(Completed: 0, Failed: 1, TimedOut: 0, Orphaned: 0),
             },
@@ -94,7 +94,7 @@ public sealed class SweepNeighbourPinsTests : IAsyncLifetime
                 Status = 2,
                 QueueStatus = 2,
                 Agents = 2,
-                Dropped = new { State = CallSessionState.Completed, Cause = (string?)"reload", Endings = 1 },
+                Dropped = new { State = CallSessionState.Completed, Cause = "reload", Endings = 1 },
                 Kept = keptBefore,
             },
             "the reload after a reconnect reads the channels, the queues and the agents once more, ends the call Asterisk no "

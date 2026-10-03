@@ -20,9 +20,12 @@ public sealed class SweepStopAfterDisposalTests : IAsyncLifetime
     [Fact]
     public async Task StopAsync_ShouldNotThrow_WhenTheSweepWasDisposedAfterItsStart()
     {
-        var sweep = _rig.BuildSweep();
-        var loop = await _rig.StartLoopAsync(sweep);
-        sweep.Dispose();
+        // Started, then disposed: the using block ends right after the start.
+        SweepLoop loop;
+        using (var sweep = _rig.BuildSweep())
+        {
+            loop = await _rig.StartLoopAsync(sweep);
+        }
 
         var error = await Record.ExceptionAsync(loop.StopAsync);
 

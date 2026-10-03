@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Sessions;
 
@@ -49,7 +50,6 @@ public sealed class SweepWhileALoadIsInFlightTests : IAsyncLifetime
         var sweepError = await Record.ExceptionAsync(() => SweepRig.SweepOnceAsync(sweep).WaitAsync(SweepRig.Bound));
         var measured = new
         {
-            SweepError = sweepError,
             LoadStillInFlight = !load.IsCompleted,
             Status = _rig.StatusRequests,
             CallEndedEvents = _rig.Endings.Count,
@@ -59,8 +59,10 @@ public sealed class SweepWhileALoadIsInFlightTests : IAsyncLifetime
         _held.TrySetResult();
         await load.WaitAsync(SweepRig.Bound);
 
+        using var scope = new AssertionScope();
+        sweepError.Should().BeNull("the sweep returns, without waiting for the load, inside the bound");
         measured.Should().BeEquivalentTo(
-            new { SweepError = (Exception?)null, LoadStillInFlight = true, Status = 1, CallEndedEvents = 0, Call = before },
+            new { LoadStillInFlight = true, Status = 1, CallEndedEvents = 0, Call = before },
             "while a load of the same server is in flight the sweep skips: it sends no Status of its own (the one "
             + "counted is the load's), returns without waiting for the load, and changes no session. "
             + $"Measured while the load was held: {described}");

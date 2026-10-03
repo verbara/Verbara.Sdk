@@ -61,8 +61,8 @@ public sealed class SessionsHostStartTests
         hosted.Should().Contain(
             ["SessionManagerHostedService", "SessionReconciliationService"],
             "the sessions registration adds both hosted services, and the container builds each through its public constructor");
-        new { Start = start, Stop = stop }.Should().BeEquivalentTo(
-            new { Start = (Exception?)null, Stop = (Exception?)null },
+        new Dictionary<string, Exception?> { ["Start"] = start, ["Stop"] = stop }
+            .Where(step => step.Value is not null).Should().BeEmpty(
             "a host built as a consumer builds it starts and stops");
     }
 

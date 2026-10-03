@@ -407,8 +407,8 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
 
         var cancelError = Record.Exception(() => stop.Cancel());
 
-        new { Stop = stopError, Cancel = cancelError }.Should().BeEquivalentTo(
-            new { Stop = (Exception?)null, Cancel = (Exception?)null },
+        new Dictionary<string, Exception?> { ["Stop"] = stopError, ["Cancel"] = cancelError }
+            .Where(step => step.Value is not null).Should().BeEmpty(
             "a stop after disposal leaves nothing registered on the host's token, so the host cancelling that token "
             + "later reaches no released source");
     }
@@ -437,15 +437,14 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
         await sut.StartAsync(CancellationToken.None);
         using var stop = new CancellationTokenSource();
 
-        var errors = new
+        var errors = new Dictionary<string, Exception?>
         {
-            Stop = await Record.ExceptionAsync(() => sut.StopAsync(stop.Token)),
-            Dispose = Record.Exception(sut.Dispose),
-            Cancel = Record.Exception(() => stop.Cancel()),
+            ["Stop"] = await Record.ExceptionAsync(() => sut.StopAsync(stop.Token)),
+            ["Dispose"] = Record.Exception(sut.Dispose),
+            ["Cancel"] = Record.Exception(() => stop.Cancel()),
         };
 
-        errors.Should().BeEquivalentTo(
-            new { Stop = (Exception?)null, Dispose = (Exception?)null, Cancel = (Exception?)null },
+        errors.Where(step => step.Value is not null).Should().BeEmpty(
             "stop, then dispose, then the host cancels its stop token: the disposal released the registration with "
             + "the source, so the cancel reaches nothing");
     }
@@ -458,15 +457,14 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
         await sut.StartAsync(CancellationToken.None);
         using var stop = new CancellationTokenSource();
 
-        var errors = new
+        var errors = new Dictionary<string, Exception?>
         {
-            Dispose = Record.Exception(sut.Dispose),
-            Stop = await Record.ExceptionAsync(() => sut.StopAsync(stop.Token)),
-            Cancel = Record.Exception(() => stop.Cancel()),
+            ["Dispose"] = Record.Exception(sut.Dispose),
+            ["Stop"] = await Record.ExceptionAsync(() => sut.StopAsync(stop.Token)),
+            ["Cancel"] = Record.Exception(() => stop.Cancel()),
         };
 
-        errors.Should().BeEquivalentTo(
-            new { Dispose = (Exception?)null, Stop = (Exception?)null, Cancel = (Exception?)null },
+        errors.Where(step => step.Value is not null).Should().BeEmpty(
             "dispose, then stop, then the host cancels its stop token: the stop after disposal registered nothing, so "
             + "the cancel reaches no released source");
     }
@@ -497,8 +495,8 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
         var cancelError = Record.Exception(() => stop.Cancel());
 
         stopRan.Should().BeTrue("premise: the disposal cancelled the persistence token, so the stop ran inside it");
-        new { Dispose = disposeError, Stop = stopError, Cancel = cancelError }.Should().BeEquivalentTo(
-            new { Dispose = (Exception?)null, Stop = (Exception?)null, Cancel = (Exception?)null },
+        new Dictionary<string, Exception?> { ["Dispose"] = disposeError, ["Stop"] = stopError, ["Cancel"] = cancelError }
+            .Where(step => step.Value is not null).Should().BeEmpty(
             "a stop that runs while the disposal is releasing the source registers nothing on it, so the host "
             + "cancelling its stop token afterwards reaches no released source");
     }
@@ -531,8 +529,8 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
         var laterCancelError = Record.Exception(() => stop.Cancel());
 
         seamRan.Should().BeTrue("premise: the disposal cancelled the persistence token, so the seam ran inside it");
-        new { Dispose = disposeError, Seam = seamError, LaterCancel = laterCancelError }.Should().BeEquivalentTo(
-            new { Dispose = (Exception?)null, Seam = (Exception?)null, LaterCancel = (Exception?)null },
+        new Dictionary<string, Exception?> { ["Dispose"] = disposeError, ["Seam"] = seamError, ["LaterCancel"] = laterCancelError }
+            .Where(step => step.Value is not null).Should().BeEmpty(
             "a stop token cancelled while the disposal is releasing the source throws nowhere: not from the stop, not "
             + "from the disposal, not from a later cancel");
     }
