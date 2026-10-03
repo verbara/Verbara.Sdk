@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Options;
 
 namespace Verbara.Sdk.VoiceAi.Tts.ElevenLabs;
 
@@ -70,6 +71,10 @@ public sealed class ElevenLabsOptions
     /// constructor that replaced the whole URL — and that replacement substituted a literal
     /// <c>test-voice</c> for <see cref="VoiceId"/>, meaning the voice segment production sends was
     /// exercised by nothing.
+    /// <para>
+    /// Must start with <c>ws://</c> or <c>wss://</c>. <see cref="ElevenLabsOptionsValidator"/>, which the SDK's registration
+    /// adds, enforces it: a host whose value does not match fails when the provider's options are first resolved.
+    /// </para>
     /// </remarks>
     [RegularExpression(@"^wss?://.+", ErrorMessage = "BaseUri must start with wss:// or ws://.")]
     public string BaseUri { get; set; } = "wss://api.elevenlabs.io/v1/text-to-speech";
@@ -109,8 +114,19 @@ public sealed class ElevenLabsOptions
     /// How long, in whole seconds, the WebSocket connect (the TCP dial, TLS and the HTTP upgrade) may
     /// take before the synthesis fails with a <see cref="SpeechProviderFailureException"/> whose
     /// <see cref="SpeechProviderFailureException.Signal"/> is <see cref="SpeechProviderFailureSignal.Handshake"/>,
-    /// the failure a refused upgrade also takes. Must be positive. Defaults to 5, the default of every
+    /// the failure a refused upgrade also takes.
+    /// Accepts whole seconds from 1 to 600: the options validator rejects any other value, and the client
+    /// throws <see cref="ArgumentOutOfRangeException"/> naming this option from its constructor and before each dial.
+    /// Defaults to 5, the default of every
     /// other WebSocket speech client in this SDK.
     /// </summary>
+    [Range(1, 600)]
     public int ConnectTimeoutSeconds { get; set; } = 5;
 }
+
+/// <summary>
+/// AOT-safe source-generated validator for <see cref="ElevenLabsOptions"/>: <c>ConnectTimeoutSeconds</c> within 1–600
+/// and <c>BaseUri</c> a <c>ws://</c> or <c>wss://</c> URI. Registered by the SDK's registration of the provider.
+/// </summary>
+[OptionsValidator]
+public sealed partial class ElevenLabsOptionsValidator : IValidateOptions<ElevenLabsOptions> { }

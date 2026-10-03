@@ -44,7 +44,12 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
     /// vendor reads, all 187 tests of the two provider suites still passed.
     /// </remarks>
     public CartesiaSpeechSynthesizer(IOptions<CartesiaOptions> options)
-        => _options = options.Value;
+    {
+        _options = options.Value;
+
+        // Checked here, naming the option, because no validator runs for Options.Create or a hand-made registration.
+        _ = TimeoutSecondsRule.ToLimit(_options.ConnectTimeoutSeconds);
+    }
 
     /// <inheritdoc />
     public override async IAsyncEnumerable<ReadOnlyMemory<byte>> SynthesizeAsync(
@@ -80,8 +85,10 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
 
         try
         {
+            // The range is checked again right before the dial, naming the option: the options object is held
+            // by reference and can change after construction.
             await WebSocketConnectBound.ConnectAsync(
-                ws, uri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
+                ws, uri, TimeoutSecondsRule.ToLimit(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {

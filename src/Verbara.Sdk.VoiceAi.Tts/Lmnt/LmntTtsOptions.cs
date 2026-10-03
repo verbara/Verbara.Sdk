@@ -115,12 +115,23 @@ public sealed class LmntTtsOptions
     /// How long, in whole seconds, the WebSocket connect (the TCP dial, TLS and the HTTP upgrade) may
     /// take before the synthesis fails with a <see cref="SpeechProviderFailureException"/> whose
     /// <see cref="SpeechProviderFailureException.Signal"/> is <see cref="SpeechProviderFailureSignal.Handshake"/>,
-    /// the failure a refused upgrade also takes. Must be positive. Defaults to 5. Only used when
-    /// <see cref="Transport"/> is <see cref="LmntTransport.WebSocket"/>.
+    /// the failure a refused upgrade also takes.
+    /// Accepts whole seconds from 1 to 600: the options validator rejects any other value, and the client
+    /// throws <see cref="ArgumentOutOfRangeException"/> naming this option from its constructor and before each dial.
+    /// Defaults to 5. Only used when
+    /// <see cref="Transport"/> is <see cref="LmntTransport.WebSocket"/>, and checked by the client only there;
+    /// the validator's range applies whatever the transport.
     /// </summary>
+    [Range(1, 600)]
     public int ConnectTimeoutSeconds { get; set; } = 5;
 
-    /// <summary>HTTP request timeout in seconds. Only used when <see cref="Transport"/> is <see cref="LmntTransport.Http"/>.</summary>
+    /// <summary>
+    /// HTTP request timeout in seconds. Only used when <see cref="Transport"/> is <see cref="LmntTransport.Http"/>.
+    /// Accepts whole seconds from 1 to 600: the options validator rejects any other value whatever the transport,
+    /// and on the HTTP transport the constructor throws <see cref="ArgumentOutOfRangeException"/> naming this option
+    /// before it builds its HTTP client. Defaults to 30.
+    /// </summary>
+    [Range(1, 600)]
     public int HttpTimeoutSeconds { get; set; } = 30;
 }
 

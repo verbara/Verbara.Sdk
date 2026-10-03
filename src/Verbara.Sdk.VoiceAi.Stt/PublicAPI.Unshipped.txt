@@ -75,3 +75,6 @@ Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.BaseUri.get -> string!
 Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.BaseUri.set -> void
 Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.ConnectTimeoutSeconds.get -> int
 Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions.ConnectTimeoutSeconds.set -> void
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptionsValidator
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptionsValidator.DeepgramOptionsValidator() -> void
+Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptionsValidator.Validate(string? name, Verbara.Sdk.VoiceAi.Stt.Deepgram.DeepgramOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!

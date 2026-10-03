@@ -34,10 +34,11 @@ public sealed class SpeechmaticsSpeechSynthesizer : SpeechSynthesizer
     public SpeechmaticsSpeechSynthesizer(IOptions<SpeechmaticsOptions> options)
     {
         _options = options.Value;
-        // Construct HttpClient internally (AOT-clean, no factory reflection).
+        // Construct HttpClient internally (AOT-clean, no factory reflection). The timeout is checked first, naming
+        // the option: before the range, 0 and -1 threw from HttpClient naming only its own setter.
         _http = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds),
+            Timeout = TimeoutSecondsRule.ToLimit(_options.ConnectTimeoutSeconds),
         };
         _ownsHttpClient = true;
     }

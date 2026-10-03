@@ -58,8 +58,12 @@ public sealed class SpeechmaticsOptions
     /// How long, in whole seconds, the WebSocket connect (the TCP dial, TLS and the HTTP upgrade) may
     /// take before the stream fails with a <see cref="SpeechProviderFailureException"/> whose
     /// <see cref="SpeechProviderFailureException.Signal"/> is <see cref="SpeechProviderFailureSignal.Handshake"/>,
-    /// the failure a refused upgrade also takes. Must be positive. Defaults to 5.
+    /// the failure a refused upgrade also takes.
+    /// Accepts whole seconds from 1 to 600: the options validator rejects any other value, and the client
+    /// throws <see cref="ArgumentOutOfRangeException"/> naming this option from its constructor and before each dial.
+    /// Defaults to 5.
     /// </summary>
+    [Range(1, 600)]
     public int ConnectTimeoutSeconds { get; set; } = 5;
 }
 

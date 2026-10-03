@@ -24,7 +24,10 @@ public static class TtsServiceCollectionExtensions
     {
         if (configure is not null)
             services.Configure(configure);
+        else
+            services.AddOptions<ElevenLabsOptions>();
 
+        services.AddSingleton<IValidateOptions<ElevenLabsOptions>, ElevenLabsOptionsValidator>();
         services.TryAddSingleton<SpeechSynthesizer, ElevenLabsSpeechSynthesizer>();
         services.AddHealthChecks().AddCheck<TtsHealthCheck>("tts");
         return services;

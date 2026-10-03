@@ -67,13 +67,21 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
     public LmntSpeechSynthesizer(IOptions<LmntTtsOptions> options)
     {
         _options = options.Value;
+
+        // Each transport's timeout is checked here, naming the option, because no validator runs for Options.Create
+        // or a hand-made registration — and only the one the transport uses: ConnectTimeoutSeconds bounds the
+        // WebSocket dial, HttpTimeoutSeconds the HTTP client, checked before that client is built.
         if (_options.Transport == LmntTransport.Http)
         {
             _httpClient = new HttpClient
             {
-                Timeout = TimeSpan.FromSeconds(_options.HttpTimeoutSeconds),
+                Timeout = TimeoutSecondsRule.ToLimit(_options.HttpTimeoutSeconds, nameof(LmntTtsOptions.HttpTimeoutSeconds)),
             };
             _ownsHttpClient = true;
+        }
+        else
+        {
+            _ = TimeoutSecondsRule.ToLimit(_options.ConnectTimeoutSeconds);
         }
     }
 
@@ -152,8 +160,10 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
 
         try
         {
+            // The range is checked again right before the dial, naming the option: the options object is held
+            // by reference and can change after construction.
             await WebSocketConnectBound.ConnectAsync(
-                ws, uri, TimeSpan.FromSeconds(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
+                ws, uri, TimeoutSecondsRule.ToLimit(_options.ConnectTimeoutSeconds), TimeProvider, ct).ConfigureAwait(false);
         }
         catch (WebSocketException ex)
         {
