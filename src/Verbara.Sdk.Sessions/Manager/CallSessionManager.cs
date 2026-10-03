@@ -1232,8 +1232,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     /// <summary>
     /// app_queue connected a queue caller to a member (<c>AgentConnect</c>), whether or not the member is
-    /// an agent the SDK knows by name: the queue visit is answered. The caller is looked up by its own
-    /// channel, <paramref name="callerUniqueId"/>, which a <c>Linkedid</c> rewrite does not move.
+    /// an agent the SDK knows by name: the queue visit is answered, and the call records the member's
+    /// interface as its <see cref="CallSession.AgentInterface"/> unless it already records one. The caller
+    /// is looked up by its own channel, <paramref name="callerUniqueId"/>, which a <c>Linkedid</c> rewrite
+    /// does not move.
     /// <para>
     /// Only a call the manager saw join a queue is acted on. For one it did not see join
     /// (<see cref="CallSession.QueueName"/> unset), the queue's metrics never counted an offer, so
@@ -1250,6 +1252,13 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         {
             if (session.QueueName is null)
                 return;
+
+            // app_queue's connect report names the member by its interface and, as Asterisk sends it, no
+            // agent, so the connect of an agent known by name (which runs first and records its own
+            // interface) does not run for it. The member is recorded here, before the call is announced, so
+            // a consumer of the announcement reads it. One already recorded is kept: a later queue visit of
+            // the same call, taken by another member, does not replace it.
+            session.AgentInterface ??= memberInterface;
 
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.AgentConnected, memberInterface, null, memberName));

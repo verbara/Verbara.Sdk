@@ -50,7 +50,23 @@ public sealed class CallSession
 
     // Call context
     public string? QueueName { get; set; }
+
+    /// <summary>
+    /// The agent the SDK knows by name that took the call, as its connect names it. Set only by the connect of
+    /// an agent the server knows by name; app_queue's own connect report names no agent, so a call taken by a
+    /// queue member that is not such an agent leaves it <c>null</c>.
+    /// </summary>
     public string? AgentId { get; set; }
+
+    /// <summary>
+    /// The interface of the queue member that took the call, exactly as app_queue reports it in its connect
+    /// report (<c>AgentConnect</c>'s <c>Interface</c>): <c>PJSIP/agent1</c> for an endpoint member. For a member
+    /// that is a <c>Local</c> channel it is the <c>Local</c> interface (<c>Local/agent1@from-queue/n</c>), not
+    /// the device it dials. It is set on the first connection and kept when a later queue visit of the call is
+    /// taken by another member; the connect of an agent known by name writes that agent's interface on each
+    /// visit it takes. It is <c>null</c> when no member took the call, or when the AMI user lacks the
+    /// <c>agent</c> read class, without which Asterisk sends none of app_queue's events.
+    /// </summary>
     public string? AgentInterface { get; set; }
     public string? BridgeId { get; set; }
 
