@@ -128,6 +128,7 @@ public sealed class QueueShapeMemberReplayTests
         var connects = (await AmiCaptureReplay.ReadCaptureAsync(fixture))
             .Where(f => f.RawFields?.ContainsKey("ActionID") != true
                 && string.Equals(f.EventType, "AgentConnect", StringComparison.OrdinalIgnoreCase))
+            .Select(f => f.RawFields!)
             .ToList();
         var replay = await AmiCaptureReplay.ReplayAsync(fixture);
 
@@ -135,9 +136,8 @@ public sealed class QueueShapeMemberReplayTests
         scope.AddReportable("calls", () => DescribeCalls(replay.Calls.Select(c => c.Session)));
         connects.Should().NotBeEmpty("premise: {0} holds a queue call a member took", fixture);
 
-        foreach (var connect in connects)
+        foreach (var fields in connects)
         {
-            var fields = connect.RawFields!;
             var callerUniqueId = fields.GetValueOrDefault("Uniqueid");
             var member = fields.GetValueOrDefault("Interface");
             fields.ContainsKey("Agent").Should().BeFalse("premise: the AgentConnect on {0} names no agent", callerUniqueId);
