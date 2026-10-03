@@ -43,22 +43,51 @@ public class AriHealthCheckIntegrationTests : IAsyncLifetime
 
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task AriHealthCheck_ShouldReturnUnhealthy_WhenUnreachable()
+    public async Task AriHealthCheck_ShouldReturnDegraded_WhenTheClientWasNeverConnected()
     {
-        // Create a client with an invalid URL — no real Asterisk needed
+        // A client nobody has connected yet is not a failure: Initial reads Degraded, and names itself.
         var options = Options.Create(new AriClientOptions
         {
-            BaseUrl = "http://localhost:1",
+            BaseUrl = "http://127.0.0.1:1",
+            Username = "invalid",
+            Password = "invalid",
+            Application = "test"
+        });
+        await using var idle = new AriClient(options, NullLogger<AriClient>.Instance);
+
+        var result = await new AriHealthCheck(idle).CheckHealthAsync(new HealthCheckContext());
+
+        using (new AssertionScope())
+        {
+            result.Status.Should().Be(HealthStatus.Degraded);
+            result.Data.Should().ContainKey("ariState").WhoseValue.Should().Be(nameof(AriConnectionState.Initial));
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task AriHealthCheck_ShouldReturnUnhealthy_WhenTheConnectToAnUnreachableAsteriskFailed()
+    {
+        // Port 1 on loopback has no listener: the dial is refused, the attempt ends Faulted, and nothing
+        // reconnects the client until a new connect.
+        var options = Options.Create(new AriClientOptions
+        {
+            BaseUrl = "http://127.0.0.1:1",
             Username = "invalid",
             Password = "invalid",
             Application = "test"
         });
         await using var badClient = new AriClient(options, NullLogger<AriClient>.Instance);
+        var connect = async () => await badClient.ConnectAsync();
+        await connect.Should().ThrowAsync<WebSocketException>("nothing listens on the port");
 
-        var healthCheck = new AriHealthCheck(badClient);
-        var result = await healthCheck.CheckHealthAsync(new HealthCheckContext());
+        var result = await new AriHealthCheck(badClient).CheckHealthAsync(new HealthCheckContext());
 
-        result.Status.Should().Be(HealthStatus.Unhealthy);
+        using (new AssertionScope())
+        {
+            result.Status.Should().Be(HealthStatus.Unhealthy);
+            result.Data.Should().ContainKey("ariState").WhoseValue.Should().Be(nameof(AriConnectionState.Faulted));
+        }
     }
 
     [Fact]
