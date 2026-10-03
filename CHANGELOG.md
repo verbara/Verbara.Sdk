@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a queued call records the queue member who took it (#381)
+
+`CallSession.AgentInterface` was always `null` on a call app_queue connected (100 of 100 on Asterisk 20.20.1, 22.9.0
+and 23.4.1), because Asterisk's `AgentConnect` names the member only by its interface and never carries an `Agent`
+header. It now holds that interface as app_queue reports it (`PJSIP/agent1`), set before `CallConnectedEvent` is
+published so its consumers read it on that delivery, and persisted with the session snapshot. For a `Local/…` member
+the value is the `Local` interface (`Local/agent1@from-queue/n`), not the device it dials. The first member is kept if
+the call is taken again in a later queue visit. `CallSession.AgentId` and `CallConnectedEvent.AgentId` are unchanged.
+The AMI user needs the `agent` read class: without it Asterisk sends none of app_queue's events and no member is
+recorded (see `docs/guides/troubleshooting.md` § Missing events).
+
 ### Changed — BREAKING: the reconciliation sweep asks Asterisk before it ends a call (#380)
 
 The sweep `AddVerbaraSessions` registers ended calls on its clock alone: a call dialing past `DialingTimeout` (60 s) or
