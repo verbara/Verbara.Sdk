@@ -117,8 +117,7 @@ internal sealed class AmiEventTally : IObserver<ManagerEvent>, IDisposable
                 _events.Add(value);
             }
 
-            if (!_disposed)
-                _changed.Release();
+            _changed.Release();
         }
     }
 

@@ -192,7 +192,7 @@ public sealed class MultiServerFixture : IAsyncLifetime
             await remove().ConfigureAwait(false);
             return [];
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return [ex];
         }

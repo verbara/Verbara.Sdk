@@ -75,11 +75,8 @@ internal static partial class ImagePinScanner
             references.AddRange(FindReferences(File.ReadAllText(file), ToRelative(repoRoot, file)));
 
         var violations = new List<string>();
-        foreach (var image in new[] { AsteriskImage, SippImage })
-        {
-            if (!references.Any(r => r.Image == image))
-                violations.Add($"found no reference to {image} under {string.Join(", ", ScannedDirectories)}: the walk read nothing, so it proves nothing");
-        }
+        foreach (var image in new[] { AsteriskImage, SippImage }.Where(i => !references.Any(r => r.Image == i)))
+            violations.Add($"found no reference to {image} under {string.Join(", ", ScannedDirectories)}: the walk read nothing, so it proves nothing");
 
         foreach (var reference in references.Where(r => !r.IsPinned))
             violations.Add($"{reference}: no @sha256 digest — a tag names whatever its publisher serves that day");
@@ -94,11 +91,9 @@ internal static partial class ImagePinScanner
         if (table is not null)
         {
             var pinnedBases = new HashSet<string>(table.Values, StringComparer.Ordinal);
-            foreach (var reference in references.Where(r => r.Image == AsteriskImage && r.IsPinned && r.Path != TablePath))
-            {
-                if (!pinnedBases.Contains(reference.Text))
-                    violations.Add($"{reference}: a pinned Asterisk base that is not a line of {TablePath}");
-            }
+            foreach (var reference in references.Where(r =>
+                         r.Image == AsteriskImage && r.IsPinned && r.Path != TablePath && !pinnedBases.Contains(r.Text)))
+                violations.Add($"{reference}: a pinned Asterisk base that is not a line of {TablePath}");
         }
 
         CheckDockerfile(repoRoot, table, violations);
@@ -203,9 +198,8 @@ internal static partial class ImagePinScanner
     private static List<string> EnumerateFiles(string repoRoot)
     {
         var files = new List<string>();
-        foreach (var scanned in ScannedDirectories)
+        foreach (var start in ScannedDirectories.Select(scanned => Path.Join(repoRoot, scanned)))
         {
-            var start = Path.Join(repoRoot, scanned);
             if (!Directory.Exists(start))
                 continue;
 

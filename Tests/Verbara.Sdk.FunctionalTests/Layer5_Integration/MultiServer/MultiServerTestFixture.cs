@@ -139,8 +139,7 @@ public sealed class MultiServerTestFixture : Xunit.IAsyncLifetime
         }
         finally
         {
-            foreach (var tally in tallies)
-                tally.Dispose();
+            tallies.ForEach(t => t.Dispose());
             foreach (var connection in connections)
                 await connection.DisposeAsync();
         }
