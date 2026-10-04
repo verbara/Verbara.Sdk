@@ -61,7 +61,7 @@ public sealed class FastAgiRequestAdmissionTests
         var data = new TheoryData<string, string>();
         foreach (var strategy in Strategies)
         {
-            foreach (var peer in (string[])["rst-empty", "fin-empty", "rst-partial", "fin-partial"])
+            foreach (var peer in TruncatingPeers)
                 data.Add(strategy, peer);
         }
 
@@ -72,6 +72,8 @@ public sealed class FastAgiRequestAdmissionTests
 
     private static readonly string[] Strategies =
         ["simple", "typename", "composite", "catchall-noio", "catchall-answer"];
+
+    private static readonly string[] TruncatingPeers = ["rst-empty", "fin-empty", "rst-partial", "fin-partial"];
 
     // ------------------------------------------------- a stream that ends before the blank line
 
@@ -217,19 +219,29 @@ public sealed class FastAgiRequestAdmissionTests
     {
         var partial = peer.EndsWith("-partial", StringComparison.Ordinal);
         var reset = peer.StartsWith("rst-", StringComparison.Ordinal);
+        var headers = Encoding.ASCII.GetBytes(TruncatedHeaders);
 
         // Every peer connects before any of them sends or closes: the burst shape.
-        var sockets = new Socket[N];
-        await Task.WhenAll(Enumerable.Range(0, N).Select(async i =>
-        {
-            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            await socket.ConnectAsync(IPAddress.Loopback, port);
-            sockets[i] = socket;
-        }));
+        var connected = 0;
+        var allConnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await Task.WhenAll(Enumerable.Range(0, N).Select(_ => PeerAsync()));
 
-        var headers = Encoding.ASCII.GetBytes(TruncatedHeaders);
-        foreach (var socket in sockets)
+        async Task PeerAsync()
         {
+            using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            try
+            {
+                await socket.ConnectAsync(IPAddress.Loopback, port);
+            }
+            finally
+            {
+                // Counted even when the connect fails, so the other peers are released and the failure surfaces.
+                if (Interlocked.Increment(ref connected) == N)
+                    allConnected.TrySetResult();
+            }
+
+            await allConnected.Task.WaitAsync(SignalTimeout);
+
             if (partial)
                 await socket.SendAsync(headers, SocketFlags.None);
 
@@ -237,37 +249,29 @@ public sealed class FastAgiRequestAdmissionTests
             {
                 socket.LingerState = new LingerOption(true, 0);
                 socket.Close();
+                return;
             }
-            else
-            {
-                socket.Shutdown(SocketShutdown.Send);
-            }
-        }
 
-        if (!reset)
-        {
             // A FIN peer reads until the server closes its side, then closes its own.
-            await Task.WhenAll(sockets.Select(DrainAndCloseAsync));
+            socket.Shutdown(SocketShutdown.Send);
+            await DrainAsync(socket);
         }
     }
 
-    private static async Task DrainAndCloseAsync(Socket socket)
+    private static async Task DrainAsync(Socket socket)
     {
-        using (socket)
+        var buffer = new byte[256];
+        using var cts = new CancellationTokenSource(SignalTimeout);
+        try
         {
-            var buffer = new byte[256];
-            using var cts = new CancellationTokenSource(SignalTimeout);
-            try
+            while (await socket.ReceiveAsync(buffer, SocketFlags.None, cts.Token) > 0)
             {
-                while (await socket.ReceiveAsync(buffer, SocketFlags.None, cts.Token) > 0)
-                {
-                    // Whatever the server writes (an ANSWER from a script) is read and not answered.
-                }
+                // Whatever the server writes (an ANSWER from a script) is read and not answered.
             }
-            catch (SocketException)
-            {
-                // The server reset its side instead of closing it; the fence decides what that means.
-            }
+        }
+        catch (SocketException)
+        {
+            // The server reset its side instead of closing it; the fence decides what that means.
         }
     }
 
