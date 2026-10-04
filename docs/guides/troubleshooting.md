@@ -103,6 +103,7 @@ See [High-Load Tuning Guide](high-load-tuning.md) for sizing recommendations.
 5. Every event of a session stopped after one `OnEvent` handler threw: up to 2.6.1 a throwing or faulting handler ended delivery silently. Upgrade; a failing handler is now logged as `[AMI_EVENT] OnEvent handler threw on <EventType>` at Warning, counted on `ami.events.handler_faults`, and delivery goes on.
 6. `QueueSession.CallsTimedOut` stays 0 although callers time out of the queue: the AMI user lacks the `dialplan` class. app_queue reports a timeout only by setting `QUEUESTATUS` on the caller's channel, and Asterisk sends that `VarSet` only to a user whose `read` includes `dialplan` (`read = all` includes it). Without it the timed-out callers are still counted in `CallsAbandoned`; nothing else in the queue metrics needs the class. Add it behind the filter below. See [Queue metrics](../../src/Verbara.Sdk.Sessions/README.md#queue-metrics).
 7. A caller who left the queue while the AMI connection was down keeps counting in `QueueSession.CallsWaiting` until the reload after the reconnect has read the queues: a completed `QueueStatus` that no longer lists the caller ends the wait and counts the visit abandoned. A reload whose `QueueStatus` did not complete closes nothing. An answer during the outage cannot be observed, so such a visit counts abandoned too.
+8. An observer subscribed with `Subscribe(IObserver<ManagerEvent>)` misses what it should have done for some events, with nothing in the log: up to 2.7.0 an exception from its `OnNext` was swallowed without a trace. Upgrade; each failure is now logged as `[AMI_EVENT] Observer threw on <EventType>` at Warning with the exception and counted on `ami.events.observer_faults`. The observer stays subscribed and receives the next event; fix what throws.
 
 #### The cost of `dialplan`, and a filter that removes it
 
@@ -116,6 +117,24 @@ eventfilter(action(exclude),name(VarSet),header(Variable),method(regex)) = ^([^Q
 ```
 
 The second line excludes every `VarSet` whose variable is not `QUEUESTATUS`; the pattern spells "not `QUEUESTATUS`" out because the filter's regular expressions have no lookahead. Behind it, on Asterisk 20.20.1, 22.9.0 and 23.4.1, the user received 1.28 % more bytes than the same user without `dialplan` (4.36 % more on calls that time out), and `CallsTimedOut` counted every timeout. The consequence: the user receives no other `VarSet` and no `Newexten`, so your own `VarSetEvent` observers see only `QUEUESTATUS`. No feature of the SDK reads another `VarSet`.
+
+### Shutdown waits for an event handler
+
+**Symptoms:** `DisposeAsync` or `DisconnectAsync` of an `AmiConnection` takes as long as the event handler that was running when it was called.
+
+**Cause:** the ending waits for the event being dispatched, so a handler doing long work holds it. An `OnEvent` handler has no way to learn that the connection is ending.
+
+**Solution:** subscribe the handler with the overload that also takes a token. On an `AmiConnection` the token is cancelled when your own `DisconnectAsync` or `DisposeAsync` ends the connection, and by nothing else (not by a loss, a reconnect or a give-up). Pass it to the handler's work; dispose the subscription to remove the handler.
+
+```csharp
+static async ValueTask ArchiveAsync(ManagerEvent evt, CancellationToken cancellationToken) =>
+    await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken); // long work that honours the token
+
+static IDisposable SubscribeArchiver(IAmiConnection connection) =>
+    connection.Subscribe((evt, ct) => ArchiveAsync(evt, ct));
+```
+
+The ending still waits for the handler to return: the token asks it to stop, it does not abandon it. A handler that ends with `OperationCanceledException` once your ending has cancelled its token is not a fault (one Debug line, `[AMI_EVENT] Event handler stopped on the caller's ending`); any other failure is logged and counted as an `OnEvent` handler's is. Token handlers and `OnEvent` handlers are called in the order they subscribed. An `IAmiConnection` of your own that does not forward the overload (a wrapper that forwards only the other members) still delivers every event to the handler, through its `OnEvent`, but with a token that is never cancelled; forward `Subscribe(Func<ManagerEvent, CancellationToken, ValueTask>)` to the inner connection to pass the token on.
 
 ### Every originate times out after 5 s
 
@@ -197,7 +216,7 @@ It is raised after the connection's `State` has left `Connected`, whether `AutoR
 - A stream Asterisk closes or resets is seen at once.
 - A peer that goes silent is seen by the heartbeat, within one `HeartbeatInterval` plus the `Ping` wait, which is the smaller of `HeartbeatTimeout` and `DefaultResponseTimeout`. With the defaults (30 s, 10 s and 2 s) that is up to about 32 s after the peer went silent; measured, 2.2–32.0 s. A shorter `HeartbeatInterval` sees it sooner.
 
-**When the reconnect gives up.** With `MaxReconnectAttempts` set to N, the connection gives up after N failed attempts, each made after its backoff delay, and then reads `Disconnected`. The first delay is `ReconnectInitialDelay`; each next one is multiplied by `ReconnectMultiplier` and capped at `ReconnectMaxDelay`. As examples, measured from the moment Asterisk was started again with the application's credentials rejected, not from the loss: 17.2–18.8 s with 1 s ×2 and N = 4; 8.1–9.2 s with 0.5 s ×2 capped at 2 s and N = 4. The give-up is announced on the connection's `StateChanged`, below: its last change, to `Disconnected`, has `IsFinal` set and carries the last attempt's exception as `Cause` (`AmiAuthenticationException` when the credentials were rejected). `ConnectionLost` is not raised for it.
+**When the reconnect gives up.** With `MaxReconnectAttempts` set to N, the connection gives up after N failed attempts, each made after its backoff delay, and then reads `Disconnected`. The first delay is `ReconnectInitialDelay`; each next one is multiplied by `ReconnectMultiplier` and capped at `ReconnectMaxDelay`. As examples, measured from the moment Asterisk was started again with the application's credentials rejected, not from the loss: 17.2–18.8 s with 1 s ×2 and N = 4; 8.1–9.2 s with 0.5 s ×2 capped at 2 s and N = 4. The give-up is announced on the connection's `StateChanged`, below: its last change, to `Disconnected`, has `IsFinal` set and carries the last attempt's exception as `Cause` (`AmiAuthenticationException` when the credentials were rejected). `ConnectionLost` is not raised for it. The log says it once, at Error, before `[AMI] Disconnected`: `[AMI] Reconnect gave up after <n> attempts; the connection will not come back`, with the same exception attached. A reconnect that your own `DisconnectAsync` or `DisposeAsync` ends writes no such line.
 
 **With `MaxReconnectAttempts = 0`** (the default) the connection never gives up: it retries for ever, rejected credentials included, each attempt failing with `AmiAuthenticationException`. `ConnectionLost` is raised once, for the loss, and nothing after it until the connection is back; `StateChanged` reports each attempt, `Reconnecting → Connecting` and, when it fails, `Connecting → Reconnecting` with the attempt's exception as `Cause`.
 

@@ -6,8 +6,8 @@
 
 | Tag | Domain | Class(es) | Events |
 |-----|--------|-----------|--------|
-| `[AMI]` | AMI connection | `AmiConnectionLog` | Connect, disconnect, reconnect, reader error, notification handler error, notification handler that has not returned |
-| `[AMI_EVENT]` | AMI events | `AmiConnectionLog` | Event received, dropped, discarded on caller ending, `OnEvent` handler fault |
+| `[AMI]` | AMI connection | `AmiConnectionLog` | Connect, disconnect, reconnect, reconnect gave up, reader error, notification handler error, notification handler that has not returned |
+| `[AMI_EVENT]` | AMI events | `AmiConnectionLog` | Event received, dropped, discarded on caller ending, `OnEvent` handler fault, observer fault |
 | `[AMI_ACTION]` | AMI actions | `AmiConnectionLog` | Response received |
 | `[LIVE]` | Live state | `VerbaraServerLog` | Initial state, reconnect reload, `Status` refused |
 | `[CHANNEL]` | Channels | `ChannelManagerLog` | New, state change, hangup, rename, link/unlink |
@@ -41,9 +41,11 @@
 | `[AMI] Reader error` with `IOException` | Infra: unstable network | — |
 | `[AMI] State-change handler error` | Bug: an application `StateChanged` handler threw (exception attached); the handlers after it still ran | P1 |
 | `[AMI] A <Event> handler has not returned after <n> s` | Bug: an application `StateChanged`, `ConnectionLost` (`Lost`) or `Reconnected` handler blocks; later notifications, the Live reload included, wait for it | P1 |
+| `[AMI] Reconnect gave up after <n> attempts; the connection will not come back` | Infra: the reconnect reached `MaxReconnectAttempts` and the connection stays `Disconnected` (last attempt's exception attached; `AmiAuthenticationException` means rejected credentials) | P0 |
 | `[AMI_EVENT] Dropped` | Infra: event buffer full (tune `EventPumpCapacity`) | — |
 | `[AMI_EVENT] Discarded on caller ending` | Expected: the caller ended the connection with events buffered | Ignore |
 | `[AMI_EVENT] OnEvent handler threw on <EventType>` | Bug: an application `OnEvent` handler failed (exception attached); delivery went on | P1 |
+| `[AMI_EVENT] Observer threw on <EventType>` | Bug: an application observer's `OnNext` failed (exception attached); it stays subscribed and delivery went on | P1 |
 | `[LIVE] Status refused` | Config: the AMI user may not run `Status` (needs `system`, `call` or `reporting` in `write`); no channel was reconciled | — |
 | `[QUEUE] Caller left` without Exception | Expected: caller hung up | Ignore |
 | `[AGENT] Logoff` without Exception | Expected: agent disconnected | Ignore |
