@@ -71,6 +71,7 @@ public sealed class AriOutboundListener : IAriOutboundListener
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
     private int _running;
+    private int _disposed;
 
     public AriOutboundListener(
         IOptions<AriOutboundListenerOptions> options,
@@ -118,9 +119,30 @@ public sealed class AriOutboundListener : IAriOutboundListener
         if (Interlocked.Exchange(ref _running, 1) == 1)
             return ValueTask.CompletedTask;
 
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _listener = new TcpListener(IPAddress.Parse(_options.ListenAddress), _options.Port);
-        _listener.Start();
+        // A start that throws after the exchange — an invalid ListenAddress, a port another listener
+        // holds — gives back everything it built and the running flag, so the listener reports itself
+        // stopped and a later start binds as a first one does.
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        TcpListener? listener = null;
+        var started = false;
+        try
+        {
+            listener = new TcpListener(IPAddress.Parse(_options.ListenAddress), _options.Port);
+            listener.Start();
+            started = true;
+        }
+        finally
+        {
+            if (!started)
+            {
+                listener?.Dispose();
+                cts.Dispose();
+                Volatile.Write(ref _running, 0);
+            }
+        }
+
+        _cts = cts;
+        _listener = listener;
 
         var endpoint = _listener.LocalEndpoint.ToString() ?? $"{_options.ListenAddress}:{_options.Port}";
         AriOutboundListenerLog.ListenerStarted(_logger, endpoint, _options.Path);
@@ -165,6 +187,10 @@ public sealed class AriOutboundListener : IAriOutboundListener
 
     public async ValueTask DisposeAsync()
     {
+        // Every disposal after the first is a no-op, whether or not the listener was started.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         await StopAsync();
         _connectionSubject.OnCompleted();
         _connectionSubject.Dispose();
