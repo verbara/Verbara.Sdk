@@ -471,24 +471,16 @@ public sealed class AudioStreamEndingTests
             return harness.Options.Admission.Held;
 
         using var probeBound = new CancellationTokenSource(SignalTimeout);
-        var probes = new List<AudioSocketTestPeer>();
-        try
+        using var probes = new DisposableSet();
+        for (var i = 0; i < ObserverStreams; i++)
         {
-            for (var i = 0; i < ObserverStreams; i++)
-            {
-                var probe = harness.IdentifyUntilAdmittedAsync(Guid.NewGuid(), probeBound.Token);
-                if (!await Signalled(probe, probeBound.Token))
-                    break;
-                probes.Add((await probe).Peer);
-            }
+            var probe = harness.IdentifyUntilAdmittedAsync(Guid.NewGuid(), probeBound.Token);
+            if (!await Signalled(probe, probeBound.Token))
+                break;
+            probes.Add((await probe).Peer);
+        }
 
-            return ObserverStreams - probes.Count;
-        }
-        finally
-        {
-            foreach (var probe in probes)
-                probe.Dispose();
-        }
+        return ObserverStreams - probes.Count;
     }
 
     private static async Task<ObserverCellCounts> MeasureWebSocketObserverCellAsync(bool throwOnDisconnected)
@@ -532,7 +524,7 @@ public sealed class AudioStreamEndingTests
                 // Proven by admission, as for the AudioSocket cell: ten new connections under the limit
                 // of ten must each be announced
                 using var probeBound = new CancellationTokenSource(SignalTimeout);
-                var probes = new List<WebSocketTestPeer>();
+                using var probes = new DisposableSet();
                 for (var i = 0; i < ObserverStreams; i++)
                 {
                     var probe = harness.ConnectUntilAdmittedAsync($"probe-{i}-{token}", probeBound.Token);
@@ -542,8 +534,6 @@ public sealed class AudioStreamEndingTests
                 }
 
                 held = ObserverStreams - probes.Count;
-                foreach (var probe in probes)
-                    probe.Dispose();
             }
             else
             {

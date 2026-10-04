@@ -129,29 +129,26 @@ public sealed class AudioSocketIdentificationTests
         var pairs = Enumerable.Range(0, peers).Select(_ => (X: Guid.NewGuid(), Y: Guid.NewGuid())).ToList();
 
         // Act
-        var connected = await Task.WhenAll(pairs.Select(async pair =>
+        using var connected = new DisposableSet();
+        foreach (var peer in await Task.WhenAll(pairs.Select(async pair =>
         {
             var peer = await AudioSocketTestPeer.ConnectAsync(harness.Port, bound.Token);
             await peer.SendAsync([.. AudioSocketFrames.Uuid(pair.X), .. AudioSocketFrames.Uuid(pair.Y)], bound.Token);
             return peer;
-        }));
+        })))
+        {
+            connected.Add(peer);
+        }
+
         await all.Task.WaitAsync(bound.Token);
 
         // Assert
-        try
+        var xs = pairs.Select(p => p.X.ToString()).ToHashSet(StringComparer.Ordinal);
+        using (new AssertionScope())
         {
-            var xs = pairs.Select(p => p.X.ToString()).ToHashSet(StringComparer.Ordinal);
-            using (new AssertionScope())
-            {
-                announced.Count(xs.Contains).Should().Be(peers, "every stream is announced with its first id");
-                pairs.Count(p => harness.Server.GetStream(p.X.ToString()) is not null).Should().Be(peers, "and found by it");
-                pairs.Count(p => harness.Server.GetStream(p.Y.ToString()) is not null).Should().Be(0, "and none by the second");
-            }
-        }
-        finally
-        {
-            foreach (var peer in connected)
-                peer.Dispose();
+            announced.Count(xs.Contains).Should().Be(peers, "every stream is announced with its first id");
+            pairs.Count(p => harness.Server.GetStream(p.X.ToString()) is not null).Should().Be(peers, "and found by it");
+            pairs.Count(p => harness.Server.GetStream(p.Y.ToString()) is not null).Should().Be(0, "and none by the second");
         }
     }
 

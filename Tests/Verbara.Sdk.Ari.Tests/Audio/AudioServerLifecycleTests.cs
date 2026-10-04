@@ -72,7 +72,7 @@ public sealed class AudioServerLifecycleTests
     public async Task StartAsync_ShouldLeaveTheServerStoppedAndStartable_WhenItsPortIsBusy(Kind kind)
     {
         // Arrange — another listener holds the port
-        var busy = new TcpListener(IPAddress.Loopback, 0);
+        using var busy = new TcpListener(IPAddress.Loopback, 0);
         busy.Start();
         var port = ((IPEndPoint)busy.LocalEndpoint).Port;
         var server = Create(kind, port);
@@ -91,7 +91,6 @@ public sealed class AudioServerLifecycleTests
         }
         finally
         {
-            busy.Dispose();
             await server.Dispose();
         }
 

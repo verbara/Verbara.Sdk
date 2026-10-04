@@ -49,6 +49,7 @@ internal sealed class AudioStreamStateChannel : IObservable<AudioStreamState>, I
     private int _endPublished;
     private int _completed;
 
+    /// <summary>Initializes a channel whose subscribers are first replayed <paramref name="initial"/>.</summary>
     /// <param name="initial">The state a subscriber is replayed before anything is published.</param>
     /// <param name="logger">Where a subscriber's exception is reported.</param>
     /// <param name="channelId">The stream's id as it stands when a subscriber throws, for the log line.</param>
@@ -125,12 +126,12 @@ internal sealed class AudioStreamStateChannel : IObservable<AudioStreamState>, I
     {
         // The managed thread id of the subscribing call while it is inside the subject's Subscribe, 0
         // otherwise. A notification delivered on that thread in that window is the replay.
-        private int _replayThread;
+        private volatile int _replayThread;
         private ExceptionDispatchInfo? _replayFailure;
 
         public IDisposable SubscribeTo(BehaviorSubject<AudioStreamState> source)
         {
-            Volatile.Write(ref _replayThread, Environment.CurrentManagedThreadId);
+            _replayThread = Environment.CurrentManagedThreadId;
             IDisposable subscription;
             try
             {
@@ -138,7 +139,7 @@ internal sealed class AudioStreamStateChannel : IObservable<AudioStreamState>, I
             }
             finally
             {
-                Volatile.Write(ref _replayThread, 0);
+                _replayThread = 0;
             }
 
             if (_replayFailure is null)
@@ -163,7 +164,7 @@ internal sealed class AudioStreamStateChannel : IObservable<AudioStreamState>, I
             {
                 deliver();
             }
-            catch (Exception ex) when (Volatile.Read(ref _replayThread) == Environment.CurrentManagedThreadId)
+            catch (Exception ex) when (_replayThread == Environment.CurrentManagedThreadId)
             {
                 // The replay inside the subscriber's own Subscribe call: handed back to that caller.
                 _replayFailure = ExceptionDispatchInfo.Capture(ex);

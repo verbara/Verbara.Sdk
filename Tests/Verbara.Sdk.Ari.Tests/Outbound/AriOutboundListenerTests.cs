@@ -1376,7 +1376,7 @@ public sealed class AriOutboundListenerTests
     public async Task StartAsync_ShouldLeaveTheListenerStoppedAndStartable_WhenItsPortIsBusy()
     {
         // Arrange — another listener holds the port
-        var busy = new TcpListener(IPAddress.Loopback, 0);
+        using var busy = new TcpListener(IPAddress.Loopback, 0);
         busy.Start();
         var port = ((IPEndPoint)busy.LocalEndpoint).Port;
         var (listener, _) = CreateListener(o => o.Port = port);
@@ -1395,7 +1395,6 @@ public sealed class AriOutboundListenerTests
         }
         finally
         {
-            busy.Dispose();
             await listener.DisposeAsync();
         }
 

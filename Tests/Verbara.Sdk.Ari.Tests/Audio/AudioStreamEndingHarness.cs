@@ -499,3 +499,24 @@ internal sealed class WebSocketTestPeer : IDisposable
 
     public void Dispose() => _client.Dispose();
 }
+
+/// <summary>Disposes everything added to it, in order, when it is disposed.</summary>
+internal sealed class DisposableSet : IDisposable
+{
+    private readonly List<IDisposable> _items = [];
+
+    public int Count => _items.Count;
+
+    public T Add<T>(T item) where T : IDisposable
+    {
+        _items.Add(item);
+        return item;
+    }
+
+    public void Dispose()
+    {
+        foreach (var item in _items)
+            item.Dispose();
+        _items.Clear();
+    }
+}

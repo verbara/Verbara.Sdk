@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Reactive.Subjects;
 using Microsoft.Extensions.Logging;
 using Verbara.Sdk.Ari.Diagnostics;
+using Verbara.Sdk.Ari.Internal;
 
 namespace Verbara.Sdk.Ari.Audio;
 
@@ -141,29 +142,22 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
             return ValueTask.CompletedTask;
 
         // A start that throws after the exchange — an invalid ListenAddress, a port another listener
-        // holds — gives back everything it built and the running flag, so the server reports itself
-        // stopped and a later start binds as a first one does.
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        TcpListener? listener = null;
+        // holds — gives the running flag back and leaves no listener, so the server reports itself
+        // stopped and a later start binds as a first one does. The source is built only once the
+        // listener is bound, so a failed start has nothing else to release.
         var started = false;
         try
         {
-            listener = new TcpListener(IPAddress.Parse(_options.ListenAddress), _options.AudioSocketPort);
-            listener.Start();
+            _listener = BoundListener.Start(_options.ListenAddress, _options.AudioSocketPort);
             started = true;
         }
         finally
         {
             if (!started)
-            {
-                listener?.Dispose();
-                cts.Dispose();
                 Volatile.Write(ref _running, 0);
-            }
         }
 
-        _cts = cts;
-        _listener = listener;
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         AudioSocketServerLog.ServerStarted(_logger, _options.AudioSocketPort);
 
         _acceptLoop = AcceptLoopAsync(_cts.Token);

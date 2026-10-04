@@ -9,6 +9,7 @@ using System.Text;
 using Verbara.Sdk;
 using Verbara.Sdk.Ari.Client;
 using Microsoft.Extensions.Logging;
+using Verbara.Sdk.Ari.Internal;
 using Microsoft.Extensions.Options;
 
 namespace Verbara.Sdk.Ari.Outbound;
@@ -120,29 +121,22 @@ public sealed class AriOutboundListener : IAriOutboundListener
             return ValueTask.CompletedTask;
 
         // A start that throws after the exchange — an invalid ListenAddress, a port another listener
-        // holds — gives back everything it built and the running flag, so the listener reports itself
-        // stopped and a later start binds as a first one does.
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        TcpListener? listener = null;
+        // holds — gives the running flag back and leaves no listener, so the listener reports itself
+        // stopped and a later start binds as a first one does. The source is built only once the
+        // listener is bound, so a failed start has nothing else to release.
         var started = false;
         try
         {
-            listener = new TcpListener(IPAddress.Parse(_options.ListenAddress), _options.Port);
-            listener.Start();
+            _listener = BoundListener.Start(_options.ListenAddress, _options.Port);
             started = true;
         }
         finally
         {
             if (!started)
-            {
-                listener?.Dispose();
-                cts.Dispose();
                 Volatile.Write(ref _running, 0);
-            }
         }
 
-        _cts = cts;
-        _listener = listener;
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         var endpoint = _listener.LocalEndpoint.ToString() ?? $"{_options.ListenAddress}:{_options.Port}";
         AriOutboundListenerLog.ListenerStarted(_logger, endpoint, _options.Path);
