@@ -34,7 +34,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
     public string NetworkAddress => _container.IpAddress;
 
     /// <summary>An Asterisk container from <paramref name="image"/>, on <paramref name="network"/>.</summary>
-    /// <param name="network">The network the container joins, under the alias <c>asterisk</c>.</param>
+    /// <param name="network">The network the container joins, under <paramref name="networkAlias"/>.</param>
     /// <param name="image">The image from <see cref="CreateImageAsync"/>.</param>
     /// <param name="configDirectory">
     /// The directory mounted read-only on <c>/etc/asterisk</c>; the shared functional configuration by default. A test
@@ -45,8 +45,9 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// Whether AMI (5038) and ARI (8088) are published on random host ports, which <see cref="AmiPort"/> and
     /// <see cref="AriPort"/> read. A test that reaches the container at <see cref="NetworkAddress"/> publishes none.
     /// </param>
+    /// <param name="networkAlias">The name other containers on <paramref name="network"/> reach it by.</param>
     public AsteriskContainer(INetwork network, IImage image, string? configDirectory = null, string? name = null,
-        bool publishPorts = true)
+        bool publishPorts = true, string networkAlias = "asterisk")
     {
         var builder = new ContainerBuilder(image);
         if (name is not null)
@@ -60,7 +61,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
             .WithExtraHost("host.docker.internal", "host-gateway")
             .WithBindMount(configDirectory ?? DockerPaths.AsteriskConfig, "/etc/asterisk", AccessMode.ReadOnly)
             .WithNetwork(network)
-            .WithNetworkAliases("asterisk")
+            .WithNetworkAliases(networkAlias)
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
                     // Step 1: Asterisk core process is running.

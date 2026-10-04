@@ -15,9 +15,16 @@ public sealed class SippContainer : IAsyncDisposable
 
     public string ContainerName => _container.Name;
 
-    public SippContainer(INetwork network)
+    /// <summary>A SIPp container on <paramref name="network"/>, idle until a scenario is run in it.</summary>
+    /// <param name="network">The network the container joins.</param>
+    /// <param name="name">The container's name; Testcontainers chooses one by default.</param>
+    public SippContainer(INetwork network, string? name = null)
     {
-        _container = new ContainerBuilder(Image)
+        var builder = new ContainerBuilder(Image);
+        if (name is not null)
+            builder = builder.WithName(name);
+
+        _container = builder
             .WithNetwork(network)
             .WithBindMount(DockerPaths.SippScenariosDir, "/sipp-scenarios", AccessMode.ReadOnly)
             .WithEntrypoint("sleep", "infinity")
@@ -52,6 +59,33 @@ public sealed class SippContainer : IAsyncDisposable
             args.AddRange(extraArgs);
 
         return await _container.ExecAsync(args, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Places <paramref name="calls"/> calls with SIPp's built-in <c>uac</c> scenario, one at a time: each dials
+    /// <paramref name="number"/> at <paramref name="targetHost"/>, talks 2 s once answered and hangs up. SIPp exits 0
+    /// when every call succeeded; its statistics, with the <c>Successful call</c> and <c>Failed call</c> counts, are
+    /// on standard output.
+    /// </summary>
+    /// <param name="targetHost">The SIP target's name or address on the shared network.</param>
+    /// <param name="number">The number dialled (the Request-URI's user part).</param>
+    /// <param name="calls">How many calls to place.</param>
+    /// <param name="targetPort">The SIP port on the target.</param>
+    /// <param name="ct">Cancels the exec.</param>
+    public Task<ExecResult> RunUacAsync(
+        string targetHost,
+        string number,
+        int calls = 1,
+        int targetPort = 5060,
+        CancellationToken ct = default)
+    {
+        IList<string> args =
+        [
+            "sipp", "-sn", "uac", "-s", number, $"{targetHost}:{targetPort}",
+            "-m", calls.ToString(System.Globalization.CultureInfo.InvariantCulture), "-l", "1", "-d", "2000",
+            "-timeout", "30s",
+        ];
+        return _container.ExecAsync(args, ct);
     }
 
     public Task<ExecResult> ExecAsync(IList<string> command, CancellationToken ct = default)
