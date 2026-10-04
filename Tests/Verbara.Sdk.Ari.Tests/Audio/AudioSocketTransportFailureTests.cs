@@ -113,6 +113,9 @@ public sealed class AudioSocketTransportFailureTests
             hangup,
             "a consumer watching StateChanges sees a reset end exactly as a hangup does; the difference " +
             "is only in the log and on the meter");
+        hangup.Should().Equal(
+            [AudioStreamState.Connected, AudioStreamState.Disconnected],
+            "and each recording publishes the ending once, last, from identification to completion");
     }
 
     [Theory]

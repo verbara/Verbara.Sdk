@@ -145,6 +145,11 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     public int ActiveSessionCount => _sessions.Count;
 
     /// <summary>Initializes a new instance.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="AudioSocketOptions.ConnectionTimeout"/> is zero, negative other than
+    /// <see cref="Timeout.InfiniteTimeSpan"/>, or more than 4 294 967 294 milliseconds: a value that cannot
+    /// bound the wait for a connection's identification frame.
+    /// </exception>
     public AudioSocketServer(AudioSocketOptions options, ILogger<AudioSocketServer> logger)
         : this(options, logger, TimeProvider.System)
     {
@@ -156,6 +161,8 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// </summary>
     internal AudioSocketServer(AudioSocketOptions options, ILogger<AudioSocketServer> logger, TimeProvider timeProvider)
     {
+        ArgumentNullException.ThrowIfNull(options);
+        ConnectionTimeoutRule.ThrowIfUnusable(options.ConnectionTimeout);
         _options = options;
         _logger = logger;
         _timeProvider = timeProvider;

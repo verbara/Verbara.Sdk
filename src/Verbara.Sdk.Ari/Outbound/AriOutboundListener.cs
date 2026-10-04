@@ -9,6 +9,7 @@ using System.Text;
 using Verbara.Sdk;
 using Verbara.Sdk.Ari.Client;
 using Microsoft.Extensions.Logging;
+using Verbara.Sdk.Ari.Internal;
 using Microsoft.Extensions.Options;
 
 namespace Verbara.Sdk.Ari.Outbound;
@@ -71,6 +72,7 @@ public sealed class AriOutboundListener : IAriOutboundListener
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
     private int _running;
+    private int _disposed;
 
     public AriOutboundListener(
         IOptions<AriOutboundListenerOptions> options,
@@ -118,9 +120,23 @@ public sealed class AriOutboundListener : IAriOutboundListener
         if (Interlocked.Exchange(ref _running, 1) == 1)
             return ValueTask.CompletedTask;
 
+        // A start that throws after the exchange — an invalid ListenAddress, a port another listener
+        // holds — gives the running flag back and leaves no listener, so the listener reports itself
+        // stopped and a later start binds as a first one does. The source is built only once the
+        // listener is bound, so a failed start has nothing else to release.
+        var started = false;
+        try
+        {
+            _listener = BoundListener.Start(_options.ListenAddress, _options.Port);
+            started = true;
+        }
+        finally
+        {
+            if (!started)
+                Volatile.Write(ref _running, 0);
+        }
+
         _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _listener = new TcpListener(IPAddress.Parse(_options.ListenAddress), _options.Port);
-        _listener.Start();
 
         var endpoint = _listener.LocalEndpoint.ToString() ?? $"{_options.ListenAddress}:{_options.Port}";
         AriOutboundListenerLog.ListenerStarted(_logger, endpoint, _options.Path);
@@ -165,6 +181,10 @@ public sealed class AriOutboundListener : IAriOutboundListener
 
     public async ValueTask DisposeAsync()
     {
+        // Every disposal after the first is a no-op, whether or not the listener was started.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         await StopAsync();
         _connectionSubject.OnCompleted();
         _connectionSubject.Dispose();

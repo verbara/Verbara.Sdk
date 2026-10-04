@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Verbara.Sdk.Ari.Diagnostics;
+using Verbara.Sdk.Ari.Internal;
 
 namespace Verbara.Sdk.Ari.Audio;
 
@@ -55,7 +56,9 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     // Every announced connection still open: the holder of each key and each connection waiting for a
     // key another one holds. ActiveStreams and ActiveStreamCount read it, so a waiting connection is
     // listed and counted like any other live stream.
-    private readonly ConcurrentDictionary<WebSocketAudioSession, byte> _live = new();
+    // A connection enters it pending, before the stop is read a second time, and is announced only once
+    // admitted; the stop claims a pending entry for its registrant to withdraw.
+    private readonly ConcurrentDictionary<WebSocketAudioSession, RegistryEntry> _live = new();
     private readonly Subject<IAudioStream> _streamSubject = new();
     // Connection handlers that have not finished. Each handler removes and disposes its own session
     // on its way out, so StopAsync waits for these until its token is cancelled.
@@ -64,6 +67,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
     private int _running;
+    private int _disposed;
 
     /// <summary>Observable that emits each new audio stream when a connection is established.</summary>
     public IObservable<IAudioStream> OnStreamConnected => _streamSubject;
@@ -126,6 +130,19 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     /// </summary>
     internal Func<CancellationToken, ValueTask<TcpClient>>? AcceptOverride { get; set; }
 
+    /// <summary>
+    /// Runs on a connection's handler just before the server registers it. Settable by tests (via
+    /// InternalsVisibleTo), so a test can run a stop inside that window instead of hoping a race lands
+    /// there.
+    /// </summary>
+    internal Action? BeforeRegistration { get; set; }
+
+    /// <summary>
+    /// Runs on a connection's handler right after its entry was added to the server's tables and before
+    /// it is announced. Settable by tests (via InternalsVisibleTo), for the same reason.
+    /// </summary>
+    internal Action? AfterRegistryAdd { get; set; }
+
     public ValueTask StartAsync(CancellationToken cancellationToken = default)
     {
         // First, and before anything is built: a second start that got as far as replacing _cts
@@ -134,9 +151,23 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
         if (Interlocked.Exchange(ref _running, 1) == 1)
             return ValueTask.CompletedTask;
 
+        // A start that throws after the exchange — an invalid ListenAddress, a port another listener
+        // holds — gives the running flag back and leaves no listener, so the server reports itself
+        // stopped and a later start binds as a first one does. The source is built only once the
+        // listener is bound, so a failed start has nothing else to release.
+        var started = false;
+        try
+        {
+            _listener = BoundListener.Start(_options.ListenAddress, _options.WebSocketPort);
+            started = true;
+        }
+        finally
+        {
+            if (!started)
+                Volatile.Write(ref _running, 0);
+        }
+
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _listener = new TcpListener(IPAddress.Parse(_options.ListenAddress), _options.WebSocketPort);
-        _listener.Start();
 
         WebSocketAudioServerLog.ServerStarted(_logger, _options.WebSocketPort);
 
@@ -410,28 +441,36 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 // Create ManagedWebSocket
                 var webSocket = WebSocket.CreateFromStream(stream, new WebSocketCreationOptions { IsServer = true });
 
-                session = new WebSocketAudioSession(webSocket, channelId, _options.DefaultFormat);
+                session = new WebSocketAudioSession(webSocket, channelId, _options.DefaultFormat, _logger);
                 session.Start();
 
                 var endpoint = client.Client.RemoteEndPoint?.ToString();
                 WebSocketAudioServerLog.ConnectionAccepted(_logger, endpoint, channelId);
 
+                // The stop is read before the registration and again after the add, as the Voice AI
+                // server does. A connection whose stop has begun is refused: closed, never announced or
+                // counted, and nothing is logged.
+                BeforeRegistration?.Invoke();
+                if (ct.IsCancellationRequested)
+                    return;
+
+                var entry = new RegistryEntry();
                 Register(channelId, session);
-                _live.TryAdd(session, 0);
+                _live.TryAdd(session, entry);
+                AfterRegistryAdd?.Invoke();
+
+                // The add must be visible before the stop is read, or this read and the stop's walk of
+                // _live could each miss the other's write. A stop that reaches the entry while it is
+                // pending leaves it to this method, which withdraws it here.
+                Interlocked.MemoryBarrier();
+                if (ct.IsCancellationRequested || !entry.TryAdmit())
+                    return;
+
                 _streamSubject.OnNext(session);
 
-                // Wait for session to disconnect
-                var tcs = new TaskCompletionSource();
-                using var sub = session.StateChanges.Subscribe(state =>
-                {
-                    if (state is AudioStreamState.Disconnected or AudioStreamState.Error)
-                        tcs.TrySetResult();
-                });
-
-                if (!session.IsConnected)
-                    tcs.TrySetResult();
-
-                await tcs.Task.WaitAsync(ct);
+                // The session completes this signal when its ending is published, before any consumer
+                // observer is notified, so the release does not depend on what those observers do.
+                await session.Ended.WaitAsync(ct);
             }
             catch (OperationCanceledException)
             {
@@ -443,6 +482,13 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 // deregisters and disposes the session, and the enclosing `using (client)` still
                 // closes the connection.
                 /* Best effort — the server is stopping */
+            }
+            catch (ObjectDisposedException) when (ct.IsCancellationRequested)
+            {
+                // An announcement that met the subject a racing DisposeAsync released: that is the
+                // stop, not a connection error. A consumer's own handler that throws
+                // ObjectDisposedException while the server runs still reaches the catch below.
+                /* Best effort — the server is being disposed */
             }
             catch (Exception ex)
             {
@@ -559,8 +605,13 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
         // Empty unless a wait was cancelled. A session disposed here makes its handler's own dispose a
         // no-op, and a handler that registers a session after this point still disposes it, because
         // its token is already cancelled.
-        foreach (var session in _live.Keys)
-            await session.DisposeAsync();
+        // A pending entry is claimed for its registrant instead, which withdraws it.
+        foreach (var (session, entry) in _live)
+        {
+            if (entry.ClaimForStop())
+                await session.DisposeAsync();
+        }
+
         _live.Clear();
         _streams.Clear();
 
@@ -569,9 +620,37 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Every disposal after the first is a no-op, whether or not the server was started.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+
         if (IsRunning) await StopAsync();
         _streamSubject.OnCompleted();
         _streamSubject.Dispose();
         _cts?.Dispose();
+    }
+
+    /// <summary>
+    /// Where one connection's registration stands. It enters pending, and moves once: to admitted by
+    /// its registrant, or to claimed by a stop.
+    /// </summary>
+    private sealed class RegistryEntry
+    {
+        private const int Pending = 0;
+        private const int Admitted = 1;
+        private const int ClaimedByStop = 2;
+
+        private int _state = Pending;
+
+        /// <summary>The registrant's move: true when the entry is now admitted, false when a stop claimed it first.</summary>
+        public bool TryAdmit() =>
+            Interlocked.CompareExchange(ref _state, Admitted, Pending) == Pending;
+
+        /// <summary>
+        /// The stop's move: claims a pending entry for its registrant to withdraw, and returns true only
+        /// for an admitted entry, which the stop itself ends.
+        /// </summary>
+        public bool ClaimForStop() =>
+            Interlocked.CompareExchange(ref _state, ClaimedByStop, Pending) == Admitted;
     }
 }

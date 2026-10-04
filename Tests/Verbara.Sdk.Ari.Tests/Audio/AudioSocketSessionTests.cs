@@ -81,7 +81,7 @@ public class AudioSocketSessionTests
     }
 
     [Fact]
-    public async Task Session_ShouldReportDisconnectedOnHangup()
+    public async Task Session_ShouldReportDisconnectedOnceOnHangup_WhenTheSessionIsThenDisposed()
     {
         var uuidFrame = BuildFrame(AudioFrameType.Uuid, UuidPayload(Guid.NewGuid()));
         var hangupFrame = BuildFrame(AudioFrameType.Hangup, []);
@@ -92,20 +92,28 @@ public class AudioSocketSessionTests
 
         var states = new List<AudioStreamState>();
         var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var memStream = new MemoryStream(allData);
         var session = new AudioSocketSession(memStream, "ulaw", NullLogger.Instance);
-        using var sub = session.StateChanges.Subscribe(s =>
-        {
-            states.Add(s);
-            if (s == AudioStreamState.Disconnected)
-                disconnected.TrySetResult();
-        });
+        using var sub = session.StateChanges.Subscribe(
+            s =>
+            {
+                states.Add(s);
+                if (s == AudioStreamState.Disconnected)
+                    disconnected.TrySetResult();
+            },
+            () => completed.TrySetResult());
         session.Start();
 
+        // The hangup frame ends the session; the disposal that follows, as every owner does, must not
+        // publish the ending again. The recording is read once the sequence has completed.
         await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await session.DisposeAsync();
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-        states.Should().Contain(AudioStreamState.Connected);
-        states.Should().Contain(AudioStreamState.Disconnected);
+        states.Should().Equal(
+            [AudioStreamState.Connecting, AudioStreamState.Connected, AudioStreamState.Disconnected],
+            "the ending is published once, last");
         session.SampleRate.Should().Be(8000);
     }
 

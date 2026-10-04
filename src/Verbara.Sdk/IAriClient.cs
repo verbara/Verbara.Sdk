@@ -730,6 +730,15 @@ public interface IAudioStream : IAsyncDisposable
     bool IsConnected { get; }
 
     /// <summary>Observable for connection state changes.</summary>
+    /// <remarks>
+    /// The stream publishes its ending once: <see cref="AudioStreamState.Disconnected"/> exactly once, as
+    /// the last state, after <see cref="AudioStreamState.Error"/> when an error frame ended it; a disposal
+    /// after the ending publishes nothing more. A subscriber is replayed the current state inside its
+    /// <c>Subscribe</c> call, and an exception it throws there reaches that caller, with the subscription
+    /// dropped. An exception a subscriber throws on a later notification is logged at Error and does not
+    /// stop the other subscribers, the stream's teardown or its release by the server that owns it, which
+    /// may already have released the stream when a subscriber is notified that it ended.
+    /// </remarks>
     IObservable<AudioStreamState> StateChanges { get; }
 
     /// <summary>Read the next audio frame. Returns empty when stream ends.</summary>

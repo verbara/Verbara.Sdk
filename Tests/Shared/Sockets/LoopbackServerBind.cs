@@ -14,9 +14,9 @@ namespace Verbara.Sdk.Tests.Shared.Sockets;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A fresh server per attempt is required, not a style choice: the ARI audio servers set their
-/// running flag before the listener's bind can throw, so a second <c>StartAsync</c> on the instance
-/// whose bind failed silently does nothing.
+/// A fresh server per attempt keeps every attempt independent of how a server treats a start after a
+/// failed one. The ARI audio servers now roll a failed start back and bind on the next one, but other
+/// servers this helper starts need not, and a fresh instance asks nothing of them.
 /// </para>
 /// <para>
 /// The retry has no delay: a new probe is all it needs, and a wait would be an unmarked barrier for
