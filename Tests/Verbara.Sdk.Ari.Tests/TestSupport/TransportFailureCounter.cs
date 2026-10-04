@@ -38,7 +38,10 @@ internal sealed class TransportFailureCounter : IDisposable
     {
     }
 
-    /// <summary>Counts another instrument; for this helper's own test, on a meter no SDK code uses.</summary>
+    /// <summary>
+    /// Counts another instrument by its meter's and its own name: this helper's own test, on a meter no SDK
+    /// code uses, and the tests of the meter's other instruments, such as <c>audio.connections.refused</c>.
+    /// </summary>
     internal TransportFailureCounter(string meterName, string instrumentName)
     {
         _listener.InstrumentPublished = (instrument, listener) =>
