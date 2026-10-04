@@ -8,6 +8,7 @@ using System.Net.WebSockets;
 using System.Reactive.Subjects;
 using System.Text.Json;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
 using Verbara.Sdk;
 
 namespace Verbara.Sdk.Ari.Audio;
@@ -19,7 +20,7 @@ namespace Verbara.Sdk.Ari.Audio;
 internal sealed class WebSocketAudioSession : IChanWebSocketSession
 {
     private readonly WebSocket _webSocket;
-    private readonly BehaviorSubject<AudioStreamState> _state = new(AudioStreamState.Connected);
+    private readonly AudioStreamStateChannel _state;
     private readonly Subject<ChanWebSocketControlMessage> _controlSubject = new();
     private readonly Channel<ReadOnlyMemory<byte>> _audioInChannel;
     private readonly CancellationTokenSource _cts = new();
@@ -34,10 +35,24 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     public IObservable<AudioStreamState> StateChanges => _state;
     public IObservable<ChanWebSocketControlMessage> ControlMessages => _controlSubject;
 
-    internal WebSocketAudioSession(WebSocket webSocket, string channelId, string format)
+    /// <summary>
+    /// Completes when the session's ending is published, before any observer is notified of it: the
+    /// signal its server waits on instead of the consumers' observable.
+    /// </summary>
+    internal Task Ended => _state.Ended;
+
+    /// <param name="webSocket">The upgraded connection.</param>
+    /// <param name="channelId">The upgrade path's last segment.</param>
+    /// <param name="format">The audio format the connection carries.</param>
+    /// <param name="logger">
+    /// Where a consumer's <see cref="StateChanges"/> observer that throws is reported. Required, so a
+    /// call site cannot compile without it and silently lose that line; the server passes its own.
+    /// </param>
+    internal WebSocketAudioSession(WebSocket webSocket, string channelId, string format, ILogger logger)
     {
         _webSocket = webSocket;
         ChannelId = channelId;
+        _state = new AudioStreamStateChannel(AudioStreamState.Connected, logger, () => ChannelId);
         Format = format;
         SampleRate = FormatToSampleRate(format);
 
@@ -102,7 +117,7 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         finally
         {
             _audioInChannel.Writer.TryComplete();
-            _state.OnNext(AudioStreamState.Disconnected);
+            _state.TryEnd(error: false);
         }
     }
 
@@ -288,8 +303,8 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         if (_readPumpTask is not null)
             await _readPumpTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
-        _state.OnNext(AudioStreamState.Disconnected);
-        _state.OnCompleted();
+        // Publishes the ending only if the pump did not (a pump never started); then completes it.
+        _state.TryEnd(error: false);
         _state.Dispose();
         _controlSubject.OnCompleted();
         _controlSubject.Dispose();

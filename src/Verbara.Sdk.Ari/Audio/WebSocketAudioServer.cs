@@ -423,7 +423,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 // Create ManagedWebSocket
                 var webSocket = WebSocket.CreateFromStream(stream, new WebSocketCreationOptions { IsServer = true });
 
-                session = new WebSocketAudioSession(webSocket, channelId, _options.DefaultFormat);
+                session = new WebSocketAudioSession(webSocket, channelId, _options.DefaultFormat, _logger);
                 session.Start();
 
                 var endpoint = client.Client.RemoteEndPoint?.ToString();

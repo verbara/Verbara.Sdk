@@ -6,6 +6,7 @@ using System.Reactive.Linq;
 using System.Text;
 using Verbara.Sdk;
 using Verbara.Sdk.Ari.Audio;
+using Verbara.Sdk.Ari.Tests.TestSupport;
 using FluentAssertions;
 
 namespace Verbara.Sdk.Ari.Tests.Audio;
@@ -13,7 +14,7 @@ namespace Verbara.Sdk.Ari.Tests.Audio;
 public class WebSocketAudioSessionTests
 {
     private static WebSocketAudioSession CreateSession(FakeWebSocket ws, string channelId = "ch-1", string format = "slin16")
-        => new(ws, channelId, format);
+        => new(ws, channelId, format, new CapturingLogger<WebSocketAudioSession>());
 
     // -- Constructor / Properties ------------------------------------------------
 
@@ -218,7 +219,7 @@ public class WebSocketAudioSessionTests
         await peer.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
         using var accepted = await accepting;
         using var serverSocket = WebSocket.CreateFromStream(accepted.GetStream(), new WebSocketCreationOptions { IsServer = true });
-        var sut = new WebSocketAudioSession(serverSocket, "ch-silent-peer", "slin16");
+        var sut = new WebSocketAudioSession(serverSocket, "ch-silent-peer", "slin16", new CapturingLogger<WebSocketAudioSession>());
         var stateCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var sub = sut.StateChanges.Subscribe(static _ => { }, () => stateCompleted.TrySetResult());
 
