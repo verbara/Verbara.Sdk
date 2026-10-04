@@ -833,7 +833,8 @@ public sealed class VerbaraServerPoolTests : IAsyncLifetime
         TaskCompletionSource started, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         started.TrySetResult();
-        await Task.Delay(Timeout.Infinite, cancellationToken);
+        // A load the peer never answers: only the caller's token ends it.
+        await new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously).Task.WaitAsync(cancellationToken);
         yield break;
     }
 
