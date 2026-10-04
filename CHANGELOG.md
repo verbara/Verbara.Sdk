@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: a FastAGI connection that closes before sending its request is not served as a request
+### Fixed: a FastAGI connection that closes before sending its request is not served as a request (#384)
 
 A connection that reset or closed before Asterisk's blank line ended the AGI environment block was still handled as a
 request. With no bytes at all — a TCP liveness probe, a load balancer's health check, a port scanner — each one logged
