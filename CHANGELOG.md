@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: an ARI audio server logs and counts a connection it refuses at its stream limit
+
+When `AudioSocketServer` or `WebSocketAudioServer` was at `MaxConcurrentStreams`, it closed each further connection
+without a trace: with a limit of 2 and 10 callers, 8 of 10 were closed, with 0 log lines and 0 measurements. Each
+refusal now writes one Warning, `[AudioSocket] Stream limit reached ({Limit}), rejecting connection` (or
+`[WebSocketAudio] …`), and counts `audio.connections.refused` on the `Verbara.Sdk.Ari.Audio` meter. A connection closed
+because the server is stopping is not reported as a refusal. No public API change.
+
 ### Fixed: a FastAGI connection that closes before sending its request is not served as a request (#384)
 
 A connection that reset or closed before Asterisk's blank line ended the AGI environment block was still handled as a
