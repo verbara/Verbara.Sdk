@@ -476,7 +476,7 @@ public sealed class VerbaraServerExtendedTests : IAsyncLifetime
         };
         var queueEntry = new QueueEntryEvent
         {
-            Queue = "support", Channel = "PJSIP/5551234-001", CallerId = "5551234", Position = 1
+            Queue = "support", Channel = "PJSIP/5551234-001", CallerIDNum = "5551234", Position = 1
         };
         var callCount = 0;
         _connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())

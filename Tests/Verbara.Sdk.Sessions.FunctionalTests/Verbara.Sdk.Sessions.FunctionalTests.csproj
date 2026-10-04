@@ -5,6 +5,9 @@
     <ProjectReference Include="..\..\src\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\Metrics\LiveQueueWaitSamples.cs" Link="Shared\Metrics\LiveQueueWaitSamples.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
