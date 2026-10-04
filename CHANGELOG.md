@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added: an ARI audio server logs and counts a connection it refuses at its stream limit
+### Added: an ARI audio server logs and counts a connection it refuses at its stream limit (#387)
 
 When `AudioSocketServer` or `WebSocketAudioServer` was at `MaxConcurrentStreams`, it closed each further connection
 without a trace: with a limit of 2 and 10 callers, 8 of 10 were closed, with 0 log lines and 0 measurements. Each
