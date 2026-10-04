@@ -61,18 +61,15 @@ public sealed class AsyncServerSocket : IAsyncDisposable
         var client = await (AcceptOverride?.Invoke(cancellationToken) ?? _listener.AcceptTcpClientAsync(cancellationToken));
         // Nothing else owns the accepted connection until it is returned: if configuring it fails, it is closed here and
         // the original exception goes on to the caller unchanged.
-        var handedOver = false;
         try
         {
             client.NoDelay = true;
-            var connection = PipelineSocketConnection.FromStream(client.GetStream());
-            handedOver = true;
-            return connection;
+            return PipelineSocketConnection.FromStream(client.GetStream());
         }
-        finally
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            if (!handedOver)
-                client.Dispose();
+            client.Dispose();
+            throw;
         }
     }
 

@@ -76,7 +76,7 @@ public sealed partial class AmiConnectionTokenHandlerTests
         await using var inner = Create(factory, new DispatchLogger());
         IAmiConnection through = new PlainWrapper(inner);
         var xCalls = 0;
-        var x = through.Subscribe((_, _) =>
+        using var x = through.Subscribe((_, _) =>
         {
             Interlocked.Increment(ref xCalls);
             return ValueTask.CompletedTask;

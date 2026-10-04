@@ -240,7 +240,7 @@ public sealed partial class AmiConnectionTokenHandlerTests
         var factory = new PipedSocketFactory();
         await using var connection = Create(factory, new DispatchLogger());
         var tokenHandlerCalls = 0;
-        var subscription = connection.Subscribe((_, _) =>
+        using var subscription = connection.Subscribe((_, _) =>
         {
             Interlocked.Increment(ref tokenHandlerCalls);
             return ValueTask.CompletedTask;
@@ -282,14 +282,14 @@ public sealed partial class AmiConnectionTokenHandlerTests
             return ValueTask.CompletedTask;
         };
         var fence = new Fence();
-        var s1 = connection.Subscribe(h);
+        using var s1 = connection.Subscribe(h);
         connection.OnEvent += evt =>
         {
             if (!IsSentinel(evt))
                 order.Enqueue("G");
             return ValueTask.CompletedTask;
         };
-        var s2 = connection.Subscribe(h);
+        using var s2 = connection.Subscribe(h);
         connection.OnEvent += fence.HandleAsync;
         var socket = await ConnectAsync(connection, factory, peer);
 

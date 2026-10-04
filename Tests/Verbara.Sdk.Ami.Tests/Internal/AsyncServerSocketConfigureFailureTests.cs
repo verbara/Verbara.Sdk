@@ -125,13 +125,12 @@ public sealed class AsyncServerSocketConfigureFailureTests
     [Fact]
     public void AcceptedClient_ShouldReadClosed_WhenTheTestDisposesItItself()
     {
-        var accepted = AcceptedClients.NeverConnected();
+        using var accepted = AcceptedClients.NeverConnected();
         accepted.IsSocketClosed.Should().BeFalse("a fresh socket is open");
 
         accepted.Client.Dispose();
 
         accepted.IsSocketClosed.Should().BeTrue("disposing the client closes its socket");
-        accepted.Dispose();
     }
 
     private static async Task<string> SendAndReceiveAsync(TcpClient client, ISocketConnection connection, string text)
