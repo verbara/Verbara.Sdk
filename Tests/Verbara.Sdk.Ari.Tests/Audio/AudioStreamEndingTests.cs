@@ -48,7 +48,7 @@ public sealed class AudioStreamEndingTests
         ServerStop,
     }
 
-    // ------------------------------------------------------------------------- one ending (H28)
+    // ------------------------------------------------------------------------- one ending
 
     [Theory]
     [InlineData(AudioSocketEnding.HangupFrame)]
@@ -212,7 +212,7 @@ public sealed class AudioStreamEndingTests
             call.Peer.Dispose();
     }
 
-    // ------------------------------------------------------------- the server learns it (H29)
+    // ------------------------------------------------------------- the server learns it
 
     [Fact]
     public async Task HandleConnection_ShouldReleaseEveryAudioSocketStream_WhenAConsumerObserverThrowsOnDisconnected()

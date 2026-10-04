@@ -24,7 +24,7 @@ public sealed class AudioServerLifecycleTests
         WebSocket,
     }
 
-    // ------------------------------------------------------------- second disposal (H92)
+    // ------------------------------------------------------------- second disposal
 
     [Theory]
     [InlineData(Kind.AudioSocket)]
@@ -64,7 +64,7 @@ public sealed class AudioServerLifecycleTests
         second.Should().BeNull("a server never started is disposed twice without an exception");
     }
 
-    // ------------------------------------------------------------------- failed start (H93)
+    // ------------------------------------------------------------------- failed start
 
     [Theory]
     [InlineData(Kind.AudioSocket)]
@@ -139,7 +139,7 @@ public sealed class AudioServerLifecycleTests
         }
     }
 
-    // ------------------------------------------------------------------- restart (D6 pin)
+    // ------------------------------------------------------------------- restart
 
     [Fact]
     public async Task StartAsync_ShouldBindAndServe_WhenTheAudioSocketServerWasStopped()
@@ -175,12 +175,12 @@ public sealed class AudioServerLifecycleTests
         harness.Server.IsRunning.Should().BeTrue("the restarted server accepted and announced the connection");
     }
 
-    // ------------------------------------------------------------ the stop window (H136)
+    // ------------------------------------------------------------ the stop window
 
     [Fact]
     public async Task HandleConnection_ShouldNotAnnounce_WhenTheStopCompletesBeforeTheRegistration()
     {
-        // Arrange — port of the Voice AI server's H88 test: the stop runs to completion between the
+        // Arrange — port of the Voice AI server's stop-window test: the stop runs to completion between the
         // identification and the registration
         await using var harness = await AudioSocketEndingHarness.StartWithReleaseSignalsAsync(_ => { }, maxStreams: 1);
         using var bound = new CancellationTokenSource(SignalTimeout);
@@ -271,7 +271,7 @@ public sealed class AudioServerLifecycleTests
     [Fact]
     public async Task HandleConnection_ShouldWithdrawTheEntry_WhenTheStopRunsBetweenTheAddAndItsCheck()
     {
-        // Arrange — port of the Voice AI server's second H88 test: the stop runs right after the add
+        // Arrange — port of the Voice AI server's second stop-window test: the stop runs right after the add
         await using var harness = await AudioSocketEndingHarness.StartWithReleaseSignalsAsync(_ => { }, maxStreams: 1);
         using var bound = new CancellationTokenSource(SignalTimeout);
         var server = harness.Server;

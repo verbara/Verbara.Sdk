@@ -21,12 +21,12 @@ public sealed class AudioSocketIdentificationTests
     /// <summary>Real time a silent connection must survive while the fake clock stands still: well past <see cref="ShortIdleTimeout"/>.</summary>
     private static readonly TimeSpan RealTimeWindow = TimeSpan.FromSeconds(1);
 
-    // ------------------------------------------------------------------ the first id wins (H2)
+    // ------------------------------------------------------------------ the first id wins
 
     [Fact]
     public async Task ReadPump_ShouldKeepTheFirstId_WhenASecondIdentificationFrameArrivesMidCall()
     {
-        // Arrange — S1: identified as X, recording
+        // Arrange — identified as X, recording
         await using var harness = await AudioSocketEndingHarness.StartAsync(recording => recording.Subscribe());
         using var bound = new CancellationTokenSource(SignalTimeout);
         var x = Guid.NewGuid();
@@ -66,7 +66,7 @@ public sealed class AudioSocketIdentificationTests
     [Fact]
     public async Task ReadPump_ShouldLeaveTheOtherCallAlone_WhenASecondIdNamesAnotherLiveCall()
     {
-        // Arrange — S2: a live stream under Y, and a second stream under X
+        // Arrange — a live stream under Y, and a second stream under X
         await using var harness = await AudioSocketEndingHarness.StartAsync(recording => recording.Subscribe());
         using var bound = new CancellationTokenSource(SignalTimeout);
         var x = Guid.NewGuid();
@@ -92,7 +92,7 @@ public sealed class AudioSocketIdentificationTests
     [Fact]
     public async Task ReadPump_ShouldWriteOneWarningAndPublishNothing_WhenTheSameIdIsRepeatedTwice()
     {
-        // Arrange — S3
+        // Arrange
         await using var harness = await AudioSocketEndingHarness.StartAsync(recording => recording.Subscribe());
         using var bound = new CancellationTokenSource(SignalTimeout);
         var x = Guid.NewGuid();
@@ -115,7 +115,7 @@ public sealed class AudioSocketIdentificationTests
     [Fact]
     public async Task HandleConnection_ShouldRegisterUnderTheFirstId_WhenTwoIdsArriveInOneWrite()
     {
-        // Arrange — S4: 200 peers, each writing X then Y in a single write
+        // Arrange — 200 peers, each writing X then Y in a single write
         const int peers = 200;
         var announced = new ConcurrentQueue<string>();
         var all = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -152,7 +152,7 @@ public sealed class AudioSocketIdentificationTests
         }
     }
 
-    // -------------------------------------------------------- the wait ends with the connection (H90)
+    // -------------------------------------------------------- the wait ends with the connection
 
     [Fact]
     public async Task IdentificationWait_ShouldKeepASilentConnectionOpen_WhileTheFakeClockStandsStill()
