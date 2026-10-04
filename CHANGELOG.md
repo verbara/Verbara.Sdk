@@ -62,6 +62,27 @@ change.
   reload to Asterisk's reported wait plus the time Live held them. `AsteriskQueueEntry.JoinedAt` keeps its meaning.
   No public API change.
 
+### Fixed: ARI audio streams end exactly once, and their server always learns it
+
+- `IAudioStream.StateChanges` published `Disconnected` twice at the end of every AudioSocket and WebSocket stream (20 of
+  20 endings measured); it is now published once, last, after `Error` when an error frame ended the stream.
+- A `StateChanges` observer that threw kept the stream registered, counted and holding its `MaxConcurrentStreams`
+  place until the server stopped (10 of 10); the server now releases it, the other observers still see the ending, and
+  the exception is logged at Error.
+- A second AudioSocket identification frame no longer changes `ChannelId`: the first is kept and one Warning per
+  session names both ids. Asterisk sends one; this covers a non-conforming peer.
+- A peer that leaves before identifying gives its place back at once instead of after `IdleTimeout`.
+- A connection that registers after the server's stop has begun is closed instead of announced; a narrow window right
+  at the start of the stop remains.
+- A second `DisposeAsync` of `AudioSocketServer`, `WebSocketAudioServer` or `AriOutboundListener` no longer throws, and
+  a start whose bind failed no longer leaves them reporting running with nothing bound. Null options now throw
+  `ArgumentNullException` instead of `NullReferenceException`.
+- The Voice AI `AudioSocketServer` rejects at construction a `ConnectionTimeout` that failed every connection: zero, a
+  negative value other than `Timeout.InfiniteTimeSpan`, or more than 4,294,967,294 ms. `Timeout.InfiniteTimeSpan` and
+  every value that works today stay accepted.
+
+No public API change.
+
 ## [2.7.0] - 2026-10-03
 
 ### Fixed: a queued call records the queue member who took it (#381)
