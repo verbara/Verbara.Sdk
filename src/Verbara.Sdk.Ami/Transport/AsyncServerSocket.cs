@@ -4,8 +4,8 @@ using System.Net.Sockets;
 namespace Verbara.Sdk.Ami.Transport;
 
 /// <summary>
-/// Async TCP server that accepts connections and wraps them as ISocketConnection
-/// using System.IO.Pipelines. Used by the FastAGI server.
+/// Async TCP server that accepts one connection per <see cref="AcceptAsync"/> call and returns it as an
+/// <see cref="ISocketConnection"/> backed by System.IO.Pipelines.
 /// </summary>
 public sealed class AsyncServerSocket : IAsyncDisposable
 {
@@ -43,6 +43,12 @@ public sealed class AsyncServerSocket : IAsyncDisposable
     }
 
     /// <summary>Accept the next incoming connection as an ISocketConnection backed by Pipelines.</summary>
+    /// <remarks>
+    /// The accepted connection is owned by this call until it is returned: when configuring it fails, it is closed and
+    /// the original exception reaches the caller unchanged. Such an exception while <see cref="IsListening"/> is
+    /// <see langword="true"/> belongs to that one connection, which has been closed; the listener keeps listening, so
+    /// accept again.
+    /// </remarks>
     public async ValueTask<ISocketConnection> AcceptAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -53,9 +59,21 @@ public sealed class AsyncServerSocket : IAsyncDisposable
         }
 
         var client = await (AcceptOverride?.Invoke(cancellationToken) ?? _listener.AcceptTcpClientAsync(cancellationToken));
-        client.NoDelay = true;
-
-        return PipelineSocketConnection.FromStream(client.GetStream());
+        // Nothing else owns the accepted connection until it is returned: if configuring it fails, it is closed here and
+        // the original exception goes on to the caller unchanged.
+        var handedOver = false;
+        try
+        {
+            client.NoDelay = true;
+            var connection = PipelineSocketConnection.FromStream(client.GetStream());
+            handedOver = true;
+            return connection;
+        }
+        finally
+        {
+            if (!handedOver)
+                client.Dispose();
+        }
     }
 
     /// <summary>Stop listening and release the port.</summary>
