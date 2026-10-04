@@ -47,7 +47,7 @@ public sealed partial class AmiConnectionTokenHandlerTests
             entered.TrySetResult();
             try
             {
-                await Task.Delay(HandlerWait, ct);
+                await Task.Delay(HandlerWait, ct); // fence-allow: SIMULATED-WORK — the handler's long work, which its token ends
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -456,7 +456,7 @@ public sealed partial class AmiConnectionTokenHandlerTests
         connection.OnEvent += async _ =>
         {
             entered.TrySetResult();
-            await Task.Delay(Timeout.InfiniteTimeSpan, own.Token);
+            await Task.Delay(Timeout.InfiniteTimeSpan, own.Token); // fence-allow: SIMULATED-WORK — the handler's work, ended only by the test's token
         };
         using var alongside = connection.Subscribe(async (_, ct) =>
         {

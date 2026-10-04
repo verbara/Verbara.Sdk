@@ -35,7 +35,7 @@ public sealed partial class AmiConnectionTokenHandlerTests
 
             lastEntered.TrySetResult();
             // Waits on the token, which never cancels, or on the test's release.
-            await Task.WhenAny(Task.Delay(Timeout.InfiniteTimeSpan, ct), release.Task);
+            await Task.WhenAny(Task.Delay(Timeout.InfiniteTimeSpan, ct), release.Task); // fence-allow: SIMULATED-WORK — the handler's work, ended by its token or the test's release
             Volatile.Write(ref returned, 1);
         });
         // A probe on the inner connection learns, through the real token, when the caller's ending has begun.
@@ -112,7 +112,7 @@ public sealed partial class AmiConnectionTokenHandlerTests
         {
             seen = ct;
             entered.TrySetResult();
-            await Task.Delay(HandlerWait, ct);
+            await Task.Delay(HandlerWait, ct); // fence-allow: SIMULATED-WORK — the handler's long work, which its token ends
         });
         var socket = await ConnectAsync(inner, factory, peer);
 
