@@ -193,7 +193,8 @@ public static class ServiceCollectionExtensions
 
     /// <summary>
     /// Add session engine services (CallSessionManager, extension points, hosted service).
-    /// Auto-attaches to the single <see cref="VerbaraServer"/> on startup.
+    /// Auto-attaches to the single <see cref="VerbaraServer"/> on startup, before the server's first load, so calls
+    /// already in progress at start have a session.
     /// Call after <see cref="AddVerbara(IServiceCollection, Action{VerbaraOptions})"/> for single-server deployments.
     /// </summary>
     public static IServiceCollection AddVerbaraSessions(
@@ -211,7 +212,8 @@ public static class ServiceCollectionExtensions
     /// packages (Redis, Postgres, ...) can register themselves fluently:
     /// <c>services.AddVerbaraSessionsBuilder().UseRedis(...)</c>.
     /// Behaves identically to <see cref="AddVerbaraSessions"/>: registers the InMemory
-    /// default store via <c>TryAddSingleton</c> and wires the auto-attach hosted services.
+    /// default store via <c>TryAddSingleton</c> and wires the auto-attach hosted services, which attach
+    /// before the server's first load, so calls already in progress at start have a session.
     /// </summary>
     public static ISessionsBuilder AddVerbaraSessionsBuilder(
         this IServiceCollection services,

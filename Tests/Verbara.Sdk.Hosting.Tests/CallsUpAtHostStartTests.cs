@@ -322,6 +322,58 @@ public sealed class CallsUpAtHostStartTests
         sut.Dispose();
     }
 
+    // --- (d) and (i): the lifecycle calls the host makes ---------------------------------------------------------
+
+    [Fact]
+    public async Task StartingAsyncThenStartAsync_ShouldAttachOnceAndDetachOnStop_WhenCalledInHostOrder()
+    {
+        await using var rig = DirectRig.Create();
+        var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
+
+        await sut.StartingAsync(CancellationToken.None);
+        await sut.StartAsync(CancellationToken.None);
+        rig.Server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
+        var startedWhileAttached = rig.Seen.Count<CallStartedEvent>();
+        await sut.StopAsync(CancellationToken.None);
+        rig.Server.Channels.OnNewChannel("uid-2", "PJSIP/100-002", ChannelState.Ring, linkedId: "linked-2");
+
+        startedWhileAttached.Should().Be(1, "the channel reported while attached opens one session, announced once");
+        rig.Manager.ActiveSessions.Select(s => s.LinkedId).Should().Equal(["linked-1"],
+            "the manager was attached once, so the stop's one detach removes every subscription it had: a second "
+            + "attach under the same id would replace the first set without removing it, and that set would keep "
+            + "opening sessions after the stop");
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task StartingAsync_ShouldThrowAndAttachNothing_WhenTheServiceWasDisposed()
+    {
+        await using var rig = DirectRig.Create();
+        var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
+        sut.Dispose();
+
+        var error = await Record.ExceptionAsync(() => sut.StartingAsync(CancellationToken.None));
+        rig.Server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
+
+        error.Should().BeOfType<ObjectDisposedException>("a disposed service cannot be started again");
+        rig.Manager.ActiveSessions.Should().BeEmpty("the refused start attached the manager to nothing");
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldThrowAndAttachNothingMore_WhenTheServiceWasDisposedAfterStartingAsync()
+    {
+        await using var rig = DirectRig.Create();
+        var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
+        await sut.StartingAsync(CancellationToken.None);
+        sut.Dispose();
+
+        var error = await Record.ExceptionAsync(() => sut.StartAsync(CancellationToken.None));
+
+        error.Should().BeOfType<ObjectDisposedException>(
+            "the disposed check comes before the attached check, so a start after disposal throws even when an "
+            + "earlier lifecycle call attached");
+    }
+
     // --- the harness -----------------------------------------------------------------------------------------------
 
     private static IHost Build(Registration registration, ScriptedAsterisk asterisk) =>
