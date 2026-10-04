@@ -37,5 +37,7 @@
     <!-- v2.2.0+ — Dapper-replacement + Postgres cluster. Both designed AOT-clean per Platform/ADR-0022. -->
     <ProjectReference Include="..\..\src\Verbara.Sdk.Data.Npgsql\Verbara.Sdk.Data.Npgsql.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.Cluster.Postgres\Verbara.Sdk.Cluster.Postgres.csproj" />
+    <!-- Referenced by a call in Program.cs, so ILC compiles the Prometheus exporter it registers. -->
+    <ProjectReference Include="..\..\src\Verbara.Sdk.OpenTelemetry\Verbara.Sdk.OpenTelemetry.csproj" />
   </ItemGroup>
 </Project>

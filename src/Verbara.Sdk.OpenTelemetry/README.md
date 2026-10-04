@@ -16,6 +16,8 @@ builder.Services.AddVerbaraOpenTelemetry(b => b
 app.UseOpenTelemetryPrometheusScrapingEndpoint();
 ```
 
+The `/metrics` output format is the upstream exporter's and follows its version; metric names and values are the SDK's.
+
 The package layers on top of the standard OpenTelemetry SDK (`OpenTelemetry.Extensions.Hosting`) — consumers who need extras (samplers, views, custom processors) can access the raw builders via `ConfigureTracing` / `ConfigureMetrics`:
 
 ```csharp

@@ -40,14 +40,14 @@ decision records, specs, plans and research notes are kept locally and are not t
 
 | line | claim | class | guard | status |
 |---|---|---|---|---|
-| 13 | Native AOT-ready badge | ENFORCING | `tools/AotCanary/` + `tools/verify-aot.sh` + `aot-validate.yml` | PARTIAL — canary references 22 of 29 packages |
+| 13 | Native AOT-ready badge | ENFORCING | `tools/AotCanary/` + `tools/verify-aot.sh` + `aot-validate.yml` | PARTIAL — canary references 23 of 29 packages, and the check fails when ILC reports a method that will always throw |
 | 23 | asterisk-java "790+ classes" | ATTRIBUTED | — | GAP — no citation, first-party voice |
 | 45 | 148 actions, 269 events, 17 typed responses | ENFORCING | — | GAP — corrected 2026-09-24 under the counting definition settled that day; all four published copies now agree. A guard still needs the `classify-docs-only.sh` carve-out moved first (see *Unresolved* 1) |
 | 46 | 54 AGI commands | ENFORCING | — | GAP |
 | 54 | four source generators, 0 trim warnings | ENFORCING | AotCanary (trim half) | PARTIAL — generator count unguarded |
 | 61 | 29 NuGet packages | ENFORCING | — | GAP |
 | 61 | 0 build warnings | ENFORCING | `Directory.Build.props` `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
-| 61 | 0 trim warnings | ENFORCING | AotCanary | PARTIAL — 22/29 |
+| 61 | 0 trim warnings | ENFORCING | AotCanary | PARTIAL — 23/29 |
 | 61 | ~2,924 unit + 154 functional + 65 integration | COHERENCE | — | WRONG — the suite runs **3,295** (measured 2026-08-29); note nothing in-tree *records* that number until §4.1 commits the record |
 | 61 | headline version **v2.7.0** | COHERENCE | `StatusBlockCoherenceTests` — against `Directory.Build.props` `<PackageVersion>` | **OK** |
 | ~~65~~ | ONNX model 8.3 MB | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history |
@@ -112,7 +112,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 | 30 | providers "Deepgram, ElevenLabs, Azure, Google, Whisper" (5) | ENFORCING | — | GAP — understates; 7 STT + 6 TTS ship |
 | 32, 58 | ~2,924 unit + 154 functional + 65 integration | COHERENCE | — | WRONG — stale by ~370 |
 | 32 | zero compiler warnings | ENFORCING | `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
-| 32 | passes AOT trim analysis cleanly | ENFORCING | AotCanary | PARTIAL — 22/29 |
+| 32 | passes AOT trim analysis cleanly | ENFORCING | AotCanary | PARTIAL — 23/29 |
 | 32 | "**designed for** … exceeding 100,000 concurrent agents" | EVIDENCE | — | **OK** — reworded 2026-09-20: "tested" removed, deferral declared with its blocker (D9). Was: GAP — nothing executes a load test at any scale; "designed for" is supported, "tested" is not |
 | 50 | "start in under 10 milliseconds" | — | — | GAP — **no startup measurement exists anywhere in the repo** |
 | 54 | four Roslyn source generators | ENFORCING | — | GAP — correct |
@@ -127,7 +127,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 |---|---|---|---|---|
 | `Verbara.Sdk/README.md:13` | 60 const strings, 14 nested classes | ENFORCING | `MarketingClaimsTests.cs:59-74` | OK |
 | `Verbara.Sdk/README.md:14` | 9 ActivitySources, 15 Meters | ENFORCING | `MarketingClaimsTests.cs:45-57` | OK |
-| `Verbara.Sdk/README.md:53` | 0 trim warnings **across the package family** | ENFORCING | AotCanary | PARTIAL — 22/29; the **seven** uncanaried are `OpenTelemetry`, `Push.AspNetCore`, `Push.Nats`, `Sessions.Redis`, `Sessions.Postgres`, `VoiceAi.TurnDetection` and `Ami.SourceGenerators` (packable, so it counts) |
+| `Verbara.Sdk/README.md:53` | 0 trim warnings **across the package family** | ENFORCING | AotCanary | PARTIAL — 23/29; the **six** uncanaried are `Push.AspNetCore`, `Push.Nats`, `Sessions.Redis`, `Sessions.Postgres`, `VoiceAi.TurnDetection` and `Ami.SourceGenerators` (packable, so it counts) |
 | `Verbara.Sdk.Ami/README.md:7` | 148 actions, 269 events, 17 response types | ENFORCING | — | GAP — corrected 2026-09-24 (was 111/261/17); now agrees with `README.md:45`. This file is the package's `PackageReadmeFile`, published verbatim on nuget.org |
 | `Verbara.Sdk.Ari/README.md:7-8` | 8 ARI resources, 46 event types | ENFORCING | — | GAP |
 | `Verbara.Sdk.Agi/README.md:8` | 54 AGI commands | ENFORCING | — | GAP |
@@ -246,7 +246,7 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 | `troubleshooting.md:198` | with the defaults, a silent peer was seen 2.2–32.0 s after it went silent | **EVIDENCE** | dated record — measured 2026-09-28 on Asterisk 22.9.0 and 23.4.1 with the default heartbeat, n = 40 (the container paused, or disconnected from its network, at a random point of the heartbeat period), from the fault to the connection's `State` leaving `Connected`; minimum to maximum |
 | `troubleshooting.md:200` | the give-up after N failed attempts, as examples measured from Asterisk's restart with the credentials rejected: 17.2–18.8 s with 1 s ×2 and N = 4; 8.1–9.2 s with 0.5 s ×2 capped at 2 s and N = 4 | **EVIDENCE** | dated record — from `docker start` of an Asterisk whose AMI user had been deleted to the connection's `State` reading `Disconnected`, measured 2026-10-01 on 20.20.1, 22.9.0 and 23.4.1, n = 10 per version and configuration (60 runs); every run made 4 reconnect connects, logged 4 `[AMI] Reconnecting` and 4 `[AMI] Reconnect attempt failed` lines, and made no connect after the give-up. 17.2–18.8 s with 1 s ×2; 8.1–9.2 s with 0.5 s ×2 capped at 2 s. Control, the same harness on the code before N meant N attempts: 3 connects in every run (60 of 60), 17.2–17.6 s and 7.0–8.2 s — the figures this row recorded until then (17.2–17.7 s, 2026-09-28/29, n = 80; 6.9–8.6 s, 2026-09-28, n = 20) |
 | `troubleshooting.md:215` | an AMI notification handler still running 30 s after its notification began is logged once at Warning | ENFORCING | OK — `AmiConnection.StuckNotificationBound`; `AmiConnectionStuckNotificationTests.Notify_ShouldLogOneWarning_WhenAHandlerHasNotReturnedOnceTheBoundHasPassed` drives the queue on a manual clock and asserts no Warning 1 ms before 30 s, one at 30 s and still one at ten times the bound, and `…_ShouldLogNoWarning_WhenEveryHandlerReturnedBeforeTheBound` that a handler that returned is never reported |
-| `troubleshooting.md:244` | designed for zero trim warnings | ENFORCING | PARTIAL — 22/29 |
+| `troubleshooting.md:244` | designed for zero trim warnings | ENFORCING | PARTIAL — 23/29 |
 | `troubleshooting.md:282,286-294` | 9 registered sources, enumerated by name | ENFORCING | PARTIAL — count pinned, the by-name list is not |
 | `troubleshooting.md:343,345` | `ChannelIdInUse` reports about 1000 ms waited; a call that comes back is waited for up to 1 second | ENFORCING | OK — the same guard as `VoiceAi.AudioSocket/README.md:50,55` (`SameIdGrace`, asserted by `…_WhenTheHolderHangsUpWithinTheGrace` and `…_ShouldLogTheChannelIdNotTheLimit_WhenItRefusesASameIdConnection`) |
 | `troubleshooting.md:351,359` | after a refusal's hangup frame the dialplan goes on on Asterisk 20 and later; Asterisk 18 hangs the call up | **EVIDENCE** | dated record — the same measurement as `VoiceAi.AudioSocket/README.md:59-61` |

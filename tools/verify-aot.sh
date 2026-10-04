@@ -9,13 +9,33 @@ RID="${1:-linux-x64}"
 PROJECT="tools/AotCanary/AotCanary.csproj"
 OUT_DIR="tools/AotCanary/bin/Release/net10.0/${RID}/publish"
 
+PUBLISH_LOG=$(mktemp)
+trap 'rm -f "$PUBLISH_LOG"' EXIT
+
+# ILC is incremental: with its intermediates present and no input changed it does not run, prints
+# nothing, and a scan of its output would pass over a stale image. Clear them so every run compiles.
+rm -rf "tools/AotCanary/obj/Release/net10.0/${RID}/native"
+
 echo "Verifying AOT publish safety for RID=${RID}..."
 dotnet publish "$PROJECT" \
   -c Release \
   -r "$RID" \
   --self-contained \
   --nologo \
-  /warnaserror 2>&1
+  /warnaserror 2>&1 | tee "$PUBLISH_LOG"
+
+# ILC's "will always throw" report is not an MSBuild warning, so /warnaserror does not fail on it:
+# a method compiled against a type its dependency no longer has publishes cleanly and throws at run
+# time. Read ILC's output instead — and require its compile line, or the scan proves nothing.
+if ! grep -q "Generating native code" "$PUBLISH_LOG"; then
+  echo "ERROR: ILC did not run (no 'Generating native code' line), so its output proves nothing about this tree."
+  exit 4
+fi
+if grep -q "will always throw" "$PUBLISH_LOG"; then
+  echo "ERROR: ILC compiled a method that will always throw:"
+  grep "will always throw" "$PUBLISH_LOG"
+  exit 3
+fi
 
 # Smoke-run the binary when the target RID matches the host RID.
 # Detect host RID via `dotnet --info` rather than uname so we don't false-fail

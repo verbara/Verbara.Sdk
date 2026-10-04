@@ -1,4 +1,5 @@
-// AOT Canary — verifies all 16 SDK packages are AOT-safe (zero trim warnings).
+// AOT Canary — publishes the SDK packages it references (23 of 29) with Native AOT; tools/verify-aot.sh
+// fails on any trim/AOT warning and on any method the AOT compiler reports will always throw.
 // References a representative public type from each package so the linker
 // processes all assemblies during dotnet publish /p:PublishAot=true.
 
@@ -217,5 +218,16 @@ await bus.PublishAsync(sample);
 _ = typeof(Verbara.Sdk.Data.Npgsql.NpgsqlExecutor);
 _ = typeof(Verbara.Sdk.Cluster.Postgres.DependencyInjection.ClusterPostgresServiceCollectionExtensions);
 _ = typeof(Verbara.Sdk.Cluster.Postgres.Migrations.MigrationRunner);
+
+// Verbara.Sdk.OpenTelemetry — call the registration (not a typeof) so ILC compiles the exporters it
+// registers, the Prometheus serializer included. A dependency drift that leaves one of their methods
+// unable to run then shows up as an ILC "will always throw" line, which tools/verify-aot.sh fails on.
+{
+    var otelServices = new ServiceCollection();
+    Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryExtensions.AddVerbaraOpenTelemetry(
+        otelServices, b => b.WithAllSources().WithPrometheusExporter());
+    using var otelProvider = otelServices.BuildServiceProvider();
+    Console.WriteLine("OpenTelemetry: Prometheus exporter registered");
+}
 
 return 0;

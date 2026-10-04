@@ -23,6 +23,19 @@ a `No script mapped` Warning, counted `agi.scripts.not_found` and opened a `NotF
 one Debug line, `[AGI] Connection closed before a request was read`, and records no script outcome.
 `agi.connections.accepted` still counts it. Well-formed requests are served as before. No public API change.
 
+### Fixed: the Prometheus `/metrics` endpoint serves the metrics again (#388)
+
+On 2.6.1 and 2.7.0 the Prometheus `/metrics` endpoint answered 200 with an empty body as soon as any double-valued
+instrument (a histogram; the SDK has 17) had a value: the exporter 1.15.2-beta.1 calls a type OpenTelemetry 1.19.1 no
+longer has, and the failure was swallowed without a log. The exporter is now 1.19.1-beta.1. Its output differs from
+2.6.0's in ways that come from upstream: no per-sample timestamps in either format; in the text format a `target_info`
+series and no `# UNIT` or `# EOF` lines; in OpenMetrics no `otel_scope_info` series, `_created` series,
+`escaping=underscores` in the content type, and histogram `le` label values printed as floats (`le="5.0"`, was
+`le="5"`). A consumer coming from 2.6.1 or 2.7.0 saw none of this, because the body was empty; only a consumer coming
+from 2.6.0 sees these differences. Metric names, unit suffixes included, and values are unchanged. The AOT trim check
+now publishes this exporter and fails when the AOT compiler reports a method that will always throw. No public API
+change.
+
 ## [2.7.0] - 2026-10-03
 
 ### Fixed: a queued call records the queue member who took it (#381)
