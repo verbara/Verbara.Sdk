@@ -617,8 +617,11 @@ public class AudioSocketServerTests : IAsyncLifetime
         await peer.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)pair.LocalEndpoint).Port);
         using var accepted = await pair.AcceptTcpClientAsync();
 
+        // The accepted connection's wait for its identification frame also runs on this clock, with a
+        // deadline no backoff can equal, so the reads below skip its timer by its due time.
+        var identificationDeadline = TimeSpan.FromMinutes(7);
         var time = new FakeTimeProvider();
-        var server = CreateServer(PortTheOsPicks, logger: new CapturingLogger(), timeProvider: time);
+        var server = CreateServer(PortTheOsPicks, idleTimeout: identificationDeadline, logger: new CapturingLogger(), timeProvider: time);
         var attempts = 0;
         server.AcceptOverride = token => Interlocked.Increment(ref attempts) switch
         {
@@ -634,6 +637,8 @@ public class AudioSocketServerTests : IAsyncLifetime
             var afterFirstFailure = await NextTimerAsync(time);
             time.Advance(afterFirstFailure.DueTime);
             var afterSuccess = await NextTimerAsync(time);
+            if (afterSuccess.DueTime == identificationDeadline)
+                afterSuccess = await NextTimerAsync(time);
 
             // Assert
             afterFirstFailure.DueTime.Should().Be(AudioSocketServer.InitialAcceptBackoff);
@@ -1108,8 +1113,8 @@ public class AudioSocketServerTests : IAsyncLifetime
         using var otherCall = await ConnectAndAwaitAnnouncementAsync(port, y, announcements);
         using var reidentifying = await ConnectAndAwaitAnnouncementAsync(port, x, announcements);
 
-        // Act — a second identification frame naming Y, then a hangup. The session reassigns its
-        // ChannelId to Y on that frame, before the hangup that ends it.
+        // Act — a second identification frame naming Y, then a hangup. The session ignores that frame
+        // and keeps X as its ChannelId; the release must still free X and leave the other call's Y.
         await reidentifying.SendAsync(BuildUuidFrame(y));
         await reidentifying.HangUpAsync();
 

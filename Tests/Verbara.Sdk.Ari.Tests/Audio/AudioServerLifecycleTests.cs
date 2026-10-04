@@ -187,6 +187,8 @@ public sealed class AudioServerLifecycleTests
         using var bound = new CancellationTokenSource(SignalTimeout);
         var server = harness.Server;
         server.BeforeRegistration = Once(() => server.StopAsync().AsTask().GetAwaiter().GetResult());
+        var listedInTheWindow = -1;
+        server.AfterRegistryAdd = Once(() => listedInTheWindow = server.ActiveStreamCount);
 
         // Act
         using var peer = await AudioSocketTestPeer.ConnectAsync(harness.Port, bound.Token);
@@ -196,6 +198,8 @@ public sealed class AudioServerLifecycleTests
         await peer.Closed.WaitAsync(bound.Token);
         var announced = harness.Announcements;
         var active = harness.Server.ActiveStreamCount;
+        var listed = listedInTheWindow;
+        server.AfterRegistryAdd = null;
         var held = await HeldAfterRestartAsync(harness, bound.Token);
 
         // Assert
@@ -205,6 +209,7 @@ public sealed class AudioServerLifecycleTests
             active.Should().Be(0);
             held.Should().Be(0, "its place was given back");
             harness.Logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+            listed.Should().Be(-1, "a refused connection is never added to the tables, not even for a moment");
         }
     }
 
