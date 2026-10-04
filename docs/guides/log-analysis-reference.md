@@ -16,7 +16,7 @@
 | `[CONFERENCE]` | Conferences | `MeetMeManagerLog` | Join, leave |
 | `[AGI]` | FastAGI | `FastAgiServerLog` | Server start/stop, script map, connection |
 | `[ARI]` | ARI client | `AriClientLog` | Connect, disconnect, WS event, reconnect |
-| `[POOL]` | Multi-server | `VerbaraServerPool` | Server added/removed (future) |
+| `[POOL]` | Multi-server | `VerbaraServerPoolLog` | Server dispose failed, AMI connection dispose failed (Error, with the server id and the exception; the pool's disposal, a removal or a failed add logs it and goes on) |
 
 ### Dashboard Tags (8)
 
@@ -46,6 +46,7 @@
 | `[AMI_EVENT] Discarded on caller ending` | Expected: the caller ended the connection with events buffered | Ignore |
 | `[AMI_EVENT] OnEvent handler threw on <EventType>` | Bug: an application `OnEvent` handler failed (exception attached); delivery went on | P1 |
 | `[AMI_EVENT] Observer threw on <EventType>` | Bug: an application observer's `OnNext` failed (exception attached); it stays subscribed and delivery went on | P1 |
+| `[POOL] Server dispose failed` or `[POOL] AMI connection dispose failed` | Bug: a server's ARI client or an AMI connection threw while the pool released it (exception attached); the pool still released everything else, and the call it came from (`DisposeAsync`, `RemoveServerAsync`, or a failed `AddServerAsync`, which rethrows its start's exception) never throws this one | P1 |
 | `[LIVE] Status refused` | Config: the AMI user may not run `Status` (needs `system`, `call` or `reporting` in `write`); no channel was reconciled | — |
 | `[QUEUE] Caller left` without Exception | Expected: caller hung up | Ignore |
 | `[AGENT] Logoff` without Exception | Expected: agent disconnected | Ignore |
