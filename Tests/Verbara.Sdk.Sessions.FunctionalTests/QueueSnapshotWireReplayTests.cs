@@ -85,9 +85,9 @@ public sealed class QueueSnapshotWireReplayTests
         foreach (var (channel, wait, samples) in recorded)
         {
             samples.Should().ContainSingle("one leave of {0} records one sample", channel)
-                .Which.Should().BeGreaterThanOrEqualTo(wait * 1000,
+                .Which.Should().BeGreaterThanOrEqualTo(wait * 1000.0,
                     "Asterisk reported {0} had waited {1} s when the snapshot was taken", channel, wait)
-                .And.BeLessThan((wait + 1) * 1000, "{0} left as soon as the load finished", channel);
+                .And.BeLessThan((wait + 1) * 1000.0, "{0} left as soon as the load finished", channel);
         }
     }
 
