@@ -14,7 +14,9 @@ namespace Verbara.Sdk.Push.Nats;
 /// Publishes every local event to NATS, and — when <see cref="NatsBridgeOptions.Subscribe"/>
 /// is configured — consumes the configured NATS subject filters and reinjects every
 /// decoded message into the local bus as a <see cref="RemotePushEvent"/>. Connection is
-/// established when the hosted service starts; a clean drain happens on stop.
+/// established when the hosted service starts. A stop or a disposal, whichever comes first, releases
+/// everything the bridge opened — the NATS connection and the bridge's Push bus subscription — once,
+/// including a connection that finishes opening after the stop returned.
 /// </summary>
 public sealed partial class NatsBridge : BackgroundService
 {
@@ -30,6 +32,10 @@ public sealed partial class NatsBridge : BackgroundService
     private INatsPublisher? _publisher;
     private INatsSubscriber? _subscriber;
     private IDisposable? _subscription;
+
+    // The release in flight; every release waits for it before taking what is stored now.
+    private readonly Lock _releaseLock = new();
+    private Task _releasing = Task.CompletedTask;
 
     internal NatsBridge(
         IPushEventBus bus,
@@ -117,41 +123,56 @@ public sealed partial class NatsBridge : BackgroundService
     {
         try
         {
-            _publisher = await _publisherFactory(_options, stoppingToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogConnectFailed(_logger, ex, _options.Url);
-            throw;
-        }
+            INatsPublisher publisher;
+            try
+            {
+                publisher = await _publisherFactory(_options, stoppingToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                LogConnectFailed(_logger, ex, _options.Url);
+                throw;
+            }
 
-        LogConnected(_logger, _options.Url, _options.SubjectPrefix);
+            // Stored before the check, so a stop that already ran leaves it to the finally below.
+            _publisher = publisher;
+            if (stoppingToken.IsCancellationRequested) return;
 
-        _subscription = _bus.AsObservable()
-            .Subscribe(
-                evt => _ = DispatchAsync(evt, stoppingToken),
-                ex => LogObserverError(_logger, ex));
+            LogConnected(_logger, _options.Url, _options.SubjectPrefix);
 
-        if (_options.Subscribe is { } subOpts && _subscriberFactory is not null)
-        {
-            await StartSubscribeLoopsAsync(subOpts, stoppingToken).ConfigureAwait(false);
+            _subscription = _bus.AsObservable()
+                .Subscribe(
+                    evt => _ = DispatchAsync(evt, stoppingToken),
+                    ex => LogObserverError(_logger, ex));
+
+            if (_options.Subscribe is { } subOpts && _subscriberFactory is not null
+                && !stoppingToken.IsCancellationRequested)
+            {
+                await StartSubscribeLoopsAsync(subOpts, stoppingToken).ConfigureAwait(false);
+            }
+
+            try
+            {
+                await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException)
+            {
+                // graceful shutdown
+            }
         }
-
-        try
+        finally
         {
-            await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
-        }
-        catch (TaskCanceledException)
-        {
-            // graceful shutdown
+            // A stop whose token ran out, or a disposal, can return before this method does; whatever a
+            // factory handed over after that is released here, by the method that stored it.
+            if (stoppingToken.IsCancellationRequested) await ReleaseAsync().ConfigureAwait(false);
         }
     }
 
     /// <inheritdoc />
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        _subscription?.Dispose();
-        _subscription = null;
+        // First, so no event is dispatched while the stop waits.
+        Interlocked.Exchange(ref _subscription, null)?.Dispose();
 
         try
         {
@@ -159,19 +180,59 @@ public sealed partial class NatsBridge : BackgroundService
         }
         finally
         {
-            if (_subscriber is { } s)
+            await ReleaseAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Ends the bridge's work and releases everything it opened — the NATS connection and its Push bus
+    /// subscription — whether or not it was stopped first. Does not return while a release a stop
+    /// began is still in progress. A second call releases nothing again.
+    /// </summary>
+    public override void Dispose()
+    {
+        base.Dispose(); // cancels the stopping token
+#pragma warning disable VSTHRD002 // Dispose is synchronous; the release only disposes what this bridge opened, and the NATS client bounds its own dispose.
+        ReleaseAsync().GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+    }
+
+    /// <summary>
+    /// Waits for the release already in flight, then takes each stored resource exactly once and
+    /// disposes it: the bus subscription, the subscriber (which does not own the shared connection),
+    /// then the publisher (which does). Safe to call from any path, any number of times.
+    /// </summary>
+    private async Task ReleaseAsync()
+    {
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task previous;
+        lock (_releaseLock)
+        {
+            previous = _releasing;
+            _releasing = done.Task;
+        }
+
+        try
+        {
+            await previous.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+            Interlocked.Exchange(ref _subscription, null)?.Dispose();
+
+            if (Interlocked.Exchange(ref _subscriber, null) is { } s)
             {
-                _subscriber = null;
                 try { await s.DisposeAsync().ConfigureAwait(false); }
                 catch (Exception ex) { LogDisposeFailed(_logger, ex); }
             }
 
-            if (_publisher is { } p)
+            if (Interlocked.Exchange(ref _publisher, null) is { } p)
             {
-                _publisher = null;
                 try { await p.DisposeAsync().ConfigureAwait(false); }
                 catch (Exception ex) { LogDisposeFailed(_logger, ex); }
             }
+        }
+        finally
+        {
+            done.TrySetResult();
         }
     }
 
@@ -219,15 +280,20 @@ public sealed partial class NatsBridge : BackgroundService
 
     private async Task StartSubscribeLoopsAsync(NatsSubscribeOptions subOpts, CancellationToken stoppingToken)
     {
+        INatsSubscriber subscriber;
         try
         {
-            _subscriber = await _subscriberFactory!(_options, stoppingToken).ConfigureAwait(false);
+            subscriber = await _subscriberFactory!(_options, stoppingToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogSubscriberConnectFailed(_logger, ex, _options.Url);
             throw;
         }
+
+        // Stored before the check, so the release in ExecuteAsync's finally takes it.
+        _subscriber = subscriber;
+        if (stoppingToken.IsCancellationRequested) return;
 
         var filters = ResolveFilters(subOpts.SubjectFilters, _options.SubjectPrefix);
         foreach (var filter in filters)
@@ -344,6 +410,7 @@ public sealed partial class NatsBridge : BackgroundService
         // the connection for the publisher to close.
         NatsConnection? shared = null;
         var gate = new SemaphoreSlim(1, 1);
+        var logger = loggerFactory.CreateLogger<NatsBridge>();
 
         async ValueTask<NatsConnection> GetOrConnectAsync(NatsBridgeOptions opts, CancellationToken ct)
         {
@@ -367,9 +434,21 @@ public sealed partial class NatsBridge : BackgroundService
                 };
 
                 var connection = new NatsConnection(natsOpts);
-                using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                connectCts.CancelAfter(TimeSpan.FromSeconds(opts.ConnectTimeoutSeconds));
-                await connection.ConnectAsync().AsTask().WaitAsync(connectCts.Token).ConfigureAwait(false);
+                var connected = false;
+                try
+                {
+                    using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    connectCts.CancelAfter(TimeSpan.FromSeconds(opts.ConnectTimeoutSeconds));
+                    await connection.ConnectAsync().AsTask().WaitAsync(connectCts.Token).ConfigureAwait(false);
+                    connected = true;
+                }
+                finally
+                {
+                    // A connect given up on (the stop, the timeout, a failure) is closed, not left to
+                    // finish on its own; the connect's exception is the one that reaches the bridge.
+                    if (!connected) await CloseAbandonedAsync(connection, logger).ConfigureAwait(false);
+                }
+
                 shared = connection;
                 return connection;
             }
@@ -388,6 +467,14 @@ public sealed partial class NatsBridge : BackgroundService
                 ownsConnection: false);
 
         return (publisherFactory, subscriberFactory);
+    }
+
+    /// <summary>Disposes a connection whose connect was abandoned; logs a failed dispose, never throws.</summary>
+    private static async Task CloseAbandonedAsync(NatsConnection connection, ILogger logger)
+    {
+        var dispose = connection.DisposeAsync().AsTask();
+        await dispose.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        if (dispose.Exception is { } failure) LogDisposeFailed(logger, failure.GetBaseException());
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "NATS bridge connected to {Url} (prefix={SubjectPrefix})")]
