@@ -126,6 +126,19 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     /// </summary>
     internal Func<CancellationToken, ValueTask<TcpClient>>? AcceptOverride { get; set; }
 
+    /// <summary>
+    /// Runs on a connection's handler just before the server registers it. Settable by tests (via
+    /// InternalsVisibleTo), so a test can run a stop inside that window instead of hoping a race lands
+    /// there.
+    /// </summary>
+    internal Action? BeforeRegistration { get; set; }
+
+    /// <summary>
+    /// Runs on a connection's handler right after its entry was added to the server's tables and before
+    /// it is announced. Settable by tests (via InternalsVisibleTo), for the same reason.
+    /// </summary>
+    internal Action? AfterRegistryAdd { get; set; }
+
     public ValueTask StartAsync(CancellationToken cancellationToken = default)
     {
         // First, and before anything is built: a second start that got as far as replacing _cts
@@ -416,8 +429,10 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 var endpoint = client.Client.RemoteEndPoint?.ToString();
                 WebSocketAudioServerLog.ConnectionAccepted(_logger, endpoint, channelId);
 
+                BeforeRegistration?.Invoke();
                 Register(channelId, session);
                 _live.TryAdd(session, 0);
+                AfterRegistryAdd?.Invoke();
                 _streamSubject.OnNext(session);
 
                 // Wait for session to disconnect
