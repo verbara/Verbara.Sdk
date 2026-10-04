@@ -50,13 +50,13 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
         var sut = new SessionManagerHostedService(csm, _server);
 
         await sut.StartAsync(CancellationToken.None);
+        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
 
-        // Verify that AttachToServer was called by checking that the manager
-        // responds to server events (no exception = attached successfully).
-        // We verify indirectly: a second attach with the same serverId would replace
-        // subscriptions without error, showing the first attach happened.
-        var act = () => csm.AttachToServer(_server, "default");
-        act.Should().NotThrow();
+        // Ends on the attach's own signal: a channel the server reports opens a session. Calling
+        // AttachToServer again and expecting no throw proved nothing — a second attach under the same id
+        // replaces the subscription set without detaching the first, so it is green with no attach at all.
+        csm.ActiveSessions.Should().ContainSingle("the started service attached the manager to the server")
+            .Which.LinkedId.Should().Be("linked-1");
 
         await csm.DisposeAsync();
     }
@@ -68,11 +68,14 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
         var sut = new SessionManagerHostedService(csm, _server);
 
         await sut.StartAsync(CancellationToken.None);
+        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
         await sut.StopAsync(CancellationToken.None);
+        _server.Channels.OnNewChannel("uid-2", "PJSIP/100-002", ChannelState.Ring, linkedId: "linked-2");
 
-        // After detach, re-attaching should work cleanly
-        var act = () => csm.AttachToServer(_server, "default");
-        act.Should().NotThrow();
+        // Ends on the detach's own signal: the manager was attached (the first channel opened a session),
+        // and a channel the server reports after the stop opens nothing.
+        csm.ActiveSessions.Select(s => s.LinkedId).Should().Equal(["linked-1"],
+            "the start attached the manager and the stop detached it");
 
         await csm.DisposeAsync();
     }
