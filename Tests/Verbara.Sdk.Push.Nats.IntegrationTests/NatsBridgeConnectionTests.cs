@@ -53,6 +53,29 @@ public sealed class NatsBridgeConnectionTests(NatsContainerFixture fixture) : IC
                 string.Join(", ", running.Subscriptions));
     }
 
+    [Fact]
+    public async Task Bridge_ShouldCloseItsConnection_WhenTheStartedHostIsDisposedWithoutAStop()
+    {
+        using var http = new HttpClient();
+        ConnzSnapshot running;
+
+        using (var host = BuildHost())
+        {
+            await host.StartAsync();
+            running = await WaitForAsync(http, static s => s.Subscriptions.Contains(Filter));
+
+            // No StopAsync: the host is disposed as a failed start or a `using` without a stop leaves it.
+        }
+
+        var afterDispose = await WaitForAsync(http, static s => s.Connections == 0);
+
+        (running.Connections, afterDispose.Connections)
+            .Should().Be(
+                (1, 0),
+                "a host disposed without a stop still closes the bridge's connection (subscriptions while running: {0})",
+                string.Join(", ", running.Subscriptions));
+    }
+
     private IHost BuildHost()
     {
         var builder = Host.CreateApplicationBuilder();

@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a NATS bridge releases everything it opened when it stops or is disposed (#389)
+
+A connection a factory returned after a stop whose time had run out, the bridge's Push bus subscription after a stop
+that waited for a slow connect, and — on a disposal without a stop, as when a later hosted service fails to start or
+a started host is disposed — the NATS connection and the bus subscription were all left open; a connect abandoned by
+a stop or a connect timeout went on to complete and stayed open. A stop or a disposal now releases everything the
+bridge opened, and a disposal returns only once the release is done. This restores the bridge's documented clean
+drain on stop and its `Dispose()` promise. No public API change.
+
 ### Added: an ARI audio server logs and counts a connection it refuses at its stream limit (#387)
 
 When `AudioSocketServer` or `WebSocketAudioServer` was at `MaxConcurrentStreams`, it closed each further connection

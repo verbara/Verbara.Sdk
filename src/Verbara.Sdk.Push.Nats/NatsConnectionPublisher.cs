@@ -29,7 +29,8 @@ internal sealed class NatsConnectionPublisher : INatsPublisher
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        // No catch here: NatsBridge.StopAsync, the only caller, logs a failed dispose.
+        // No catch here: the bridge's release, its only caller (from a stop, a disposal or its own
+        // ending), logs a failed dispose.
         await _connection.DisposeAsync().ConfigureAwait(false);
     }
 }
