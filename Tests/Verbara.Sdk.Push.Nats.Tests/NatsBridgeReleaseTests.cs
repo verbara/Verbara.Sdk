@@ -116,7 +116,7 @@ public sealed class NatsBridgeReleaseTests
     public async Task Dispose_ShouldReleaseEverythingOnce_WhenTheStartedBridgeWasNeverStopped()
     {
         var rig = new Rig();
-        var bridge = rig.Build(subscribe: true);
+        using var bridge = rig.Build(subscribe: true);
 
         await bridge.StartAsync(CancellationToken.None);
         await rig.Subscriber.Subscribed.WaitAsync(Fence);
@@ -137,7 +137,7 @@ public sealed class NatsBridgeReleaseTests
     public async Task Dispose_ShouldReleaseNothingAgain_WhenTheBridgeWasStoppedAndIsDisposedTwice()
     {
         var rig = new Rig();
-        var bridge = rig.Build(subscribe: true);
+        using var bridge = rig.Build(subscribe: true);
 
         await bridge.StartAsync(CancellationToken.None);
         await rig.Subscriber.Subscribed.WaitAsync(Fence);
@@ -154,7 +154,7 @@ public sealed class NatsBridgeReleaseTests
     public void Dispose_ShouldCallNoFactory_WhenTheBridgeNeverStarted()
     {
         var rig = new Rig();
-        var bridge = rig.Build(subscribe: true);
+        using var bridge = rig.Build(subscribe: true);
 
         var dispose = () => bridge.Dispose();
         dispose.Should().NotThrow();
@@ -167,7 +167,7 @@ public sealed class NatsBridgeReleaseTests
     public async Task Dispose_ShouldNotReturn_WhileAReleaseAnotherPathBeganIsInProgress()
     {
         var rig = new Rig(parkPublisherDispose: true);
-        var bridge = rig.Build(subscribe: false);
+        using var bridge = rig.Build(subscribe: false);
 
         await bridge.StartAsync(CancellationToken.None);
         await rig.Bus.Subscribed.WaitAsync(Fence); // the publisher was handed over before the bus subscription
@@ -618,48 +618,50 @@ public sealed class NatsBridgeReleaseTests
 
         private async Task ServeAsync(Socket socket)
         {
-            try
+            using (socket)
             {
-                await _release.Task.WaitAsync(_cts.Token);
-                await socket.SendAsync(Encoding.ASCII.GetBytes(Info), SocketFlags.None, _cts.Token);
-                var buffer = new byte[8192];
-                var pending = new StringBuilder();
-                while (true)
+                try
                 {
-                    var read = await socket.ReceiveAsync(buffer, SocketFlags.None, _cts.Token);
-                    if (read == 0) break;
-                    pending.Append(Encoding.ASCII.GetString(buffer, 0, read));
-                    var text = pending.ToString();
-                    int end;
-                    while ((end = text.IndexOf("\r\n", StringComparison.Ordinal)) >= 0)
+                    await _release.Task.WaitAsync(_cts.Token);
+                    await socket.SendAsync(Encoding.ASCII.GetBytes(Info), SocketFlags.None, _cts.Token);
+                    var buffer = new byte[8192];
+                    var pending = new StringBuilder();
+                    while (true)
                     {
-                        var line = text[..end];
-                        text = text[(end + 2)..];
-                        if (line.StartsWith("PING", StringComparison.Ordinal))
+                        var read = await socket.ReceiveAsync(buffer, SocketFlags.None, _cts.Token);
+                        if (read == 0) break;
+                        pending.Append(Encoding.ASCII.GetString(buffer, 0, read));
+                        var text = pending.ToString();
+                        int end;
+                        while ((end = text.IndexOf("\r\n", StringComparison.Ordinal)) >= 0)
                         {
-                            await socket.SendAsync("PONG\r\n"u8.ToArray(), SocketFlags.None, _cts.Token);
-                            Interlocked.Increment(ref _pongs);
+                            var line = text[..end];
+                            text = text[(end + 2)..];
+                            if (line.StartsWith("PING", StringComparison.Ordinal))
+                            {
+                                await socket.SendAsync("PONG\r\n"u8.ToArray(), SocketFlags.None, _cts.Token);
+                                Interlocked.Increment(ref _pongs);
+                            }
                         }
+                        pending.Clear().Append(text);
                     }
-                    pending.Clear().Append(text);
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                // the test disposed the server
-            }
-            catch (SocketException)
-            {
-                // the client reset the connection: closed all the same
-            }
-            catch (ObjectDisposedException)
-            {
-                // the test disposed the server
-            }
-            finally
-            {
-                socket.Dispose();
-                if (Interlocked.Decrement(ref _open) == 0) _allClosed.TrySetResult();
+                catch (OperationCanceledException)
+                {
+                    // the test disposed the server
+                }
+                catch (SocketException)
+                {
+                    // the client reset the connection: closed all the same
+                }
+                catch (ObjectDisposedException)
+                {
+                    // the test disposed the server
+                }
+                finally
+                {
+                    if (Interlocked.Decrement(ref _open) == 0) _allClosed.TrySetResult();
+                }
             }
         }
     }
