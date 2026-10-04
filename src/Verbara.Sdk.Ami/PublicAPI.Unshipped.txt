@@ -7,3 +7,4 @@ Verbara.Sdk.Ami.Connection.EventActionOutcome.EventActionOutcome() -> void (forw
 Verbara.Sdk.Ami.Connection.EventActionOutcome.Rejection.get -> string? (forwarded, contained in Verbara.Sdk)
 Verbara.Sdk.Ami.Connection.EventActionOutcome.Reported.get -> bool (forwarded, contained in Verbara.Sdk)
 Verbara.Sdk.Ami.Connection.EventActionOutcome.SessionEnded.get -> bool (forwarded, contained in Verbara.Sdk)
+Verbara.Sdk.Ami.Connection.AmiConnection.Subscribe(System.Func<Verbara.Sdk.ManagerEvent!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! handler) -> System.IDisposable!

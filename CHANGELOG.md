@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: an AMI event handler that is told when the caller ends the connection (#391)
+
+`IAmiConnection.Subscribe(Func<ManagerEvent, CancellationToken, ValueTask>)` registers an event handler that receives a
+token cancelled when the caller ends the connection with `DisconnectAsync` or `DisposeAsync`, and only then. A handler
+that honours it no longer holds the caller's close: with a handler taking 6 s, closing took 5,997–6,004 ms (20 of 20)
+and now takes 0–4 ms. Handlers subscribed this way and through `OnEvent` are called in the order they subscribed. An
+`IAmiConnection` wrapper that does not forward the new member still delivers every event, through the default
+implementation, with a token that is never cancelled. A call that passes a literal `null` or `default` to `Subscribe`
+no longer compiles (CS0121, ambiguous between the two overloads); on 2.7.0 such a call subscribed a null observer,
+which failed on every event and was never reported, and no other call changes meaning or stops compiling. Pass a
+typed `IObserver<ManagerEvent>` or the named argument `observer:`. Binary-compatible with 2.7.0.
+
+### Added: a reconnect that gives up logs one Error (#391)
+
+When the AMI connection's reconnect gives up, it logs one Error, `[AMI] Reconnect gave up after <n> attempts; the
+connection will not come back`, with the last attempt's exception, before `[AMI] Disconnected`.
+
+### Fixed: an AMI event observer that throws is logged and counted (#391)
+
+An `IObserver<ManagerEvent>` whose `OnNext` threw was swallowed without a trace. It is now logged at Warning
+(`[AMI_EVENT] Observer threw on <EventType>`) and counted on `ami.events.observer_faults`; the other observers and
+handlers still receive the event.
+
+### Fixed: a connection `AsyncServerSocket` accepted is closed when configuring it fails (#391)
+
+`AsyncServerSocket.AcceptAsync` left the accepted socket open when configuring it threw; it now closes it before the
+exception reaches the caller.
+
 ### Fixed: a NATS bridge releases everything it opened when it stops or is disposed (#389)
 
 A connection a factory returned after a stop whose time had run out, the bridge's Push bus subscription after a stop

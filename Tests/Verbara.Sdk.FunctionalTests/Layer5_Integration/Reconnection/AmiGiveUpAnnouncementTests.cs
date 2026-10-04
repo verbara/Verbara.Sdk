@@ -11,6 +11,7 @@ using Verbara.Sdk.TestInfrastructure;
 using Verbara.Sdk.TestInfrastructure.Containers;
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Microsoft.Extensions.Logging;
 using Xunit.Abstractions;
 
 namespace Verbara.Sdk.FunctionalTests.Layer5_Integration.Reconnection;
@@ -109,6 +110,14 @@ public sealed class AmiGiveUpAnnouncementTests : FunctionalTestBase, IClassFixtu
             refused.Should().OnlyContain(c => c.Cause is AmiAuthenticationException, "every attempt reached Asterisk, which refused the login");
             changes.Should().OnlyContain(c => !c.ByCaller, "the kick and the reconnect loop made every change");
             entries.Should().NotContain(e => e.Change == null, "no attempt logged in, so nothing reconnected");
+
+            // The give-up's Error line is written before the final change is queued, so it is in the capture by now.
+            var gaveUp = LogCapture.Entries
+                .Where(e => e.Level == LogLevel.Error && e.Message.Contains("Reconnect gave up after", StringComparison.Ordinal))
+                .ToList();
+            gaveUp.Should().ContainSingle("the give-up writes exactly one Error line");
+            gaveUp.Should().OnlyContain(e => e.Exception is AmiAuthenticationException,
+                "the line carries the last attempt's exception, and Asterisk refused that login");
         }
 
         connection.State.Should().Be(AmiConnectionState.Disconnected);
