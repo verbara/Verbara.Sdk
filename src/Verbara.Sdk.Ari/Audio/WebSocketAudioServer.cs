@@ -6,6 +6,7 @@ using System.Reactive.Subjects;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Verbara.Sdk.Ari.Diagnostics;
 
 namespace Verbara.Sdk.Ari.Audio;
 
@@ -28,6 +29,9 @@ internal static partial class WebSocketAudioServerLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[WebSocketAudio] Accept failed — the server stays bound and accepts again after a backoff")]
     public static partial void AcceptLoopFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] Stream limit reached ({Limit}), rejecting connection")]
+    public static partial void StreamLimitReached(ILogger logger, int limit);
 }
 
 /// <summary>
@@ -152,7 +156,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 
                 // Nothing that can fail for this one connection runs between the accept and the
                 // hand-off, not even configuring the socket; the capacity check only takes a place
-                // from a count and closes what it refuses. Configuring fails in the handler, which closes the
+                // from a count, and closes and reports what it refuses. Configuring fails in the handler, which closes the
                 // connection and reports it as that connection's error. Here it would reach the catches
                 // below, which classify by type only: a SocketException would be logged as an accept
                 // failure and backed off for, with the socket left open, and an
@@ -165,6 +169,19 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 if (!_options.Admission.TryEnter(_options.MaxConcurrentStreams))
                 {
                     client.Dispose();
+
+                    // Reported after the close, so a logger or listener that throws cannot leave the
+                    // refused socket open, and from nothing read off the connection. A refusal decided
+                    // once the stop has begun is the stop, not a full server: the running flag tells
+                    // them apart, as in the SocketException arm below, because StopAsync clears it
+                    // before it cancels `ct`. The count goes first: a MeterListener runs inside Add, so
+                    // whoever has seen the Warning has seen the count.
+                    if (IsRunning)
+                    {
+                        AudioStreamMetrics.ConnectionsRefused.Add(1);
+                        WebSocketAudioServerLog.StreamLimitReached(_logger, _options.MaxConcurrentStreams);
+                    }
+
                     continue;
                 }
 

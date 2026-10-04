@@ -21,7 +21,8 @@ public sealed class AudioServerOptions
     /// different instances do not share it. A connection counts from the moment it is accepted until it
     /// ends: one that has not identified itself yet, and one that waits for an id another live
     /// connection holds, take a place like any other. A connection over the limit is closed before
-    /// anything is read from it.
+    /// anything is read from it; while the server runs, the server that refused it logs a Warning that
+    /// names the limit and counts the connection on <c>audio.connections.refused</c>.
     /// </remarks>
     public int MaxConcurrentStreams { get; set; } = 1000;
 
