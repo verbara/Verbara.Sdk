@@ -62,7 +62,7 @@ change.
   reload to Asterisk's reported wait plus the time Live held them. `AsteriskQueueEntry.JoinedAt` keeps its meaning.
   No public API change.
 
-### Fixed: ARI audio streams end exactly once, and their server always learns it
+### Fixed: ARI audio streams end exactly once, and their server always learns it (#392)
 
 - `IAudioStream.StateChanges` published `Disconnected` twice at the end of every AudioSocket and WebSocket stream (20 of
   20 endings measured); it is now published once, last, after `Error` when an error frame ended the stream.
