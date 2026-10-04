@@ -31,7 +31,7 @@ For each error or warning, classify using this table:
 | `[LIVE] Status refused` | Config: the AMI user may not run `Status`; the load reconciled no channel | Give the user `system`, `call` or `reporting` in `write` |
 | `[CALL_FLOW] Evicted stale` | Infra: zombie call | Investigate missing Hangup events |
 | `[AGENT] Unknown agent` | Config: agent not tracked | Check AgentsAction response |
-| `[AGI] No script mapped` | Config: missing mapping | Update `IMappingStrategy` |
+| `[AGI] No script mapped` | Config: missing mapping — a real request named a script no strategy maps (a connection that closes before sending its request, such as a TCP probe or a port scanner, logs only the Debug line `[AGI] Connection closed before a request was read` and is not counted here) | Update `IMappingStrategy` |
 | `[CONFIG_DB] No table mapping` | Config: missing Realtime map | Add entry to `RealtimeTableMap` |
 
 ### Phase 3: Root Cause
