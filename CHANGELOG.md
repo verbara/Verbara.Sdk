@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: a NATS bridge releases everything it opened when it stops or is disposed
+### Fixed: a NATS bridge releases everything it opened when it stops or is disposed (#389)
 
 A connection a factory returned after a stop whose time had run out, the bridge's Push bus subscription after a stop
 that waited for a slow connect, and — on a disposal without a stop, as when a later hosted service fails to start or
