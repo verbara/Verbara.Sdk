@@ -80,11 +80,6 @@ public sealed class VoiceAiSessionBrokerShutdownTests : IAsyncLifetime
         using var grace = new CancellationTokenSource();
 
         var stop = host.StopAsync(grace.Token);
-        var handlerReturnedBeforeTheStop = stop.ContinueWith(
-            _ => handler.Returned.IsCompleted,
-            CancellationToken.None,
-            TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
         try
         {
             await Task.WhenAny(stop, waiting).WaitAsync(SignalTimeout);
@@ -110,12 +105,15 @@ public sealed class VoiceAiSessionBrokerShutdownTests : IAsyncLifetime
         }
         finally
         {
+            // Read by the handler itself, on its own thread, as it returns.
+            handler.ObserveOnReturn(() => stop.IsCompleted);
             handler.Release();
         }
 
         await stop.WaitAsync(SignalTimeout);
 
-        (await handlerReturnedBeforeTheStop).Should().BeTrue(
+        var stopCompletedWhenTheHandlerReturned = await handler.ObservedOnReturn.WaitAsync(SignalTimeout);
+        stopCompletedWhenTheHandlerReturned.Should().BeFalse(
             "the host's stop completed only after the handler had returned");
         if (order != StopOrder.BrokerStoppedFirst)
         {
@@ -229,6 +227,8 @@ public sealed class VoiceAiSessionBrokerShutdownTests : IAsyncLifetime
         private readonly TaskCompletionSource<ParkedCall> _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _returned = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _observed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private Func<bool>? _observeOnReturn;
 
         /// <summary>Completes with the first call, as soon as it is recorded.</summary>
         public Task<ParkedCall> Entered => _entered.Task;
@@ -236,8 +236,20 @@ public sealed class VoiceAiSessionBrokerShutdownTests : IAsyncLifetime
         /// <summary>Completes when the handler has returned.</summary>
         public Task Returned => _returned.Task;
 
+        /// <summary>
+        /// Completes with what the observation set by <see cref="ObserveOnReturn"/> read as the handler returned. Never
+        /// completes when no observation was set.
+        /// </summary>
+        public Task<bool> ObservedOnReturn => _observed.Task;
+
         /// <summary>Opens the gate. Safe to call more than once.</summary>
         public void Release() => _gate.TrySetResult();
+
+        /// <summary>
+        /// Sets a read the handler makes on its own thread as it returns, just before <see cref="Returned"/> completes.
+        /// Set it before <see cref="Release"/>; none is made by default.
+        /// </summary>
+        public void ObserveOnReturn(Func<bool> observe) => _observeOnReturn = observe;
 
         public async ValueTask HandleSessionAsync(AudioSocketSession session, CancellationToken ct = default)
         {
@@ -248,6 +260,8 @@ public sealed class VoiceAiSessionBrokerShutdownTests : IAsyncLifetime
             }
             finally
             {
+                if (_observeOnReturn is { } observe)
+                    _observed.TrySetResult(observe());
                 _returned.TrySetResult();
             }
         }
