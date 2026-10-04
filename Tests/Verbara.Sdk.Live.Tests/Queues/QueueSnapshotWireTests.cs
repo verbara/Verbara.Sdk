@@ -111,7 +111,8 @@ public sealed class QueueSnapshotWireTests : IAsyncLifetime
         var samples = _samples.During(() => server.Queues.OnCallerLeft(Queue, Caller));
 
         samples.Should().ContainSingle("one leave records one sample")
-            .Which.Should().BeLessThan(1000,
+            .Which.Should().BeGreaterThanOrEqualTo(0, "a negative reported wait is not subtracted from the time held")
+            .And.BeLessThan(1000,
                 "with no wait reported, or a negative one Asterisk does not send, the sample is the time Live held the "
                 + "caller, as for a live join");
     }
