@@ -20,6 +20,17 @@ public sealed class AudioSocketOptions
     /// <summary>Receive buffer size in bytes. Default: <c>4096</c>.</summary>
     public int ReceiveBufferSize { get; set; } = 4096;
 
-    /// <summary>Connection timeout. Default: <c>30 seconds</c>.</summary>
+    /// <summary>
+    /// How long a connection may take to send its identification frame before the server closes it.
+    /// Default: <c>30 seconds</c>.
+    /// </summary>
+    /// <remarks>
+    /// More than zero and at most 4 294 967 294 milliseconds (49.71 days), or
+    /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> for no deadline. The server checks the value
+    /// when it is constructed and throws <see cref="ArgumentOutOfRangeException"/> for any other; a value
+    /// set after construction is read per connection unchecked. <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>
+    /// removes the deadline: a connection that never identifies itself keeps its
+    /// <see cref="MaxConcurrentSessions"/> place until the server stops.
+    /// </remarks>
     public TimeSpan ConnectionTimeout { get; set; } = TimeSpan.FromSeconds(30);
 }
