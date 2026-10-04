@@ -20,23 +20,45 @@ public sealed class FastAgiReader
 
     /// <summary>
     /// Read the AGI request header (agi_key: value lines until blank line).
+    /// When the stream ends before the blank line, the request is parsed from the lines read so far
+    /// (none at all gives a request whose <see cref="AgiRequest.Script"/> is <see langword="null"/>).
     /// </summary>
     public async ValueTask<AgiRequest> ReadRequestAsync(CancellationToken ct = default)
+    {
+        var (lines, _) = await ReadHeaderLinesAsync(ct);
+        return AgiRequest.Parse(lines);
+    }
+
+    /// <summary>
+    /// Read the AGI request header, or <see langword="null"/> when the stream ends before the blank
+    /// line that terminates it: a request is complete only at that line, so a connection that resets
+    /// or closes first carries no request.
+    /// </summary>
+    internal async ValueTask<AgiRequest?> TryReadRequestAsync(CancellationToken ct = default)
+    {
+        var (lines, complete) = await ReadHeaderLinesAsync(ct);
+        return complete ? AgiRequest.Parse(lines) : null;
+    }
+
+    private async ValueTask<(List<string> Lines, bool Complete)> ReadHeaderLinesAsync(CancellationToken ct)
     {
         var lines = new List<string>();
 
         while (true)
         {
             var line = await ReadLineAsync(ct);
-            if (line is null || line.Length == 0)
+            if (line is null)
             {
-                break;
+                return (lines, false);
+            }
+
+            if (line.Length == 0)
+            {
+                return (lines, true);
             }
 
             lines.Add(line);
         }
-
-        return AgiRequest.Parse(lines);
     }
 
     /// <summary>

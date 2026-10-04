@@ -27,6 +27,9 @@ internal static partial class FastAgiServerLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AGI] No script mapped: script={Script}")]
     public static partial void NoScriptMapped(ILogger logger, string? script);
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AGI] Connection closed before a request was read")]
+    public static partial void ClosedBeforeRequest(ILogger logger);
+
     [LoggerMessage(Level = LogLevel.Error, Message = "[AGI] Connection error")]
     public static partial void ConnectionError(ILogger logger, Exception exception);
 
@@ -255,7 +258,14 @@ public sealed class FastAgiServer : IAgiServer
             var writer = new FastAgiWriter(conn.Output);
 
             // Read AGI request headers
-            var request = await reader.ReadRequestAsync(connectionCt);
+            var request = await reader.TryReadRequestAsync(connectionCt);
+            if (request is null)
+            {
+                // The stream ended before the blank line that ends the request: a reset or a close
+                // with no request (a liveness probe, a scanner) is not served.
+                FastAgiServerLog.ClosedBeforeRequest(_logger);
+                return;
+            }
 
             activity = AgiActivitySource.StartScript(request.Script, request.Channel);
             FastAgiServerLog.ScriptExecuting(_logger, request.Script, request.Channel);

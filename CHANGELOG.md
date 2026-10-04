@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a FastAGI connection that closes before sending its request is not served as a request (#384)
+
+A connection that reset or closed before Asterisk's blank line ended the AGI environment block was still handled as a
+request. With no bytes at all — a TCP liveness probe, a load balancer's health check, a port scanner — each one logged
+a `No script mapped` Warning, counted `agi.scripts.not_found` and opened a `NotFound` span (200 of 200 in a burst of
+200 resets, with each of the SDK's mapping strategies); a strategy that maps any request ran its script with a null
+`Script`. A peer that sent headers naming a script and then closed before the blank line had that script run (200 of
+200, with every strategy). A request is now complete only at that blank line: a connection that ends before it logs
+one Debug line, `[AGI] Connection closed before a request was read`, and records no script outcome.
+`agi.connections.accepted` still counts it. Well-formed requests are served as before. No public API change.
+
 ## [2.7.0] - 2026-10-03
 
 ### Fixed: a queued call records the queue member who took it (#381)
