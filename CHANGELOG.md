@@ -15,7 +15,7 @@ a `No script mapped` Warning, counted `agi.scripts.not_found` and opened a `NotF
 one Debug line, `[AGI] Connection closed before a request was read`, and records no script outcome.
 `agi.connections.accepted` still counts it. Well-formed requests are served as before. No public API change.
 
-### Fixed: the Prometheus `/metrics` endpoint serves the metrics again
+### Fixed: the Prometheus `/metrics` endpoint serves the metrics again (#388)
 
 On 2.6.1 and 2.7.0 the Prometheus `/metrics` endpoint answered 200 with an empty body as soon as any double-valued
 instrument (a histogram; the SDK has 17) had a value: the exporter 1.15.2-beta.1 calls a type OpenTelemetry 1.19.1 no
