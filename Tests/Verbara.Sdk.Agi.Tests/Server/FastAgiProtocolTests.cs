@@ -29,6 +29,35 @@ public class FastAgiProtocolTests
     }
 
     [Fact]
+    public async Task ReadRequestAsync_ShouldReturnARequestWithNoScript_WhenTheStreamEndsWithNoBytes()
+    {
+        var pipe = new Pipe();
+        var reader = new FastAgiReader(pipe.Reader);
+        await pipe.Writer.CompleteAsync();
+
+        var read = async () => await reader.ReadRequestAsync();
+
+        var request = (await read.Should().NotThrowAsync()).Subject;
+        request.Should().NotBeNull("the public reader returns the request parsed from what it read, even nothing");
+        request.Script.Should().BeNull();
+        request.Variables.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ReadRequestAsync_ShouldReturnTheLinesItRead_WhenTheStreamEndsBeforeTheBlankLine()
+    {
+        var pipe = new Pipe();
+        var reader = new FastAgiReader(pipe.Reader);
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("agi_network: yes\nagi_network_script: hello\nagi_channel: SIP/test\n"));
+        await pipe.Writer.CompleteAsync();
+
+        var request = await reader.ReadRequestAsync();
+
+        request.Script.Should().Be("hello", "the public reader parses the lines it read when the stream ends early");
+        request.Channel.Should().Be("SIP/test");
+    }
+
+    [Fact]
     public async Task Reader_ShouldReadReply()
     {
         var pipe = new Pipe();

@@ -106,5 +106,33 @@ public sealed class TestSupportTests
         AgiCounters.ConnectionsAccepted.Should().Be(AgiMetrics.ConnectionsAccepted.Name);
         AgiCounters.ScriptsFailed.Should().Be(AgiMetrics.ScriptsFailed.Name);
         AgiCounters.ScriptsExecuted.Should().Be(AgiMetrics.ScriptsExecuted.Name);
+        AgiCounters.ScriptsNotFound.Should().Be(AgiMetrics.ScriptsNotFound.Name);
+        AgiCounters.Hangups.Should().Be(AgiMetrics.Hangups.Name);
+        AgiCounters.ScriptDuration.Should().Be(AgiMetrics.ScriptDurationMs.Name);
+    }
+
+    [Fact]
+    public async Task WhenRecorded_ShouldCompleteOnTheNthRecordOfAHistogramOnly_WhenRecordsArrive()
+    {
+        // A meter no SDK code uses, so this test moves no instrument another test counts.
+        using var meter = new Meter($"TestSupport.{Guid.NewGuid():N}");
+        using var counters = new AgiCounters(meter.Name);
+        var duration = meter.CreateHistogram<double>(AgiCounters.ScriptDuration);
+        var notFound = meter.CreateCounter<long>(AgiCounters.ScriptsNotFound);
+
+        var third = counters.WhenRecorded(AgiCounters.ScriptDuration, 3);
+        duration.Record(12.5);
+        duration.Record(0);
+        notFound.Add(5);
+        var completedAfterTwo = third.IsCompleted;
+        duration.Record(7);
+        await third.WaitAsync(SignalTimeout);
+
+        completedAfterTwo.Should().BeFalse("two records of the histogram, and one of another instrument, are not three");
+        counters.Records(AgiCounters.ScriptDuration).Should().Be(3, "a histogram's records are counted, not its values summed");
+        counters.Get(AgiCounters.ScriptsNotFound).Should().Be(5, "a counter is still summed");
+        counters.Records(AgiCounters.ScriptsNotFound).Should().Be(1);
+        counters.WhenRecorded(AgiCounters.ScriptDuration, 3).IsCompleted.Should().BeTrue(
+            "a count already reached completes at once");
     }
 }
