@@ -75,6 +75,17 @@ public static class AudioStreamMetrics
         Meter.CreateCounter<long>("audio.transport.failures", "sessions",
             "AudioSocket sessions that ended because their transport failed, not on a hangup");
 
+    /// <summary>
+    /// Connections an ARI audio server closed at the accept, before reading anything, because
+    /// <c>MaxConcurrentStreams</c> places were already held. Recorded by the server that refused the
+    /// connection, together with its Warning, and not for a refusal decided after the server's stop
+    /// began. A refused connection never became a stream, so it moves no <c>audio.streams.*</c> count.
+    /// Internal: the instrument's name is the contract an exporter sees, and the field adds no public API.
+    /// </summary>
+    internal static readonly Counter<long> ConnectionsRefused =
+        Meter.CreateCounter<long>("audio.connections.refused", "connections",
+            "Audio connections closed at accept because MaxConcurrentStreams places were already held");
+
     // --- Latency ---
 
     /// <summary>Time from receive to consumer read.</summary>
