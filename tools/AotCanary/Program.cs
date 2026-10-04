@@ -1,4 +1,5 @@
-// AOT Canary — verifies all 16 SDK packages are AOT-safe (zero trim warnings).
+// AOT Canary — publishes the SDK packages it references (23 of 29) with Native AOT; tools/verify-aot.sh
+// fails on any trim/AOT warning and on any method the AOT compiler reports will always throw.
 // References a representative public type from each package so the linker
 // processes all assemblies during dotnet publish /p:PublishAot=true.
 
