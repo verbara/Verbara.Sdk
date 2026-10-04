@@ -209,12 +209,19 @@ public sealed class VerbaraServerPool : IAsyncDisposable
         // Taken out one by one before each is disposed: a second or concurrent disposal finds nothing to dispose again.
         foreach (var serverId in _servers.Keys)
         {
-            if (!_servers.TryRemove(serverId, out var server))
-                continue;
-
-            await ReleaseAsync(serverId, server);
+            await TakeOutAndReleaseAsync(serverId);
         }
         _agentRouting.Clear();
+    }
+
+    /// <summary>
+    /// Takes the server under <paramref name="serverId"/> out of the pool and releases it, when the pool still holds one:
+    /// a concurrent caller that took it out first releases it instead.
+    /// </summary>
+    private async ValueTask TakeOutAndReleaseAsync(string serverId)
+    {
+        if (_servers.TryRemove(serverId, out var server))
+            await ReleaseAsync(serverId, server);
     }
 
     /// <summary>Removes every agent route that points to <paramref name="serverId"/>, and only those.</summary>
