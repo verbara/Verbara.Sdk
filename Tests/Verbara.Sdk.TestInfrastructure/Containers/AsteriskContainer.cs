@@ -12,7 +12,9 @@ namespace Verbara.Sdk.TestInfrastructure.Containers;
 ///
 /// Asterisk version is controlled by the <c>ASTERISK_VERSION</c> environment variable
 /// (defaults to <c>22</c>). CI matrices set this per job to validate the SDK against
-/// both Asterisk 22 LTS and Asterisk 23 Standard. <c>CODEC_OPUS_VERSION</c> defaults
+/// both Asterisk 22 LTS and Asterisk 23 Standard. The image is built on the base
+/// <c>docker/asterisk-base-images.txt</c> pins for that version (<see cref="AsteriskBaseImages"/>);
+/// a version with no line fails before any build. <c>CODEC_OPUS_VERSION</c> defaults
 /// to <c>{ASTERISK_VERSION}.0_1.3.0</c>; override only if a non-default Digium codec
 /// build is required.
 /// </summary>
@@ -87,12 +89,14 @@ public sealed class AsteriskContainer : IAsyncDisposable
             var asteriskVersion = Environment.GetEnvironmentVariable("ASTERISK_VERSION") ?? "22";
             var codecOpusVersion = Environment.GetEnvironmentVariable("CODEC_OPUS_VERSION")
                 ?? $"{asteriskVersion}.0_1.3.0";
+            var baseImage = AsteriskBaseImages.Resolve(asteriskVersion);
 
             var image = new ImageFromDockerfileBuilder()
                 .WithDockerfile("Dockerfile.asterisk")
                 .WithDockerfileDirectory(DockerPaths.DockerDir)
                 .WithBuildArgument("ASTERISK_VERSION", asteriskVersion)
                 .WithBuildArgument("CODEC_OPUS_VERSION", codecOpusVersion)
+                .WithBuildArgument("ASTERISK_BASE_IMAGE", baseImage)
                 .Build();
 
             await image.CreateAsync(ct).ConfigureAwait(false);

@@ -1,0 +1,11 @@
+# The Asterisk base image of docker/Dockerfile.asterisk, one pinned build per supported version:
+#   <ASTERISK_VERSION> <image>:<build tag>@<registry digest>
+# The publisher re-publishes every version tag weekly with a new build; the per-build tag never moves and the digest
+# names the exact image. Testcontainers (AsteriskContainer) and the CI pre-build read the line of the ASTERISK_VERSION
+# they build; a version with no line fails before any build. The Dockerfile's default base is the 22 line, and
+# docker-compose.test-23.yml passes the 23 line: the Governance guard fails the unit lane until every copy matches.
+# Re-pinning is one reviewed edit here, with the new build's `asterisk -V` and digest measured first.
+# 20 is pinned for local measurement; CI runs 22 and 23.
+20 andrius/asterisk:20.20.1_debian-trixie-d0182a6@sha256:c202cdf0f0348ab75e6dee49967418ce8c08853644b8a5c00de91f6b4aca4dd1
+22 andrius/asterisk:22.10.1_debian-trixie-6bb254a@sha256:212326bd3f973a597be9e4747be5d6653802e4950159e95aa7d728e394de2012
+23 andrius/asterisk:23.4.1_debian-trixie-d0182a6@sha256:f741171a6a779f22e590498cdd39bfa98443ac5a30108a1e4fe5fdd7ece83bf5

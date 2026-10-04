@@ -31,16 +31,26 @@ Parallel stack — can coexist with the 22 stack. Container names use the `aster
 
 ## Build-arg driven image
 
-`docker/Dockerfile.asterisk` accepts two build-args to select the Asterisk line:
+`docker/Dockerfile.asterisk` builds on a pinned base: `docker/asterisk-base-images.txt` holds one line per supported
+version, `<version> <image>:<build tag>@<digest>` (22 and 23 for CI, 20 for local measurement). A version tag such as
+`22` is re-published with a new build every week; the per-build tag never moves and the digest names the exact image,
+so every run of a version tests the same Asterisk. Testcontainers and the CI pre-build read the line for the
+`ASTERISK_VERSION` they build, and a version with no line fails before any build.
+
+A hand-run build passes the version, its Opus build and its base:
 
 ```sh
-docker build -f docker/Dockerfile.asterisk \
+docker build -f docker/Dockerfile.asterisk docker/ \
   --build-arg ASTERISK_VERSION=23 \
   --build-arg CODEC_OPUS_VERSION=23.0_1.3.0 \
-  -t asterisk-sdk-test:23 .
+  --build-arg ASTERISK_BASE_IMAGE="$(awk '$1 == "23" { print $2 }' docker/asterisk-base-images.txt)" \
+  -t asterisk-sdk-test:23
 ```
 
-`ASTERISK_VERSION` selects the base image tag (`andrius/asterisk:${ASTERISK_VERSION}`). `CODEC_OPUS_VERSION` picks the matching Digium Opus binary. If Digium has not yet published a codec_opus build for the selected version, the image continues to build with a warning — the SDK test suites do not exercise Opus audio payloads.
+With no `ASTERISK_BASE_IMAGE` the base is the table's 22 line. The Dockerfile checks that the base's `asterisk -V` is
+the selected `ASTERISK_VERSION` and fails otherwise ("base is Asterisk 22.x.y, not Asterisk 23"), so a build handed
+only the version never produces the wrong server. Moving a version to a newer build is one edit to the table, with the
+new build's `asterisk -V` and digest measured first. `CODEC_OPUS_VERSION` picks the matching Digium Opus binary. If Digium has not yet published a codec_opus build for the selected version, the image continues to build with a warning — the SDK test suites do not exercise Opus audio payloads.
 
 ## Known break-change risk areas between 22 ↔ 23
 

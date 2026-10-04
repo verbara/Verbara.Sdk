@@ -8,13 +8,16 @@ namespace Verbara.Sdk.TestInfrastructure.Containers;
 /// <summary>Wraps a SIPp container for SIP load/scenario testing. Requires a shared network.</summary>
 public sealed class SippContainer : IAsyncDisposable
 {
+    /// <summary>The SIPp image, by digest (a single-architecture linux/amd64 manifest, resolved 2026-10-04).</summary>
+    public const string Image = "ctaloi/sipp@sha256:c459f2340443ddcc159227efc798217dbdaad0dbe88b76b78b1a876aa271986a";
+
     private readonly IContainer _container;
 
     public string ContainerName => _container.Name;
 
     public SippContainer(INetwork network)
     {
-        _container = new ContainerBuilder("ctaloi/sipp")
+        _container = new ContainerBuilder(Image)
             .WithNetwork(network)
             .WithBindMount(DockerPaths.SippScenariosDir, "/sipp-scenarios", AccessMode.ReadOnly)
             .WithEntrypoint("sleep", "infinity")

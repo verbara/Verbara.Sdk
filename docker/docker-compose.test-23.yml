@@ -41,6 +41,8 @@ services:
       args:
         ASTERISK_VERSION: "23"
         CODEC_OPUS_VERSION: "23.0_1.3.0"
+        # The 23 line of asterisk-base-images.txt; the Dockerfile refuses a base of another version.
+        ASTERISK_BASE_IMAGE: "andrius/asterisk:23.4.1_debian-trixie-d0182a6@sha256:f741171a6a779f22e590498cdd39bfa98443ac5a30108a1e4fe5fdd7ece83bf5"
     container_name: asterisk-sdk-test-23
     networks:
       - sdk-test-23
@@ -67,6 +69,8 @@ services:
       args:
         ASTERISK_VERSION: "23"
         CODEC_OPUS_VERSION: "23.0_1.3.0"
+        # The 23 line of asterisk-base-images.txt; the Dockerfile refuses a base of another version.
+        ASTERISK_BASE_IMAGE: "andrius/asterisk:23.4.1_debian-trixie-d0182a6@sha256:f741171a6a779f22e590498cdd39bfa98443ac5a30108a1e4fe5fdd7ece83bf5"
     container_name: asterisk-sdk-test-23-pstn
     networks:
       - sdk-test-23
