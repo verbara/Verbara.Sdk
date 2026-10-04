@@ -159,6 +159,38 @@ public sealed class AmiReconnectGiveUpLogTests : IAsyncLifetime, IDisposable
         (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
     }
 
+    /// <summary>
+    /// A loop whose backoff cannot be computed keeps its own single Error line and writes no give-up line: it did not
+    /// reach its limit. The multiplier is changed after construction, through the object the connection holds, so the
+    /// constructor's check never saw it.
+    /// </summary>
+    [Fact]
+    public async Task BackoffFailure_ShouldKeepItsOwnErrorAndWriteNoGiveUpLine_WhenTheBackoffCannotBeComputed()
+    {
+        using var peer = new CancellationTokenSource(Bound * 2);
+        var factory = new PipedSocketFactory();
+        var logger = new DispatchLogger();
+        var options = new AmiConnectionOptions();
+        await using var connection = Create(factory, logger, o =>
+        {
+            Reconnecting(o, maxAttempts: 2, delay: TimeSpan.FromMilliseconds(20));
+            options = o;
+        });
+        options.ReconnectMultiplier = 0.5;
+        var socket = await ConnectAsync(connection, factory, peer);
+        var disconnected = logger.Logged("[AMI] Disconnected");
+
+        socket.CloseFromPeer();
+        var ended = await CompletesWithinBoundAsync(disconnected);
+
+        using (new AssertionScope())
+        {
+            ended.Should().BeTrue("a loop whose backoff cannot be computed ends the connection");
+            logger.Containing("[AMI] Reconnect backoff failed").Should().ContainSingle("the backoff failure keeps its own line");
+            GiveUpLines(logger).Should().BeEmpty("the loop did not give up at its limit: it never made an attempt");
+        }
+    }
+
     [Fact]
     public async Task Loss_ShouldWriteNoGiveUpLine_WhenAutoReconnectIsOff()
     {

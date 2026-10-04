@@ -60,6 +60,12 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Reconnect backoff failed: the reconnect loop ends")]
     public static partial void ReconnectBackoffFailed(ILogger logger, Exception exception);
 
+    // The loop reached MaxReconnectAttempts: the one terminal reconnect path with no line of its own until then. The
+    // fragment "Reconnect gave up" matches ARI's give-up line too.
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "[AMI] Reconnect gave up after {Attempts} attempts; the connection will not come back")]
+    public static partial void ReconnectGaveUp(ILogger logger, int attempts, Exception? exception);
+
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Reconnect handler error")]
     public static partial void ReconnectHandlerError(ILogger logger, Exception exception);
 
@@ -1571,6 +1577,11 @@ public sealed class AmiConnection : IAmiConnection
                 // behind is released: the last one a failed connect created. The ending writes Disconnecting
                 // itself, and only when no other ending is under way; a caller's ending under way is not joined,
                 // because it is waiting for this loop.
+                // The give-up is said once, at Error, before the ending announces Disconnected — unless the caller's
+                // ending is already recorded: then the caller, not the loop, ended the connection.
+                if (!EndingRecorded())
+                    AmiConnectionLog.ReconnectGaveUp(_logger, _options.MaxReconnectAttempts, lastError);
+
                 await EndLostConnectionAsync(lastError);
                 return;
             }
