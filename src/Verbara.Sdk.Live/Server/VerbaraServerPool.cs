@@ -4,6 +4,15 @@ using Microsoft.Extensions.Logging;
 
 namespace Verbara.Sdk.Live.Server;
 
+internal static partial class VerbaraServerPoolLog
+{
+    [LoggerMessage(Level = LogLevel.Error, Message = "[POOL] Server dispose failed: server={ServerId}")]
+    public static partial void ServerDisposeFailed(ILogger logger, string serverId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[POOL] AMI connection dispose failed: server={ServerId}")]
+    public static partial void ConnectionDisposeFailed(ILogger logger, string serverId, Exception exception);
+}
+
 /// <summary>
 /// Manages multiple VerbaraServer instances connected to different Asterisk PBX servers.
 /// Provides federated agent routing so callers can locate which server owns a given agent.
@@ -13,6 +22,7 @@ public sealed class VerbaraServerPool : IAsyncDisposable
 {
     private readonly IAmiConnectionFactory _connectionFactory;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly ILogger _logger;
     private readonly ConcurrentDictionary<string, VerbaraServer> _servers = new();
     private readonly ConcurrentDictionary<string, string> _agentRouting = new();
 
@@ -22,6 +32,7 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     {
         _connectionFactory = connectionFactory;
         _loggerFactory = loggerFactory;
+        _logger = loggerFactory.CreateLogger<VerbaraServerPool>();
     }
 
     /// <summary>Number of servers in the pool.</summary>
@@ -152,15 +163,53 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// Disposes every server in the pool and the AMI connection behind each, whether the pool created that
     /// connection or it was handed in with <see cref="AddExistingServer"/>, then empties the pool.
     /// </summary>
+    /// <remarks>
+    /// Each server is taken out of the pool, then it and its connection are disposed in separate attempts, so a server
+    /// or a connection whose disposal throws does not stop the disposal of its own connection or of any other server.
+    /// Each such failure is logged at Error with the server's id and the exception, and is not thrown: the disposal
+    /// returns normally, with no server and no agent route left in the pool. A second call disposes nothing and logs
+    /// nothing.
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
-        foreach (var server in _servers.Values)
+        // Taken out one by one before each is disposed: a second or concurrent disposal finds nothing to dispose again.
+        foreach (var serverId in _servers.Keys)
         {
-            var connection = server.Connection;
+            if (_servers.TryRemove(serverId, out var server))
+            {
+                await ReleaseAsync(serverId, server);
+            }
+        }
+        _agentRouting.Clear();
+    }
+
+    /// <summary>
+    /// Disposes a server the pool has taken out, then the AMI connection behind it, each in its own attempt. A failure
+    /// of either is logged and not thrown, so that the other is still disposed and the caller's own work goes on.
+    /// </summary>
+    private async ValueTask ReleaseAsync(string serverId, VerbaraServer server)
+    {
+        // Read before the server is disposed. The server goes first, so it has unhooked the connection before the
+        // connection ends.
+        var connection = server.Connection;
+        try
+        {
             await server.DisposeAsync();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // A server throws on disposal only through foreign code, such as the ARI client hung on it. Running out of
+            // memory is the process's failure, not the server's, so it is not swallowed here.
+            VerbaraServerPoolLog.ServerDisposeFailed(_logger, serverId, ex);
+        }
+
+        try
+        {
             await connection.DisposeAsync();
         }
-        _servers.Clear();
-        _agentRouting.Clear();
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            VerbaraServerPoolLog.ConnectionDisposeFailed(_logger, serverId, ex);
+        }
     }
 }
