@@ -71,35 +71,27 @@ public sealed class AudioServerRefusalReportTests
 
         // Act — 10 connections, one after another, none of which ends. The accept queue is FIFO, so the
         // first two are the admitted ones; their reads are started before the refused ones are read.
-        var clients = new List<TcpClient>();
-        try
-        {
-            for (var i = 0; i < 10; i++)
-                clients.Add(await ConnectAsync(port));
-            var admittedReads = clients.Take(Limit).Select(c => c.GetStream().ReadAsync(new byte[1]).AsTask()).ToList();
+        using var clients = new Clients();
+        for (var i = 0; i < 10; i++)
+            clients.Add(await ConnectAsync(port));
+        var admittedReads = clients.Take(Limit).Select(c => c.GetStream().ReadAsync(new byte[1]).AsTask()).ToList();
 
-            var closedByServer = 0;
-            foreach (var client in clients.Skip(Limit))
-                closedByServer += await ReadsToEndAsync(client) ? 1 : 0;
-            var reported = await WhenReportedAsync(server.Logger, 8);
+        var closedByServer = 0;
+        foreach (var client in clients.Skip(Limit))
+            closedByServer += await ReadsToEndAsync(client) ? 1 : 0;
+        var reported = await WhenReportedAsync(server.Logger, 8);
 
-            // Assert
-            using (new AssertionScope())
-            {
-                closedByServer.Should().Be(8, "the 8 connections over the limit are closed by the server");
-                reported.Should().BeTrue(
-                    $"every refused connection is reported, but after the bound {Refusals(server.Logger)} " +
-                    $"StreamLimitReached entries and a counter delta of {refused.Total} were observed");
-                AssertRefusalWarnings(server.Logger, 8);
-                refused.Total.Should().Be(8, "each refusal is counted once on audio.connections.refused");
-                admittedReads.Should().OnlyContain(read => !read.IsCompleted, "the 2 admitted connections stay open");
-                server.Options.Admission.Held.Should().Be(Limit);
-            }
-        }
-        finally
+        // Assert
+        using (new AssertionScope())
         {
-            foreach (var client in clients)
-                client.Dispose();
+            closedByServer.Should().Be(8, "the 8 connections over the limit are closed by the server");
+            reported.Should().BeTrue(
+                $"every refused connection is reported, but after the bound {Refusals(server.Logger)} " +
+                $"StreamLimitReached entries and a counter delta of {refused.Total} were observed");
+            AssertRefusalWarnings(server.Logger, 8);
+            refused.Total.Should().Be(8, "each refusal is counted once on audio.connections.refused");
+            admittedReads.Should().OnlyContain(read => !read.IsCompleted, "the 2 admitted connections stay open");
+            server.Options.Admission.Held.Should().Be(Limit);
         }
     }
 
@@ -121,45 +113,35 @@ public sealed class AudioServerRefusalReportTests
             if (Interlocked.Increment(ref announced) == Limit)
                 bothAnnounced.TrySetResult();
         });
-        var clients = new List<TcpClient>();
-        try
+        using var clients = new Clients();
+        for (var i = 0; i < Limit; i++)
         {
-            for (var i = 0; i < Limit; i++)
-            {
-                var call = await ConnectAsync(audioSocketPort);
-                clients.Add(call);
-                await call.GetStream().WriteAsync(UuidFrame(Guid.NewGuid()));
-            }
-            await bothAnnounced.Task.WaitAsync(SignalTimeout);
-
-            // Act — 3 connections arrive at the WebSocket server
-            var refusedClients = new List<TcpClient>();
-            for (var i = 0; i < 3; i++)
-                refusedClients.Add(await ConnectAsync(webSocketPort));
-            clients.AddRange(refusedClients);
-
-            var closedByServer = 0;
-            foreach (var client in refusedClients)
-                closedByServer += await ReadsToEndAsync(client) ? 1 : 0;
-            var reported = await WhenReportedAsync(pair.WebSocket.Logger, 3);
-
-            // Assert
-            using (new AssertionScope())
-            {
-                closedByServer.Should().Be(3);
-                reported.Should().BeTrue(
-                    $"the WebSocket server refused them, but after the bound {Refusals(pair.WebSocket.Logger)} " +
-                    $"StreamLimitReached entries from it and a counter delta of {refused.Total} were observed");
-                AssertRefusalWarnings(pair.WebSocket.Logger, 3);
-                Refusals(pair.AudioSocket.Logger).Should().Be(0, "the AudioSocket server holds the places but refused nothing");
-                refused.Total.Should().Be(3);
-                pair.Options.Admission.Held.Should().Be(Limit);
-            }
+            var call = await ConnectAsync(audioSocketPort);
+            clients.Add(call);
+            await call.GetStream().WriteAsync(UuidFrame(Guid.NewGuid()));
         }
-        finally
+        await bothAnnounced.Task.WaitAsync(SignalTimeout);
+
+        // Act — 3 connections arrive at the WebSocket server
+        for (var i = 0; i < 3; i++)
+            clients.Add(await ConnectAsync(webSocketPort));
+
+        var closedByServer = 0;
+        foreach (var client in clients.Skip(Limit))
+            closedByServer += await ReadsToEndAsync(client) ? 1 : 0;
+        var reported = await WhenReportedAsync(pair.WebSocket.Logger, 3);
+
+        // Assert
+        using (new AssertionScope())
         {
-            foreach (var client in clients)
-                client.Dispose();
+            closedByServer.Should().Be(3);
+            reported.Should().BeTrue(
+                $"the WebSocket server refused them, but after the bound {Refusals(pair.WebSocket.Logger)} " +
+                $"StreamLimitReached entries from it and a counter delta of {refused.Total} were observed");
+            AssertRefusalWarnings(pair.WebSocket.Logger, 3);
+            Refusals(pair.AudioSocket.Logger).Should().Be(0, "the AudioSocket server holds the places but refused nothing");
+            refused.Total.Should().Be(3);
+            pair.Options.Admission.Held.Should().Be(Limit);
         }
     }
 
@@ -332,9 +314,12 @@ public sealed class AudioServerRefusalReportTests
         try
         {
             var stream = client.GetStream();
-            while (await stream.ReadAsync(buffer).AsTask().WaitAsync(SignalTimeout) > 0)
+            int read;
+            do
             {
+                read = await stream.ReadAsync(buffer).AsTask().WaitAsync(SignalTimeout);
             }
+            while (read > 0);
             return true;
         }
         catch (IOException)
@@ -381,6 +366,16 @@ public sealed class AudioServerRefusalReportTests
         frame[2] = 16;
         uuid.TryWriteBytes(frame.AsSpan(3), bigEndian: true, out _);
         return frame;
+    }
+
+    /// <summary>The clients a test opened, all closed when it ends, whatever it asserted.</summary>
+    private sealed class Clients : List<TcpClient>, IDisposable
+    {
+        public void Dispose()
+        {
+            foreach (var client in this)
+                client.Dispose();
+        }
     }
 
     /// <summary>What a test reads from a server's capturing logger, whichever server it is.</summary>
