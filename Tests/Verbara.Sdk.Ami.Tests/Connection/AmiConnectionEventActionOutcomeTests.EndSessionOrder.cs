@@ -17,9 +17,10 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// </summary>
 /// <remarks>
 /// <para>
-/// No timing decides the outcome. The probe's collector is given a channel whose continuations run synchronously, so a
-/// continuation on its completion runs inside <see cref="ResponseEventCollector.Abandon"/>, on the reader loop, and reads
-/// <see cref="AmiConnection.State"/> at that exact point: either the state has been written by then, or it has not.
+/// No timing decides the outcome. The probe's collector is given a channel whose writer reads
+/// <see cref="AmiConnection.State"/> inside the <c>TryComplete</c> that <see cref="ResponseEventCollector.Abandon"/> calls,
+/// on the reader loop, before it completes the inner channel: either the state has been written by then, or it has not.
+/// No continuation is involved, so nothing depends on where the runtime chooses to run one.
 /// </para>
 /// <para>
 /// The seam lives only here: two private fields reached by reflection (a test project is not AOT-published, and an
@@ -35,9 +36,6 @@ public sealed partial class AmiConnectionEventActionOutcomeTests
 
     private static void ReplaceCollectorChannel(ResponseEventCollector collector, Channel<ManagerEvent> channel) =>
         PrivateField(typeof(ResponseEventCollector), "_channel").SetValue(collector, channel);
-
-    private static Channel<ManagerEvent> CollectorChannel(ResponseEventCollector collector) =>
-        (Channel<ManagerEvent>)PrivateField(typeof(ResponseEventCollector), "_channel").GetValue(collector)!;
 
     private static FieldInfo PrivateField(
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicFields)] Type owner, string name) =>
@@ -55,13 +53,10 @@ public sealed partial class AmiConnectionEventActionOutcomeTests
         var peer = await ConnectAsync(connection, factory, peerCts);
 
         var probe = new ResponseEventCollector();
-        ReplaceCollectorChannel(probe, Channel.CreateUnbounded<ManagerEvent>(
-            new UnboundedChannelOptions { AllowSynchronousContinuations = true }));
         var stateAtAbandon = new TaskCompletionSource<AmiConnectionState>(TaskCreationOptions.RunContinuationsAsynchronously);
-        // The channel's completion completes inside Abandon's TryComplete, and runs this continuation there.
-        _ = CollectorChannel(probe).Reader.Completion.ContinueWith(
-            _ => stateAtAbandon.TrySetResult(connection.State),
-            CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        // Abandon's TryComplete is the call that reads the state, on the reader loop's thread.
+        ReplaceCollectorChannel(probe, new StateAtCompletionChannel(
+            Channel.CreateUnbounded<ManagerEvent>(), () => stateAtAbandon.TrySetResult(connection.State)));
         PendingEventActions(connection)["h85-probe"] = probe;
 
         peer.CloseFromPeer();
@@ -75,5 +70,36 @@ public sealed partial class AmiConnectionEventActionOutcomeTests
             state.Should().Be(autoReconnect ? AmiConnectionState.Reconnecting : AmiConnectionState.Disconnecting,
                 "a woken caller reads the state the ending chose");
         }
+    }
+
+    /// <summary>
+    /// A channel that reads from an inner channel and writes through a writer that runs a callback inside its
+    /// <c>TryComplete</c>, before it completes the inner channel.
+    /// </summary>
+    private sealed class StateAtCompletionChannel : Channel<ManagerEvent>
+    {
+        public StateAtCompletionChannel(Channel<ManagerEvent> inner, Action onComplete)
+        {
+            Reader = inner.Reader;
+            Writer = new ObservingWriter(inner.Writer, onComplete);
+        }
+    }
+
+    /// <summary>
+    /// Delegates every write to <paramref name="inner"/>. <c>TryComplete(Exception?)</c> is the one completing member a
+    /// <see cref="ChannelWriter{T}"/> declares virtual, so both <c>Complete</c> and <c>TryComplete</c> come through it.
+    /// </summary>
+    private sealed class ObservingWriter(ChannelWriter<ManagerEvent> inner, Action onComplete) : ChannelWriter<ManagerEvent>
+    {
+        public override bool TryComplete(Exception? error = null)
+        {
+            onComplete();
+            return inner.TryComplete(error);
+        }
+
+        public override bool TryWrite(ManagerEvent item) => inner.TryWrite(item);
+
+        public override ValueTask<bool> WaitToWriteAsync(CancellationToken cancellationToken = default) =>
+            inner.WaitToWriteAsync(cancellationToken);
     }
 }

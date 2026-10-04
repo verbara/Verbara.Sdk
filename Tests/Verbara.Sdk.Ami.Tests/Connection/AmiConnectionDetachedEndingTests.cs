@@ -34,8 +34,8 @@ public sealed class AmiConnectionDetachedEndingTests
 
     /// <summary>
     /// Event 1's handler starts, without awaiting it, a task that disposes the connection once event 2's dispatch has
-    /// begun; event 2's handler is held on a gate. A continuation on the dispose's completion records whether event 2's
-    /// handler had returned by then: the dispatch in progress was waited for.
+    /// begun; event 2's handler is held on a gate. As it returns, event 2's handler records, on its own thread, whether
+    /// the dispose had already completed: it had not, so the dispatch in progress was waited for.
     /// </summary>
     [Fact]
     public async Task DisposeAsync_ShouldWaitForTheDispatchInProgress_WhenStartedFromATaskAFinishedDispatchSpawned()
@@ -45,8 +45,8 @@ public sealed class AmiConnectionDetachedEndingTests
         var connection = Create(factory);
         var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var secondGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var secondReturned = 0;
-        var disposeCalled = new TaskCompletionSource<Task<bool>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disposeCalled = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disposeCompletedWhenSecondReturned = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var dispatches = 0;
         connection.OnEvent += async evt =>
         {
@@ -56,26 +56,26 @@ public sealed class AmiConnectionDetachedEndingTests
                 _ = Task.Run(async () =>
                 {
                     await secondEntered.Task;
-                    var dispose = connection.DisposeAsync().AsTask();
-                    disposeCalled.TrySetResult(dispose.ContinueWith(
-                        _ => Volatile.Read(ref secondReturned) == 1,
-                        CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default));
+                    disposeCalled.TrySetResult(connection.DisposeAsync().AsTask());
                 });
                 return;
             }
 
             secondEntered.TrySetResult();
             await secondGate.Task;
-            Volatile.Write(ref secondReturned, 1);
+            // The gate opens only after the dispose was called, so its task is already published here.
+            var disposing = await disposeCalled.Task;
+            disposeCompletedWhenSecondReturned.TrySetResult(disposing.IsCompleted);
         };
         var socket = await ConnectAsync(connection, factory, peerCts);
 
         (await socket.WriteEventAsync("UserEvent", [new("UserEvent", "one")])).Should().BeTrue("the peer sends event 1");
         (await socket.WriteEventAsync("UserEvent", [new("UserEvent", "two")])).Should().BeTrue("the peer sends event 2");
-        var secondReturnedWhenDisposeCompleted = await disposeCalled.Task.WaitAsync(Bound);
-        await Task.WhenAny(secondReturnedWhenDisposeCompleted, Task.Delay(SettleWindow)); // fence-allow: SETTLE — the window in which today's dispose completes without waiting for the held dispatch
+        var dispose = await disposeCalled.Task.WaitAsync(Bound);
+        await Task.WhenAny(dispose, Task.Delay(SettleWindow)); // fence-allow: SETTLE — the window in which today's dispose completes without waiting for the held dispatch
         secondGate.TrySetResult();
-        var waited = await secondReturnedWhenDisposeCompleted.WaitAsync(Bound);
+        var waited = !await disposeCompletedWhenSecondReturned.Task.WaitAsync(Bound);
+        await dispose.WaitAsync(Bound);
 
         using (new AssertionScope())
         {

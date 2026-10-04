@@ -153,13 +153,11 @@ public sealed class AmiConnectionConnectAfterLossBoundTests
         Exception? inDispatch = null;
         var stateAfterTheCall = AmiConnectionState.Initial;
         var waitTimersInDispatch = -1;
-        // Completed by the handler as its last act. The continuation runs synchronously on the handler's thread, under
-        // the test's execution context, so the retry is made outside the dispatch and before the handler has returned.
-        var returning = new TaskCompletionSource();
+        // The handler's last act starts the retry itself, on its own thread and before it returns, under the test's
+        // execution context captured here: the dispatch marks itself in an AsyncLocal, so the retry is made from outside it.
+        var outside = ExecutionContext.Capture();
+        outside.Should().NotBeNull("the test never suppresses the flow of its execution context");
         var retryStarted = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var retrying = returning.Task.ContinueWith(
-            _ => retryStarted.TrySetResult(rig.Connection.ConnectAsync().AsTask()),
-            CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         rig.HoldTheFirstEvent(async () =>
         {
             await rig.LossDisconnecting.WaitAsync(Bound);
@@ -176,13 +174,12 @@ public sealed class AmiConnectionConnectAfterLossBoundTests
 
             stateAfterTheCall = rig.Connection.State;
             waitTimersInDispatch = rig.WaitTimersCreatedSoFar();
-            returning.TrySetResult();
+            ExecutionContext.Run(outside!, _ => retryStarted.TrySetResult(rig.Connection.ConnectAsync().AsTask()), null);
         });
 
         await rig.ConnectFirstAsync();
         await rig.LoseTheFirstSessionAsync();
         var retry = await retryStarted.Task.WaitAsync(Bound);
-        await retrying.WaitAsync(Bound);
         var retryOutcome = await LostSessionRig.OutcomeAsync(retry);
         var stateAfterRetry = rig.Connection.State;
         var disposed = await CompletesWithinBoundAsync(rig.EndAndDrainAsync());
