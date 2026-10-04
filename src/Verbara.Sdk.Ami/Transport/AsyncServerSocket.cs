@@ -14,6 +14,11 @@ public sealed class AsyncServerSocket : IAsyncDisposable
 
     private readonly int _port;
 
+    /// <summary>
+    /// Test-only seam: when set, the accept runs this instead of the listener's own. Production never sets it.
+    /// </summary>
+    internal Func<CancellationToken, ValueTask<TcpClient>>? AcceptOverride { get; set; }
+
     /// <summary>The actual port the server is listening on (resolved after Start if 0 was passed).</summary>
     public int Port => _listener is not null
         ? ((IPEndPoint)_listener.LocalEndpoint).Port
@@ -47,7 +52,7 @@ public sealed class AsyncServerSocket : IAsyncDisposable
             throw new InvalidOperationException("Server not started. Call Start() first.");
         }
 
-        var client = await _listener.AcceptTcpClientAsync(cancellationToken);
+        var client = await (AcceptOverride?.Invoke(cancellationToken) ?? _listener.AcceptTcpClientAsync(cancellationToken));
         client.NoDelay = true;
 
         return PipelineSocketConnection.FromStream(client.GetStream());

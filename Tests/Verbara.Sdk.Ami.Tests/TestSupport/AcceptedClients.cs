@@ -1,6 +1,6 @@
 using System.Net.Sockets;
 
-namespace Verbara.Sdk.Ari.Tests.TestSupport;
+namespace Verbara.Sdk.Ami.Tests.TestSupport;
 
 /// <summary>
 /// A client an accept seam hands to a server, and the socket it wraps, kept so a test can see whether
@@ -32,13 +32,13 @@ internal sealed class AcceptedClient : IDisposable
 
 /// <summary>
 /// Accepted connections built to fail at a chosen step between the accept and serving, for the
-/// <c>AcceptOverride</c> seam of the ARI servers. None of them is a natural trigger, and none was found
-/// on Linux: each one is a socket built to fail at that step.
+/// <c>AcceptOverride</c> seam of <c>AsyncServerSocket</c>. None of them is a natural trigger, and none was
+/// found on Linux: each one is a socket built to fail at that step.
 /// </summary>
 /// <remarks>
-/// One of three copies: <c>Verbara.Sdk.Agi.Tests</c> carries one for <c>FastAgiServer</c> and
-/// <c>Verbara.Sdk.Ami.Tests</c> one for <c>AsyncServerSocket</c>, because referencing this project from
-/// either would drag this suite into it. Change all three together.
+/// One of three copies, with <c>Verbara.Sdk.Agi.Tests</c> and <c>Verbara.Sdk.Ari.Tests</c>: referencing
+/// either project from here would drag its suite into this one, so the copies are deliberate. Change all
+/// three together.
 /// </remarks>
 internal static class AcceptedClients
 {

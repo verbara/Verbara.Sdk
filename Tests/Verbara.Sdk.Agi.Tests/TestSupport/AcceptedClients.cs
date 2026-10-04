@@ -36,8 +36,9 @@ internal sealed class AcceptedClient : IDisposable
 /// found on Linux: each one is a socket built to fail at that step.
 /// </summary>
 /// <remarks>
-/// A copy of the fixtures in <c>Verbara.Sdk.Ari.Tests</c>: referencing that project from here would
-/// drag its suite into this one, so the copy is deliberate. Change both together.
+/// One of three copies, with <c>Verbara.Sdk.Ari.Tests</c> and <c>Verbara.Sdk.Ami.Tests</c>: referencing
+/// either project from here would drag its suite into this one, so the copies are deliberate. Change all
+/// three together.
 /// </remarks>
 internal static class AcceptedClients
 {
