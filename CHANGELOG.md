@@ -36,7 +36,7 @@ from 2.6.0 sees these differences. Metric names, unit suffixes included, and val
 now publishes this exporter and fails when the AOT compiler reports a method that will always throw. No public API
 change.
 
-### Fixed: a queue caller a reload finds carries its caller number, and Live's queue wait sample counts the wait Asterisk reported
+### Fixed: a queue caller a reload finds carries its caller number, and Live's queue wait sample counts the wait Asterisk reported (#390)
 
 - **A caller admitted by a load or a reconnect reload carries its caller number.** The reload read each
   `QueueEntry`'s caller number from a header no Asterisk version sends, so `AsteriskQueueEntry.CallerId` was `null`
