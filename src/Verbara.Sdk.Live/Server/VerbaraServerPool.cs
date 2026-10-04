@@ -209,10 +209,10 @@ public sealed class VerbaraServerPool : IAsyncDisposable
         // Taken out one by one before each is disposed: a second or concurrent disposal finds nothing to dispose again.
         foreach (var serverId in _servers.Keys)
         {
-            if (_servers.TryRemove(serverId, out var server))
-            {
-                await ReleaseAsync(serverId, server);
-            }
+            if (!_servers.TryRemove(serverId, out var server))
+                continue;
+
+            await ReleaseAsync(serverId, server);
         }
         _agentRouting.Clear();
     }
@@ -220,13 +220,10 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// <summary>Removes every agent route that points to <paramref name="serverId"/>, and only those.</summary>
     private void DropRoutesTo(string serverId)
     {
-        foreach (var route in _agentRouting)
+        foreach (var route in _agentRouting.Where(r => string.Equals(r.Value, serverId, StringComparison.Ordinal)))
         {
-            if (string.Equals(route.Value, serverId, StringComparison.Ordinal))
-            {
-                // Removed only if it still points to this server: a route re-pointed meanwhile survives.
-                _agentRouting.TryRemove(route);
-            }
+            // Removed only if it still points to this server: a route re-pointed meanwhile survives.
+            _agentRouting.TryRemove(route);
         }
     }
 
