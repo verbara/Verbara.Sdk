@@ -316,12 +316,29 @@ public sealed class QueueManager
             && queue.Entries.TryRemove(channel, out var entry))
         {
             LiveMetrics.QueueCallsLeft.Add(1);
-            var waitMs = (DateTimeOffset.UtcNow - entry.JoinedAt).TotalMilliseconds;
+            var waitMs = (DateTimeOffset.UtcNow - entry.JoinedAt).TotalMilliseconds + ReportedWaitMilliseconds(entry);
             LiveMetrics.QueueWaitTimeMs.Record(waitMs);
             QueueManagerLog.CallerLeft(_logger, queueName, channel);
             CallerLeft?.Invoke(queueName, entry);
         }
     }
+
+    /// <summary>
+    /// The part of a caller's wait that passed before Live held it: for an entry a <c>QueueStatus</c> snapshot
+    /// reported, the <c>Wait</c> Asterisk reported for it (whole seconds, so within about a second of the caller's
+    /// true wait when the snapshot was taken); <c>0</c> otherwise.
+    /// <para>
+    /// <c>0</c> as well for a reported wait the session manager does not count either: absent, negative (Asterisk
+    /// does not send one), or reaching back before the earliest instant a <see cref="DateTimeOffset"/> can hold from
+    /// <see cref="AsteriskQueueEntry.JoinedAt"/>, which Asterisk cannot have measured and which would otherwise throw
+    /// after the entry was removed and before its leave was raised.
+    /// </para>
+    /// </summary>
+    private static double ReportedWaitMilliseconds(AsteriskQueueEntry entry) =>
+        entry is { FromSnapshot: true, ReportedWaitSeconds: long waitSeconds and >= 0 }
+        && waitSeconds <= entry.JoinedAt.UtcTicks / TimeSpan.TicksPerSecond
+            ? TimeSpan.FromSeconds(waitSeconds).TotalMilliseconds
+            : 0;
 
     /// <summary>
     /// Handle a <c>QueueCallerLeave</c> as Asterisk reported it: recorded in every open snapshot window, then
@@ -464,8 +481,10 @@ public sealed class AsteriskQueueEntry
     /// Asterisk sent it: how long the caller had been waiting in this queue when the snapshot was
     /// taken. <c>null</c> when the header was absent, and always <c>null</c> for a live join.
     /// <para>
-    /// Live does not interpret it and does not backdate <see cref="JoinedAt"/> with it; a reader that
-    /// needs the time the caller joined subtracts it from its own clock.
+    /// Live adds it to the caller's <c>live.queue.wait_time</c> sample when the caller leaves, so the sample counts
+    /// the wait Asterisk reported as well as the time Live held the caller. It does not backdate
+    /// <see cref="JoinedAt"/> with it; a reader that needs the time the caller joined subtracts it from its own
+    /// clock.
     /// </para>
     /// </summary>
     internal long? ReportedWaitSeconds { get; init; }

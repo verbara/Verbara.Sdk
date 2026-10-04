@@ -45,6 +45,23 @@ from 2.6.0 sees these differences. Metric names, unit suffixes included, and val
 now publishes this exporter and fails when the AOT compiler reports a method that will always throw. No public API
 change.
 
+### Fixed: a queue caller a reload finds carries its caller number, and Live's queue wait sample counts the wait Asterisk reported (#390)
+
+- **A caller admitted by a load or a reconnect reload carries its caller number.** The reload read each
+  `QueueEntry`'s caller number from a header no Asterisk version sends, so `AsteriskQueueEntry.CallerId` was `null`
+  for every caller a load or reconnect reload admitted (12 of 12 on Asterisk 20.20.1, 22.9.0 and 23.4.1), while the
+  same caller admitted by a live join carried its number. It is now read from `CallerIDNum`, the header Asterisk
+  sends and the live join reads; a `CallerID` header fills it only when `CallerIDNum` is absent.
+- **`live.queue.wait_time` counts the wait Asterisk reported for a caller a reload found.** Such a caller's sample
+  measured only the time since Live handled the snapshot, so a caller who had waited 3 s and left at once recorded
+  about 0 ms. The sample now adds the `Wait` Asterisk reported (whole seconds), the same reported wait the session
+  layer already counts, so the captured samples go from under 1.5 ms to at least 3000, 2000, 2000 and 1000 ms. A
+  live join, and a reported wait that is absent, negative or out of range, keep the previous sample.
+- **What a consumer observes changes.** The `CallerId` of an entry a reload admitted now carries the number, the
+  same value as a live join, and the `live.queue.wait_time` samples of such callers rise from the time since the
+  reload to Asterisk's reported wait plus the time Live held them. `AsteriskQueueEntry.JoinedAt` keeps its meaning.
+  No public API change.
+
 ## [2.7.0] - 2026-10-03
 
 ### Fixed: a queued call records the queue member who took it (#381)

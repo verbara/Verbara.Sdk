@@ -559,9 +559,10 @@ public sealed class VerbaraServer : IVerbaraServer
                 case QueueEntryEvent qe:
                     // The entry is marked as a snapshot's, and carries the Wait Asterisk reported, so
                     // the session manager can tell a caller it already holds from a new one and date
-                    // the visit from when Asterisk says the caller joined.
+                    // the visit from when Asterisk says the caller joined. The caller number is read from CallerIDNum,
+                    // the header Asterisk sends and the live join reads; a CallerID header only fills it when absent.
                     Queues.OnSnapshotEntry(window,
-                        qe.Queue ?? "", qe.Channel ?? "", qe.Uniqueid, qe.CallerId, qe.Position ?? 0,
+                        qe.Queue ?? "", qe.Channel ?? "", qe.Uniqueid, qe.CallerIDNum ?? qe.CallerId, qe.Position ?? 0,
                         reportedWaitSeconds: qe.Wait, lossEpoch: ReadEventLossEpoch());
                     break;
             }

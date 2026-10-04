@@ -201,7 +201,7 @@ public sealed class QueueCallerTests : FunctionalTestBase
                         break;
                     case QueueEntryEvent qe:
                         server.Queues.OnCallerJoined(
-                            qe.Queue ?? "", qe.Channel ?? "", qe.CallerId, qe.Position ?? 0);
+                            qe.Queue ?? "", qe.Channel ?? "", qe.CallerIDNum ?? qe.CallerId, qe.Position ?? 0);
                         break;
                 }
             }

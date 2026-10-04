@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <Compile Include="..\Verbara.Sdk.Ami.Tests\Connection\PipedSocketFactory.cs" Link="Harness\PipedSocketFactory.cs" />
+    <Compile Include="..\Shared\Metrics\LiveQueueWaitSamples.cs" Link="Shared\Metrics\LiveQueueWaitSamples.cs" />
   </ItemGroup>
 
   <ItemGroup>

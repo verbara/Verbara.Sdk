@@ -138,7 +138,7 @@ public sealed class QueueSnapshotEntryTests : IAsyncLifetime
     {
         Queue = Queue,
         Channel = channel,
-        CallerId = "5552101",
+        CallerIDNum = "5552101",
         Position = 1,
         Wait = wait
     };
