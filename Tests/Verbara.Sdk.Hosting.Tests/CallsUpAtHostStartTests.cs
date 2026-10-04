@@ -293,7 +293,7 @@ public sealed class CallsUpAtHostStartTests
     public async Task StartAsync_ShouldAttachOnce_WhenTheServiceIsStartedOnItsOwn()
     {
         await using var rig = DirectRig.Create();
-        var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
+        using var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
 
         await sut.StartAsync(CancellationToken.None);
         rig.Server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
@@ -301,14 +301,13 @@ public sealed class CallsUpAtHostStartTests
         rig.Manager.ActiveSessions.Should().ContainSingle("a start invoked alone still attaches the manager");
         rig.Seen.Count<CallStartedEvent>().Should().Be(1, "attached once, so the channel is announced once");
         await sut.StopAsync(CancellationToken.None);
-        sut.Dispose();
     }
 
     [Fact]
     public async Task StartAsync_ShouldAttachAgain_WhenTheServiceIsStartedAfterAStop()
     {
         await using var rig = DirectRig.Create();
-        var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
+        using var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
 
         await sut.StartAsync(CancellationToken.None);
         await sut.StopAsync(CancellationToken.None);
@@ -319,7 +318,6 @@ public sealed class CallsUpAtHostStartTests
             "the stop detached the manager, so the start after it attaches it again");
         rig.Seen.Count<CallStartedEvent>().Should().Be(1, "attached once, not twice");
         await sut.StopAsync(CancellationToken.None);
-        sut.Dispose();
     }
 
     // --- (d) and (i): the lifecycle calls the host makes ---------------------------------------------------------
@@ -328,7 +326,7 @@ public sealed class CallsUpAtHostStartTests
     public async Task StartingAsyncThenStartAsync_ShouldAttachOnceAndDetachOnStop_WhenCalledInHostOrder()
     {
         await using var rig = DirectRig.Create();
-        var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
+        using var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
 
         await sut.StartingAsync(CancellationToken.None);
         await sut.StartAsync(CancellationToken.None);
@@ -342,14 +340,13 @@ public sealed class CallsUpAtHostStartTests
             "the manager was attached once, so the stop's one detach removes every subscription it had: a second "
             + "attach under the same id would replace the first set without removing it, and that set would keep "
             + "opening sessions after the stop");
-        sut.Dispose();
     }
 
     [Fact]
     public async Task StartingAsync_ShouldThrowAndAttachNothing_WhenTheServiceWasDisposed()
     {
         await using var rig = DirectRig.Create();
-        var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
+        using var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
         sut.Dispose();
 
         var error = await Record.ExceptionAsync(() => sut.StartingAsync(CancellationToken.None));
@@ -363,7 +360,7 @@ public sealed class CallsUpAtHostStartTests
     public async Task StartAsync_ShouldThrowAndAttachNothingMore_WhenTheServiceWasDisposedAfterStartingAsync()
     {
         await using var rig = DirectRig.Create();
-        var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
+        using var sut = new SessionManagerHostedService(rig.Manager, rig.Server);
         await sut.StartingAsync(CancellationToken.None);
         sut.Dispose();
 
