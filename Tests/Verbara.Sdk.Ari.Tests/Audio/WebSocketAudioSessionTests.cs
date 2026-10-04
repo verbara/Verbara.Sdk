@@ -95,7 +95,7 @@ public class WebSocketAudioSessionTests
     // -- ReadPump state transitions ---------------------------------------------
 
     [Fact]
-    public async Task ReadPump_ShouldTransitionToDisconnected_WhenCloseFrameReceived()
+    public async Task ReadPump_ShouldTransitionToDisconnectedOnce_WhenCloseFrameReceived()
     {
         using var ws = new FakeWebSocket();
         ws.EnqueueClose();
@@ -122,13 +122,16 @@ public class WebSocketAudioSessionTests
         // the read pump publishes the state. Removing the close frame makes it throw here in 5 s
         // instead of asserting on an empty list, which is how this wait was checked.
         await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(5));
-
-        states.Should().Contain(AudioStreamState.Disconnected);
         await sut.DisposeAsync();
+
+        // Read after the disposal, which every owner performs: it must not publish the ending again
+        states.Should().Equal(
+            [AudioStreamState.Connected, AudioStreamState.Disconnected],
+            "the close frame's ending is published once, last");
     }
 
     [Fact]
-    public async Task ReadPump_ShouldTransitionToDisconnected_WhenCancelled()
+    public async Task ReadPump_ShouldTransitionToDisconnectedOnce_WhenCancelled()
     {
         using var ws = new FakeWebSocket();
         // No data enqueued — pump will block until cancelled
@@ -140,7 +143,9 @@ public class WebSocketAudioSessionTests
         sut.Start();
         await sut.DisposeAsync();
 
-        states.Should().Contain(AudioStreamState.Disconnected);
+        states.Should().Equal(
+            [AudioStreamState.Connected, AudioStreamState.Disconnected],
+            "a cancelled pump and the disposal that cancelled it publish one ending between them");
     }
 
     // -- WriteFrameAsync --------------------------------------------------------
@@ -162,7 +167,7 @@ public class WebSocketAudioSessionTests
     // -- DisposeAsync -----------------------------------------------------------
 
     [Fact]
-    public async Task DisposeAsync_ShouldTransitionToDisconnected()
+    public async Task DisposeAsync_ShouldTransitionToDisconnectedOnce()
     {
         using var ws = new FakeWebSocket();
         var sut = CreateSession(ws);
@@ -171,7 +176,9 @@ public class WebSocketAudioSessionTests
 
         await sut.DisposeAsync();
 
-        states.Should().Contain(AudioStreamState.Disconnected);
+        states.Should().Equal(
+            [AudioStreamState.Connected, AudioStreamState.Disconnected],
+            "the disposal of a session whose pump never ran publishes the ending once");
     }
 
     [Fact]

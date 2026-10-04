@@ -1334,6 +1334,130 @@ public sealed class AriOutboundListenerTests
             Func<TState, Exception?, string> formatter) =>
             _entries.Enqueue(new LogEntry(logLevel, eventId.Name, exception?.GetType().Name));
     }
+
+    // ------------------------------------------------------ second disposal and failed start
+
+    [Fact]
+    public async Task DisposeAsync_ShouldNotThrowAndCompleteAnnouncementsOnce_WhenAStartedListenerIsDisposedTwice()
+    {
+        // Arrange
+        var (listener, _) = CreateListener();
+        await listener.StartAsync();
+        var completions = 0;
+        using var subscription = listener.OnConnectionAccepted.Subscribe(static _ => { }, () => Interlocked.Increment(ref completions));
+        await listener.DisposeAsync();
+
+        // Act
+        var second = await Record.ExceptionAsync(async () => await listener.DisposeAsync());
+
+        // Assert
+        using (new AssertionScope())
+        {
+            second.Should().BeNull("every disposal after the first is a no-op");
+            Volatile.Read(ref completions).Should().Be(1, "the announcements complete once");
+        }
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ShouldNotThrow_WhenANeverStartedListenerIsDisposedTwice()
+    {
+        // Arrange
+        var (listener, _) = CreateListener();
+        await listener.DisposeAsync();
+
+        // Act
+        var second = await Record.ExceptionAsync(async () => await listener.DisposeAsync());
+
+        // Assert
+        second.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldLeaveTheListenerStoppedAndStartable_WhenItsPortIsBusy()
+    {
+        // Arrange — another listener holds the port
+        var busy = new TcpListener(IPAddress.Loopback, 0);
+        busy.Start();
+        var port = ((IPEndPoint)busy.LocalEndpoint).Port;
+        var (listener, _) = CreateListener(o => o.Port = port);
+        Exception? first;
+        Exception? second;
+        bool runningAfterFailure;
+        bool accepts;
+        try
+        {
+            // Act
+            first = await Record.ExceptionAsync(async () => await listener.StartAsync());
+            runningAfterFailure = listener.IsRunning;
+            busy.Stop();
+            second = await Record.ExceptionAsync(async () => await listener.StartAsync());
+            accepts = await AcceptsAsync(port);
+        }
+        finally
+        {
+            busy.Dispose();
+            await listener.DisposeAsync();
+        }
+
+        // Assert
+        using (new AssertionScope())
+        {
+            first.Should().BeOfType<SocketException>("the bind failed");
+            runningAfterFailure.Should().BeFalse("a start whose bind failed leaves the listener stopped");
+            second.Should().BeNull();
+            accepts.Should().BeTrue("the next start, once the port is free, binds and accepts");
+        }
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldLeaveTheListenerStoppedAndStartable_WhenItsListenAddressIsInvalid()
+    {
+        // Arrange
+        var (listener, options) = CreateListener(o => o.ListenAddress = "not-an-address");
+        Exception? first;
+        Exception? second;
+        bool runningAfterFailure;
+        bool accepts;
+        try
+        {
+            // Act
+            first = await Record.ExceptionAsync(async () => await listener.StartAsync());
+            runningAfterFailure = listener.IsRunning;
+            options.ListenAddress = "127.0.0.1";
+            second = await Record.ExceptionAsync(async () => await listener.StartAsync());
+            accepts = listener.IsRunning && await AcceptsAsync(listener.BoundPort);
+        }
+        finally
+        {
+            await listener.DisposeAsync();
+        }
+
+        // Assert
+        using (new AssertionScope())
+        {
+            first.Should().BeOfType<FormatException>();
+            runningAfterFailure.Should().BeFalse("a start that threw leaves the listener stopped");
+            second.Should().BeNull();
+            accepts.Should().BeTrue("a start with a valid address binds and accepts");
+        }
+    }
+
+    private static async Task<bool> AcceptsAsync(int port)
+    {
+        if (port == 0)
+            return false;
+
+        using var client = new TcpClient();
+        try
+        {
+            await client.ConnectAsync(IPAddress.Loopback, port).WaitAsync(SignalTimeout);
+            return true;
+        }
+        catch (SocketException)
+        {
+            return false;
+        }
+    }
 }
 
 public sealed class AriOutboundListenerOptionsValidatorTests
