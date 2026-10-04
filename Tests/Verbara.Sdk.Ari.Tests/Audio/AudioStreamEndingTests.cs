@@ -459,9 +459,11 @@ public sealed class AudioStreamEndingTests
 
     /// <summary>
     /// The places still held by the cell's ten streams. When every connection was closed, it is proven
-    /// by admission: one more peer must be announced under the limit of ten, and the internal count is
-    /// read only after that announcement (minus the probe's own place). When they were not, nothing is
-    /// racing the read any more and the count is read as it stands.
+    /// by admission: under the limit of ten, ten new peers must each be announced, which they can only
+    /// if no ended stream still holds a place; the count is ten minus the probes admitted. One probe
+    /// would prove only that one place came back, and the read after it would race the last releases.
+    /// When the connections were not closed, nothing is racing the read any more and the count is read
+    /// as it stands.
     /// </summary>
     private static async Task<int> PlacesHeldAsync(bool allClosed, AudioSocketEndingHarness harness)
     {
@@ -469,12 +471,24 @@ public sealed class AudioStreamEndingTests
             return harness.Options.Admission.Held;
 
         using var probeBound = new CancellationTokenSource(SignalTimeout);
-        var probe = harness.IdentifyUntilAdmittedAsync(Guid.NewGuid(), probeBound.Token);
-        if (!await Signalled(probe, probeBound.Token))
-            return harness.Options.Admission.Held;
+        var probes = new List<AudioSocketTestPeer>();
+        try
+        {
+            for (var i = 0; i < ObserverStreams; i++)
+            {
+                var probe = harness.IdentifyUntilAdmittedAsync(Guid.NewGuid(), probeBound.Token);
+                if (!await Signalled(probe, probeBound.Token))
+                    break;
+                probes.Add((await probe).Peer);
+            }
 
-        using var admitted = (await probe).Peer;
-        return harness.Options.Admission.Held - 1;
+            return ObserverStreams - probes.Count;
+        }
+        finally
+        {
+            foreach (var probe in probes)
+                probe.Dispose();
+        }
     }
 
     private static async Task<ObserverCellCounts> MeasureWebSocketObserverCellAsync(bool throwOnDisconnected)
@@ -515,17 +529,21 @@ public sealed class AudioStreamEndingTests
             errors = harness.Logger.Entries.Count(e => e.Level == LogLevel.Error);
             if (allReleased)
             {
+                // Proven by admission, as for the AudioSocket cell: ten new connections under the limit
+                // of ten must each be announced
                 using var probeBound = new CancellationTokenSource(SignalTimeout);
-                var probe = harness.ConnectUntilAdmittedAsync($"probe-{token}", probeBound.Token);
-                if (await Signalled(probe, probeBound.Token))
+                var probes = new List<WebSocketTestPeer>();
+                for (var i = 0; i < ObserverStreams; i++)
                 {
-                    using var admitted = (await probe).Peer;
-                    held = harness.Options.Admission.Held - 1;
+                    var probe = harness.ConnectUntilAdmittedAsync($"probe-{i}-{token}", probeBound.Token);
+                    if (!await Signalled(probe, probeBound.Token))
+                        break;
+                    probes.Add((await probe).Peer);
                 }
-                else
-                {
-                    held = harness.Options.Admission.Held;
-                }
+
+                held = ObserverStreams - probes.Count;
+                foreach (var probe in probes)
+                    probe.Dispose();
             }
             else
             {

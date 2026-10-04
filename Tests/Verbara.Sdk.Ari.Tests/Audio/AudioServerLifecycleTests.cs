@@ -309,6 +309,8 @@ public sealed class AudioServerLifecycleTests
         var stopBegun = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
         var server = harness.Server;
         server.BeforeRegistration = Once(() => stopBegun.TrySetResult(server.StopAsync().AsTask()));
+        var listedInTheWindow = -1;
+        server.AfterRegistryAdd = Once(() => listedInTheWindow = server.ActiveStreamCount);
 
         // Act
         using var peer = await WebSocketTestPeer.ConnectAsync(harness.Port, $"stop-{Guid.NewGuid():N}", bound.Token);
@@ -320,8 +322,33 @@ public sealed class AudioServerLifecycleTests
         {
             harness.Announcements.Should().Be(0, "a connection that registers during the stop is refused");
             harness.Server.ActiveStreamCount.Should().Be(0);
+            listedInTheWindow.Should().Be(-1, "a refused connection is never added to the tables, not even for a moment");
         }
     }
+
+    [Fact]
+    public async Task HandleConnection_ShouldNotAnnounce_WhenTheWebSocketStopBeginsBetweenTheAddAndItsCheck()
+    {
+        // Arrange — the stop begins right after the add; the WebSocket stop waits for its handlers
+        await using var harness = await WebSocketEndingHarness.StartAsync(_ => { });
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        var stopBegun = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = harness.Server;
+        server.AfterRegistryAdd = Once(() => stopBegun.TrySetResult(server.StopAsync().AsTask()));
+
+        // Act
+        using var peer = await WebSocketTestPeer.ConnectAsync(harness.Port, $"add-{Guid.NewGuid():N}", bound.Token);
+        var stop = await stopBegun.Task.WaitAsync(bound.Token);
+        await stop.WaitAsync(bound.Token);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            harness.Announcements.Should().Be(0, "the entry added once the stop had begun is withdrawn, never announced");
+            harness.Server.ActiveStreamCount.Should().Be(0);
+        }
+    }
+
 
     // -------------------------------------------------------------------------------- helpers
 
