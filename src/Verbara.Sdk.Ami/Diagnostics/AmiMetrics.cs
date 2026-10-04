@@ -36,12 +36,22 @@ public static class AmiMetrics
             "AMI events dispatched to observers");
 
     /// <summary>
-    /// <c>OnEvent</c> handler failures: a handler that threw, or whose task faulted or was cancelled, one per failure.
-    /// The failure is also logged at Warning with the event type; delivery goes on.
+    /// Event handler failures — a handler subscribed through <c>OnEvent</c> or through the token overload of
+    /// <c>Subscribe</c> that threw, or whose task faulted or was cancelled — one per failure. A token handler that stops
+    /// with <see cref="OperationCanceledException"/> after the caller's ending is not counted. The failure is also logged
+    /// at Warning with the event type; delivery goes on. Observers are counted apart, on <see cref="ObserverFaults"/>.
     /// </summary>
     internal static readonly Counter<long> HandlerFaults =
         Meter.CreateCounter<long>("ami.events.handler_faults", "faults",
             "OnEvent handler failures (a handler threw, or its task faulted); delivery goes on");
+
+    /// <summary>
+    /// Event observer failures: an observer whose <c>OnNext</c> threw, one per failure. The failure is also logged at
+    /// Warning with the event type; the observer stays subscribed and delivery goes on.
+    /// </summary>
+    internal static readonly Counter<long> ObserverFaults =
+        Meter.CreateCounter<long>("ami.events.observer_faults", "faults",
+            "Event observer failures (an observer's OnNext threw); delivery goes on");
 
     /// <summary>Total AMI actions sent to Asterisk.</summary>
     public static readonly Counter<long> ActionsSent =

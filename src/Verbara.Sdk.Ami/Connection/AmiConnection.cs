@@ -82,6 +82,9 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] OnEvent handler threw on {EventType}")]
     public static partial void HandlerFault(ILogger logger, string? eventType, Exception exception);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] Observer threw on {EventType}")]
+    public static partial void ObserverFault(ILogger logger, string? eventType, Exception exception);
+
     [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_EVENT] Event handler stopped on the caller's ending: {EventType}")]
     public static partial void HandlerStoppedOnCallerEnding(ILogger logger, string? eventType);
 }
@@ -1794,7 +1797,8 @@ public sealed class AmiConnection : IAmiConnection
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    // Observer errors should not crash the pump
+                    // An observer's failure stops neither the pump nor the other subscribers; it is reported, once.
+                    RecordObserverFault(evt, ex);
                 }
             }
 
@@ -1861,6 +1865,12 @@ public sealed class AmiConnection : IAmiConnection
         {
             frame.Finished = true;
         }
+    }
+
+    private void RecordObserverFault(ManagerEvent evt, Exception exception)
+    {
+        AmiMetrics.ObserverFaults.Add(1);
+        AmiConnectionLog.ObserverFault(_logger, evt.EventType, exception);
     }
 
     /// <summary>A handler's task still running when every handler has been started, and which kind of handler it is.</summary>
