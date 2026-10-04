@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.IO.Pipelines;
-using System.Reactive.Subjects;
 using System.Text;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
@@ -12,6 +11,9 @@ internal static partial class AudioSocketSessionLog
 {
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] Transport failed under a live session, which ends as Disconnected: channel_id={ChannelId}")]
     public static partial void TransportFailed(ILogger logger, Exception exception, string channelId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] A second identification frame was ignored: channel_id={ChannelId} ignored_id={IgnoredId}")]
+    public static partial void SecondIdentificationIgnored(ILogger logger, string channelId, string ignoredId);
 }
 
 /// <summary>
@@ -22,20 +24,36 @@ internal sealed class AudioSocketSession : IAudioStream
 {
     private readonly Stream _stream;
     private readonly Pipe _inputPipe;
-    private readonly BehaviorSubject<AudioStreamState> _state = new(AudioStreamState.Connecting);
+    private readonly AudioStreamStateChannel _state;
+    private readonly TaskCompletionSource<bool> _identified = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Channel<ReadOnlyMemory<byte>> _audioInChannel;
     private readonly CancellationTokenSource _cts = new();
     private readonly ILogger _logger;
     private Exception? _transportFailure;
     private Task? _readPumpTask;
     private Task? _pipeFillTask;
-    private volatile bool _disposed;
+    private int _disposed;
+    private bool _secondIdentificationReported;
 
+    /// <summary>The id of the connection's first identification frame; empty until it arrives, and never changed after.</summary>
     public string ChannelId { get; private set; } = string.Empty;
     public string Format { get; }
     public int SampleRate { get; }
-    public bool IsConnected => !_disposed && _state.Value == AudioStreamState.Connected;
+    public bool IsConnected => Volatile.Read(ref _disposed) == 0 && _state.Value == AudioStreamState.Connected;
     public IObservable<AudioStreamState> StateChanges => _state;
+
+    /// <summary>
+    /// Completes when the session's ending is published, before any observer is notified of it: the
+    /// signal its server waits on instead of the consumers' observable.
+    /// </summary>
+    internal Task Ended => _state.Ended;
+
+    /// <summary>
+    /// Completes <see langword="true"/> at the first identification frame that names a non-empty id,
+    /// and <see langword="false"/> when the read ends before one: the signal the server's
+    /// identification wait ends on.
+    /// </summary>
+    internal Task<bool> Identified => _identified.Task;
 
     /// <param name="stream">The connection's stream, read until it ends.</param>
     /// <param name="format">The audio format the connection carries.</param>
@@ -48,6 +66,7 @@ internal sealed class AudioSocketSession : IAudioStream
     {
         _stream = stream;
         _logger = logger;
+        _state = new AudioStreamStateChannel(AudioStreamState.Connecting, logger, () => ChannelId);
         Format = format;
         SampleRate = FormatToSampleRate(format);
 
@@ -139,8 +158,7 @@ internal sealed class AudioSocketSession : IAudioStream
                     switch (frameType)
                     {
                         case AudioFrameType.Uuid:
-                            ChannelId = ParseUuid(payload);
-                            _state.OnNext(AudioStreamState.Connected);
+                            Identify(ParseUuid(payload));
                             break;
 
                         case AudioFrameType.Audio:
@@ -148,12 +166,14 @@ internal sealed class AudioSocketSession : IAudioStream
                             break;
 
                         case AudioFrameType.Hangup:
-                            _state.OnNext(AudioStreamState.Disconnected);
+                            _state.TryEnd(error: false);
                             _audioInChannel.Writer.TryComplete();
                             return;
 
                         case AudioFrameType.Error:
-                            _state.OnNext(AudioStreamState.Error);
+                            // Error and then Disconnected, in this one step: the disposal publishes the
+                            // ending only when no one has, so a Disconnected left to it would be lost.
+                            _state.TryEnd(error: true);
                             _audioInChannel.Writer.TryComplete();
                             return;
                     }
@@ -175,9 +195,8 @@ internal sealed class AudioSocketSession : IAudioStream
         }
         // No IOException arm: the fill loop completes the pipe writer without an exception, so a
         // transport failure never reaches `reader.ReadAsync` as one. It arrives as the pipe's end,
-        // with the failure recorded for the report below. The one other source of an IOException
-        // here is a consumer's `StateChanges` observer, which leaves the loop as it would with an
-        // exception of any other type.
+        // with the failure recorded for the report below. A consumer's `StateChanges` observer cannot
+        // throw into this loop either: the state channel's guard catches and logs what it throws.
         finally
         {
             await reader.CompleteAsync();
@@ -189,7 +208,7 @@ internal sealed class AudioSocketSession : IAudioStream
             // ending already finds the line and the count. The ending itself stays Disconnected.
             var endsLive = _state.Value == AudioStreamState.Connected;
             var failure = Volatile.Read(ref _transportFailure);
-            if (endsLive && failure is not null && !_disposed)
+            if (endsLive && failure is not null && Volatile.Read(ref _disposed) == 0)
             {
                 AudioSocketSessionLog.TransportFailed(_logger, failure, ChannelId);
                 AudioStreamMetrics.TransportFailures.Add(1);
@@ -197,8 +216,39 @@ internal sealed class AudioSocketSession : IAudioStream
 
             _audioInChannel.Writer.TryComplete();
             if (endsLive)
-                _state.OnNext(AudioStreamState.Disconnected);
+                _state.TryEnd(error: false);
+
+            // A read that ended before any identification frame: the server's wait ends now, and the
+            // connection gives its place back instead of holding it until the idle deadline.
+            _identified.TrySetResult(false);
         }
+    }
+
+    /// <summary>
+    /// The identification frame's case. The first frame that names a non-empty id sets
+    /// <see cref="ChannelId"/>, publishes Connected and ends the server's wait; the id a server registered
+    /// the session under therefore never changes. A later frame is ignored, with one Warning per
+    /// session naming both ids. A frame whose payload names nothing (a zero-length payload parses to
+    /// an empty id) identifies nothing.
+    /// </summary>
+    private void Identify(string id)
+    {
+        if (ChannelId.Length == 0)
+        {
+            if (id.Length == 0)
+                return;
+
+            ChannelId = id;
+            _state.PublishConnected();
+            _identified.TrySetResult(true);
+            return;
+        }
+
+        if (_secondIdentificationReported)
+            return;
+
+        _secondIdentificationReported = true;
+        AudioSocketSessionLog.SecondIdentificationIgnored(_logger, ChannelId, id);
     }
 
     public async ValueTask<ReadOnlyMemory<byte>> ReadFrameAsync(CancellationToken cancellationToken = default)
@@ -251,8 +301,9 @@ internal sealed class AudioSocketSession : IAudioStream
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
-        _disposed = true;
+        // Atomic: three parties can dispose one session — the handler's `await using`, the server's
+        // stop walking its sessions, and a consumer holding it as an IAudioStream.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         await _cts.CancelAsync();
         _audioInChannel.Writer.TryComplete();
@@ -262,8 +313,8 @@ internal sealed class AudioSocketSession : IAudioStream
         if (_readPumpTask is not null)
             await _readPumpTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
-        _state.OnNext(AudioStreamState.Disconnected);
-        _state.OnCompleted();
+        // Publishes the ending only if the pump did not; then completes the sequence.
+        _state.TryEnd(error: false);
         _state.Dispose();
         _cts.Dispose();
 
