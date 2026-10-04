@@ -115,8 +115,8 @@ public sealed class AmiConnectionObserverFaultTests
         using (new AssertionScope())
         {
             reached.Should().BeTrue("the handler receives every event up to the sentinel written last");
-            logger.Containing("OnEvent handler threw on").Should().ContainSingle()
-                .Which.Level.Should().Be(LogLevel.Warning);
+            logger.Containing("OnEvent handler threw on").Should().ContainSingle();
+            logger.Containing("OnEvent handler threw on").Should().OnlyContain(e => e.Level == LogLevel.Warning);
             counters.Total(HandlerFaults).Should().Be(1, "the handler's one failure is counted on ami.events.handler_faults");
             counters.Total(ObserverFaults).Should().Be(0, "a handler failure is not an observer failure");
             logger.Containing(ObserverFaultFragment).Should().BeEmpty("no observer threw");

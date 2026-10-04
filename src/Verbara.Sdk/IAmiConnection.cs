@@ -167,6 +167,41 @@ public interface IAmiConnection : IAsyncDisposable
     /// <summary>Subscribe to all AMI events via IObservable.</summary>
     IDisposable Subscribe(IObserver<ManagerEvent> observer);
 
+    /// <summary>
+    /// Subscribes an event handler that also receives a token asking it to stop when the caller ends the connection.
+    /// Disposing the returned subscription removes the handler; a second disposal does nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The token.</b> On the SDK's AMI connection the token is cancelled when the caller ends the connection with
+    /// <see cref="DisconnectAsync"/> or <c>DisposeAsync</c>, and by nothing else: not by a loss nobody asked for, not by
+    /// a reconnect, not by a give-up. It is cancelled before the ending waits for the dispatch in progress, and stays
+    /// cancelled. The ending still waits for that dispatch: the token asks the handler to stop, it does not abandon
+    /// it, so a handler that ignores it holds the ending as an <see cref="OnEvent"/> handler does. A handler that ends
+    /// in <see cref="OperationCanceledException"/> after the caller's ending has cancelled its token is not reported as
+    /// a fault; any other failure is logged and counted as an <see cref="OnEvent"/> handler's is.
+    /// </para>
+    /// <para>
+    /// <b>Order.</b> Every handler, subscribed through <see cref="OnEvent"/> or through this overload, is called in the
+    /// order it subscribed; every one is called before any is awaited, and the next event is delivered only after all of
+    /// them have returned. A handler whose subscription is disposed while an event is being dispatched can still be
+    /// called for that event.
+    /// </para>
+    /// <para>
+    /// <b>Default implementation.</b> An implementation of this interface that does not provide this overload — a
+    /// wrapper that forwards only the other members, say — subscribes the handler through its own
+    /// <see cref="OnEvent"/> and calls it with a token that is never cancelled: nothing it delivers is lost, but the
+    /// handler is never asked to stop. A wrapper that wants the token forwards this overload to the inner connection.
+    /// A proxy or a mock (such as an NSubstitute substitute) does not run a default member's body: it delivers nothing
+    /// to the handler and returns whatever it was configured to return.
+    /// </para>
+    /// </remarks>
+    /// <param name="handler">Called for every event, with the event and the token.</param>
+    /// <returns>The subscription; disposing it removes the handler.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="handler"/> is <see langword="null"/>.</exception>
+    IDisposable Subscribe(Func<ManagerEvent, CancellationToken, ValueTask> handler) =>
+        OnEventTokenSubscription.Attach(this, handler);
+
     /// <summary>Event raised when an AMI event is received.</summary>
     event Func<ManagerEvent, ValueTask>? OnEvent;
 

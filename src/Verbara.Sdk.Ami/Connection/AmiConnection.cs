@@ -81,6 +81,9 @@ internal static partial class AmiConnectionLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] OnEvent handler threw on {EventType}")]
     public static partial void HandlerFault(ILogger logger, string? eventType, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_EVENT] Event handler stopped on the caller's ending: {EventType}")]
+    public static partial void HandlerStoppedOnCallerEnding(ILogger logger, string? eventType);
 }
 
 /// <summary>
@@ -292,20 +295,52 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-    // The OnEvent handlers, in subscription order: an immutable array swapped under _handlersLock, read lock-free
-    // by the dispatch, like _observers.
-    private volatile Func<ManagerEvent, ValueTask>[] _handlers = [];
+    // Every event handler, subscribed through OnEvent or through the token overload of Subscribe, in subscription order:
+    // an immutable array swapped under _handlersLock, read lock-free by the dispatch, like _observers. Each entry is its
+    // own object, so a subscription's Dispose removes exactly its entry, whichever handler it holds.
+    private volatile HandlerEntry[] _handlers = [];
     private readonly Lock _handlersLock = new();
+
+    /// <summary>One subscribed event handler: an <see cref="OnEvent"/> handler, or a handler that takes a token.</summary>
+    private sealed class HandlerEntry
+    {
+        public HandlerEntry(Func<ManagerEvent, ValueTask> plain) => Plain = plain;
+
+        public HandlerEntry(Func<ManagerEvent, CancellationToken, ValueTask> withToken) => WithToken = withToken;
+
+        /// <summary>The <see cref="OnEvent"/> handler, or <see langword="null"/> for a token handler.</summary>
+        public Func<ManagerEvent, ValueTask>? Plain { get; }
+
+        /// <summary>The token handler, or <see langword="null"/> for an <see cref="OnEvent"/> handler.</summary>
+        public Func<ManagerEvent, CancellationToken, ValueTask>? WithToken { get; }
+
+        public ValueTask Invoke(ManagerEvent evt, CancellationToken token) =>
+            Plain is { } plain ? plain(evt) : WithToken!(evt, token);
+    }
+
+    /// <summary>A token handler's subscription: its first disposal removes its own entry, later ones do nothing.</summary>
+    private sealed class HandlerSubscription(AmiConnection owner, HandlerEntry entry) : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                owner.RemoveHandler(entry);
+        }
+    }
 
     /// <summary>Raised for every AMI event the connection delivers, in the order Asterisk sent them.</summary>
     /// <remarks>
     /// <para>
-    /// Each handler is called in the order it subscribed, and every handler is called before any is awaited. The
-    /// event pump then waits for every handler's task, not only the last one's, before it delivers the next event:
-    /// a slow handler holds delivery whatever its position, and events that arrive meanwhile wait in the pump's
-    /// buffer (<c>AmiConnectionOptions.EventPumpCapacity</c>), where a full buffer drops them
-    /// (<c>ami.events.dropped</c>, <c>reason=buffer_full</c>). A handler that must not hold delivery hands its work
-    /// off and returns.
+    /// Every handler, subscribed through <see cref="OnEvent"/> or through
+    /// <see cref="Subscribe(Func{ManagerEvent, CancellationToken, ValueTask})"/>, is called in the order it subscribed,
+    /// and every handler is called before any is awaited. The event pump then waits for every handler's task, not only
+    /// the last one's, before it delivers the next event: a slow handler holds delivery whatever its position, and
+    /// events that arrive meanwhile wait in the pump's buffer (<c>AmiConnectionOptions.EventPumpCapacity</c>), where a
+    /// full buffer drops them (<c>ami.events.dropped</c>, <c>reason=buffer_full</c>). A handler that must not hold
+    /// delivery hands its work off and returns; one that must stop when the caller ends the connection subscribes
+    /// through the token overload instead.
     /// </para>
     /// <para>
     /// A handler that throws, or whose task faults, stops neither delivery nor the other subscribers: the other
@@ -322,7 +357,7 @@ public sealed class AmiConnection : IAmiConnection
                 return;
 
             lock (_handlersLock)
-                _handlers = [.. _handlers, value];
+                _handlers = [.. _handlers, new HandlerEntry(value)];
         }
         remove
         {
@@ -333,16 +368,45 @@ public sealed class AmiConnection : IAmiConnection
             {
                 // The last subscription of that handler goes, as a multicast delegate's removal does.
                 var current = _handlers;
-                var index = Array.LastIndexOf(current, value);
-                if (index < 0)
-                    return;
-
-                var next = new Func<ManagerEvent, ValueTask>[current.Length - 1];
-                Array.Copy(current, 0, next, 0, index);
-                Array.Copy(current, index + 1, next, index, current.Length - index - 1);
-                _handlers = next;
+                for (var i = current.Length - 1; i >= 0; i--)
+                {
+                    if (current[i].Plain is { } plain && plain.Equals(value))
+                    {
+                        _handlers = Without(current, i);
+                        return;
+                    }
+                }
             }
         }
+    }
+
+    /// <inheritdoc />
+    public IDisposable Subscribe(Func<ManagerEvent, CancellationToken, ValueTask> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        var entry = new HandlerEntry(handler);
+        lock (_handlersLock)
+            _handlers = [.. _handlers, entry];
+        return new HandlerSubscription(this, entry);
+    }
+
+    private void RemoveHandler(HandlerEntry entry)
+    {
+        lock (_handlersLock)
+        {
+            var current = _handlers;
+            var index = Array.IndexOf(current, entry);
+            if (index >= 0)
+                _handlers = Without(current, index);
+        }
+    }
+
+    private static HandlerEntry[] Without(HandlerEntry[] current, int index)
+    {
+        var next = new HandlerEntry[current.Length - 1];
+        Array.Copy(current, 0, next, 0, index);
+        Array.Copy(current, index + 1, next, index, current.Length - index - 1);
+        return next;
     }
 
     public event Action? Reconnected;
@@ -1740,23 +1804,26 @@ public sealed class AmiConnection : IAmiConnection
             // Every handler is started in order, each guarded, before any is awaited; then every one that has not
             // completed is awaited, each guarded. A failure is logged and counted, and stops neither the other
             // handlers nor the pump.
+            // A token handler receives the caller's ending: the token is cancelled only by DisconnectAsync/DisposeAsync.
             var handlers = _handlers;
-            ValueTask[]? pending = null;
+            var token = _lifetime.Token;
+            PendingHandler[]? pending = null;
             var pendingCount = 0;
             for (var i = 0; i < handlers.Length; i++)
             {
+                var entry = handlers[i];
                 try
                 {
-                    var task = handlers[i](evt);
+                    var task = entry.Invoke(evt, token);
                     if (task.IsCompletedSuccessfully)
                         continue;
 
                     // Still running, or already faulted or cancelled: awaited below, where a failure is observed.
-                    (pending ??= new ValueTask[handlers.Length - i])[pendingCount++] = task;
+                    (pending ??= new PendingHandler[handlers.Length - i])[pendingCount++] = new PendingHandler(task, entry.Plain is null);
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    RecordHandlerFault(evt, ex);
+                    RecordHandlerFault(evt, ex, entry.Plain is null);
                 }
             }
 
@@ -1774,7 +1841,7 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-    private async ValueTask AwaitHandlersAsync(ValueTask[] pending, int count, ManagerEvent evt, DispatchFrame frame)
+    private async ValueTask AwaitHandlersAsync(PendingHandler[] pending, int count, ManagerEvent evt, DispatchFrame frame)
     {
         try
         {
@@ -1782,11 +1849,11 @@ public sealed class AmiConnection : IAmiConnection
             {
                 try
                 {
-                    await pending[i].ConfigureAwait(false);
+                    await pending[i].Task.ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    RecordHandlerFault(evt, ex);
+                    RecordHandlerFault(evt, ex, pending[i].TakesToken);
                 }
             }
         }
@@ -1796,8 +1863,20 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-    private void RecordHandlerFault(ManagerEvent evt, Exception exception)
+    /// <summary>A handler's task still running when every handler has been started, and which kind of handler it is.</summary>
+    private readonly record struct PendingHandler(ValueTask Task, bool TakesToken);
+
+    private void RecordHandlerFault(ManagerEvent evt, Exception exception, bool takesToken)
     {
+        // A token handler that stops because the caller's ending cancelled its token did what it was asked: not a fault.
+        // Read when the failure is observed, not by comparing tokens, so a handler that linked the token with its own
+        // timeout still counts as honouring it. An OnEvent handler keeps the rule it always had.
+        if (takesToken && exception is OperationCanceledException && _lifetime.IsCancellationRequested)
+        {
+            AmiConnectionLog.HandlerStoppedOnCallerEnding(_logger, evt.EventType);
+            return;
+        }
+
         AmiMetrics.HandlerFaults.Add(1);
         AmiConnectionLog.HandlerFault(_logger, evt.EventType, exception);
     }

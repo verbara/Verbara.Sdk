@@ -92,3 +92,4 @@ Verbara.Sdk.Ami.Connection.EventActionOutcome.Reported.get -> bool
 Verbara.Sdk.Ami.Connection.EventActionOutcome.SessionEnded.get -> bool
 Verbara.Sdk.IAmiConnection.ReportsEventActionOutcome.get -> bool
 Verbara.Sdk.IAmiConnection.SendEventGeneratingActionAsync(Verbara.Sdk.ManagerAction! action, Verbara.Sdk.Ami.Connection.EventActionOutcome? outcome, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.ManagerEvent!>!
+Verbara.Sdk.IAmiConnection.Subscribe(System.Func<Verbara.Sdk.ManagerEvent!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! handler) -> System.IDisposable!
