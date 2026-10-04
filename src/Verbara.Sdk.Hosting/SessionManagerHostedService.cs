@@ -19,8 +19,9 @@ namespace Verbara.Sdk.Hosting;
 /// <para>
 /// A caller that drives this service as a plain <see cref="IHostedService"/> — <see cref="StartAsync"/> alone — still
 /// attaches, in <see cref="StartAsync"/>. Whichever of the two runs first attaches and the other does nothing: a second
-/// attach under the same id would replace the subscriptions without removing the first ones, and every event would
-/// then be handled twice. A stop detaches, so a start after a stop attaches again.
+/// attach under the same id would replace the subscriptions without removing the first ones, so the stop's detach would
+/// remove only the second set and the first would go on opening sessions after the stop. A stop detaches, so a start
+/// after a stop attaches again.
 /// </para>
 /// </remarks>
 internal sealed class SessionManagerHostedService(
