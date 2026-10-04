@@ -412,10 +412,19 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
                 // place back now instead of after IdleTimeout), or at IdleTimeout measured on the
                 // injected clock. An IdleTimeout the wait cannot use throws ArgumentOutOfRangeException
                 // into the catch below, as this connection's error.
+                //
+                // Forced to yield even when the frame has already arrived: the accept loop starts this
+                // handler inline, and the poll this wait replaced always yielded here, so the rest of the
+                // connection — its registration and the consumers' OnStreamConnected handlers — never
+                // ran on the accept loop's stack. Without it a fast identification would announce the
+                // stream from inside the accept loop: accepts would wait for the consumers' handlers, and
+                // a handler that stopped the server synchronously would wait for the accept loop to end.
                 bool identified;
                 try
                 {
-                    identified = await session.Identified.WaitAsync(_options.IdleTimeout, _timeProvider, ct);
+                    identified = await session.Identified
+                        .WaitAsync(_options.IdleTimeout, _timeProvider, ct)
+                        .ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
                 }
                 catch (TimeoutException)
                 {
