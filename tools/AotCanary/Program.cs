@@ -218,4 +218,15 @@ _ = typeof(Verbara.Sdk.Data.Npgsql.NpgsqlExecutor);
 _ = typeof(Verbara.Sdk.Cluster.Postgres.DependencyInjection.ClusterPostgresServiceCollectionExtensions);
 _ = typeof(Verbara.Sdk.Cluster.Postgres.Migrations.MigrationRunner);
 
+// Verbara.Sdk.OpenTelemetry — call the registration (not a typeof) so ILC compiles the exporters it
+// registers, the Prometheus serializer included. A dependency drift that leaves one of their methods
+// unable to run then shows up as an ILC "will always throw" line, which tools/verify-aot.sh fails on.
+{
+    var otelServices = new ServiceCollection();
+    Verbara.Sdk.OpenTelemetry.VerbaraOpenTelemetryExtensions.AddVerbaraOpenTelemetry(
+        otelServices, b => b.WithAllSources().WithPrometheusExporter());
+    using var otelProvider = otelServices.BuildServiceProvider();
+    Console.WriteLine("OpenTelemetry: Prometheus exporter registered");
+}
+
 return 0;
