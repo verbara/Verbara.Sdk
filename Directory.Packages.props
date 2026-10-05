@@ -111,7 +111,7 @@
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="FluentAssertions" Version="7.2.2" />
     <PackageVersion Include="bunit" Version="2.0.66" />
-    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="Testcontainers" Version="4.15.0" />
     <!-- Test-only HTTP substrate for the VoiceAi provider suites whose transport is HTTP
          request/response (ADR-0041 D1/D7). Referenced ONLY from
