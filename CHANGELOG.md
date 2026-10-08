@@ -32,6 +32,19 @@ handlers still receive the event.
 `AsyncServerSocket.AcceptAsync` left the accepted socket open when configuring it threw; it now closes it before the
 exception reaches the caller.
 
+### Fixed: cancelling the token passed to `ConnectAsync` after the connect has returned no longer ends the AMI session (#401)
+
+`AmiConnection` linked the caller's `ConnectAsync` token into the session it established, so cancelling that token
+later — a timeout that fires after the connect, a phase token cancelled at the end of its phase — was reported as a
+connection loss with no cause: with `AutoReconnect` on (the default) the connection announced the loss and logged in
+again about 200 ms later; with it off the connection went to `Disconnected` and the next action threw
+`AmiNotConnectedException`. The token now cancels the connect only, as `IAmiConnection.ConnectAsync` documents: once the
+connect has returned, cancelling it neither ends the session nor announces it lost. This includes the token
+`VerbaraServerPool.AddServerAsync` passes to the connect. Cancelling the token while the connect is still in progress
+still throws `OperationCanceledException` and releases the socket, and cancelling an action's own token still ends only
+that action. A caller that cancelled the connect token, with `AutoReconnect` off, to end the session must now call
+`DisconnectAsync` or `DisposeAsync`. No public API change.
+
 ### Fixed: a NATS bridge releases everything it opened when it stops or is disposed (#389)
 
 A connection a factory returned after a stop whose time had run out, the bridge's Push bus subscription after a stop
