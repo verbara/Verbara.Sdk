@@ -211,6 +211,7 @@ public sealed class AmiConnectionConnectTokenTests
         {
             await foreach (var _ in events)
             {
+                // The events are not asserted on: only what ends the enumeration is.
             }
 
             return null;
