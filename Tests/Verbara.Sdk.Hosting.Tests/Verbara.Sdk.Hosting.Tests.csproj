@@ -1,4 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- A host binds a Sessions section into the configure delegate itself, as AddVerbara(IConfiguration) does: with
+         the configuration-binding source generator, so the Bind call compiles to generated code (no IL2026 / IL3050). -->
+    <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verbara.Sdk.Hosting\Verbara.Sdk.Hosting.csproj" />
   </ItemGroup>
