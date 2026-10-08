@@ -87,6 +87,33 @@ public sealed class ImagePinGuardTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Scan_ShouldReportEverySippReference_WhenTwoCarryDifferentDigests()
+    {
+        using var tree = GreenTree();
+        var other = Sipp + "@sha256:" + new string('6', 64);
+        tree.Write(".github/workflows/ci.yml", $"jobs:\n  x:\n    steps:\n      - run: docker pull {other} &\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+        output.WriteLine(report.ToString());
+
+        report.Violations.Should().ContainSingle(v => v.Contains("pinned by more than one digest", StringComparison.Ordinal)
+                && v.Contains(".github/workflows/ci.yml:4", StringComparison.Ordinal)
+                && v.Contains("Tests/Some/SippContainer.cs:1", StringComparison.Ordinal),
+            "CI pre-pulling one SIPp image while the tests start another pulls an image nothing uses");
+    }
+
+    [Fact]
+    public void Scan_ShouldPass_WhenEverySippReferenceCarriesTheSameDigest()
+    {
+        using var tree = GreenTree();
+        tree.Write(".github/workflows/ci.yml", $"jobs:\n  x:\n    steps:\n      - run: docker pull {Sipp}{DigestSipp} &\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.IsClean.Should().BeTrue(report.ToString());
+    }
+
+    [Fact]
     public void Scan_ShouldReportTheDefault_WhenTheDockerfileDefaultIsNotThe22Line()
     {
         using var tree = GreenTree();

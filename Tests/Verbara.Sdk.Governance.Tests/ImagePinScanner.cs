@@ -5,7 +5,7 @@ namespace Verbara.Sdk.Governance.Tests;
 /// <summary>
 /// Detector for the functional lane's image pins: every reference to the Asterisk base image or the SIPp image under
 /// <c>docker/</c>, <c>.github/workflows/</c> and <c>Tests/</c> carries a registry digest, every pinned Asterisk base is
-/// a line of <c>docker/asterisk-base-images.txt</c>, and <c>docker/Dockerfile.asterisk</c> defaults to that table's
+/// a line of <c>docker/asterisk-base-images.txt</c>, every SIPp reference carries the same digest, and <c>docker/Dockerfile.asterisk</c> defaults to that table's
 /// 22 line and refuses a base of another version.
 /// </summary>
 /// <remarks>
@@ -80,6 +80,13 @@ internal static partial class ImagePinScanner
 
         foreach (var reference in references.Where(r => !r.IsPinned))
             violations.Add($"{reference}: no @sha256 digest — a tag names whatever its publisher serves that day");
+
+        var sippDigests = references.Where(r => r.Image == SippImage && r.IsPinned)
+            .GroupBy(r => DigestPattern().Match(r.Text).Value, StringComparer.Ordinal)
+            .ToList();
+        if (sippDigests.Count > 1)
+            violations.Add($"{SippImage} is pinned by more than one digest — the CI pre-pull and the tests' container must name one image: "
+                + string.Join("; ", sippDigests.SelectMany(g => g).Select(r => r.ToString())));
 
         var tablePath = Path.Join(repoRoot, TablePath);
         IReadOnlyDictionary<string, string>? table = null;
