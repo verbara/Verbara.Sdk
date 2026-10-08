@@ -111,6 +111,18 @@ change.
 
 No public API change.
 
+### Fixed: calls already in progress when the host starts have a session (#399)
+
+A host registered with `AddVerbaraSessions` or `AddVerbaraSessionsBuilder` opened no session for a call that was
+already up when it started: the first load ran before the session engine was attached, so those calls had no session,
+no `CallStartedEvent` and no `CallEndedEvent` until the next reconnect. The engine now attaches before the first load.
+Each call in progress at start raises one `CallStartedEvent`, marked `origin=reload`, to subscribers that subscribed
+before the host started, exactly as after a reconnect reload, and one `CallEndedEvent` when it hangs up. A call that
+starts or ends while the first load is reading gets one session or none, never two. A caller already waiting in a
+queue at start also has its queue visit opened from the wait Asterisk reported, in the state Asterisk reported, and the
+queue counts it as one offer. A subscriber that subscribes after `StartAsync` returns does not see these events. Hosts
+that attach the session manager by hand after starting the server are unchanged. No public API change.
+
 ## [2.7.0] - 2026-10-03
 
 ### Fixed: a queued call records the queue member who took it (#381)
