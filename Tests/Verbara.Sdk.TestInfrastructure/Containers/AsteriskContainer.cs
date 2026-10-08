@@ -12,7 +12,9 @@ namespace Verbara.Sdk.TestInfrastructure.Containers;
 ///
 /// Asterisk version is controlled by the <c>ASTERISK_VERSION</c> environment variable
 /// (defaults to <c>22</c>). CI matrices set this per job to validate the SDK against
-/// both Asterisk 22 LTS and Asterisk 23 Standard. <c>CODEC_OPUS_VERSION</c> defaults
+/// both Asterisk 22 LTS and Asterisk 23 Standard. The image is built on the base
+/// <c>docker/asterisk-base-images.txt</c> pins for that version (<see cref="AsteriskBaseImages"/>);
+/// a version with no line fails before any build. <c>CODEC_OPUS_VERSION</c> defaults
 /// to <c>{ASTERISK_VERSION}.0_1.3.0</c>; override only if a non-default Digium codec
 /// build is required.
 /// </summary>
@@ -32,7 +34,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
     public string NetworkAddress => _container.IpAddress;
 
     /// <summary>An Asterisk container from <paramref name="image"/>, on <paramref name="network"/>.</summary>
-    /// <param name="network">The network the container joins, under the alias <c>asterisk</c>.</param>
+    /// <param name="network">The network the container joins, under <paramref name="networkAlias"/>.</param>
     /// <param name="image">The image from <see cref="CreateImageAsync"/>.</param>
     /// <param name="configDirectory">
     /// The directory mounted read-only on <c>/etc/asterisk</c>; the shared functional configuration by default. A test
@@ -43,8 +45,9 @@ public sealed class AsteriskContainer : IAsyncDisposable
     /// Whether AMI (5038) and ARI (8088) are published on random host ports, which <see cref="AmiPort"/> and
     /// <see cref="AriPort"/> read. A test that reaches the container at <see cref="NetworkAddress"/> publishes none.
     /// </param>
+    /// <param name="networkAlias">The name other containers on <paramref name="network"/> reach it by.</param>
     public AsteriskContainer(INetwork network, IImage image, string? configDirectory = null, string? name = null,
-        bool publishPorts = true)
+        bool publishPorts = true, string networkAlias = "asterisk")
     {
         var builder = new ContainerBuilder(image);
         if (name is not null)
@@ -58,7 +61,7 @@ public sealed class AsteriskContainer : IAsyncDisposable
             .WithExtraHost("host.docker.internal", "host-gateway")
             .WithBindMount(configDirectory ?? DockerPaths.AsteriskConfig, "/etc/asterisk", AccessMode.ReadOnly)
             .WithNetwork(network)
-            .WithNetworkAliases("asterisk")
+            .WithNetworkAliases(networkAlias)
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
                     // Step 1: Asterisk core process is running.
@@ -87,12 +90,14 @@ public sealed class AsteriskContainer : IAsyncDisposable
             var asteriskVersion = Environment.GetEnvironmentVariable("ASTERISK_VERSION") ?? "22";
             var codecOpusVersion = Environment.GetEnvironmentVariable("CODEC_OPUS_VERSION")
                 ?? $"{asteriskVersion}.0_1.3.0";
+            var baseImage = AsteriskBaseImages.Resolve(asteriskVersion);
 
             var image = new ImageFromDockerfileBuilder()
                 .WithDockerfile("Dockerfile.asterisk")
                 .WithDockerfileDirectory(DockerPaths.DockerDir)
                 .WithBuildArgument("ASTERISK_VERSION", asteriskVersion)
                 .WithBuildArgument("CODEC_OPUS_VERSION", codecOpusVersion)
+                .WithBuildArgument("ASTERISK_BASE_IMAGE", baseImage)
                 .Build();
 
             await image.CreateAsync(ct).ConfigureAwait(false);

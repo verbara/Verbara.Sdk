@@ -1,16 +1,24 @@
 # Build args allow the same Dockerfile to target multiple Asterisk versions.
-# Defaults match the current LTS target (22). Override via:
-#   docker build --build-arg ASTERISK_VERSION=23 --build-arg CODEC_OPUS_VERSION=23.0_1.3.0 ...
+# ASTERISK_BASE_IMAGE is the pinned base of docker/asterisk-base-images.txt for ASTERISK_VERSION; its default is
+# that table's 22 line, so a build with no argument builds the pinned 22. Another version passes its line:
+#   docker build -f docker/Dockerfile.asterisk docker/ \
+#     --build-arg ASTERISK_VERSION=23 --build-arg CODEC_OPUS_VERSION=23.0_1.3.0 \
+#     --build-arg ASTERISK_BASE_IMAGE="$(awk '$1 == "23" { print $2 }' docker/asterisk-base-images.txt)" ...
 ARG ASTERISK_VERSION=22
 ARG CODEC_OPUS_VERSION=22.0_1.3.0
+ARG ASTERISK_BASE_IMAGE=andrius/asterisk:22.10.1_debian-trixie-6bb254a@sha256:212326bd3f973a597be9e4747be5d6653802e4950159e95aa7d728e394de2012
 
-FROM andrius/asterisk:${ASTERISK_VERSION}
+FROM ${ASTERISK_BASE_IMAGE}
 
 # Re-declare the build args inside the FROM scope so they're visible to RUN steps.
 ARG ASTERISK_VERSION
 ARG CODEC_OPUS_VERSION
 
 USER root
+
+# The base must be the selected version: a build handed ASTERISK_VERSION=23 without the 23 base would otherwise
+# produce the default 22 server with a 23 Opus download. Fails before any download, naming both versions.
+RUN asterisk -V | grep -Eq "^Asterisk ${ASTERISK_VERSION}\." || { echo "base is $(asterisk -V), not Asterisk ${ASTERISK_VERSION}" >&2; exit 1; }
 
 # codec_opus download is best-effort — if the matching Digium build doesn't exist
 # for the selected ASTERISK_VERSION, the image still functions (Opus is optional

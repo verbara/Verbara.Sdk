@@ -382,15 +382,22 @@ jobs:
           (github.event_name == 'merge_group' || contains(github.event.pull_request.labels.*.name, 'ci:functional'))
           && (needs.gate.result != 'success' || needs.gate.outputs.docs_only != 'true')
         # Populate the Docker layer cache before tests run so container startups are fast.
-        # The Asterisk image is rebuilt per-matrix because the FROM tag changes.
+        # The Asterisk image is rebuilt per matrix version, on the base docker/asterisk-base-images.txt pins for that
+        # version (build tag + digest, the line AsteriskContainer also reads); a version with no line fails the step.
         run: |
+          base=$(awk -v v='${{ matrix.asterisk }}' '$1 == v { print $2 }' docker/asterisk-base-images.txt)
+          if [ -z "$base" ]; then
+            echo "::error::docker/asterisk-base-images.txt has no line for Asterisk ${{ matrix.asterisk }}"
+            exit 1
+          fi
           docker pull postgres:18-alpine &
           docker pull ghcr.io/shopify/toxiproxy:2.12.0 &
-          docker pull ctaloi/sipp &
+          docker pull ctaloi/sipp@sha256:c459f2340443ddcc159227efc798217dbdaad0dbe88b76b78b1a876aa271986a &
           wait
           docker build -f docker/Dockerfile.asterisk docker/ \
             --build-arg ASTERISK_VERSION=${{ matrix.asterisk }} \
             --build-arg CODEC_OPUS_VERSION=${{ matrix.asterisk }}.0_1.3.0 \
+            --build-arg ASTERISK_BASE_IMAGE="$base" \
             -t asterisk-sdk-test-cache:${{ matrix.asterisk }}
       - name: Run functional + integration tests
         # Guarded (ADR-0051): pull_request events skip the Testcontainers execution unless the

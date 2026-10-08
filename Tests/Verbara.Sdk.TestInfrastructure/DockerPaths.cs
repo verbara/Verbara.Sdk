@@ -10,6 +10,7 @@ public static class DockerPaths
     public static string FunctionalDir => Path.Join(DockerDir, "functional");
     public static string AsteriskConfig => Path.Join(FunctionalDir, "asterisk-config");
     public static string PstnEmulatorConfig => Path.Join(FunctionalDir, "pstn-emulator-config");
+    public static string MultiServerPbxConfig => Path.Join(FunctionalDir, "multi-server", "pbx");
     public static string AsteriskDockerfile => Path.Join(DockerDir, "Dockerfile.asterisk");
     public static string FunctionalSqlDir => Path.Join(FunctionalDir, "sql");
     public static string SippScenariosDir => Path.Join(FunctionalDir, "sipp-scenarios");

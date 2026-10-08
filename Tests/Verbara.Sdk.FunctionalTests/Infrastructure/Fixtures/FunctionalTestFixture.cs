@@ -14,9 +14,7 @@ public sealed class FunctionalTestFixture : Xunit.IAsyncLifetime
 
     public AsteriskContainer Asterisk => _inner.Asterisk;
     public PostgresContainer Postgres => _inner.Postgres;
-    public PstnEmulatorContainer PstnEmulator => _inner.PstnEmulator;
     public ToxiproxyContainer Toxiproxy => _inner.Toxiproxy;
-    public SippContainer Sipp => _inner.Sipp;
 
     public async Task InitializeAsync()
     {
