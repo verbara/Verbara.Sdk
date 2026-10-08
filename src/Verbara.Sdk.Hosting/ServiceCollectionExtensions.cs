@@ -270,8 +270,24 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IValidateOptions<SessionOptions>, SessionOptionsValidator>();
         services.AddOptions<SessionOptions>().ValidateOnStart();
-        services.AddHealthChecks()
-            .AddCheck<Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck>("sessions");
+        // Guarded, not a plain AddCheck: a host may call more than one sessions registration (the single-server and the
+        // multi-server one, or one of them twice), and a second registration under the same name makes
+        // HealthCheckService throw "Duplicate health checks were registered" on resolve.
+        services.AddHealthChecks();
+        services.Configure<HealthCheckServiceOptions>(options =>
+        {
+            foreach (var registration in options.Registrations)
+            {
+                if (string.Equals(registration.Name, SessionsHealthCheckName, StringComparison.Ordinal))
+                    return;
+            }
+
+            options.Registrations.Add(new HealthCheckRegistration(
+                SessionsHealthCheckName,
+                sp => new Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck(sp.GetRequiredService<ICallSessionManager>()),
+                failureStatus: null,
+                tags: null));
+        });
         return services;
     }
 
@@ -311,6 +327,9 @@ public static class ServiceCollectionExtensions
         });
         return services;
     }
+
+    /// <summary>The name every sessions registration registers the session engine's health check under, once.</summary>
+    private const string SessionsHealthCheckName = "sessions";
 
     /// <summary>The name <see cref="AddVerbaraMultiServer"/> registers the pool health check under.</summary>
     private const string ServerPoolHealthCheckName = "verbara-pool";
