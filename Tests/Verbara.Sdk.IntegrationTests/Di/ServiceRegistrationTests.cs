@@ -134,7 +134,7 @@ public class ServiceRegistrationTests
     }
 
     [Fact]
-    public async Task AddVerbaraSessionsMultiServer_ShouldNotRegisterHostedService()
+    public async Task AddVerbaraSessionsMultiServer_ShouldRegisterThePoolSweepAndAttachNoServer_WhenCalled()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -142,9 +142,12 @@ public class ServiceRegistrationTests
         services.AddVerbaraSessionsMultiServer();
 
         await using var provider = services.BuildServiceProvider();
-        var hostedServices = provider.GetServices<IHostedService>().ToList();
+        var hostedServices = provider.GetServices<IHostedService>().Select(s => s.GetType().Name).ToList();
 
-        hostedServices.Should().NotContain(s => s.GetType().Name == "SessionManagerHostedService");
+        hostedServices.Should().BeEquivalentTo(
+            ["HealthCheckPublisherHostedService", "PoolReconciliationService"],
+            "the multi-server registration adds the pool's reconciliation sweep and no service that attaches a server: "
+            + "the host attaches each server of the pool itself");
     }
 
     [Fact]

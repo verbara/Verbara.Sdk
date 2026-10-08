@@ -322,12 +322,13 @@ internal sealed class RigServer
     /// <summary>A <c>Status</c> answer that never completes: it ends when its token is cancelled or the connection is disposed.</summary>
     public async IAsyncEnumerable<ManagerEvent> Hang([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var cancelled = Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-        var finished = await Task.WhenAny(cancelled, _connectionDisposed.Task);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var registration = cancellationToken.Register(() => cancelled.TrySetCanceled(cancellationToken));
+        var finished = await Task.WhenAny(cancelled.Task, _connectionDisposed.Task);
         if (finished == _connectionDisposed.Task)
             throw new ObjectDisposedException(nameof(IAmiConnection), "The AMI connection was disposed under the Status.");
 
-        await cancelled;
+        await cancelled.Task;
         yield break;
     }
 
