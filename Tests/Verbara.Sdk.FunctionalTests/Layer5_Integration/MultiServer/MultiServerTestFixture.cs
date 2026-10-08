@@ -86,62 +86,73 @@ public sealed class MultiServerTestFixture : Xunit.IAsyncLifetime
 
     private async Task<ClassMeasurement> MeasureClassesAsync()
     {
-        var connections = new List<AmiConnection>();
-        var tallies = new List<AmiEventTally>();
-        try
+        await using var held = new HeldConnections();
+
+        async Task<AmiEventTally> ObserveAsync(char server, AmiUserClass user)
         {
-            async Task<AmiEventTally> ObserveAsync(char server, AmiUserClass user)
-            {
-                var connection = Connect(server, user);
-                connections.Add(connection);
-                var tally = new AmiEventTally($"{server}:{user.Name}", connection);
-                tallies.Add(tally);
-                await connection.ConnectAsync();
-                return tally;
-            }
-
-            var observers = new Dictionary<string, AmiEventTally>(StringComparer.Ordinal);
-            foreach (var user in MultiServerAmiUsers.All)
-                observers[user.Name] = await ObserveAsync('A', user);
-            var farEnd = await ObserveAsync('B', MultiServerAmiUsers.Full);
-
-            var driver = Connect('A', MultiServerAmiUsers.Full);
-            connections.Add(driver);
-            await driver.ConnectAsync();
-
-            for (var i = 0; i < Calls; i++)
-            {
-                var response = await driver.SendActionAsync(new OriginateAction
-                {
-                    Channel = $"Local/queue@{MultiServerFixture.LabContext}/n",
-                    Application = "Wait",
-                    Data = "3",
-                    IsAsync = true,
-                    ActionId = string.Create(CultureInfo.InvariantCulture, $"queue-call-{i}"),
-                });
-                if (!string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"originate {i} was refused: {response.Response} {response.Message}");
-            }
-
-            // Fence 1: the ground truth is complete. Each queue call ends three legs on A (the two Local halves and the
-            // trunk leg) and one on B.
-            var full = observers[MultiServerAmiUsers.Full.Name];
-            await full.WaitUntilAsync(t => t.Count("Hangup") >= 3 * Calls, CallBound, $"A's {3 * Calls} Hangup events");
-            await farEnd.WaitUntilAsync(t => t.Count("Hangup") >= Calls, CallBound, $"B's {Calls} Hangup events");
-
-            // Fence 2: every observer on A has drained what A sent it before the marker.
-            await DrainAsync(driver, [.. observers.Values]);
-
-            return new ClassMeasurement(
-                observers.ToDictionary(o => o.Key, o => Snapshot(o.Value), StringComparer.Ordinal),
-                Snapshot(farEnd),
-                string.Join(Environment.NewLine, tallies.Select(t => t.Describe())));
+            var tally = held.Observe($"{server}:{user.Name}", Connect(server, user));
+            await tally.Connection.ConnectAsync();
+            return tally.Tally;
         }
-        finally
+
+        var observers = new Dictionary<string, AmiEventTally>(StringComparer.Ordinal);
+        foreach (var user in MultiServerAmiUsers.All)
+            observers[user.Name] = await ObserveAsync('A', user);
+        var farEnd = await ObserveAsync('B', MultiServerAmiUsers.Full);
+
+        await using var driver = Connect('A', MultiServerAmiUsers.Full);
+        await driver.ConnectAsync();
+
+        for (var i = 0; i < Calls; i++)
         {
-            tallies.ForEach(t => t.Dispose());
-            foreach (var connection in connections)
+            var response = await driver.SendActionAsync(new OriginateAction
+            {
+                Channel = $"Local/queue@{MultiServerFixture.LabContext}/n",
+                Application = "Wait",
+                Data = "3",
+                IsAsync = true,
+                ActionId = string.Create(CultureInfo.InvariantCulture, $"queue-call-{i}"),
+            });
+            if (!string.Equals(response.Response, "Success", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"originate {i} was refused: {response.Response} {response.Message}");
+        }
+
+        // Fence 1: the ground truth is complete. Each queue call ends three legs on A (the two Local halves and the
+        // trunk leg) and one on B.
+        var full = observers[MultiServerAmiUsers.Full.Name];
+        await full.WaitUntilAsync(t => t.Count("Hangup") >= 3 * Calls, CallBound, $"A's {3 * Calls} Hangup events");
+        await farEnd.WaitUntilAsync(t => t.Count("Hangup") >= Calls, CallBound, $"B's {Calls} Hangup events");
+
+        // Fence 2: every observer on A has drained what A sent it before the marker.
+        await DrainAsync(driver, [.. observers.Values]);
+
+        return new ClassMeasurement(
+            observers.ToDictionary(o => o.Key, o => Snapshot(o.Value), StringComparer.Ordinal),
+            Snapshot(farEnd),
+            held.Describe());
+    }
+
+    /// <summary>The measurement's observer connections and their tallies, released together.</summary>
+    private sealed class HeldConnections : IAsyncDisposable
+    {
+        private readonly List<(AmiConnection Connection, AmiEventTally Tally)> _held = [];
+
+        public (AmiConnection Connection, AmiEventTally Tally) Observe(string label, AmiConnection connection)
+        {
+            var entry = (connection, new AmiEventTally(label, connection));
+            _held.Add(entry);
+            return entry;
+        }
+
+        public string Describe() => string.Join(Environment.NewLine, _held.Select(h => h.Tally.Describe()));
+
+        public async ValueTask DisposeAsync()
+        {
+            foreach (var (connection, tally) in _held)
+            {
+                tally.Dispose();
                 await connection.DisposeAsync();
+            }
         }
     }
 

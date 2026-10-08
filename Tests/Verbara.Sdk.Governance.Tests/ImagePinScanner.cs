@@ -198,11 +198,8 @@ internal static partial class ImagePinScanner
     private static List<string> EnumerateFiles(string repoRoot)
     {
         var files = new List<string>();
-        foreach (var start in ScannedDirectories.Select(scanned => Path.Join(repoRoot, scanned)))
+        foreach (var start in ScannedDirectories.Select(scanned => Path.Join(repoRoot, scanned)).Where(Directory.Exists))
         {
-            if (!Directory.Exists(start))
-                continue;
-
             var pending = new Stack<string>();
             pending.Push(start);
             while (pending.Count > 0)

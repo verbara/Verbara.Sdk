@@ -41,11 +41,8 @@ public static class AsteriskBaseImages
     private static Dictionary<string, string> Parse(string table)
     {
         var lines = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var line in table.Split('\n').Select(raw => raw.Trim()))
+        foreach (var line in table.Split('\n').Select(raw => raw.Trim()).Where(l => l.Length > 0 && !l.StartsWith('#')))
         {
-            if (line.Length == 0 || line.StartsWith('#'))
-                continue;
-
             var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 2)
                 lines[parts[0]] = parts[1];
