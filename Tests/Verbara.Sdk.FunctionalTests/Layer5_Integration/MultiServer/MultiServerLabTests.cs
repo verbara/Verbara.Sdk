@@ -197,26 +197,47 @@ public sealed partial class MultiServerLabTests(MultiServerTestFixture fixture, 
     public async Task Sipp_ShouldPlaceACallThatCrossesTheTrunk_WhenItDialsServerA()
     {
         WriteVersions();
+        await using var observerA = fixture.Connect('A', MultiServerAmiUsers.Full);
         await using var observerB = fixture.Connect('B', MultiServerAmiUsers.Full);
+        using var a = new AmiEventTally("A:full", observerA);
         using var b = new AmiEventTally("B:full", observerB);
+        await observerA.ConnectAsync();
         await observerB.ConnectAsync();
 
         var result = await _lab.Sipp.RunUacAsync("server-a", "777");
         output.WriteLine(result.Stdout);
         output.WriteLine(result.Stderr);
         await b.WaitUntilAsync(t => t.Count("Hangup") >= 1, MultiServerTestFixture.CallBound, "B's Hangup of SIPp's call");
+
+        // B's Hangup can precede A's: the test ends only once every leg A created for the call has ended, so no A event
+        // of this call reaches an observer a later test logs in.
+        await a.WaitUntilAsync(
+            t => t.Count("Newchannel") > 0 && t.UniqueIds("Newchannel").IsSubsetOf(t.UniqueIds("Hangup")),
+            MultiServerTestFixture.CallBound, "A's Hangup of every leg it created for SIPp's call");
+        output.WriteLine(a.Describe());
         output.WriteLine(b.Describe());
 
+        var aLegs = a.Channels("Newchannel");
         new
         {
             result.ExitCode,
             Successful = Cumulative(result.Stdout, "Successful call"),
             Failed = Cumulative(result.Stdout, "Failed call"),
+            ANewchannel = aLegs.Count,
+            AInboundLegs = aLegs.Count(c => c.StartsWith("PJSIP/anonymous-", StringComparison.Ordinal)),
+            ATrunkLegs = aLegs.Count(c => c.StartsWith("PJSIP/agent-", StringComparison.Ordinal)),
+            AEveryLegEnded = a.UniqueIds("Newchannel").SetEquals(a.UniqueIds("Hangup")),
             BNewchannel = b.Count("Newchannel"),
             BHangup = b.Count("Hangup"),
         }.Should().BeEquivalentTo(
-            new { ExitCode = 0L, Successful = 1, Failed = 0, BNewchannel = 1, BHangup = 1 },
-            $"SIPp's one call enters A and A carries it over the trunk to B's far number. {b.Describe()}");
+            new
+            {
+                ExitCode = 0L, Successful = 1, Failed = 0,
+                ANewchannel = 2, AInboundLegs = 1, ATrunkLegs = 1, AEveryLegEnded = true,
+                BNewchannel = 1, BHangup = 1,
+            },
+            "SIPp's one call enters A as one inbound leg, A carries it over the trunk as one more, both end, and B's "
+            + $"far number answers it. {a.Describe()}; {b.Describe()}");
     }
 
     private void WriteVersions()
