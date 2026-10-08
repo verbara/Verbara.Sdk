@@ -41,6 +41,15 @@ a stop or a connect timeout went on to complete and stayed open. A stop or a dis
 bridge opened, and a disposal returns only once the release is done. This restores the bridge's documented clean
 drain on stop and its `Dispose()` promise. No public API change.
 
+### Changed: the test Asterisk image builds on a pinned build of each version (#400)
+
+`docker/Dockerfile.asterisk` no longer builds `FROM andrius/asterisk:${ASTERISK_VERSION}`, a tag the publisher points
+at a new build every week. `docker/asterisk-base-images.txt` names one build per version by build tag and digest
+(22 → 22.10.1 build `6bb254a`, 23 → 23.4.1 build `d0182a6`, 20 → 20.20.1 for local runs), and the Dockerfile takes it
+as `ASTERISK_BASE_IMAGE`, defaulting to the 22 line. A hand-run build that passes `ASTERISK_VERSION=23` must also pass
+the 23 base, or it fails with "base is Asterisk 22.10.1, not Asterisk 23"; `docs/guides/asterisk-version-matrix.md`
+shows the command. No package changes.
+
 ### Added: an ARI audio server logs and counts a connection it refuses at its stream limit (#387)
 
 When `AudioSocketServer` or `WebSocketAudioServer` was at `MaxConcurrentStreams`, it closed each further connection
