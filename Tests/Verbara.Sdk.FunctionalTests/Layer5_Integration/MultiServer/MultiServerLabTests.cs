@@ -240,6 +240,50 @@ public sealed partial class MultiServerLabTests(MultiServerTestFixture fixture, 
             + $"far number answers it. {a.Describe()}; {b.Describe()}");
     }
 
+    [Fact]
+    public async Task Servers_ShouldIssueIdsPrefixedWithTheirOwnSystemName_WhenACallStartsOnEachInTheSameSecond()
+    {
+        WriteVersions();
+        await using var observerA = fixture.Connect('A', MultiServerAmiUsers.Full);
+        await using var observerB = fixture.Connect('B', MultiServerAmiUsers.Full);
+        using var a = new AmiEventTally("A:full", observerA);
+        using var b = new AmiEventTally("B:full", observerB);
+        await observerA.ConnectAsync();
+        await observerB.ConnectAsync();
+
+        await Task.WhenAll(
+            observerA.SendActionAsync(new OriginateAction
+            {
+                Channel = $"Local/short@{MultiServerFixture.LabContext}/n", Application = "Wait", Data = "1", IsAsync = true,
+            }).AsTask(),
+            observerB.SendActionAsync(new OriginateAction
+            {
+                Channel = "Local/short@from-dut/n", Application = "Wait", Data = "1", IsAsync = true,
+            }).AsTask());
+
+        // Every leg each server created has ended, so no event of these calls reaches a later test's observer.
+        foreach (var tally in new[] { a, b })
+        {
+            await tally.WaitUntilAsync(
+                t => t.Count("Newchannel") >= 2 && t.UniqueIds("Newchannel").IsSubsetOf(t.UniqueIds("Hangup")),
+                MultiServerTestFixture.CallBound, $"{tally.Label}'s Hangup of every leg it created");
+        }
+
+        var idsA = a.UniqueIds("Newchannel");
+        var idsB = b.UniqueIds("Newchannel");
+        output.WriteLine($"A: {string.Join(" ", idsA)}; B: {string.Join(" ", idsB)}");
+
+        new
+        {
+            AllOfAPrefixed = idsA.All(id => id.StartsWith(MultiServerFixture.SystemNameA + "-", StringComparison.Ordinal)),
+            AllOfBPrefixed = idsB.All(id => id.StartsWith(MultiServerFixture.SystemNameB + "-", StringComparison.Ordinal)),
+            Shared = idsA.Intersect(idsB, StringComparer.Ordinal).ToList(),
+        }.Should().BeEquivalentTo(
+            new { AllOfAPrefixed = true, AllOfBPrefixed = true, Shared = new List<string>() },
+            "each server carries its own system name in every id it issues, so no id of A can equal one of B "
+            + $"(A: {string.Join(" ", idsA)}; B: {string.Join(" ", idsB)})");
+    }
+
     private void WriteVersions()
     {
         output.WriteLine($"server A ({_lab.RunName}-a): {_lab.ServerAVersion}");

@@ -39,6 +39,12 @@ public sealed class MultiServerFixture : IAsyncLifetime
     /// <summary>A's dialplan context for calls the tests originate.</summary>
     public const string LabContext = "lab";
 
+    /// <summary>Server A's <c>systemname</c>: every id A issues starts with it and a dash.</summary>
+    public const string SystemNameA = "a";
+
+    /// <summary>Server B's <c>systemname</c>: every id B issues starts with it and a dash.</summary>
+    public const string SystemNameB = "b";
+
     private static readonly TimeSpan BootBound = TimeSpan.FromSeconds(90);
 
     private readonly Func<CancellationToken, Task>? _beforeServerBStarts;
