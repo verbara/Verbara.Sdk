@@ -66,7 +66,8 @@ public sealed class AmiConnectionConnectTokenTests
     {
         using var peerCts = new CancellationTokenSource(Bound * 2);
         var sockets = new PipedSocketFactory();
-        await using var connection = Create(sockets, autoReconnect: true);
+        // No response timeout can end the wait for the login's response: only the caller's token can.
+        await using var connection = Create(sockets, autoReconnect: true, responseTimeout: TimeSpan.FromMinutes(1));
         using var connectCts = new CancellationTokenSource();
         var loginRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -154,7 +155,7 @@ public sealed class AmiConnectionConnectTokenTests
         _ = peer;
     }
 
-    private static AmiConnection Create(PipedSocketFactory sockets, bool autoReconnect) =>
+    private static AmiConnection Create(PipedSocketFactory sockets, bool autoReconnect, TimeSpan? responseTimeout = null) =>
         new(Options.Create(new AmiConnectionOptions
         {
             Hostname = "localhost",
@@ -164,6 +165,7 @@ public sealed class AmiConnectionConnectTokenTests
             AutoReconnect = autoReconnect,
             ConnectionTimeout = TimeSpan.FromMinutes(1),
             DefaultEventTimeout = TimeSpan.FromMinutes(1),
+            DefaultResponseTimeout = responseTimeout ?? new AmiConnectionOptions().DefaultResponseTimeout,
         }), sockets, NullLogger<AmiConnection>.Instance);
 
     private static Task PlayLoginThenPingsAsync(PipedSocketFactory sockets, CancellationToken cancellationToken) =>
