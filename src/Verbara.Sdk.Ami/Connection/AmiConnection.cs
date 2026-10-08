@@ -483,6 +483,11 @@ public sealed class AmiConnection : IAmiConnection
     /// handler. Likewise, a <see cref="StateChanged"/> or <see cref="Lost"/> handler that blocks on this method holds the
     /// notification queue, so no later notification is delivered, for up to that bound.
     /// </para>
+    /// <para>
+    /// The <paramref name="cancellationToken"/> cancels the connect; it has no authority over the session once the
+    /// connect has returned. Cancelling it afterwards neither ends the session nor announces it lost; the session ends
+    /// with <see cref="DisconnectAsync"/> or <see cref="DisposeAsync"/>.
+    /// </para>
     /// </remarks>
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -578,7 +583,9 @@ public sealed class AmiConnection : IAmiConnection
     {
         SetConnectState(AmiConnectionState.Connecting, byLoop);
 
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // The session source. The loop's attempts link the lifetime token, so a caller's ending stops them; a caller's
+        // token is linked only into connectCts below: it cancels the connect and has no authority over the session.
+        var cts = byLoop ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken) : new CancellationTokenSource();
         // Read once, while the source is this attempt's alone: once published, an ending's cleanup may dispose it.
         var sessionToken = cts.Token;
         var ctsPublished = false;

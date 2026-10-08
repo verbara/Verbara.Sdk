@@ -20,7 +20,9 @@ public interface IAmiConnection : IAsyncDisposable
     /// caller's own cancellation — releases what it acquired and leaves <see cref="State"/> at
     /// <see cref="AmiConnectionState.Disconnected"/> before its exception reaches the caller, unchanged; the connection
     /// can be connected again. A connect overtaken by the caller's <c>DisconnectAsync</c> or <c>DisposeAsync</c> yields to
-    /// that ending and throws <see cref="System.OperationCanceledException"/>.
+    /// that ending and throws <see cref="System.OperationCanceledException"/>. The token cancels the connect; it has no
+    /// authority over the session once the connect has returned, which ends with <c>DisconnectAsync</c> or
+    /// <c>DisposeAsync</c>.
     /// <para>
     /// An implementation may wait, before it connects, for the release of a session the connection lost on its own and
     /// is still ending. The SDK's connection does, bounded by its <c>ConnectionTimeout</c> option, the caller's token and
