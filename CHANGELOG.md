@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a multi-server pool releases what it started when an add, a removal or its disposal fails (#398)
+
+`VerbaraServerPool.AddServerAsync` called with an id already in the pool no longer logs in to Asterisk first: the id
+is checked before connecting, so the duplicate asks for no connection and throws the same
+`InvalidOperationException`. Only two adds of the same id racing each other still connect, and the loser disposes its
+connection. When the server's start throws — the token is cancelled during the state load, or the AMI session ends
+for good under it — the server, its connection and the agent routes the load recorded are released before the
+exception reaches the caller, so the id is free for a new add (it used to stay in the pool, and the cancelled
+connection stayed logged in). A start that the connection's own reconnect will repair keeps the server, as before.
+`RemoveServerAsync` and the pool's `DisposeAsync` dispose each server and its AMI connection in separate attempts: a
+server or connection whose disposal throws no longer stops the release of its own connection or of any other server.
+Each such failure is logged at Error (`[POOL] Server dispose failed` / `[POOL] AMI connection dispose failed`, with the
+server id and the exception) and is not thrown, so a host that disposes the pool goes on to dispose the services
+resolved before it. A removal no longer drops an agent's route that now points at another server. No public API
+change.
+
 ### Added: an AMI event handler that is told when the caller ends the connection (#391)
 
 `IAmiConnection.Subscribe(Func<ManagerEvent, CancellationToken, ValueTask>)` registers an event handler that receives a
