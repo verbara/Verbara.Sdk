@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: the session engine warns when two servers report the same channel id (#403)
+
+`CallSessionManager` keeps one channel-id index and one `linkedid` index for every server attached to it, and Asterisk
+channel ids are unique across servers only when each Asterisk has its own `systemname`. Without one, two servers issue
+the same ids in the same second and their calls are correlated together with nothing logged: measured on two Asterisk
+servers, 200 simultaneous calls opened 101–107 sessions. When a channel arrives from one server with a channel id or
+`linkedid` that the indexes already hold for a call of another server, the session engine now logs one Warning per
+pair of servers for the life of the process. The Warning names both server ids and the shared id, and tells you to
+give every Asterisk its own `systemname` in `asterisk.conf` or, if both server ids watch the same Asterisk, to attach
+it once. Later collisions between the same two servers are logged at Debug. Nothing else changes: which session a
+channel joins, how calls end, the events published and the public API stay as they were. See
+[troubleshooting](docs/guides/troubleshooting.md#multi-server-pools).
+
 ### Changed — BREAKING: a multi-server host runs the reconciliation sweep for every server of the pool (#402)
 
 `AddVerbaraSessionsMultiServer` and `AddVerbaraSessionsMultiServerBuilder` registered no sweep, so on a multi-server
