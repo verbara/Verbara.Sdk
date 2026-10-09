@@ -107,6 +107,18 @@ await pool.AddServerAsync("pbx-west", new AmiConnectionOptions
 
 `AddVerbaraMultiServer` also registers a health check named `verbara-pool`, with no tags, once however often it is called. It reads every server's AMI connection when it runs: `Healthy` when every server is connected or the pool holds none, `Unhealthy` when every server's connection has ended (`Disconnecting` or `Disconnected`), and `Degraded` otherwise; its data maps each server id to its connection's state. An unfiltered `/health` endpoint includes it, so point a liveness probe at an endpoint filtered by tag ([migration guide](../../docs/guides/ami-connection-state-and-health-migration.md)).
 
+For call sessions, `AddVerbaraSessionsMultiServer` registers the session engine and a reconciliation sweep for every server of the pool. It attaches no server: attach each one under its id in the pool, and detach it when it leaves.
+
+```csharp
+builder.Services.AddVerbaraMultiServer();
+builder.Services.AddVerbaraSessionsMultiServer();
+// ...
+var server = await pool.AddServerAsync("pbx-east", options);
+host.Services.GetRequiredService<ICallSessionManager>().AttachToServer(server, "pbx-east");
+```
+
+On each `SessionOptions.ReconciliationInterval` tick (30 s by default) the sweep verifies, for each server, the held calls attached under its id against one `Status` of that server, and ends a call whose hangup was lost as a reload ends it; one server's failure never stops the others. `o => o.ReconciliationInterval = Timeout.InfiniteTimeSpan` in the `configure` delegate switches it off. Give every Asterisk of the pool its own `systemname`, so no two servers issue the same channel ids. See [the migration guide](../../docs/guides/call-session-ending-migration.md#the-sweep-on-a-multi-server-host-280).
+
 See `Examples/MultiServerExample/` for a full federation walkthrough.
 
 ## Native AOT

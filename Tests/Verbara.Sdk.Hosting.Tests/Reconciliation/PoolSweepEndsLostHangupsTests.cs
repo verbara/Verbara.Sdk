@@ -125,4 +125,23 @@ public sealed class PoolSweepEndsLostHangupsTests : IAsyncLifetime
             "a session whose server the pool does not hold is neither verified nor ended, and the tick reports it. "
             + $"Measured: {_rig.Describe()}");
     }
+
+    [Fact]
+    public async Task PoolSweepAndAnOwnLoop_ShouldSendTwoStatusAndEndALostHangupOnce_WhenTheHostKeptItsOwnReconciliation()
+    {
+        var a = _rig.AddServer("a");
+        var live = a.LostCall(_rig.Manager, "live");
+        var lost = a.LostCall(_rig.Manager, "lost");
+        a.AsteriskLists("live");
+        await _rig.StartAsync();
+
+        // One interval of a host that still runs the 2.7.0 loop of its own beside the pool sweep.
+        await _rig.TickAsync();
+        await a.Server.ReconcileChannelsAsync().AsTask().WaitAsync(SweepRig.Bound);
+
+        new { a.StatusRequests, Lost = EndingOf(lost), Live = SweepRig.Look(live).State }.Should().BeEquivalentTo(
+            new { StatusRequests = 2, Lost = EndedAsAReload, Live = CallSessionState.Connected },
+            "each reconciliation keeps its own read window: the server is asked twice per interval and the lost call "
+            + $"still ends once. Measured: {_rig.Describe()}");
+    }
 }
