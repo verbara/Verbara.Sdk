@@ -259,7 +259,9 @@ no public API is added or removed, but those calls now end.
    call by the channel ids Asterisk issues, and two servers without a system name issue the same ids
    (`<epoch>.<sequence>`) in the same second: a hangup on one server can then end a call of the other, and calls of
    both servers can share one session. That happens on every `Hangup`, with or without the sweep; the sweep neither
-   causes nor repairs it, and what it promises holds only where channel ids are unique across the pool.
+   causes nor repairs it, and what it promises holds only where channel ids are unique across the pool. The session
+   engine logs a Warning the first time two of its servers report the same id (see
+   [troubleshooting](troubleshooting.md#multi-server-pools)).
 4. **The AMI user of every server needs `Status`**: `system`, `call` or `reporting` in its `write` line (`write = all`
    includes them). A server whose user may not run it logs `[LIVE] Status refused: …` at Warning once per AMI session,
    and its lost hangups stay open, as on a single server.
