@@ -30,7 +30,7 @@ public sealed class PoolSweepRigTests : IAsyncLifetime
 
         new { a.StatusRequests, B = _rig["b"].StatusRequests, call.State, Cause = call.Metadata.GetValueOrDefault("cause"), Endings = _rig.EndingsOf(call) }
             .Should().BeEquivalentTo(
-                new { StatusRequests = 1, B = 0, State = CallSessionState.Completed, Cause = (string?)"reload", Endings = 1 },
+                new { StatusRequests = 1, B = 0, State = CallSessionState.Completed, Cause = "reload", Endings = 1 },
                 "the rig counts each server's Status on its own and its servers end a gone call through the reload ending");
     }
 

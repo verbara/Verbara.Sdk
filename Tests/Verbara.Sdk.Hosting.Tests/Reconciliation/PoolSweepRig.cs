@@ -157,11 +157,8 @@ internal sealed class PoolSweepRig : IAsyncDisposable
     /// <summary>Starts every hosted service the registrations added, as a host starts them, with <paramref name="token"/>.</summary>
     public async Task StartAsync(CancellationToken token = default)
     {
-        foreach (var service in HostedServices)
+        foreach (var service in HostedServices.Where(s => s.GetType().Name != "HealthCheckPublisherHostedService"))
         {
-            if (service.GetType().Name == "HealthCheckPublisherHostedService")
-                continue;
-
             if (service is IHostedLifecycleService lifecycle)
                 await lifecycle.StartingAsync(token);
             await service.StartAsync(token);

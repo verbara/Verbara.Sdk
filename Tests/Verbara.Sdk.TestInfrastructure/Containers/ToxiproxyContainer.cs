@@ -17,6 +17,7 @@ public sealed class ToxiproxyContainer : IAsyncDisposable
     /// <summary>The container's address on the network it joined.</summary>
     public string NetworkAddress => _container.IpAddress;
 
+    /// <summary>A Toxiproxy container, not yet started, with its API and proxy ports published on random host ports.</summary>
     /// <param name="network">The network the container joins, when not the default bridge.</param>
     /// <param name="name">The container's name; Docker picks one when <see langword="null"/>.</param>
     public ToxiproxyContainer(INetwork? network = null, string? name = null)

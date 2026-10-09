@@ -46,6 +46,7 @@ internal sealed partial class PoolReconciliationService : IHostedService, IDispo
     private PeriodicTimer? _timer;
     private Task? _runningTask;
 
+    /// <summary>The pool sweep over <paramref name="pool"/>, built by the multi-server registrations' factory.</summary>
     /// <param name="manager">The session engine whose held calls are verified.</param>
     /// <param name="pool">The pool to walk; <see langword="null"/> when the host registered none.</param>
     /// <param name="excluded">The single DI server the single-server sweep verifies, or <see langword="null"/>.</param>

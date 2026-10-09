@@ -33,7 +33,7 @@ public sealed class PoolSweepLifetimeTests : IAsyncLifetime
 
         new { call.State, Cause = call.Metadata.GetValueOrDefault("cause"), Endings = _rig.EndingsOf(call) }
             .Should().BeEquivalentTo(
-                new { State = CallSessionState.Completed, Cause = (string?)"reload", Endings = 1 },
+                new { State = CallSessionState.Completed, Cause = "reload", Endings = 1 },
                 "the start token means only that the start was aborted; the loop runs on the service's own source. "
                 + $"Measured: {_rig.Describe()}");
     }
@@ -51,7 +51,7 @@ public sealed class PoolSweepLifetimeTests : IAsyncLifetime
         var secondDisposal = Record.Exception(((IDisposable)sweep).Dispose);
 
         new { stop, secondDisposal }.Should().BeEquivalentTo(
-            new { stop = (Exception?)null, secondDisposal = (Exception?)null },
+            new { stop = default(Exception), secondDisposal = default(Exception) },
             "a stop after the disposal cancels and awaits nothing it released, and a second disposal is ignored");
     }
 }

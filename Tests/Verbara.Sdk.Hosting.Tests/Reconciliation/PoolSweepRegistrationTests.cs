@@ -67,7 +67,7 @@ public sealed class PoolSweepRegistrationTests
         var stop = await Record.ExceptionAsync(() => rig.PoolSweep!.StopAsync(CancellationToken.None));
 
         new { start, stop, rig.Clock.TimersCreated }.Should().BeEquivalentTo(
-            new { start = (Exception?)null, stop = (Exception?)null, TimersCreated = 0 },
+            new { start = default(Exception), stop = default(Exception), TimersCreated = 0 },
             "without a pool there is nothing to walk: the sweep starts no timer and its start and stop complete");
     }
 
@@ -86,7 +86,7 @@ public sealed class PoolSweepRegistrationTests
         rig.Clock.Advance(PoolSweepRig.Interval);
 
         new { start, rig.Clock.TimersCreated, a.StatusRequests, Look = SweepRig.Look(call) }.Should().BeEquivalentTo(
-            new { start = (Exception?)null, TimersCreated = 0, StatusRequests = 0, Look = before },
+            new { start = default(Exception), TimersCreated = 0, StatusRequests = 0, Look = before },
             "an infinite interval switches the pool sweep off: no timer, nothing sent, no call changed");
     }
 
