@@ -21,6 +21,15 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     private readonly ConcurrentDictionary<string, CallSession> _byLinkedId = new();
     private readonly ConcurrentDictionary<string, CallSession> _byChannelId = new();
     private readonly ConcurrentDictionary<string, string> _bridgeToSession = new();
+
+    /// <summary>
+    /// The unordered server pairs already reported at Warning for sharing a channel id or a
+    /// <c>linkedid</c>, each pair ordered ordinally so <c>{a, b}</c> and <c>{b, a}</c> are one key. Its keys
+    /// are built only from server ids the host passed to <see cref="AttachToServer"/>, never from ids read
+    /// off the wire, so call traffic cannot grow it. It is never cleared: the Warning is once per pair for
+    /// the manager's life, and a server that comes back under the same id has the same cause.
+    /// </summary>
+    private readonly ConcurrentDictionary<(string Low, string High), byte> _warnedServerPairs = new();
     private readonly ConcurrentQueue<ReleaseEntry> _completedOrder = new();
 
     /// <summary>
@@ -320,6 +329,19 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         var linkedId = channel.LinkedId;
         if (string.IsNullOrEmpty(linkedId)) linkedId = channel.UniqueId;
 
+        // The indexes are shared by every attached server, so an id another server's call holds is a
+        // collision of the indexes. It is judged here, before this arrival writes the channel-id index,
+        // and again on the linkedid entry the loop below is about to join or replace; at most one entry
+        // per arrival. Only the held session's server decides it, never the spelling of the id, and
+        // nothing about where the leg goes changes.
+        var collisionReported = false;
+        if (_byChannelId.TryGetValue(channel.UniqueId, out var holder)
+            && !string.Equals(holder.ServerId, serverId, StringComparison.Ordinal))
+        {
+            ReportCrossServerCollision(serverId, holder.ServerId, ChannelIdKind, channel.UniqueId);
+            collisionReported = true;
+        }
+
         // The session this leg opens if it finds no live call to join. Built once, fully, before it can
         // be published, so whoever finds it through the linkedid index sees a complete session.
         var direction = _correlator.InferDirection(channel.Context, channel.Extension);
@@ -377,6 +399,12 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         {
             if (_byLinkedId.TryGetValue(linkedId, out var existing))
             {
+                if (!collisionReported && !string.Equals(existing.ServerId, serverId, StringComparison.Ordinal))
+                {
+                    ReportCrossServerCollision(serverId, existing.ServerId, LinkedIdKind, linkedId);
+                    collisionReported = true;
+                }
+
                 if (TryJoin(existing, channel))
                     return;
 
@@ -406,6 +434,42 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         _ = PersistAsync(session);
     }
+
+    private const string ChannelIdKind = "channel id";
+    private const string LinkedIdKind = "linkedid";
+
+    /// <summary>
+    /// Logs that <paramref name="serverId"/> reported <paramref name="id"/> while the session indexes hold
+    /// it for a call of <paramref name="otherServerId"/>: at Warning the first time this unordered pair of
+    /// servers collides, at Debug every time after. The lock-free look comes first because in a pool
+    /// whose Asterisk servers share an id space nearly every arrival collides, and an insert takes the
+    /// key's lock even when the key is already there; the insert alone decides the Warning, so two
+    /// servers colliding on two threads at once still log it once.
+    /// </summary>
+    private void ReportCrossServerCollision(string serverId, string otherServerId, string idKind, string id)
+    {
+        var pair = string.CompareOrdinal(serverId, otherServerId) < 0
+            ? (serverId, otherServerId)
+            : (otherServerId, serverId);
+
+        if (!_warnedServerPairs.ContainsKey(pair) && _warnedServerPairs.TryAdd(pair, 0))
+            LogCrossServerCollision(serverId, idKind, id, otherServerId);
+        else
+            LogCrossServerCollisionAgain(serverId, idKind, id, otherServerId);
+    }
+
+    [LoggerMessage(EventId = 1, EventName = nameof(LogCrossServerCollision), Level = LogLevel.Warning,
+        Message = "Server {ServerId} reported {IdKind} {Id}, which the session indexes already hold for a call of "
+            + "server {OtherServerId}. The session manager shares one index across servers, so calls of these two "
+            + "servers can be correlated together. Asterisk channel ids are unique across servers only when each "
+            + "Asterisk has its own 'systemname' in asterisk.conf; if both server ids watch the same Asterisk, "
+            + "attach it once. Later collisions between these two servers are logged at Debug")]
+    private partial void LogCrossServerCollision(string serverId, string idKind, string id, string otherServerId);
+
+    [LoggerMessage(EventId = 2, EventName = nameof(LogCrossServerCollisionAgain), Level = LogLevel.Debug,
+        Message = "Server {ServerId} reported {IdKind} {Id}, already held for a call of server {OtherServerId}; "
+            + "collision between these servers already reported at Warning")]
+    private partial void LogCrossServerCollisionAgain(string serverId, string idKind, string id, string otherServerId);
 
     /// <summary>
     /// Adds <paramref name="channel"/> to <paramref name="call"/> unless the call has ended, and answers
