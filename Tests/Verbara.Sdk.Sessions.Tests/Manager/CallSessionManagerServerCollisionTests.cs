@@ -119,7 +119,7 @@ public sealed class CallSessionManagerServerCollisionTests : IAsyncLifetime
             {
                 Level = LogLevel.Warning,
                 Servers = new object?[] { "a", "b" },
-                Id = (object?)"1700000000.1",
+                Id = "1700000000.1",
                 NamesSystemname = true,
                 NamesSecondCause = true,
             },
@@ -162,7 +162,7 @@ public sealed class CallSessionManagerServerCollisionTests : IAsyncLifetime
         var warnings = Collisions(CollisionEvent);
         warnings.Should().ContainSingle("a linkedid held for another server's call is a collision of the linkedid index");
         new { Id = warnings[0].State["Id"], Kind = warnings[0].State["IdKind"] }.Should().BeEquivalentTo(
-            new { Id = (object?)"L", Kind = (object?)"linkedid" },
+            new { Id = "L", Kind = "linkedid" },
             "the entry names the linkedid that collided, not the leg's own channel id, which no server held");
     }
 
@@ -305,7 +305,7 @@ public sealed class CallSessionManagerServerCollisionTests : IAsyncLifetime
             OwnServer = own.ServerId,
             OwnLegs = own.Participants.Select(p => p.UniqueId).ToArray(),
         }.Should().BeEquivalentTo(
-            new { Id = (object?)"X", Kind = (object?)"channel id", OwnServer = "b", OwnLegs = ExpectedOwnLegs },
+            new { Id = "X", Kind = "channel id", OwnServer = "b", OwnLegs = ExpectedOwnLegs },
             "the check judges what the index held before the arrival overwrote it, and the leg still opens its own call");
     }
 
@@ -332,7 +332,7 @@ public sealed class CallSessionManagerServerCollisionTests : IAsyncLifetime
             NewCall = replacement.SessionId != ended.SessionId,
             NewServer = replacement.ServerId,
         }.Should().BeEquivalentTo(
-            new { Id = (object?)"L", NewCall = true, NewServer = "b" },
+            new { Id = "L", NewCall = true, NewServer = "b" },
             "the entry names the linkedid, and the leg opens a call of its own exactly as before");
     }
 
