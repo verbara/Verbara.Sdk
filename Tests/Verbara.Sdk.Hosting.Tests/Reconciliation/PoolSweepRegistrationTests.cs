@@ -134,8 +134,10 @@ public sealed class PoolSweepRegistrationTests
         rig.Pool!.AddExistingServer("default", di.Server);
         var other = rig.AddServer("b");
         await rig.StartAsync();
+        // A call the DI server still lists stays a candidate for every sweep that looks at that server, so a second
+        // sweep over it would show as a second Status.
         var onDi = di.LostCall(rig.Manager, "on-di");
-        di.AsteriskLists();
+        di.AsteriskLists("on-di");
         var onOther = other.LostCall(rig.Manager, "on-other");
         other.AsteriskLists();
         var single = rig.HostedServices.OfType<SessionReconciliationService>().Single();
@@ -147,7 +149,7 @@ public sealed class PoolSweepRegistrationTests
             .Should().BeEquivalentTo(
                 new
                 {
-                    DiStatus = 1, OnDi = CallSessionState.Completed,
+                    DiStatus = 1, OnDi = CallSessionState.Connected,
                     OnOther = CallSessionState.Completed, OtherStatus = 1,
                 },
                 "the single DI server, also held by the pool, is verified by the single-server sweep only; the other "
