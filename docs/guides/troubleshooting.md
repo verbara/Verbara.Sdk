@@ -339,7 +339,7 @@ Open the resulting `.nettrace` in PerfView or Chromium `about:tracing`.
 
 ## Session Reconciliation Sweep
 
-The sweep `AddVerbaraSessions` registers checks the held calls against Asterisk's channel snapshot once a held call is older than `SessionOptions.DialingTimeout`, and ends a call whose channels Asterisk no longer reports. See [the migration guide](call-session-ending-migration.md#the-reconciliation-sweep-and-long-answered-calls) for what changed in 2.7.0.
+The sweep `AddVerbaraSessions` registers checks the held calls against Asterisk's channel snapshot once a held call is older than `SessionOptions.DialingTimeout`, and ends a call whose channels Asterisk no longer reports. `AddVerbaraSessionsMultiServer` registers the same sweep for every server of the pool, each server checked on its own. See [the migration guide](call-session-ending-migration.md#the-reconciliation-sweep-and-long-answered-calls) for what changed in 2.7.0, and [the sweep on a multi-server host](call-session-ending-migration.md#the-sweep-on-a-multi-server-host-280) for 2.8.0.
 
 **Calls end with no hangup cause and `Metadata["cause"] == "reload"`, outside any reconnect.** The sweep found their channels gone: their `Hangup` never reached the SDK, most often because the AMI user filters it out or because the event pump dropped it (`ami.events.dropped`). Each such call ends once, `Completed` if it was answered and `Failed` otherwise. If they are frequent, find out why the hangups are missing; the sweep is what ends those calls at all.
 
@@ -347,13 +347,16 @@ The sweep `AddVerbaraSessions` registers checks the held calls against Asterisk'
 - the server log for `[LIVE] Status refused: …` (Warning, once per AMI session): the AMI user may not run `Status`. Put `system`, `call` or `reporting` in its `write` line in `manager.conf` (`write = all` includes them);
 - the `verification` tag on the `session reconciliation` span: `skipped:not-connected` while the connection is down, `skipped:outcome-not-reported` when the server's `IAmiConnection` does not report how an action ended (`ReportsEventActionOutcome` is false: a connection of your own that does not forward it and the outcome overload), `skipped:load-in-flight` while a load of the same server runs (the next tick verifies);
 - `sessions.unverifiable` on the same span: a held call none of whose channels the channel table holds cannot be proved gone by a snapshot and is left alone;
-- the registration: `AddVerbaraSessionsMultiServer` registers no sweep. Call `VerbaraServer.ReconcileChannelsAsync()` per server on a schedule of your own.
+- on a multi-server host, the id the session engine was attached with: the pool sweep picks a server's candidates by its id in the pool, so attach each server with `AttachToServer(server, id)` under that id. A session of a server that left the pool is never verified; the tick's Debug line counts it as `serverless`.
 
-**The snapshots are too heavy for the PBX.** One `Status` per interval is sent whenever some held call is older than the dialing timeout; its size grows with the channels Asterisk holds (see [high-load-tuning.md](high-load-tuning.md#session-reconciliation)). Lengthen the interval:
-```json
-{ "Sessions": { "ReconciliationInterval": "00:01:00" } }
+**On a multi-server host, a server receives two `Status` per interval.** The host still runs a loop of its own over `pool.Servers` that calls `ReconcileChannelsAsync`, as the 2.7.0 documentation advised. Since 2.8.0 the registration runs that sweep: remove the loop, or switch the pool sweep off.
+
+**The snapshots are too heavy for the PBX.** One `Status` per interval is sent whenever some held call is older than the dialing timeout — on a multi-server host, to each server holding such a call; its size grows with the channels Asterisk holds (see [high-load-tuning.md](high-load-tuning.md#session-reconciliation)). Lengthen the interval in the registration's `configure` delegate:
+```csharp
+var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddVerbaraSessions(o => o.ReconciliationInterval = TimeSpan.FromMinutes(1));
 ```
-or switch the sweep off with `ReconciliationInterval = Timeout.InfiniteTimeSpan` — no timer, no snapshot; calls whose hangup was lost then stay held until a reconnect's reload. Any other interval of zero or less fails the host's start with `ArgumentOutOfRangeException`.
+or switch the sweep off with `ReconciliationInterval = Timeout.InfiniteTimeSpan` — no timer, no snapshot; calls whose hangup was lost then stay held until a reconnect's reload. Any other interval of zero or less fails the host's start with `ArgumentOutOfRangeException`. No SDK registration binds a `Sessions` configuration section: to set these from configuration, bind the section inside the delegate (`o => builder.Configuration.GetSection("Sessions").Bind(o)`, with `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` for Native AOT). There, `Timeout.InfiniteTimeSpan` is written `"-00:00:00.001"`.
 
 ---
 

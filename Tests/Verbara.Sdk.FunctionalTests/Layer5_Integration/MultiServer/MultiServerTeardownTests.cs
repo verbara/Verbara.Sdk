@@ -19,8 +19,9 @@ public sealed class MultiServerTeardownTests(ITestOutputHelper output)
         try
         {
             await lab.InitializeAsync();
+            await lab.StartAmiPathProxyAsync();
             output.WriteLine($"{lab.RunName}: A {lab.ServerAVersion}; B {lab.ServerBVersion}");
-            (await ContainersAsync(lab.RunName)).Should().HaveCount(3, "A, B and SIPp run under the run's name");
+            (await ContainersAsync(lab.RunName)).Should().HaveCount(4, "A, B, SIPp and the AMI proxy run under the run's name");
             (await NetworksAsync(lab.RunName)).Should().ContainSingle();
             Directory.Exists(lab.ConfigDirectory).Should().BeTrue();
         }

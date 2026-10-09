@@ -12,7 +12,8 @@ removed, but the state, the connected time and the talk time of three kinds of c
   the member's leg answers.
 
 The reconciliation sweep's treatment of long answered calls also changes in this release; see
-[the sweep](#the-reconciliation-sweep-and-long-answered-calls).
+[the sweep](#the-reconciliation-sweep-and-long-answered-calls). In 2.8.0 the multi-server registrations run that sweep
+for every server of the pool; see [the sweep on a multi-server host](#the-sweep-on-a-multi-server-host-280).
 
 Dialed calls, calls that were never answered, and queued calls a member took end exactly as before: same state,
 same cause, same domain events.
@@ -198,14 +199,17 @@ Each sweep is a `session reconciliation` span of the `Verbara.Sdk.Sessions` sour
 was lost then stay held until a reconnect's reload. Any other interval of zero or less fails the host's start with
 `ArgumentOutOfRangeException`, as before.
 
-A host that wants another bound, or that registers sessions with `AddVerbaraSessionsMultiServer` (which registers no
-sweep), can call the same reconciliation itself:
+A host that wants another bound can call the same reconciliation itself, on a schedule of its own:
 
 ```csharp
-// Every server of the pool, on a schedule of your own.
-foreach (var (_, server) in pool.Servers)
-    await server.ReconcileChannelsAsync(cancellationToken);
+// One server, on a schedule of your own.
+await server.ReconcileChannelsAsync(cancellationToken);
 ```
+
+Up to 2.7.x `AddVerbaraSessionsMultiServer` registered no sweep, and this guide showed a loop of your own over
+`pool.Servers`. Since 2.8.0 that registration runs the sweep for every server of the pool: a host that kept the loop
+sends two `Status` per server per tick. Remove the loop, or switch the pool sweep off; see
+[the sweep on a multi-server host](#the-sweep-on-a-multi-server-host-280).
 
 It requests only the channel snapshot, reconciles nothing when the snapshot did not complete (it throws
 `OperationCanceledException` or `AmiNotConnectedException`), and reconciles nothing, without throwing, when Asterisk
@@ -218,3 +222,107 @@ ended none of the 120 calls; each ended at its hangup with its own state and cau
 `Hangup`, it ended all 120, the talked and the IVR calls `Completed` with a talk time and the others `Failed`, all with
 `cause=reload`, and none was held past the retention. With the default timeouts, on 22.10.1, an IVR that lasts 100 s
 and a call that rings 160 s and talks 5 s ran to their hangups, 5 of 5 each.
+
+## The sweep on a multi-server host (2.8.0)
+
+`AddVerbaraSessionsMultiServer` and `AddVerbaraSessionsMultiServerBuilder` register the reconciliation sweep since
+2.8.0. Before, a multi-server host ran none: a call whose `Hangup` never reached the host (an AMI user whose event
+filter drops it, or an event pump that lost it, `ami.events.dropped`) stayed open for the life of the process, and a
+durable store listed it as active. Only a reconnect of that server cleared it. This is the release's breaking change:
+no public API is added or removed, but those calls now end.
+
+### What changes on a multi-server host
+
+- On each `ReconciliationInterval` tick (30 s by default) the sweep takes the servers `VerbaraServerPool` holds and runs,
+  for each one, the check a single-server host runs: the candidates are the held calls attached under that server's
+  id, older than `DialingTimeout` (60 s by default), holding a channel the server's table holds; when there is one, the
+  server receives one `Status`; a call whose channels the completed snapshot omits ends `Completed` if it was answered
+  and `Failed` otherwise, with no `HangupCause` and `Metadata["cause"] == "reload"`, once.
+- The servers are verified side by side. One whose verification throws or times out, or that was removed while the
+  tick held it, is logged and skipped for that tick — at Error with its id while it is still in the pool, at Debug once
+  it has left — and the others are verified. A server that is not connected is skipped (`skipped:not-connected`); the
+  reload after its reconnect ends its own lost calls.
+- A server added to the pool is walked from the next tick on; a server removed is not walked again.
+- Each server's pass is a `session reconciliation` span tagged `server.id`, beside the tags of
+  [the single-server sweep](#when-the-sweep-does-not-verify); each tick logs one Debug line,
+  `Pool reconciliation sweep: servers=<n> serverless=<m>`.
+- `GetServices<IHostedService>()` returns one more service. Calling the registration twice registers one sweep.
+
+### What you have to do on a multi-server host
+
+1. **Remove a loop of your own** over `pool.Servers` that calls `ReconcileChannelsAsync`, or switch the pool sweep off.
+   Both together are correct (each reconciliation keeps its own read window) but send two `Status` per server per tick.
+2. **Attach each server under its id in the pool**: `AttachToServer(server, id)` with the id you gave
+   `AddExistingServer` or `AddServerAsync`. The sweep picks a server's candidates by that id; a session attached under
+   any other id is never verified and is counted as `serverless`.
+3. **Give every Asterisk of the pool its own `systemname`** (`asterisk.conf`, `[options]`). The session engine finds a
+   call by the channel ids Asterisk issues, and two servers without a system name issue the same ids
+   (`<epoch>.<sequence>`) in the same second: a hangup on one server can then end a call of the other, and calls of
+   both servers can share one session. That happens on every `Hangup`, with or without the sweep; the sweep neither
+   causes nor repairs it, and what it promises holds only where channel ids are unique across the pool.
+4. **The AMI user of every server needs `Status`**: `system`, `call` or `reporting` in its `write` line (`write = all`
+   includes them). A server whose user may not run it logs `[LIVE] Status refused: …` at Warning once per AMI session,
+   and its lost hangups stay open, as on a single server.
+
+### Switching the pool sweep off
+
+The registration's `configure` delegate is the switch:
+
+```csharp
+builder.Services.AddVerbaraSessionsMultiServer(o => o.ReconciliationInterval = Timeout.InfiniteTimeSpan);
+```
+
+No timer is started and nothing is sent. No SDK registration binds a `Sessions` configuration section (`AddVerbara`
+binds only `Asterisk:Ami` and `Asterisk:Ari`). To drive the options from configuration, bind the section inside the
+delegate yourself:
+
+```csharp
+var sessions = builder.Configuration.GetSection("Sessions");
+builder.Services.AddVerbaraSessionsMultiServer(o => sessions.Bind(o));
+```
+
+For Native AOT, set `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` in the host's
+project, so the `Bind` call compiles to generated code instead of reflection. `Timeout.InfiniteTimeSpan` is minus one
+millisecond, which configuration writes as:
+
+```json
+{ "Sessions": { "ReconciliationInterval": "-00:00:00.001" } }
+```
+
+### What it costs
+
+One `Status` per server per tick on which that server holds a candidate. Its size grows with the channels that server
+holds; see [high-load-tuning.md](high-load-tuning.md#session-reconciliation) for one server's cost.
+
+### What you see
+
+- A call whose hangup was lost ends at the first tick after its server dropped it once it is older than
+  `DialingTimeout`, as on a single server: one `CallEndedEvent`, counted once in `sessions.completed` or
+  `sessions.failed`, saved to the store and released after `CompletedRetention`.
+- A held session that holds no channel the server's table holds (one restored from a store without participants, for
+  instance) is counted in `sessions.unverifiable` on every tick; it was invisible before.
+- On a host that registers both `AddVerbaraSessions` and a multi-server registration, the single DI server is verified
+  by the single-server sweep only, also when the pool holds it. The sessions that registration attaches (under the id
+  `default`) are counted as `serverless` on each tick unless the pool holds the DI server under `default`.
+
+### Measured on two servers
+
+On 2026-10-08, two Asterisk servers per version (20.20.1, 22.10.1, 23.4.1, each with its own `systemname`), a host
+built with `AddVerbaraMultiServer` + `AddVerbaraSessionsMultiServer`, servers joined by connect, start, add to the
+pool and attach, `DialingTimeout` 3 s, a 1 s interval; server A's AMI user filters out `Hangup`, server B's does not.
+Ten calls per shape (a call that rings 8 s and talks 5 s, one that only rings, an IVR answered with no dial for 8 s or
+100 s, a dial never answered, a call that rings 160 s and talks 5 s): before 2.8.0, A left 60 of 60 open on each
+version; with the pool sweep, 0 of 60, all ended `cause=reload` once, while B's 60 ended by their own hangups as
+before. With 100 simultaneous calls per server, A's 100 of 100 open became 0 (22.10.1, 23.4.1). Calls that crossed
+the trunk, a server added to the running host, and a server cut off the network for about 16 s while the other kept
+its lost hangups: every lost hangup ended once, no call Asterisk still had was ended, and no call ended twice.
+
+### A server that leaves the pool
+
+The sessions of a server that was detached and removed, or that came back as a new instance under the same id, stay
+held: the sweep neither verifies nor ends them, and counts them as `serverless` on every tick. The SDK cannot tell
+whether such a call is over. `DetachFromServer` is the same call when a cluster hands a node over to another instance,
+which restores those calls from a shared store and goes on following them, and when an operator removes a node; ending
+the sessions on detach would raise false `CallEndedEvent`s and write a false ending into a store another instance is
+reading, and ending them by their age would let the clock decide an ending, which the sweep never does. No public member
+ends a session by hand.

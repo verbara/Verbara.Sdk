@@ -1,7 +1,4 @@
-using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Server;
-using Verbara.Sdk.Sessions;
-using Verbara.Sdk.Sessions.Diagnostics;
 using Verbara.Sdk.Sessions.Manager;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -31,11 +28,10 @@ namespace Verbara.Sdk.Hosting;
 /// </remarks>
 internal sealed partial class SessionReconciliationService : IHostedService, IDisposable
 {
-    private readonly ICallSessionManager _manager;
     private readonly VerbaraServer _server;
     private readonly SessionOptions _options;
     private readonly ILogger<SessionReconciliationService> _logger;
-    private readonly TimeProvider _timeProvider;
+    private readonly ServerSweep _sweep;
     private PeriodicTimer? _timer;
     private Task? _runningTask;
     private CancellationTokenSource? _cts;
@@ -66,11 +62,10 @@ internal sealed partial class SessionReconciliationService : IHostedService, IDi
         ILogger<SessionReconciliationService> logger,
         TimeProvider timeProvider)
     {
-        _manager = manager;
         _server = server;
         _options = options.Value;
         _logger = logger;
-        _timeProvider = timeProvider;
+        _sweep = new ServerSweep(manager, _options, logger, timeProvider);
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -107,80 +102,11 @@ internal sealed partial class SessionReconciliationService : IHostedService, IDi
 
     /// <summary>
     /// One sweep: find the held calls old enough to verify and, when there is one and the verification can be
-    /// trusted, reconcile the server's channels once.
+    /// trusted, reconcile the server's channels once. The rules are <see cref="ServerSweep"/>'s, with every held call a
+    /// candidate.
     /// </summary>
-    internal async Task SweepAsync(CancellationToken cancellationToken)
-    {
-        using var activity = SessionActivitySource.StartReconciliation();
-        var now = _timeProvider.GetUtcNow();
-        var candidates = new List<CallSession>();
-        var unverifiable = 0;
-
-        var old = _manager.ActiveSessions.Where(session => now - session.CreatedAt > _options.DialingTimeout).ToArray();
-        foreach (var session in old)
-        {
-            if (HoldsAChannel(session))
-                candidates.Add(session);
-            else
-                unverifiable++;
-        }
-
-        var verification = SkipReason(candidates.Count) is { } reason ? $"skipped:{reason}" : "run";
-        activity?.SetTag("sessions.candidates", candidates.Count);
-        activity?.SetTag("sessions.unverifiable", unverifiable);
-        activity?.SetTag("verification", verification);
-
-        try
-        {
-            if (verification == "run")
-                await _server.ReconcileChannelsAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            // Counted however the verification ended: one that threw after it had ended some calls (a subscriber to
-            // an ending that threw) reports those.
-            var ended = candidates.Count(HasEnded);
-            activity?.SetTag("sessions.ended", ended);
-            LogSweepResult(candidates.Count, unverifiable, ended, verification);
-        }
-    }
-
-    /// <summary>Why this sweep does not verify, or <see langword="null"/> when it does.</summary>
-    private string? SkipReason(int candidates)
-    {
-        if (candidates == 0)
-            return "no-candidate";
-
-        var connection = _server.Connection;
-        if (!connection.ReportsEventActionOutcome)
-            return "outcome-not-reported";
-
-        if (connection.State != AmiConnectionState.Connected)
-            return "not-connected";
-
-        return _server.IsLoadInFlight ? "load-in-flight" : null;
-    }
-
-    /// <summary>Whether the server's channel table holds any of <paramref name="session"/>'s channels.</summary>
-    private bool HoldsAChannel(CallSession session)
-    {
-        string[] uniqueIds;
-        lock (session.SyncRoot)
-        {
-            uniqueIds = [.. session.Participants.Select(participant => participant.UniqueId)];
-        }
-
-        foreach (var uniqueId in uniqueIds)
-        {
-            if (_server.Channels.GetByUniqueId(uniqueId) is not null)
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool HasEnded(CallSession session) =>
-        session.State is CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut;
+    internal Task SweepAsync(CancellationToken cancellationToken) =>
+        _sweep.SweepAsync(_server, serverId: null, cancellationToken);
 
     /// <summary>
     /// Ends the loop and waits for it. A stop after disposal does nothing: it cancels and awaits nothing the disposal
@@ -239,10 +165,6 @@ internal sealed partial class SessionReconciliationService : IHostedService, IDi
         cts?.Dispose();
         _timer?.Dispose();
     }
-
-    [LoggerMessage(Level = LogLevel.Debug,
-        Message = "Reconciliation sweep: candidates={Candidates} unverifiable={Unverifiable} ended={Ended} verification={Verification}")]
-    private partial void LogSweepResult(int candidates, int unverifiable, int ended, string verification);
 
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "Reconciliation sweep switched off: the reconciliation interval is infinite")]

@@ -66,4 +66,32 @@ public sealed class HealthCheckRegistrationTests
         var names = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations.Select(r => r.Name);
         names.Should().BeEquivalentTo(["ami", "live", "agi"], "a single-server host's checks do not change");
     }
+
+    public enum SessionsTwice
+    {
+        MultiServerTwice,
+        SingleAndMultiServer,
+    }
+
+    [Theory]
+    [InlineData(SessionsTwice.MultiServerTwice)]
+    [InlineData(SessionsTwice.SingleAndMultiServer)]
+    public async Task SessionsRegistrations_ShouldRegisterOneSessionsCheck_WhenTheSessionEngineIsRegisteredTwice(
+        SessionsTwice registrations)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        if (registrations == SessionsTwice.SingleAndMultiServer)
+            services.AddVerbaraSessions();
+        else
+            services.AddVerbaraSessionsMultiServer();
+        services.AddVerbaraSessionsMultiServer();
+
+        await using var provider = services.BuildServiceProvider();
+        var run = async () => await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+
+        var report = (await run.Should().NotThrowAsync(
+            "a second sessions registration adds no second check under the same name")).Subject;
+        report.Entries.Keys.Should().Equal(["sessions"], "the sessions check is registered once");
+    }
 }

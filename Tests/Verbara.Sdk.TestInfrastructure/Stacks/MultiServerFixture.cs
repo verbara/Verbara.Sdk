@@ -25,7 +25,7 @@ namespace Verbara.Sdk.TestInfrastructure.Stacks;
 /// temporary path with the same name, readable by its owner only where the platform supports it.
 /// </para>
 /// <para>
-/// <b>Teardown.</b> <see cref="DisposeAsync"/> removes SIPp, B, A, the network and the configuration directory, each
+/// <b>Teardown.</b> <see cref="DisposeAsync"/> removes the AMI proxy when one was started, SIPp, B, A, the network and the configuration directory, each
 /// on its own so a failure to remove one does not leak the rest, and does nothing the second time. A failed
 /// <see cref="InitializeAsync"/> removes what it created before it rethrows, whether or not the caller disposes the
 /// fixture afterwards. Neither depends on the test process's resource reaper.
@@ -38,6 +38,12 @@ public sealed class MultiServerFixture : IAsyncLifetime
 
     /// <summary>A's dialplan context for calls the tests originate.</summary>
     public const string LabContext = "lab";
+
+    /// <summary>Server A's <c>systemname</c>: every id A issues starts with it and a dash.</summary>
+    public const string SystemNameA = "a";
+
+    /// <summary>Server B's <c>systemname</c>: every id B issues starts with it and a dash.</summary>
+    public const string SystemNameB = "b";
 
     private static readonly TimeSpan BootBound = TimeSpan.FromSeconds(90);
 
@@ -54,6 +60,8 @@ public sealed class MultiServerFixture : IAsyncLifetime
     private AsteriskContainer? ServerB { get; set; }
 
     private SippContainer? SippContainerOfRun { get; set; }
+
+    private ToxiproxyContainer? AmiProxyContainer { get; set; }
 
     /// <summary>A fixture with a run name and secrets of its own; nothing is created before <see cref="InitializeAsync"/>.</summary>
     /// <param name="beforeServerBStarts">
@@ -89,6 +97,28 @@ public sealed class MultiServerFixture : IAsyncLifetime
 
     /// <summary>The SIPp container, on the run's network.</summary>
     public SippContainer Sipp => SippContainerOfRun ?? throw NotStarted();
+
+    /// <summary>
+    /// Starts a Toxiproxy hop named <c>{RunName}-proxy</c> on the run's network in front of server A's AMI port
+    /// (<c>server-a:5038</c>), so a test can cut and restore a host's AMI path to A while A keeps its address. The
+    /// fixture's disposal removes it with the rest; a second call returns the same hop.
+    /// </summary>
+    public async Task<AmiPathProxy> StartAmiPathProxyAsync(CancellationToken cancellationToken = default)
+    {
+        if (AmiProxy is not null)
+            return AmiProxy;
+
+        AmiProxyContainer = new ToxiproxyContainer(Network ?? throw NotStarted(), RunName + "-proxy");
+        await AmiProxyContainer.StartAsync(cancellationToken).ConfigureAwait(false);
+        var proxy = new AmiPathProxy(AmiProxyContainer);
+        await proxy.CreateAsync("server-a:" + MultiServerAmiUsers.AmiPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            cancellationToken).ConfigureAwait(false);
+        AmiProxy = proxy;
+        return proxy;
+    }
+
+    /// <summary>The hop <see cref="StartAmiPathProxyAsync"/> started, or <see langword="null"/>.</summary>
+    public AmiPathProxy? AmiProxy { get; private set; }
 
     /// <summary>The run's secret for <paramref name="user"/> on server A.</summary>
     public string SecretA(AmiUserClass user) => _secretsA[(user ?? throw new ArgumentNullException(nameof(user))).Name];
@@ -144,10 +174,18 @@ public sealed class MultiServerFixture : IAsyncLifetime
         }
     }
 
-    /// <summary>Removes SIPp, B, A, the network and the configuration directory; a second call does nothing.</summary>
+    /// <summary>
+    /// Removes the AMI proxy, SIPp, B, A, the network and the configuration directory; a second call does nothing.
+    /// </summary>
     public async Task DisposeAsync()
     {
         var failures = new List<Exception>();
+
+        var proxy = AmiProxyContainer;
+        AmiProxyContainer = null;
+        AmiProxy = null;
+        if (proxy is not null)
+            failures.AddRange(await TryAsync(() => proxy.DisposeAsync().AsTask()).ConfigureAwait(false));
 
         var sipp = SippContainerOfRun;
         SippContainerOfRun = null;

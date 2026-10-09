@@ -208,6 +208,28 @@ await bus.PublishAsync(sample);
     }
 }
 
+// Exercise the multi-server sessions registration: its pool sweep is a hosted service built by an explicit factory, and
+// only resolving and starting it brings that factory and the sweep's loop into ILC's analysis.
+{
+    var poolServices = new ServiceCollection();
+    poolServices.AddLogging();
+    poolServices.AddVerbaraMultiServer();
+    poolServices.AddVerbaraSessionsMultiServer();
+    await using var poolProvider = poolServices.BuildServiceProvider();
+    var hosted = poolProvider.GetServices<Microsoft.Extensions.Hosting.IHostedService>().ToList();
+    foreach (var service in hosted)
+        await service.StartAsync(CancellationToken.None);
+    foreach (var service in hosted)
+        await service.StopAsync(CancellationToken.None);
+    var names = string.Join(",", hosted.Select(service => service.GetType().Name).Order(StringComparer.Ordinal));
+    Console.WriteLine($"AddVerbaraSessionsMultiServer: hosted={names}");
+    if (!names.Contains("PoolReconciliationService", StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine("AOT canary: AddVerbaraSessionsMultiServer registered no pool sweep.");
+        return 1;
+    }
+}
+
 
 
 // v2.2.0+ Data.Npgsql + Cluster.Postgres force-load (Platform/ADR-0022 Phase D + Phase A.5).

@@ -5,10 +5,12 @@ namespace Verbara.Sdk.Sessions.Manager;
 public sealed class SessionOptions
 {
     /// <summary>
-    /// How often the reconciliation sweep that <c>AddVerbaraSessions</c> registers runs. At each run, when a held
+    /// How often the reconciliation sweep runs: the one <c>AddVerbaraSessions</c> registers for the single server, and
+    /// the one <c>AddVerbaraSessionsMultiServer</c> registers for every server of the pool. At each run, when a held
     /// call is older than <see cref="DialingTimeout"/>, the sweep checks the held calls once against the channels
-    /// Asterisk reports. <see cref="Timeout.InfiniteTimeSpan"/> switches the sweep off: no timer is started and
-    /// nothing is sent. Any other value of zero or less fails the host's start with
+    /// Asterisk reports — on a pool, once per server that holds such a call, against that server's channels.
+    /// <see cref="Timeout.InfiniteTimeSpan"/> switches the sweep off: no timer is started and nothing is sent; in
+    /// configuration it is written <c>-00:00:00.001</c>. Any other value of zero or less fails the host's start with
     /// <see cref="ArgumentOutOfRangeException"/>. Default: 30 seconds.
     /// </summary>
     public TimeSpan ReconciliationInterval { get; set; } = TimeSpan.FromSeconds(30);

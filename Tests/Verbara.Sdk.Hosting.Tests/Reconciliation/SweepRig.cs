@@ -260,7 +260,7 @@ internal sealed class SweepRig : IAsyncDisposable
     }
 
     /// <summary>The backing field of the init-only <see cref="CallSession.CreatedAt"/>.</summary>
-    private static readonly FieldInfo CreatedAtField =
+    internal static readonly FieldInfo CreatedAtField =
         typeof(CallSession).GetField("<CreatedAt>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("CallSession.CreatedAt has no auto-property backing field.");
 

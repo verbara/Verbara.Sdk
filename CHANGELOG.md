@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: a multi-server host runs the reconciliation sweep for every server of the pool (#402)
+
+`AddVerbaraSessionsMultiServer` and `AddVerbaraSessionsMultiServerBuilder` registered no sweep, so on a multi-server
+host a call whose `Hangup` never reached the host — an AMI user whose event filter drops `Hangup`, or events lost by a
+full pump — stayed active for the life of the process: measured on two Asterisk servers, 60 of 60 such calls per
+version, and 100 of 100 under 100 simultaneous calls. Both registrations now register, on by default, the sweep a
+single-server host already runs, applied to every server of `VerbaraServerPool` on its own: on each
+`SessionOptions.ReconciliationInterval` tick (30 s by default), the held calls attached under a server's pool id and
+older than `DialingTimeout` (60 s by default) are checked against one `Status` of that server, and a call whose
+channels Asterisk no longer reports ends once, with `Metadata["cause"] == "reload"`, the same ending the single-server
+sweep gives; `CallEndedEvent` and a durable store see it. Calls Asterisk still reports are never ended, and one
+server's failure or disconnection does not stop the others. What a host that did nothing observes: those calls now
+end; a server whose held calls include a candidate receives one `Status` per tick (its AMI user needs `system`, `call`
+or `reporting` write access, as on a single server); and `GetServices<IHostedService>()` returns one more service.
+Sessions of a server that left the pool are not ended; the sweep reports them as unverifiable. Switch the sweep off
+with `AddVerbaraSessionsMultiServer(o => o.ReconciliationInterval = Timeout.InfiniteTimeSpan)`. A host that kept its own
+loop calling `ReconcileChannelsAsync` over `pool.Servers`, as the earlier documentation advised, should remove it; with
+both, each server receives two `Status` per tick. Give every Asterisk of a pool its own `systemname`: two servers
+without one issue the same channel ids, which mixes their calls on every `Hangup`, with or without the sweep. See
+[the sweep on a multi-server host](docs/guides/call-session-ending-migration.md#the-sweep-on-a-multi-server-host-280).
+
+### Fixed: registering the session engine twice no longer breaks the health checks (#402)
+
+Registering the session engine twice — for example `AddVerbaraSessions` together with `AddVerbaraSessionsMultiServer`
+— made every health-check run throw "Duplicate health checks were registered with the name(s): sessions". The
+`sessions` health check is now registered once.
+
 ### Fixed: a multi-server pool releases what it started when an add, a removal or its disposal fails (#398)
 
 `VerbaraServerPool.AddServerAsync` called with an id already in the pool no longer logs in to Asterisk first: the id

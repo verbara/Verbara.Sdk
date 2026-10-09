@@ -57,8 +57,9 @@ await server.ReconcileChannelsAsync(cancellationToken);
 - Each run is traced as a `live channel-reconcile` activity, tagged `live.channels` and, on a refusal,
   `live.status.refused`, and logged at Debug. It is not reported as a state load.
 
-The session engine's reconciliation sweep (`AddVerbaraSessions`) calls it. A host can also call it on a schedule of its
-own: for each server of a multi-server host, for instance, since `AddVerbaraSessionsMultiServer` registers no sweep.
+The session engine's reconciliation sweep calls it: `AddVerbaraSessions` for the single server, and
+`AddVerbaraSessionsMultiServer` for every server of the pool. A host can also call it on a schedule of its own; on a
+multi-server host, switch the pool sweep off first, or each server receives two `Status` per interval.
 
 ## Documentation
 

@@ -14,7 +14,13 @@ public sealed class ToxiproxyContainer : IAsyncDisposable
     public int ProxyPort => _container.GetMappedPublicPort(15038);
     public string ContainerName => _container.Name;
 
-    public ToxiproxyContainer(INetwork? network = null)
+    /// <summary>The container's address on the network it joined.</summary>
+    public string NetworkAddress => _container.IpAddress;
+
+    /// <summary>A Toxiproxy container, not yet started, with its API and proxy ports published on random host ports.</summary>
+    /// <param name="network">The network the container joins, when not the default bridge.</param>
+    /// <param name="name">The container's name; Docker picks one when <see langword="null"/>.</param>
+    public ToxiproxyContainer(INetwork? network = null, string? name = null)
     {
         var builder = new ContainerBuilder("ghcr.io/shopify/toxiproxy:2.12.0")
             .WithPortBinding(8474, true)
@@ -35,6 +41,9 @@ public sealed class ToxiproxyContainer : IAsyncDisposable
 
         if (network is not null)
             builder = builder.WithNetwork(network);
+
+        if (name is not null)
+            builder = builder.WithName(name);
 
         _container = builder.Build();
     }

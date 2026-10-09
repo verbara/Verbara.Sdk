@@ -17,6 +17,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Verbara.Sdk.Hosting;
@@ -204,6 +205,7 @@ public static class ServiceCollectionExtensions
         AddSessionsCore(services, configure);
         services.AddSingleton<IHostedService, SessionManagerHostedService>();
         services.AddSingleton<IHostedService, SessionReconciliationService>();
+        services.TryAddSingleton(SingleServerSweepRegistration.Instance);
         return services;
     }
 
@@ -222,34 +224,85 @@ public static class ServiceCollectionExtensions
         AddSessionsCore(services, configure);
         services.AddSingleton<IHostedService, SessionManagerHostedService>();
         services.AddSingleton<IHostedService, SessionReconciliationService>();
+        services.TryAddSingleton(SingleServerSweepRegistration.Instance);
         return new SessionsBuilder(services);
     }
 
     /// <summary>
-    /// Add session engine services for multi-server deployments using <see cref="VerbaraServerPool"/>.
-    /// Does NOT register a hosted service — manual server attachment via
-    /// <see cref="CallSessionManager.AttachToServer"/> / <see cref="CallSessionManager.DetachFromServer"/> is required.
-    /// Call after <see cref="AddVerbaraMultiServer"/> for clustered deployments.
+    /// Add session engine services for multi-server deployments using <see cref="VerbaraServerPool"/>, and the
+    /// reconciliation sweep of the pool. Call after <see cref="AddVerbaraMultiServer"/> for clustered deployments.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Servers are not attached for you: attach each one with <see cref="CallSessionManager.AttachToServer"/> under
+    /// the id it has in the pool, and detach it with <see cref="CallSessionManager.DetachFromServer"/>.
+    /// </para>
+    /// <para>
+    /// The sweep is a hosted service. On each <see cref="SessionOptions.ReconciliationInterval"/> tick (default 30
+    /// seconds) it walks the servers the pool holds and, for each one, verifies the held calls attached under that
+    /// server's id that are older than <see cref="SessionOptions.DialingTimeout"/> against one <c>Status</c> of that
+    /// server, sent only when there is such a call. A call whose channels the completed snapshot omits ends as a reload
+    /// ends it (<c>cause=reload</c>, no hangup cause); a call Asterisk still lists is left alone. A server whose
+    /// verification fails is logged and skipped for that tick; the other servers are verified. A held call whose
+    /// server is not in the pool is left alone. <see cref="Timeout.InfiniteTimeSpan"/> switches the sweep off
+    /// (<c>configure: o =&gt; o.ReconciliationInterval = Timeout.InfiniteTimeSpan</c>); any other interval of zero or
+    /// less fails the host's start with <see cref="ArgumentOutOfRangeException"/>. Calling this method more than once
+    /// registers one sweep; on a host that also calls <see cref="AddVerbaraSessions"/>, the single DI server is left to
+    /// that registration's sweep.
+    /// </para>
+    /// <para>
+    /// The sessions are found by the channel ids Asterisk issues, so the servers of a pool must not issue the same ids:
+    /// give every Asterisk of the pool its own <c>systemname</c>.
+    /// </para>
+    /// </remarks>
     public static IServiceCollection AddVerbaraSessionsMultiServer(
         this IServiceCollection services,
         Action<SessionOptions>? configure = null)
     {
-        return AddSessionsCore(services, configure);
+        AddSessionsCore(services, configure);
+        AddPoolSweep(services);
+        return services;
     }
 
     /// <summary>
-    /// Add session engine services for multi-server deployments and return an
-    /// <see cref="ISessionsBuilder"/> so backend packages can register themselves
-    /// fluently. Behaves identically to <see cref="AddVerbaraSessionsMultiServer"/>
-    /// otherwise.
+    /// Add session engine services for multi-server deployments, and the reconciliation sweep of the pool, and return an
+    /// <see cref="ISessionsBuilder"/> so backend packages can register themselves fluently. Behaves identically to
+    /// <see cref="AddVerbaraSessionsMultiServer"/> otherwise, sweep included.
     /// </summary>
     public static ISessionsBuilder AddVerbaraSessionsMultiServerBuilder(
         this IServiceCollection services,
         Action<SessionOptions>? configure = null)
     {
         AddSessionsCore(services, configure);
+        AddPoolSweep(services);
         return new SessionsBuilder(services);
+    }
+
+    /// <summary>
+    /// Registers the pool's reconciliation sweep once, however many multi-server registrations call it, through an
+    /// explicit factory (no constructor reflection).
+    /// </summary>
+    private static void AddPoolSweep(IServiceCollection services) =>
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, PoolReconciliationService>(sp =>
+            new PoolReconciliationService(
+                sp.GetRequiredService<ICallSessionManager>(),
+                sp.GetService<VerbaraServerPool>(),
+                sp.GetService<SingleServerSweepRegistration>() is null ? null : sp.GetService<VerbaraServer>(),
+                sp.GetRequiredService<IOptions<SessionOptions>>(),
+                sp.GetRequiredService<ILogger<PoolReconciliationService>>(),
+                sp.GetService<TimeProvider>() ?? TimeProvider.System)));
+
+    /// <summary>
+    /// Registered by the single-server sessions registrations: tells the pool sweep that the single DI server is
+    /// verified by the single-server sweep.
+    /// </summary>
+    internal sealed class SingleServerSweepRegistration
+    {
+        public static readonly SingleServerSweepRegistration Instance = new();
+
+        private SingleServerSweepRegistration()
+        {
+        }
     }
 
     private static IServiceCollection AddSessionsCore(
@@ -270,8 +323,24 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IValidateOptions<SessionOptions>, SessionOptionsValidator>();
         services.AddOptions<SessionOptions>().ValidateOnStart();
-        services.AddHealthChecks()
-            .AddCheck<Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck>("sessions");
+        // Guarded, not a plain AddCheck: a host may call more than one sessions registration (the single-server and the
+        // multi-server one, or one of them twice), and a second registration under the same name makes
+        // HealthCheckService throw "Duplicate health checks were registered" on resolve.
+        services.AddHealthChecks();
+        services.Configure<HealthCheckServiceOptions>(options =>
+        {
+            foreach (var registration in options.Registrations)
+            {
+                if (string.Equals(registration.Name, SessionsHealthCheckName, StringComparison.Ordinal))
+                    return;
+            }
+
+            options.Registrations.Add(new HealthCheckRegistration(
+                SessionsHealthCheckName,
+                sp => new Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck(sp.GetRequiredService<ICallSessionManager>()),
+                failureStatus: null,
+                tags: null));
+        });
         return services;
     }
 
@@ -311,6 +380,9 @@ public static class ServiceCollectionExtensions
         });
         return services;
     }
+
+    /// <summary>The name every sessions registration registers the session engine's health check under, once.</summary>
+    private const string SessionsHealthCheckName = "sessions";
 
     /// <summary>The name <see cref="AddVerbaraMultiServer"/> registers the pool health check under.</summary>
     private const string ServerPoolHealthCheckName = "verbara-pool";
