@@ -353,6 +353,7 @@ The sweep `AddVerbaraSessions` registers checks the held calls against Asterisk'
 
 **The snapshots are too heavy for the PBX.** One `Status` per interval is sent whenever some held call is older than the dialing timeout — on a multi-server host, to each server holding such a call; its size grows with the channels Asterisk holds (see [high-load-tuning.md](high-load-tuning.md#session-reconciliation)). Lengthen the interval in the registration's `configure` delegate:
 ```csharp
+var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddVerbaraSessions(o => o.ReconciliationInterval = TimeSpan.FromMinutes(1));
 ```
 or switch the sweep off with `ReconciliationInterval = Timeout.InfiniteTimeSpan` — no timer, no snapshot; calls whose hangup was lost then stay held until a reconnect's reload. Any other interval of zero or less fails the host's start with `ArgumentOutOfRangeException`. No SDK registration binds a `Sessions` configuration section: to set these from configuration, bind the section inside the delegate (`o => builder.Configuration.GetSection("Sessions").Bind(o)`, with `<EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>` for Native AOT). There, `Timeout.InfiniteTimeSpan` is written `"-00:00:00.001"`.

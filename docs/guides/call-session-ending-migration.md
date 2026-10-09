@@ -305,6 +305,18 @@ holds; see [high-load-tuning.md](high-load-tuning.md#session-reconciliation) for
   by the single-server sweep only, also when the pool holds it. The sessions that registration attaches (under the id
   `default`) are counted as `serverless` on each tick unless the pool holds the DI server under `default`.
 
+### Measured on two servers
+
+On 2026-10-08, two Asterisk servers per version (20.20.1, 22.10.1, 23.4.1, each with its own `systemname`), a host
+built with `AddVerbaraMultiServer` + `AddVerbaraSessionsMultiServer`, servers joined by connect, start, add to the
+pool and attach, `DialingTimeout` 3 s, a 1 s interval; server A's AMI user filters out `Hangup`, server B's does not.
+Ten calls per shape (a call that rings 8 s and talks 5 s, one that only rings, an IVR answered with no dial for 8 s or
+100 s, a dial never answered, a call that rings 160 s and talks 5 s): before 2.8.0, A left 60 of 60 open on each
+version; with the pool sweep, 0 of 60, all ended `cause=reload` once, while B's 60 ended by their own hangups as
+before. With 100 simultaneous calls per server, A's 100 of 100 open became 0 (22.10.1, 23.4.1). Calls that crossed
+the trunk, a server added to the running host, and a server cut off the network for about 16 s while the other kept
+its lost hangups: every lost hangup ended once, no call Asterisk still had was ended, and no call ended twice.
+
 ### A server that leaves the pool
 
 The sessions of a server that was detached and removed, or that came back as a new instance under the same id, stay
