@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed: a public member added to a shipped package fails the build unless its record declares it (#N)
+### Changed: a public member added to a shipped package fails the build unless its record declares it (#406)
 
 The undeclared-public-API diagnostic (`RS0016`) was in the shared `NoWarn` list, which overrides the `.editorconfig`
 severity a comment said controlled it, and the source-generator package never ran the analyzer: a public member
