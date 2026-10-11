@@ -36,7 +36,8 @@ public sealed class GoogleSpeechRecognizer : SpeechRecognizer
     /// <param name="http">Client the test owns and disposes.</param>
     /// <param name="fakeOrigin">
     /// Scheme, host and port of an in-process test server — the IPv4 loopback literal, never
-    /// <c>localhost</c> (ADR-0044). Only the <em>origin</em> is substituted: <see cref="RecognizePath"/>
+    /// <c>localhost</c>, which resolves to <c>::1</c> first and can reach another listener on the
+    /// same port number. Only the <em>origin</em> is substituted: <see cref="RecognizePath"/>
     /// and the <c>key</c> query parameter are still appended by this class, so a test server matching
     /// strictly on path and query is asserting the request this provider really builds rather than
     /// one the test handed it.

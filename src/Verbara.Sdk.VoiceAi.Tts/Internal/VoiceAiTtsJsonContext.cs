@@ -38,7 +38,7 @@ internal sealed class ElevenLabsAudioOutput
     /// <summary>
     /// The vendor's symbolic failure code — <c>invalid_api_key</c> and the like. Present only on a
     /// failure frame, which carries no <c>audio</c> member and was therefore dropped as
-    /// "carries no audio" until ADR-0050.
+    /// "carries no audio" until the receive loop was made to report a failure frame to the caller.
     /// </summary>
     [JsonPropertyName("error")] public string? Error { get; set; }
 

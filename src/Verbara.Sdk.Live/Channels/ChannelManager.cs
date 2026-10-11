@@ -709,7 +709,9 @@ public sealed class AsteriskChannel : LiveObjectBase
     /// <see cref="ChannelManager.ChannelRemoved"/> subscriber MUST treat the cause as unknown and
     /// MUST NOT read the default <c>HangupCause.NotDefined</c> — cause zero — as an abnormal
     /// ending. Internal on purpose: this change adds no public API, and the consumer-visible
-    /// marker belongs to the session the removal ends (<c>ADR-0062</c>, design D3).
+    /// marker belongs to the session the removal ends. The cause stays unset because cause zero is
+    /// not neutral downstream: a classifier would read every call lost across a reconnect as an
+    /// abnormal hangup.
     /// </para>
     /// </summary>
     internal bool RemovedByReload { get; private set; }
@@ -719,7 +721,7 @@ public sealed class AsteriskChannel : LiveObjectBase
     /// <see cref="ChannelManager"/>'s admission counter reached when this channel was admitted.
     /// Monotonic and assigned once, so a stamp greater than a mark captured before a reload's
     /// snapshot was requested means the snapshot is older than the channel and says nothing about
-    /// it (<c>ADR-0062</c>, design D6).
+    /// it, so a reload never ends a call that arrived after its snapshot was taken.
     /// <para>
     /// A counter and not a timestamp on purpose: <see cref="CreatedAt"/> is
     /// <c>DateTimeOffset.UtcNow</c> at construction and is not injectable, so two admissions
@@ -743,7 +745,8 @@ public sealed class AsteriskChannel : LiveObjectBase
     /// start, so <see cref="State"/> is the only account of it that will ever arrive and no
     /// <c>NewState</c> announcing it is coming. A subscriber opening a record for the channel reads
     /// this as positive evidence that the history behind that state was never seen, instead of
-    /// inferring it from a missing event (<c>ADR-0062</c>, design D5).
+    /// inferring it from a missing event, so a call the reload reports as live is not described as
+    /// newly created.
     /// </para>
     /// <para>
     /// Internal on purpose: this change adds no public API, and the consumer-visible marker belongs

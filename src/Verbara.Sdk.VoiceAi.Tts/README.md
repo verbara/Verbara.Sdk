@@ -18,7 +18,7 @@ Text-to-speech providers for [Verbara.Sdk.VoiceAi](https://www.nuget.org/package
 [^dg]: [Deepgram — Introducing Aura-2](https://deepgram.com/learn/introducing-aura-2-enterprise-text-to-speech) and [Text to Speech Latency](https://developers.deepgram.com/docs/text-to-speech-latency), both accessed 2026-09-20.
 
 Every figure above is the **vendor's own published number**, cited and dated, never a measurement of this
-SDK (ADR-0042 D8 as amended). A dash means the vendor publishes nothing we could cite — not that the
+SDK: a figure this repository cannot measure is attributed to its source, or left out. A dash means the vendor publishes nothing we could cite — not that the
 provider is slow. None of these are comparable to each other: they measure different things (model
 inference, time-to-first-audio, time-to-first-byte) under conditions each vendor chose.
 
@@ -98,7 +98,7 @@ services.AddAzureTtsSpeechSynthesizer(o => { ... });
 
 ## Native AOT
 
-All HTTP/WebSocket clients hand-rolled with `HttpClient` / `ClientWebSocket`. JSON serialization via source-generated `JsonSerializerContext` (`VoiceAiTtsJsonContext`). 0 trim warnings. No vendor SDKs by design (ADR-0014).
+All HTTP/WebSocket clients hand-rolled with `HttpClient` / `ClientWebSocket`. JSON serialization via source-generated `JsonSerializerContext` (`VoiceAiTtsJsonContext`). 0 trim warnings. No vendor SDKs by design: the official SDKs rely on reflection-based serialization and transitive dependencies that block `PublishAot=true` downstream.
 
 ## License
 

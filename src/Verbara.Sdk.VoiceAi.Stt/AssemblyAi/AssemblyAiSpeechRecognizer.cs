@@ -274,8 +274,8 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
 
     /// <summary>
     /// Reads the session to its end. Returns whether the vendor sent any message at all — the
-    /// evidence <c>ADR-0050</c> E5's recognition rule turns on, which is <em>not</em> whether any
-    /// transcript was produced.
+    /// evidence that tells an empty session from a healthy one that heard no speech, which is
+    /// <em>not</em> whether any transcript was produced.
     /// </summary>
     /// <exception cref="SpeechProviderFailureException">The session failed.</exception>
     private static async Task<bool> ReceiveLoopAsync(

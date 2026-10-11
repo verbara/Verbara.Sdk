@@ -136,7 +136,7 @@ internal sealed class EndOfInputSilenceBound : IDisposable
     /// </summary>
     public bool Expired => _cts.IsCancellationRequested && !_outer.IsCancellationRequested;
 
-    /// <summary>The typed failure a silent vendor is reported as: the result is incomplete (<c>ADR-0050</c> E2c).</summary>
+    /// <summary>The typed failure a silent vendor is reported as: the result is incomplete, and a silent end must not read as a normal one.</summary>
     public SpeechProviderFailureException ToFailure(string provider)
         => SpeechProviderFailureException.FromTransport(
             provider,

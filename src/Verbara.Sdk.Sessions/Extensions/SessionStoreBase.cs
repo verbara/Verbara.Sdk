@@ -35,8 +35,8 @@ public abstract class SessionStoreBase : ISessionStore
     /// <para>
     /// Internal, so no store outside this assembly sees it or has to override it. The default
     /// in-memory store overrides it, because it keeps the very object the manager held: without it,
-    /// the manager's release would free a dictionary entry and leave the call held (<c>ADR-0063</c>,
-    /// D5).
+    /// the manager's release would free a dictionary entry and leave the call held. A manager that
+    /// lets go of an object its default store still holds frees nothing.
     /// </para>
     /// </summary>
     /// <param name="session">The session object the manager released.</param>
