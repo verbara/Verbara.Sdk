@@ -40,7 +40,7 @@ public sealed class AzureTtsSpeechSynthesizer : SpeechSynthesizer
     /// <param name="chunkSize">Frame size the response stream is sliced into.</param>
     /// <param name="fakeOrigin">
     /// Scheme, host and port of an in-process test server — the IPv4 loopback literal, never
-    /// <c>localhost</c>, which resolves to <c>::1</c> first and can reach another listener on the
+    /// <c>localhost</c>, which can resolve to <c>::1</c> first and can reach another listener on the
     /// same port number. Only the <em>origin</em> is substituted: <see cref="SynthesisPath"/>
     /// is still appended by this class, so a test server matching strictly on the path is asserting
     /// the route this provider really builds rather than one the test handed it.

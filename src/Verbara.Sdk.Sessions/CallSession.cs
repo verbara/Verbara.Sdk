@@ -115,10 +115,9 @@ public sealed class CallSession
     /// It records delivery, not state, and both halves of that are load-bearing. It is kept on the
     /// session rather than in a manager-side set, so it outlives the session's release: a leg that
     /// joined the call after it ended still points at this object, and its later departure must not
-    /// deliver the ending again. And it is never derived from <see cref="State"/>: a call the timeout
-    /// sweep made terminal has had no ending delivered, and still gets its one when its participants
-    /// leave. A call's ending is delivered exactly once, because a second delivery is what once left
-    /// an unusable entry at the head of the release queue.
+    /// deliver the ending again. And it is never derived from <see cref="State"/>: the state says how
+    /// the call stands, not whether its ending reached anyone. A call's ending is delivered exactly once,
+    /// because a second delivery is what once left an unusable entry at the head of the release queue.
     /// </para>
     /// </summary>
     internal bool EndingDelivered { get; private set; }

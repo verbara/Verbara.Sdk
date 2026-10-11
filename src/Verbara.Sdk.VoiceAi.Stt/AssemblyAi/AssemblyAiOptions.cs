@@ -9,8 +9,8 @@ namespace Verbara.Sdk.VoiceAi.Stt.AssemblyAi;
 /// <remarks>
 /// The official AssemblyAI .NET SDK was discontinued in April 2025
 /// (<see href="https://www.assemblyai.com/blog/announcing-dotnet-sdk"/>).
-/// This provider is a hand-rolled, AOT-clean implementation: vendor SDKs depend on reflection-based
-/// serialization, which Native AOT cannot compile.
+/// This provider is a hand-rolled, AOT-clean implementation: vendor SDKs rely on reflection-based
+/// serialization, which blocks <c>PublishAot=true</c> downstream.
 /// </remarks>
 public sealed class AssemblyAiOptions
 {

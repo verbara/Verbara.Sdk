@@ -274,8 +274,8 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
 
     /// <summary>
     /// Reads the session to its end. Returns whether the vendor sent any message at all — the
-    /// evidence that tells an empty session from a healthy one that heard no speech, which is
-    /// <em>not</em> whether any transcript was produced.
+    /// evidence that tells a session the vendor never answered from a healthy one that heard no speech,
+    /// which is <em>not</em> whether any transcript was produced.
     /// </summary>
     /// <exception cref="SpeechProviderFailureException">The session failed.</exception>
     private static async Task<bool> ReceiveLoopAsync(
