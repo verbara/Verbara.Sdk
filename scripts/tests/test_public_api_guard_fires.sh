@@ -10,7 +10,8 @@
 # Each case is a stand-in checkout (a git repository with the probe's project and source file) and a stand-in
 # `dotnet` that records what it was asked and what the file held when it was asked, then prints and exits as the
 # case says. Pure bash + git + coreutils `timeout`, no .NET, a few seconds. Runs in the always-run
-# `Coverage Script Tests` job; the real control runs in `Pack Warnings Gate`.
+# `Coverage Script Tests` job; the real control runs in `Pack Warnings Gate`. The last cases read ci.yml: the control
+# is the last step of that job, and this harness runs in Coverage Script Tests.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -228,6 +229,27 @@ else
     expect_not_out "PROVEN" "the script interrupted with SIG$sig"
     expect_out "restored $REL" "the script interrupted with SIG$sig"
   done
+fi
+
+# --- the wiring ----------------------------------------------------------------------------------------------------
+
+# The control must run on every PR, LAST in Pack Warnings Gate (after the pack and both guards, so the mutated
+# checkout feeds nothing else), and this harness in Coverage Script Tests. Read from the workflow, not remembered.
+CI_YML="${CI_YML:-$SCRIPT_DIR/../../.github/workflows/ci.yml}"
+job_runs() { # job_runs <job id> — the `run:` values of that job's steps, in order
+  awk -v job="  $1:" '
+    $0 == job { injob = 1; next }
+    injob && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { injob = 0 }
+    injob && /^[[:space:]]+run:[[:space:]]/ { sub(/^[[:space:]]+run:[[:space:]]+/, ""); print }' "$CI_YML"
+}
+if [ -f "$CI_YML" ]; then
+  last_run="$(job_runs pack-check | tail -n 1)"
+  [ "$last_run" = "bash scripts/ci/check-public-api-guard-fires.sh" ] && ok \
+    || bad "ci.yml: the last step of pack-check runs '$last_run', not the negative control"
+  job_runs coverage-scripts | grep -qxF "bash scripts/tests/test_public_api_guard_fires.sh" && ok \
+    || bad "ci.yml: coverage-scripts does not run this harness"
+else
+  bad "ci.yml not found at $CI_YML"
 fi
 
 echo "---"; echo "passed=$pass failed=$fails"
