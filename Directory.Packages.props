@@ -8,21 +8,43 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
+  <!-- Microsoft.Extensions.* band. A shipped package (IsPackable, which Directory.Build.props sets
+       for src/**) declares the band's floor, major.minor.0, in its nuspec instead of the monthly
+       servicing patch. A declared ">= 10.0.<patch>" put every consumer that pins an earlier patch
+       centrally into NU1109 (package downgrade) on each SDK release; which patch runs is the
+       application's choice, and NuGetAudit warns the application when that version carries an
+       advisory. Every other project (tests, examples, tools) compiles and runs against the patch.
+       MicrosoftExtensionsVersion is the one literal to bump: the floor is derived from it. A shipped
+       package whose own dependencies require more than the floor raises it in its project file
+       (MicrosoftExtensionsFloorVersion): the Update below is expanded with the project's final
+       property values, and a central pin, transitive pins included, below a dependency's minimum is
+       NU1109 in this build. -->
+  <PropertyGroup>
+    <MicrosoftExtensionsVersion>10.0.12</MicrosoftExtensionsVersion>
+    <MicrosoftExtensionsFloorVersion>$([System.Version]::Parse('$(MicrosoftExtensionsVersion)').ToString(2)).0</MicrosoftExtensionsFloorVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="$(MicrosoftExtensionsVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <!-- Selects the items just declared: the only PackageVersion items evaluated so far. -->
+    <PackageVersion Update="@(PackageVersion->WithMetadataValue('Version', '$(MicrosoftExtensionsVersion)'))" Version="$(MicrosoftExtensionsFloorVersion)" />
+  </ItemGroup>
+
   <!-- Runtime dependencies -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.12" />
     <!-- Test-only: in-process ASP.NET Core HTTP pipeline (no port binding) for webhook integration tests. -->
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
     <!-- Test-only: real JwtBearer authentication in the SSE push stream tests (tokens minted per test host). -->
