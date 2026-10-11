@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: shipped packages declare `Microsoft.Extensions.* >= 10.0.0` instead of the servicing patch (#NNN)
+
+Every package this repository publishes declared its `Microsoft.Extensions.*` dependencies at the servicing patch the
+SDK was built with (`>= 10.0.12` in 2.8.0). An application that pins an earlier 10.0.x patch centrally got `NU1109`
+(package downgrade) on every SDK release that moved the patch, and a build with warnings as errors failed: measured
+with a consumer pinning `Microsoft.Extensions.Configuration.Binder` and `Microsoft.Extensions.Diagnostics` at 10.0.11,
+restore failed with 36 `NU1109` through SDK packages. The packages now declare the band's floor, `>= 10.0.0`, and the
+same consumer restores cleanly. `Verbara.Sdk.Sessions.Redis` declares `>= 10.0.5`, because `StackExchange.Redis` 3.3.1
+already requires `Microsoft.Extensions.Logging.Abstractions >= 10.0.5`. Which patch runs is now the application's
+choice: an application that pins `Microsoft.Extensions.*` keeps its pins, and one that does not pin a package and gets
+no higher version from another dependency resolves 10.0.0 (10.0.5 for the Redis package's dependencies), where it
+resolved 10.0.12 before. Pin the patch you want to run; NuGetAudit still warns about a vulnerable version that arrives
+through a floor. Not breaking: no public API, behaviour or assembly contents change — the code the
+`Microsoft.Extensions.*` source generators emit into the shipped assemblies is the same at 10.0.0 and 10.0.12, the
+packages compile against 10.0.0, and the AOT canary publishes and runs at 10.0.0.
+
 ### Changed: a public member added to a shipped package fails the build unless its record declares it (#406)
 
 The undeclared-public-API diagnostic (`RS0016`) was in the shared `NoWarn` list, which overrides the `.editorconfig`
