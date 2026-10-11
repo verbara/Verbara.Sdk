@@ -14,6 +14,10 @@ namespace Verbara.Sdk.Ari.Outbound;
 public interface IAriOutboundListener : IAsyncDisposable
 {
     /// <summary>Bind the TCP socket and start accepting connections.</summary>
+    /// <param name="ct">
+    /// Bounds only the start. Cancelling it after the start returned does not stop the listener and does
+    /// not end a connection it is serving; call <see cref="StopAsync"/> or dispose the listener for that.
+    /// </param>
     ValueTask StartAsync(CancellationToken ct = default);
 
     /// <summary>Stop accepting new connections and close existing ones.</summary>

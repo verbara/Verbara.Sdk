@@ -115,8 +115,17 @@ public sealed class AriOutboundListener : IAriOutboundListener
             .Where(c => string.Equals(c.Connection.ApplicationName, applicationName, StringComparison.OrdinalIgnoreCase))
             .Select(static c => c.Connection);
 
+    /// <summary>
+    /// Binds the listener and starts the accept loop. A start while the listener is running completes and
+    /// binds nothing. The listener serves until <see cref="StopAsync"/> or <see cref="DisposeAsync"/>.
+    /// </summary>
+    /// <param name="ct">Unused: this start begins nothing that can be aborted.</param>
     public ValueTask StartAsync(CancellationToken ct = default)
     {
+        // The parameter is deliberately unused: it means the start was aborted, and this start begins
+        // nothing that can be aborted. The accept loop and every connection it serves get the token this
+        // listener owns, which the listener's own stop cancels; a source linked to the start's token would
+        // end them all when that token is cancelled after the start returned.
         if (Interlocked.Exchange(ref _running, 1) == 1)
             return ValueTask.CompletedTask;
 
@@ -136,12 +145,20 @@ public sealed class AriOutboundListener : IAriOutboundListener
                 Volatile.Write(ref _running, 0);
         }
 
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _cts = new CancellationTokenSource();
 
         var endpoint = _listener.LocalEndpoint.ToString() ?? $"{_options.ListenAddress}:{_options.Port}";
         AriOutboundListenerLog.ListenerStarted(_logger, endpoint, _options.Path);
 
-        _acceptLoop = Task.Run(() => AcceptLoopAsync(_cts.Token), CancellationToken.None);
+        // CancellationToken.None on the hand-off, and deliberately so. Task.Run's token skips a work
+        // item that has not started yet, and the listener is already bound with this loop as the
+        // only thing that serves it: a skipped hand-off leaves a listener that takes connections
+        // into its backlog and never accepts one. The loop's token is read here rather than inside
+        // the lambda. A DisposeAsync that gets there first releases _cts, whose Token getter would
+        // then throw on the pool and fault a task nobody observes; a token read before the release
+        // just reads as cancelled, and the loop ends at its first check.
+        var token = _cts.Token;
+        _acceptLoop = Task.Run(() => AcceptLoopAsync(token), CancellationToken.None);
         return ValueTask.CompletedTask;
     }
 
