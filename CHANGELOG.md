@@ -35,6 +35,33 @@ the build fails because of it. A contributor who adds public API now adds its li
 (the `RS0016` error quotes the line to add). No public API, behaviour or package contents
 change: the records are analyzer input and are not packed.
 
+### Fixed: cancelling the token passed to a server's start, or to `PipelineSocketConnection.ConnectAsync`, after it returned no longer stops it (#NNN)
+
+The ARI AudioSocket and WebSocket audio servers, the ARI outbound listener, the FastAGI server and the session
+reconciliation sweep ran their own loop on a source linked to the token passed to their start. The AMI
+`PipelineSocketConnection` did the same with the token passed to its connect.
+
+Through the SDK's registration this fired only in the host's start window: a SIGTERM or a `StartupTimeout` while a
+later hosted service was still starting. For the four public servers it also fired for a direct caller that passed a
+token of its own.
+
+Cancelling that token stopped the accept loop and tore down the connections being served, while the server kept its
+port and went on reporting itself running. `IsRunning` stayed `true`, and the FastAGI server stayed `Listening`, so
+the AGI health check kept reporting it healthy. Outbound WebSockets that Asterisk dialled went unanswered. The sweep
+stopped without a log line, so held calls whose channels Asterisk had dropped were never checked again.
+
+The four servers and the sweep now ignore that token, and `StopAsync` or `DisposeAsync` is the only stop. Because
+their start is synchronous, a start whose token is already cancelled now binds and serves.
+
+`PipelineSocketConnection` was reachable only by a direct caller with a token of its own: the SDK's AMI connection
+hands it a token that lasts only for the connect. Cancelling the token after `ConnectAsync` returned ended both pumps
+in silence. The input completed as if the remote had closed, later writes were dropped, and `IsConnected` stayed
+`true`. The token now bounds only the TCP connect and the TLS handshake, as `ISocketConnection.ConnectAsync`
+documents, and only `CloseAsync` or `DisposeAsync` closes the connection.
+
+A caller that cancelled the start token to stop one of the four servers must now call `StopAsync` or `DisposeAsync`.
+For the connection it is `CloseAsync` or `DisposeAsync`. No public API change.
+
 ## [2.8.0] - 2026-10-09
 
 ### Changed — BREAKING: a multi-server host runs the reconciliation sweep for every server of the pool (#402)
