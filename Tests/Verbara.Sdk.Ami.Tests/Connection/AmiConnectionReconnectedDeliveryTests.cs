@@ -134,8 +134,11 @@ public sealed class AmiConnectionReconnectedDeliveryTests
         var gate = new ManualResetEventSlim(false);
         var lostEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var reconnectedCalls = new int[1];
+        var lostNotification = 0;
         connection.Lost += _ =>
         {
+            // The queue runs each notification as its own task, so the id current here is the held Lost's place in it.
+            Volatile.Write(ref lostNotification, Task.CurrentId ?? -1);
             lostEntered.TrySetResult();
             gate.Wait();
         };
@@ -144,16 +147,21 @@ public sealed class AmiConnectionReconnectedDeliveryTests
 
         sockets.Created[0].CloseFromPeer();
         await lostEntered.Task.WaitAsync(Bound);
-        var tailHoldingLost = connection.PendingNotifications;
-        await TailMovedPastAsync(connection, tailHoldingLost).WaitAsync(Bound);
+        await TailMovedPastAsync(connection, Volatile.Read(ref lostNotification)).WaitAsync(Bound);
 
         return new HeldQueueRun(connection, gate, reconnectedCalls, peerCts, serving);
     }
 
-    /// <summary>Completes once the notification queue has a tail other than <paramref name="tail"/>.</summary>
-    private static async Task TailMovedPastAsync(AmiConnection connection, Task tail)
+    /// <summary>Completes once the notification queue's tail is no longer the notification with id <paramref name="lost"/>.</summary>
+    /// <remarks>
+    /// The held <c>Lost</c> is named by the id its own handler read, not by a read of the tail once the handler is
+    /// known to run: the reconnect loop does not wait for that handler, so on a loaded runner it can queue
+    /// <c>Reconnected</c> before the test reads the tail, the read is already the last tail, and a wait for it to move
+    /// never ends.
+    /// </remarks>
+    private static async Task TailMovedPastAsync(AmiConnection connection, int lost)
     {
-        while (ReferenceEquals(connection.PendingNotifications, tail))
+        while (connection.PendingNotifications.Id == lost)
             await Task.Delay(5); // fence-allow: LOOP-DRIVER — PendingNotifications exposes the queue's tail but no signal when it moves
     }
 
