@@ -20,6 +20,9 @@ public sealed class AmiConnectionReconnectedDeliveryTests
     /// <summary>A hang bound. Every wait ends on its signal long before it; only a defect reaches it.</summary>
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);
 
+    /// <summary>What the held <c>Lost</c> records when it runs on no task: a task's id is never 0.</summary>
+    private const int NotAQueueTask = 0;
+
     [Fact]
     public async Task Reconnected_ShouldReachLaterHandlers_WhenAnEarlierHandlerThrows()
     {
@@ -81,8 +84,14 @@ public sealed class AmiConnectionReconnectedDeliveryTests
         await run.Connection.PendingNotifications.WaitAsync(Bound);
         await run.StopPeersAsync();
 
-        Volatile.Read(ref run.ReconnectedCalls[0]).Should().Be(0,
-            "the caller's ending was recorded before the queue reached the Reconnected, and an ending raises no Reconnected");
+        using (new AssertionScope())
+        {
+            Volatile.Read(ref run.ReconnectedCalls[0]).Should().Be(0,
+                "the caller's ending was recorded before the queue reached the Reconnected, and an ending raises no Reconnected");
+            run.Logger.Entries.Should().Contain(
+                e => e.Level == LogLevel.Debug && e.Line.Contains("[AMI] Reconnected not delivered"),
+                "the Reconnected was queued before the ending and dropped at delivery, not skipped by the reconnect loop");
+        }
     }
 
     /// <summary>The positive control of the test above: the same queue, without the caller's ending, delivers it once.</summary>
@@ -101,7 +110,12 @@ public sealed class AmiConnectionReconnectedDeliveryTests
     }
 
     private sealed record HeldQueueRun(
-        AmiConnection Connection, ManualResetEventSlim Gate, int[] ReconnectedCalls, CancellationTokenSource PeerCts, Task Serving)
+        AmiConnection Connection,
+        SignalingLogger<AmiConnection> Logger,
+        ManualResetEventSlim Gate,
+        int[] ReconnectedCalls,
+        CancellationTokenSource PeerCts,
+        Task Serving)
     {
         public async Task StopPeersAsync()
         {
@@ -116,11 +130,19 @@ public sealed class AmiConnectionReconnectedDeliveryTests
     /// Connects, holds the <see cref="AmiConnection.Lost"/> handler of a loss on a gate, and returns once the reconnect
     /// that follows has queued its <see cref="AmiConnection.Reconnected"/> behind it.
     /// </summary>
+    /// <remarks>
+    /// The held <c>Lost</c> is named by <see cref="Task.CurrentId"/> inside its handler: <c>AmiConnection</c>'s
+    /// <c>NotifyLocked</c> runs each notification directly as its own <c>ContinueWith</c> task on the queue's tail, so
+    /// that id is the tail the reconnect loop moves past when it queues <c>Reconnected</c>. A handler that runs on no
+    /// task fails the test here instead of letting the wait return at once. The logger keeps Debug lines, so a test can
+    /// tell a <c>Reconnected</c> dropped at delivery from one the loop never queued.
+    /// </remarks>
     private static async Task<HeldQueueRun> HoldLostUntilReconnectedIsQueuedAsync()
     {
         var peerCts = new CancellationTokenSource(Bound * 3);
         var sockets = new PipedSocketFactory();
         var serving = ServeEverySocketAsync(sockets, peerCts.Token);
+        var logger = new SignalingLogger<AmiConnection> { MinimumLevel = LogLevel.Debug };
         var connection = new AmiConnection(Options.Create(new AmiConnectionOptions
         {
             Hostname = "localhost",
@@ -130,12 +152,16 @@ public sealed class AmiConnectionReconnectedDeliveryTests
             AutoReconnect = true,
             ReconnectInitialDelay = TimeSpan.FromMilliseconds(20),
             ReconnectMaxDelay = TimeSpan.FromMilliseconds(20),
-        }), sockets, new SignalingLogger<AmiConnection>());
+        }), sockets, logger);
         var gate = new ManualResetEventSlim(false);
         var lostEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var reconnectedCalls = new int[1];
+        var lostNotification = NotAQueueTask;
         connection.Lost += _ =>
         {
+            // The queue runs each notification as its own task, so the id current here is the held Lost's place in it.
+            // The queue logs and swallows a handler's throw, so a Lost on no task is recorded and failed on below.
+            Volatile.Write(ref lostNotification, Task.CurrentId ?? NotAQueueTask);
             lostEntered.TrySetResult();
             gate.Wait();
         };
@@ -144,16 +170,25 @@ public sealed class AmiConnectionReconnectedDeliveryTests
 
         sockets.Created[0].CloseFromPeer();
         await lostEntered.Task.WaitAsync(Bound);
-        var tailHoldingLost = connection.PendingNotifications;
-        await TailMovedPastAsync(connection, tailHoldingLost).WaitAsync(Bound);
+        var lost = Volatile.Read(ref lostNotification);
+        if (lost == NotAQueueTask)
+            throw new InvalidOperationException("Lost ran outside a queue task, so the queue's tail cannot name it");
 
-        return new HeldQueueRun(connection, gate, reconnectedCalls, peerCts, serving);
+        await TailMovedPastAsync(connection, lost).WaitAsync(Bound);
+
+        return new HeldQueueRun(connection, logger, gate, reconnectedCalls, peerCts, serving);
     }
 
-    /// <summary>Completes once the notification queue has a tail other than <paramref name="tail"/>.</summary>
-    private static async Task TailMovedPastAsync(AmiConnection connection, Task tail)
+    /// <summary>Completes once the notification queue's tail is no longer the notification with id <paramref name="lost"/>.</summary>
+    /// <remarks>
+    /// The held <c>Lost</c> is named by the id its own handler read, not by a read of the tail once the handler is
+    /// known to run: the reconnect loop does not wait for that handler, so on a loaded runner it can queue
+    /// <c>Reconnected</c> before the test reads the tail, the read is already the last tail, and a wait for it to move
+    /// never ends.
+    /// </remarks>
+    private static async Task TailMovedPastAsync(AmiConnection connection, int lost)
     {
-        while (ReferenceEquals(connection.PendingNotifications, tail))
+        while (connection.PendingNotifications.Id == lost)
             await Task.Delay(5); // fence-allow: LOOP-DRIVER — PendingNotifications exposes the queue's tail but no signal when it moves
     }
 
