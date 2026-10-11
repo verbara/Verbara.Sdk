@@ -44,3 +44,10 @@ static readonly Verbara.Sdk.Audio.AudioFormat.Slin16Mono16kHz -> Verbara.Sdk.Aud
 static readonly Verbara.Sdk.Audio.AudioFormat.Slin16Mono24kHz -> Verbara.Sdk.Audio.AudioFormat
 static readonly Verbara.Sdk.Audio.AudioFormat.Slin16Mono48kHz -> Verbara.Sdk.Audio.AudioFormat
 static readonly Verbara.Sdk.Audio.AudioFormat.Slin16Mono8kHz -> Verbara.Sdk.Audio.AudioFormat
+Verbara.Sdk.Audio.AudioFormat.Deconstruct(out int SampleRate, out int Channels, out int BitsPerSample, out Verbara.Sdk.Audio.AudioEncoding Encoding) -> void
+Verbara.Sdk.Audio.AudioFormat.Equals(Verbara.Sdk.Audio.AudioFormat other) -> bool
+override Verbara.Sdk.Audio.AudioFormat.GetHashCode() -> int
+static Verbara.Sdk.Audio.AudioFormat.operator !=(Verbara.Sdk.Audio.AudioFormat left, Verbara.Sdk.Audio.AudioFormat right) -> bool
+static Verbara.Sdk.Audio.AudioFormat.operator ==(Verbara.Sdk.Audio.AudioFormat left, Verbara.Sdk.Audio.AudioFormat right) -> bool
+~override Verbara.Sdk.Audio.AudioFormat.Equals(object obj) -> bool
+~override Verbara.Sdk.Audio.AudioFormat.ToString() -> string

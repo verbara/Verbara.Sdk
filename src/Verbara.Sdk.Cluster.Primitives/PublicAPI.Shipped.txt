@@ -1,1 +1,20 @@
 #nullable enable
+Verbara.Sdk.Cluster.Primitives.ClusterEvent.ClusterEvent(Verbara.Sdk.Cluster.Primitives.ClusterEvent! original) -> void
+Verbara.Sdk.Cluster.Primitives.ClusterEvent.Deconstruct(out string! SourceInstanceId, out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.Cluster.Primitives.NodeInfo.<Clone>$() -> Verbara.Sdk.Cluster.Primitives.NodeInfo!
+Verbara.Sdk.Cluster.Primitives.NodeInfo.Deconstruct(out string! NodeId, out Verbara.Sdk.Cluster.Primitives.NodeState State) -> void
+Verbara.Sdk.Cluster.Primitives.NodeInfo.Equals(Verbara.Sdk.Cluster.Primitives.NodeInfo? other) -> bool
+abstract Verbara.Sdk.Cluster.Primitives.ClusterEvent.<Clone>$() -> Verbara.Sdk.Cluster.Primitives.ClusterEvent!
+override Verbara.Sdk.Cluster.Primitives.ClusterEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Cluster.Primitives.ClusterEvent.GetHashCode() -> int
+override Verbara.Sdk.Cluster.Primitives.ClusterEvent.ToString() -> string!
+override Verbara.Sdk.Cluster.Primitives.NodeInfo.Equals(object? obj) -> bool
+override Verbara.Sdk.Cluster.Primitives.NodeInfo.GetHashCode() -> int
+override Verbara.Sdk.Cluster.Primitives.NodeInfo.ToString() -> string!
+static Verbara.Sdk.Cluster.Primitives.ClusterEvent.operator !=(Verbara.Sdk.Cluster.Primitives.ClusterEvent? left, Verbara.Sdk.Cluster.Primitives.ClusterEvent? right) -> bool
+static Verbara.Sdk.Cluster.Primitives.ClusterEvent.operator ==(Verbara.Sdk.Cluster.Primitives.ClusterEvent? left, Verbara.Sdk.Cluster.Primitives.ClusterEvent? right) -> bool
+static Verbara.Sdk.Cluster.Primitives.NodeInfo.operator !=(Verbara.Sdk.Cluster.Primitives.NodeInfo? left, Verbara.Sdk.Cluster.Primitives.NodeInfo? right) -> bool
+static Verbara.Sdk.Cluster.Primitives.NodeInfo.operator ==(Verbara.Sdk.Cluster.Primitives.NodeInfo? left, Verbara.Sdk.Cluster.Primitives.NodeInfo? right) -> bool
+virtual Verbara.Sdk.Cluster.Primitives.ClusterEvent.EqualityContract.get -> System.Type!
+virtual Verbara.Sdk.Cluster.Primitives.ClusterEvent.Equals(Verbara.Sdk.Cluster.Primitives.ClusterEvent? other) -> bool
+virtual Verbara.Sdk.Cluster.Primitives.ClusterEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool

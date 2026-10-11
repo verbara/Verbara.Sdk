@@ -10,10 +10,13 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <!-- Suppress CS1591 (missing XML comment) during initial development -->
-    <!-- RS0016: source-generated code in obj/ produces undeclared API (editorconfig can't suppress obj/) -->
     <!-- RS0037: auto-populated API files; RS0041: internal API tracking not needed -->
-    <NoWarn>$(NoWarn);CS1591;RS0016;RS0037;RS0041</NoWarn>
-    <!-- RS0016 severity controlled in .editorconfig for user-authored code (warning level) -->
+    <NoWarn>$(NoWarn);CS1591;RS0037;RS0041</NoWarn>
+    <!-- RS0016 (undeclared public API) is deliberately absent from NoWarn: every public symbol of a
+         shipped package is declared in its PublicAPI.Shipped.txt / PublicAPI.Unshipped.txt, including
+         the members the C# compiler synthesises for record types and those the System.Text.Json source
+         generator emits. Its severity is set in the root .editorconfig (warning, so an error under
+         TreatWarningsAsErrors); adding RS0016 back to a NoWarn list silences that setting. -->
   </PropertyGroup>
 
   <!-- Native AOT readiness -->
@@ -65,11 +68,15 @@
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
   </ItemGroup>
 
-  <!-- Analyzers for source projects only (exclude SourceGenerators) -->
+  <!-- Banned-API analyzer for source projects only (exclude SourceGenerators) -->
   <ItemGroup Condition="$(MSBuildProjectDirectory.Contains('src')) And !$(MSBuildProjectName.Contains('SourceGenerators'))">
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" Link="BannedSymbols.txt" />
+  </ItemGroup>
+
+  <!-- Public-API analyzer for every shipped package, the source generator included -->
+  <ItemGroup Condition="$(MSBuildProjectDirectory.Contains('src'))">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <AdditionalFiles Include="$(MSBuildProjectDirectory)/PublicAPI.Shipped.txt" Condition="Exists('$(MSBuildProjectDirectory)/PublicAPI.Shipped.txt')" />
     <AdditionalFiles Include="$(MSBuildProjectDirectory)/PublicAPI.Unshipped.txt" Condition="Exists('$(MSBuildProjectDirectory)/PublicAPI.Unshipped.txt')" />
   </ItemGroup>

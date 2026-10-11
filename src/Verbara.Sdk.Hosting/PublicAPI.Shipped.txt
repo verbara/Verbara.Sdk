@@ -31,3 +31,6 @@ Verbara.Sdk.Hosting.AriAudioHostedService
 Verbara.Sdk.Hosting.AriAudioHostedService.AriAudioHostedService(Verbara.Sdk.Ari.Audio.AudioSocketServer! audioSocketServer, Verbara.Sdk.Ari.Audio.WebSocketAudioServer? webSocketAudioServer = null) -> void
 Verbara.Sdk.Hosting.AriAudioHostedService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 Verbara.Sdk.Hosting.AriAudioHostedService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+Verbara.Sdk.Hosting.VerbaraTelemetry
+static readonly Verbara.Sdk.Hosting.VerbaraTelemetry.ActivitySourceNames -> string![]!
+static readonly Verbara.Sdk.Hosting.VerbaraTelemetry.MeterNames -> string![]!

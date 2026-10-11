@@ -261,3 +261,190 @@ Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck
 Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck.SessionHealthCheck(Verbara.Sdk.Sessions.Manager.ICallSessionManager! manager) -> void
 Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
 static readonly Verbara.Sdk.Sessions.Diagnostics.SessionActivitySource.Source -> System.Diagnostics.ActivitySource!
+Verbara.Sdk.Sessions.AgentSession
+Verbara.Sdk.Sessions.AgentSession.AgentId.get -> string!
+Verbara.Sdk.Sessions.AgentSession.AgentSession(string! agentId) -> void
+Verbara.Sdk.Sessions.AgentSession.AvgHandleTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.AgentSession.AvgTalkTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.AgentSession.CallsHandled.get -> int
+Verbara.Sdk.Sessions.AgentSession.CallsMissed.get -> int
+Verbara.Sdk.Sessions.AgentSession.CurrentCall.get -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.AgentSession.CurrentQueueName.get -> string?
+Verbara.Sdk.Sessions.AgentSession.IdleTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.AgentSession.LastCallEndedAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Sessions.AgentSession.State.get -> Verbara.Sdk.Sessions.AgentSessionState
+Verbara.Sdk.Sessions.AgentSession.StateChangedAt.get -> System.DateTimeOffset?
+Verbara.Sdk.Sessions.AgentSession.TotalHoldTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.AgentSession.TotalTalkTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.AgentSession.TotalWrapUpTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.AgentSession.TrackedSince.get -> System.DateTimeOffset
+Verbara.Sdk.Sessions.AgentSession.TrackedSince.init -> void
+Verbara.Sdk.Sessions.AgentSessionState
+Verbara.Sdk.Sessions.AgentSessionState.Idle = 0 -> Verbara.Sdk.Sessions.AgentSessionState
+Verbara.Sdk.Sessions.AgentSessionState.Offline = 5 -> Verbara.Sdk.Sessions.AgentSessionState
+Verbara.Sdk.Sessions.AgentSessionState.OnCall = 2 -> Verbara.Sdk.Sessions.AgentSessionState
+Verbara.Sdk.Sessions.AgentSessionState.Paused = 4 -> Verbara.Sdk.Sessions.AgentSessionState
+Verbara.Sdk.Sessions.AgentSessionState.Ringing = 1 -> Verbara.Sdk.Sessions.AgentSessionState
+Verbara.Sdk.Sessions.AgentSessionState.WrapUp = 3 -> Verbara.Sdk.Sessions.AgentSessionState
+Verbara.Sdk.Sessions.AgentSessionStateChanged
+Verbara.Sdk.Sessions.AgentSessionStateChanged.AgentId.get -> string!
+Verbara.Sdk.Sessions.AgentSessionStateChanged.AgentId.init -> void
+Verbara.Sdk.Sessions.AgentSessionStateChanged.AgentSessionStateChanged(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! AgentId, Verbara.Sdk.Sessions.AgentSessionState PreviousState, Verbara.Sdk.Sessions.AgentSessionState NewState) -> void
+Verbara.Sdk.Sessions.AgentSessionStateChanged.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp, out string! AgentId, out Verbara.Sdk.Sessions.AgentSessionState PreviousState, out Verbara.Sdk.Sessions.AgentSessionState NewState) -> void
+Verbara.Sdk.Sessions.AgentSessionStateChanged.Equals(Verbara.Sdk.Sessions.AgentSessionStateChanged? other) -> bool
+Verbara.Sdk.Sessions.AgentSessionStateChanged.NewState.get -> Verbara.Sdk.Sessions.AgentSessionState
+Verbara.Sdk.Sessions.AgentSessionStateChanged.NewState.init -> void
+Verbara.Sdk.Sessions.AgentSessionStateChanged.PreviousState.get -> Verbara.Sdk.Sessions.AgentSessionState
+Verbara.Sdk.Sessions.AgentSessionStateChanged.PreviousState.init -> void
+Verbara.Sdk.Sessions.CallConnectedEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp, out string? AgentId, out string? QueueName, out System.TimeSpan WaitTime) -> void
+Verbara.Sdk.Sessions.CallConnectedEvent.Equals(Verbara.Sdk.Sessions.CallConnectedEvent? other) -> bool
+Verbara.Sdk.Sessions.CallEndedEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp, out Verbara.Sdk.Enums.HangupCause? Cause, out System.TimeSpan Duration, out System.TimeSpan? TalkTime) -> void
+Verbara.Sdk.Sessions.CallEndedEvent.Equals(Verbara.Sdk.Sessions.CallEndedEvent? other) -> bool
+Verbara.Sdk.Sessions.CallFailedEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp, out string! Reason) -> void
+Verbara.Sdk.Sessions.CallFailedEvent.Equals(Verbara.Sdk.Sessions.CallFailedEvent? other) -> bool
+Verbara.Sdk.Sessions.CallHeldEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.Sessions.CallHeldEvent.Equals(Verbara.Sdk.Sessions.CallHeldEvent? other) -> bool
+Verbara.Sdk.Sessions.CallQueuedEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp, out string! QueueName, out int? Position) -> void
+Verbara.Sdk.Sessions.CallQueuedEvent.Equals(Verbara.Sdk.Sessions.CallQueuedEvent? other) -> bool
+Verbara.Sdk.Sessions.CallResumedEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.Sessions.CallResumedEvent.Equals(Verbara.Sdk.Sessions.CallResumedEvent? other) -> bool
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp, out string! AgentId, out string? QueueName) -> void
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent.Equals(Verbara.Sdk.Sessions.CallRingNoAnswerEvent? other) -> bool
+Verbara.Sdk.Sessions.CallSessionEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallSessionEvent!
+Verbara.Sdk.Sessions.CallSessionEvent.Deconstruct(out System.DateTimeOffset Timestamp, out Verbara.Sdk.Sessions.CallSessionEventType Type, out string? SourceChannel, out string? TargetChannel, out string? Detail) -> void
+Verbara.Sdk.Sessions.CallSessionEvent.Equals(Verbara.Sdk.Sessions.CallSessionEvent? other) -> bool
+Verbara.Sdk.Sessions.CallStartedEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp, out Verbara.Sdk.Sessions.CallDirection Direction, out string? CallerIdNum) -> void
+Verbara.Sdk.Sessions.CallStartedEvent.Equals(Verbara.Sdk.Sessions.CallStartedEvent? other) -> bool
+Verbara.Sdk.Sessions.CallTransferredEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp, out string! TransferType, out string? TargetChannel) -> void
+Verbara.Sdk.Sessions.CallTransferredEvent.Equals(Verbara.Sdk.Sessions.CallTransferredEvent? other) -> bool
+Verbara.Sdk.Sessions.CallWrapUpEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp, out string? AgentId, out string? QueueName, out System.TimeSpan WrapUpDuration) -> void
+Verbara.Sdk.Sessions.CallWrapUpEvent.Equals(Verbara.Sdk.Sessions.CallWrapUpEvent? other) -> bool
+Verbara.Sdk.Sessions.Manager.IAgentSessionTracker
+Verbara.Sdk.Sessions.Manager.IAgentSessionTracker.ActiveAgents.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Sessions.AgentSession!>!
+Verbara.Sdk.Sessions.Manager.IAgentSessionTracker.GetByAgentId(string! agentId) -> Verbara.Sdk.Sessions.AgentSession?
+Verbara.Sdk.Sessions.Manager.IAgentSessionTracker.GetByState(Verbara.Sdk.Sessions.AgentSessionState state) -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Sessions.AgentSession!>!
+Verbara.Sdk.Sessions.Manager.IAgentSessionTracker.StateChanges.get -> System.IObservable<Verbara.Sdk.Sessions.AgentSessionStateChanged!>!
+Verbara.Sdk.Sessions.Manager.IQueueSessionTracker
+Verbara.Sdk.Sessions.Manager.IQueueSessionTracker.ActiveQueues.get -> System.Collections.Generic.IEnumerable<Verbara.Sdk.Sessions.QueueSession!>!
+Verbara.Sdk.Sessions.Manager.IQueueSessionTracker.GetByQueueName(string! queueName) -> Verbara.Sdk.Sessions.QueueSession?
+Verbara.Sdk.Sessions.Manager.SessionOptions.WrapUpDuration.get -> System.TimeSpan
+Verbara.Sdk.Sessions.Manager.SessionOptions.WrapUpDuration.set -> void
+Verbara.Sdk.Sessions.QueueSession
+Verbara.Sdk.Sessions.QueueSession.AbandonRate.get -> double
+Verbara.Sdk.Sessions.QueueSession.AnswerRate.get -> double
+Verbara.Sdk.Sessions.QueueSession.AvgWaitTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.QueueSession.CallsAbandoned.get -> int
+Verbara.Sdk.Sessions.QueueSession.CallsAnswered.get -> int
+Verbara.Sdk.Sessions.QueueSession.CallsOffered.get -> int
+Verbara.Sdk.Sessions.QueueSession.CallsTimedOut.get -> int
+Verbara.Sdk.Sessions.QueueSession.CallsWaiting.get -> int
+Verbara.Sdk.Sessions.QueueSession.CallsWithinSla.get -> int
+Verbara.Sdk.Sessions.QueueSession.MaxWaitTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.QueueSession.MinWaitTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.QueueSession.QueueName.get -> string!
+Verbara.Sdk.Sessions.QueueSession.QueueSession(string! queueName) -> void
+Verbara.Sdk.Sessions.QueueSession.ServiceLevel.get -> double
+Verbara.Sdk.Sessions.QueueSession.TotalWaitTime.get -> System.TimeSpan
+Verbara.Sdk.Sessions.QueueSession.WindowStart.get -> System.DateTimeOffset
+Verbara.Sdk.Sessions.SessionDomainEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.Sessions.SessionDomainEvent.SessionDomainEvent(Verbara.Sdk.Sessions.SessionDomainEvent! original) -> void
+Verbara.Sdk.Sessions.SessionMergedEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp, out string! MergedSessionId) -> void
+Verbara.Sdk.Sessions.SessionMergedEvent.Equals(Verbara.Sdk.Sessions.SessionMergedEvent? other) -> bool
+abstract Verbara.Sdk.Sessions.SessionDomainEvent.<Clone>$() -> Verbara.Sdk.Sessions.SessionDomainEvent!
+override Verbara.Sdk.Sessions.AgentSessionStateChanged.<Clone>$() -> Verbara.Sdk.Sessions.AgentSessionStateChanged!
+override Verbara.Sdk.Sessions.AgentSessionStateChanged.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.AgentSessionStateChanged.GetHashCode() -> int
+override Verbara.Sdk.Sessions.AgentSessionStateChanged.ToString() -> string!
+override Verbara.Sdk.Sessions.CallConnectedEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallConnectedEvent!
+override Verbara.Sdk.Sessions.CallConnectedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallConnectedEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallConnectedEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.CallEndedEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallEndedEvent!
+override Verbara.Sdk.Sessions.CallEndedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallEndedEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallEndedEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.CallFailedEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallFailedEvent!
+override Verbara.Sdk.Sessions.CallFailedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallFailedEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallFailedEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.CallHeldEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallHeldEvent!
+override Verbara.Sdk.Sessions.CallHeldEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallHeldEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallHeldEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.CallQueuedEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallQueuedEvent!
+override Verbara.Sdk.Sessions.CallQueuedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallQueuedEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallQueuedEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.CallResumedEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallResumedEvent!
+override Verbara.Sdk.Sessions.CallResumedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallResumedEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallResumedEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.CallRingNoAnswerEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallRingNoAnswerEvent!
+override Verbara.Sdk.Sessions.CallRingNoAnswerEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallRingNoAnswerEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallRingNoAnswerEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.CallSessionEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallSessionEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallSessionEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.CallStartedEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallStartedEvent!
+override Verbara.Sdk.Sessions.CallStartedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallStartedEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallStartedEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.CallTransferredEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallTransferredEvent!
+override Verbara.Sdk.Sessions.CallTransferredEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallTransferredEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallTransferredEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.CallWrapUpEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallWrapUpEvent!
+override Verbara.Sdk.Sessions.CallWrapUpEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallWrapUpEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallWrapUpEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.SessionDomainEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.SessionDomainEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.SessionDomainEvent.ToString() -> string!
+override Verbara.Sdk.Sessions.SessionMergedEvent.<Clone>$() -> Verbara.Sdk.Sessions.SessionMergedEvent!
+override Verbara.Sdk.Sessions.SessionMergedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.SessionMergedEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.SessionMergedEvent.ToString() -> string!
+override sealed Verbara.Sdk.Sessions.AgentSessionStateChanged.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+override sealed Verbara.Sdk.Sessions.CallConnectedEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+override sealed Verbara.Sdk.Sessions.CallEndedEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+override sealed Verbara.Sdk.Sessions.CallFailedEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+override sealed Verbara.Sdk.Sessions.CallHeldEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+override sealed Verbara.Sdk.Sessions.CallQueuedEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+override sealed Verbara.Sdk.Sessions.CallResumedEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+override sealed Verbara.Sdk.Sessions.CallRingNoAnswerEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+override sealed Verbara.Sdk.Sessions.CallStartedEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+override sealed Verbara.Sdk.Sessions.CallTransferredEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+override sealed Verbara.Sdk.Sessions.CallWrapUpEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+override sealed Verbara.Sdk.Sessions.SessionMergedEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+static Verbara.Sdk.Sessions.AgentSessionStateChanged.operator !=(Verbara.Sdk.Sessions.AgentSessionStateChanged? left, Verbara.Sdk.Sessions.AgentSessionStateChanged? right) -> bool
+static Verbara.Sdk.Sessions.AgentSessionStateChanged.operator ==(Verbara.Sdk.Sessions.AgentSessionStateChanged? left, Verbara.Sdk.Sessions.AgentSessionStateChanged? right) -> bool
+static Verbara.Sdk.Sessions.CallConnectedEvent.operator !=(Verbara.Sdk.Sessions.CallConnectedEvent? left, Verbara.Sdk.Sessions.CallConnectedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallConnectedEvent.operator ==(Verbara.Sdk.Sessions.CallConnectedEvent? left, Verbara.Sdk.Sessions.CallConnectedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallEndedEvent.operator !=(Verbara.Sdk.Sessions.CallEndedEvent? left, Verbara.Sdk.Sessions.CallEndedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallEndedEvent.operator ==(Verbara.Sdk.Sessions.CallEndedEvent? left, Verbara.Sdk.Sessions.CallEndedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallFailedEvent.operator !=(Verbara.Sdk.Sessions.CallFailedEvent? left, Verbara.Sdk.Sessions.CallFailedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallFailedEvent.operator ==(Verbara.Sdk.Sessions.CallFailedEvent? left, Verbara.Sdk.Sessions.CallFailedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallHeldEvent.operator !=(Verbara.Sdk.Sessions.CallHeldEvent? left, Verbara.Sdk.Sessions.CallHeldEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallHeldEvent.operator ==(Verbara.Sdk.Sessions.CallHeldEvent? left, Verbara.Sdk.Sessions.CallHeldEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallQueuedEvent.operator !=(Verbara.Sdk.Sessions.CallQueuedEvent? left, Verbara.Sdk.Sessions.CallQueuedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallQueuedEvent.operator ==(Verbara.Sdk.Sessions.CallQueuedEvent? left, Verbara.Sdk.Sessions.CallQueuedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallResumedEvent.operator !=(Verbara.Sdk.Sessions.CallResumedEvent? left, Verbara.Sdk.Sessions.CallResumedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallResumedEvent.operator ==(Verbara.Sdk.Sessions.CallResumedEvent? left, Verbara.Sdk.Sessions.CallResumedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallRingNoAnswerEvent.operator !=(Verbara.Sdk.Sessions.CallRingNoAnswerEvent? left, Verbara.Sdk.Sessions.CallRingNoAnswerEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallRingNoAnswerEvent.operator ==(Verbara.Sdk.Sessions.CallRingNoAnswerEvent? left, Verbara.Sdk.Sessions.CallRingNoAnswerEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallSessionEvent.operator !=(Verbara.Sdk.Sessions.CallSessionEvent? left, Verbara.Sdk.Sessions.CallSessionEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallSessionEvent.operator ==(Verbara.Sdk.Sessions.CallSessionEvent? left, Verbara.Sdk.Sessions.CallSessionEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallStartedEvent.operator !=(Verbara.Sdk.Sessions.CallStartedEvent? left, Verbara.Sdk.Sessions.CallStartedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallStartedEvent.operator ==(Verbara.Sdk.Sessions.CallStartedEvent? left, Verbara.Sdk.Sessions.CallStartedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallTransferredEvent.operator !=(Verbara.Sdk.Sessions.CallTransferredEvent? left, Verbara.Sdk.Sessions.CallTransferredEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallTransferredEvent.operator ==(Verbara.Sdk.Sessions.CallTransferredEvent? left, Verbara.Sdk.Sessions.CallTransferredEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallWrapUpEvent.operator !=(Verbara.Sdk.Sessions.CallWrapUpEvent? left, Verbara.Sdk.Sessions.CallWrapUpEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallWrapUpEvent.operator ==(Verbara.Sdk.Sessions.CallWrapUpEvent? left, Verbara.Sdk.Sessions.CallWrapUpEvent? right) -> bool
+static Verbara.Sdk.Sessions.SessionDomainEvent.operator !=(Verbara.Sdk.Sessions.SessionDomainEvent? left, Verbara.Sdk.Sessions.SessionDomainEvent? right) -> bool
+static Verbara.Sdk.Sessions.SessionDomainEvent.operator ==(Verbara.Sdk.Sessions.SessionDomainEvent? left, Verbara.Sdk.Sessions.SessionDomainEvent? right) -> bool
+static Verbara.Sdk.Sessions.SessionMergedEvent.operator !=(Verbara.Sdk.Sessions.SessionMergedEvent? left, Verbara.Sdk.Sessions.SessionMergedEvent? right) -> bool
+static Verbara.Sdk.Sessions.SessionMergedEvent.operator ==(Verbara.Sdk.Sessions.SessionMergedEvent? left, Verbara.Sdk.Sessions.SessionMergedEvent? right) -> bool
+virtual Verbara.Sdk.Sessions.SessionDomainEvent.EqualityContract.get -> System.Type!
+virtual Verbara.Sdk.Sessions.SessionDomainEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+virtual Verbara.Sdk.Sessions.SessionDomainEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool

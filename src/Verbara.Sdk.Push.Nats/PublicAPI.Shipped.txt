@@ -1,1 +1,11 @@
 #nullable enable
+Verbara.Sdk.Push.Nats.NatsBridgeOptionsValidator.Validate(string? name, Verbara.Sdk.Push.Nats.NatsBridgeOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.Push.Nats.NatsSubscriberMessage.Deconstruct(out string! Subject, out byte[]! Payload) -> void
+Verbara.Sdk.Push.Nats.NatsSubscriberMessage.Equals(Verbara.Sdk.Push.Nats.NatsSubscriberMessage other) -> bool
+override Verbara.Sdk.Push.Nats.NatsBridge.Dispose() -> void
+override Verbara.Sdk.Push.Nats.NatsBridge.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+override Verbara.Sdk.Push.Nats.NatsSubscriberMessage.GetHashCode() -> int
+static Verbara.Sdk.Push.Nats.NatsSubscriberMessage.operator !=(Verbara.Sdk.Push.Nats.NatsSubscriberMessage left, Verbara.Sdk.Push.Nats.NatsSubscriberMessage right) -> bool
+static Verbara.Sdk.Push.Nats.NatsSubscriberMessage.operator ==(Verbara.Sdk.Push.Nats.NatsSubscriberMessage left, Verbara.Sdk.Push.Nats.NatsSubscriberMessage right) -> bool
+~override Verbara.Sdk.Push.Nats.NatsSubscriberMessage.Equals(object obj) -> bool
+~override Verbara.Sdk.Push.Nats.NatsSubscriberMessage.ToString() -> string

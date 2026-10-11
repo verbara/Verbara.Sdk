@@ -546,3 +546,221 @@ static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.HangupFrames -> S
 static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.Meter -> System.Diagnostics.Metrics.Meter!
 static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.StreamsClosed -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.StreamsOpened -> System.Diagnostics.Metrics.Counter<long>!
+Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.ChanWebSocketControlMessage() -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.ChanWebSocketControlMessage(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage! original) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Deconstruct(out string! Digit, out int DurationMs) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Deconstruct(out string? Cause) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketHangup? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Deconstruct(out string! Mark) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Deconstruct(out int Bytes) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Deconstruct(out string! Mark) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Deconstruct(out string! Format, out int Rate, out int Channels) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.ChanWebSocketMediaXoff() -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon.ChanWebSocketMediaXon() -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.Deconstruct(out Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection Direction) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection? other) -> bool
+Verbara.Sdk.Ari.Client.AriClientFactory
+Verbara.Sdk.Ari.Client.AriClientFactory.AriClientFactory(Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> void
+Verbara.Sdk.Ari.Client.AriClientFactory.Create(Verbara.Sdk.Ari.Client.AriClientOptions! options) -> Verbara.Sdk.IAriClient!
+Verbara.Sdk.Ari.Client.AriClientFactory.CreateAndConnectAsync(Verbara.Sdk.Ari.Client.AriClientOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.IAriClient!>
+Verbara.Sdk.Ari.Client.AriClientOptionsValidator.Validate(string? name, Verbara.Sdk.Ari.Client.AriClientOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.Ari.Client.IAriClientFactory
+Verbara.Sdk.Ari.Client.IAriClientFactory.Create(Verbara.Sdk.Ari.Client.AriClientOptions! options) -> Verbara.Sdk.IAriClient!
+Verbara.Sdk.Ari.Client.IAriClientFactory.CreateAndConnectAsync(Verbara.Sdk.Ari.Client.AriClientOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.IAriClient!>
+Verbara.Sdk.Ari.Resources.AriJsonContext.AriJsonContext() -> void
+Verbara.Sdk.Ari.Resources.AriJsonContext.AriJsonContext(System.Text.Json.JsonSerializerOptions! options) -> void
+abstract Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketHangup!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.GetTypeInfo(System.Type! type) -> System.Text.Json.Serialization.Metadata.JsonTypeInfo?
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.ToString() -> string!
+override Verbara.Sdk.Ari.Resources.AriJsonContext.GetTypeInfo(System.Type! type) -> System.Text.Json.Serialization.Metadata.JsonTypeInfo?
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? left, Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? left, Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf? left, Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf? left, Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketHangup? left, Verbara.Sdk.Ari.Audio.ChanWebSocketHangup? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketHangup? left, Verbara.Sdk.Ari.Audio.ChanWebSocketHangup? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.Default.get -> Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext!
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection? left, Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection? left, Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection? right) -> bool
+static Verbara.Sdk.Ari.Resources.AriJsonContext.Default.get -> Verbara.Sdk.Ari.Resources.AriJsonContext!
+virtual Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.EqualityContract.get -> System.Type!
+virtual Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+virtual Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.PrintMembers(System.Text.StringBuilder! builder) -> bool
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketControlMessage.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketDtmf.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketHangup.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketHangup>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMarkMedia.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMediaBuffering.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMediaDirection.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMediaMarkProcessed.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMediaStart.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMediaXoff.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMediaXon.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketSetMediaDirection.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.Int32.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<int>
+~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.String.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<string>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ApplicationMoveFailedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ApplicationMoveFailedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ApplicationRegisteredEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ApplicationRegisteredEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ApplicationReplacedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ApplicationReplacedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ApplicationUnregisteredEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ApplicationUnregisteredEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriApplication.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriApplication>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriApplicationArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriApplication[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriAsteriskInfo.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriAsteriskInfo>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriAsteriskPing.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriAsteriskPing>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriBridge.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriBridge>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriBridgeArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriBridge[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriBuildInfo.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriBuildInfo>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriCallerId.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriCallerId>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriChannel.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriChannel>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriChannelArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriChannel[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriChannelState.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriChannelState>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriConfigInfo.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriConfigInfo>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriConfigTuple.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriConfigTuple>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriConfigTupleArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriConfigTuple[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriContactInfo.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriContactInfo>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriDeviceState.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriDeviceState>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriDeviceStateArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriDeviceState[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriDialplanCep.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriDialplanCep>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriEndpoint.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriEndpoint>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriEndpointArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriEndpoint[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriFormatLang.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriFormatLang>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriFormatLangArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriFormatLang[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriLiveRecording.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriLiveRecording>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriLiveRecordingArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriLiveRecording[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriLogChannel.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriLogChannel>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriLogChannelArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriLogChannel[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriMailbox.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriMailbox>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriMailboxArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriMailbox[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriModule.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriModule>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriModuleArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriModule[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriPeer.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriPeer>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriPlayback.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriPlayback>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriPlaybackArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriPlayback[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriRtpStats.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriRtpStats>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriSetId.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriSetId>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriSound.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriSound>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriSoundArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriSound[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriStatusInfo.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriStatusInfo>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriStoredRecording.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriStoredRecording>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriStoredRecordingArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriStoredRecording[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriSystemInfo.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriSystemInfo>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriTextMessage.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriTextMessage>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.AriVariable.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.AriVariable>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.Boolean.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<bool>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.BridgeAttendedTransferEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.BridgeAttendedTransferEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.BridgeBlindTransferEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.BridgeBlindTransferEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.BridgeCreatedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.BridgeCreatedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.BridgeDestroyedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.BridgeDestroyedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.BridgeMergedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.BridgeMergedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.BridgeVideoSourceChangedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.BridgeVideoSourceChangedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelCallerIdEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelCallerIdEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelConnectedLineEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelConnectedLineEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelCreatedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelCreatedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelDestroyedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelDestroyedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelDialplanEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelDialplanEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelDtmfReceivedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelDtmfReceivedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelEnteredBridgeEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelEnteredBridgeEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelHangupRequestEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelHangupRequestEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelHoldEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelHoldEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelLeftBridgeEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelLeftBridgeEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelStateChangeEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelStateChangeEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelTalkingFinishedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelTalkingFinishedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelTalkingStartedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelTalkingStartedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelToneDetectedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelToneDetectedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelTransferEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelTransferEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelUnholdEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelUnholdEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelUsereventEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelUsereventEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ChannelVarsetEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ChannelVarsetEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ContactStatusChangeEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ContactStatusChangeEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.DeviceStateChangedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.DeviceStateChangedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.DialEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.DialEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.DictionaryStringString.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<System.Collections.Generic.Dictionary<string, string>>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.Double.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<double>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.EndpointStateChangeEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.EndpointStateChangeEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.IReadOnlyListAriFormatLang.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<System.Collections.Generic.IReadOnlyList<Verbara.Sdk.AriFormatLang>>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.IReadOnlyListString.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<System.Collections.Generic.IReadOnlyList<string>>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.Int32.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<int>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.MissingParamsEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.MissingParamsEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.NullableDouble.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<double?>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.NullableInt32.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<int?>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.PeerStatusChangeEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.PeerStatusChangeEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.PlaybackContinuingEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.PlaybackContinuingEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.PlaybackFinishedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.PlaybackFinishedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.PlaybackStartedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.PlaybackStartedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.RecordingFailedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.RecordingFailedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.RecordingFinishedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.RecordingFinishedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.RecordingStartedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.RecordingStartedEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ReferToEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ReferToEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.ReferredByEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.ReferredByEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.RequiredDestinationEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.RequiredDestinationEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.StasisEndEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.StasisEndEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.StasisStartEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.StasisStartEvent>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.String.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<string>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.StringArray.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<string[]>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.TextMessageReceivedEvent.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Events.TextMessageReceivedEvent>

@@ -80,3 +80,10 @@ static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.F
 static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.FramesSent -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.Meter -> System.Diagnostics.Metrics.Meter!
 static readonly Verbara.Sdk.VoiceAi.AudioSocket.Diagnostics.AudioSocketMetrics.SessionDurationMs -> System.Diagnostics.Metrics.Histogram<double>!
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.Deconstruct(out Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrameType Type, out System.ReadOnlyMemory<byte> Payload) -> void
+Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.Equals(Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame other) -> bool
+override Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.GetHashCode() -> int
+static Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.operator !=(Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame left, Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame right) -> bool
+static Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.operator ==(Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame left, Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame right) -> bool
+~override Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.Equals(object obj) -> bool
+~override Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketFrame.ToString() -> string

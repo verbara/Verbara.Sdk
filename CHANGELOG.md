@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: a public member added to a shipped package fails the build unless its record declares it (#406)
+
+The undeclared-public-API diagnostic (`RS0016`) was in the shared `NoWarn` list, which overrides the `.editorconfig`
+severity a comment said controlled it, and the source-generator package never ran the analyzer: a public member
+could reach a published package without a line in its `PublicAPI.*.txt` record and no build noticed. The diagnostic
+now fails the build of every package this repository publishes. The 796 public symbols already published but
+missing from the records — 784 in 16 packages, most of them members the compiler synthesises for records or the
+`System.Text.Json` and options-validation source generators emit, plus 12 in `Verbara.Sdk.Ami.SourceGenerators` —
+are appended to each package's `PublicAPI.Shipped.txt`; no `PublicAPI.Unshipped.txt` line changes. Two CI steps keep
+it true: one proves from each compile's own arguments and diagnostic log that all 29 packages build with the
+diagnostic live, and a negative control adds an undeclared public member on every pull request and passes only when
+the build fails because of it. A contributor who adds public API now adds its line to `PublicAPI.Unshipped.txt`
+(the `RS0016` error quotes the line to add). No public API, behaviour or package contents
+change: the records are analyzer input and are not packed.
+
 ## [2.8.0] - 2026-10-09
 
 ### Changed — BREAKING: a multi-server host runs the reconciliation sweep for every server of the pool (#402)

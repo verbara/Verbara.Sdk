@@ -1,1 +1,13 @@
 #nullable enable
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.CircuitBreakerFailureThreshold.get -> int
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.CircuitBreakerFailureThreshold.set -> void
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.CircuitBreakerOpenDuration.get -> System.TimeSpan
+Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions.CircuitBreakerOpenDuration.set -> void
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.<Clone>$() -> Verbara.Sdk.Push.Webhooks.WebhookSubscription!
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.Equals(Verbara.Sdk.Push.Webhooks.WebhookSubscription? other) -> bool
+Verbara.Sdk.Push.Webhooks.WebhookSubscription.WebhookSubscription() -> void
+override Verbara.Sdk.Push.Webhooks.WebhookSubscription.Equals(object? obj) -> bool
+override Verbara.Sdk.Push.Webhooks.WebhookSubscription.GetHashCode() -> int
+override Verbara.Sdk.Push.Webhooks.WebhookSubscription.ToString() -> string!
+static Verbara.Sdk.Push.Webhooks.WebhookSubscription.operator !=(Verbara.Sdk.Push.Webhooks.WebhookSubscription? left, Verbara.Sdk.Push.Webhooks.WebhookSubscription? right) -> bool
+static Verbara.Sdk.Push.Webhooks.WebhookSubscription.operator ==(Verbara.Sdk.Push.Webhooks.WebhookSubscription? left, Verbara.Sdk.Push.Webhooks.WebhookSubscription? right) -> bool

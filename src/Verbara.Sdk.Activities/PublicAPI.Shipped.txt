@@ -215,3 +215,33 @@ override Verbara.Sdk.Activities.Models.PhoneNumber.ToString() -> string!
 static Verbara.Sdk.Activities.Models.EndPoint.Parse(string! channelString) -> Verbara.Sdk.Activities.Models.EndPoint?
 virtual Verbara.Sdk.Activities.Activities.AriActivityBase.DisposeAsync() -> System.Threading.Tasks.ValueTask
 virtual Verbara.Sdk.Activities.Activities.AriActivityBase.OnCancellingAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Models.CallerId.<Clone>$() -> Verbara.Sdk.Activities.Models.CallerId!
+Verbara.Sdk.Activities.Models.CallerId.Deconstruct(out string! Number, out string? Name) -> void
+Verbara.Sdk.Activities.Models.CallerId.Equals(Verbara.Sdk.Activities.Models.CallerId? other) -> bool
+Verbara.Sdk.Activities.Models.DialPlanExtension.<Clone>$() -> Verbara.Sdk.Activities.Models.DialPlanExtension!
+Verbara.Sdk.Activities.Models.DialPlanExtension.Deconstruct(out string! Context, out string! Extension, out int Priority) -> void
+Verbara.Sdk.Activities.Models.DialPlanExtension.Equals(Verbara.Sdk.Activities.Models.DialPlanExtension? other) -> bool
+Verbara.Sdk.Activities.Models.EndPoint.<Clone>$() -> Verbara.Sdk.Activities.Models.EndPoint!
+Verbara.Sdk.Activities.Models.EndPoint.Deconstruct(out Verbara.Sdk.Activities.Models.TechType Tech, out string! Resource) -> void
+Verbara.Sdk.Activities.Models.EndPoint.Equals(Verbara.Sdk.Activities.Models.EndPoint? other) -> bool
+Verbara.Sdk.Activities.Models.PhoneNumber.<Clone>$() -> Verbara.Sdk.Activities.Models.PhoneNumber!
+Verbara.Sdk.Activities.Models.PhoneNumber.Deconstruct(out string! Number, out string? Name) -> void
+Verbara.Sdk.Activities.Models.PhoneNumber.Equals(Verbara.Sdk.Activities.Models.PhoneNumber? other) -> bool
+override Verbara.Sdk.Activities.Models.CallerId.Equals(object? obj) -> bool
+override Verbara.Sdk.Activities.Models.CallerId.GetHashCode() -> int
+override Verbara.Sdk.Activities.Models.CallerId.ToString() -> string!
+override Verbara.Sdk.Activities.Models.DialPlanExtension.Equals(object? obj) -> bool
+override Verbara.Sdk.Activities.Models.DialPlanExtension.GetHashCode() -> int
+override Verbara.Sdk.Activities.Models.DialPlanExtension.ToString() -> string!
+override Verbara.Sdk.Activities.Models.EndPoint.Equals(object? obj) -> bool
+override Verbara.Sdk.Activities.Models.EndPoint.GetHashCode() -> int
+override Verbara.Sdk.Activities.Models.PhoneNumber.Equals(object? obj) -> bool
+override Verbara.Sdk.Activities.Models.PhoneNumber.GetHashCode() -> int
+static Verbara.Sdk.Activities.Models.CallerId.operator !=(Verbara.Sdk.Activities.Models.CallerId? left, Verbara.Sdk.Activities.Models.CallerId? right) -> bool
+static Verbara.Sdk.Activities.Models.CallerId.operator ==(Verbara.Sdk.Activities.Models.CallerId? left, Verbara.Sdk.Activities.Models.CallerId? right) -> bool
+static Verbara.Sdk.Activities.Models.DialPlanExtension.operator !=(Verbara.Sdk.Activities.Models.DialPlanExtension? left, Verbara.Sdk.Activities.Models.DialPlanExtension? right) -> bool
+static Verbara.Sdk.Activities.Models.DialPlanExtension.operator ==(Verbara.Sdk.Activities.Models.DialPlanExtension? left, Verbara.Sdk.Activities.Models.DialPlanExtension? right) -> bool
+static Verbara.Sdk.Activities.Models.EndPoint.operator !=(Verbara.Sdk.Activities.Models.EndPoint? left, Verbara.Sdk.Activities.Models.EndPoint? right) -> bool
+static Verbara.Sdk.Activities.Models.EndPoint.operator ==(Verbara.Sdk.Activities.Models.EndPoint? left, Verbara.Sdk.Activities.Models.EndPoint? right) -> bool
+static Verbara.Sdk.Activities.Models.PhoneNumber.operator !=(Verbara.Sdk.Activities.Models.PhoneNumber? left, Verbara.Sdk.Activities.Models.PhoneNumber? right) -> bool
+static Verbara.Sdk.Activities.Models.PhoneNumber.operator ==(Verbara.Sdk.Activities.Models.PhoneNumber? left, Verbara.Sdk.Activities.Models.PhoneNumber? right) -> bool

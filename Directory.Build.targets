@@ -1,0 +1,28 @@
+<Project>
+
+  <!-- Public-API guard record. Armed only by the global property RecordCscArgs=true (Pack Warnings
+       Gate's Build Release passes it together with ProvideCommandLineArgs=true). Each compile then
+       leaves two files in its own obj/<configuration>/<tfm>/:
+         public-api.csc-args.txt — the arguments the C# compiler was handed by the compile that
+                                   produced the DLL (@(CscCommandLineArgs)), written after CoreCompile;
+                                   a failed compile writes none, so its existence proves success;
+         public-api.sarif        — the compiler's own SARIF 2.1 log of that compile, which records every
+                                   RS0016 the analyzer raised, suppressed or demoted ones included.
+       scripts/ci/check-public-api-guard-coverage.sh reads both, and the analyzer-config files the
+       record names, for every packable project. ErrorLog is set here rather than on the command line
+       because a comma in a -p: value must be escaped as %2C, or csc writes SARIF 1.0. This file is
+       imported after the project body, so a project-body ErrorLog loses; one set in a target shows on
+       the record's /errorlog: line, which the guard checks against /out:. -->
+  <PropertyGroup Condition="'$(RecordCscArgs)' == 'true'">
+    <ErrorLog>$(IntermediateOutputPath)public-api.sarif,version=2</ErrorLog>
+  </PropertyGroup>
+
+  <Target Name="RecordPublicApiCompilerArgs" AfterTargets="CoreCompile" Condition="'$(RecordCscArgs)' == 'true'">
+    <WriteLinesToFile File="$(IntermediateOutputPath)public-api.csc-args.txt" Lines="@(CscCommandLineArgs)" Overwrite="true" Condition="'@(CscCommandLineArgs)' != ''" />
+    <ItemGroup>
+      <FileWrites Include="$(IntermediateOutputPath)public-api.csc-args.txt" />
+      <FileWrites Include="$(IntermediateOutputPath)public-api.sarif" />
+    </ItemGroup>
+  </Target>
+
+</Project>
