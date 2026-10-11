@@ -236,6 +236,10 @@ jobs:
       # guard does, with the same SDK.
       - name: Run public-API guard unit tests
         run: bash scripts/tests/test_public_api_guard_coverage.sh
+      # The negative control edits a tracked source file on every PR, so its verdict and its restore (interrupted runs
+      # included) are tested here, for the same reason; the control itself runs last in Pack Warnings Gate.
+      - name: Run public-API negative control unit tests
+        run: bash scripts/tests/test_public_api_guard_fires.sh
 
   aot-check:
     name: AOT Trim Check
@@ -302,6 +306,13 @@ jobs:
         env:
           PUBLIC_API_MSBUILD_CASES: '1'
         run: bash scripts/tests/test_public_api_guard_coverage.sh
+      # The negative control: the guard above shows every package was compiled with RS0016 live; this shows RS0016
+      # fires. It adds an undeclared public member to one shipped source file, rebuilds that project with the committed
+      # configuration and passes only if the build fails with RS0016 naming that member — a green build is what a
+      # silenced guard produces too. It restores the file from a copy on every exit path. It runs LAST, after the pack
+      # and both guards, so the mutated checkout feeds nothing else.
+      - name: The public-API guard fires on an undeclared public member
+        run: bash scripts/ci/check-public-api-guard-fires.sh
 
   audit-test-asserts:
     name: Audit Test Asserts
