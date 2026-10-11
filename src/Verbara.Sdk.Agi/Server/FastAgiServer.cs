@@ -100,14 +100,24 @@ public sealed class FastAgiServer : IAgiServer
         _timeProvider = timeProvider;
     }
 
+    /// <summary>
+    /// Binds the listener and starts the accept loop. The server serves until <see cref="StopAsync"/> or
+    /// <see cref="DisposeAsync"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Unused: this start begins nothing that can be aborted.</param>
+    /// <exception cref="InvalidOperationException">The server is <see cref="AgiServerState.Faulted"/>.</exception>
     public async ValueTask StartAsync(CancellationToken cancellationToken = default)
     {
+        // The parameter is deliberately unused: it means the start was aborted, and this start begins
+        // nothing that can be aborted. The accept loop and every connection handler get the token this
+        // server owns, which the server's own stop cancels; a source linked to the start's token would
+        // end them all when that token is cancelled after the start returned.
         if (State == AgiServerState.Faulted)
             throw new InvalidOperationException("Cannot start from Faulted state. Call StopAsync first.");
 
         SetState(AgiServerState.Starting);
 
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _cts = new CancellationTokenSource();
         _listener = new TcpListener(IPAddress.Any, Port);
 
         try
