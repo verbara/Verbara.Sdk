@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed: shipped packages declare `Microsoft.Extensions.* >= 10.0.0` instead of the servicing patch (#NNN)
+### Changed: shipped packages declare `Microsoft.Extensions.* >= 10.0.0` instead of the servicing patch (#408)
 
 Every package this repository publishes declared its `Microsoft.Extensions.*` dependencies at the servicing patch the
 SDK was built with (`>= 10.0.12` in 2.8.0). An application that pins an earlier 10.0.x patch centrally got `NU1109`
