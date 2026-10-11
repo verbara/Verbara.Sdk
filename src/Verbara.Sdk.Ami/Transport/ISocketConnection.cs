@@ -17,6 +17,13 @@ public interface ISocketConnection : IAsyncDisposable
     PipeWriter Output { get; }
 
     /// <summary>Connect to the remote host.</summary>
+    /// <param name="hostname">The remote host to connect to.</param>
+    /// <param name="port">The remote port.</param>
+    /// <param name="useSsl">Whether to authenticate the connection with TLS after the TCP connect.</param>
+    /// <param name="cancellationToken">
+    /// Bounds only the connect and the TLS handshake. Cancelling it after the connect returned does not
+    /// close the connection; call <see cref="CloseAsync"/> or dispose the connection for that.
+    /// </param>
     ValueTask ConnectAsync(string hostname, int port, bool useSsl = false, CancellationToken cancellationToken = default);
 
     /// <summary>Close the connection gracefully.</summary>

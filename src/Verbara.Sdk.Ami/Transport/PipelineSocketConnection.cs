@@ -65,7 +65,11 @@ public sealed class PipelineSocketConnection : ISocketConnection
 
         _inputPipe = new Pipe(pipeOptions);
         _outputPipe = new Pipe(pipeOptions);
-        _pumpCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        // The connect token bounds the TCP connect and the TLS handshake above, and nothing after them.
+        // The pumps run on a source this connection owns, which only CloseAsync and DisposeAsync cancel;
+        // a source linked to the connect token would stop both pumps in silence when that token is
+        // cancelled after the connect returned, with IsConnected still true.
+        _pumpCts = new CancellationTokenSource();
 
         var token = _pumpCts.Token;
         _readPumpTask = Task.Run(() => ReadPumpAsync(_stream, _inputPipe.Writer, token), CancellationToken.None);

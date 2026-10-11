@@ -294,11 +294,18 @@ internal sealed class SweepRig : IAsyncDisposable
     /// Starts the sweep's own loop, as the host does, and returns a handle that counts the sweeps it completes
     /// and stops it. Disposed (stopped) with the rig if the test does not stop it.
     /// </summary>
-    public async Task<SweepLoop> StartLoopAsync(SessionReconciliationService sweep)
+    public Task<SweepLoop> StartLoopAsync(SessionReconciliationService sweep) =>
+        StartLoopAsync(sweep, CancellationToken.None);
+
+    /// <summary>
+    /// Starts the sweep's own loop as <see cref="StartLoopAsync(SessionReconciliationService)"/> does, handing
+    /// <paramref name="startToken"/> to the sweep's start as the host hands it the start token.
+    /// </summary>
+    public async Task<SweepLoop> StartLoopAsync(SessionReconciliationService sweep, CancellationToken startToken)
     {
         var loop = new SweepLoop(sweep, _pulse);
         _owned.Add(loop);
-        await loop.StartAsync();
+        await loop.StartAsync(startToken);
         return loop;
     }
 
@@ -510,7 +517,10 @@ internal sealed class SweepLoop : IAsyncDisposable
     public int Sweeps => Volatile.Read(ref _sweeps);
 
     /// <summary>Starts the loop as the host does.</summary>
-    public async Task StartAsync()
+    public Task StartAsync() => StartAsync(CancellationToken.None);
+
+    /// <summary>Starts the loop as the host does, handing <paramref name="startToken"/> to the sweep's start.</summary>
+    public async Task StartAsync(CancellationToken startToken)
     {
         var previous = Activity.Current;
         var parent = new Activity("sweep-loop-under-test");
@@ -519,7 +529,7 @@ internal sealed class SweepLoop : IAsyncDisposable
         _parents[parent.TraceId] = parent;
         try
         {
-            await _sweep.StartAsync(CancellationToken.None);
+            await _sweep.StartAsync(startToken);
             Volatile.Write(ref _running, 1);
         }
         finally

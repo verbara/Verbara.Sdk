@@ -112,6 +112,7 @@ internal sealed class DecisionGuardBaseline
         TaskRunHandoffScanner.GuardName,
         EmptyCatchScanner.GuardName,
         HostedStartTokenScanner.GuardName,
+        HostedStartTokenScanner.ComponentGuardName,
         VersionOverrideScanner.GuardName,
     };
 

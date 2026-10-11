@@ -318,8 +318,8 @@ public sealed class HostedStartTokenGuardTests
     [Fact]
     public void Scan_ShouldPass_WhenANonHostedTypeHasAStartAsyncThatStoresItsToken()
     {
-        // Whether R2 also binds components that are not hosted services is an open ruling; the spec
-        // requirement this guard holds is about hosted services only.
+        // The hosted guard's requirement is about hosted services only; a non-hosted start is the
+        // component guard's, whose twin of this fixture is reported (ComponentStartTokenGuardTests).
         const string source =
             "class Listener : IAsyncDisposable {\n" +
             "    private CancellationTokenSource? _cts;\n" +
