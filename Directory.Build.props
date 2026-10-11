@@ -65,11 +65,15 @@
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
   </ItemGroup>
 
-  <!-- Analyzers for source projects only (exclude SourceGenerators) -->
+  <!-- Banned-API analyzer for source projects only (exclude SourceGenerators) -->
   <ItemGroup Condition="$(MSBuildProjectDirectory.Contains('src')) And !$(MSBuildProjectName.Contains('SourceGenerators'))">
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" Link="BannedSymbols.txt" />
+  </ItemGroup>
+
+  <!-- Public-API analyzer for every shipped package, the source generator included -->
+  <ItemGroup Condition="$(MSBuildProjectDirectory.Contains('src'))">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <AdditionalFiles Include="$(MSBuildProjectDirectory)/PublicAPI.Shipped.txt" Condition="Exists('$(MSBuildProjectDirectory)/PublicAPI.Shipped.txt')" />
     <AdditionalFiles Include="$(MSBuildProjectDirectory)/PublicAPI.Unshipped.txt" Condition="Exists('$(MSBuildProjectDirectory)/PublicAPI.Unshipped.txt')" />
   </ItemGroup>
