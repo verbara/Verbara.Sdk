@@ -371,3 +371,23 @@ static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.QueueWaitTimeMs -> Syst
 Verbara.Sdk.Live.Diagnostics.LiveHealthCheck
 Verbara.Sdk.Live.Diagnostics.LiveHealthCheck.LiveHealthCheck(Verbara.Sdk.Live.Server.VerbaraServer! server) -> void
 Verbara.Sdk.Live.Diagnostics.LiveHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.<Clone>$() -> Verbara.Sdk.Live.Bridges.BridgeTransferInfo!
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.Deconstruct(out string! BridgeId, out string! TransferType, out string? TargetChannel, out string? SecondBridgeId, out string? DestType, out string? Result) -> void
+Verbara.Sdk.Live.Bridges.BridgeTransferInfo.Equals(Verbara.Sdk.Live.Bridges.BridgeTransferInfo? other) -> bool
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.<Clone>$() -> Verbara.Sdk.Live.Channels.ExtensionHistoryEntry!
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.Deconstruct(out string! Context, out string! Extension, out int Priority, out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.Equals(Verbara.Sdk.Live.Channels.ExtensionHistoryEntry? other) -> bool
+Verbara.Sdk.Live.Diagnostics.LiveActivitySource
+Verbara.Sdk.Live.Server.VerbaraServer.AriClient.get -> Verbara.Sdk.IAriClient?
+Verbara.Sdk.Live.Server.VerbaraServer.SetAriClient(Verbara.Sdk.IAriClient! ariClient) -> void
+override Verbara.Sdk.Live.Bridges.BridgeTransferInfo.Equals(object? obj) -> bool
+override Verbara.Sdk.Live.Bridges.BridgeTransferInfo.GetHashCode() -> int
+override Verbara.Sdk.Live.Bridges.BridgeTransferInfo.ToString() -> string!
+override Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.Equals(object? obj) -> bool
+override Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.GetHashCode() -> int
+override Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.ToString() -> string!
+static Verbara.Sdk.Live.Bridges.BridgeTransferInfo.operator !=(Verbara.Sdk.Live.Bridges.BridgeTransferInfo? left, Verbara.Sdk.Live.Bridges.BridgeTransferInfo? right) -> bool
+static Verbara.Sdk.Live.Bridges.BridgeTransferInfo.operator ==(Verbara.Sdk.Live.Bridges.BridgeTransferInfo? left, Verbara.Sdk.Live.Bridges.BridgeTransferInfo? right) -> bool
+static Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.operator !=(Verbara.Sdk.Live.Channels.ExtensionHistoryEntry? left, Verbara.Sdk.Live.Channels.ExtensionHistoryEntry? right) -> bool
+static Verbara.Sdk.Live.Channels.ExtensionHistoryEntry.operator ==(Verbara.Sdk.Live.Channels.ExtensionHistoryEntry? left, Verbara.Sdk.Live.Channels.ExtensionHistoryEntry? right) -> bool
+static readonly Verbara.Sdk.Live.Diagnostics.LiveActivitySource.Source -> System.Diagnostics.ActivitySource!

@@ -78,3 +78,78 @@ static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.S
 static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsCompleted -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsFailed -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsStarted -> System.Diagnostics.Metrics.Counter<long>!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptionsValidator.Validate(string? name, Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.Deconstruct(out System.Guid ChannelId, out System.DateTimeOffset Timestamp, out string! Message) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent? other) -> bool
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.Deconstruct(out System.Guid ChannelId, out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.RealtimeEvent(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent! original) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.Deconstruct(out System.Guid ChannelId, out System.DateTimeOffset Timestamp, out string! FunctionName, out string! ArgumentsJson, out string! ResultJson) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent? other) -> bool
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.Deconstruct(out System.Guid ChannelId, out System.DateTimeOffset Timestamp, out System.TimeSpan Duration) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent? other) -> bool
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent.Deconstruct(out System.Guid ChannelId, out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent? other) -> bool
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent.Deconstruct(out System.Guid ChannelId, out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent? other) -> bool
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent.Deconstruct(out System.Guid ChannelId, out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent? other) -> bool
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.Deconstruct(out System.Guid ChannelId, out System.DateTimeOffset Timestamp, out string! Transcript, out bool IsFinal) -> void
+Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent? other) -> bool
+abstract Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent!
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.ToString() -> string!
+override sealed Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? other) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.operator !=(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent.operator ==(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeErrorEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.operator !=(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.operator ==(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.operator !=(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent.operator ==(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeFunctionCalledEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.operator !=(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent.operator ==(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseEndedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent.operator !=(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent.operator ==(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeResponseStartedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent.operator !=(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent.operator ==(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStartedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent.operator !=(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent.operator ==(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeSpeechStoppedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.operator !=(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.operator ==(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent? left, Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent? right) -> bool
+virtual Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.EqualityContract.get -> System.Type!
+virtual Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? other) -> bool
+virtual Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool

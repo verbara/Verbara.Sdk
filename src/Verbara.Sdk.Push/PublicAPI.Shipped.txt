@@ -116,3 +116,59 @@ Verbara.Sdk.Push.Authz.AllowAllSubscriptionAuthorizer.AllowAllSubscriptionAuthor
 Verbara.Sdk.Push.Authz.AllowAllSubscriptionAuthorizer.CanSubscribe(Verbara.Sdk.Push.Delivery.SubscriberContext! subscriber, Verbara.Sdk.Push.Topics.TopicPattern requestedPattern) -> Verbara.Sdk.Push.Authz.AuthorizationResult
 Verbara.Sdk.Push.Authz.ITopicPermissionMap
 Verbara.Sdk.Push.Authz.ITopicPermissionMap.GetGrantedPatterns(string! permissionName) -> System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Push.Topics.TopicPattern>!
+Verbara.Sdk.Push.Authz.AuthorizationResult.Allowed.init -> void
+Verbara.Sdk.Push.Authz.AuthorizationResult.AuthorizationResult() -> void
+Verbara.Sdk.Push.Authz.AuthorizationResult.Deconstruct(out bool Allowed, out string? Reason) -> void
+Verbara.Sdk.Push.Authz.AuthorizationResult.Equals(Verbara.Sdk.Push.Authz.AuthorizationResult other) -> bool
+Verbara.Sdk.Push.Authz.AuthorizationResult.Reason.init -> void
+Verbara.Sdk.Push.Delivery.SubscriberContext.<Clone>$() -> Verbara.Sdk.Push.Delivery.SubscriberContext!
+Verbara.Sdk.Push.Delivery.SubscriberContext.Deconstruct(out string! TenantId, out string? UserId, out System.Collections.Generic.IReadOnlySet<string!>! Roles, out System.Collections.Generic.IReadOnlySet<string!>! Permissions, out string? RequestedTopicPattern) -> void
+Verbara.Sdk.Push.Delivery.SubscriberContext.Equals(Verbara.Sdk.Push.Delivery.SubscriberContext? other) -> bool
+Verbara.Sdk.Push.Diagnostics.PushActivitySource
+Verbara.Sdk.Push.Events.PushEvent.PushEvent() -> void
+Verbara.Sdk.Push.Events.PushEvent.PushEvent(Verbara.Sdk.Push.Events.PushEvent! original) -> void
+Verbara.Sdk.Push.Events.PushEventMetadata.<Clone>$() -> Verbara.Sdk.Push.Events.PushEventMetadata!
+Verbara.Sdk.Push.Events.PushEventMetadata.Deconstruct(out string! TenantId, out string? UserId, out System.DateTimeOffset OccurredAt, out string? CorrelationId, out string? TopicPath, out string? TraceContext) -> void
+Verbara.Sdk.Push.Events.PushEventMetadata.Equals(Verbara.Sdk.Push.Events.PushEventMetadata? other) -> bool
+Verbara.Sdk.Push.Events.RemotePushEvent.Deconstruct(out string! OriginalEventType, out string? SourceNodeId, out byte[]! RawPayload) -> void
+Verbara.Sdk.Push.Events.RemotePushEvent.Equals(Verbara.Sdk.Push.Events.RemotePushEvent? other) -> bool
+Verbara.Sdk.Push.Topics.TopicName.TopicName() -> void
+Verbara.Sdk.Push.Topics.TopicPattern.TopicPattern() -> void
+abstract Verbara.Sdk.Push.Events.PushEvent.<Clone>$() -> Verbara.Sdk.Push.Events.PushEvent!
+override Verbara.Sdk.Push.Authz.AuthorizationResult.GetHashCode() -> int
+override Verbara.Sdk.Push.Delivery.SubscriberContext.Equals(object? obj) -> bool
+override Verbara.Sdk.Push.Delivery.SubscriberContext.GetHashCode() -> int
+override Verbara.Sdk.Push.Delivery.SubscriberContext.ToString() -> string!
+override Verbara.Sdk.Push.Events.PushEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Push.Events.PushEvent.GetHashCode() -> int
+override Verbara.Sdk.Push.Events.PushEvent.ToString() -> string!
+override Verbara.Sdk.Push.Events.PushEventMetadata.Equals(object? obj) -> bool
+override Verbara.Sdk.Push.Events.PushEventMetadata.GetHashCode() -> int
+override Verbara.Sdk.Push.Events.PushEventMetadata.ToString() -> string!
+override Verbara.Sdk.Push.Events.RemotePushEvent.<Clone>$() -> Verbara.Sdk.Push.Events.RemotePushEvent!
+override Verbara.Sdk.Push.Events.RemotePushEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Push.Events.RemotePushEvent.GetHashCode() -> int
+override Verbara.Sdk.Push.Events.RemotePushEvent.ToString() -> string!
+override Verbara.Sdk.Push.Topics.TopicName.Equals(object? obj) -> bool
+override Verbara.Sdk.Push.Topics.TopicName.GetHashCode() -> int
+override Verbara.Sdk.Push.Topics.TopicName.ToString() -> string!
+override Verbara.Sdk.Push.Topics.TopicPattern.Equals(object? obj) -> bool
+override Verbara.Sdk.Push.Topics.TopicPattern.GetHashCode() -> int
+override Verbara.Sdk.Push.Topics.TopicPattern.ToString() -> string!
+override sealed Verbara.Sdk.Push.Events.RemotePushEvent.Equals(Verbara.Sdk.Push.Events.PushEvent? other) -> bool
+static Verbara.Sdk.Push.Authz.AuthorizationResult.operator !=(Verbara.Sdk.Push.Authz.AuthorizationResult left, Verbara.Sdk.Push.Authz.AuthorizationResult right) -> bool
+static Verbara.Sdk.Push.Authz.AuthorizationResult.operator ==(Verbara.Sdk.Push.Authz.AuthorizationResult left, Verbara.Sdk.Push.Authz.AuthorizationResult right) -> bool
+static Verbara.Sdk.Push.Delivery.SubscriberContext.operator !=(Verbara.Sdk.Push.Delivery.SubscriberContext? left, Verbara.Sdk.Push.Delivery.SubscriberContext? right) -> bool
+static Verbara.Sdk.Push.Delivery.SubscriberContext.operator ==(Verbara.Sdk.Push.Delivery.SubscriberContext? left, Verbara.Sdk.Push.Delivery.SubscriberContext? right) -> bool
+static Verbara.Sdk.Push.Events.PushEvent.operator !=(Verbara.Sdk.Push.Events.PushEvent? left, Verbara.Sdk.Push.Events.PushEvent? right) -> bool
+static Verbara.Sdk.Push.Events.PushEvent.operator ==(Verbara.Sdk.Push.Events.PushEvent? left, Verbara.Sdk.Push.Events.PushEvent? right) -> bool
+static Verbara.Sdk.Push.Events.PushEventMetadata.operator !=(Verbara.Sdk.Push.Events.PushEventMetadata? left, Verbara.Sdk.Push.Events.PushEventMetadata? right) -> bool
+static Verbara.Sdk.Push.Events.PushEventMetadata.operator ==(Verbara.Sdk.Push.Events.PushEventMetadata? left, Verbara.Sdk.Push.Events.PushEventMetadata? right) -> bool
+static Verbara.Sdk.Push.Events.RemotePushEvent.operator !=(Verbara.Sdk.Push.Events.RemotePushEvent? left, Verbara.Sdk.Push.Events.RemotePushEvent? right) -> bool
+static Verbara.Sdk.Push.Events.RemotePushEvent.operator ==(Verbara.Sdk.Push.Events.RemotePushEvent? left, Verbara.Sdk.Push.Events.RemotePushEvent? right) -> bool
+static readonly Verbara.Sdk.Push.Diagnostics.PushActivitySource.Source -> System.Diagnostics.ActivitySource!
+virtual Verbara.Sdk.Push.Events.PushEvent.EqualityContract.get -> System.Type!
+virtual Verbara.Sdk.Push.Events.PushEvent.Equals(Verbara.Sdk.Push.Events.PushEvent? other) -> bool
+virtual Verbara.Sdk.Push.Events.PushEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+~override Verbara.Sdk.Push.Authz.AuthorizationResult.Equals(object obj) -> bool
+~override Verbara.Sdk.Push.Authz.AuthorizationResult.ToString() -> string

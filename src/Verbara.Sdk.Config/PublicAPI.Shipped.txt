@@ -66,3 +66,5 @@ static Verbara.Sdk.Config.ConfigFileReader.Parse(string! filePath) -> Verbara.Sd
 static Verbara.Sdk.Config.ConfigFileReader.Parse(System.IO.TextReader! reader, string? fileName = null) -> Verbara.Sdk.Config.ConfigFile!
 static Verbara.Sdk.Config.ExtensionsConfigFileReader.Parse(string! filePath) -> Verbara.Sdk.Config.ExtensionsConfigFile!
 static Verbara.Sdk.Config.ExtensionsConfigFileReader.Parse(System.IO.TextReader! reader, string? fileName = null) -> Verbara.Sdk.Config.ExtensionsConfigFile!
+Verbara.Sdk.Config.IncludeDirective.IsTry.get -> bool
+Verbara.Sdk.Config.IncludeDirective.IsTry.init -> void

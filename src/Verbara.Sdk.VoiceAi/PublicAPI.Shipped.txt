@@ -134,3 +134,131 @@ virtual Verbara.Sdk.VoiceAi.SpeechRecognizer.DisposeAsync() -> System.Threading.
 virtual Verbara.Sdk.VoiceAi.SpeechRecognizer.ProviderName.get -> string!
 virtual Verbara.Sdk.VoiceAi.SpeechSynthesizer.DisposeAsync() -> System.Threading.Tasks.ValueTask
 virtual Verbara.Sdk.VoiceAi.SpeechSynthesizer.ProviderName.get -> string!
+Verbara.Sdk.VoiceAi.ConversationTurn.Deconstruct(out string! UserTranscript, out string! AssistantResponse, out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.ConversationTurn.Equals(Verbara.Sdk.VoiceAi.ConversationTurn other) -> bool
+Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.BargInDetectedEvent(Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent! original) -> void
+Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.Deconstruct(out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.Deconstruct(out System.DateTimeOffset Timestamp, out string! Message, out System.Exception? Exception, out Verbara.Sdk.VoiceAi.Events.PipelineErrorSource Source) -> void
+Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.PipelineErrorEvent(Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent! original) -> void
+Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.Deconstruct(out System.DateTimeOffset Timestamp, out string! Response) -> void
+Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.ResponseGeneratedEvent(Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent! original) -> void
+Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.Deconstruct(out System.DateTimeOffset Timestamp, out System.TimeSpan Duration) -> void
+Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.SpeechEndedEvent(Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent! original) -> void
+Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.Deconstruct(out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.SpeechStartedEvent(Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent! original) -> void
+Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.Deconstruct(out System.DateTimeOffset Timestamp, out System.TimeSpan Duration) -> void
+Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.SynthesisEndedEvent(Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent! original) -> void
+Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.Deconstruct(out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.SynthesisStartedEvent(Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent! original) -> void
+Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Deconstruct(out System.DateTimeOffset Timestamp, out string! Transcript, out float Confidence, out bool IsFinal) -> void
+Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.TranscriptReceivedEvent(Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent! original) -> void
+Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.Deconstruct(out System.DateTimeOffset Timestamp) -> void
+Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.VoiceAiPipelineEvent(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent! original) -> void
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.Deconstruct(out string! Transcript, out float Confidence, out bool IsFinal, out System.TimeSpan Duration) -> void
+Verbara.Sdk.VoiceAi.SpeechRecognitionResult.Equals(Verbara.Sdk.VoiceAi.SpeechRecognitionResult other) -> bool
+Verbara.Sdk.VoiceAi.TurnSignal.Deconstruct(out Verbara.Sdk.VoiceAi.TurnAction Action, out float Confidence) -> void
+Verbara.Sdk.VoiceAi.TurnSignal.Equals(Verbara.Sdk.VoiceAi.TurnSignal other) -> bool
+abstract Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent!
+override Verbara.Sdk.VoiceAi.ConversationTurn.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent!
+override Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.EqualityContract.get -> System.Type!
+override Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+override Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent!
+override Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.EqualityContract.get -> System.Type!
+override Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+override Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent!
+override Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.EqualityContract.get -> System.Type!
+override Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+override Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent!
+override Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.EqualityContract.get -> System.Type!
+override Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+override Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent!
+override Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.EqualityContract.get -> System.Type!
+override Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+override Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent!
+override Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.EqualityContract.get -> System.Type!
+override Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+override Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent!
+override Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.EqualityContract.get -> System.Type!
+override Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+override Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.<Clone>$() -> Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent!
+override Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.EqualityContract.get -> System.Type!
+override Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+override Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.ToString() -> string!
+override Verbara.Sdk.VoiceAi.SpeechRecognitionResult.GetHashCode() -> int
+override Verbara.Sdk.VoiceAi.TurnSignal.GetHashCode() -> int
+override sealed Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.Equals(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.Equals(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.Equals(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.Equals(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.Equals(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.Equals(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.Equals(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? other) -> bool
+override sealed Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Equals(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? other) -> bool
+static Verbara.Sdk.VoiceAi.ConversationTurn.operator !=(Verbara.Sdk.VoiceAi.ConversationTurn left, Verbara.Sdk.VoiceAi.ConversationTurn right) -> bool
+static Verbara.Sdk.VoiceAi.ConversationTurn.operator ==(Verbara.Sdk.VoiceAi.ConversationTurn left, Verbara.Sdk.VoiceAi.ConversationTurn right) -> bool
+static Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.operator !=(Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent? left, Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.operator ==(Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent? left, Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.operator !=(Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent? left, Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.operator ==(Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent? left, Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.operator !=(Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent? left, Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.operator ==(Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent? left, Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.operator !=(Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent? left, Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.operator ==(Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent? left, Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.operator !=(Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent? left, Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.operator ==(Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent? left, Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.operator !=(Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent? left, Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.operator ==(Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent? left, Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.operator !=(Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent? left, Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.operator ==(Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent? left, Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.operator !=(Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent? left, Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.operator ==(Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent? left, Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.operator !=(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? left, Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.operator ==(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? left, Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? right) -> bool
+static Verbara.Sdk.VoiceAi.SpeechRecognitionResult.operator !=(Verbara.Sdk.VoiceAi.SpeechRecognitionResult left, Verbara.Sdk.VoiceAi.SpeechRecognitionResult right) -> bool
+static Verbara.Sdk.VoiceAi.SpeechRecognitionResult.operator ==(Verbara.Sdk.VoiceAi.SpeechRecognitionResult left, Verbara.Sdk.VoiceAi.SpeechRecognitionResult right) -> bool
+static Verbara.Sdk.VoiceAi.TurnSignal.operator !=(Verbara.Sdk.VoiceAi.TurnSignal left, Verbara.Sdk.VoiceAi.TurnSignal right) -> bool
+static Verbara.Sdk.VoiceAi.TurnSignal.operator ==(Verbara.Sdk.VoiceAi.TurnSignal left, Verbara.Sdk.VoiceAi.TurnSignal right) -> bool
+virtual Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent.Equals(Verbara.Sdk.VoiceAi.Events.BargInDetectedEvent? other) -> bool
+virtual Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent.Equals(Verbara.Sdk.VoiceAi.Events.PipelineErrorEvent? other) -> bool
+virtual Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent.Equals(Verbara.Sdk.VoiceAi.Events.ResponseGeneratedEvent? other) -> bool
+virtual Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent.Equals(Verbara.Sdk.VoiceAi.Events.SpeechEndedEvent? other) -> bool
+virtual Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent.Equals(Verbara.Sdk.VoiceAi.Events.SpeechStartedEvent? other) -> bool
+virtual Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent.Equals(Verbara.Sdk.VoiceAi.Events.SynthesisEndedEvent? other) -> bool
+virtual Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent.Equals(Verbara.Sdk.VoiceAi.Events.SynthesisStartedEvent? other) -> bool
+virtual Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent.Equals(Verbara.Sdk.VoiceAi.Events.TranscriptReceivedEvent? other) -> bool
+virtual Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.EqualityContract.get -> System.Type!
+virtual Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.Equals(Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent? other) -> bool
+virtual Verbara.Sdk.VoiceAi.Events.VoiceAiPipelineEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+~override Verbara.Sdk.VoiceAi.ConversationTurn.Equals(object obj) -> bool
+~override Verbara.Sdk.VoiceAi.ConversationTurn.ToString() -> string
+~override Verbara.Sdk.VoiceAi.SpeechRecognitionResult.Equals(object obj) -> bool
+~override Verbara.Sdk.VoiceAi.SpeechRecognitionResult.ToString() -> string
+~override Verbara.Sdk.VoiceAi.TurnSignal.Equals(object obj) -> bool
+~override Verbara.Sdk.VoiceAi.TurnSignal.ToString() -> string

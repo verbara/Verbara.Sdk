@@ -5434,3 +5434,12 @@ static readonly Verbara.Sdk.Ami.Diagnostics.AmiMetrics.EventsReceived -> System.
 static readonly Verbara.Sdk.Ami.Diagnostics.AmiMetrics.Meter -> System.Diagnostics.Metrics.Meter!
 static readonly Verbara.Sdk.Ami.Diagnostics.AmiMetrics.ReconnectionAttempts -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.Ami.Diagnostics.AmiMetrics.ResponsesReceived -> System.Diagnostics.Metrics.Counter<long>!
+Verbara.Sdk.Ami.Connection.AmiConnectionOptionsValidator.Validate(string? name, Verbara.Sdk.Ami.Connection.AmiConnectionOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
+Verbara.Sdk.Ami.Responses.ConfigCategory.<Clone>$() -> Verbara.Sdk.Ami.Responses.ConfigCategory!
+Verbara.Sdk.Ami.Responses.ConfigCategory.Deconstruct(out string! Name, out System.Collections.Generic.Dictionary<string!, string!>! Variables) -> void
+Verbara.Sdk.Ami.Responses.ConfigCategory.Equals(Verbara.Sdk.Ami.Responses.ConfigCategory? other) -> bool
+override Verbara.Sdk.Ami.Responses.ConfigCategory.Equals(object? obj) -> bool
+override Verbara.Sdk.Ami.Responses.ConfigCategory.GetHashCode() -> int
+override Verbara.Sdk.Ami.Responses.ConfigCategory.ToString() -> string!
+static Verbara.Sdk.Ami.Responses.ConfigCategory.operator !=(Verbara.Sdk.Ami.Responses.ConfigCategory? left, Verbara.Sdk.Ami.Responses.ConfigCategory? right) -> bool
+static Verbara.Sdk.Ami.Responses.ConfigCategory.operator ==(Verbara.Sdk.Ami.Responses.ConfigCategory? left, Verbara.Sdk.Ami.Responses.ConfigCategory? right) -> bool

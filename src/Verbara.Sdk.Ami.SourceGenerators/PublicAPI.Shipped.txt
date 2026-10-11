@@ -1,1 +1,13 @@
 #nullable enable
+Verbara.Sdk.Ami.SourceGenerators.ActionSerializerGenerator
+Verbara.Sdk.Ami.SourceGenerators.ActionSerializerGenerator.ActionSerializerGenerator() -> void
+Verbara.Sdk.Ami.SourceGenerators.ActionSerializerGenerator.Initialize(Microsoft.CodeAnalysis.IncrementalGeneratorInitializationContext context) -> void
+Verbara.Sdk.Ami.SourceGenerators.EventDeserializerGenerator
+Verbara.Sdk.Ami.SourceGenerators.EventDeserializerGenerator.EventDeserializerGenerator() -> void
+Verbara.Sdk.Ami.SourceGenerators.EventDeserializerGenerator.Initialize(Microsoft.CodeAnalysis.IncrementalGeneratorInitializationContext context) -> void
+Verbara.Sdk.Ami.SourceGenerators.EventRegistryGenerator
+Verbara.Sdk.Ami.SourceGenerators.EventRegistryGenerator.EventRegistryGenerator() -> void
+Verbara.Sdk.Ami.SourceGenerators.EventRegistryGenerator.Initialize(Microsoft.CodeAnalysis.IncrementalGeneratorInitializationContext context) -> void
+Verbara.Sdk.Ami.SourceGenerators.ResponseDeserializerGenerator
+Verbara.Sdk.Ami.SourceGenerators.ResponseDeserializerGenerator.Initialize(Microsoft.CodeAnalysis.IncrementalGeneratorInitializationContext context) -> void
+Verbara.Sdk.Ami.SourceGenerators.ResponseDeserializerGenerator.ResponseDeserializerGenerator() -> void

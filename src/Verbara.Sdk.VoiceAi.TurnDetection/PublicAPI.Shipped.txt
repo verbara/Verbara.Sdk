@@ -1,1 +1,2 @@
 #nullable enable
+Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptionsValidator.Validate(string? name, Verbara.Sdk.VoiceAi.TurnDetection.SmartTurnDetectorOptions! options) -> Microsoft.Extensions.Options.ValidateOptionsResult!
