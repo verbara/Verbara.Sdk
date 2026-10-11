@@ -427,9 +427,14 @@ internal sealed class SignalingLogger<T> : ILogger<T>
         }
     }
 
+    /// <summary>
+    /// The lowest level written: <see cref="LogLevel.Information"/> unless a test that waits on a Debug line lowers it.
+    /// </summary>
+    public LogLevel MinimumLevel { get; init; } = LogLevel.Information;
+
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
-    public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Information;
+    public bool IsEnabled(LogLevel logLevel) => logLevel >= MinimumLevel;
 
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
         Func<TState, Exception?, string> formatter)
