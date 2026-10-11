@@ -231,6 +231,12 @@ jobs:
       - name: Run CodeQL SARIF filter unit tests (ADR-0051)
         run: bash scripts/tests/test_filter_codeql_sarif.sh
 
+      # Public-API guard unit tests. The guard runs in Pack Warnings Gate; its logic is tested here, on every PR, for
+      # the reason the guards above are: a broken one passes silently, green. The real-MSBuild half runs where the
+      # guard does, with the same SDK.
+      - name: Run public-API guard unit tests
+        run: bash scripts/tests/test_public_api_guard_coverage.sh
+
   aot-check:
     name: AOT Trim Check
     runs-on: ubuntu-latest
@@ -258,8 +264,11 @@ jobs:
       - uses: actions/setup-dotnet@v6.0.0
         with:
           dotnet-version: '10.0.x'
+      # The two properties make every compile leave its own arguments and its SARIF log in its obj/ folder
+      # (Directory.Build.targets); the public-API guard below judges each shipped package from them. Neither changes
+      # what is compiled.
       - name: Build Release
-        run: dotnet build Verbara.Sdk.slnx -c Release
+        run: dotnet build Verbara.Sdk.slnx -c Release -p:ProvideCommandLineArgs=true -p:RecordCscArgs=true
       - name: Pack with warnings as errors
         # Surfaces PackageValidation baseline drift, PublicAPI drift, missing
         # icons/release-notes, and license-expression issues at PR time so
@@ -281,6 +290,18 @@ jobs:
         run: bash scripts/tests/test_package_validation_coverage.sh
       - name: Every shipped package runs package validation (ADR-0055)
         run: bash scripts/ci/check-package-validation-coverage.sh
+      # Every shipped package was compiled with the undeclared-public-API diagnostic (RS0016) live. A package that
+      # silences, demotes or starves it builds exactly as green as one that declares its whole surface, so the guard
+      # reads what each compile left behind — its arguments, its SARIF log and the analyzer-config files it names —
+      # and blocks the PR that adds an opt-out. It also checks that the set judged is the set packed above.
+      - name: Every shipped package is compiled with the public-API diagnostic live
+        run: bash scripts/ci/check-public-api-guard-coverage.sh
+      # Re-proves, with this job's SDK, that each known silencer builds green with an undeclared public member and
+      # that the guard reads every one of them as "not proven"; if it stops seeing one, the verdict above is not used.
+      - name: Prove the public-API guard sees what each silencer leaves behind
+        env:
+          PUBLIC_API_MSBUILD_CASES: '1'
+        run: bash scripts/tests/test_public_api_guard_coverage.sh
 
   audit-test-asserts:
     name: Audit Test Asserts
