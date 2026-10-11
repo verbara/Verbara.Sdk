@@ -35,7 +35,7 @@ the build fails because of it. A contributor who adds public API now adds its li
 (the `RS0016` error quotes the line to add). No public API, behaviour or package contents
 change: the records are analyzer input and are not packed.
 
-### Fixed: cancelling the token passed to a server's start, or to `PipelineSocketConnection.ConnectAsync`, after it returned no longer stops it (#NNN)
+### Fixed: cancelling the token passed to a server's start, or to `PipelineSocketConnection.ConnectAsync`, after it returned no longer stops it (#409)
 
 The ARI AudioSocket and WebSocket audio servers, the ARI outbound listener, the FastAGI server and the session
 reconciliation sweep ran their own loop on a source linked to the token passed to their start. The AMI
