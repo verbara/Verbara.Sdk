@@ -98,7 +98,7 @@ services.AddAzureTtsSpeechSynthesizer(o => { ... });
 
 ## Native AOT
 
-All HTTP/WebSocket clients hand-rolled with `HttpClient` / `ClientWebSocket`. JSON serialization via source-generated `JsonSerializerContext` (`VoiceAiTtsJsonContext`). 0 trim warnings. No vendor SDKs by design: the official SDKs rely on reflection-based serialization and transitive dependencies that block `PublishAot=true` downstream.
+All HTTP/WebSocket clients hand-rolled with `HttpClient` / `ClientWebSocket`. JSON serialization via source-generated `JsonSerializerContext` (`VoiceAiTtsJsonContext`). 0 trim warnings. No vendor SDKs by design: the vendor SDKs surveyed rely on reflection-based serialization and transitive dependencies that block `PublishAot=true` downstream.
 
 ## License
 

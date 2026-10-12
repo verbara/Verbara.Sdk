@@ -116,7 +116,7 @@ public sealed class CallSession
     /// session rather than in a manager-side set, so it outlives the session's release: a leg that
     /// joined the call after it ended still points at this object, and its later departure must not
     /// deliver the ending again. And it is never derived from <see cref="State"/>: the state says how
-    /// the call stands, not whether its ending reached anyone. A call's ending is delivered exactly once,
+    /// the call stands, not whether its ending reached anyone. A call's ending is delivered at most once,
     /// because a second delivery is what once left an unusable entry at the head of the release queue.
     /// </para>
     /// </summary>
