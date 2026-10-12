@@ -2,6 +2,12 @@
   <PropertyGroup>
     <Description>Verbara.Sdk.Push.AspNetCore - SSE push delivery endpoints for ASP.NET Core. Maps IPushEventBus events to Server-Sent Events with topic filtering and JWT authorization.</Description>
     <PackageTags>asterisk;push;sse;aspnetcore;realtime;sdk</PackageTags>
+    <!-- MapPushEndpoints binds its handler through code the request delegate generator writes at compile
+         time, not through RequestDelegateFactory reflection, so a Native AOT host can map the stream: without
+         it the native image throws when the endpoint is built. The Web SDK adds the interceptors namespace
+         itself; this project uses the plain SDK, so it is added here. -->
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.AspNetCore.Http.Generated</InterceptorsNamespaces>
   </PropertyGroup>
 
   <ItemGroup>

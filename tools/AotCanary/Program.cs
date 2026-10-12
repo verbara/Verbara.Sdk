@@ -1,7 +1,8 @@
-// AOT Canary — publishes the SDK packages it references (23 of 29) with Native AOT; tools/verify-aot.sh
-// fails on any trim/AOT warning and on any method the AOT compiler reports will always throw.
-// References a representative public type from each package so the linker
-// processes all assemblies during dotnet publish /p:PublishAot=true.
+// AOT Canary — references the 28 runtime SDK packages (the 29th under src/, the source generator, is an analyzer and
+// never reaches an image) and publishes them with Native AOT; tools/verify-aot.sh fails on any trim/AOT warning and on
+// any method the AOT compiler reports will always throw.
+// ILC analyzes only the code the canary calls: a package referenced through a typeof alone has none of its methods
+// compiled, so a trim hazard inside it is not seen here and rests on the package's own IsAotCompatible analyzers.
 
 using Verbara.Sdk;
 using Verbara.Sdk.Ami.Actions;
@@ -34,6 +35,12 @@ using Verbara.Sdk.Push.Webhooks;
 using Verbara.Sdk.Resilience;
 using Verbara.Sdk.Cluster.Primitives;
 using Verbara.Sdk.Cluster.Primitives.InMemory;
+using Verbara.Sdk.Push.AspNetCore;
+using Verbara.Sdk.Push.Nats;
+using Verbara.Sdk.Sessions.Extensions;
+using Verbara.Sdk.Sessions.Postgres;
+using Verbara.Sdk.Sessions.Redis;
+using Verbara.Sdk.VoiceAi.TurnDetection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -250,6 +257,133 @@ _ = typeof(Verbara.Sdk.Cluster.Postgres.Migrations.MigrationRunner);
         otelServices, b => b.WithAllSources().WithPrometheusExporter());
     using var otelProvider = otelServices.BuildServiceProvider();
     Console.WriteLine("OpenTelemetry: Prometheus exporter registered");
+}
+
+// Paths that need a live NATS, Redis or Postgres run only when AOT_CANARY_LIVE=1. ILC cannot fold an environment
+// read, so it compiles them either way, and the smoke run stays offline.
+var live = Environment.GetEnvironmentVariable("AOT_CANARY_LIVE") == "1";
+
+// Verbara.Sdk.Push.Nats — register the bridge, resolve it, and round-trip an event through the default payload
+// serializer and deserializer; connecting is the live path.
+{
+    var natsServices = new ServiceCollection();
+    natsServices.AddLogging();
+    natsServices.AddVerbaraPush();
+    natsServices.AddPushNats(o =>
+    {
+        o.Url = "nats://127.0.0.1:4222";
+        o.NodeId = "canary";
+    });
+    await using var natsProvider = natsServices.BuildServiceProvider();
+    var natsPayload = natsProvider.GetRequiredService<INatsPayloadSerializer>().Serialize(sample);
+    var natsSubject = NatsSubjectTranslator.ToNatsSubject("canary/ping", "verbara.push");
+    var remote = natsProvider.GetRequiredService<INatsPayloadDeserializer>().Deserialize(natsSubject, natsPayload);
+    var bridge = natsProvider.GetRequiredService<NatsBridge>();
+    if (live)
+    {
+        await bridge.StartAsync(CancellationToken.None);
+        await bridge.StopAsync(CancellationToken.None);
+    }
+    Console.WriteLine($"Push.Nats: subject={natsSubject} payloadBytes={natsPayload.Length} remote={remote?.EventType ?? "<null>"}");
+    if (natsPayload.Length == 0 || remote is null)
+    {
+        Console.Error.WriteLine("AOT canary: the NATS payload did not round-trip.");
+        return 1;
+    }
+}
+
+// Verbara.Sdk.Sessions.Postgres / Verbara.Sdk.Sessions.Redis — register each backend and resolve the store it puts in
+// place of the in-memory default. A Postgres data source does not connect until used, so its store is resolved offline;
+// the Redis store's multiplexer connects on resolve, so that store and both stores' I/O are the live path.
+{
+    var pgServices = new ServiceCollection();
+    pgServices.AddLogging();
+    pgServices.AddVerbaraSessionsBuilder().UsePostgres("Host=127.0.0.1;Database=canary;Username=canary;Password=canary");
+    await using var pgProvider = pgServices.BuildServiceProvider();
+    var pgStore = pgProvider.GetRequiredService<SessionStoreBase>();
+    Console.WriteLine($"Sessions.Postgres: store={pgStore.GetType().Name}");
+    if (pgStore is not PostgresSessionStore)
+    {
+        Console.Error.WriteLine("AOT canary: UsePostgres did not replace the session store.");
+        return 1;
+    }
+
+    var redisServices = new ServiceCollection();
+    redisServices.AddLogging();
+    redisServices.AddVerbaraSessionsBuilder().UseRedis("127.0.0.1:6379");
+    await using var redisProvider = redisServices.BuildServiceProvider();
+    var redisDescriptor = redisServices.Last(d => d.ServiceType == typeof(SessionStoreBase));
+    Console.WriteLine($"Sessions.Redis: store={redisDescriptor.ImplementationType?.Name}");
+    if (redisDescriptor.ImplementationType != typeof(RedisSessionStore))
+    {
+        Console.Error.WriteLine("AOT canary: UseRedis did not replace the session store.");
+        return 1;
+    }
+
+    if (live)
+    {
+        var session = new CallSession("canary-session", "canary-linked", "canary-server", CallDirection.Inbound);
+        foreach (var store in new[] { pgStore, redisProvider.GetRequiredService<SessionStoreBase>() })
+        {
+            await store.SaveAsync(session, CancellationToken.None);
+            _ = await store.GetAsync(session.SessionId, CancellationToken.None);
+            _ = await store.GetActiveAsync(CancellationToken.None);
+            await store.DeleteAsync(session.SessionId, CancellationToken.None);
+        }
+    }
+}
+
+// Verbara.Sdk.Push.AspNetCore — register the SSE stream and map its endpoint on a host that is built but never run.
+{
+    var webBuilder = Microsoft.AspNetCore.Builder.WebApplication.CreateSlimBuilder();
+    webBuilder.Services.AddVerbaraPushAspNetCore();
+    await using var web = webBuilder.Build();
+    web.MapPushEndpoints();
+    var endpoints = ((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)web).DataSources.SelectMany(d => d.Endpoints).ToList();
+    Console.WriteLine($"Push.AspNetCore: endpoints={string.Join(",", endpoints.Select(e => e.DisplayName))}");
+    if (endpoints.Count == 0)
+    {
+        Console.Error.WriteLine("AOT canary: MapPushEndpoints mapped no endpoint.");
+        return 1;
+    }
+}
+
+// Verbara.Sdk.VoiceAi.TurnDetection — resolve the detector, which loads the embedded ONNX model into the native ONNX
+// runtime published beside the binary, then feed it one second of tone and 300 ms of silence: the 200 ms silence
+// trigger runs the model once on the buffered speech, so the smoke run proves inference works in the native image.
+{
+    var turnServices = new ServiceCollection();
+    turnServices.AddLogging();
+    turnServices.AddSmartTurnDetection();
+    await using var turnProvider = turnServices.BuildServiceProvider();
+    var detector = turnProvider.GetRequiredService<ITurnDetector>();
+    if (detector is not SmartTurnDetector)
+    {
+        Console.Error.WriteLine("AOT canary: AddSmartTurnDetection did not register the smart detector.");
+        return 1;
+    }
+
+    var tone = new short[160];
+    for (var i = 0; i < tone.Length; i++)
+        tone[i] = (short)(8000 * Math.Sin(2 * Math.PI * 440 * i / 8000.0));
+    var silence = new short[160];
+    var signals = new List<string>();
+    for (var frame = 0; frame < 50; frame++)
+        signals.Add(detector.Analyze(tone, isAssistantSpeaking: false).Action.ToString());
+    for (var frame = 0; frame < 15; frame++)
+        signals.Add(detector.Analyze(silence, isAssistantSpeaking: false).Action.ToString());
+    var changes = string.Join(",", signals.Where(a => a != nameof(TurnAction.Continue)));
+    Console.WriteLine($"TurnDetection: detector={detector.GetType().Name} signals={changes}");
+    if (!signals.Contains(nameof(TurnAction.SpeechStarted)))
+    {
+        Console.Error.WriteLine("AOT canary: the smart detector did not see the tone as speech.");
+        return 1;
+    }
+    if (!signals.Contains(nameof(TurnAction.EndOfUtterance)))
+    {
+        Console.Error.WriteLine("AOT canary: the smart detector's ONNX inference did not end the utterance on silence.");
+        return 1;
+    }
 }
 
 return 0;

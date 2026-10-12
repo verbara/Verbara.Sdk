@@ -9,8 +9,8 @@ internal sealed class OnnxSessionManager : IDisposable
 
     public OnnxSessionManager(ExecutionProvider provider = ExecutionProvider.Cpu, int intraOpThreads = 1)
     {
-        // Assembly access is required to load the embedded ONNX model resource.
-        // This package already opts out of AOT (IsAotCompatible=false).
+        // Assembly access is required to load the embedded ONNX model resource. Reading a manifest
+        // resource by name is trim- and AOT-safe: the resource ships inside the assembly.
 #pragma warning disable RS0030 // Banned API — no source-generator alternative for embedded resources
         var assembly = typeof(OnnxSessionManager).Assembly;
         using var stream = assembly.GetManifestResourceStream("smart-turn-v3.2-cpu.onnx")

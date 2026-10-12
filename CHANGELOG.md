@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: `MapPushEndpoints` works in a Native AOT app, and `Verbara.Sdk.VoiceAi.TurnDetection` is marked AOT-compatible (#410)
+
+`Verbara.Sdk.Push.AspNetCore`'s `MapPushEndpoints()` carried `[RequiresUnreferencedCode]` and `[RequiresDynamicCode]`,
+so a Native AOT host that mapped the SSE stream got `IL2026` and `IL3050` at the call, and the native image then threw
+`NotSupportedException` (no `JsonTypeInfo` for `Task`) when ASP.NET Core built the endpoint — measured by publishing
+and running a host that calls it. The package now binds the handler through code the ASP.NET Core request delegate
+generator writes at compile time, the two attributes are removed, and the same host publishes with no warning and maps
+`GET /api/v1/push/stream`. The route, the handler and its parameters (the HTTP context, the push bus, the subscription
+authorizer, the delivery filter, the logger factory and the request's cancellation token) are unchanged; a JIT host
+runs the generated binding instead of `RequestDelegateFactory`; the generator is ASP.NET Core's compile-time
+counterpart of it, and the package's 188 endpoint tests pass unchanged.
+
+`Verbara.Sdk.VoiceAi.TurnDetection` opted out of AOT (`IsAotCompatible=false`, trim and AOT analyzers off) with no
+recorded reason. With the analyzers on, the package builds with no warning; published with Native AOT, the AOT
+compiler reports no warning for it, and the native image loads the embedded ONNX model and runs inference. The
+package is now marked AOT-compatible and trimmable, like the other packages.
+
+The AOT canary now also references and calls `Push.AspNetCore`, `Push.Nats`, `Sessions.Postgres`, `Sessions.Redis`
+and `VoiceAi.TurnDetection`, each with a registration and a real use. It references all 28 runtime packages, but the
+AOT compiler analyzes only the code it calls, which comes from 17 of them. No public API signature changes.
+
 ### Changed: shipped packages declare `Microsoft.Extensions.* >= 10.0.0` instead of the servicing patch (#408)
 
 Every package this repository publishes declared its `Microsoft.Extensions.*` dependencies at the servicing patch the

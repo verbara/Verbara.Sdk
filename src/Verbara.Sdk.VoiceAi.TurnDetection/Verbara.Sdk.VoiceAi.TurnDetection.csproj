@@ -2,10 +2,6 @@
   <PropertyGroup>
     <Description>ML-based turn detection for Verbara.Sdk VoiceAi pipeline using the Pipecat smart-turn-v3.2-cpu ONNX model.</Description>
     <PackageTags>$(PackageTags);voice-ai;turn-detection;onnx;smart-turn</PackageTags>
-    <IsAotCompatible>false</IsAotCompatible>
-    <EnableAotAnalyzer>false</EnableAotAnalyzer>
-    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
-    <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Verbara.Sdk.VoiceAi.TurnDetection.Tests" />

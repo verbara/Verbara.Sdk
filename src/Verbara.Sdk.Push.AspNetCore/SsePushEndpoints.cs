@@ -1,6 +1,5 @@
 namespace Verbara.Sdk.Push.AspNetCore;
 
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -39,13 +38,9 @@ public static class SsePushEndpoints
     /// <param name="prefix">URL prefix for all push endpoints. Defaults to <c>/api/v1/push</c>.</param>
     /// <returns>The same <see cref="IEndpointRouteBuilder"/> for chaining.</returns>
     /// <remarks>
-    /// Minimal API endpoint registration uses reflection-based parameter binding which is not
-    /// fully AOT-compatible. Add <c>app.MapPushEndpoints()</c> to a native-AOT app only when
-    /// <c>&lt;PublishAot&gt;true&lt;/PublishAot&gt;</c> is <em>not</em> set, or suppress the
-    /// IL2026/IL3050 warnings explicitly with <c>[UnconditionalSuppressMessage]</c>.
+    /// The endpoint's parameter binding is generated at compile time by the ASP.NET Core request
+    /// delegate generator, so the call is safe in a Native AOT app and raises no trim or AOT warning.
     /// </remarks>
-    [RequiresUnreferencedCode("Minimal API endpoint registration uses reflection for parameter binding.")]
-    [RequiresDynamicCode("Minimal API endpoint registration requires dynamic code generation.")]
     public static IEndpointRouteBuilder MapPushEndpoints(
         this IEndpointRouteBuilder app,
         string prefix = "/api/v1/push")
@@ -61,8 +56,6 @@ public static class SsePushEndpoints
         return app;
     }
 
-    [RequiresUnreferencedCode("Minimal API parameter binding uses reflection.")]
-    [RequiresDynamicCode("Minimal API parameter binding requires dynamic code generation.")]
     private static async Task HandleSseStreamAsync(
         HttpContext ctx,
         IPushEventBus bus,

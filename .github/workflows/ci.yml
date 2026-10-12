@@ -7,6 +7,13 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    # The three defaults plus `labeled`: the functional lane reads the `ci:functional` label, and
+    # without this event a label added after the last push starts nothing until the next push.
+    # Any label re-runs the whole workflow; the concurrency group below supersedes the run in
+    # flight for that PR, so a burst of labels costs one run, not one each. No job is skipped on
+    # an unrelated label on purpose: a skipped job satisfies a required context, and that run
+    # would then mask the result of the one it superseded.
+    types: [opened, synchronize, reopened, labeled]
   merge_group:
 
 # Supersede in-flight PR runs when a branch is pushed again (ADR-0051). Nothing cancelled 457 runs
