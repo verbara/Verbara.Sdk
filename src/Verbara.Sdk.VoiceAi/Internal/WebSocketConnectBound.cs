@@ -21,10 +21,11 @@ namespace Verbara.Sdk.VoiceAi.Internal;
 /// that failed without an HTTP answer, a <see cref="WebSocketException"/> carrying a
 /// <see cref="TimeoutException"/>, the type <see cref="ClientWebSocket"/> gives a refused connection.
 /// Every call site therefore keeps its existing classification of a failed connect: the speech clients
-/// wrap it as <c>SpeechProviderFailureException.FromHandshake</c> (<c>ADR-0050</c> E7). The caller's
-/// own cancellation still arrives as <see cref="OperationCanceledException"/> (<c>ADR-0050</c> E6).
-/// Which of the two ended the connect is read from the caller's token, never from the exception
-/// (<c>ADR-0053</c>).
+/// wrap it as <c>SpeechProviderFailureException.FromHandshake</c>, so a caller catches one type
+/// however the vendor fails the connect. The caller's own cancellation still arrives as
+/// <see cref="OperationCanceledException"/>, because cancellation is never a provider failure.
+/// Which of the two ended the connect is read from the caller's token, never from the exception:
+/// an ending is classified by who ended it, not by where it landed.
 /// </para>
 /// <para>
 /// The limit runs on a <see cref="TimeProvider"/>, the client's own, so a test drives it with a manual

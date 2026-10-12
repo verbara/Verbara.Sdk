@@ -50,7 +50,7 @@ builder.Services.AddVerbaraOpenTelemetry().WithAllSources();
 
 ## Native AOT
 
-Zero runtime reflection. All serialization paths use Roslyn source generators (`ActionSerializerGenerator`, `EventDeserializerGenerator`, `EventRegistryGenerator`, `ResponseDeserializerGenerator`). Trim-safe (`<IsTrimmable>true</IsTrimmable>`); 0 trim warnings across the package family. Design rationale: ADR-0001 (Native AOT first) and ADR-0003 (source generators over reflection).
+Zero runtime reflection. All serialization paths use Roslyn source generators (`ActionSerializerGenerator`, `EventDeserializerGenerator`, `EventRegistryGenerator`, `ResponseDeserializerGenerator`). Trim-safe (`<IsTrimmable>true</IsTrimmable>`); 0 trim warnings across the package family. Why: every public API must compile clean under `PublishAot=true` in a consumer project, so serialization and dispatch are generated at compile time instead of discovered by runtime reflection.
 
 ## License
 

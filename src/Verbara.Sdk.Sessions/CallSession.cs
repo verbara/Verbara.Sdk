@@ -115,9 +115,9 @@ public sealed class CallSession
     /// It records delivery, not state, and both halves of that are load-bearing. It is kept on the
     /// session rather than in a manager-side set, so it outlives the session's release: a leg that
     /// joined the call after it ended still points at this object, and its later departure must not
-    /// deliver the ending again. And it is never derived from <see cref="State"/>: a call the timeout
-    /// sweep made terminal has had no ending delivered, and still gets its one when its participants
-    /// leave (<c>ADR-0063</c>, D2).
+    /// deliver the ending again. And it is never derived from <see cref="State"/>: the state says how
+    /// the call stands, not whether its ending reached anyone. A call's ending is delivered at most once,
+    /// because a second delivery is what once left an unusable entry at the head of the release queue.
     /// </para>
     /// </summary>
     internal bool EndingDelivered { get; private set; }
@@ -225,8 +225,8 @@ public sealed class CallSession
     /// <see cref="CallSessionStateTransitions"/> lets <see cref="CallSessionState.Created"/> reach
     /// only <c>Dialing</c>, <c>Queued</c> and <c>Failed</c>, so a transition to <c>Connected</c> or
     /// <c>Ringing</c> returns <c>false</c> and silently does nothing — the state has to be chosen
-    /// when the session is constructed, which is the only moment this method is legal at
-    /// (<c>ADR-0062</c>, design D5).
+    /// when the session is constructed, which is the only moment this method is legal at. A call a
+    /// state reload reports as live must not be described as newly created.
     /// </para>
     /// <para>
     /// It also deliberately does not run <see cref="UpdateTimestamp"/>, and that is the point rather

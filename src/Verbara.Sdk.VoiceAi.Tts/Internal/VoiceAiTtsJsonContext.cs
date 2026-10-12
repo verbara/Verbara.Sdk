@@ -38,7 +38,7 @@ internal sealed class ElevenLabsAudioOutput
     /// <summary>
     /// The vendor's symbolic failure code — <c>invalid_api_key</c> and the like. Present only on a
     /// failure frame, which carries no <c>audio</c> member and was therefore dropped as
-    /// "carries no audio" until ADR-0050.
+    /// "carries no audio" until the receive loop was made to report a failure frame to the caller.
     /// </summary>
     [JsonPropertyName("error")] public string? Error { get; set; }
 
@@ -178,7 +178,7 @@ internal sealed class DeepgramTtsServerMessage
 /// LMNT requires the API key inside this JSON body — NOT in the HTTP upgrade headers.
 /// </summary>
 /// <remarks>
-/// R1.5 follow-up: verify field names and required set against the live LMNT API at integration test time
+/// Verify field names and required set against the live LMNT API at integration test time
 /// (see <see href="https://docs.lmnt.com"/> and the LMNT Python SDK source for authoritative schema).
 /// </remarks>
 internal sealed class LmntInitMessage
@@ -210,7 +210,7 @@ internal sealed class LmntTextMessage
 /// Signals that the client wants the server to emit any buffered audio.
 /// </summary>
 /// <remarks>
-/// R1.5 follow-up: verify exact schema (<c>{"flush":true}</c>) against the live LMNT API and Python SDK source.
+/// Verify the exact schema (<c>{"flush":true}</c>) against the live LMNT API and Python SDK source.
 /// </remarks>
 internal sealed class LmntFlushMessage
 {

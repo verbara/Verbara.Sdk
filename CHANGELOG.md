@@ -83,6 +83,13 @@ documents, and only `CloseAsync` or `DisposeAsync` closes the connection.
 A caller that cancelled the start token to stop one of the four servers must now call `StopAsync` or `DisposeAsync`.
 For the connection it is `CloseAsync` or `DisposeAsync`. No public API change.
 
+### Fixed: package READMEs and IntelliSense text state the reason instead of citing internal decision ids (#411)
+
+The READMEs of `Verbara.Sdk`, `Verbara.Sdk.VoiceAi.Stt` and `Verbara.Sdk.VoiceAi.Tts` shown on nuget.org, and the XML
+documentation of the speech failure types, `SpeechRecognizer.StreamAsync`, several speech providers and the Sessions
+and Live reload members, cited internal decision ids a reader cannot open. Each citation now states the reason in one
+sentence. No behaviour or public API changes.
+
 ## [2.8.0] - 2026-10-09
 
 ### Changed — BREAKING: a multi-server host runs the reconciliation sweep for every server of the pool (#402)

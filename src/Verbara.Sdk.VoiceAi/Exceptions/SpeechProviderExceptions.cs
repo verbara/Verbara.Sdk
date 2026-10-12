@@ -10,30 +10,31 @@ namespace Verbara.Sdk.VoiceAi;
 /// shape of the exception.
 /// </summary>
 /// <remarks>
-/// This is deliberately <em>not</em> a retryability discriminator (<c>ADR-0050</c> E4): a rate-limit
+/// This is deliberately <em>not</em> a retryability discriminator: a rate-limit
 /// rejection is retryable and an invalid-credential rejection is not, and both arrive as
 /// <see cref="ErrorFrame"/>. Policy reads <see cref="SpeechProviderFailureException.Code"/>.
 /// </remarks>
 public enum SpeechProviderFailureSignal
 {
     /// <summary>
-    /// An in-band message whose meaning is "this failed" — the vendor's own error frame. The door
-    /// <c>ADR-0049</c> D1 names: a receive loop that keeps only content message types discards
-    /// every one of these by construction.
+    /// An in-band message whose meaning is "this failed" — the vendor's own error frame. A receive
+    /// loop must never silently discard a frame that carries a failure, and one that keeps only
+    /// content message types discards every one of these by construction.
     /// </summary>
     ErrorFrame,
 
     /// <summary>
     /// The WebSocket close code. A failure signal in its own right on measured surfaces — a
     /// Speechmatics session rejects a credential with <c>101</c> and then close <c>4001
-    /// not_authorised</c> — and read nowhere in this SDK before <c>ADR-0050</c>.
+    /// not_authorised</c> — and read nowhere in this SDK until its receive loops were made to treat
+    /// a failure close as a failure.
     /// </summary>
     CloseCode,
 
     /// <summary>
     /// The vendor rejected the HTTP upgrade, or did not answer it within the client's connect
     /// timeout, so no session ever opened. Wrapped rather than left as a raw transport exception
-    /// (<c>ADR-0050</c> E7) because <em>where</em> a vendor validates a credential is a property of
+    /// because <em>where</em> a vendor validates a credential is a property of
     /// the vendor, not of this client, and it can change with no line of this repository changing.
     /// </summary>
     Handshake,
@@ -52,8 +53,8 @@ public enum SpeechProviderFailureSignal
 /// <summary>Base exception for failures raised by a speech provider surface (TTS or STT).</summary>
 /// <remarks>
 /// <para>
-/// Rooted at <see cref="Exception"/> rather than at this SDK's <c>AsteriskException</c>, deliberately
-/// and as recorded in <c>ADR-0050</c> E3: this package family does not reference the PBX layer, and a
+/// Rooted at <see cref="Exception"/> rather than at this SDK's <c>AsteriskException</c>, deliberately:
+/// this package family does not reference the PBX layer, and a
 /// rejected TTS credential is not an Asterisk error. It is the one place the SDK's otherwise uniform
 /// exception rooting is not followed.
 /// </para>
@@ -162,7 +163,8 @@ public class SpeechProviderFailureException(
 
     /// <summary>
     /// A rejected — or otherwise failed — connection upgrade, wrapped so the caller catches the same
-    /// type whether the vendor validates in the handshake or in band (<c>ADR-0050</c> E7).
+    /// type whether the vendor validates in the handshake or in band. Where a vendor validates a
+    /// credential is the vendor's choice, and it can change under the caller.
     /// </summary>
     /// <param name="provider">The provider name.</param>
     /// <param name="httpStatusCode">
@@ -193,8 +195,8 @@ public class SpeechProviderFailureException(
     }
 
     /// <summary>
-    /// A connection that died mid-session. The result is empty or truncated, and the third door
-    /// <c>ADR-0050</c> E2 closes: this used to end the stream as though it had completed normally.
+    /// A connection that died mid-session. The result is empty or truncated, so it is reported as a
+    /// failure: this used to end the stream as though it had completed normally.
     /// </summary>
     public static SpeechProviderFailureException FromTransport(string provider, Exception innerException)
         => new(
@@ -212,18 +214,19 @@ public class SpeechProviderFailureException(
 /// <para>
 /// The counterpart to <see cref="SpeechProviderFailureException"/>: no code, no vendor message,
 /// because there was none. Operationally these are different events — the other type is an alert
-/// with a cause attached, this one is the trigger to probe that surface against the vendor
-/// (<c>ADR-0048</c>).
+/// with a cause attached, this one is the trigger to probe that surface against the live vendor,
+/// because a green suite against a fake server cannot show the client still speaks the vendor's
+/// protocol.
 /// </para>
 /// <para>
-/// What counts as "nothing" is per surface (<c>ADR-0050</c> E5) and not the same test on both:
+/// What counts as "nothing" is per surface and not the same test on both:
 /// synthesis fails on zero audio, recognition fails only when <em>no vendor frame arrived at all</em>.
 /// A recognition session that received lifecycle frames and produced zero transcripts completes
 /// normally — voice activity detection flushes on any turn trigger, so noise with no speech is a
 /// healthy zero-transcript session and must not be reported as an error.
 /// </para>
 /// <para>
-/// Caller cancellation never produces this (<c>ADR-0050</c> E6); it surfaces as
+/// Caller cancellation is never a provider failure and never produces this; it surfaces as
 /// <see cref="OperationCanceledException"/>, as it always has.
 /// </para>
 /// </remarks>
