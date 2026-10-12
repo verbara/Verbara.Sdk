@@ -6,9 +6,10 @@ namespace Verbara.Sdk.Governance.Tests;
 
 /// <summary>
 /// Pure, I/O-free detector for ADR-0059 R2: a hosted service does not keep the token the host hands
-/// to <c>StartAsync</c>. Reports each assignment inside a hosted service's <c>StartAsync</c> that
+/// to <c>StartAsync</c>, and no other component keeps the token handed to a start or a connect that
+/// returns while the work it began runs on. Reports each assignment inside such a method that
 /// stores that token in a field, or stores a <c>CancellationTokenSource.CreateLinkedTokenSource</c>
-/// over it, as a <see cref="DecisionGuardSite"/> keyed by the text of the assignment, so the guard can
+/// over it, as a <see cref="DecisionGuardSite"/> keyed by the text of the assignment, so each guard can
 /// match it against <c>decision-guards-baseline.json</c>.
 /// </summary>
 /// <remarks>
@@ -26,9 +27,22 @@ namespace Verbara.Sdk.Governance.Tests;
 /// that holds <c>StartAsync</c> or on another part of the same partial type in the same file. Its
 /// <c>StartAsync</c> is the method of that name declared directly in it (explicit interface
 /// implementations included) with a <c>CancellationToken</c> parameter; nested types are judged on
-/// their own base list. A <c>StartAsync</c> on any other type is not this rule's concern: whether R2
-/// also binds components that are not hosted services is an open ruling, and this guard does not
-/// decide it.
+/// their own base list. A <c>StartAsync</c> on any other type is judged by the second guard below.
+/// </para>
+/// <para>
+/// <b>Every other component</b> (guard <see cref="ComponentGuardName"/>): the start token bounds the
+/// start, not the life, of any type in <c>src/</c> that is not a hosted service. Its reach is every
+/// <c>StartAsync</c> and every <c>ConnectAsync</c> declared directly in such a type, with a body (block
+/// or expression) and a <c>CancellationToken</c> parameter; a declaration without a body keeps nothing
+/// and is neither judged nor counted. The site rule is the hosted one. One shape passes: <b>the start
+/// that is the life</b>, where the method reads the assigned member at least once and every read is a
+/// direct argument of the invocation that is the direct operand of an <c>await</c> in that method, with
+/// nothing in between but a member access on the read itself (<c>await ExecuteAsync(_cts.Token)</c>)
+/// and no lambda or local function around the <c>await</c>. The work then runs inside the call, so the
+/// token's phase is the work's phase. A method that assigns the member and never reads it is reported
+/// (the read has moved into the loop it starts, one call away), and so is any read handed to a call
+/// that is not awaited, stored, discarded, captured by a lambda or nested under an awaited combinator
+/// such as <c>Task.WhenAny</c>.
 /// </para>
 /// <para>
 /// <b>Kept</b> means an assignment anywhere in that method's body — including inside a lambda or
@@ -57,6 +71,15 @@ internal static class HostedStartTokenScanner
 {
     /// <summary>The name this guard's entries carry in <c>decision-guards-baseline.json</c>.</summary>
     public const string GuardName = "hosted-service-start-token";
+
+    /// <summary>The name the component guard's entries carry in <c>decision-guards-baseline.json</c>.</summary>
+    public const string ComponentGuardName = "component-start-token";
+
+    /// <summary>The methods the component guard reaches: a start, and a connect that starts pumps.</summary>
+    private static readonly HashSet<string> ComponentMethodNames = new(StringComparer.Ordinal)
+    {
+        "StartAsync", "ConnectAsync",
+    };
 
     /// <summary>
     /// Base-list names that make a type a hosted service. <c>IHostedLifecycleService</c> extends
@@ -114,7 +137,149 @@ internal static class HostedStartTokenScanner
         return HostedStartMethods(source).Count();
     }
 
-    private static IEnumerable<(MethodDeclarationSyntax Method, HashSet<string> TokenNames)> HostedStartMethods(string source)
+    /// <summary>
+    /// The assignments in <paramref name="source"/> that keep the token of a <c>StartAsync</c> or
+    /// <c>ConnectAsync</c> declared in a type that is not a hosted service, except where the start is the
+    /// life (see the remarks). <see cref="DecisionGuardSite.Key"/> is the assignment's text.
+    /// </summary>
+    public static IReadOnlyList<DecisionGuardSite> ScanComponents(string source, string path)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(path);
+
+        var sites = new List<DecisionGuardSite>();
+        foreach (var (method, tokenNames) in ComponentStartMethods(source))
+        {
+            var body = (SyntaxNode?)method.Body ?? method.ExpressionBody!;
+            var declared = DeclaredNames(method);
+            var carriers = body.DescendantNodesAndSelf().OfType<AssignmentExpressionSyntax>()
+                .Where(assignment => assignment.Parent is not InitializerExpressionSyntax
+                    && IsState(assignment.Left, declared)
+                    && CarriesToken(assignment.Right, tokenNames)
+                    && !IsTheLife(assignment, body));
+            foreach (var assignment in carriers)
+            {
+                sites.Add(new DecisionGuardSite(
+                    path,
+                    assignment.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
+                    assignment.ToString()));
+            }
+        }
+
+        return sites;
+    }
+
+    /// <summary>
+    /// Counts the bodied <c>StartAsync</c>/<c>ConnectAsync</c> methods taking a token in the types of
+    /// <paramref name="source"/> that are not hosted services, compliant or not — the population the
+    /// component guard inspects. Its liveness floor sums it over the tree, so a detector that stopped
+    /// recognising these methods fails instead of passing an empty baseline having inspected nothing.
+    /// </summary>
+    public static int CountComponentStartMethods(string source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        return ComponentStartMethods(source).Count();
+    }
+
+    /// <summary>
+    /// Whether the member <paramref name="assignment"/> stores is read at least once in the method and
+    /// every read is a direct argument of an awaited invocation: the work runs inside the start.
+    /// </summary>
+    private static bool IsTheLife(AssignmentExpressionSyntax assignment, SyntaxNode body)
+    {
+        var member = MemberKey(assignment.Left);
+        if (member is null)
+            return false;
+
+        var reads = body.DescendantNodes().OfType<ExpressionSyntax>()
+            .Where(node => node is IdentifierNameSyntax or MemberAccessExpressionSyntax
+                && !(node.Parent is MemberAccessExpressionSyntax outer && outer.Name == node)
+                && !(node.Parent is AssignmentExpressionSyntax written && written.Left == node)
+                && MemberKey(node) == member)
+            .ToList();
+
+        return reads.Count > 0 && reads.All(IsAwaitedArgument);
+    }
+
+    /// <summary>
+    /// <paramref name="read"/>, or a member access on it (<c>_cts.Token</c>), is an argument of an
+    /// invocation that is itself the operand of an <c>await</c>, with no lambda or local function between
+    /// that <c>await</c> and the method.
+    /// </summary>
+    private static bool IsAwaitedArgument(ExpressionSyntax read)
+    {
+        SyntaxNode node = read;
+        while (node.Parent is MemberAccessExpressionSyntax access && access.Expression == node)
+            node = access;
+
+        if (node.Parent is not ArgumentSyntax argument
+            || argument.Parent is not ArgumentListSyntax { Parent: InvocationExpressionSyntax invocation }
+            || invocation.Parent is not AwaitExpressionSyntax awaited)
+        {
+            return false;
+        }
+
+        for (var outer = awaited.Parent; outer is not null and not MemberDeclarationSyntax; outer = outer.Parent)
+        {
+            if (outer is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax)
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The member an expression names, as text with whitespace removed and a leading <c>this.</c>
+    /// dropped, so <c>_cts</c> and <c>this._cts</c> are one member; looked through parentheses and
+    /// <c>!</c>.
+    /// </summary>
+    private static string? MemberKey(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PostfixUnaryExpressionSyntax postfix when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
+                    expression = postfix.Operand;
+                    continue;
+            }
+
+            break;
+        }
+
+        return expression switch
+        {
+            MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax } access => access.Name.Identifier.ValueText,
+            IdentifierNameSyntax or MemberAccessExpressionSyntax => string.Concat(expression.ToString().Where(c => !char.IsWhiteSpace(c))),
+            _ => null,
+        };
+    }
+
+    private static IEnumerable<(MethodDeclarationSyntax Method, HashSet<string> TokenNames)> ComponentStartMethods(string source)
+    {
+        var (types, hostedPartials) = TypesOf(source);
+        foreach (var type in types.Where(type => !IsHosted(type, hostedPartials)))
+        {
+            foreach (var method in type.Members.OfType<MethodDeclarationSyntax>()
+                .Where(method => ComponentMethodNames.Contains(method.Identifier.ValueText)
+                    && (method.Body is not null || method.ExpressionBody is not null)))
+            {
+                var tokenNames = TokenNames(method);
+                if (tokenNames.Count > 0)
+                    yield return (method, tokenNames);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Every type declared in <paramref name="source"/>, and the qualified names of the partial types one
+    /// of whose parts in this file names a hosted-service base.
+    /// </summary>
+    private static (List<TypeDeclarationSyntax> Types, HashSet<string> HostedPartials) TypesOf(string source)
     {
         var root = CSharpSyntaxTree.ParseText(source).GetRoot();
         var types = root.DescendantNodes().OfType<TypeDeclarationSyntax>().ToList();
@@ -125,21 +290,28 @@ internal static class HostedStartTokenScanner
             .Where(t => t.Modifiers.Any(SyntaxKind.PartialKeyword) && NamesAHostedServiceBase(t))
             .Select(QualifiedName)
             .ToHashSet(StringComparer.Ordinal);
+        return (types, hostedPartials);
+    }
 
-        foreach (var type in types)
+    private static bool IsHosted(TypeDeclarationSyntax type, HashSet<string> hostedPartials) =>
+        NamesAHostedServiceBase(type)
+        || (type.Modifiers.Any(SyntaxKind.PartialKeyword) && hostedPartials.Contains(QualifiedName(type)));
+
+    private static HashSet<string> TokenNames(MethodDeclarationSyntax method) =>
+        method.ParameterList.Parameters
+            .Where(p => p.Type is not null && TrailingName(p.Type) == "CancellationToken")
+            .Select(p => p.Identifier.ValueText)
+            .ToHashSet(StringComparer.Ordinal);
+
+    private static IEnumerable<(MethodDeclarationSyntax Method, HashSet<string> TokenNames)> HostedStartMethods(string source)
+    {
+        var (types, hostedPartials) = TypesOf(source);
+        foreach (var type in types.Where(type => IsHosted(type, hostedPartials)))
         {
-            var hosted = NamesAHostedServiceBase(type)
-                || (type.Modifiers.Any(SyntaxKind.PartialKeyword) && hostedPartials.Contains(QualifiedName(type)));
-            if (!hosted)
-                continue;
-
             foreach (var method in type.Members.OfType<MethodDeclarationSyntax>()
                 .Where(method => method.Identifier.ValueText == "StartAsync"))
             {
-                var tokenNames = method.ParameterList.Parameters
-                    .Where(p => p.Type is not null && TrailingName(p.Type) == "CancellationToken")
-                    .Select(p => p.Identifier.ValueText)
-                    .ToHashSet(StringComparer.Ordinal);
+                var tokenNames = TokenNames(method);
                 if (tokenNames.Count > 0)
                     yield return (method, tokenNames);
             }
