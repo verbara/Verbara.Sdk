@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: `MapPushEndpoints` works in a Native AOT app, and `Verbara.Sdk.VoiceAi.TurnDetection` is marked AOT-compatible (#NNN)
+### Fixed: `MapPushEndpoints` works in a Native AOT app, and `Verbara.Sdk.VoiceAi.TurnDetection` is marked AOT-compatible (#410)
 
 `Verbara.Sdk.Push.AspNetCore`'s `MapPushEndpoints()` carried `[RequiresUnreferencedCode]` and `[RequiresDynamicCode]`,
 so a Native AOT host that mapped the SSE stream got `IL2026` and `IL3050` at the call, and the native image then threw
