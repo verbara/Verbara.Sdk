@@ -17,6 +17,10 @@ public interface IAgiServer : IAsyncDisposable
     AgiServerState State { get; }
 
     /// <summary>Start accepting AGI connections.</summary>
+    /// <param name="cancellationToken">
+    /// Bounds only the start. Cancelling it after the start returned does not stop the server and does not
+    /// end a script it is serving; call <see cref="StopAsync"/> or dispose the server for that.
+    /// </param>
     ValueTask StartAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Stop accepting connections and shutdown gracefully.</summary>

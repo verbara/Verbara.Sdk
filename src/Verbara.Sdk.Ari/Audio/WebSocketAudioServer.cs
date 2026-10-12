@@ -143,8 +143,18 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     /// </summary>
     internal Action? AfterRegistryAdd { get; set; }
 
+    /// <summary>
+    /// Binds the listener and starts the accept loop. A start while the server is running completes and
+    /// binds nothing. The server serves until <see cref="StopAsync"/> or <see cref="DisposeAsync"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Unused: this start begins nothing that can be aborted.</param>
     public ValueTask StartAsync(CancellationToken cancellationToken = default)
     {
+        // The parameter is deliberately unused: it means the start was aborted, and this start begins
+        // nothing that can be aborted. The accept loop and every connection handler get the token this
+        // server owns, which the server's own stop cancels; a source linked to the start's token would
+        // end them all when that token is cancelled after the start returned.
+        //
         // First, and before anything is built: a second start that got as far as replacing _cts
         // would leave the first accept loop running against a source nothing can cancel, and the
         // listener, the source and the loop task it overwrote all leaked.
@@ -167,7 +177,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 Volatile.Write(ref _running, 0);
         }
 
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _cts = new CancellationTokenSource();
 
         WebSocketAudioServerLog.ServerStarted(_logger, _options.WebSocketPort);
 

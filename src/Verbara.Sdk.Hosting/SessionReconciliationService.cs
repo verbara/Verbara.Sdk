@@ -68,15 +68,26 @@ internal sealed partial class SessionReconciliationService : IHostedService, IDi
         _sweep = new ServerSweep(manager, _options, logger, timeProvider);
     }
 
+    /// <summary>
+    /// Starts the sweep loop. The sweep runs until <see cref="StopAsync"/> or <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Unused: this start begins nothing that can be aborted.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="SessionOptions.ReconciliationInterval"/> is zero or less and not <see cref="Timeout.InfiniteTimeSpan"/>.
+    /// </exception>
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        // The parameter is deliberately unused: it means the start was aborted, and this start begins
+        // nothing that can be aborted. The loop gets the token this service owns, which the service's own
+        // stop cancels; a source linked to the start's token would end the sweep when that token is
+        // cancelled after the start returned.
         if (_options.ReconciliationInterval == Timeout.InfiniteTimeSpan)
         {
             LogSweepSwitchedOff();
             return Task.CompletedTask;
         }
 
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _cts = new CancellationTokenSource();
         _timer = new PeriodicTimer(_options.ReconciliationInterval);
         _runningTask = RunLoop(_cts.Token);
         return Task.CompletedTask;
