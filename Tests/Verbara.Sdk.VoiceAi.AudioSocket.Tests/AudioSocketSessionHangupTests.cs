@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading.Channels;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -129,6 +130,77 @@ public sealed class AudioSocketSessionHangupTests : IAsyncLifetime
             if (read.Frames.Count > 0)
                 read.Frames[^1].Should().Be(
                     new PeerFrame(AudioSocketFrameType.Hangup, 0), "the hangup frame follows the audio, whole");
+        }
+    }
+
+    /// <summary>The two endings raced on one session in the theory below.</summary>
+    public enum TwoEndings
+    {
+        /// <summary>Two <see cref="AudioSocketSession.HangupAsync"/> calls.</summary>
+        TwoHangups,
+
+        /// <summary>A <see cref="AudioSocketSession.HangupAsync"/> and the server's own ending of the session.</summary>
+        HangupAndServerEnding,
+    }
+
+    /// <summary>
+    /// Two endings that run on one live session at once write one hangup frame in all: the ending is
+    /// claimed under the write lock, so the one that loses writes nothing. Repeated 300 times inside the
+    /// test, because the race is a window and not an ordering a seam can hold open.
+    /// </summary>
+    /// <remarks>
+    /// Measured on the base with two concurrent hangups on a real loopback server: one frame 296 of 300,
+    /// two frames 4 of 300, because the first ending released the lock before its teardown marked the
+    /// session ended, and the second, waiting on the lock, re-read it still live.
+    /// </remarks>
+    [Theory]
+    [InlineData(TwoEndings.TwoHangups)]
+    [InlineData(TwoEndings.HangupAndServerEnding)]
+    public async Task HangupAsync_ShouldWriteOneHangupFrame_WhenTwoEndingsRunAtOnce(TwoEndings endings)
+    {
+        const int Runs = 300;
+        var started = Channel.CreateUnbounded<AudioSocketSession>();
+        _server.OnSessionStarted += session =>
+        {
+            started.Writer.TryWrite(session);
+            return ValueTask.CompletedTask;
+        };
+
+        var framesPerRun = new Dictionary<int, int>();
+        var faults = new List<string>();
+        for (var run = 0; run < Runs; run++)
+        {
+            using var peer = await RawPeer.ConnectAsync(_server.BoundPort);
+            var session = await started.Reader.ReadAsync().AsTask().WaitAsync(SignalTimeout);
+
+            // Both endings are released by one gate, each on its own thread, so neither has a head start.
+            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var first = Task.Run(async () => { await gate.Task; await session.HangupAsync(); });
+            var second = Task.Run(async () =>
+            {
+                await gate.Task;
+                if (endings == TwoEndings.TwoHangups)
+                    await session.HangupAsync();
+                else
+                    await session.EndFromServerAsync();
+            });
+            gate.SetResult();
+
+            var fault = await Record.ExceptionAsync(() => Task.WhenAll(first, second).WaitAsync(SignalTimeout));
+            if (fault is not null)
+                faults.Add($"run {run}: {fault.GetType().Name}: {fault.Message}");
+
+            var read = await peer.ReadToEndAsync(SignalTimeout);
+            var hangupFrames = read.Frames.Count(f => f.Type == AudioSocketFrameType.Hangup);
+            framesPerRun[hangupFrames] = framesPerRun.GetValueOrDefault(hangupFrames) + 1;
+        }
+
+        var tally = string.Join(", ", framesPerRun.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key} frame(s): {kv.Value}/{Runs}"));
+        using (new AssertionScope())
+        {
+            faults.Should().BeEmpty("neither ending throws on a live session ({0})", endings);
+            framesPerRun.GetValueOrDefault(1).Should().Be(
+                Runs, "every run writes exactly one hangup frame in all ({0}; tally: {1})", endings, tally);
         }
     }
 
