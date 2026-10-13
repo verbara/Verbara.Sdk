@@ -258,9 +258,10 @@ public sealed class AudioSocketSession : IAsyncDisposable
 
     /// <summary>
     /// Ends the connection from the server's side, exactly as <see cref="HangupAsync"/> does: a hangup
-    /// frame if the session is still live, then the teardown every ending runs.
+    /// frame if the session is still live, then the teardown every ending runs. Cancelling
+    /// <paramref name="ct"/> abandons the frame as it does for a hangup; the caller then closes the session.
     /// </summary>
-    internal ValueTask EndFromServerAsync() => EndCoreAsync(CancellationToken.None);
+    internal ValueTask EndFromServerAsync(CancellationToken ct) => EndCoreAsync(ct);
 
     private async ValueTask EndCoreAsync(CancellationToken ct)
     {

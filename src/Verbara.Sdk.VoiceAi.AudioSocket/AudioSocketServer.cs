@@ -49,6 +49,13 @@ namespace Verbara.Sdk.VoiceAi.AudioSocket;
 /// hangup frame, never announced or counted, and not logged as a refusal: the client missed nothing.
 /// </para>
 /// <para>
+/// <b>The stop ends live sessions with a hangup frame.</b> <see cref="StopAsync"/> and disposal end every
+/// session that is still live with one hangup frame and then the close, whichever other component (a
+/// session broker, the handler) is ending it at the same time, and write nothing to a session that has
+/// already ended. The endings run together under one bound of about a second; a session that cannot take
+/// its frame within it is closed without one.
+/// </para>
+/// <para>
 /// <b>Started once.</b> The server binds one listener and runs one accept loop in its lifetime. A start
 /// while it is running changes nothing, so a host that starts the same instance twice (as the hosted
 /// service <c>AddAudioSocketServer</c> registers and again by hand) keeps the one listener, and the stop
@@ -96,6 +103,13 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// wait, as silence before its dialplan goes on.
     /// </summary>
     internal static readonly TimeSpan SameIdGrace = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// How long the stop waits, for all live sessions together, to end each one with a hangup frame before
+    /// it closes the ones still waiting without a frame. Of the same order as <see cref="SameIdGrace"/>: an
+    /// ending waits only for a write in flight and for the frame's own flush. Runs on the server's clock.
+    /// </summary>
+    internal static readonly TimeSpan StopEndingBound = TimeSpan.FromSeconds(1);
     private readonly Meter _instanceMeter;
 
     /// <summary>
@@ -249,16 +263,35 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// Stops accepting, releases the listener and ends every session the server serves. A stop after
     /// disposal completes and does nothing.
     /// </summary>
-    /// <param name="cancellationToken">Unused: the stop waits for nothing that can outlast it.</param>
+    /// <remarks>
+    /// <para>
+    /// Every session that is still live is ended the way <see cref="AudioSocketSession.HangupAsync"/> ends
+    /// one: one hangup frame, then the close, so on Asterisk 20 and later the call goes on in the dialplan
+    /// after <c>AudioSocket()</c>. A session that has already ended (the far end, its handler or another
+    /// ending closed it) gets no frame, and two endings that run at once on one session write one frame
+    /// between them. The sessions are ended together, and the wait is bounded: a session whose frame cannot
+    /// be written within about a second (a write in flight on it does not complete, for example because the
+    /// far end stopped reading) is closed without a frame. Disposal runs the same stop.
+    /// </para>
+    /// <para>
+    /// A connection still being registered when the stop begins is not ended here: its registration
+    /// refuses it, with a hangup frame.
+    /// </para>
+    /// </remarks>
+    /// <param name="cancellationToken">
+    /// Ends the wait for the hangup frames early: once it is cancelled, every session still waiting to be
+    /// ended is closed without a frame. The listener and the sessions are released either way, and the stop
+    /// does not throw for it.
+    /// </param>
     public Task StopAsync(CancellationToken cancellationToken) =>
-        Volatile.Read(ref _released) != 0 ? Task.CompletedTask : StopCoreAsync();
+        Volatile.Read(ref _released) != 0 ? Task.CompletedTask : StopCoreAsync(cancellationToken);
 
     /// <summary>
     /// The stop itself, run by <see cref="StopAsync"/> and by <see cref="DisposeAsync"/>. Marks the
     /// server's lifetime begun before it reads what to release, so a start that has not bound yet binds
     /// nothing afterwards.
     /// </summary>
-    private async Task StopCoreAsync()
+    private async Task StopCoreAsync(CancellationToken cancellationToken)
     {
         CancellationTokenSource? cts;
         TcpListener? listener;
@@ -274,15 +307,51 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
 
         listener?.Stop();
 
-        // The cancel above comes first: a registration whose entry this loop does not see reads it after
+        // The cancel above comes first: a registration whose entry this walk does not see reads it after
         // its add and withdraws. An entry still pending is left to its registrant, which sees the cancel
-        // and refuses the connection with a hangup frame; ending it here would close it frameless.
-        // Each entry is claimed as the loop reaches it, after the previous one's disposal, as before.
-        foreach (var entry in _sessions.Values.Where(e => e.ClaimForStop()))
-            await entry.Session.DisposeAsync().ConfigureAwait(false);
+        // and refuses the connection with a hangup frame; claiming it here only keeps it from being
+        // admitted. Every admitted entry is claimed before any ending starts.
+        var live = _sessions.Values.Where(e => e.ClaimForStop()).Select(e => e.Session).ToList();
+        if (live.Count > 0)
+        {
+            // One bound for all the endings, which run together, so the stop waits at most one bound
+            // however many sessions it ends.
+            using var bound = new CancellationTokenSource(StopEndingBound, _timeProvider);
+            using var ending = CancellationTokenSource.CreateLinkedTokenSource(bound.Token, cancellationToken);
+            await Task.WhenAll(live.Select(s => EndForStopAsync(s, ending.Token))).ConfigureAwait(false);
+        }
 
         _sessions.Clear();
         AudioSocketLog.ServerStopped(_logger);
+    }
+
+    /// <summary>
+    /// Ends one live session for the stop: a hangup frame and the close, or, once <paramref name="ct"/>
+    /// fires, the close alone. Never throws, and the session is no longer connected when it returns.
+    /// </summary>
+    /// <remarks>
+    /// The wait on the ending is bounded by <paramref name="ct"/> itself, not only by the token the ending
+    /// passes to its lock and its flush, so a flush the transport never completes cannot hold the stop. The
+    /// disposal that follows closes the transport, which ends that flush; the ending then finds the session
+    /// already torn down.
+    /// </remarks>
+    private static async Task EndForStopAsync(AudioSocketSession session, CancellationToken ct)
+    {
+        try
+        {
+            await session.EndFromServerAsync(ct).AsTask().WaitAsync(ct).ConfigureAwait(false);
+            return;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // The bound ran out, or the host withdrew its graceful stop: closed without a frame below.
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The ending failed some other way; the close below still ends the session.
+        }
+
+        await session.DisposeAsync().ConfigureAwait(false);
     }
 
     internal async Task AcceptLoopAsync(CancellationToken ct)
@@ -606,7 +675,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// and later, the call goes on in the dialplan. The session never started its read loop, so its
     /// hangup never fires and it releases nothing.
     /// </summary>
-    private static ValueTask RefuseAsync(AudioSocketSession session) => session.EndFromServerAsync();
+    private static ValueTask RefuseAsync(AudioSocketSession session) => session.EndFromServerAsync(CancellationToken.None);
 
     /// <summary>
     /// Releases the registry entry of a session that has hung up: the release its
@@ -676,7 +745,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
 
         // The core, not the public stop: the public one is a no-op once the server is released, and
         // disposal must still run its own stop.
-        await StopCoreAsync().ConfigureAwait(false);
+        await StopCoreAsync(CancellationToken.None).ConfigureAwait(false);
         _cts?.Dispose();
         _instanceMeter.Dispose();
         _listener = null;

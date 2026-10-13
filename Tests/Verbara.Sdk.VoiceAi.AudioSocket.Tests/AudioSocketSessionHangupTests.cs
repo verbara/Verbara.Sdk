@@ -182,7 +182,7 @@ public sealed class AudioSocketSessionHangupTests : IAsyncLifetime
                 if (endings == TwoEndings.TwoHangups)
                     await session.HangupAsync();
                 else
-                    await session.EndFromServerAsync();
+                    await session.EndFromServerAsync(CancellationToken.None);
             });
             gate.SetResult();
 

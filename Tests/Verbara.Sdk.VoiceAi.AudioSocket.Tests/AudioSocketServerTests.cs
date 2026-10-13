@@ -229,6 +229,89 @@ public sealed class AudioSocketServerTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// A session whose far end stopped reading holds an audio write in flight that cannot complete, so the
+    /// stop's hangup frame waits behind it. The stop waits no longer than its bound, then closes the session
+    /// without a frame. The bound runs on the server's clock, a <see cref="FakeTimeProvider"/> here: the test
+    /// moves it past the bound once the stop has armed it, and waits on no wall clock for it.
+    /// </summary>
+    [Fact]
+    public async Task StopAsync_ShouldReturnWithinTheBound_WhenAWriteNeverCompletes()
+    {
+        var clock = new FakeTimeProvider();
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { Port = 0, ConnectionTimeout = TimeSpan.FromSeconds(5) },
+            NullLogger<AudioSocketServer>.Instance,
+            clock);
+        var probe = SessionStartedProbe.SubscribeTo(server);
+        await server.StartAsync(CancellationToken.None);
+        var channelId = Guid.NewGuid();
+        using var peer = await FrameCountingPeer.ConnectAsync(server.BoundPort, channelId, startReading: false);
+        var session = await probe.Started(channelId).WaitAsync(SignalTimeout);
+        var hungUp = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.OnHangup += () => hungUp.TrySetResult();
+
+        // The far end reads nothing, so the socket's buffers fill and one write stays in flight. The loop
+        // bound is a failure bound: loopback buffers hold far less than this many frames.
+        var frame = new byte[32_000];
+        Task? inFlight = null;
+        for (var i = 0; i < 2_000 && inFlight is null; i++)
+        {
+            var write = session.WriteAudioAsync(frame, AudioSocketFrameType.Audio);
+            if (write.IsCompleted)
+                await write;
+            else
+                inFlight = write.AsTask();
+        }
+
+        var pending = inFlight
+            ?? throw new Xunit.Sdk.XunitException("the far end reads nothing, so a write eventually waits for the transport");
+
+        var stop = server.StopAsync(CancellationToken.None);
+        var armed = await NextTimerAsync(clock, AudioSocketServer.StopEndingBound);
+        var heldBeforeTheBound = !stop.IsCompleted;
+        clock.Advance(AudioSocketServer.StopEndingBound);
+        var stopFault = await Record.ExceptionAsync(() => stop.WaitAsync(SignalTimeout));
+        var writeFault = await Record.ExceptionAsync(() => pending.WaitAsync(SignalTimeout));
+        var hangupRaised = await Record.ExceptionAsync(() => hungUp.Task.WaitAsync(SignalTimeout));
+        var read = await peer.ReadToEndAsync(SignalTimeout);
+
+        using (new AssertionScope())
+        {
+            armed.Should().BeTrue("the stop arms its bound on the server's clock");
+            heldBeforeTheBound.Should().BeTrue("the stop's ending waits for the write in flight until the bound runs out");
+            stopFault.Should().BeNull("the stop returns once its bound has run out, without throwing");
+            session.IsConnected.Should().BeFalse("the session the bound ran out on is closed without a frame");
+            writeFault.Should().NotBeNull("the write in flight fails when the session is closed under it");
+            hangupRaised.Should().BeNull("the session's hangup is raised when it is closed");
+            read.ReachedEnd.Should().BeTrue($"the stop closes the connection (read: {read.Describe()})");
+            read.Frames.Should().NotContain(
+                AudioSocketFrameType.Hangup, $"no hangup frame is written once the bound ran out (read: {read.Describe()})");
+        }
+    }
+
+    /// <summary>
+    /// Waits until <paramref name="clock"/> has a timer due after <paramref name="dueTime"/>: the moment the
+    /// code under test is parked on it. False when no such timer is created within the signal bound.
+    /// </summary>
+    private static async Task<bool> NextTimerAsync(FakeTimeProvider clock, TimeSpan dueTime)
+    {
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        try
+        {
+            while (true)
+            {
+                var timer = await clock.TimersCreated.ReadAsync(bound.Token);
+                if (timer.DueTime == dueTime)
+                    return true;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
     private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
 
@@ -245,7 +328,9 @@ public sealed class AudioSocketServerTests : IAsyncLifetime
 
 /// <summary>
 /// A far end that speaks the AudioSocket wire directly, as Asterisk does, and keeps every byte the server
-/// writes, so a test can count the frames.
+/// writes, so a test can count the frames. It reads from the start, or, built with
+/// <c>startReading: false</c>, only from its first <see cref="ReadToEndAsync"/>, with a small receive buffer
+/// so that the server's writes stall.
 /// </summary>
 file sealed class FrameCountingPeer : IDisposable
 {
@@ -253,18 +338,21 @@ file sealed class FrameCountingPeer : IDisposable
     private readonly System.Net.Sockets.NetworkStream _stream;
     private readonly List<byte> _received = [];
     private readonly Lock _gate = new();
-    private readonly Task _reading;
+    private Task? _reading;
 
-    private FrameCountingPeer(System.Net.Sockets.TcpClient client)
+    private FrameCountingPeer(System.Net.Sockets.TcpClient client, bool startReading)
     {
         _client = client;
         _stream = client.GetStream();
-        _reading = ReadAllAsync();
+        if (startReading)
+            _reading = ReadAllAsync();
     }
 
-    public static async Task<FrameCountingPeer> ConnectAsync(int port, Guid channelId)
+    public static async Task<FrameCountingPeer> ConnectAsync(int port, Guid channelId, bool startReading = true)
     {
-        var client = new System.Net.Sockets.TcpClient();
+        var client = startReading
+            ? new System.Net.Sockets.TcpClient()
+            : new System.Net.Sockets.TcpClient { ReceiveBufferSize = 4096 };
         try
         {
             // 127.0.0.1, never "localhost": the name resolves ::1 first on this host.
@@ -274,7 +362,7 @@ file sealed class FrameCountingPeer : IDisposable
             uuid[2] = 16;
             channelId.TryWriteBytes(uuid.AsSpan(3), bigEndian: true, out _);
             await client.GetStream().WriteAsync(uuid);
-            return new FrameCountingPeer(client);
+            return new FrameCountingPeer(client, startReading);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -292,6 +380,9 @@ file sealed class FrameCountingPeer : IDisposable
     /// </summary>
     public async Task<FrameRead> ReadToEndAsync(TimeSpan bound)
     {
+        lock (_gate)
+            _reading ??= ReadAllAsync();
+
         var reachedEnd = false;
         try
         {
