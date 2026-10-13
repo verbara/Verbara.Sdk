@@ -875,6 +875,88 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
     }
 
     /// <summary>
+    /// The far end leaving by resetting the connection mid-playback is the far end leaving, whatever
+    /// exception the write meets: the synthesis is counted cancelled with <c>voiceai.ending=far-end</c>,
+    /// never failed, and no pipeline error is published. A reset reaches the write as an
+    /// <see cref="IOException"/>, not the <see cref="ObjectDisposedException"/> a torn-down session raises,
+    /// so the guard that reads only the latter booked it as a synthesis failure.
+    /// </summary>
+    /// <remarks>
+    /// A real server and a raw far end that never reads: the synthesizer streams until the socket's
+    /// buffers are full, says it is speaking once a chunk has been written, and the far end then resets
+    /// (<c>SO_LINGER</c> 0). Repeated 20 times inside the test; measured on the base, the write threw
+    /// <see cref="IOException"/> for this ending 300 of 300.
+    /// </remarks>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldNotReportASynthesisFailure_WhenTheFarEndResetsMidPlayback()
+    {
+        const int Runs = 20;
+        var outcomes = new List<string>();
+        for (var run = 0; run < Runs; run++)
+            outcomes.Add(await ResetMidPlaybackOnceAsync());
+
+        const string Expected = "cancelled=[voiceai.ending=far-end] failed=0 errors=0 fault=none";
+        var tally = string.Join("; ", outcomes.GroupBy(o => o).Select(g => $"{g.Count()}x {g.Key}"));
+        outcomes.Count(o => o == Expected).Should().Be(
+            Runs, "every reset mid-playback is the far end leaving, not a synthesis failure (runs: {0})", tally);
+    }
+
+    /// <summary>One session whose far end resets mid-playback; returns what the session counted and published.</summary>
+    private static async Task<string> ResetMidPlaybackOnceAsync()
+    {
+        var detector = new ScriptedTurnDetector(TurnAction.SpeechStarted, TurnAction.EndOfUtterance);
+        await using var tts = new EndlessSpeechSynthesizer();
+        await using var pipeline = BuildPipeline(tts, detector);
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { Port = 0 }, NullLogger<AudioSocketServer>.Instance);
+        TaskCompletionSource<AudioSocketSession> accepted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.OnSessionStarted += s => { accepted.TrySetResult(s); return ValueTask.CompletedTask; };
+        await server.StartAsync(CancellationToken.None);
+        using var ttsMetrics = new MeterCapture(TtsMeterName);
+        using var capture = new PipelineEventCapture(pipeline);
+
+        // 127.0.0.1, never "localhost": the name resolves ::1 first on this host. A small receive buffer,
+        // and the peer never reads, so the synthesis soon waits on the transport.
+        using var peer = new System.Net.Sockets.TcpClient { ReceiveBufferSize = 4096 };
+        await peer.ConnectAsync(System.Net.IPAddress.Loopback, server.BoundPort);
+        var stream = peer.GetStream();
+        var uuid = new byte[19];
+        uuid[0] = (byte)AudioSocketFrameType.Uuid;
+        uuid[2] = 16;
+        Guid.NewGuid().TryWriteBytes(uuid.AsSpan(3), bigEndian: true, out _);
+        await stream.WriteAsync(uuid);
+        var session = await accepted.Task.WaitAsync(SignalTimeout);
+
+        var sessionTask = pipeline.HandleSessionAsync(session, CancellationToken.None).AsTask();
+        await stream.WriteAsync(AudioFrameOnTheWire(VoiceFrame()));
+        await detector.Analyzed(0).WaitAsync(SignalTimeout);
+        await stream.WriteAsync(AudioFrameOnTheWire(VoiceFrame()));
+        await detector.Analyzed(1).WaitAsync(SignalTimeout);
+        await tts.Speaking.WaitAsync(SignalTimeout);
+
+        // Act — the far end resets the connection mid-playback.
+        peer.Client.LingerState = new System.Net.Sockets.LingerOption(true, 0);
+        peer.Close();
+
+        var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+        var cancelled = string.Join(",", ttsMetrics.Tags("tts.syntheses.cancelled"));
+        var errors = capture.Events.OfType<PipelineErrorEvent>().Count();
+        return $"cancelled=[{cancelled}] failed={ttsMetrics.Get("tts.syntheses.failed")} errors={errors} "
+            + $"fault={fault?.GetType().Name ?? "none"}";
+    }
+
+    /// <summary>An 8 kHz audio frame as the far end puts it on the wire: type, big-endian length, payload.</summary>
+    private static byte[] AudioFrameOnTheWire(ReadOnlyMemory<byte> payload)
+    {
+        var frame = new byte[3 + payload.Length];
+        frame[0] = (byte)AudioSocketFrameType.Audio;
+        frame[1] = (byte)(payload.Length >> 8);
+        frame[2] = (byte)payload.Length;
+        payload.Span.CopyTo(frame.AsSpan(3));
+        return frame;
+    }
+
+    /// <summary>
     /// The control that keeps the write's guard scoped to the write: an
     /// <see cref="ObjectDisposedException"/> raised by the <em>synthesizer</em> — a provider client
     /// used after its own disposal — on a session that is still connected is a synthesis failure like
@@ -1337,6 +1419,36 @@ file sealed class KeepsSpeakingAfterTheParkSpeechSynthesizer : SpeechSynthesizer
     {
         Release();
         return base.DisposeAsync();
+    }
+}
+
+/// <summary>
+/// Streams 320-byte chunks until the token it was handed is cancelled or the pipeline stops pulling, and
+/// says it is speaking once the pipeline has asked for a second chunk, which it does only after writing
+/// the first to the session.
+/// </summary>
+file sealed class EndlessSpeechSynthesizer : SpeechSynthesizer
+{
+    private readonly TaskCompletionSource _speaking = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public override string ProviderName => "Endless";
+
+    /// <summary>Completes once a chunk has been written to the session.</summary>
+    public Task Speaking => _speaking.Task;
+
+    public override async IAsyncEnumerable<ReadOnlyMemory<byte>> SynthesizeAsync(
+        string text,
+        AudioFormat outputFormat,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        yield return new byte[320];
+        while (true)
+        {
+            _speaking.TrySetResult();
+            ct.ThrowIfCancellationRequested();
+            await Task.Yield();
+            yield return new byte[320];
+        }
     }
 }
 
