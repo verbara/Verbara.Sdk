@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
+using FluentAssertions.Execution;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Verbara.Sdk.VoiceAi.AudioSocket.Tests;
@@ -389,6 +391,180 @@ public sealed class AudioSocketSessionTests : IAsyncLifetime
         Volatile.Read(ref releases).Should().Be(1, "the release runs, so the server gives back the entry and the place");
     }
 
+    // ── A write that fails on its transport ends the session ─────────────────
+
+    /// <summary>
+    /// A write that fails because the far end reset the connection ends the session before the exception
+    /// reaches the caller: by the time <see cref="AudioSocketSession.WriteAudioAsync(ReadOnlyMemory{byte}, CancellationToken)"/>
+    /// throws, the session reports itself not connected and has raised its hangup once, and the transport
+    /// failure is logged once at Warning. The exception type is unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Deterministic: the session is built on a pipe reader the test holds and never completes, and its
+    /// read loop is never started, so nothing but the write itself can notice the reset.
+    /// </remarks>
+    [Fact]
+    public async Task WriteAudioAsync_ShouldEndTheSessionBeforeThrowing_WhenTheTransportFails()
+    {
+        var logger = new RecordingSessionLogger();
+        await using var pair = await SessionPair.CreateAsync(logger);
+        var hangups = 0;
+        pair.Session.OnHangup += () => Interlocked.Increment(ref hangups);
+
+        pair.ResetPeer();
+        var fault = await WriteUntilItThrowsAsync(pair.Session);
+
+        // Read right after the throw, before anything else can run on the session.
+        var connectedAtTheThrow = pair.Session.IsConnected;
+        var hangupsAtTheThrow = Volatile.Read(ref hangups);
+
+        using (new AssertionScope())
+        {
+            fault.Should().BeAssignableTo<IOException>("the exception type the caller sees does not change");
+            connectedAtTheThrow.Should().BeFalse("the session ended itself before the exception reached the caller");
+            hangupsAtTheThrow.Should().Be(1, "the session's hangup was raised once, before the throw");
+            logger.Entries.Where(e => e.Level == LogLevel.Warning).Should().ContainSingle(
+                "a transport that failed while the session was live is reported once at Warning");
+        }
+    }
+
+    /// <summary>
+    /// A write cut short by the session's own ending (here its owner's disposal, which closes the transport
+    /// under a flush) throws, and logs nothing: the session was not live when the write failed, so nothing
+    /// broke.
+    /// </summary>
+    [Fact]
+    public async Task WriteAudioAsync_ShouldThrowWithoutAWarning_WhenTheSessionEndsUnderTheWrite()
+    {
+        var logger = new RecordingSessionLogger();
+        await using var pair = await SessionPair.CreateAsync(logger);
+        var frame = new byte[32_000];
+
+        // The far end does not read, so the socket's buffers fill and one write stays in flight. The loop
+        // bound is a failure bound: loopback buffers hold far less than this many frames.
+        Task? inFlight = null;
+        for (var i = 0; i < 2_000 && inFlight is null; i++)
+        {
+            var write = pair.Session.WriteAudioAsync(frame, AudioSocketFrameType.Audio);
+            if (write.IsCompleted)
+                await write;
+            else
+                inFlight = write.AsTask();
+        }
+
+        var pending = inFlight
+            ?? throw new Xunit.Sdk.XunitException("the far end reads nothing, so a write eventually waits for the transport");
+
+        await pair.Session.DisposeAsync();
+        var fault = await Record.ExceptionAsync(() => pending.WaitAsync(SignalTimeout));
+
+        using (new AssertionScope())
+        {
+            fault.Should().Match<Exception>(
+                e => e is IOException || e is ObjectDisposedException,
+                "the write in flight fails once the transport under it is closed (got {0})", fault?.GetType().Name);
+            logger.Entries.Where(e => e.Level >= LogLevel.Warning).Should().BeEmpty(
+                "a write the session's own ending cut short is not a transport failure");
+        }
+    }
+
+    /// <summary>
+    /// A hangup subscriber that throws neither replaces the write's transport failure nor escapes the
+    /// ending: the write still throws its <see cref="IOException"/>, the subscriber's exception is logged
+    /// once at Warning, and the release and the hung-up signal still run.
+    /// </summary>
+    [Fact]
+    public async Task WriteAudioAsync_ShouldStillThrowTheTransportFailure_WhenAHangupSubscriberThrows()
+    {
+        var logger = new RecordingSessionLogger();
+        await using var pair = await SessionPair.CreateAsync(logger);
+        var subscriberFault = new InvalidOperationException("A hangup subscriber failed.");
+        var released = 0;
+        pair.Session.OnHangup += () => throw subscriberFault;
+        pair.Session.Released = () => Interlocked.Increment(ref released);
+
+        pair.ResetPeer();
+        var fault = await WriteUntilItThrowsAsync(pair.Session);
+        var hungUp = await Record.ExceptionAsync(() => pair.Session.HungUp.WaitAsync(SignalTimeout));
+
+        using (new AssertionScope())
+        {
+            fault.Should().BeAssignableTo<IOException>(
+                "the write's own failure reaches the caller, not the subscriber's exception");
+            logger.Entries.Should().ContainSingle(
+                e => e.Level == LogLevel.Warning && ReferenceEquals(e.Exception, subscriberFault),
+                "the subscriber's exception is logged once at Warning and goes no further");
+            hungUp.Should().BeNull("the hung-up signal still completes after a throwing subscriber");
+            Volatile.Read(ref released).Should().Be(1, "the release still runs after a throwing subscriber");
+        }
+    }
+
+    /// <summary>Upper bound on any single wait in the transport-failure tests. Reaching it is a failure.</summary>
+    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Writes small frames until one throws, and returns what it threw. The bound is a failure bound: on
+    /// loopback the reset is in the kernel before the first write after it.
+    /// </summary>
+    private static async Task<Exception?> WriteUntilItThrowsAsync(AudioSocketSession session)
+    {
+        var frame = new byte[320];
+        for (var i = 0; i < 10_000; i++)
+        {
+            var fault = await Record.ExceptionAsync(async () => await session.WriteAudioAsync(frame));
+            if (fault is not null)
+                return fault;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// A session over a real loopback connection whose read side is a pipe the test never completes, so
+    /// the read loop (never started) cannot end the session; and the raw far end of that connection.
+    /// </summary>
+    private sealed class SessionPair : IAsyncDisposable
+    {
+        private readonly System.Net.Sockets.TcpListener _listener;
+        private readonly System.Net.Sockets.TcpClient _peer;
+        private readonly System.IO.Pipelines.Pipe _heldReadSide = new();
+
+        private SessionPair(
+            System.Net.Sockets.TcpListener listener, System.Net.Sockets.TcpClient peer, System.Net.Sockets.TcpClient accepted, ILogger logger)
+        {
+            _listener = listener;
+            _peer = peer;
+            Session = new AudioSocketSession(
+                Guid.NewGuid(), accepted, _heldReadSide.Reader, new AudioSocketOptions().DefaultFormat, logger);
+        }
+
+        public AudioSocketSession Session { get; }
+
+        public static async Task<SessionPair> CreateAsync(ILogger logger)
+        {
+            var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            listener.Start();
+            var peer = new System.Net.Sockets.TcpClient { ReceiveBufferSize = 4096 };
+            await peer.ConnectAsync(System.Net.IPAddress.Loopback, ((System.Net.IPEndPoint)listener.LocalEndpoint).Port);
+            var accepted = await listener.AcceptTcpClientAsync();
+            return new SessionPair(listener, peer, accepted, logger);
+        }
+
+        /// <summary>The far end resets the connection: <c>SO_LINGER</c> 0, then close.</summary>
+        public void ResetPeer()
+        {
+            _peer.Client.LingerState = new System.Net.Sockets.LingerOption(true, 0);
+            _peer.Close();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await Session.DisposeAsync();
+            _peer.Dispose();
+            _listener.Dispose();
+        }
+    }
+
     /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
     private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
 
@@ -400,5 +576,32 @@ public sealed class AudioSocketSessionTests : IAsyncLifetime
     {
         await _server.StopAsync(CancellationToken.None);
         await _server.DisposeAsync();
+    }
+}
+
+/// <summary>One entry a session logged: its level, its message and the exception it carried.</summary>
+file sealed record SessionLogEntry(LogLevel Level, string Message, Exception? Exception);
+
+/// <summary>Records what a session logs, so a test can say at which level and with which exception.</summary>
+file sealed class RecordingSessionLogger : ILogger
+{
+    private readonly Lock _gate = new();
+    private readonly List<SessionLogEntry> _entries = [];
+
+    /// <summary>A snapshot of everything logged so far, oldest first.</summary>
+    public IReadOnlyList<SessionLogEntry> Entries
+    {
+        get { lock (_gate) return [.. _entries]; }
+    }
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(
+        LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        lock (_gate)
+            _entries.Add(new SessionLogEntry(logLevel, formatter(state, exception), exception));
     }
 }
