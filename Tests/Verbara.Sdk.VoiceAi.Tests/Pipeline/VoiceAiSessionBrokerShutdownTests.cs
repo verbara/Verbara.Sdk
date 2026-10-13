@@ -115,8 +115,17 @@ public sealed class VoiceAiSessionBrokerShutdownTests : IAsyncLifetime
         var stopCompletedWhenTheHandlerReturned = await handler.ObservedOnReturn.WaitAsync(SignalTimeout);
         stopCompletedWhenTheHandlerReturned.Should().BeFalse(
             "the host's stop completed only after the handler had returned");
-        if (order != StopOrder.BrokerStoppedFirst)
+        if (order == StopOrder.ServerStoppedFirst)
         {
+            // The server's own stop ends the live session with a frame, so the order no longer decides
+            // whether the far end reads one.
+            var read = await peer.ReadToEndAsync(SignalTimeout);
+            AssertOneHangupThenClose(read, "the server's stop, which runs first here, ends the live session with a frame");
+        }
+        else if (order == StopOrder.StoppedConcurrently)
+        {
+            // Two endings race here (the broker's and the server's); exactly one frame needs the ending to
+            // be claimed under the session's write lock, which a later step tightens this to.
             var read = await peer.ReadToEndAsync(SignalTimeout);
             read.Frames.Count(f => f.Type == AudioSocketFrameType.Hangup).Should().BeLessThanOrEqualTo(
                 1, $"some ending wrote at most one hangup frame in all (read: {read.Describe()})");
