@@ -190,13 +190,15 @@ public sealed class AudioSocketIdentificationTests
         // Act
         time.Advance(ShortIdleTimeout + TimeSpan.FromMilliseconds(1));
         await peer.Closed.WaitAsync(bound.Token);
-        var (probe, _) = await harness.IdentifyUntilAdmittedAsync(Guid.NewGuid(), bound.Token);
-        using var admitted = probe;
+        var placeBack = await HeldReachesAsync(harness.Options.Admission, 0, bound.Token);
+        var admittedAtFirstAttempt = await IdentifyOnceAsync(harness, Guid.NewGuid(), bound.Token);
 
         // Assert
         using (new AssertionScope())
         {
             deadline.DueTime.Should().Be(ShortIdleTimeout, "the wait asked the injected clock for IdleTimeout");
+            placeBack.Should().BeTrue("the closed connection gives its place back");
+            admittedAtFirstAttempt.Should().BeTrue("so the next peer is admitted at its first attempt");
             Volatile.Read(ref announcements).Should().Be(1, "the silent connection was never announced; only the probe was");
             harness.Logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
         }
