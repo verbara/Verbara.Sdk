@@ -70,6 +70,57 @@ public sealed class ActivityEndingTests
             "an ending nobody requested is Failed, never Cancelled");
     }
 
+    [Theory]
+    [MemberData(nameof(ActivityBases))]
+    public async Task StartAsync_ShouldStayCancelledWithoutThrowing_WhenTheUnwindThrowsAfterCancelAsync(string activityBase)
+    {
+        var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var activity = EndingActivities.Create(
+            activityBase, ct => EndingActivities.ParkThenThrowIOException(running, ct));
+        var statuses = new List<ActivityStatus>();
+        using var subscription = activity.StatusChanges.Subscribe(statuses.Add);
+
+        var start = activity.StartAsync().AsTask();
+        await running.Task.WaitAsync(SignalTimeout);
+        await activity.CancelAsync();
+
+        var finishing = () => start.WaitAsync(SignalTimeout);
+
+        using var scope = new AssertionScope();
+        await finishing.Should().NotThrowAsync(
+            "after a request the stop is the ending, and what the unwind throws is dropped");
+        activity.Status.Should().Be(ActivityStatus.Cancelled);
+        statuses.Should().Equal(
+            [ActivityStatus.Pending, ActivityStatus.Starting, ActivityStatus.InProgress, ActivityStatus.Cancelled],
+            "Cancelled is written once and nothing — Failed included — is written before or after it");
+    }
+
+    [Theory]
+    [MemberData(nameof(ActivityBases))]
+    public async Task StartAsync_ShouldStayCancelledWithoutThrowing_WhenTheUnwindThrowsAfterTheCallerCancels(string activityBase)
+    {
+        var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var activity = EndingActivities.Create(
+            activityBase, ct => EndingActivities.ParkThenThrowIOException(running, ct));
+        var statuses = new List<ActivityStatus>();
+        using var subscription = activity.StatusChanges.Subscribe(statuses.Add);
+        using var caller = new CancellationTokenSource();
+
+        var start = activity.StartAsync(caller.Token).AsTask();
+        await running.Task.WaitAsync(SignalTimeout);
+        EndingActivities.CancelInline(caller);
+
+        var finishing = () => start.WaitAsync(SignalTimeout);
+
+        using var scope = new AssertionScope();
+        await finishing.Should().NotThrowAsync(
+            "after a request the stop is the ending, and what the unwind throws is dropped");
+        activity.Status.Should().Be(ActivityStatus.Cancelled);
+        statuses.Should().Equal(
+            [ActivityStatus.Pending, ActivityStatus.Starting, ActivityStatus.InProgress, ActivityStatus.Cancelled],
+            "Cancelled is written once and nothing — Failed included — is written before or after it");
+    }
+
     [Fact]
     public async Task AttendedTransferActivity_ShouldEndFailed_WhenTheAmiResponseTimesOut()
     {
@@ -143,6 +194,23 @@ file static class EndingActivities
     /// <c>CancellationTokenSource.CancelAsync</c> would run them on the thread pool instead.
     /// </summary>
     public static void CancelInline(CancellationTokenSource source) => source.Cancel();
+
+    /// <summary>
+    /// Parks on the execution token, then answers its cancellation with something other than a
+    /// cancellation — a socket the stop itself closed, say.
+    /// </summary>
+    public static async ValueTask ParkThenThrowIOException(TaskCompletionSource running, CancellationToken cancellationToken)
+    {
+        running.TrySetResult();
+        try
+        {
+            await new TaskCompletionSource().Task.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException ex)
+        {
+            throw new IOException("The connection closed while the activity was stopping.", ex);
+        }
+    }
 }
 
 file sealed class EndingAgiActivity(IAgiChannel channel, Func<CancellationToken, ValueTask> execute) : ActivityBase(channel)
