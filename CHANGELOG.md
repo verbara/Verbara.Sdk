@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: an activity ends `Cancelled` only when someone asked it to stop (#NNN)
+
+The three activity base classes (`ActivityBase`, `AmiActivityBase`, `AriActivityBase`, so all fifteen shipped
+activities) read every `OperationCanceledException` as a cancellation: an activity ended by a deadline nobody asked
+for reported `Cancelled`, as if the caller had stopped it, and `StartAsync` returned. An `AttendedTransferActivity`
+whose `Atxfer` Asterisk did not answer within `AmiConnectionOptions.DefaultResponseTimeout` (2 s by default), and a
+`SnoopActivity` or `ExternalMediaActivity` whose ARI request hit the `HttpClient` timeout (100 s), each ended
+`Cancelled` — the snoop with `SnoopChannel` null. An activity now ends `Cancelled` only when the token passed to
+`StartAsync` was cancelled, `CancelAsync` was called, or it was disposed while running, and `StartAsync` still returns
+without throwing then. Every other ending is `Failed` and `StartAsync` rethrows it, including the
+`OperationCanceledException` of such a deadline. A deadline the caller links into the token it passes (a `CancelAfter`
+source, a FastAGI connection token cancelled after `ConnectionTimeout`) counts as the caller's request and still ends
+`Cancelled`.
+
+Two more endings change with the same rule. A `CancelAsync` that arrives while the activity is `Starting` wrote
+`Cancelled`, after which the activity wrote `InProgress` and executed anyway; it now ends `Cancelled` and never
+executes. After `CancelAsync` or the caller's cancellation, an unwind that throws something other than a cancellation
+(an `IOException` from a socket the stop closed) wrote `Failed` beside `Cancelled`, in an order that depended on the
+host, and `StartAsync` threw it; the activity now ends `Cancelled`, written once, `StartAsync` returns, and that
+exception is dropped — the base classes hold no logger, so it is not logged. Code that awaited `StartAsync` without a
+`try`, or read `Status == ActivityStatus.Cancelled` after it to detect a timeout, must now catch the exception. No
+public API signature changes; the `IActivity.StartAsync`, `IActivity.CancelAsync` and `ActivityStatus` XML docs state
+the rule.
+
+**Migration guide:** [`docs/guides/activity-ending-migration.md`](docs/guides/activity-ending-migration.md)
+
 ### Fixed: `MapPushEndpoints` works in a Native AOT app, and `Verbara.Sdk.VoiceAi.TurnDetection` is marked AOT-compatible (#410)
 
 `Verbara.Sdk.Push.AspNetCore`'s `MapPushEndpoints()` carried `[RequiresUnreferencedCode]` and `[RequiresDynamicCode]`,
