@@ -112,8 +112,9 @@ An event is matched by its **name**: its `TopicPath`, or its `EventType` when th
 
 For a **null** topic path this is the convention the NATS bridge already used to build its subject
 (`TopicPath ?? EventType`). It is not the same for an **empty** one: the bridge publishes an event with an empty
-topic path to the bare subject prefix, not under its event type. **Webhooks are not changed**: a webhook
-subscription still never receives an event whose topic path is null or empty.
+topic path to the bare subject prefix, not under its event type. **Webhooks were not changed in 2.8.0**: a
+webhook subscription still never received an event whose topic path is null or empty. From 2.9.0 webhooks apply the
+same rule; see [webhooks receive events without a topic path](#webhooks-receive-events-without-a-topic-path-290).
 
 ### 3. The stream knows who the subscriber is, from claim types you can configure
 
@@ -375,3 +376,25 @@ Details per package: [`Verbara.Sdk.Push.AspNetCore` README](../../src/Verbara.Sd
 [claim types](../../src/Verbara.Sdk.Push.AspNetCore/README.md#who-a-connection-belongs-to)),
 [`Verbara.Sdk.Push` README](../../src/Verbara.Sdk.Push/README.md#tracing),
 [`Verbara.Sdk.Push.Webhooks` README](../../src/Verbara.Sdk.Push.Webhooks/README.md#accepted-option-values).
+
+## Webhooks receive events without a topic path (2.9.0)
+
+Before 2.9.0 a webhook subscription never received an event whose `TopicPath` was null or empty. From 2.9.0 such an
+event is matched by its `EventType`, the rule the SSE stream applies since 2.8.0:
+
+| Event | Subscription `**` | `billing.**` | `calls.**` |
+|---|---|---|---|
+| type `billing.invoice.created`, no topic path | receives (new) | receives (new) | no |
+| type `billing..x` (not a topic), no topic path | receives (new) | no | no |
+| any type, topic path `calls.42` | receives | no | receives (unchanged) |
+| any type, topic path `calls..x` (does not parse) | no — logged as `Error` EventId 9 (unchanged) | no | no |
+
+What to check:
+
+1. Subscriptions whose pattern is `**`, or matches an event type you publish without a topic path, now receive those
+   events.
+2. A receiver that answers the new events with a 4xx: with the default options one such event is 6 consecutive
+   failures, which opens that URL's circuit (threshold 5) and skips every delivery to it, topic-bearing ones
+   included, for 30 s (`circuit.skipped`). Have it accept them (answer `2xx`), or
+3. keep an event away from webhooks by publishing it with a topic path that no subscription matches.
+
