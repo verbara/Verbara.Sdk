@@ -93,6 +93,205 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
         await CleanupAsync(client, server);
     }
 
+    // ---- A session ends in exactly one of completed, failed or cancelled ----
+
+    /// <summary>
+    /// A session the caller cancelled is counted in <c>voiceai.sessions.cancelled</c> and in no other
+    /// ending, and its duration sample says so. The counter is read by name, so before it exists it reads
+    /// as no measurement and the assertion, not the build, fails.
+    /// </summary>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldCountTheSessionCancelled_WhenTheCallerCancels()
+    {
+        // Arrange — nothing to do but read frames, so the only thing that can end the session is the token.
+        var detector = new ScriptedTurnDetector();
+        await using var tts = new ParkingSpeechSynthesizer();
+        await using var pipeline = BuildPipeline(tts, detector);
+        var (session, server, client) = await CreateAudioSessionAsync();
+        using var metrics = new MeterCapture(MeterName);
+        using var cts = new CancellationTokenSource();
+
+        var sessionTask = pipeline.HandleSessionAsync(session, cts.Token).AsTask();
+        await client.SendAudioAsync(SilenceFrame());
+        await detector.FirstAnalyzed.WaitAsync(SignalTimeout);
+
+        // Act
+        await cts.CancelAsync();
+        var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+        // Assert
+        using (new AssertionScope())
+        {
+            fault.Should().BeNull("a cancellation the caller asked for is not rethrown");
+            metrics.Get("voiceai.sessions.started").Should().Be(1);
+            metrics.Get("voiceai.sessions.cancelled").Should().Be(1, "the caller's token ended the session");
+            metrics.Get("voiceai.sessions.completed").Should().Be(0, "a cancelled session is not completed");
+            metrics.Get("voiceai.sessions.failed").Should().Be(0);
+            metrics.Tags("voiceai.session.duration_ms").Should().ContainSingle()
+                .Which.Should().Be(
+                    "voiceai.ending=session-cancelled",
+                    "the one duration sample of a cancelled session carries what ended it");
+        }
+
+        await CleanupAsync(client, server);
+    }
+
+    /// <summary>What ends a session in the partition theory below.</summary>
+    public enum SessionEnding
+    {
+        /// <summary>The far end sends a hangup frame; nobody in the process asked for the ending.</summary>
+        FarEndHangsUp,
+
+        /// <summary>The handler ends with an exception it rethrows.</summary>
+        HandlerFails,
+
+        /// <summary>The token handed to <c>HandleSessionAsync</c> is cancelled.</summary>
+        HostCancels,
+
+        /// <summary>The broker's graceful stop ends the session with a hangup frame and cancels no token.</summary>
+        BrokerStopsGracefully,
+
+        /// <summary>
+        /// The broker's stop runs out of budget (its token is cancelled) while the handler is parked inside
+        /// a synthesis, so the parked handler sees its own token cancelled.
+        /// </summary>
+        BrokerStopsPastItsBudget,
+    }
+
+    /// <summary>
+    /// Every session the pipeline starts is counted in exactly one of completed, failed or cancelled, and
+    /// each ending lands in its own bucket: cancelled only when the handler token was cancelled. The sum
+    /// <c>started = completed + failed + cancelled</c> is checked as a guard; it is not what turns red
+    /// before the fix, because the old <c>finally</c> counted completed for everything not failed.
+    /// </summary>
+    [Theory]
+    [InlineData(SessionEnding.FarEndHangsUp)]
+    [InlineData(SessionEnding.HandlerFails)]
+    [InlineData(SessionEnding.HostCancels)]
+    [InlineData(SessionEnding.BrokerStopsGracefully)]
+    [InlineData(SessionEnding.BrokerStopsPastItsBudget)]
+    public async Task HandleSessionAsync_ShouldCountTheSessionInItsOwnBucket_WhateverEndsIt(SessionEnding ending)
+    {
+        using var metrics = new MeterCapture(MeterName);
+        var fault = ending is SessionEnding.BrokerStopsGracefully or SessionEnding.BrokerStopsPastItsBudget
+            ? await EndBehindTheBrokerAsync(ending, metrics)
+            : await EndDirectlyAsync(ending);
+
+        var (completed, failed, cancelled) = ending switch
+        {
+            SessionEnding.HostCancels or SessionEnding.BrokerStopsPastItsBudget => (0L, 0L, 1L),
+            SessionEnding.HandlerFails => (0L, 1L, 0L),
+            _ => (1L, 0L, 0L),
+        };
+
+        using (new AssertionScope())
+        {
+            if (ending == SessionEnding.HandlerFails)
+                fault.Should().BeOfType<InvalidOperationException>("a handler failure is rethrown");
+            else
+                fault.Should().BeNull("no other ending here is rethrown ({0})", ending);
+
+            metrics.Get("voiceai.sessions.cancelled").Should().Be(cancelled, "ending {0}", ending);
+            metrics.Get("voiceai.sessions.completed").Should().Be(completed, "ending {0}", ending);
+            metrics.Get("voiceai.sessions.failed").Should().Be(failed, "ending {0}", ending);
+            metrics.Tags("voiceai.session.duration_ms").Should().ContainSingle(
+                    "one duration sample per session ({0})", ending)
+                .Which.Should().Be(
+                    cancelled == 1 ? "voiceai.ending=session-cancelled" : string.Empty,
+                    "the sample is tagged only when the session was cancelled ({0})", ending);
+
+            // Guard, not the red: one session started, and it ended in exactly one bucket.
+            var started = metrics.Get("voiceai.sessions.started");
+            started.Should().Be(1);
+            (metrics.Get("voiceai.sessions.completed") + metrics.Get("voiceai.sessions.failed")
+                + metrics.Get("voiceai.sessions.cancelled")).Should().Be(started, "ending {0}", ending);
+        }
+    }
+
+    /// <summary>Runs one session by calling <c>HandleSessionAsync</c> directly and ends it as asked.</summary>
+    private static async Task<Exception?> EndDirectlyAsync(SessionEnding ending)
+    {
+        ITurnDetector detector = ending == SessionEnding.HandlerFails
+            ? new ThrowingTurnDetector()
+            : new ScriptedTurnDetector();
+        await using var tts = new ParkingSpeechSynthesizer();
+        await using var pipeline = BuildPipeline(tts, detector);
+        var (session, server, client) = await CreateAudioSessionAsync();
+        using var cts = new CancellationTokenSource();
+
+        var sessionTask = pipeline.HandleSessionAsync(session, cts.Token).AsTask();
+        await client.SendAudioAsync(SilenceFrame());
+
+        switch (ending)
+        {
+            case SessionEnding.FarEndHangsUp:
+                await ((ScriptedTurnDetector)detector).FirstAnalyzed.WaitAsync(SignalTimeout);
+                await client.SendHangupAsync();
+                break;
+
+            case SessionEnding.HostCancels:
+                await ((ScriptedTurnDetector)detector).FirstAnalyzed.WaitAsync(SignalTimeout);
+                await cts.CancelAsync();
+                break;
+
+            case SessionEnding.HandlerFails:
+                // The first frame throws out of the monitor loop, which is the handler failing.
+                break;
+        }
+
+        var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+        await CleanupAsync(client, server);
+        return fault;
+    }
+
+    /// <summary>
+    /// Runs one session behind a real <see cref="VoiceAiSessionBroker"/> and ends it through the broker's
+    /// stop: graceful (a hangup frame, no token cancelled), or past its budget with the handler parked in
+    /// a synthesis. The handler's return is the pipeline's session counter, which it records last.
+    /// </summary>
+    private static async Task<Exception?> EndBehindTheBrokerAsync(SessionEnding ending, MeterCapture metrics)
+    {
+        var detector = ending == SessionEnding.BrokerStopsPastItsBudget
+            ? new ScriptedTurnDetector(TurnAction.SpeechStarted, TurnAction.EndOfUtterance)
+            : new ScriptedTurnDetector();
+        await using var tts = new ParkingSpeechSynthesizer();
+        await using var pipeline = BuildPipeline(tts, detector);
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { Port = 0 }, NullLogger<AudioSocketServer>.Instance);
+        using var broker = new VoiceAiSessionBroker(server, pipeline, NullLogger<VoiceAiSessionBroker>.Instance);
+        await broker.StartAsync(CancellationToken.None);
+        await server.StartAsync(CancellationToken.None);
+
+        // 127.0.0.1, never "localhost": the name resolves ::1 first on this host.
+        await using var client = new AudioSocketClient("127.0.0.1", server.BoundPort, Guid.NewGuid());
+        await client.ConnectAsync(CancellationToken.None);
+
+        if (ending == SessionEnding.BrokerStopsGracefully)
+        {
+            await client.SendAudioAsync(SilenceFrame());
+            await detector.FirstAnalyzed.WaitAsync(SignalTimeout);
+            await broker.StopAsync(CancellationToken.None).WaitAsync(SignalTimeout);
+        }
+        else
+        {
+            await client.SendAudioAsync(VoiceFrame());
+            await detector.Analyzed(0).WaitAsync(SignalTimeout);
+            await client.SendAudioAsync(VoiceFrame());
+            await detector.Analyzed(1).WaitAsync(SignalTimeout);
+            await tts.Parked.WaitAsync(SignalTimeout);
+
+            // Started, then its token cancelled, then awaited: the stop has run out of budget while the
+            // handler is parked inside the synthesis.
+            using var stopToken = new CancellationTokenSource();
+            var stopping = broker.StopAsync(stopToken.Token);
+            await stopToken.CancelAsync();
+            await stopping.WaitAsync(SignalTimeout);
+            broker.Dispose();
+        }
+
+        return await Record.ExceptionAsync(() => metrics.SessionEnded.WaitAsync(SignalTimeout));
+    }
+
     [Fact]
     public async Task HandleSessionAsync_ShouldEndCleanlyAndStayAccountedFor_WhenABargeInFollowsDisposal()
     {
@@ -936,6 +1135,20 @@ file sealed class ScriptedTurnDetector : ITurnDetector
     }
 
     public void Reset() => _index = 0;
+}
+
+/// <summary>
+/// Throws from the first frame it is asked about: <c>VoiceAiPipeline</c> calls the detector on its
+/// monitor loop, so the exception leaves the session handler as a failure it rethrows.
+/// </summary>
+file sealed class ThrowingTurnDetector : ITurnDetector
+{
+    public TurnSignal Analyze(ReadOnlySpan<short> samples, bool isAssistantSpeaking) =>
+        throw new InvalidOperationException("The turn detector failed.");
+
+    public void Reset()
+    {
+    }
 }
 
 /// <summary>
