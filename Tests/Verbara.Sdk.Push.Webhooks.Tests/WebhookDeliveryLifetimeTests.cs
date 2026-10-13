@@ -13,8 +13,8 @@ namespace Verbara.Sdk.Push.Webhooks.Tests;
 [Collection(WebhookProcessWideGroup.Name)]
 public sealed class WebhookDeliveryLifetimeTests
 {
-    private const string Before = "h118.before";
-    private const string After = "h118.after";
+    private const string Before = "startup.before";
+    private const string After = "startup.after";
 
     [Fact]
     public async Task StopAsync_ShouldDispatchNothingAfterwards_WhenAnEventIsPublishedAfterStop()
@@ -24,15 +24,15 @@ public sealed class WebhookDeliveryLifetimeTests
         int enumerationsAtStop, enumerationsAfter, deliveredAfter;
         await using (var run = await StartAsync())
         {
-            await run.PublishAsync(Before, topicPath: "h118.evt");
-            deliveredBefore = await run.Endpoint.To("s-h118", Before).WaitForAsync(1, GuardRun.Bound);
+            await run.PublishAsync(Before, topicPath: "startup.evt");
+            deliveredBefore = await run.Endpoint.To("s-startup", Before).WaitForAsync(1, GuardRun.Bound);
             await run.StopServiceAsync();
             enumerationsAtStop = run.Store.Enumerations;
 
-            await run.PublishAsync(After, topicPath: "h118.evt");
+            await run.PublishAsync(After, topicPath: "startup.evt");
             drained = await run.DrainAsync();
             enumerationsAfter = run.Store.Enumerations;
-            deliveredAfter = run.Endpoint.To("s-h118", After).Count;
+            deliveredAfter = run.Endpoint.To("s-startup", After).Count;
         }
         var faulted = unobserved.Collect();
 
@@ -52,14 +52,14 @@ public sealed class WebhookDeliveryLifetimeTests
         int deliveredAfter;
         await using (var run = await StartAsync())
         {
-            await run.PublishAsync(Before, topicPath: "h118.evt");
-            deliveredBefore = await run.Endpoint.To("s-h118", Before).WaitForAsync(1, GuardRun.Bound);
+            await run.PublishAsync(Before, topicPath: "startup.evt");
+            deliveredBefore = await run.Endpoint.To("s-startup", Before).WaitForAsync(1, GuardRun.Bound);
             run.DisposeService();
 
             // The bus outlives the service: it is disposed only when the run is.
-            await run.PublishAsync(After, topicPath: "h118.evt");
+            await run.PublishAsync(After, topicPath: "startup.evt");
             drained = await run.DrainAsync();
-            deliveredAfter = run.Endpoint.To("s-h118", After).Count;
+            deliveredAfter = run.Endpoint.To("s-startup", After).Count;
         }
         var faulted = unobserved.Collect();
 
@@ -81,8 +81,8 @@ public sealed class WebhookDeliveryLifetimeTests
             await run.StartServiceAsync(CancellationToken.None);
             resubscribed = await run.Bus.Subscriptions.WaitForAsync(2, GuardRun.Bound);
 
-            await run.PublishAsync(After, topicPath: "h118.evt");
-            delivered = await run.Endpoint.To("s-h118", After).WaitForAsync(1, GuardRun.Bound);
+            await run.PublishAsync(After, topicPath: "startup.evt");
+            delivered = await run.Endpoint.To("s-startup", After).WaitForAsync(1, GuardRun.Bound);
         }
         var faulted = unobserved.Collect();
 
@@ -98,14 +98,14 @@ public sealed class WebhookDeliveryLifetimeTests
         using var unobserved = new UnobservedTaskExceptions();
         bool delivered;
         using (var startToken = new CancellationTokenSource())
-        await using (var run = GuardRun.Create(GuardRun.ValidOptions(), HttpStatusCode.OK, [GuardRun.Subscription("s-h118", "h118.**")]))
+        await using (var run = GuardRun.Create(GuardRun.ValidOptions(), HttpStatusCode.OK, [GuardRun.Subscription("s-startup", "startup.**")]))
         {
             await run.StartServiceAsync(startToken.Token);
             await run.Bus.Subscribed.WaitAsync(GuardRun.Bound);
             await startToken.CancelAsync();
 
-            await run.PublishAsync(After, topicPath: "h118.evt");
-            delivered = await run.Endpoint.To("s-h118", After).WaitForAsync(1, GuardRun.Bound);
+            await run.PublishAsync(After, topicPath: "startup.evt");
+            delivered = await run.Endpoint.To("s-startup", After).WaitForAsync(1, GuardRun.Bound);
         }
         var faulted = unobserved.Collect();
 
@@ -116,7 +116,7 @@ public sealed class WebhookDeliveryLifetimeTests
 
     private static async Task<GuardRun> StartAsync()
     {
-        var run = GuardRun.Create(GuardRun.ValidOptions(), HttpStatusCode.OK, [GuardRun.Subscription("s-h118", "h118.**")]);
+        var run = GuardRun.Create(GuardRun.ValidOptions(), HttpStatusCode.OK, [GuardRun.Subscription("s-startup", "startup.**")]);
         await run.StartServiceAsync(CancellationToken.None);
         await run.Bus.Subscribed.WaitAsync(GuardRun.Bound);
         return run;

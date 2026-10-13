@@ -23,32 +23,32 @@ public sealed class WebhookTopiclessRoutingTests
     public async Task Dispatch_ShouldMatchByEventType_WhenTopicPathIsNullOrEmptyAndTypeIsATopic(string? topicPath)
     {
         await using var run = await StartAsync(
-            GuardRun.Subscription("typed", "h131.**"),
+            GuardRun.Subscription("typed", "routing.**"),
             GuardRun.Subscription("other", "calls.**"),
             GuardRun.Subscription("all", "**"));
 
-        await run.PublishAsync("h131.evt", topicPath);
-        var typed = await run.Endpoint.To("typed", "h131.evt").WaitForAsync(1, GuardRun.Bound);
-        var all = await run.Endpoint.To("all", "h131.evt").WaitForAsync(1, GuardRun.Bound);
+        await run.PublishAsync("routing.evt", topicPath);
+        var typed = await run.Endpoint.To("typed", "routing.evt").WaitForAsync(1, GuardRun.Bound);
+        var all = await run.Endpoint.To("all", "routing.evt").WaitForAsync(1, GuardRun.Bound);
         var closed = await CloseAsync(run);
 
         using var scope = new AssertionScope();
-        typed.Should().BeTrue("the event type h131.evt matches h131.**");
-        all.Should().BeTrue("the event type h131.evt matches **");
+        typed.Should().BeTrue("the event type routing.evt matches routing.**");
+        all.Should().BeTrue("the event type routing.evt matches **");
         closed.Should().BeTrue("the sentinel published last is delivered");
-        run.Endpoint.To("other").Count.Should().Be(0, "the event type h131.evt does not match calls.**");
-        run.Endpoint.To("typed").Count.Should().Be(1, "h131.** receives the event once");
+        run.Endpoint.To("other").Count.Should().Be(0, "the event type routing.evt does not match calls.**");
+        run.Endpoint.To("typed").Count.Should().Be(1, "routing.** receives the event once");
     }
 
     [Fact]
     public async Task Dispatch_ShouldDeliverOnlyToCatchAll_WhenTopicPathIsNullAndTypeIsNotATopic()
     {
         await using var run = await StartAsync(
-            GuardRun.Subscription("typed", "h131.**"),
+            GuardRun.Subscription("typed", "routing.**"),
             GuardRun.Subscription("all", "**"));
 
-        await run.PublishAsync("h131..bad", topicPath: null);
-        var all = await run.Endpoint.To("all", "h131..bad").WaitForAsync(1, GuardRun.Bound);
+        await run.PublishAsync("routing..bad", topicPath: null);
+        var all = await run.Endpoint.To("all", "routing..bad").WaitForAsync(1, GuardRun.Bound);
         var closed = await CloseAsync(run);
         var errors = run.Log.Entries.Where(e => e.Level >= LogLevel.Error).ToArray();
 
@@ -63,18 +63,18 @@ public sealed class WebhookTopiclessRoutingTests
     public async Task Dispatch_ShouldMatchByTopicPathAlone_WhenTopicPathIsSet()
     {
         await using var run = await StartAsync(
-            GuardRun.Subscription("typed", "h131.**"),
+            GuardRun.Subscription("typed", "routing.**"),
             GuardRun.Subscription("other", "calls.**"),
             GuardRun.Subscription("all", "**"));
 
-        await run.PublishAsync("calls.evt", topicPath: "h131.evt");
+        await run.PublishAsync("calls.evt", topicPath: "routing.evt");
         var typed = await run.Endpoint.To("typed", "calls.evt").WaitForAsync(1, GuardRun.Bound);
         var all = await run.Endpoint.To("all", "calls.evt").WaitForAsync(1, GuardRun.Bound);
         var closed = await CloseAsync(run);
 
         using var scope = new AssertionScope();
-        typed.Should().BeTrue("the topic path h131.evt matches h131.**");
-        all.Should().BeTrue("the topic path h131.evt matches **");
+        typed.Should().BeTrue("the topic path routing.evt matches routing.**");
+        all.Should().BeTrue("the topic path routing.evt matches **");
         closed.Should().BeTrue("the sentinel published last is delivered");
         run.Endpoint.To("other").Count.Should().Be(0, "the topic path decides, not the event type calls.evt");
     }

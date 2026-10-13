@@ -42,8 +42,8 @@ public sealed class WebhookHostStartupTests
         using var host = builder.Build();
         await host.Services.GetRequiredService<IWebhookSubscriptionStore>().AddAsync(new WebhookSubscription
         {
-            Id = "s-h118",
-            TopicPattern = TopicPattern.Parse("h118.**"),
+            Id = "s-startup",
+            TopicPattern = TopicPattern.Parse("startup.**"),
             TargetUrl = new Uri("http://127.0.0.1:9/hook"),
         });
 
@@ -55,7 +55,7 @@ public sealed class WebhookHostStartupTests
             subscribedWhenStartReturned = recording!.IsSubscribed;
             await recording.PublishAsync(new HostStartupEvent
             {
-                Metadata = new PushEventMetadata("t", null, DateTimeOffset.UtcNow, "e1", "h118.evt"),
+                Metadata = new PushEventMetadata("t", null, DateTimeOffset.UtcNow, "e1", "startup.evt"),
             });
             try
             {
@@ -79,7 +79,7 @@ public sealed class WebhookHostStartupTests
 
     private sealed record HostStartupEvent : PushEvent
     {
-        public override string EventType => "h118.host";
+        public override string EventType => "startup.host";
     }
 
     private sealed class CountingHandler(CountSignal requests) : HttpMessageHandler

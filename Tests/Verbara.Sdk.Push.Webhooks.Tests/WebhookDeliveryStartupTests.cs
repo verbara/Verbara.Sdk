@@ -13,8 +13,8 @@ namespace Verbara.Sdk.Push.Webhooks.Tests;
 [Collection(WebhookProcessWideGroup.Name)]
 public sealed class WebhookDeliveryStartupTests
 {
-    private const string FirstEvent = "h118.e1";
-    private const string SecondEvent = "h118.e2";
+    private const string FirstEvent = "startup.e1";
+    private const string SecondEvent = "startup.e2";
 
     [Fact]
     public async Task StartAsync_ShouldBeSubscribed_WhenItCompletes()
@@ -23,7 +23,7 @@ public sealed class WebhookDeliveryStartupTests
         using var hold = new ManualResetEventSlim(false);
         StartCallGatedBus? gated = null;
         await using var run = GuardRun.Create(
-            GuardRun.ValidOptions(), HttpStatusCode.OK, [GuardRun.Subscription("s-h118", "h118.**")],
+            GuardRun.ValidOptions(), HttpStatusCode.OK, [GuardRun.Subscription("s-startup", "startup.**")],
             inner => gated = new StartCallGatedBus(inner, hold));
         var e1Dispatched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var dispatchSignal = run.InnerBus.AsObservable().Subscribe(new EventObserver(e =>
@@ -38,7 +38,7 @@ public sealed class WebhookDeliveryStartupTests
         {
             await StartCallGatedBus.CallStartAsync(() => run.StartServiceAsync(CancellationToken.None));
 
-            await run.PublishAsync(FirstEvent, topicPath: "h118.evt");
+            await run.PublishAsync(FirstEvent, topicPath: "startup.evt");
             e1WasDispatched = await Task.WhenAny(e1Dispatched.Task, Task.Delay(GuardRun.Bound)) == e1Dispatched.Task; // fence-allow: GUARD-TIMEOUT — failure bound on a dispatch signal, never the winning arm of a green run
         }
         finally
@@ -47,9 +47,9 @@ public sealed class WebhookDeliveryStartupTests
         }
 
         subscribed = await Task.WhenAny(run.Bus.Subscribed, Task.Delay(GuardRun.Bound)) == run.Bus.Subscribed; // fence-allow: GUARD-TIMEOUT — failure bound on a subscription signal, never the winning arm of a green run
-        await run.PublishAsync(SecondEvent, topicPath: "h118.evt");
-        e2Delivered = await run.Endpoint.To("s-h118", SecondEvent).WaitForAsync(1, GuardRun.Bound);
-        e1Delivered = await run.Endpoint.To("s-h118", FirstEvent).WaitForAsync(1, GuardRun.Bound);
+        await run.PublishAsync(SecondEvent, topicPath: "startup.evt");
+        e2Delivered = await run.Endpoint.To("s-startup", SecondEvent).WaitForAsync(1, GuardRun.Bound);
+        e1Delivered = await run.Endpoint.To("s-startup", FirstEvent).WaitForAsync(1, GuardRun.Bound);
         heldSubscriptions = gated.Held;
 
         using var scope = new AssertionScope();
