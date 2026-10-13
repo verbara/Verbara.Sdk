@@ -650,11 +650,12 @@ public sealed class OpenAiRealtimeBridgeEndingTests
     /// The host's cancellation in that same instant. The session token reaches the read through the
     /// bound's token, so it aborts the socket the same way, and the rest of the message threw
     /// <see cref="WebSocketException"/> too: a requested cancellation was counted as a failure (50 of 50
-    /// with the hook). A requested cancellation is a completion (see
+    /// with the hook). A requested cancellation is not a failure: the handler returns normally and the
+    /// session is counted cancelled (see
     /// <see cref="HandleSessionAsync_ShouldNotCountTheBound_WhenTheHostCancelsAfterTheHangup"/>).
     /// </summary>
     [Fact]
-    public async Task HandleSessionAsync_ShouldCompleteWithoutCountingTheBound_WhenTheHostCancelsInsideAReadThatReturnsPartOfAMessage()
+    public async Task HandleSessionAsync_ShouldCountItCancelledWithoutCountingTheBound_WhenTheHostCancelsInsideAReadThatReturnsPartOfAMessage()
     {
         // Arrange
         await using var fakeOpenAi = new RealtimeFakeServer { AnswerClientCloseOnRequest = true };
@@ -687,8 +688,9 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             // Assert
             using (new AssertionScope())
             {
-                ending.Should().BeNull("a requested cancellation is a completion");
-                metrics.Get("openai_realtime.sessions.completed").Should().Be(1, "the host ended the session");
+                ending.Should().BeNull("a requested cancellation is not rethrown");
+                metrics.Get("openai_realtime.sessions.cancelled").Should().Be(1, "the host ended the session");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(0, "a cancelled session is not completed");
                 metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
                     0, "the host's cancellation is not the bound running out");
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(0, "nothing broke");
@@ -774,8 +776,8 @@ public sealed class OpenAiRealtimeBridgeEndingTests
 
     /// <summary>
     /// A control: the host cancels the session token while the bridge waits for the vendor's answer.
-    /// A requested cancellation is a completion, as it always was, and it is not the bound running out,
-    /// so nothing is counted as unanswered and nothing warns (<c>P1b-cancel-7000</c>).
+    /// A requested cancellation returns normally, as it always did, and is counted cancelled. It is not the
+    /// bound running out, so nothing is counted as unanswered and nothing warns (<c>P1b-cancel-7000</c>).
     /// </summary>
     [Fact]
     public async Task HandleSessionAsync_ShouldNotCountTheBound_WhenTheHostCancelsAfterTheHangup()
@@ -810,8 +812,9 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             {
                 armedDue.Should().Be(CloseAnswerBound, "the bound is ten seconds, counted from the bridge's close");
                 sessionTask.Status.Should().Be(
-                    TaskStatus.RanToCompletion, "a requested cancellation is a completion");
-                metrics.Get("openai_realtime.sessions.completed").Should().Be(1, "the host ended the wait");
+                    TaskStatus.RanToCompletion, "a requested cancellation is not rethrown");
+                metrics.Get("openai_realtime.sessions.cancelled").Should().Be(1, "the host ended the wait");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(0, "a cancelled session is not completed");
                 metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
                     0, "the host's cancellation is not the bound running out");
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(0, "nothing broke");

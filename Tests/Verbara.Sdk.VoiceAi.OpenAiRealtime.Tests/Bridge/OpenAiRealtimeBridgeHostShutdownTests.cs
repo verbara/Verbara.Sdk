@@ -16,7 +16,7 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Bridge;
 /// A Realtime session that a host's shutdown cancels while it is still unwinding, and whose bridge the
 /// host's container then releases. Whatever the session still raises after that release is dropped and
 /// logged at Debug: it raises no <see cref="ObjectDisposedException"/> inside the session, logs nothing at
-/// Error, and is not counted as a failed session. A session the host cancelled stays completed.
+/// Error, and is not counted as a failed session. A session the host cancelled is counted cancelled.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -96,8 +96,10 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
             {
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(
                     0, "an event raised after the host released the bridge is not the session failing");
+                metrics.Get("openai_realtime.sessions.cancelled").Should().Be(
+                    1, "a session the host cancelled is counted cancelled");
                 metrics.Get("openai_realtime.sessions.completed").Should().Be(
-                    1, "a session the host cancelled is counted completed");
+                    0, "a session the host cancelled is not completed");
                 log.Entries.Where(e => e.Level >= LogLevel.Error).Select(e => e.Message).Should().BeEmpty(
                     "nothing is logged at Error for a session the host cancelled");
                 log.Entries.Count(e => e.Exception is ObjectDisposedException).Should().Be(
@@ -148,8 +150,10 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
             {
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(
                     0, "a function that returns after the host cancelled the session does not fail it");
+                metrics.Get("openai_realtime.sessions.cancelled").Should().Be(
+                    1, "a session the host cancelled is counted cancelled");
                 metrics.Get("openai_realtime.sessions.completed").Should().Be(
-                    1, "a session the host cancelled is counted completed");
+                    0, "a session the host cancelled is not completed");
                 log.Entries.Where(e => e.Level >= LogLevel.Error).Select(e => e.Message).Should().BeEmpty(
                     "nothing is logged at Error for a session the host cancelled");
             }
@@ -228,8 +232,10 @@ public sealed class OpenAiRealtimeBridgeHostShutdownTests
                     "nothing of the session is left to fault where nobody awaits it");
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(
                     0, "a session the host cancelled is not a failure");
+                metrics.Get("openai_realtime.sessions.cancelled").Should().Be(
+                    1, "a session the host cancelled is counted cancelled");
                 metrics.Get("openai_realtime.sessions.completed").Should().Be(
-                    1, "a session the host cancelled is counted completed");
+                    0, "a session the host cancelled is not completed");
             }
         }
         finally
