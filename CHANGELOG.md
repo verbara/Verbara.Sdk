@@ -185,7 +185,7 @@ The `Push.AspNetCore` README and the push stream migration guide now say that a 
 
 A client that cannot lose events refetches over REST on `open`. Behaviour is unchanged.
 
-### Added: `voiceai.sessions.cancelled` and `openai_realtime.sessions.cancelled` (#NNN)
+### Added: `voiceai.sessions.cancelled` and `openai_realtime.sessions.cancelled` (#415)
 
 The voice pipeline and the Realtime bridge each count a session whose handler token was cancelled in a counter of
 its own: `voiceai.sessions.cancelled` (`VoiceAiMetrics.SessionsCancelled`, meter `Verbara.Sdk.VoiceAi`) and
@@ -195,7 +195,7 @@ stop runs out of its shutdown budget, or when the broker is disposed. Each handl
 in exactly one of `…completed`, `…failed` or `…cancelled`, so `started - completed - failed - cancelled` is what is
 still running. Two new public fields; no other public API change.
 
-### Changed — BREAKING: a cancelled voice session is counted cancelled, not completed (#NNN)
+### Changed — BREAKING: a cancelled voice session is counted cancelled, not completed (#415)
 
 A session whose handler token was cancelled was counted in `voiceai.sessions.completed` or
 `openai_realtime.sessions.completed`. It is now counted in the matching `…sessions.cancelled` (above) and no longer
@@ -209,7 +209,7 @@ breaking because a published number changes meaning; no public API signature cha
 
 **Migration guide:** [`docs/guides/voice-session-ending-migration.md`](docs/guides/voice-session-ending-migration.md#cancelled-sessions-tagged-latency-and-the-servers-stop-290)
 
-### Changed: the latency sample of a cancelled turn carries `voiceai.ending` (#NNN)
+### Changed: the latency sample of a cancelled turn carries `voiceai.ending` (#415)
 
 `stt.transcription.latency_ms` and `tts.synthesis.latency_ms` still record one sample per recognition or synthesis
 the pipeline starts. The sample of a turn counted in its arm's `…cancelled` counter now carries `voiceai.ending` with
@@ -218,7 +218,7 @@ turns' samples carry no tag. Nothing is excluded: a query that aggregates over t
 before, and a query that keeps tags apart shows up to four more series per histogram. To read the latency of turns
 that were not cut short, keep the samples without `voiceai.ending`. `tts.synthesis.ttfa_ms` is unchanged.
 
-### Fixed: a far end that resets mid-playback is not a synthesis failure (#NNN)
+### Fixed: a far end that resets mid-playback is not a synthesis failure (#415)
 
 When the caller left mid-playback, the pipeline's write met either `ObjectDisposedException` or `IOException`,
 depending on how the far end left. The first was counted as the far end leaving; the second was counted in
@@ -236,7 +236,7 @@ nothing. A hangup subscriber that throws is now logged at Warning by the session
 write's exception and no longer escapes the ending. A caller that writes again after catching the `IOException` gets
 `ObjectDisposedException` at once, where it got it a few milliseconds later before. No public API change.
 
-### Changed: the AudioSocket server's stop ends live sessions with a hangup frame (#NNN)
+### Changed: the AudioSocket server's stop ends live sessions with a hangup frame (#415)
 
 `AudioSocketServer.StopAsync` and `DisposeAsync` closed every session they served without a hangup frame, so a call
 got its frame only when the session broker stopped first (the server registered before the pipeline or the
