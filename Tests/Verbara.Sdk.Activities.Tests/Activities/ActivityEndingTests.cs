@@ -1,5 +1,6 @@
 using Verbara.Sdk;
 using Verbara.Sdk.Activities.Activities;
+using Verbara.Sdk.Activities.Models;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using NSubstitute;
@@ -67,6 +68,59 @@ public sealed class ActivityEndingTests
         statuses.Should().Equal(
             [ActivityStatus.Pending, ActivityStatus.Starting, ActivityStatus.InProgress, ActivityStatus.Failed],
             "an ending nobody requested is Failed, never Cancelled");
+    }
+
+    [Fact]
+    public async Task AttendedTransferActivity_ShouldEndFailed_WhenTheAmiResponseTimesOut()
+    {
+        // The shape an unanswered action takes: the connection's response wait is linked to its own
+        // response timeout, and that timeout surfaces as a cancellation carrying the linked token.
+        using var responseTimeout = new CancellationTokenSource();
+        await responseTimeout.CancelAsync();
+        var ami = Substitute.For<IAmiConnection>();
+#pragma warning disable CA2012 // NSubstitute setup: the ValueTask is returned to the activity, which awaits it once.
+        ami.SendActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<ManagerResponse>(Task.FromException<ManagerResponse>(
+                new TaskCanceledException("The AMI response did not arrive in time.", null, responseTimeout.Token))));
+#pragma warning restore CA2012
+        await using var activity = new AttendedTransferActivity(ami)
+        {
+            Channel = "PJSIP/alice-00001",
+            Destination = new DialPlanExtension("internal", "2001"),
+        };
+
+        var starting = () => activity.StartAsync().AsTask().WaitAsync(SignalTimeout);
+
+        using var scope = new AssertionScope();
+        await starting.Should().ThrowAsync<OperationCanceledException>(
+            "a response timeout is the connection's deadline, not the caller's request");
+        activity.Status.Should().Be(ActivityStatus.Failed);
+    }
+
+    [Fact]
+    public async Task SnoopActivity_ShouldEndFailed_WhenTheAriRequestTimesOut()
+    {
+        var ari = Substitute.For<IAriClient>();
+        var channels = Substitute.For<IAriChannelsResource>();
+        ari.Channels.Returns(channels);
+#pragma warning disable CA2012 // NSubstitute setup: the ValueTask is returned to the activity, which awaits it once.
+        // The shape an HTTP client timeout takes: a TaskCanceledException whose inner exception is a TimeoutException.
+        channels.SnoopAsync(
+                Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<AriChannel>(Task.FromException<AriChannel>(
+                new TaskCanceledException("The ARI request timed out.", new TimeoutException()))));
+#pragma warning restore CA2012
+        await using var activity = new SnoopActivity(ari) { TargetChannelId = "target-001", App = "supervision" };
+
+        var starting = () => activity.StartAsync().AsTask().WaitAsync(SignalTimeout);
+
+        using var scope = new AssertionScope();
+        await starting.Should().ThrowAsync<OperationCanceledException>(
+            "an HTTP client timeout is the transport's deadline, not the caller's request");
+        activity.Status.Should().Be(ActivityStatus.Failed);
+        activity.SnoopChannel.Should().BeNull("the request that would have created it never completed");
     }
 }
 
