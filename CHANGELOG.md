@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed — BREAKING: an activity ends `Cancelled` only when someone asked it to stop (#NNN)
+### Changed — BREAKING: an activity ends `Cancelled` only when someone asked it to stop (#413)
 
 The three activity base classes (`ActivityBase`, `AmiActivityBase`, `AriActivityBase`, so all fifteen shipped
 activities) read every `OperationCanceledException` as a cancellation: an activity ended by a deadline nobody asked
