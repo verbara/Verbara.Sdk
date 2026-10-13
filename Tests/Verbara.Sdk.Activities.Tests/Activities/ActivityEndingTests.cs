@@ -121,6 +121,43 @@ public sealed class ActivityEndingTests
             "Cancelled is written once and nothing — Failed included — is written before or after it");
     }
 
+    [Theory]
+    [MemberData(nameof(ActivityBases))]
+    public async Task StartAsync_ShouldEndCancelledWithoutExecuting_WhenCancelAsyncArrivesDuringStarting(string activityBase)
+    {
+        var executed = false;
+        await using var activity = EndingActivities.Create(activityBase, async ct =>
+        {
+            executed = true;
+            await new TaskCompletionSource().Task.WaitAsync(ct);
+        });
+        var statuses = new List<ActivityStatus>();
+        Task? cancelling = null;
+        // The subscriber reacts to Starting on the publishing thread, so its CancelAsync lands inside StartAsync,
+        // after Starting is written and before the execution begins.
+        using var subscription = activity.StatusChanges.Subscribe(status =>
+        {
+            statuses.Add(status);
+            if (status == ActivityStatus.Starting)
+                cancelling = activity.CancelAsync().AsTask();
+        });
+
+        var start = activity.StartAsync().AsTask();
+
+        var finishing = () => start.WaitAsync(SignalTimeout);
+
+        using var scope = new AssertionScope();
+        await finishing.Should().NotThrowAsync(
+            "a stop requested while starting ends the activity before it executes, so StartAsync returns");
+        cancelling.Should().NotBeNull("the subscriber saw Starting and asked the activity to stop");
+        await (cancelling ?? Task.CompletedTask).WaitAsync(SignalTimeout);
+        activity.Status.Should().Be(ActivityStatus.Cancelled);
+        statuses.Should().Equal(
+            [ActivityStatus.Pending, ActivityStatus.Starting, ActivityStatus.Cancelled],
+            "Cancelled is the last word: InProgress never overtakes it");
+        executed.Should().BeFalse("an activity asked to stop before it executed never executes");
+    }
+
     [Fact]
     public async Task AttendedTransferActivity_ShouldEndFailed_WhenTheAmiResponseTimesOut()
     {
