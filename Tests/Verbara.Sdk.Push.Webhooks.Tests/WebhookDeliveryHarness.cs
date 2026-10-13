@@ -260,9 +260,13 @@ internal sealed class FixedStore(params WebhookSubscription[] subscriptions) : I
     /// <summary>How many times the service enumerated the store: once per event it dispatched.</summary>
     public int Enumerations => Volatile.Read(ref _enumerations);
 
+    /// <summary>Runs inside every enumeration, on the caller's execution context.</summary>
+    public Action? OnEnumerate { get; set; }
+
     public ValueTask<IReadOnlyList<WebhookSubscription>> GetAllAsync(CancellationToken ct = default)
     {
         Interlocked.Increment(ref _enumerations);
+        OnEnumerate?.Invoke();
         return ValueTask.FromResult<IReadOnlyList<WebhookSubscription>>(subscriptions);
     }
 
