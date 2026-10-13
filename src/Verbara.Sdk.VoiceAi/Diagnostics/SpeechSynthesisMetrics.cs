@@ -62,6 +62,18 @@ public static class SpeechSynthesisMetrics
         Meter.CreateCounter<long>("tts.syntheses.silent", "syntheses",
             "Syntheses that completed with zero audio chunks and without reporting a failure");
 
+    /// <summary>
+    /// Synthesis latency: one sample per synthesis the pipeline starts, whatever ends it, so the sample
+    /// count equals <see cref="SynthesesStarted"/>.
+    /// </summary>
+    /// <remarks>
+    /// The sample of a synthesis counted in <see cref="SynthesesCancelled"/> carries the same
+    /// <c>voiceai.ending</c> tag as that increment (<c>session-cancelled</c>, <c>barge-in</c>,
+    /// <c>disposal</c> or <c>far-end</c>), and measures the time until the synthesis was cut short. The
+    /// samples of completed and failed syntheses carry no tag, so a query for served latency filters out
+    /// samples that carry <c>voiceai.ending</c>. <see cref="SynthesisTtfaMs"/> is not tagged this way: it
+    /// is recorded only once a first chunk arrived.
+    /// </remarks>
     public static readonly Histogram<double> SynthesisLatencyMs =
         Meter.CreateHistogram<double>("tts.synthesis.latency_ms", "ms", "Synthesis latency");
 

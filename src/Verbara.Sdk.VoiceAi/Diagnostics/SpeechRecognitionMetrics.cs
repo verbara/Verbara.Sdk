@@ -33,6 +33,16 @@ public static class SpeechRecognitionMetrics
         Meter.CreateCounter<long>("stt.transcriptions.cancelled", "transcriptions",
             "Transcriptions ended because their caller or the session's owner stopped them");
 
+    /// <summary>
+    /// Transcription latency: one sample per transcription the pipeline starts, whatever ends it, so the
+    /// sample count equals <see cref="TranscriptionsStarted"/>.
+    /// </summary>
+    /// <remarks>
+    /// The sample of a transcription counted in <see cref="TranscriptionsCancelled"/> carries the same
+    /// <c>voiceai.ending</c> tag as that increment, and measures the time until the transcription was cut
+    /// short. The samples of completed and failed transcriptions carry no tag, so a query for served
+    /// latency filters out samples that carry <c>voiceai.ending</c>.
+    /// </remarks>
     public static readonly Histogram<double> TranscriptionLatencyMs =
         Meter.CreateHistogram<double>("stt.transcription.latency_ms", "ms", "Transcription latency");
 }

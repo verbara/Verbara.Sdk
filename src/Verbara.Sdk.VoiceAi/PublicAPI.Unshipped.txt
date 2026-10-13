@@ -3,6 +3,7 @@ static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechRecognitionMetrics.Transcr
 static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesesCancelled -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesesSilent -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.VoiceAi.Diagnostics.SpeechSynthesisMetrics.SynthesisTtfaMs -> System.Diagnostics.Metrics.Histogram<double>!
+static readonly Verbara.Sdk.VoiceAi.Diagnostics.VoiceAiMetrics.SessionsCancelled -> System.Diagnostics.Metrics.Counter<long>!
 static Verbara.Sdk.VoiceAi.SpeechProviderFailureException.FromCloseStatus(string! provider, System.Net.WebSockets.WebSocketCloseStatus? closeStatus, string? closeStatusDescription) -> Verbara.Sdk.VoiceAi.SpeechProviderFailureException?
 static Verbara.Sdk.VoiceAi.SpeechProviderFailureException.FromErrorFrame(string! provider, string? code, string? vendorMessage) -> Verbara.Sdk.VoiceAi.SpeechProviderFailureException!
 static Verbara.Sdk.VoiceAi.SpeechProviderFailureException.FromHandshake(string! provider, System.Net.HttpStatusCode? httpStatusCode, System.Exception! innerException) -> Verbara.Sdk.VoiceAi.SpeechProviderFailureException!
