@@ -87,8 +87,11 @@ public sealed class WebhookHostStartupTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             requests.Increment();
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            return Task.FromResult(Ok());
         }
+
+        // The response a handler returns belongs to the HttpClient that sent the request, which disposes it.
+        private static HttpResponseMessage Ok() => new(HttpStatusCode.OK);
     }
 }
 
