@@ -44,3 +44,6 @@ Verbara.Sdk.Push.Webhooks.WebhookSubscription.TargetUrl.init -> void
 Verbara.Sdk.Push.Webhooks.WebhookSubscription.TopicPattern.get -> Verbara.Sdk.Push.Topics.TopicPattern
 Verbara.Sdk.Push.Webhooks.WebhookSubscription.TopicPattern.init -> void
 static Verbara.Sdk.Push.Webhooks.WebhookServiceCollectionExtensions.AddVerbaraPushWebhooks(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Push.Webhooks.WebhookDeliveryOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+override Verbara.Sdk.Push.Webhooks.WebhookDeliveryService.Dispose() -> void
+override Verbara.Sdk.Push.Webhooks.WebhookDeliveryService.StartAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+override Verbara.Sdk.Push.Webhooks.WebhookDeliveryService.StopAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
