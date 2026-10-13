@@ -107,14 +107,17 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
             {
                 var peer = await ConnectAndIdentifyAsync(server, Guid.NewGuid());
                 peers.Add(peer);
-                reads.Add(ReadUntilClosedAsync(peer, onClosed: () =>
+                reads.Add(ReadUntilClosedAsync(peer, onClosed: refusal =>
                 {
                     barrier.TrySetResult();
-                    tally.Refused();
+                    tally.Refused(refusal);
                 }));
             }
 
-            // Every connection ends up announced or refused; which, is what the assertions read.
+            // Every connection ends up announced or refused; which, is what the assertions read. The
+            // refusals are read from the tally, which records each one in the step that may settle it:
+            // the read task of a refused peer completes only after that step, so it is not yet complete
+            // when the settle wakes this test.
             await tally.Settled.WaitAsync(SignalTimeout);
 
             using (new AssertionScope())
@@ -124,7 +127,7 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
                     limit, "a burst of {0} distinct ids against a limit of {1} admits exactly the limit", burst, limit);
                 tally.MostLive.Should().BeLessThanOrEqualTo(
                     limit, "the number of live sessions never exceeds the limit, not even for an instant");
-                reads.Where(r => r.IsCompleted).Select(r => r.Result.Bytes).Should().HaveCount(
+                tally.Refusals.Select(r => r.Bytes).Should().HaveCount(
                     overflow, "every connection past the limit is refused").And.AllSatisfy(bytes => bytes.Should().Equal(
                     HangupFrame, "a refusal is a hangup frame and then the end of the connection"));
                 server.ActiveSessionCount.Should().Be(limit);
@@ -351,12 +354,22 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
     /// <summary>
     /// The stop runs, start to finish, after a connection's entry was added to the registry and before
     /// the registration checks for the stop. The stop leaves that entry to its registrant, which
-    /// withdraws it and refuses the connection itself, so the peer still reads a hangup frame and then
-    /// the end of the connection: a stop that ended the entry itself would close it with no frame.
+    /// withdraws it and refuses the connection itself: the peer reads a hangup frame and then the end of
+    /// the connection, nothing is announced, and the place the connection took is given back.
     /// </summary>
+    /// <remarks>
+    /// The connection is handed to the server's handler by the test, as the accept loop would hand it,
+    /// so the test can wait for the handler to return. The registrant refuses the connection and only
+    /// then gives its place back, so the peer reads the end of the connection before the place is
+    /// returned: the handler's return, not the peer's read, is the edge after which the place count is
+    /// final. The handler is given no stop token of its own; it reads the stop from the server, which
+    /// the test started.
+    /// </remarks>
     [Fact]
     public async Task HandleConnectionAsync_ShouldRefuseWithAHangupFrame_WhenTheStopRunsBetweenTheRegistryAddAndItsCheck()
     {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
         var clock = new SeamClock();
         var logger = new CapturingLogger();
         await using var server = NewServer(clock, logger, maxConcurrentSessions: 10);
@@ -375,8 +388,12 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         };
         await server.StartAsync(CancellationToken.None);
 
-        using var peer = await ConnectAndIdentifyAsync(server, Guid.NewGuid());
+        using var peer = await ConnectAndIdentifyAsync(listener, Guid.NewGuid());
+        using var accepted = await listener.AcceptTcpClientAsync().WaitAsync(SignalTimeout);
         var read = ReadUntilClosedAsync(peer);
+        await server.HandleConnectionAsync(accepted, CancellationToken.None).WaitAsync(SignalTimeout);
+
+        // An announcement, had there been one, completed before the handler returned.
         await Task.WhenAny(read, announced.Task).WaitAsync(SignalTimeout);
 
         using (new AssertionScope())
@@ -387,7 +404,7 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
             if (read.IsCompleted)
             {
                 var refusal = await read;
-                refusal.Bytes.Should().Equal(HangupFrame, "the registrant refuses it with the frame the stop would not have written");
+                refusal.Bytes.Should().Equal(HangupFrame, "a refusal is a hangup frame and then the end of the connection");
                 refusal.ClosedByServer.Should().BeTrue();
             }
 
@@ -517,13 +534,23 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
             clock);
 
     /// <summary>Connects a raw peer to the server's bound port and sends the UUID frame naming <paramref name="channelId"/>.</summary>
-    private static async Task<TcpClient> ConnectAndIdentifyAsync(AudioSocketServer server, Guid channelId)
+    private static Task<TcpClient> ConnectAndIdentifyAsync(AudioSocketServer server, Guid channelId) =>
+        ConnectAndIdentifyAsync(server.BoundPort, channelId);
+
+    /// <summary>
+    /// Connects a raw peer to the test's own <paramref name="listener"/>, whose accepted end the test hands
+    /// to the server's handler, and sends the UUID frame naming <paramref name="channelId"/>.
+    /// </summary>
+    private static Task<TcpClient> ConnectAndIdentifyAsync(TcpListener listener, Guid channelId) =>
+        ConnectAndIdentifyAsync(((IPEndPoint)listener.LocalEndpoint).Port, channelId);
+
+    private static async Task<TcpClient> ConnectAndIdentifyAsync(int port, Guid channelId)
     {
         var peer = new TcpClient();
         try
         {
             // 127.0.0.1, never "localhost": the name resolves ::1 first on this host.
-            await peer.ConnectAsync(IPAddress.Loopback, server.BoundPort).WaitAsync(SignalTimeout);
+            await peer.ConnectAsync(IPAddress.Loopback, port).WaitAsync(SignalTimeout);
             await SendFrameAsync(peer, AudioSocketFrameType.Uuid, channelId.ToByteArray(bigEndian: true));
             return peer;
         }
@@ -549,8 +576,10 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
     /// Everything the server writes to <paramref name="peer"/> until the connection ends. Unbounded on
     /// purpose: a connection the server serves stays open until the test releases it, and the test
     /// bounds the wait it cares about itself. A connection the test disposes ends the read too.
+    /// <paramref name="onClosed"/> runs with what was read when the server closed the connection, before
+    /// the returned task completes.
     /// </summary>
-    private static async Task<PeerRead> ReadUntilClosedAsync(TcpClient peer, Action? onClosed = null)
+    private static async Task<PeerRead> ReadUntilClosedAsync(TcpClient peer, Action<PeerRead>? onClosed = null)
     {
         using var all = new MemoryStream();
         var buffer = new byte[256];
@@ -566,8 +595,9 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
             return new PeerRead(all.ToArray(), ClosedByServer: false);
         }
 
-        onClosed?.Invoke();
-        return new PeerRead(all.ToArray(), ClosedByServer: true);
+        var closed = new PeerRead(all.ToArray(), ClosedByServer: true);
+        onClosed?.Invoke(closed);
+        return closed;
     }
 
     /// <summary>
@@ -616,9 +646,13 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         }
     }
 
-    /// <summary>Counts how a burst settles: every connection is announced or refused.</summary>
+    /// <summary>
+    /// Counts how a burst settles: every connection is announced or refused. Each refusal is recorded,
+    /// with what its peer read, in the same step that counts it.
+    /// </summary>
     private sealed class BurstTally(int total)
     {
+        private readonly ConcurrentQueue<PeerRead> _refusals = new();
         private int _announced;
         private int _refused;
         private int _mostLive;
@@ -629,6 +663,9 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         public int AnnouncedCount => Volatile.Read(ref _announced);
 
         public int MostLive => Volatile.Read(ref _mostLive);
+
+        /// <summary>What each refused peer read, in the order the refusals were counted.</summary>
+        public IReadOnlyCollection<PeerRead> Refusals => _refusals.ToArray();
 
         public void Announced(int liveNow)
         {
@@ -643,8 +680,9 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
             CheckSettled();
         }
 
-        public void Refused()
+        public void Refused(PeerRead refusal)
         {
+            _refusals.Enqueue(refusal);
             Interlocked.Increment(ref _refused);
             CheckSettled();
         }
