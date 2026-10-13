@@ -185,6 +185,79 @@ The `Push.AspNetCore` README and the push stream migration guide now say that a 
 
 A client that cannot lose events refetches over REST on `open`. Behaviour is unchanged.
 
+### Added: `voiceai.sessions.cancelled` and `openai_realtime.sessions.cancelled` (#NNN)
+
+The voice pipeline and the Realtime bridge each count a session whose handler token was cancelled in a counter of
+its own: `voiceai.sessions.cancelled` (`VoiceAiMetrics.SessionsCancelled`, meter `Verbara.Sdk.VoiceAi`) and
+`openai_realtime.sessions.cancelled` (`RealtimeMetrics.SessionsCancelled`, meter `Verbara.Sdk.VoiceAi.OpenAiRealtime`).
+The token is cancelled when the host cancels the token it passes to `HandleSessionAsync`, when the session broker's
+stop runs out of its shutdown budget, or when the broker is disposed. Each handler now counts every session it starts
+in exactly one of `…completed`, `…failed` or `…cancelled`, so `started - completed - failed - cancelled` is what is
+still running. Two new public fields; no other public API change.
+
+### Changed — BREAKING: a cancelled voice session is counted cancelled, not completed (#NNN)
+
+A session whose handler token was cancelled was counted in `voiceai.sessions.completed` or
+`openai_realtime.sessions.completed`. It is now counted in the matching `…sessions.cancelled` (above) and no longer
+in `…completed`, so a dashboard or alert over `…sessions.completed` drops by the number of cancelled sessions.
+`completed + cancelled` gives the old figure. The session's duration sample (`voiceai.session.duration_ms`,
+`openai_realtime.session.duration_ms`) carries `voiceai.ending` = `session-cancelled`; the samples of completed and
+failed sessions carry no tag. A session that the caller hung up, that the vendor closed, or that a graceful broker
+stop ended (a hangup frame, the token not cancelled) is still `completed`, and one whose handler threw is still
+`failed`. The cancellation is still not rethrown, so code that awaits `HandleSessionAsync` sees no change. Labelled
+breaking because a published number changes meaning; no public API signature changes.
+
+**Migration guide:** [`docs/guides/voice-session-ending-migration.md`](docs/guides/voice-session-ending-migration.md#cancelled-sessions-tagged-latency-and-the-servers-stop-290)
+
+### Changed: the latency sample of a cancelled turn carries `voiceai.ending` (#NNN)
+
+`stt.transcription.latency_ms` and `tts.synthesis.latency_ms` still record one sample per recognition or synthesis
+the pipeline starts. The sample of a turn counted in its arm's `…cancelled` counter now carries `voiceai.ending` with
+the value that increment carries (`session-cancelled`, `barge-in`, `disposal` or `far-end`). Completed and failed
+turns' samples carry no tag. Nothing is excluded: a query that aggregates over tags reads the same numbers as
+before, and a query that keeps tags apart shows up to four more series per histogram. To read the latency of turns
+that were not cut short, keep the samples without `voiceai.ending`. `tts.synthesis.ttfa_ms` is unchanged.
+
+### Fixed: a far end that resets mid-playback is not a synthesis failure (#NNN)
+
+When the caller left mid-playback, the pipeline's write met either `ObjectDisposedException` or `IOException`,
+depending on how the far end left. The first was counted as the far end leaving; the second was counted in
+`tts.syntheses.failed`, published a `PipelineErrorEvent` with source `Tts`, and logged a Warning. A far end that
+resets the connection reached the write as `IOException` in 300 of 300 loopback runs, and a hangup frame or a clean
+close did in 10 and 9 of 300. Both are now the far end leaving: `tts.syntheses.cancelled` with `voiceai.ending` =
+`far-end`, no `PipelineErrorEvent`, and nothing at Warning or above from the pipeline. A synthesizer's own
+`IOException` is still a synthesis failure.
+
+`AudioSocketSession.WriteAudioAsync` changes with it: a write that fails on its transport ends the session before
+the exception reaches the caller, so `IsConnected` is already false and `OnHangup` has already run. The exception
+type is unchanged. The session logs the transport failure at Warning only when the session was still live (a
+reset); a write cut short by the session's own ending (a hangup frame, a clean close, its owner's disposal) logs
+nothing. A hangup subscriber that throws is now logged at Warning by the session; its exception never replaces the
+write's exception and no longer escapes the ending. A caller that writes again after catching the `IOException` gets
+`ObjectDisposedException` at once, where it got it a few milliseconds later before. No public API change.
+
+### Changed: the AudioSocket server's stop ends live sessions with a hangup frame (#NNN)
+
+`AudioSocketServer.StopAsync` and `DisposeAsync` closed every session they served without a hangup frame, so a call
+got its frame only when the session broker stopped first (the server registered before the pipeline or the
+Realtime bridge, as the READMEs show). The stop now ends every session that is still live with one hangup frame and
+then the close, as `HangupAsync` does, and writes nothing to a session that has already ended. The endings run
+together under one bound of about a second: a session that cannot take its frame within it, because a write in
+flight on it never completes, is closed without one. The token passed to `StopAsync`, unused before, ends that wait
+early the same way; the stop never throws for it.
+
+An ending now claims the session under its write lock before writing its frame, so two endings at once (two
+`HangupAsync` calls, or the server's stop and the broker's under `HostOptions.ServicesStopConcurrently`) write one
+frame between them. Before, 7 to 11 of 300 concurrent pairs on loopback wrote two.
+
+Measured against Asterisk 20.20.1, 22.10.1 and 23.4.1, 10 host stops × 2 calls per stop order, through
+`AudioSocket()` and a relay that counts the frames the server writes: with the server stopped first, each call now
+receives exactly one hangup frame (60 of 60; 0 of 20 before, on 22.10.1), and with the services stopped
+concurrently, exactly one (60 of 60). The dialplan went on after `AudioSocket()` in every call, before and after: a
+clean frameless close also lets `AudioSocket()` return. The frame removes the case where it does not: a close with
+the caller's audio still unread resets the connection and fails `AudioSocket()` on Asterisk 20 and later. No public
+API change.
+
 ## [2.8.0] - 2026-10-09
 
 ### Changed — BREAKING: a multi-server host runs the reconciliation sweep for every server of the pool (#402)
