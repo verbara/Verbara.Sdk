@@ -158,6 +158,94 @@ public sealed class ActivityEndingTests
         executed.Should().BeFalse("an activity asked to stop before it executed never executes");
     }
 
+    [Theory]
+    [MemberData(nameof(ActivityBases))]
+    public async Task StartAsync_ShouldEndCancelled_WhenTheCallerCancelsAndTheSurfacedTokenIsNotTheCallers(string activityBase)
+    {
+        var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var inner = new CancellationTokenSource();
+        await inner.CancelAsync();
+        await using var activity = EndingActivities.Create(activityBase, async ct =>
+        {
+            running.TrySetResult();
+            try
+            {
+                await new TaskCompletionSource().Task.WaitAsync(ct);
+            }
+            catch (OperationCanceledException ex)
+            {
+                // A cancelled inner operation reports its own token, not the caller's — as a linked
+                // response wait or an HTTP stack does.
+                throw new OperationCanceledException("An inner operation was cancelled.", ex, inner.Token);
+            }
+        });
+        var statuses = new List<ActivityStatus>();
+        using var subscription = activity.StatusChanges.Subscribe(statuses.Add);
+        using var caller = new CancellationTokenSource();
+
+        var start = activity.StartAsync(caller.Token).AsTask();
+        await running.Task.WaitAsync(SignalTimeout);
+        EndingActivities.CancelInline(caller);
+
+        var finishing = () => start.WaitAsync(SignalTimeout);
+
+        using var scope = new AssertionScope();
+        await finishing.Should().NotThrowAsync(
+            "whether the caller asked is read from the caller's token, not from the token the exception carries");
+        activity.Status.Should().Be(ActivityStatus.Cancelled);
+        statuses.Should().Equal(
+            [ActivityStatus.Pending, ActivityStatus.Starting, ActivityStatus.InProgress, ActivityStatus.Cancelled]);
+    }
+
+    [Theory]
+    [MemberData(nameof(ActivityBases))]
+    public async Task StartAsync_ShouldThrowAndEndFailed_WhenExecutionFailsAndNobodyAskedToStop(string activityBase)
+    {
+        var failure = new InvalidOperationException("The execution failed on its own.");
+        await using var activity = EndingActivities.Create(activityBase, _ => ValueTask.FromException(failure));
+        var statuses = new List<ActivityStatus>();
+        using var subscription = activity.StatusChanges.Subscribe(statuses.Add);
+
+        var starting = () => activity.StartAsync().AsTask().WaitAsync(SignalTimeout);
+
+        using var scope = new AssertionScope();
+        (await starting.Should().ThrowAsync<InvalidOperationException>(
+                "a failure nobody asked for surfaces as the exception StartAsync throws"))
+            .Which.Should().BeSameAs(failure);
+        activity.Status.Should().Be(ActivityStatus.Failed);
+        statuses.Should().Equal(
+            [ActivityStatus.Pending, ActivityStatus.Starting, ActivityStatus.InProgress, ActivityStatus.Failed]);
+    }
+
+    [Theory]
+    [MemberData(nameof(ActivityBases))]
+    public async Task DisposeAsync_ShouldEndCancelledWithoutThrowing_WhenTheActivityIsRunning(string activityBase)
+    {
+        var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Not `await using`: the test disposes the activity itself, mid-run, and a second disposal is not under test.
+        var activity = EndingActivities.Create(activityBase, async ct =>
+        {
+            running.TrySetResult();
+            await new TaskCompletionSource().Task.WaitAsync(ct);
+        });
+        var statuses = new List<ActivityStatus>();
+        var completed = false;
+        using var subscription = activity.StatusChanges.Subscribe(statuses.Add, () => completed = true);
+
+        var start = activity.StartAsync().AsTask();
+        await running.Task.WaitAsync(SignalTimeout);
+        await activity.DisposeAsync();
+
+        var finishing = () => start.WaitAsync(SignalTimeout);
+
+        using var scope = new AssertionScope();
+        await finishing.Should().NotThrowAsync("disposing a running activity is a request to stop it");
+        statuses.Should().Equal(
+            [ActivityStatus.Pending, ActivityStatus.Starting, ActivityStatus.InProgress, ActivityStatus.Cancelled],
+            "the disposal's cancellation is read as the request it is");
+        completed.Should().BeTrue("disposal completes the status stream");
+    }
+
     [Fact]
     public async Task AttendedTransferActivity_ShouldEndFailed_WhenTheAmiResponseTimesOut()
     {
