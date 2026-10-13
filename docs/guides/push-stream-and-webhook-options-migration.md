@@ -299,6 +299,9 @@ An `EventSource` client treats a non-`200` answer as a failure and closes; it do
 - **Listen for `.gap`** if missing events matters: `source.addEventListener('.gap', e => …)`, where
   `JSON.parse(e.data).dropped` is the number of events lost before the next one. A client that does not listen ignores
   it. There is no replay; refetch state if you need it.
+- **A reconnection starts from now.** Frames carry no `id:` and a `Last-Event-ID` request header is ignored, so
+  events dispatched while no connection was open are not resent. A client that cannot lose events refetches its
+  state over REST on `open` (`source.addEventListener('open', …)`).
 - **Do not publish an event named `.gap`.** It is delivered as `%2Egap`.
 - **Raise the bound** if your clients legitimately fall behind by more than 1 MiB, for example on large events:
 

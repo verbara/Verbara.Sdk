@@ -174,3 +174,7 @@ the defaults, or the value it configures, without that start-up check.
 
 A client disconnect or reset ends the stream: the heartbeat stops, the connection unsubscribes from the bus and
 the request completes, logged at `Debug` only.
+
+A reconnection starts from now. Frames carry no `id:` and a `Last-Event-ID` request header is ignored, so events
+dispatched while no connection was open are not resent. A client that cannot lose events refetches its state over
+REST when the stream opens (the `EventSource` `open` event).

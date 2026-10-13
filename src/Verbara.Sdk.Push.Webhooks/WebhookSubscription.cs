@@ -12,8 +12,11 @@ public sealed record WebhookSubscription
     public required string Id { get; init; }
 
     /// <summary>
-    /// Topic pattern to match against <see cref="Events.PushEventMetadata.TopicPath"/>.
-    /// Supports <c>*</c> (single-level), <c>**</c> (multi-level), and <c>{self}</c> placeholders.
+    /// Topic pattern to match against <see cref="Events.PushEventMetadata.TopicPath"/>, or against
+    /// <see cref="Events.PushEvent.EventType"/> when the topic path is null or empty (an event type that is not a
+    /// valid topic is received only by the pattern <c>**</c>).
+    /// Supports <c>*</c> (single-level), <c>**</c> (multi-level), and <c>{self}</c> placeholders; <c>{self}</c>
+    /// resolves to <see cref="Events.PushEventMetadata.UserId"/>.
     /// </summary>
     public required TopicPattern TopicPattern { get; init; }
 

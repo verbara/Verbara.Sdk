@@ -3,7 +3,6 @@ using System.Net.Http.Headers;
 using System.Reactive.Linq;
 using Verbara.Sdk.Push.Bus;
 using Verbara.Sdk.Push.Events;
-using Verbara.Sdk.Push.Topics;
 using Verbara.Sdk.Resilience;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -28,6 +27,13 @@ namespace Verbara.Sdk.Push.Webhooks;
 /// before it returns, and <see cref="Dispose"/> ends it even without a stop. The token passed to
 /// <see cref="StartAsync"/> governs the start only; cancelling it after the start has completed does not stop
 /// delivery. A service stopped and started again delivers again.
+/// </para>
+/// <para>
+/// An event is matched by its <see cref="PushEventMetadata.TopicPath"/>; when that is null or empty, by its
+/// <see cref="PushEvent.EventType"/>, the rule the SSE stream applies. An event type that is not a valid topic
+/// reaches only subscriptions whose pattern is <c>**</c>. A non-empty topic path that is not a valid topic is
+/// never matched by the event type instead: the event is delivered to no subscription and logged as a dispatch
+/// failure.
 /// </para>
 /// </remarks>
 public sealed partial class WebhookDeliveryService : BackgroundService
@@ -225,26 +231,16 @@ public sealed partial class WebhookDeliveryService : BackgroundService
             return;
         }
 
-        var topic = ResolveTopic(evt);
-        if (topic is null)
-            return;
-
-        var resolved = topic.Value;
+        // A non-empty topic path that does not parse throws here and is logged by DispatchEventAsync.
+        var name = WebhookTopicResolver.Resolve(evt);
+        var selfUserId = evt.Metadata?.UserId;
         foreach (var sub in subs)
         {
-            if (!sub.TopicPattern.Matches(resolved, selfUserId: evt.Metadata?.UserId))
+            if (!name.IsMatchedBy(sub.TopicPattern, selfUserId))
                 continue;
 
             _ = DeliverAsync(sub, evt, ct);
         }
-    }
-
-    private static TopicName? ResolveTopic(PushEvent evt)
-    {
-        var path = evt.Metadata?.TopicPath;
-        if (string.IsNullOrEmpty(path))
-            return null;
-        return TopicName.Parse(path);
     }
 
     // Fired without awaiting from the dispatch: it must never fault. A failure outside the attempt loop's own
