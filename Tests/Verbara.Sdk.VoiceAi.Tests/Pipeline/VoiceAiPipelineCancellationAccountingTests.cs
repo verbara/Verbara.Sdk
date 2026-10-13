@@ -84,8 +84,9 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
         {
             fault.Should().BeNull("a cancellation the caller asked for is not a fault");
             metrics.Get("voiceai.sessions.started").Should().Be(1);
-            metrics.Get("voiceai.sessions.completed").Should()
+            metrics.Get("voiceai.sessions.cancelled").Should()
                 .Be(1, "the terminal block must run wherever the cancel landed");
+            metrics.Get("voiceai.sessions.completed").Should().Be(0, "a cancelled session is not completed");
             metrics.Get("voiceai.sessions.failed").Should().Be(0);
             metrics.GetDouble("voiceai.session.duration_ms").Should().BeGreaterThan(0);
         }
@@ -633,7 +634,7 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
 
     /// <summary>
     /// The third control: the caller's own cancellation during a synthesis belongs to the caller. The
-    /// loop rethrows it and the session counts itself completed (<c>ADR-0054</c> R1), so it is not a
+    /// loop rethrows it and the session counts itself cancelled, not failed (<c>ADR-0054</c> R1), so it is not a
     /// synthesis failure either.
     /// </summary>
     [Fact]
@@ -671,7 +672,8 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
             ttsMetrics.Get("tts.syntheses.failed").Should()
                 .Be(0, "the caller asked the synthesis to stop");
             sessionMetrics.Get("voiceai.sessions.failed").Should().Be(0);
-            sessionMetrics.Get("voiceai.sessions.completed").Should().Be(1);
+            sessionMetrics.Get("voiceai.sessions.cancelled").Should().Be(1, "the caller's token ended the session");
+            sessionMetrics.Get("voiceai.sessions.completed").Should().Be(0, "a cancelled session is not completed");
             logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
             activities.Statuses.Should().ContainSingle().Which.Should().NotBe(ActivityStatusCode.Error);
 
@@ -761,7 +763,14 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
             logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
             activities.Statuses.Should().ContainSingle().Which.Should().NotBe(ActivityStatusCode.Error);
             sessionMetrics.Get("voiceai.sessions.failed").Should().Be(0);
-            sessionMetrics.Get("voiceai.sessions.completed").Should().Be(1);
+
+            // Only the caller's token cancels the session; a barge-in or a disposal ends the synthesis
+            // and the session then ends at the hangup, so it is completed.
+            var sessionCancelled = ending == RequestedEnding.CallerToken ? 1L : 0L;
+            sessionMetrics.Get("voiceai.sessions.cancelled").Should()
+                .Be(sessionCancelled, "the session is cancelled only when its token was ({0})", ending);
+            sessionMetrics.Get("voiceai.sessions.completed").Should()
+                .Be(1L - sessionCancelled, "the session is completed unless its token was cancelled ({0})", ending);
 
             // Disposal completes the event stream, so for that ending the counter, the log and the
             // activity above carry this assertion.
@@ -1069,7 +1078,8 @@ public sealed class VoiceAiPipelineCancellationAccountingTests
             ttsMetrics.Get("tts.syntheses.failed").Should()
                 .Be(0, "the caller asked the write to stop");
             sessionMetrics.Get("voiceai.sessions.failed").Should().Be(0);
-            sessionMetrics.Get("voiceai.sessions.completed").Should().Be(1);
+            sessionMetrics.Get("voiceai.sessions.cancelled").Should().Be(1, "the caller's token ended the session");
+            sessionMetrics.Get("voiceai.sessions.completed").Should().Be(0, "a cancelled session is not completed");
             logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
             activities.Statuses.Should().ContainSingle().Which.Should().NotBe(ActivityStatusCode.Error);
 
