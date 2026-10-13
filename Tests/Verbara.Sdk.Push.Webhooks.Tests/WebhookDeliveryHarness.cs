@@ -92,12 +92,11 @@ internal sealed class GuardRun : IAsyncDisposable
         TargetUrl = new Uri("http://127.0.0.1:9/" + id),
     };
 
-    /// <summary>Starts a run with one subscription <c>s-fail</c> and waits until the service has subscribed.</summary>
+    /// <summary>Starts a run with one subscription <c>s-fail</c>; the service is subscribed once its start completes.</summary>
     public static async Task<GuardRun> StartAsync(WebhookDeliveryOptions options, HttpStatusCode status, string pattern = "fail.**")
     {
         var run = Create(options, status, [Subscription("s-fail", pattern)]);
         await run.StartServiceAsync(CancellationToken.None);
-        await run.Bus.Subscribed.WaitAsync(Bound);
         return run;
     }
 

@@ -1,5 +1,8 @@
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Threading.Channels;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
@@ -233,9 +236,65 @@ public sealed class WebhookEndToEndTests
             .WhoseValue.Should().Be(traceparent);
     }
 
+    [Fact]
+    public async Task PublishEvent_ShouldDeliverToCatchAll_WhenTheEventHasNoTopicPath()
+    {
+        // Every negative is closed by a sentinel published last: the bus dispatches one event at a time, and the
+        // in-memory store answers synchronously, so an event's routing — up to the outgoing request it starts —
+        // completes inside its dispatch. Once the sentinel has reached the wire, a zero for the earlier event is final.
+        var occurredAt = new DateTimeOffset(2026, 10, 12, 8, 30, 0, TimeSpan.Zero);
+        await using var subscriber = TestSubscriberServer.Create(_ => Results.OkResult);
+        await using var harness = await WebhookHarness.StartAsync(subscriber,
+        [
+            Route(subscriber, "all", "**"),
+            Route(subscriber, "typed", "conversation.**"),
+            Route(subscriber, "other", "calls.**"),
+            Route(subscriber, "sentinel", "sentinel.**"),
+        ]);
+
+        await harness.Bus.PublishAsync(new TestEvent
+        {
+            Metadata = new PushEventMetadata("tenant-1", "alice", occurredAt, "corr-topicless", TopicPath: null),
+        });
+        await harness.Bus.PublishAsync(new SentinelEvent
+        {
+            Metadata = new PushEventMetadata("tenant-1", null, occurredAt, "corr-sentinel", SentinelEvent.Type),
+        });
+
+        var all = await subscriber.WaitForRequestAsync(r => r.Is("/webhook/all", "conversation.assigned"), TimeSpan.FromSeconds(5));
+        var typed = await subscriber.WaitForRequestAsync(r => r.Is("/webhook/typed", "conversation.assigned"), TimeSpan.FromSeconds(5));
+        var sentinel = await subscriber.WaitForRequestAsync(r => r.Is("/webhook/sentinel", SentinelEvent.Type), TimeSpan.FromSeconds(5));
+
+        var expectedBody =
+            "{\"eventType\":\"conversation.assigned\",\"metadata\":{\"tenantId\":\"tenant-1\",\"userId\":\"alice\","
+            + "\"occurredAt\":\"" + occurredAt.ToString("O", CultureInfo.InvariantCulture) + "\",\"correlationId\":\"corr-topicless\"}}";
+        all.Should().NotBeNull("an event without a topic path reaches the ** subscription");
+        Encoding.UTF8.GetString(all!.Body).Should().Be(expectedBody, "the posted body is the event, with no topic path");
+        all.Headers.Should().ContainKey("X-Event-Type").WhoseValue.Should().Be("conversation.assigned");
+        typed.Should().NotBeNull("its event type conversation.assigned matches conversation.**");
+        sentinel.Should().NotBeNull("the sentinel published last is delivered");
+        harness.Outgoing.CountTo("/webhook/other").Should().Be(0, "the event type conversation.assigned does not match calls.**");
+        harness.Outgoing.CountTo("/webhook/typed").Should().Be(1, "conversation.** receives the topic-less event once and not the sentinel");
+    }
+
+    private static WebhookSubscription Route(TestSubscriberServer subscriber, string name, string pattern) => new()
+    {
+        Id = "sub-" + name,
+        TopicPattern = TopicPattern.Parse(pattern),
+        TargetUrl = subscriber.UriFor(name),
+        Secret = null,
+    };
+
     private sealed record TestEvent : PushEvent
     {
         public override string EventType => "conversation.assigned";
+    }
+
+    private sealed record SentinelEvent : PushEvent
+    {
+        public const string Type = "sentinel.end";
+
+        public override string EventType => Type;
     }
 }
 
@@ -251,12 +310,18 @@ internal sealed class TestSubscriberServer : IAsyncDisposable
     private readonly TestServer _server;
     private readonly Channel<RecordedRequest> _channel;
     private readonly Func<HttpContext, ResponseSpec> _responder;
+    private readonly Lock _gate = new();
+    private readonly List<RecordedRequest> _recorded = [];
+    private readonly List<(Func<RecordedRequest, bool> Match, TaskCompletionSource<RecordedRequest> Signal)> _waiters = [];
     private int _receivedCount;
 
     /// <summary>Base URI used by tests. TestServer doesn't bind a real port; the
     /// handler intercepts requests for this host regardless. Reads from the underlying
     /// TestServer so the same value the handler uses internally drives the assertions.</summary>
     public Uri BaseUri => new(_server.BaseAddress, "webhook");
+
+    /// <summary>A target URL of its own on this server, <c>/webhook/{name}</c>, so requests can be told apart by path.</summary>
+    public Uri UriFor(string name) => new(_server.BaseAddress, "webhook/" + name);
 
     public int ReceivedCount => Volatile.Read(ref _receivedCount);
 
@@ -294,8 +359,13 @@ internal sealed class TestSubscriberServer : IAsyncDisposable
         var headers = ctx.Request.Headers
             .ToDictionary(h => h.Key, h => string.Join(',', h.Value!), StringComparer.OrdinalIgnoreCase);
 
-        var recorded = new RecordedRequest(ctx.Request.Method, body, headers);
+        var recorded = new RecordedRequest(ctx.Request.Method, body, headers, ctx.Request.Path.Value ?? string.Empty);
         Interlocked.Increment(ref _receivedCount);
+        lock (_gate)
+        {
+            _recorded.Add(recorded);
+            _waiters.RemoveAll(w => w.Match(recorded) && w.Signal.TrySetResult(recorded));
+        }
         await _channel.Writer.WriteAsync(recorded);
 
         var spec = _responder(ctx);
@@ -319,6 +389,33 @@ internal sealed class TestSubscriberServer : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Waits for the first request, received before or after the call, that <paramref name="match"/> accepts;
+    /// <c>null</c> if none arrives within <paramref name="timeout"/>. It does not consume the requests the other
+    /// wait methods read.
+    /// </summary>
+    public async Task<RecordedRequest?> WaitForRequestAsync(Func<RecordedRequest, bool> match, TimeSpan timeout)
+    {
+        Task<RecordedRequest> signal;
+        lock (_gate)
+        {
+            var seen = _recorded.Find(r => match(r));
+            if (seen is not null) return seen;
+            var tcs = new TaskCompletionSource<RecordedRequest>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _waiters.Add((match, tcs));
+            signal = tcs.Task;
+        }
+
+        try
+        {
+            return await signal.WaitAsync(timeout);
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
+    }
+
     public async Task WaitForRequestsAsync(int expectedCount, TimeSpan timeout)
     {
         using var cts = new CancellationTokenSource(timeout);
@@ -337,7 +434,33 @@ internal sealed class TestSubscriberServer : IAsyncDisposable
     }
 }
 
-internal sealed record RecordedRequest(string Method, byte[] Body, Dictionary<string, string> Headers);
+internal sealed record RecordedRequest(string Method, byte[] Body, Dictionary<string, string> Headers, string Path)
+{
+    public bool Is(string path, string eventType)
+        => Path == path && Headers.TryGetValue("X-Event-Type", out var type) && type == eventType;
+}
+
+/// <summary>
+/// Counts each outgoing request by target path when the delivery service hands it to the HTTP pipeline, before it
+/// reaches the wire. The count is taken inside the send call the delivery makes from its dispatch, so it is already
+/// final for an event once a later event has been sent.
+/// </summary>
+internal sealed class OutgoingRequestCounter : DelegatingHandler
+{
+    private readonly ConcurrentDictionary<string, int> _counts = new(StringComparer.Ordinal);
+
+    public OutgoingRequestCounter(HttpMessageHandler inner) : base(inner)
+    {
+    }
+
+    public int CountTo(string path) => _counts.TryGetValue(path, out var count) ? count : 0;
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        _counts.AddOrUpdate(request.RequestUri?.AbsolutePath ?? string.Empty, 1, static (_, count) => count + 1);
+        return base.SendAsync(request, cancellationToken);
+    }
+}
 
 internal readonly record struct ResponseSpec(HttpStatusCode StatusCode, string? Body);
 
@@ -360,21 +483,32 @@ internal sealed class WebhookHarness : IAsyncDisposable
 
     public IPushEventBus Bus { get; }
 
+    /// <summary>The requests the delivery service sent, counted per target path before they reach the wire.</summary>
+    public OutgoingRequestCounter Outgoing { get; }
+
     private WebhookHarness(
         ServiceProvider provider,
         WebhookDeliveryService delivery,
         IPushEventBus bus,
-        CancellationTokenSource cts)
+        CancellationTokenSource cts,
+        OutgoingRequestCounter outgoing)
     {
         _provider = provider;
         _delivery = delivery;
         Bus = bus;
         _cts = cts;
+        Outgoing = outgoing;
     }
+
+    public static Task<WebhookHarness> StartAsync(
+        TestSubscriberServer subscriber,
+        WebhookSubscription subscription,
+        Action<WebhookDeliveryOptions>? configureOptions = null)
+        => StartAsync(subscriber, [subscription], configureOptions);
 
     public static async Task<WebhookHarness> StartAsync(
         TestSubscriberServer subscriber,
-        WebhookSubscription subscription,
+        IReadOnlyList<WebhookSubscription> subscriptions,
         Action<WebhookDeliveryOptions>? configureOptions = null)
     {
         var services = new ServiceCollection();
@@ -390,9 +524,10 @@ internal sealed class WebhookHarness : IAsyncDisposable
 
         services.AddVerbaraPushWebhooks();
 
-        // Route outgoing HTTP through the TestServer's handler.
+        // Route outgoing HTTP through the TestServer's handler, counting each request on its way.
+        var outgoing = new OutgoingRequestCounter(subscriber.Handler);
         services.AddHttpClient(nameof(WebhookDeliveryService))
-            .ConfigurePrimaryHttpMessageHandler(() => subscriber.Handler);
+            .ConfigurePrimaryHttpMessageHandler(() => outgoing);
 
         // Reasonable defaults; tests override via `configureOptions`.
         services.Configure<WebhookDeliveryOptions>(opts =>
@@ -412,9 +547,12 @@ internal sealed class WebhookHarness : IAsyncDisposable
 
         var provider = services.BuildServiceProvider();
 
-        // Register the subscription before starting delivery so the first event lands cleanly.
+        // Register the subscriptions before starting delivery so the first event lands cleanly.
         var store = provider.GetRequiredService<IWebhookSubscriptionStore>();
-        await store.AddAsync(subscription, CancellationToken.None);
+        foreach (var subscription in subscriptions)
+        {
+            await store.AddAsync(subscription, CancellationToken.None);
+        }
 
         // WebhookDeliveryService is registered as IHostedService (via AddHostedService),
         // not as the concrete type. Pull the single instance from the hosted-services
@@ -423,13 +561,10 @@ internal sealed class WebhookHarness : IAsyncDisposable
             .OfType<WebhookDeliveryService>()
             .Single();
         var cts = new CancellationTokenSource();
+        // Delivery is subscribed to the bus once its start completes, so events can be published right away.
         await delivery.StartAsync(cts.Token);
 
-        // Tiny grace period so the BackgroundService.ExecuteAsync subscription is wired
-        // up before tests publish events.
-        await Task.Delay(50);
-
-        return new WebhookHarness(provider, delivery, provider.GetRequiredService<IPushEventBus>(), cts);
+        return new WebhookHarness(provider, delivery, provider.GetRequiredService<IPushEventBus>(), cts, outgoing);
     }
 
     public async ValueTask DisposeAsync()

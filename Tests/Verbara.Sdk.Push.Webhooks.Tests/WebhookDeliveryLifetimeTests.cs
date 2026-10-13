@@ -101,7 +101,6 @@ public sealed class WebhookDeliveryLifetimeTests
         await using (var run = GuardRun.Create(GuardRun.ValidOptions(), HttpStatusCode.OK, [GuardRun.Subscription("s-startup", "startup.**")]))
         {
             await run.StartServiceAsync(startToken.Token);
-            await run.Bus.Subscribed.WaitAsync(GuardRun.Bound);
             await startToken.CancelAsync();
 
             await run.PublishAsync(After, topicPath: "startup.evt");
@@ -118,7 +117,6 @@ public sealed class WebhookDeliveryLifetimeTests
     {
         var run = GuardRun.Create(GuardRun.ValidOptions(), HttpStatusCode.OK, [GuardRun.Subscription("s-startup", "startup.**")]);
         await run.StartServiceAsync(CancellationToken.None);
-        await run.Bus.Subscribed.WaitAsync(GuardRun.Bound);
         return run;
     }
 }

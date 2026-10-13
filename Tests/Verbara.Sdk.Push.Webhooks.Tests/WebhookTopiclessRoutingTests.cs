@@ -99,7 +99,6 @@ public sealed class WebhookTopiclessRoutingTests
     {
         var run = GuardRun.Create(GuardRun.ValidOptions(), HttpStatusCode.OK, [.. subscriptions, GuardRun.Subscription(Sentinel, "sentinel.**")]);
         await run.StartServiceAsync(CancellationToken.None);
-        await run.Bus.Subscribed.WaitAsync(GuardRun.Bound);
         return run;
     }
 

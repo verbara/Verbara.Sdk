@@ -27,7 +27,6 @@ public sealed class WebhookDeliveryExecutionContextTests
             inner => new AmbientScopeBus(inner));
         run.Store.OnEnumerate = () => seen.Enqueue(Ambient.Value ?? "<none>");
         await run.StartServiceAsync(CancellationToken.None);
-        await run.Bus.Subscribed.WaitAsync(GuardRun.Bound);
 
         await PublishAsync(run, "tenant-1");
         await PublishAsync(run, "tenant-2");
