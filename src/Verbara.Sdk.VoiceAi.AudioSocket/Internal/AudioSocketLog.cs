@@ -35,4 +35,10 @@ internal static partial class AudioSocketLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] Read loop ended for channel {ChannelId}")]
     public static partial void ReadLoopEnded(ILogger logger, Exception exception, Guid channelId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] Write failed on the transport for channel {ChannelId}, ending the session")]
+    public static partial void WriteTransportFailed(ILogger logger, Exception exception, Guid channelId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] A hangup handler failed for channel {ChannelId}")]
+    public static partial void HangupHandlerFailed(ILogger logger, Exception exception, Guid channelId);
 }

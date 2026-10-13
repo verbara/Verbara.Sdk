@@ -124,11 +124,10 @@ public sealed class VoiceAiSessionBrokerShutdownTests : IAsyncLifetime
         }
         else if (order == StopOrder.StoppedConcurrently)
         {
-            // Two endings race here (the broker's and the server's); exactly one frame needs the ending to
-            // be claimed under the session's write lock, which a later step tightens this to.
+            // Two endings race here (the broker's and the server's); the session claims its ending under
+            // its write lock, so the loser writes nothing.
             var read = await peer.ReadToEndAsync(SignalTimeout);
-            read.Frames.Count(f => f.Type == AudioSocketFrameType.Hangup).Should().BeLessThanOrEqualTo(
-                1, $"some ending wrote at most one hangup frame in all (read: {read.Describe()})");
+            AssertOneHangupThenClose(read, "the broker's and the server's stops race, and only one of them writes a frame");
         }
     }
 
