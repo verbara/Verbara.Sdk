@@ -190,13 +190,15 @@ public sealed class AudioSocketIdentificationTests
         // Act
         time.Advance(ShortIdleTimeout + TimeSpan.FromMilliseconds(1));
         await peer.Closed.WaitAsync(bound.Token);
-        var (probe, _) = await harness.IdentifyUntilAdmittedAsync(Guid.NewGuid(), bound.Token);
-        using var admitted = probe;
+        var placeBack = await HeldReachesAsync(harness.Options.Admission, 0, bound.Token);
+        var admittedAtFirstAttempt = await IdentifyOnceAsync(harness, Guid.NewGuid(), bound.Token);
 
         // Assert
         using (new AssertionScope())
         {
             deadline.DueTime.Should().Be(ShortIdleTimeout, "the wait asked the injected clock for IdleTimeout");
+            placeBack.Should().BeTrue("the closed connection gives its place back");
+            admittedAtFirstAttempt.Should().BeTrue("so the next peer is admitted at its first attempt");
             Volatile.Read(ref announcements).Should().Be(1, "the silent connection was never announced; only the probe was");
             harness.Logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
         }
@@ -227,36 +229,45 @@ public sealed class AudioSocketIdentificationTests
     [Fact]
     public async Task IdentificationWait_ShouldGiveThePlaceBackAtOnce_WhenPeersLeaveBeforeIdentifying()
     {
-        // Arrange — a limit of 10 and a 30 s deadline on a clock that does not move
+        // Arrange — a limit of 10 and a 30 s deadline on a clock that does not move, so the deadline
+        // can never be what ends a wait here
         var time = new FakeTimeProvider();
         await using var harness = await AudioSocketEndingHarness.StartAsync(
             _ => { }, maxStreams: 10, idleTimeout: TimeSpan.FromSeconds(30), timeProvider: time);
         using var bound = new CancellationTokenSource(SignalTimeout);
+        var closedByServer = 0;
+        var placesBack = false;
+        var admittedAtFirstAttempt = false;
 
-        // Act — 10 peers connect and close without identifying, then an 11th identifies itself
-        for (var i = 0; i < 10; i++)
-        {
-            using var leaver = await AudioSocketTestPeer.ConnectAsync(harness.Port, bound.Token);
-        }
-
-        var admitted = false;
+        // Act — 10 peers connect and leave without identifying: each closes its sending half and reads
+        // the server's close, which proves the server accepted it and ended its wait. Then the count
+        // must come back to zero, and an 11th peer that identifies itself is admitted at its one attempt.
         try
         {
-            var (probe, _) = await harness.IdentifyUntilAdmittedAsync(Guid.NewGuid(), bound.Token);
-            probe.Dispose();
-            admitted = true;
+            for (var i = 0; i < 10; i++)
+            {
+                using var leaver = await AudioSocketTestPeer.ConnectAsync(harness.Port, bound.Token);
+                leaver.ShutdownSend();
+                await leaver.Closed.WaitAsync(bound.Token);
+                closedByServer++;
+            }
+
+            placesBack = await HeldReachesAsync(harness.Options.Admission, 0, bound.Token);
+            admittedAtFirstAttempt = await IdentifyOnceAsync(harness, Guid.NewGuid(), bound.Token);
         }
         catch (OperationCanceledException) when (bound.IsCancellationRequested)
         {
-            // Refused until the bound: the ten places are still held
+            // Reaching the bound is the failure the assertions below describe
         }
 
         // Assert
         using (new AssertionScope())
         {
-            admitted.Should().BeTrue(
-                $"a peer that leaves before identifying gives its place back at once (held at the bound: {harness.Options.Admission.Held})");
-            harness.Logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+            closedByServer.Should().Be(10, "a peer that leaves before identifying is closed when its read ends, not at a deadline the clock never reaches");
+            placesBack.Should().BeTrue(
+                $"each of them gives its place back at once (held at the bound: {harness.Options.Admission.Held})");
+            admittedAtFirstAttempt.Should().BeTrue("with every place back, the next peer is admitted at its first attempt");
+            harness.Logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning, "no connection was refused and none failed");
         }
     }
 
@@ -273,6 +284,46 @@ public sealed class AudioSocketIdentificationTests
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Waits until <paramref name="admission"/> holds <paramref name="value"/> places, or the bound passes.
+    /// The place goes back in the handler's last step, after the peer has already read the close, and
+    /// nothing signals it, so the wait reads the count itself. Nothing in the server's own work is
+    /// timed by it: it only ends when the count is the one asked for.
+    /// </summary>
+    private static async Task<bool> HeldReachesAsync(AudioStreamAdmission admission, int value, CancellationToken token)
+    {
+        while (admission.Held != value)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(1), token); // fence-allow: LOOP-DRIVER — paces reading a count nothing signals; the bound ends the loop
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                return admission.Held == value;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>One attempt to identify: true when the server announces it, false when it closes the connection instead.</summary>
+    private static async Task<bool> IdentifyOnceAsync(AudioSocketEndingHarness harness, Guid id, CancellationToken token)
+    {
+        var announced = harness.AnnouncedAs(id.ToString());
+        using var peer = await AudioSocketTestPeer.ConnectAsync(harness.Port, token);
+        try
+        {
+            await peer.SendAsync(AudioSocketFrames.Uuid(id), token);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+
+        return await Task.WhenAny(announced, peer.Closed).WaitAsync(token) == announced;
     }
 
     private static Task<FakeTimeProvider.FakeTimer> NextTimerAsync(FakeTimeProvider time, CancellationToken token) =>
