@@ -83,17 +83,24 @@ All five VoiceAi packages publish a `Meter` + `ActivitySource` + `IHealthCheck`.
 
 | Meter | Key Instruments |
 |-------|-----------------|
-| `Verbara.Sdk.VoiceAi` | `voiceai.sessions.started` / `.completed` / `.failed`, `voiceai.session.duration_ms` (histogram) |
+| `Verbara.Sdk.VoiceAi` | `voiceai.sessions.started` / `.completed` / `.failed` / `.cancelled`, `voiceai.session.duration_ms` (histogram) |
 | `Verbara.Sdk.VoiceAi.Stt` | `stt.transcriptions.started` / `.completed` / `.failed` / `.cancelled`, `stt.transcription.latency_ms` |
 | `Verbara.Sdk.VoiceAi.Tts` | `tts.syntheses.started` / `.completed` / `.failed` / `.cancelled` / `.silent`, `tts.synthesis.latency_ms`, `tts.synthesis.ttfa_ms`, `tts.synthesis.characters` |
 | `Verbara.Sdk.VoiceAi.AudioSocket` | `audiosocket.connections.{accepted,closed}`, `audiosocket.frames.{received,sent}`, `audiosocket.bytes.{received,sent}`, `audiosocket.session.duration_ms` |
-| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | `openai_realtime.sessions.{started,completed,failed,close_unanswered}`, `openai_realtime.session.duration_ms` |
+| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | `openai_realtime.sessions.{started,completed,failed,cancelled,close_unanswered}`, `openai_realtime.session.duration_ms` |
 
 Every recognition and every synthesis the pipeline starts ends in exactly one of `.completed`, `.failed` or
 `.cancelled`, so per arm `started - completed - failed - cancelled` is what is still in flight. `.cancelled` is
 tagged `voiceai.ending`: `session-cancelled` (the session's token — the host's or the session broker's stop or
-disposal), and for syntheses also `barge-in`, `disposal` and `far-end` (a write found the session already ended).
-`.completed` counts only a synthesis whose audio was all written to the session.
+disposal), and for syntheses also `barge-in`, `disposal` and `far-end` (a write found the session already ended, or
+failed on its transport because the far end left). `.completed` counts only a synthesis whose audio was all written to
+the session. The sessions follow the same rule per handler: `voiceai.sessions.*` and `openai_realtime.sessions.*`
+count each started session in exactly one of `.completed`, `.failed` or `.cancelled`, and a session is `.cancelled`
+only when the token its handler runs under was cancelled; a hangup, a vendor close or a graceful stop is `.completed`.
+The same `voiceai.ending` value rides on the latency sample of a cancelled turn (`stt.transcription.latency_ms`,
+`tts.synthesis.latency_ms`) and on the duration sample of a cancelled session (`voiceai.session.duration_ms`,
+`openai_realtime.session.duration_ms`, always `session-cancelled`). Completed and failed samples carry no tag, so
+filter on the tag's absence to read them, or aggregate over it to read every sample as before.
 
 HealthChecks exposed via `/health` when using the standard ASP.NET Core pipeline:
 `VoiceAiHealthCheck`, `SttHealthCheck`, `TtsHealthCheck`, `AudioSocketHealthCheck`, `OpenAiRealtimeHealthCheck`.
