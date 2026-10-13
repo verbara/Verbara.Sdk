@@ -90,7 +90,7 @@ documentation of the speech failure types, `SpeechRecognizer.StreamAsync`, sever
 and Live reload members, cited internal decision ids a reader cannot open. Each citation now states the reason in one
 sentence. No behaviour or public API changes.
 
-### Changed — BREAKING: a webhook subscription receives an event without a topic path when its event type matches (#NNN)
+### Changed — BREAKING: a webhook subscription receives an event without a topic path when its event type matches (#414)
 
 `Verbara.Sdk.Push.Webhooks` delivered no event whose `PushEventMetadata.TopicPath` was null or empty, and the
 `TopicPath` documentation said so ("webhooks do not deliver it"). Such an event is now named by its `EventType`, the
@@ -120,7 +120,7 @@ To keep topic-less events away from a receiver, either:
 
 No public API changes. Migration note: [`docs/guides/push-stream-and-webhook-options-migration.md`](docs/guides/push-stream-and-webhook-options-migration.md#webhooks-receive-events-without-a-topic-path-290).
 
-### Fixed: a webhook subscription receives an event published right after the host starts (#NNN)
+### Fixed: a webhook subscription receives an event published right after the host starts (#414)
 
 `WebhookDeliveryService` subscribed to the push bus from `ExecuteAsync`, which `BackgroundService` runs on a
 background task. Its start, and the host's, usually returned before the subscription existed. The bus serves only
@@ -149,7 +149,7 @@ and ends.
 `WebhookDeliveryService` gains three `override` members: `StartAsync`, `StopAsync` and `Dispose`. The class is sealed
 and the overrides are source- and binary-compatible.
 
-### Fixed: the push stream documentation says a reconnection starts from now (#NNN)
+### Fixed: the push stream documentation says a reconnection starts from now (#414)
 
 The `Push.AspNetCore` README and the push stream migration guide now say that a reconnection does not resume:
 
