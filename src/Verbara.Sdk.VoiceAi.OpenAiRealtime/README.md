@@ -62,6 +62,11 @@ The bridge runs one Realtime conversation per AudioSocket session, and the sessi
   returns once both of its audio loops have ended, without waiting for a function still running, and an event a session raises after the
   bridge was disposed is dropped and logged at Debug rather than thrown inside the session.
 
+Every session the bridge starts is counted in exactly one of `openai_realtime.sessions.completed`, `.failed` or
+`.cancelled`. A session is `cancelled` only when the token handed to the bridge was cancelled (the host, a stop that
+is no longer graceful, the broker's disposal), and its `openai_realtime.session.duration_ms` sample carries
+`voiceai.ending` = `session-cancelled`; a caller's hangup, the vendor's close and a graceful stop are `completed`.
+
 Register `AddAudioSocketServer` before `AddOpenAiRealtimeBridge` (the prerequisite above), so the
 broker stops before the server and every call ends with a hangup frame.
 

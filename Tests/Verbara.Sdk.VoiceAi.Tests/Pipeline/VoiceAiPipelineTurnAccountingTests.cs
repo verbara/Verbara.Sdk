@@ -126,6 +126,24 @@ public sealed class VoiceAiPipelineTurnAccountingTests
                     "every {0} turn started ends in exactly one bucket once the handler has returned "
                     + "(ending {1}: started {2}, completed {3}, failed {4}, cancelled {5})",
                     arm, ending, started, completed, failed, cancelled);
+
+                // One latency sample per started turn (a guard: the finally already records one), and the
+                // samples carrying each ending value equal that value's cancelled increments (the red).
+                var samples = outcome.SampleTags(LatencyOf(arm));
+                samples.Should().HaveCount(
+                    (int)started, "one {0} latency sample per started turn (ending {1})", arm, ending);
+                var cancelledByEnding = outcome.Recorded
+                    .Where(m => m.Instrument == $"{arm}.cancelled")
+                    .GroupBy(m => m.Tags)
+                    .ToDictionary(g => g.Key, g => g.Sum(m => m.Value));
+                var taggedSamplesByEnding = samples
+                    .Where(t => t.Length > 0)
+                    .GroupBy(t => t)
+                    .ToDictionary(g => g.Key, g => (long)g.Count());
+                taggedSamplesByEnding.Should().BeEquivalentTo(
+                    cancelledByEnding,
+                    "the {0} latency samples carrying each voiceai.ending value equal that value's cancelled "
+                    + "increments (ending {1})", arm, ending);
             }
 
             outcome.Sum($"{Stt}.started").Should().BeGreaterThan(0, "every ending here starts a recognition");
@@ -135,8 +153,9 @@ public sealed class VoiceAiPipelineTurnAccountingTests
     /// <summary>
     /// A turn somebody outside the provider cut short is counted cancelled, tagged with what ended it,
     /// and in no other ending: the host's or the broker's token (<c>session-cancelled</c>), a barge-in,
-    /// the pipeline's disposal, or the far end leaving mid-playback. Each such turn still leaves the
-    /// session completed, and publishes no pipeline error.
+    /// the pipeline's disposal, or the far end leaving mid-playback. Its one latency sample carries the
+    /// same tag. The session is counted cancelled when its token was cancelled and completed otherwise,
+    /// and no pipeline error is published.
     /// </summary>
     [Theory]
     [InlineData(Ending.HostCancelsDuringRecognition, Stt, "session-cancelled")]
@@ -165,7 +184,19 @@ public sealed class VoiceAiPipelineTurnAccountingTests
             outcome.Sum($"{arm}.failed").Should().Be(0, "nobody's fault ended the turn ({0})", ending);
             outcome.Sum($"{otherArm}.cancelled").Should().Be(0, "only one turn was cut short ({0})", ending);
             outcome.Events.OfType<PipelineErrorEvent>().Should().BeEmpty("a requested ending publishes no error");
-            outcome.Sum("voiceai.sessions.completed").Should().Be(1, "the session itself ended normally");
+            outcome.SampleTags(LatencyOf(arm)).Should().ContainSingle(
+                    "one {0} latency sample for the one turn cut short ({1})", arm, ending)
+                .Which.Should().Be(
+                    $"voiceai.ending={expectedEnding}",
+                    "the latency sample of a cancelled turn carries what ended it ({0})", ending);
+
+            // The session's own ending: the token rows cancelled it; barge-in, disposal and the far end
+            // leaving cut only the turn short, and the session ended on its own.
+            var sessionCancelled = expectedEnding == "session-cancelled";
+            outcome.Sum("voiceai.sessions.cancelled").Should().Be(
+                sessionCancelled ? 1 : 0, "the handler token was{0} cancelled ({1})", sessionCancelled ? "" : " not", ending);
+            outcome.Sum("voiceai.sessions.completed").Should().Be(
+                sessionCancelled ? 0 : 1, "a session is counted completed only when its token was not cancelled ({0})", ending);
             outcome.Sum("voiceai.sessions.failed").Should().Be(0);
 
             if (ending is Ending.BargeIn or Ending.FarEndLeavesMidPlayback)
@@ -219,14 +250,47 @@ public sealed class VoiceAiPipelineTurnAccountingTests
         }
     }
 
+    /// <summary>
+    /// A served or failed turn records exactly one latency sample, untagged: only a cancelled turn's sample
+    /// carries <c>voiceai.ending</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(Ending.NormalTurn)]
+    [InlineData(Ending.ProviderFailureInEachArm)]
+    public async Task HandleSessionAsync_ShouldRecordOneUntaggedLatencySample_WhenTheTurnCompletesOrFails(Ending ending)
+    {
+        var outcome = await RunAsync(ending);
+
+        using (new AssertionScope())
+        {
+            outcome.Fault.Should().BeNull();
+            foreach (var arm in new[] { Stt, Tts })
+            {
+                outcome.SampleTags(LatencyOf(arm)).Should().HaveCount(
+                    (int)outcome.Sum($"{arm}.started"), "one {0} latency sample per started turn ({1})", arm, ending);
+                outcome.SampleTags(LatencyOf(arm)).Should().OnlyContain(
+                    t => t.Length == 0, "a completed or failed {0} turn's sample carries no tag ({1})", arm, ending);
+            }
+        }
+    }
+
     // ---- Harness ----
+
+    /// <summary>The latency histogram of <paramref name="arm"/>.</summary>
+    private static string LatencyOf(string arm) =>
+        arm == Stt ? "stt.transcription.latency_ms" : "tts.synthesis.latency_ms";
 
     /// <summary>What one session left behind: the counters, the events and any fault.</summary>
     private sealed record Outcome(
         IReadOnlyList<TaggedMeasurement> Recorded,
+        IReadOnlyList<HistogramSample> Samples,
         IReadOnlyList<VoiceAiPipelineEvent> Events,
         Exception? Fault)
     {
+        /// <summary>The tags of every sample of the histogram <paramref name="instrument"/>, oldest first.</summary>
+        public IReadOnlyList<string> SampleTags(string instrument) =>
+            [.. Samples.Where(s => s.Instrument == instrument).Select(s => s.Tags)];
+
         public long Sum(string instrument) =>
             Recorded.Where(m => m.Instrument == instrument).Sum(m => m.Value);
 
@@ -356,7 +420,7 @@ public sealed class VoiceAiPipelineTurnAccountingTests
         }
 
         var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
-        return new Outcome(meters.Snapshot(), events.Events, fault);
+        return new Outcome(meters.Snapshot(), meters.Samples(), events.Events, fault);
     }
 
     /// <summary>
@@ -425,7 +489,7 @@ public sealed class VoiceAiPipelineTurnAccountingTests
         // The pipeline records its session counter last, in the finally of HandleSessionAsync, so this
         // measurement is the session handler having returned.
         await meters.SessionEnded.WaitAsync(SignalTimeout);
-        return new Outcome(meters.Snapshot(), events.Events, Fault: null);
+        return new Outcome(meters.Snapshot(), meters.Samples(), events.Events, Fault: null);
     }
 
     /// <summary>Sends a speech frame and an end-of-utterance frame, each decided on before the next.</summary>
@@ -469,14 +533,19 @@ public sealed class VoiceAiPipelineTurnAccountingTests
     /// <summary>One counter measurement: the instrument's name, its value and its tags, sorted.</summary>
     private sealed record TaggedMeasurement(string Instrument, long Value, string Tags);
 
+    /// <summary>One histogram sample: the instrument's name and its tags, sorted (empty when untagged).</summary>
+    private sealed record HistogramSample(string Instrument, string Tags);
+
     /// <summary>
     /// Records every <c>long</c> measurement of the three voice meters with its tags, by instrument name.
     /// </summary>
     /// <remarks>
     /// The instruments are process-wide statics; the class runs in <see cref="SessionCounterGroup"/>, so
     /// what this records belongs to the test that created it. <see cref="SessionEnded"/> completes on the
-    /// first <c>voiceai.sessions.completed</c> or <c>voiceai.sessions.failed</c> measurement, which the
-    /// pipeline records in the <c>finally</c> of <c>HandleSessionAsync</c>, after every turn counter.
+    /// first <c>voiceai.sessions.completed</c>, <c>.failed</c> or <c>.cancelled</c> measurement (read by
+    /// name), which the pipeline records in the <c>finally</c> of <c>HandleSessionAsync</c>, after every
+    /// turn counter and after the session's duration sample. Histogram samples (<c>double</c>) are kept
+    /// with their tags, so a test can say which samples carry <c>voiceai.ending</c>.
     /// </remarks>
     private sealed class TaggedMeterCapture : IDisposable
     {
@@ -486,6 +555,7 @@ public sealed class VoiceAiPipelineTurnAccountingTests
         private readonly MeterListener _listener = new();
         private readonly Lock _gate = new();
         private readonly List<TaggedMeasurement> _recorded = [];
+        private readonly List<HistogramSample> _samples = [];
         private readonly TaskCompletionSource _sessionEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public TaggedMeterCapture()
@@ -496,6 +566,7 @@ public sealed class VoiceAiPipelineTurnAccountingTests
                     listener.EnableMeasurementEvents(instrument);
             };
             _listener.SetMeasurementEventCallback<long>(OnLong);
+            _listener.SetMeasurementEventCallback<double>(OnDouble);
             _listener.Start();
         }
 
@@ -506,19 +577,37 @@ public sealed class VoiceAiPipelineTurnAccountingTests
             lock (_gate) return [.. _recorded];
         }
 
-        private void OnLong(Instrument instrument, long measurement,
-            ReadOnlySpan<KeyValuePair<string, object?>> tags, object? state)
+        public IReadOnlyList<HistogramSample> Samples()
+        {
+            lock (_gate) return [.. _samples];
+        }
+
+        private static string Render(ReadOnlySpan<KeyValuePair<string, object?>> tags)
         {
             var rendered = new List<string>(tags.Length);
             foreach (var tag in tags)
                 rendered.Add($"{tag.Key}={tag.Value}");
             rendered.Sort(StringComparer.Ordinal);
+            return string.Join(',', rendered);
+        }
 
+        private void OnLong(Instrument instrument, long measurement,
+            ReadOnlySpan<KeyValuePair<string, object?>> tags, object? state)
+        {
+            var rendered = Render(tags);
             lock (_gate)
-                _recorded.Add(new TaggedMeasurement(instrument.Name, measurement, string.Join(',', rendered)));
+                _recorded.Add(new TaggedMeasurement(instrument.Name, measurement, rendered));
 
-            if (instrument.Name is "voiceai.sessions.completed" or "voiceai.sessions.failed")
+            if (instrument.Name is "voiceai.sessions.completed" or "voiceai.sessions.failed" or "voiceai.sessions.cancelled")
                 _sessionEnded.TrySetResult();
+        }
+
+        private void OnDouble(Instrument instrument, double measurement,
+            ReadOnlySpan<KeyValuePair<string, object?>> tags, object? state)
+        {
+            var rendered = Render(tags);
+            lock (_gate)
+                _samples.Add(new HistogramSample(instrument.Name, rendered));
         }
 
         public void Dispose() => _listener.Dispose();

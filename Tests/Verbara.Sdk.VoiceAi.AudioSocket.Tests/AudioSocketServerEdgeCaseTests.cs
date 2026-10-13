@@ -288,9 +288,9 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
             "a release removes only the entry its own session holds, and the released session never held X — removing by key alone would unregister the other call's live session");
         holder.IsConnected.Should().BeTrue("nothing has ended the holder's connection");
         await server.StopAsync(CancellationToken.None);
-        (await ReadFromServerAsync(holderPeer)).Should().Be(
-            0,
-            "the holder is still registered, so the stop finds it and closes its connection");
+        (await ReadUntilServerClosesAsync(holderPeer)).Should().Equal(
+            HangupFrame,
+            "the holder is still registered, so the stop finds it and ends it: one hangup frame, then the close");
     }
 
     [Fact]
@@ -337,9 +337,9 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
         Volatile.Read(ref announcements).Should().Be(1, "a refused connection is never announced");
         holder.IsConnected.Should().BeTrue("the refusal leaves the holder's connection alone");
         await server.StopAsync(CancellationToken.None);
-        (await ReadFromServerAsync(holderPeer)).Should().Be(
-            0,
-            "the holder is still registered, so the stop finds it and closes its connection");
+        (await ReadUntilServerClosesAsync(holderPeer)).Should().Equal(
+            HangupFrame,
+            "the holder is still registered, so the stop finds it and ends it: one hangup frame, then the close");
     }
 
     [Fact]

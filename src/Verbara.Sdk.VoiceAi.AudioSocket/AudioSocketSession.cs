@@ -40,6 +40,20 @@ public sealed class AudioSocketSession : IAsyncDisposable
     private int _consumerDisposed; // 1 once the owner called DisposeAsync(); see ADR-0053
     private int _hangupFired; // 0 = not fired, 1 = fired
 
+    /// <summary>
+    /// 1 once an ending has claimed the right to write the hangup frame. Taken under <c>_writeLock</c>, so of
+    /// two endings that run at once exactly one writes the frame; the other writes nothing and goes on to the
+    /// shared teardown. Never reset: a frame whose flush was cancelled may still be buffered, and a second
+    /// frame behind it would be a second hangup on the wire.
+    /// </summary>
+    private int _ending;
+
+    /// <summary>
+    /// 1 once a failed transport has been logged, by the write side or by the read loop. A far-end reset is
+    /// often seen by both; whichever reports it first is the only one.
+    /// </summary>
+    private int _transportFailureReported;
+
     /// <summary>UUID received from Asterisk (from the first UUID frame).</summary>
     public Guid ChannelId { get; }
 
@@ -56,7 +70,8 @@ public sealed class AudioSocketSession : IAsyncDisposable
     /// <remarks>
     /// While the handlers run, the session still holds its channel id on the server that accepted it
     /// and still counts as active there: a connection that presents the same id waits until every
-    /// handler has returned before it is served.
+    /// handler has returned before it is served. An exception a handler throws is logged at Warning and goes
+    /// no further: the handlers after it still run, and the ending that raised the event is not affected.
     /// </remarks>
     public event Action? OnHangup;
 
@@ -151,10 +166,37 @@ public sealed class AudioSocketSession : IAsyncDisposable
     /// or a high-rate type (e.g., <see cref="AudioSocketFrameType.AudioSlin16"/>) for Asterisk 23+.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Frames are written one at a time: a write waits for any other write or hangup in flight on the
     /// same session, so every frame reaches the far end whole.
+    /// </para>
+    /// <para>
+    /// A write that fails on its transport (an <see cref="IOException"/>, for example because the far end
+    /// reset the connection) ends the session before the exception reaches the caller: by the time it is
+    /// thrown, <see cref="IsConnected"/> is <see langword="false"/> and <see cref="OnHangup"/> has been
+    /// raised. The exception is rethrown unchanged. The failure is logged at Warning only when the session
+    /// was still live; a write cut short by the session's own ending is not logged.
+    /// </para>
     /// </remarks>
     public async ValueTask WriteAudioAsync(ReadOnlyMemory<byte> pcmData, AudioSocketFrameType frameType, CancellationToken ct = default)
+    {
+        try
+        {
+            await WriteFrameAsync(pcmData, frameType, ct).ConfigureAwait(false);
+        }
+        catch (IOException ex)
+        {
+            // The lock is already released here, so a hangup handler that calls HangupAsync waits on nothing
+            // this thread holds.
+            await EndOnTransportFailureAsync(ex).ConfigureAwait(false);
+            throw;
+        }
+
+        AudioSocketMetrics.FramesSent.Add(1);
+        AudioSocketMetrics.BytesSent.Add(pcmData.Length);
+    }
+
+    private async ValueTask WriteFrameAsync(ReadOnlyMemory<byte> pcmData, AudioSocketFrameType frameType, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) == 1, this);
         await _writeLock.WaitAsync(ct).ConfigureAwait(false);
@@ -169,9 +211,24 @@ public sealed class AudioSocketSession : IAsyncDisposable
         {
             _writeLock.Release();
         }
+    }
 
-        AudioSocketMetrics.FramesSent.Add(1);
-        AudioSocketMetrics.BytesSent.Add(pcmData.Length);
+    /// <summary>
+    /// Ends the session after a write failed on its transport. Only the side that tears the session down
+    /// (the session was live) logs the failure and raises the hangup; when the session had already ended, the
+    /// failure is the session's own teardown closing the transport under the flush, and the side that ended it
+    /// owns the hangup.
+    /// </summary>
+    private async ValueTask EndOnTransportFailureAsync(IOException failure)
+    {
+        if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0)
+            return;
+
+        if (Interlocked.Exchange(ref _transportFailureReported, 1) == 0)
+            AudioSocketLog.WriteTransportFailed(_logger, failure, ChannelId);
+
+        await ReleaseTransportAsync().ConfigureAwait(false);
+        FireHangup();
     }
 
     /// <summary>
@@ -186,7 +243,9 @@ public sealed class AudioSocketSession : IAsyncDisposable
     /// Idempotent. On a session that has already ended — the far end hung up or closed, the session was
     /// hung up before, or its owner disposed it — the call completes and writes nothing. When the
     /// transport fails under the frame (the far end is already gone, or a teardown raced this call) the
-    /// frame is skipped and the session still ends.
+    /// frame is skipped and the session still ends. Two endings that run at once write one hangup frame
+    /// between them: the frame is claimed under the write lock, and the ending that loses the claim writes
+    /// nothing and goes on to the same teardown.
     /// </para>
     /// <para>
     /// A hangup issued while an audio write is in flight waits for that write to finish, so the far end
@@ -199,9 +258,10 @@ public sealed class AudioSocketSession : IAsyncDisposable
 
     /// <summary>
     /// Ends the connection from the server's side, exactly as <see cref="HangupAsync"/> does: a hangup
-    /// frame if the session is still live, then the teardown every ending runs.
+    /// frame if the session is still live, then the teardown every ending runs. Cancelling
+    /// <paramref name="ct"/> abandons the frame as it does for a hangup; the caller then closes the session.
     /// </summary>
-    internal ValueTask EndFromServerAsync() => EndCoreAsync(CancellationToken.None);
+    internal ValueTask EndFromServerAsync(CancellationToken ct) => EndCoreAsync(ct);
 
     private async ValueTask EndCoreAsync(CancellationToken ct)
     {
@@ -211,8 +271,10 @@ public sealed class AudioSocketSession : IAsyncDisposable
         await _writeLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            // Re-read under the lock: the session may have ended while this call waited for a write.
-            if (Volatile.Read(ref _disposed) == 0)
+            // Re-read under the lock: the session may have ended while this call waited for a write. The
+            // claim is taken here, under the lock, so a second ending that waited behind this one finds it
+            // taken and writes nothing, even though the teardown below has not marked the session ended yet.
+            if (Volatile.Read(ref _disposed) == 0 && Interlocked.CompareExchange(ref _ending, 1, 0) == 0)
             {
                 try
                 {
@@ -284,7 +346,9 @@ public sealed class AudioSocketSession : IAsyncDisposable
         catch (OperationCanceledException) { /* normal shutdown */ }
         catch (Exception ex)
         {
-            AudioSocketLog.ReadLoopEnded(_logger, ex, ChannelId);
+            // A write may have met the same failure and reported it already.
+            if (Interlocked.Exchange(ref _transportFailureReported, 1) == 0)
+                AudioSocketLog.ReadLoopEnded(_logger, ex, ChannelId);
         }
         finally
         {
@@ -303,7 +367,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
             try
             {
                 _audioChannel.Writer.TryComplete();
-                OnHangup?.Invoke();
+                RaiseHangup();
             }
             finally
             {
@@ -323,6 +387,30 @@ public sealed class AudioSocketSession : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Calls each <see cref="OnHangup"/> handler in turn. A handler's failure is its own: it is logged at
+    /// Warning and the handlers after it still run, so it neither replaces a write's transport failure nor
+    /// escapes the read loop's task unseen.
+    /// </summary>
+    private void RaiseHangup()
+    {
+        var handlers = OnHangup;
+        if (handlers is null)
+            return;
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                AudioSocketLog.HangupHandlerFailed(_logger, ex, ChannelId);
+            }
+        }
+    }
+
     /// <inheritdoc/>
     /// <remarks>Disposal is the owner's statement that it is finished with the session; afterwards
     /// <see cref="ReadAudioAsync"/> throws like every other member. A session that ends on its own
@@ -337,9 +425,12 @@ public sealed class AudioSocketSession : IAsyncDisposable
     /// Release the transport. Idempotent, and shared by the owner's disposal and by every
     /// session-initiated ending.
     /// </summary>
-    private async ValueTask TerminateAsync()
+    private ValueTask TerminateAsync() =>
+        Interlocked.CompareExchange(ref _disposed, 1, 0) != 0 ? ValueTask.CompletedTask : ReleaseTransportAsync();
+
+    /// <summary>The teardown itself, run once by whichever ending set <c>_disposed</c>.</summary>
+    private async ValueTask ReleaseTransportAsync()
     {
-        if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
         await _cts.CancelAsync().ConfigureAwait(false);
         _cts.Dispose();
         _audioChannel.Writer.TryComplete(); // a parked consumer ends here, not on a token

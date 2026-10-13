@@ -66,8 +66,12 @@ The server binds one listener and runs one accept loop in its lifetime.
   instead.
 - A `StartAsync` after `DisposeAsync` throws `ObjectDisposedException`; a `StopAsync` after it does
   nothing.
-- The stop closes the sessions it serves without a hangup frame. Register the server before the
-  Voice AI pipeline or the Realtime bridge, so their broker stops first and ends each call with one.
+- The stop, and disposal, end every session that is still live with one hangup frame and then the
+  close, as `HangupAsync` does; a session already ended gets nothing, and two endings at once (the
+  stop and a session broker's, under `HostOptions.ServicesStopConcurrently`) write one frame between
+  them. The endings run together under one bound of about a second: a session that cannot take its
+  frame in time (a write in flight on it never completes because the far end stopped reading) is
+  closed without one. Cancelling the stop's token ends that wait early the same way.
 - Once the stop has begun, nothing more is registered: a connection that identified itself just
   before is refused with a hangup frame and never announced.
 

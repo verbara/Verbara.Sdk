@@ -14,7 +14,7 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Bridge;
 /// <summary>
 /// The setup window: everything between entering <c>HandleSessionAsync</c> and the loops starting.
 /// A cancel landing there used to escape as a fault and skip the terminal block entirely, because
-/// the <c>finally</c> that owns the close, the completion counter, the duration histogram and the
+/// the <c>finally</c> that owns the close, the session counters, the duration histogram and the
 /// end-of-session log was attached to the <em>inner</em> try. See ADR-0053.
 /// </summary>
 /// <remarks>
@@ -56,8 +56,9 @@ public sealed class OpenAiRealtimeBridgeSetupWindowTests
         {
             fault.Should().BeNull("a cancellation the caller asked for is not a fault");
             metrics.Get("openai_realtime.sessions.started").Should().Be(1);
-            metrics.Get("openai_realtime.sessions.completed").Should()
+            metrics.Get("openai_realtime.sessions.cancelled").Should()
                 .Be(1, "the terminal block must run wherever the cancel landed");
+            metrics.Get("openai_realtime.sessions.completed").Should().Be(0, "a cancelled session is not completed");
             metrics.Get("openai_realtime.sessions.failed").Should().Be(0);
             metrics.GetDouble("openai_realtime.session.duration_ms").Should().BeGreaterThan(0);
             log.Entries.Should().Contain(e => e.EventId.Name == "SessionEnded");
@@ -91,7 +92,8 @@ public sealed class OpenAiRealtimeBridgeSetupWindowTests
         using (new AssertionScope())
         {
             fault.Should().BeNull("a cancellation the caller asked for is not a fault");
-            metrics.Get("openai_realtime.sessions.completed").Should().Be(1);
+            metrics.Get("openai_realtime.sessions.cancelled").Should().Be(1, "the caller's token ended the session");
+            metrics.Get("openai_realtime.sessions.completed").Should().Be(0, "a cancelled session is not completed");
             metrics.Get("openai_realtime.sessions.failed").Should().Be(0);
             log.Entries.Should().Contain(e => e.EventId.Name == "SessionEnded");
         }

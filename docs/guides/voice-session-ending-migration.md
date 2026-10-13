@@ -135,9 +135,9 @@ What this means for code you may have written:
 
 - **Register the server before the pipeline.** A host stops its hosted services in the reverse order of their
   registration. With `AddAudioSocketServer` called first, as the package READMEs show, the broker stops first and
-  ends every call with a hangup frame. If the server is stopped first, or concurrently
-  (`HostOptions.ServicesStopConcurrently`), it closes the sessions without a frame. On Asterisk 20 and later a close
-  with the caller's audio unread fails the call instead of continuing the dialplan. `AddOpenAiRealtimeBridge` already
+  ends every call with a hangup frame. Before 2.9.0 a server stopped first, or concurrently
+  (`HostOptions.ServicesStopConcurrently`), closed the sessions without a frame; from 2.9.0 its own stop ends each
+  live session with one hangup frame too ([below](#cancelled-sessions-tagged-latency-and-the-servers-stop-290)). `AddOpenAiRealtimeBridge` still
   requires the server to be registered first.
 
 The broker is not restartable, as before. A `StartAsync` after a stop subscribes nothing. A `StartAsync` after
@@ -225,7 +225,7 @@ old tts.syntheses.completed = tts.syntheses.completed
 ```
 
 `stt.transcriptions.completed` and every `failed` counter keep their meaning. The latency histograms,
-`tts.syntheses.silent` and `SynthesisEndedEvent` are unchanged.
+`tts.syntheses.silent` and `SynthesisEndedEvent` are unchanged here (2.9.0 tags cancelled turns' latency: [below](#cancelled-sessions-tagged-latency-and-the-servers-stop-290)).
 
 ## The Realtime bridge
 
@@ -260,3 +260,92 @@ runs at once. Before, the call sat in silence. Then stop the host with a call up
 and the stop returns once the handler has returned. For the counters, compare `started` against
 `completed + failed + cancelled` per arm after a load test: the difference is what is still in flight, and zero once
 the host is idle.
+
+## Cancelled sessions, tagged latency and the server's stop (2.9.0)
+
+Four behaviours move in 2.9.0, all in telemetry and in how a session ends. Nothing stops compiling, and the only
+public additions are two counter fields.
+
+### A cancelled session is counted `cancelled`, not `completed`
+
+**Before 2.9.0:** a session whose handler token was cancelled (the host cancelled the token it passed to
+`HandleSessionAsync`, the broker's stop ran out of its shutdown budget, or the broker was disposed) was counted in
+`voiceai.sessions.completed` by `VoiceAiPipeline` and in `openai_realtime.sessions.completed` by
+`OpenAiRealtimeBridge`, with an untagged duration sample.
+
+**From 2.9.0:** it is counted in the new `voiceai.sessions.cancelled` (`VoiceAiMetrics.SessionsCancelled`) or
+`openai_realtime.sessions.cancelled` (`RealtimeMetrics.SessionsCancelled`), and no longer in `…completed`. Every
+session a handler starts is counted in exactly one of `completed`, `failed` or `cancelled`, so per handler
+`started - completed - failed - cancelled` is what is still running. The session's duration sample
+(`voiceai.session.duration_ms`, `openai_realtime.session.duration_ms`) carries `voiceai.ending` = `session-cancelled`.
+The cancellation is still not rethrown to the caller.
+
+A session the caller hung up, the vendor closed, or a graceful broker stop ended is still `completed`: a graceful stop
+ends the session with a hangup frame and does not cancel the handler token. A session whose handler threw is still
+`failed`.
+
+A dashboard or alert over `…sessions.completed` drops by the number of cancelled sessions. To keep the old number:
+
+```text
+old voiceai.sessions.completed         = voiceai.sessions.completed         + voiceai.sessions.cancelled
+old openai_realtime.sessions.completed = openai_realtime.sessions.completed + openai_realtime.sessions.cancelled
+```
+
+### The latency sample of a cancelled turn says what ended it
+
+`stt.transcription.latency_ms` and `tts.synthesis.latency_ms` still record one sample per recognition or synthesis
+the pipeline starts. The sample of a turn counted `cancelled` now carries `voiceai.ending`, with the value its
+`…cancelled` increment carries: `session-cancelled`, `barge-in`, `disposal` or `far-end`. The sample of a completed
+or failed turn carries no tag. `tts.synthesis.ttfa_ms` is unchanged: its sample is a first chunk that really arrived.
+
+A query that aggregates over tags reads the same numbers as before. A query that keeps tags apart shows up to four
+more series per histogram. To read the latency of turns that were not cut short, filter on the tag's absence: keep
+the samples that carry no `voiceai.ending`.
+
+### A far end that resets mid-playback is not a synthesis failure
+
+**Before 2.9.0:** when the caller left mid-playback, the pipeline's write met either `ObjectDisposedException` or
+`IOException`, depending on how the far end left and on timing; a far end that reset the connection gave
+`IOException`. `ObjectDisposedException` was counted as the far end leaving, but `IOException` was counted in
+`tts.syntheses.failed`, published a `PipelineErrorEvent` with source `Tts`, and logged a Warning.
+
+**From 2.9.0:** both are the far end leaving: `tts.syntheses.cancelled` with `voiceai.ending` = `far-end`, no
+`PipelineErrorEvent`, and nothing at Warning or above from the pipeline. A synthesizer's own `IOException` is still
+a synthesis failure.
+
+`AudioSocketSession.WriteAudioAsync` changes with it. A write that fails on its transport ends the session before the
+exception reaches you, so when you catch it `IsConnected` is already false and `OnHangup` has already run. The
+exception type does not change. The session logs one Warning when the transport failed while the session was still
+live (a reset). A write cut short by the session's own ending (a hangup frame, a clean close, its owner's disposal)
+logs nothing. A hangup subscriber that throws is logged at Warning by the session; its exception never replaces the
+write's exception and no longer escapes the ending. Code that writes again after catching an `IOException` gets
+`ObjectDisposedException` at once, where it got it a few milliseconds later before.
+
+### The AudioSocket server's stop ends live sessions with a hangup frame
+
+**Before 2.9.0:** `AudioSocketServer.StopAsync` and `DisposeAsync` closed every session they served without a hangup
+frame, so a call got its frame only when the session broker stopped first. With the server stopped first or
+concurrently, a session whose caller audio was still unread when it closed was reset, and on Asterisk 20 and later a
+reset fails `AudioSocket()` instead of continuing the dialplan. Two endings running at once on one session (two
+`HangupAsync` calls, for example) could also write two hangup frames.
+
+**From 2.9.0:** the stop ends every live session with one hangup frame and then the close, as `HangupAsync` does. A
+session that has already ended gets nothing. An ending claims the session before it writes its frame, so two endings
+at once (the server's stop and the broker's under `HostOptions.ServicesStopConcurrently`, or two `HangupAsync` calls)
+write one frame between them. The far end reads exactly one hangup frame whatever order the host stops the broker and
+the server in.
+
+The endings run together under one bound of about a second. A session that cannot take its frame within it, because
+a write in flight on it never completes (the far end stopped reading), is closed without one. The token passed to
+`StopAsync`, unused before, ends that wait early in the same way. With calls up, a server's stop can take up to about
+a second longer; the stop never throws for it.
+
+Registering `AddAudioSocketServer` first is still what the package READMEs show, and `AddOpenAiRealtimeBridge` still
+requires it.
+
+### How to check (2.9.0)
+
+Cancel the token you pass to a session handler, or stop a host whose shutdown budget runs out with a call up:
+`…sessions.cancelled` moves and `…sessions.completed` does not, and `started = completed + failed + cancelled` per
+handler once the host is idle. Stop an `AudioSocketServer` registered after the pipeline with a call up through
+`AudioSocket()` followed by `NoOp()`: the dialplan goes on after `AudioSocket()`.

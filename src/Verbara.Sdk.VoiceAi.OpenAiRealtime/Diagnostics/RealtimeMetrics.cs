@@ -21,6 +21,11 @@ public static class RealtimeMetrics
             "Total OpenAI Realtime sessions started");
 
     /// <summary>Total OpenAI Realtime sessions completed successfully.</summary>
+    /// <remarks>
+    /// A session ended by a cancellation of the token handed to <c>HandleSessionAsync</c> is counted in
+    /// <see cref="SessionsCancelled"/>, not here. The count that included those sessions is
+    /// <c>completed + cancelled</c>.
+    /// </remarks>
     public static readonly Counter<long> SessionsCompleted =
         Meter.CreateCounter<long>("openai_realtime.sessions.completed", "sessions",
             "Total OpenAI Realtime sessions completed successfully");
@@ -29,6 +34,22 @@ public static class RealtimeMetrics
     public static readonly Counter<long> SessionsFailed =
         Meter.CreateCounter<long>("openai_realtime.sessions.failed", "sessions",
             "Total OpenAI Realtime sessions that failed with an error");
+
+    /// <summary>
+    /// OpenAI Realtime sessions the bridge ended because the token handed to <c>HandleSessionAsync</c> was
+    /// cancelled: by the host that called it, by the session broker's stop once that stop is no longer
+    /// graceful, or by the broker's disposal. The cancellation is not rethrown to the caller.
+    /// </summary>
+    /// <remarks>
+    /// Every session the bridge starts is counted in exactly one of <see cref="SessionsCompleted"/>,
+    /// <see cref="SessionsFailed"/> or this counter, so <c>started - completed - failed - cancelled</c> is
+    /// what is still running. A graceful broker stop does not cancel the token, so the session it ends is
+    /// completed. The <see cref="SessionDurationMs"/> sample of a session counted here carries the tag
+    /// <c>voiceai.ending</c> = <c>session-cancelled</c>.
+    /// </remarks>
+    public static readonly Counter<long> SessionsCancelled =
+        Meter.CreateCounter<long>("openai_realtime.sessions.cancelled", "sessions",
+            "OpenAI Realtime sessions ended because the token they run under was cancelled");
 
     /// <summary>Total messages sent to the OpenAI Realtime API.</summary>
     public static readonly Counter<long> MessagesSent =
@@ -68,7 +89,16 @@ public static class RealtimeMetrics
 
     // --- Histograms ---
 
-    /// <summary>Duration of an OpenAI Realtime session in milliseconds.</summary>
+    /// <summary>
+    /// Duration of an OpenAI Realtime session in milliseconds: one sample per session the bridge starts,
+    /// whatever ends it.
+    /// </summary>
+    /// <remarks>
+    /// The sample of a session counted in <see cref="SessionsCancelled"/> carries the tag
+    /// <c>voiceai.ending</c> = <c>session-cancelled</c>; the samples of completed and failed sessions carry
+    /// no tag. A query for the duration of sessions that ran to their end filters out samples that carry
+    /// <c>voiceai.ending</c>.
+    /// </remarks>
     public static readonly Histogram<double> SessionDurationMs =
         Meter.CreateHistogram<double>("openai_realtime.session.duration_ms", "ms",
             "Duration of an OpenAI Realtime session");

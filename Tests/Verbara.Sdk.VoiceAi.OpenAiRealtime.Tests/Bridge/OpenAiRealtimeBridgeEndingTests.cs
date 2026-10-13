@@ -127,6 +127,169 @@ public sealed class OpenAiRealtimeBridgeEndingTests
         }
     }
 
+    // ---- A Realtime session ends in exactly one of completed, failed or cancelled ----
+
+    /// <summary>
+    /// A Realtime session the host cancelled is counted in <c>openai_realtime.sessions.cancelled</c> and
+    /// in no other ending, and its duration sample says so. The counter is read by name, so before it
+    /// exists it reads as no measurement and the assertion, not the build, fails.
+    /// </summary>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldCountTheSessionCancelled_WhenTheHostCancels()
+    {
+        using var metrics = new MeterCapture(MeterName);
+        var fault = await EndRealtimeSessionAsync(RealtimeEnding.HostCancels);
+
+        using (new AssertionScope())
+        {
+            fault.Should().BeNull("a cancellation the host asked for is not rethrown");
+            metrics.Get("openai_realtime.sessions.started").Should().Be(1);
+            metrics.Get("openai_realtime.sessions.cancelled").Should().Be(1, "the host's token ended the session");
+            metrics.Get("openai_realtime.sessions.completed").Should().Be(0, "a cancelled session is not completed");
+            metrics.Get("openai_realtime.sessions.failed").Should().Be(0);
+            metrics.Tags("openai_realtime.session.duration_ms").Should().ContainSingle()
+                .Which.Should().Be(
+                    "voiceai.ending=session-cancelled",
+                    "the one duration sample of a cancelled session carries what ended it");
+        }
+    }
+
+    /// <summary>What ends a Realtime session in the partition theory below.</summary>
+    public enum RealtimeEnding
+    {
+        /// <summary>The caller hangs up and the vendor answers the bridge's close.</summary>
+        CallerHangsUp,
+
+        /// <summary>The vendor drops the connection in answer to the bridge's close: the session fails.</summary>
+        VendorDropsTheConnection,
+
+        /// <summary>The token handed to <c>HandleSessionAsync</c> is cancelled while both loops run.</summary>
+        HostCancels,
+
+        /// <summary>
+        /// The broker's graceful stop ends the session with a hangup frame and cancels no token, so the
+        /// bridge sees the caller's side end.
+        /// </summary>
+        BrokerStopsGracefully,
+    }
+
+    /// <summary>
+    /// Every Realtime session is counted in exactly one of completed, failed or cancelled, each ending in
+    /// its own bucket: cancelled only when the handler token was cancelled. The sum
+    /// <c>started = completed + failed + cancelled</c> is a guard; it is not what turns red before the
+    /// fix, because the old <c>finally</c> counted completed for everything not failed.
+    /// </summary>
+    [Theory]
+    [InlineData(RealtimeEnding.CallerHangsUp)]
+    [InlineData(RealtimeEnding.VendorDropsTheConnection)]
+    [InlineData(RealtimeEnding.HostCancels)]
+    [InlineData(RealtimeEnding.BrokerStopsGracefully)]
+    public async Task HandleSessionAsync_ShouldCountTheSessionInItsOwnBucket_WhateverEndsIt(RealtimeEnding ending)
+    {
+        using var metrics = new MeterCapture(MeterName);
+        var fault = await EndRealtimeSessionAsync(ending);
+
+        var (completed, failed, cancelled) = ending switch
+        {
+            RealtimeEnding.HostCancels => (0L, 0L, 1L),
+            RealtimeEnding.VendorDropsTheConnection => (0L, 1L, 0L),
+            _ => (1L, 0L, 0L),
+        };
+
+        using (new AssertionScope())
+        {
+            if (ending == RealtimeEnding.VendorDropsTheConnection)
+                fault.Should().BeOfType<WebSocketException>("a dropped transport is rethrown");
+            else
+                fault.Should().BeNull("no other ending here is rethrown ({0})", ending);
+
+            metrics.Get("openai_realtime.sessions.cancelled").Should().Be(cancelled, "ending {0}", ending);
+            metrics.Get("openai_realtime.sessions.completed").Should().Be(completed, "ending {0}", ending);
+            metrics.Get("openai_realtime.sessions.failed").Should().Be(failed, "ending {0}", ending);
+            metrics.Tags("openai_realtime.session.duration_ms").Should().ContainSingle(
+                    "one duration sample per session ({0})", ending)
+                .Which.Should().Be(
+                    cancelled == 1 ? "voiceai.ending=session-cancelled" : string.Empty,
+                    "the sample is tagged only when the session was cancelled ({0})", ending);
+
+            // Guard, not the red: one session started, and it ended in exactly one bucket.
+            var started = metrics.Get("openai_realtime.sessions.started");
+            started.Should().Be(1);
+            (metrics.Get("openai_realtime.sessions.completed") + metrics.Get("openai_realtime.sessions.failed")
+                + metrics.Get("openai_realtime.sessions.cancelled")).Should().Be(started, "ending {0}", ending);
+        }
+    }
+
+    /// <summary>
+    /// Runs one Realtime session against the loopback fake vendor and ends it as asked; returns what the
+    /// session handler threw, or <see langword="null"/>. Every path returns only after the handler has.
+    /// </summary>
+    private static async Task<Exception?> EndRealtimeSessionAsync(RealtimeEnding ending)
+    {
+        await using var fakeOpenAi = ending == RealtimeEnding.VendorDropsTheConnection
+            ? new RealtimeFakeServer { HoldOpenUntilDisposed = true }
+            : new RealtimeFakeServer { HoldOpenUntilClientCloses = true };
+        fakeOpenAi.EventsToSend.Add(LoopsRunningMarkerEvent);
+        fakeOpenAi.Start();
+
+        if (ending == RealtimeEnding.BrokerStopsGracefully)
+        {
+            await using var server = new AudioSocketServer(
+                new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
+                NullLogger<AudioSocketServer>.Instance);
+            await using var brokered = CreateBridge(fakeOpenAi);
+            using var loopsUp = new RealtimeEventCollector(
+                brokered.Events, e => e.OfType<RealtimeSpeechStartedEvent>().Any());
+            using var broker = new Pipeline.VoiceAiSessionBroker(
+                server, brokered, NullLogger<Pipeline.VoiceAiSessionBroker>.Instance);
+            await broker.StartAsync(CancellationToken.None);
+            await server.StartAsync(CancellationToken.None);
+            await using var caller = new AudioSocketClient("127.0.0.1", server.BoundPort, Guid.NewGuid());
+            await caller.ConnectAsync(CancellationToken.None);
+            await loopsUp.Satisfied.WaitAsync(SignalTimeout);
+
+            // A graceful stop ends the live session with a frame, then waits for the handler to return.
+            return await Record.ExceptionAsync(
+                () => broker.StopAsync(CancellationToken.None).WaitAsync(SignalTimeout));
+        }
+
+        var (session, audioServer, client) = await CreateAudioSessionAsync();
+        try
+        {
+            await using var bridge = CreateBridge(fakeOpenAi);
+            using var loopsRunning = new RealtimeEventCollector(
+                bridge.Events, e => e.OfType<RealtimeSpeechStartedEvent>().Any());
+            using var host = new CancellationTokenSource();
+
+            var sessionTask = bridge.HandleSessionAsync(session, host.Token).AsTask();
+            await loopsRunning.Satisfied.WaitAsync(SignalTimeout);
+
+            switch (ending)
+            {
+                case RealtimeEnding.CallerHangsUp:
+                    await client.SendHangupAsync();
+                    break;
+
+                case RealtimeEnding.VendorDropsTheConnection:
+                    await client.SendHangupAsync();
+                    await fakeOpenAi.ClientCloseReceived.WaitAsync(SignalTimeout);
+                    fakeOpenAi.Abort();
+                    break;
+
+                case RealtimeEnding.HostCancels:
+                    await host.CancelAsync();
+                    break;
+            }
+
+            return await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+        }
+        finally
+        {
+            await client.DisposeAsync();
+            await audioServer.StopAsync(CancellationToken.None);
+        }
+    }
+
     [Fact]
     public async Task HandleSessionAsync_ShouldFailWithTheTransportError_WhenTheVendorDropsTheConnectionInAnswerToTheClose()
     {
@@ -487,11 +650,12 @@ public sealed class OpenAiRealtimeBridgeEndingTests
     /// The host's cancellation in that same instant. The session token reaches the read through the
     /// bound's token, so it aborts the socket the same way, and the rest of the message threw
     /// <see cref="WebSocketException"/> too: a requested cancellation was counted as a failure (50 of 50
-    /// with the hook). A requested cancellation is a completion (see
+    /// with the hook). A requested cancellation is not a failure: the handler returns normally and the
+    /// session is counted cancelled (see
     /// <see cref="HandleSessionAsync_ShouldNotCountTheBound_WhenTheHostCancelsAfterTheHangup"/>).
     /// </summary>
     [Fact]
-    public async Task HandleSessionAsync_ShouldCompleteWithoutCountingTheBound_WhenTheHostCancelsInsideAReadThatReturnsPartOfAMessage()
+    public async Task HandleSessionAsync_ShouldCountItCancelledWithoutCountingTheBound_WhenTheHostCancelsInsideAReadThatReturnsPartOfAMessage()
     {
         // Arrange
         await using var fakeOpenAi = new RealtimeFakeServer { AnswerClientCloseOnRequest = true };
@@ -524,8 +688,9 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             // Assert
             using (new AssertionScope())
             {
-                ending.Should().BeNull("a requested cancellation is a completion");
-                metrics.Get("openai_realtime.sessions.completed").Should().Be(1, "the host ended the session");
+                ending.Should().BeNull("a requested cancellation is not rethrown");
+                metrics.Get("openai_realtime.sessions.cancelled").Should().Be(1, "the host ended the session");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(0, "a cancelled session is not completed");
                 metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
                     0, "the host's cancellation is not the bound running out");
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(0, "nothing broke");
@@ -611,8 +776,8 @@ public sealed class OpenAiRealtimeBridgeEndingTests
 
     /// <summary>
     /// A control: the host cancels the session token while the bridge waits for the vendor's answer.
-    /// A requested cancellation is a completion, as it always was, and it is not the bound running out,
-    /// so nothing is counted as unanswered and nothing warns (<c>P1b-cancel-7000</c>).
+    /// A requested cancellation returns normally, as it always did, and is counted cancelled. It is not the
+    /// bound running out, so nothing is counted as unanswered and nothing warns (<c>P1b-cancel-7000</c>).
     /// </summary>
     [Fact]
     public async Task HandleSessionAsync_ShouldNotCountTheBound_WhenTheHostCancelsAfterTheHangup()
@@ -647,8 +812,9 @@ public sealed class OpenAiRealtimeBridgeEndingTests
             {
                 armedDue.Should().Be(CloseAnswerBound, "the bound is ten seconds, counted from the bridge's close");
                 sessionTask.Status.Should().Be(
-                    TaskStatus.RanToCompletion, "a requested cancellation is a completion");
-                metrics.Get("openai_realtime.sessions.completed").Should().Be(1, "the host ended the wait");
+                    TaskStatus.RanToCompletion, "a requested cancellation is not rethrown");
+                metrics.Get("openai_realtime.sessions.cancelled").Should().Be(1, "the host ended the wait");
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(0, "a cancelled session is not completed");
                 metrics.Get("openai_realtime.sessions.close_unanswered").Should().Be(
                     0, "the host's cancellation is not the bound running out");
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(0, "nothing broke");

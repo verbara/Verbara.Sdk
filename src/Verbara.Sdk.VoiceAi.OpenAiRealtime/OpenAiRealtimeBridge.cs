@@ -137,6 +137,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         using var downsampler = inputRate != 24000 ? ResamplerFactory.Create(24000, inputRate) : null;
 
         var sessionFailed = false;
+        var sessionCancelled = false;
 
         // The two loops and the two sources only they use, declared out here so the terminal block can
         // wait for the loops before anything they use is released. Declared inside the try, the sources
@@ -251,15 +252,21 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     RealtimeMetrics.SessionsCloseUnanswered.Add(1);
                 }
             }
+
+            // A host cancellation that the loops ended on quietly returns here instead of through the
+            // filter below: OutputLoop ends its read on the token without throwing. The token ended
+            // that session all the same, so it is counted cancelled too.
+            sessionCancelled = ct.IsCancellationRequested;
         }
         // The filter tests the token, never ex.CancellationToken: a cancelled ConnectAsync surfaces
         // a TaskCanceledException carrying a *different* token, so an identity check would silently
         // not match and a requested shutdown would be counted as a failure.
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { /* expected */ }
+        // Expected, and not rethrown: the host asked for it. Counted cancelled, not completed, as the
+        // voice pipeline counts the same ending.
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { sessionCancelled = true; }
         catch (Exception ex)
         {
             sessionFailed = true;
-            RealtimeMetrics.SessionsFailed.Add(1);
             sessionActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             RealtimeLog.SessionError(_logger, channelId, ex.Message);
             throw;
@@ -268,7 +275,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         {
             // Both loops end before anything they use is released, on every path out of the try. The
             // session is already classified above, so what they raise here is observed and nothing more:
-            // a session the host cancelled stays completed.
+            // a session the host cancelled stays cancelled.
             if (input is not null && output is not null)
                 await AwaitLoopsAsync(inputCts!, input, output).ConfigureAwait(false);
             ReleaseLoopSources(inputCts, silence);
@@ -285,10 +292,20 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             catch { /* ignore close errors */ }
             finally { wsWriteLock.Release(); }
 
-            if (!sessionFailed)
+            // The duration first, then exactly one of the three counters: a listener that treats the
+            // session counter as "the handler returned" finds the duration sample already recorded.
+            var duration = Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds;
+            if (sessionCancelled)
+                RealtimeMetrics.SessionDurationMs.Record(duration, TurnEnding.Tag(TurnEnding.SessionCancelled));
+            else
+                RealtimeMetrics.SessionDurationMs.Record(duration);
+
+            if (sessionFailed)
+                RealtimeMetrics.SessionsFailed.Add(1);
+            else if (sessionCancelled)
+                RealtimeMetrics.SessionsCancelled.Add(1);
+            else
                 RealtimeMetrics.SessionsCompleted.Add(1);
-            RealtimeMetrics.SessionDurationMs.Record(
-                Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds);
             RealtimeLog.SessionEnded(_logger, channelId);
         }
     }

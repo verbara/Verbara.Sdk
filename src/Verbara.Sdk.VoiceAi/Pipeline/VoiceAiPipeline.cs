@@ -101,6 +101,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
 
         var history = new List<ConversationTurn>();
         var failed = false;
+        var cancelled = false;
 
         try
         {
@@ -114,20 +115,31 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             // ADR-0054: the caller asked for this, so it is how the session ended, not how it
             // failed — the classification OpenAiRealtimeBridge settled on in ADR-0053. Swallowed
             // rather than rethrown, because the bridge does not rethrow either and one
-            // ISessionHandler interface has to answer one way.
+            // ISessionHandler interface has to answer one way. Counted cancelled, not completed:
+            // the session was cut short by its token, and the bridge counts the same ending the same way.
+            cancelled = true;
         }
         catch
         {
             failed = true;
-            VoiceAiMetrics.SessionsFailed.Add(1);
             sessionActivity?.SetStatus(ActivityStatusCode.Error);
             throw;
         }
         finally
         {
+            // The duration first, then exactly one of the three counters: a listener that treats the
+            // session counter as "the handler returned" finds the duration sample already recorded.
             var duration = Stopwatch.GetElapsedTime(sessionStart).TotalMilliseconds;
-            VoiceAiMetrics.SessionDurationMs.Record(duration);
-            if (!failed)
+            if (cancelled)
+                VoiceAiMetrics.SessionDurationMs.Record(duration, TurnEnding.Tag(TurnEnding.SessionCancelled));
+            else
+                VoiceAiMetrics.SessionDurationMs.Record(duration);
+
+            if (failed)
+                VoiceAiMetrics.SessionsFailed.Add(1);
+            else if (cancelled)
+                VoiceAiMetrics.SessionsCancelled.Add(1);
+            else
                 VoiceAiMetrics.SessionsCompleted.Add(1);
 
             VoiceAiLog.PipelineStopped(_logger, session.ChannelId);
@@ -225,6 +237,11 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             using var sttActivity = VoiceAiActivitySource.StartRecognition(_stt.ProviderName);
 
             string? transcript = null;
+
+            // Set only by the arm that counts this transcription cancelled, to the value its increment
+            // carries; the latency sample below then carries the same tag. Completed and failed turns
+            // leave it null and record an untagged sample.
+            string? sttEnding = null;
             try
             {
                 await foreach (var result in _stt.StreamAsync(
@@ -242,8 +259,8 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                 // The session's token was cancelled mid-transcription — by the host or by the session
                 // broker's stop or disposal. Not a failure of the recognizer and not a completion: every
                 // started transcription ends in exactly one of completed, failed or cancelled.
-                SpeechRecognitionMetrics.TranscriptionsCancelled.Add(1,
-                    TurnEnding.Tag(TurnEnding.SessionCancelled));
+                sttEnding = TurnEnding.SessionCancelled;
+                SpeechRecognitionMetrics.TranscriptionsCancelled.Add(1, TurnEnding.Tag(sttEnding));
                 throw;
             }
             catch (Exception ex)
@@ -257,8 +274,12 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             }
             finally
             {
-                SpeechRecognitionMetrics.TranscriptionLatencyMs.Record(
-                    Stopwatch.GetElapsedTime(sttStart).TotalMilliseconds);
+                // One sample per started transcription, whatever ended it; a cancelled one says who.
+                var sttLatency = Stopwatch.GetElapsedTime(sttStart).TotalMilliseconds;
+                if (sttEnding is null)
+                    SpeechRecognitionMetrics.TranscriptionLatencyMs.Record(sttLatency);
+                else
+                    SpeechRecognitionMetrics.TranscriptionLatencyMs.Record(sttLatency, TurnEnding.Tag(sttEnding));
             }
 
             if (transcript is null)
@@ -322,6 +343,10 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                 _ttsCts = ttsCts;
             }
 
+            // Set only by the arms that count this synthesis cancelled, to the value their increment
+            // carries; the latency sample below then carries the same tag. Completed and failed turns
+            // leave it null and record an untagged sample.
+            string? ttsEnding = null;
             try
             {
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, ttsCts.Token);
@@ -357,8 +382,19 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                         // Scoped to this one call deliberately. An ObjectDisposedException raised by the
                         // *synthesizer* — a provider client used after its own disposal — still reaches
                         // the failure clause it belongs to, and a transport that breaks while the session
-                        // is still connected surfaces as IOException/SocketException, is not caught here,
-                        // and stays a synthesis failure.
+                        // is still connected surfaces as IOException/SocketException and is not caught here.
+                        farEndGone = true;
+                        break;
+                    }
+                    catch (IOException) when (!session.IsConnected)
+                    {
+                        // The same ending reaching the write as a transport failure: the far end reset the
+                        // connection, or our own teardown closed it under a flush. A session whose write
+                        // fails on its transport ends itself before the exception reaches this frame, so a
+                        // disconnected session here means the far end left, not that the synthesizer
+                        // failed. A transport failure on a session that is still connected is not caught
+                        // and stays a synthesis failure. Scoped to the write call, like the arm above, so
+                        // an IOException raised by the synthesizer never lands here.
                         farEndGone = true;
                         break;
                     }
@@ -378,7 +414,8 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                     // history and guards tts.syntheses.silent, and neither belongs to a turn whose
                     // listener has gone. The ending is visible at Debug and nowhere an operator pages.
                     VoiceAiLog.PlaybackStoppedSessionEnded(_logger, channelId);
-                    SpeechSynthesisMetrics.SynthesesCancelled.Add(1, TurnEnding.Tag(TurnEnding.FarEnd));
+                    ttsEnding = TurnEnding.FarEnd;
+                    SpeechSynthesisMetrics.SynthesesCancelled.Add(1, TurnEnding.Tag(ttsEnding));
                     Publish(new SynthesisEndedEvent(
                         DateTimeOffset.UtcNow, DateTimeOffset.UtcNow - synthStart));
                 }
@@ -411,7 +448,8 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                 // The session's token was cancelled mid-synthesis — by the host or by the session
                 // broker's stop or disposal. Counted cancelled so the started synthesis ends in exactly
                 // one bucket; no SynthesisEndedEvent, since the session itself is ending.
-                SpeechSynthesisMetrics.SynthesesCancelled.Add(1, TurnEnding.Tag(TurnEnding.SessionCancelled));
+                ttsEnding = TurnEnding.SessionCancelled;
+                SpeechSynthesisMetrics.SynthesesCancelled.Add(1, TurnEnding.Tag(ttsEnding));
                 throw;
             }
             catch (OperationCanceledException) when (ttsCts.IsCancellationRequested)
@@ -429,10 +467,9 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                 // Cancelled, not completed: the caller did not hear the answer in full. The tag is
                 // whichever of the two cancelled the source first, recorded by that canceller under the
                 // gate.
-                string ending;
                 lock (_ttsGate)
-                    ending = _ttsEnding ?? TurnEnding.BargeIn;
-                SpeechSynthesisMetrics.SynthesesCancelled.Add(1, TurnEnding.Tag(ending));
+                    ttsEnding = _ttsEnding ?? TurnEnding.BargeIn;
+                SpeechSynthesisMetrics.SynthesesCancelled.Add(1, TurnEnding.Tag(ttsEnding));
                 Publish(new SynthesisEndedEvent(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow - synthStart));
             }
             catch (Exception ex)
@@ -452,8 +489,12 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
             }
             finally
             {
-                SpeechSynthesisMetrics.SynthesisLatencyMs.Record(
-                    Stopwatch.GetElapsedTime(ttsStart).TotalMilliseconds);
+                // One sample per started synthesis, whatever ended it; a cancelled one says who.
+                var ttsLatency = Stopwatch.GetElapsedTime(ttsStart).TotalMilliseconds;
+                if (ttsEnding is null)
+                    SpeechSynthesisMetrics.SynthesisLatencyMs.Record(ttsLatency);
+                else
+                    SpeechSynthesisMetrics.SynthesisLatencyMs.Record(ttsLatency, TurnEnding.Tag(ttsEnding));
                 lock (_ttsGate)
                     _ttsCts = null;
             }
