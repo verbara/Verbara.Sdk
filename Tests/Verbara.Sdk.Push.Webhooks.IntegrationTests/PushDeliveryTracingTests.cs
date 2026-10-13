@@ -119,9 +119,9 @@ public sealed class WebhookDeliveryTracingTests : IDisposable
             TargetUrl = server.Url,
         });
 
-        // The bus is resolved outside any activity. The service is built by its public constructor over a
-        // decorator that reports the subscription, so publishing waits for it by signal, not by time.
-        var bus = new SubscriptionSignallingBus(provider.GetRequiredService<IPushEventBus>());
+        // The bus is resolved outside any activity. The service is built by its public constructor and is
+        // subscribed once its start completes, so publishing needs no wait.
+        var bus = provider.GetRequiredService<IPushEventBus>();
         using var delivery = new WebhookDeliveryService(
             bus,
             provider.GetRequiredService<IWebhookSubscriptionStore>(),
@@ -132,8 +132,6 @@ public sealed class WebhookDeliveryTracingTests : IDisposable
         await delivery.StartAsync(CancellationToken.None);
         try
         {
-            await bus.Subscribed.WaitAsync(Bound);
-
             var handlers = new Dictionary<string, Activity>(StringComparer.Ordinal);
             for (var i = 0; i < N; i++)
             {
@@ -287,32 +285,6 @@ internal sealed class CountSignal
             var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _waiters.Add((count, tcs));
             return tcs.Task.WaitAsync(bound);
-        }
-    }
-}
-
-/// <summary>An <see cref="IPushEventBus"/> decorator that completes <see cref="Subscribed"/> on the first subscription.</summary>
-internal sealed class SubscriptionSignallingBus(IPushEventBus inner) : IPushEventBus
-{
-    private readonly TaskCompletionSource _subscribed = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-    public Task Subscribed => _subscribed.Task;
-
-    public ValueTask PublishAsync<TEvent>(TEvent pushEvent, CancellationToken ct = default)
-        where TEvent : PushEvent => inner.PublishAsync(pushEvent, ct);
-
-    public IObservable<PushEvent> AsObservable() => new Signalling<PushEvent>(inner.AsObservable(), _subscribed);
-
-    public IObservable<TEvent> OfType<TEvent>() where TEvent : PushEvent
-        => new Signalling<TEvent>(inner.OfType<TEvent>(), _subscribed);
-
-    private sealed class Signalling<T>(IObservable<T> source, TaskCompletionSource subscribed) : IObservable<T>
-    {
-        public IDisposable Subscribe(IObserver<T> observer)
-        {
-            var subscription = source.Subscribe(observer);
-            subscribed.TrySetResult();
-            return subscription;
         }
     }
 }

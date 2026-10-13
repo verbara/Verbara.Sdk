@@ -54,7 +54,7 @@
     "Tests/Verbara.Sdk.Push.Nats.IntegrationTests/NatsBridgeIntegrationTests.cs": 4,
     "Tests/Verbara.Sdk.Push.Nats.Tests/NatsBridgeSubscribeTests.cs": 2,
     "Tests/Verbara.Sdk.Push.Tests/RxPushEventBusTests.cs": 2,
-    "Tests/Verbara.Sdk.Push.Webhooks.IntegrationTests/WebhookEndToEndTests.cs": 4,
+    "Tests/Verbara.Sdk.Push.Webhooks.IntegrationTests/WebhookEndToEndTests.cs": 3,
     "Tests/Verbara.Sdk.Resilience.Tests/ResiliencePolicyTests.cs": 2,
     "Tests/Verbara.Sdk.Sessions.FunctionalTests/SessionLifecycleTests.cs": 2,
     "Tests/Verbara.Sdk.Sessions.Postgres.Tests/PostgresFixture.cs": 2,

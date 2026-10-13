@@ -28,6 +28,42 @@ await store.AddAsync(new WebhookSubscription
 });
 ```
 
+## Which events a subscription receives
+
+An event is matched by its **name**: its `PushEventMetadata.TopicPath`, or its `EventType` when the topic path is
+null or empty — the same rule the SSE stream of `Verbara.Sdk.Push.AspNetCore` applies.
+
+| The event's `TopicPath` | Matched by | When that name is not a valid topic |
+|-------------------------|------------|-------------------------------------|
+| a valid topic | the topic path | — |
+| null or empty | the event type, `{self}` resolved to `PushEventMetadata.UserId` | delivered only to subscriptions whose pattern is `**` |
+| non-empty, not a valid topic | — | delivered to no subscription, `**` included; one `Error` entry (EventId 9) |
+
+- A topic-less `calls.ended` reaches a `calls.**` subscription and a `**` one, and not a `queue.**` one.
+- A topic-less event of a type that is not a valid topic (for example `calls..x`) is not an error: it reaches only
+  `**` subscriptions.
+- An event whose non-empty topic path does not parse never falls back to its event type.
+
+**A `**` subscription receives topic-less events too, and they count toward its URL's circuit.** The circuit
+breaker is per target URL. If a receiver answers a topic-less event with a failure, every attempt counts: with the
+defaults one such event fails `MaxRetries + 1` = 6 times, which reaches `CircuitBreakerFailureThreshold` (5) and
+opens the URL's circuit, so every delivery to that URL — topic-bearing ones included — is skipped without an attempt
+(`circuit.skipped`) for `CircuitBreakerOpenDuration` (30 s). To keep topic-less events away from a receiver, publish
+them with a topic path its pattern does not match; otherwise have the receiver accept them.
+
+### When delivery starts and ends
+
+The delivery service (`WebhookDeliveryService`, registered as a hosted service by `AddVerbaraPushWebhooks`) is
+subscribed to the bus by the time its start completes, so an event published once the host has started reaches
+every subscription it matches. The bus delivers to its current subscribers only: an event published **before** the
+delivery service has started — for example by a hosted service registered ahead of it, during that service's own
+start — is not delivered and not counted. Hosted services start in registration order, so register a service that
+publishes while it starts after `AddVerbaraPushWebhooks`.
+
+Delivery ends when the service is stopped or disposed: nothing is dispatched once its stop returns. Cancelling the
+token passed to its start after the start has completed does not stop delivery, and a service stopped and started
+again delivers again.
+
 ## Accepted option values
 
 `WebhookDeliveryOptions` is checked when the options are first resolved (at the latest when the host builds the

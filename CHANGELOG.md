@@ -116,6 +116,75 @@ documentation of the speech failure types, `SpeechRecognizer.StreamAsync`, sever
 and Live reload members, cited internal decision ids a reader cannot open. Each citation now states the reason in one
 sentence. No behaviour or public API changes.
 
+### Changed — BREAKING: a webhook subscription receives an event without a topic path when its event type matches (#414)
+
+`Verbara.Sdk.Push.Webhooks` delivered no event whose `PushEventMetadata.TopicPath` was null or empty, and the
+`TopicPath` documentation said so ("webhooks do not deliver it"). Such an event is now named by its `EventType`, the
+rule the SSE stream already applies. An event type that is a valid topic is matched against each subscription's
+pattern like a topic path, with `{self}` resolving to the event's user. An event type that is not a valid topic
+(for example `billing..x`) reaches only subscriptions whose pattern is `**`. An event with a non-empty topic path
+is matched by that path alone, exactly as before. A non-empty path that does not parse is still logged as a dispatch
+failure (`Error`, EventId 9) and never falls back to the event type.
+
+Measured over 20 runs with three subscriptions: one whose pattern matches the event type, `**`, and `calls.**`.
+Before, a topic-less event reached none of them. Now it reaches the first two in 20 of 20 runs and never reaches
+`calls.**`. The same event with a topic path is delivered as before.
+
+Why it is breaking:
+
+- A subscription whose pattern is `**`, or matches an event type, receives events it never received before.
+- A publisher can no longer rely on "no topic path, no webhook".
+- Through the circuit breaker, it can delay deliveries that work today. The breaker is per target URL. If a `**`
+  receiver answers a topic-less event with a 4xx, that one event fails `MaxRetries + 1` times: 6 with the defaults.
+  That opens the URL's circuit (threshold 5). Every delivery to that URL, topic-bearing ones included, is then skipped
+  without retry for the break duration (30 s by default) and counted on `circuit.skipped`.
+
+To keep topic-less events away from a receiver, either:
+
+- publish them with a topic path that its pattern does not match, or
+- have the receiver accept them (answer `2xx`).
+
+No public API changes. Migration note: [`docs/guides/push-stream-and-webhook-options-migration.md`](docs/guides/push-stream-and-webhook-options-migration.md#webhooks-receive-events-without-a-topic-path-290).
+
+### Fixed: a webhook subscription receives an event published right after the host starts (#414)
+
+`WebhookDeliveryService` subscribed to the push bus from `ExecuteAsync`, which `BackgroundService` runs on a
+background task. Its start, and the host's, usually returned before the subscription existed. The bus serves only
+its current subscribers, so an event published in that window was lost with no log line and no metric. In a probe
+that published right after start (probe facts, not production rates):
+
+- the service was unsubscribed when `host.StartAsync()` returned in 292–298 of 300 runs;
+- the first start of the process lost its first event in 4 of 4 batches, with the subscription made 34–50 ms after
+  the start returned;
+- warm restarts in the same process lost 2–46 of 300 first events.
+
+The service now subscribes inside `StartAsync`. An event published once the start has completed reaches every
+subscription it matches, in every run of a test that holds back any subscription made outside the start call. The
+change has these consequences:
+
+- `StopAsync` ends the subscription before it returns; nothing is dispatched after it.
+- A service that is stopped and then started again delivers again.
+- `Dispose` without a stop also ends the subscription.
+- Cancelling the token passed to `StartAsync` after the start has completed no longer ends delivery. Before, it did,
+  through the source `BackgroundService` links to that token. This is the same class of fix as #409.
+
+Events published before the delivery service starts are still not delivered. This includes events that a hosted
+service registered ahead of it publishes during its own start. The `Push.Webhooks` README says when delivery starts
+and ends.
+
+`WebhookDeliveryService` gains three `override` members: `StartAsync`, `StopAsync` and `Dispose`. The class is sealed
+and the overrides are source- and binary-compatible.
+
+### Fixed: the push stream documentation says a reconnection starts from now (#414)
+
+The `Push.AspNetCore` README and the push stream migration guide now say that a reconnection does not resume:
+
+- frames carry no `id:`;
+- `Last-Event-ID` is ignored;
+- events dispatched while no connection was open are not resent.
+
+A client that cannot lose events refetches over REST on `open`. Behaviour is unchanged.
+
 ## [2.8.0] - 2026-10-09
 
 ### Changed — BREAKING: a multi-server host runs the reconciliation sweep for every server of the pool (#402)

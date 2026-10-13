@@ -3,7 +3,6 @@ using System.Net.Http.Headers;
 using System.Reactive.Linq;
 using Verbara.Sdk.Push.Bus;
 using Verbara.Sdk.Push.Events;
-using Verbara.Sdk.Push.Topics;
 using Verbara.Sdk.Resilience;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -16,6 +15,27 @@ namespace Verbara.Sdk.Push.Webhooks;
 /// HTTP webhooks to every registered <see cref="WebhookSubscription"/> with exponential
 /// retry and HMAC-SHA256 signing.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The service is subscribed to the bus by the time <see cref="StartAsync"/> completes, so an event
+/// published once the host has started is dispatched to every subscription it matches. The bus serves its
+/// current subscribers only: an event published before this service starts — by a hosted service registered
+/// ahead of it, during that service's own start — is not delivered.
+/// </para>
+/// <para>
+/// Delivery runs until the service is stopped or disposed: <see cref="StopAsync"/> ends the subscription
+/// before it returns, and <see cref="Dispose"/> ends it even without a stop. The token passed to
+/// <see cref="StartAsync"/> governs the start only; cancelling it after the start has completed does not stop
+/// delivery. A service stopped and started again delivers again.
+/// </para>
+/// <para>
+/// An event is matched by its <see cref="PushEventMetadata.TopicPath"/>; when that is null or empty, by its
+/// <see cref="PushEvent.EventType"/>, the rule the SSE stream applies. An event type that is not a valid topic
+/// reaches only subscriptions whose pattern is <c>**</c>. A non-empty topic path that is not a valid topic is
+/// never matched by the event type instead: the event is delivered to no subscription and logged as a dispatch
+/// failure.
+/// </para>
+/// </remarks>
 public sealed partial class WebhookDeliveryService : BackgroundService
 {
     private readonly IPushEventBus _bus;
@@ -28,6 +48,12 @@ public sealed partial class WebhookDeliveryService : BackgroundService
     private readonly ILogger<WebhookDeliveryService> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<string, CircuitBreakerState> _circuits = new(StringComparer.Ordinal);
+    private readonly Lock _lifetimeLock = new();
+
+    // Owned per start: the subscription made by the last StartAsync and the source that cancels its dispatches.
+    // Both are taken exactly once by StopAsync or Dispose, whichever comes first.
+    private IDisposable? _subscription;
+    private CancellationTokenSource? _dispatchCts;
 
     internal WebhookDeliveryService(
         IPushEventBus bus,
@@ -77,14 +103,93 @@ public sealed partial class WebhookDeliveryService : BackgroundService
     {
     }
 
+    /// <summary>
+    /// Subscribes to the Push bus, then starts the service. Delivery has begun when the returned task
+    /// completes. A second start without a stop does not subscribe again.
+    /// </summary>
+    /// <param name="cancellationToken">Aborts the start; it does not govern delivery once the start has completed.</param>
+    /// <exception cref="ObjectDisposedException">The Push bus has been disposed.</exception>
+    public override Task StartAsync(CancellationToken cancellationToken)
+    {
+        lock (_lifetimeLock)
+        {
+            if (_subscription is null)
+            {
+                // A fresh source per start, neither linked to the start token nor kept with it: a stop cancels
+                // it, and the next start must not inherit a cancelled one.
+                var dispatchCts = new CancellationTokenSource();
+                var token = dispatchCts.Token;
+                try
+                {
+                    _subscription = _bus.AsObservable()
+                        .Subscribe(
+                            evt => _ = DispatchEventAsync(evt, token),
+                            ex => LogObserverError(_logger, ex));
+                }
+                catch
+                {
+                    dispatchCts.Dispose();
+                    throw;
+                }
+
+                _dispatchCts = dispatchCts;
+            }
+        }
+
+        return base.StartAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Ends the bus subscription — nothing is dispatched once it returns — cancels the deliveries in flight,
+    /// then stops the service.
+    /// </summary>
+    /// <param name="cancellationToken">Bounds how long the stop waits for the service to end.</param>
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        var (subscription, dispatchCts) = TakeLifetime();
+        subscription?.Dispose();
+        if (dispatchCts is not null)
+        {
+            await dispatchCts.CancelAsync().ConfigureAwait(false);
+            dispatchCts.Dispose();
+        }
+
+        await base.StopAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Ends the bus subscription and cancels the deliveries in flight, whether or not the service was
+    /// stopped first. A second call releases nothing again.
+    /// </summary>
+    public override void Dispose()
+    {
+        var (subscription, dispatchCts) = TakeLifetime();
+        subscription?.Dispose();
+        if (dispatchCts is not null)
+        {
+            dispatchCts.Cancel();
+            dispatchCts.Dispose();
+        }
+
+        base.Dispose();
+    }
+
+    private (IDisposable? Subscription, CancellationTokenSource? DispatchCts) TakeLifetime()
+    {
+        lock (_lifetimeLock)
+        {
+            var taken = (_subscription, _dispatchCts);
+            _subscription = null;
+            _dispatchCts = null;
+            return taken;
+        }
+    }
+
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var subscription = _bus.AsObservable()
-            .Subscribe(
-                evt => _ = DispatchEventAsync(evt, stoppingToken),
-                ex => LogObserverError(_logger, ex));
-
+        // The subscription is made by StartAsync and released by StopAsync or Dispose; this only keeps the
+        // service's execute task running until the host stops it.
         try
         {
             await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
@@ -126,26 +231,16 @@ public sealed partial class WebhookDeliveryService : BackgroundService
             return;
         }
 
-        var topic = ResolveTopic(evt);
-        if (topic is null)
-            return;
-
-        var resolved = topic.Value;
+        // A non-empty topic path that does not parse throws here and is logged by DispatchEventAsync.
+        var name = WebhookTopicResolver.Resolve(evt);
+        var selfUserId = evt.Metadata?.UserId;
         foreach (var sub in subs)
         {
-            if (!sub.TopicPattern.Matches(resolved, selfUserId: evt.Metadata?.UserId))
+            if (!name.IsMatchedBy(sub.TopicPattern, selfUserId))
                 continue;
 
             _ = DeliverAsync(sub, evt, ct);
         }
-    }
-
-    private static TopicName? ResolveTopic(PushEvent evt)
-    {
-        var path = evt.Metadata?.TopicPath;
-        if (string.IsNullOrEmpty(path))
-            return null;
-        return TopicName.Parse(path);
     }
 
     // Fired without awaiting from the dispatch: it must never fault. A failure outside the attempt loop's own
