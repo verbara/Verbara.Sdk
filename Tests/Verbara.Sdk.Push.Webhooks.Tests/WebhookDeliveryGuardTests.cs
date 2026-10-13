@@ -38,7 +38,7 @@ public sealed class WebhookDeliveryGuardTests
     public async Task Delivery_ShouldDeadLetterWithOneBackoffError_WhenOptionsBecomeUnusableAfterConstruction()
     {
         using var unobserved = new UnobservedTaskExceptions();
-        var options = ValidOptions();
+        var options = GuardRun.ValidOptions();
         bool deadLettered;
         int calls;
         long deadLetterCount;
@@ -77,7 +77,7 @@ public sealed class WebhookDeliveryGuardTests
     [Fact]
     public async Task Delivery_ShouldStillDeliverLaterEvents_WhenAnEarlierBackoffFailed()
     {
-        var options = ValidOptions();
+        var options = GuardRun.ValidOptions();
         await using var run = await GuardRun.StartAsync(options, HttpStatusCode.InternalServerError);
         options.InitialDelay = TimeSpan.FromSeconds(1);
         options.MaxDelay = TimeSpan.FromMilliseconds(500);
@@ -104,7 +104,7 @@ public sealed class WebhookDeliveryGuardTests
         bool delivered;
         int calls;
         CapturedLogEntry[] errors;
-        await using (var run = await GuardRun.StartAsync(ValidOptions(), HttpStatusCode.OK, pattern: "queue.**"))
+        await using (var run = await GuardRun.StartAsync(GuardRun.ValidOptions(), HttpStatusCode.OK, pattern: "queue.**"))
         {
             await run.PublishAsync("queue..x");
             await run.PublishAsync("queue.1.updated");
@@ -121,150 +121,6 @@ public sealed class WebhookDeliveryGuardTests
         if (errors.Length == 1)
             errors[0].Exception.Should().BeAssignableTo<ArgumentException>("the entry carries the topic parse failure");
         faulted.Should().BeEmpty("no dispatch task faults unobserved");
-    }
-
-    private static WebhookDeliveryOptions ValidOptions() => new()
-    {
-        MaxRetries = 2,
-        InitialDelay = TimeSpan.FromMilliseconds(20),
-        MaxDelay = TimeSpan.FromMilliseconds(50),
-    };
-
-    private sealed record GuardEvent : PushEvent
-    {
-        public const string Type = "h109.guard";
-
-        public override string EventType => Type;
-    }
-
-    /// <summary>A running delivery service over a real bus, a fake endpoint, counted metrics and a captured log.</summary>
-    private sealed class GuardRun : IAsyncDisposable
-    {
-        private readonly PushMetrics _pushMetrics;
-        private readonly RxPushEventBus _bus;
-        private readonly WebhookMetrics _webhookMetrics;
-        private readonly MeterListener _meterListener;
-        private readonly WebhookDeliveryService _service;
-
-        private GuardRun(WebhookDeliveryOptions options, HttpStatusCode status, string pattern)
-        {
-            _pushMetrics = new PushMetrics();
-            _bus = new RxPushEventBus(
-                Options.Create(new PushEventBusOptions { BufferCapacity = 64 }), NullLogger<RxPushEventBus>.Instance, _pushMetrics);
-            Bus = new SubscriptionSignallingBus(_bus);
-            Endpoint = new FakeEndpoint(status);
-            _webhookMetrics = new WebhookMetrics();
-            Metrics = new MetricCounts();
-            _meterListener = new MeterListener
-            {
-                InstrumentPublished = (instrument, listener) =>
-                {
-                    if (ReferenceEquals(instrument.Meter, _webhookMetrics.DeadLetter.Meter))
-                        listener.EnableMeasurementEvents(instrument);
-                },
-            };
-            _meterListener.SetMeasurementEventCallback<long>((instrument, value, _, _) =>
-            {
-                if (ReferenceEquals(instrument, _webhookMetrics.DeadLetter)) { Metrics.AddDeadLetter(value); DeadLetters.Add((int)value); }
-                else if (ReferenceEquals(instrument, _webhookMetrics.DeliveriesSucceeded)) { Metrics.AddSucceeded(value); Succeeded.Add((int)value); }
-            });
-            _meterListener.Start();
-            var store = new FixedStore(new WebhookSubscription
-            {
-                Id = "s-fail",
-                TopicPattern = TopicPattern.Parse(pattern),
-                TargetUrl = new Uri("http://127.0.0.1:9/hook"),
-            });
-            _service = new WebhookDeliveryService(
-                Bus, store, new HmacSha256Signer(), new DefaultWebhookPayloadSerializer(), new FakeFactory(Endpoint),
-                Options.Create(options), _webhookMetrics, Log);
-        }
-
-        public SubscriptionSignallingBus Bus { get; }
-
-        public FakeEndpoint Endpoint { get; }
-
-        public CapturingLogger Log { get; } = new();
-
-        public MetricCounts Metrics { get; }
-
-        public CountSignal DeadLetters { get; } = new();
-
-        public CountSignal Succeeded { get; } = new();
-
-        public static async Task<GuardRun> StartAsync(WebhookDeliveryOptions options, HttpStatusCode status, string pattern = "fail.**")
-        {
-            var run = new GuardRun(options, status, pattern);
-            await run._service.StartAsync(CancellationToken.None);
-            await run.Bus.Subscribed.WaitAsync(Bound);
-            return run;
-        }
-
-        public ValueTask PublishAsync(string topicPath) => _bus.PublishAsync(new GuardEvent
-        {
-            Metadata = new PushEventMetadata("t", "u", DateTimeOffset.UtcNow, "c", topicPath),
-        });
-
-        public async ValueTask DisposeAsync()
-        {
-            await _service.StopAsync(CancellationToken.None);
-            _service.Dispose();
-            _meterListener.Dispose();
-            _webhookMetrics.Dispose();
-            _bus.Dispose();
-            _pushMetrics.Dispose();
-            Endpoint.Dispose();
-        }
-    }
-
-    private sealed class MetricCounts
-    {
-        private long _deadLetter;
-        private long _succeeded;
-
-        public long DeadLetter => Interlocked.Read(ref _deadLetter);
-
-        public long Succeeded => Interlocked.Read(ref _succeeded);
-
-        public void AddDeadLetter(long value) => Interlocked.Add(ref _deadLetter, value);
-
-        public void AddSucceeded(long value) => Interlocked.Add(ref _succeeded, value);
-    }
-
-    private sealed class FakeEndpoint(HttpStatusCode status) : HttpMessageHandler
-    {
-        private int _calls;
-        private volatile int _status = (int)status;
-
-        public int Calls => Volatile.Read(ref _calls);
-
-        public HttpStatusCode Status
-        {
-            get => (HttpStatusCode)_status;
-            set => _status = (int)value;
-        }
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Interlocked.Increment(ref _calls);
-            await Task.CompletedTask.ConfigureAwait(false);
-            return new HttpResponseMessage(Status);
-        }
-    }
-
-    private sealed class FakeFactory(HttpMessageHandler handler) : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
-    }
-
-    private sealed class FixedStore(params WebhookSubscription[] subscriptions) : IWebhookSubscriptionStore
-    {
-        public ValueTask<IReadOnlyList<WebhookSubscription>> GetAllAsync(CancellationToken ct = default)
-            => ValueTask.FromResult<IReadOnlyList<WebhookSubscription>>(subscriptions);
-
-        public ValueTask AddAsync(WebhookSubscription subscription, CancellationToken ct = default) => ValueTask.CompletedTask;
-
-        public ValueTask RemoveAsync(string id, CancellationToken ct = default) => ValueTask.CompletedTask;
     }
 }
 
@@ -333,6 +189,15 @@ internal sealed class CountSignal
     private readonly List<(int Count, TaskCompletionSource Signal)> _waiters = [];
     private int _count;
 
+    public int Count
+    {
+        get
+        {
+            lock (_gate)
+                return _count;
+        }
+    }
+
     public void Add(int value)
     {
         lock (_gate)
@@ -356,27 +221,33 @@ internal sealed class CountSignal
     }
 }
 
-/// <summary>An <see cref="IPushEventBus"/> decorator that completes <see cref="Subscribed"/> on the first subscription.</summary>
+/// <summary>
+/// An <see cref="IPushEventBus"/> decorator that completes <see cref="Subscribed"/> on the first subscription and
+/// counts every subscription in <see cref="Subscriptions"/>.
+/// </summary>
 internal sealed class SubscriptionSignallingBus(IPushEventBus inner) : IPushEventBus
 {
     private readonly TaskCompletionSource _subscribed = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public Task Subscribed => _subscribed.Task;
 
+    public CountSignal Subscriptions { get; } = new();
+
     public ValueTask PublishAsync<TEvent>(TEvent pushEvent, CancellationToken ct = default)
         where TEvent : PushEvent => inner.PublishAsync(pushEvent, ct);
 
-    public IObservable<PushEvent> AsObservable() => new Signalling<PushEvent>(inner.AsObservable(), _subscribed);
+    public IObservable<PushEvent> AsObservable() => new Signalling<PushEvent>(inner.AsObservable(), this);
 
     public IObservable<TEvent> OfType<TEvent>() where TEvent : PushEvent
-        => new Signalling<TEvent>(inner.OfType<TEvent>(), _subscribed);
+        => new Signalling<TEvent>(inner.OfType<TEvent>(), this);
 
-    private sealed class Signalling<T>(IObservable<T> source, TaskCompletionSource subscribed) : IObservable<T>
+    private sealed class Signalling<T>(IObservable<T> source, SubscriptionSignallingBus owner) : IObservable<T>
     {
         public IDisposable Subscribe(IObserver<T> observer)
         {
             var subscription = source.Subscribe(observer);
-            subscribed.TrySetResult();
+            owner._subscribed.TrySetResult();
+            owner.Subscriptions.Add(1);
             return subscription;
         }
     }
