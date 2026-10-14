@@ -164,6 +164,12 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
         await foreach (var result in ResultReader(channel.Reader).ReadAllAsync(ct).ConfigureAwait(false))
             yield return result;
 
+        // The reader's own token check is not enough: a cancel can land after that check and before
+        // the reader sees the channel's state, while the receive loop, reacting to the same cancel, ends
+        // the channel cleanly. The reader then reports a clean end, so the caller's token decides the
+        // ending here, before the empty-result rule can report a cancelled session as empty.
+        ct.ThrowIfCancellationRequested();
+
         // Ensure both tasks complete (propagate exceptions via AggregateException).
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
 
