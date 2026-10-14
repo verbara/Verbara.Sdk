@@ -134,11 +134,19 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
             yield return frame;
         }
 
+        // The reader's own token check is not enough: a cancel can land after that check and before
+        // the reader sees the channel's state, while the receive loop, reacting to the same cancel, ends
+        // the channel cleanly. The reader then reports a clean end, so the caller's token decides the
+        // ending here, before the empty-result rule can report a cancelled session as empty.
+        ct.ThrowIfCancellationRequested();
+
         // Ensure both tasks complete (propagate exceptions).
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
 
         // ADR-0050 E5, the synthesis rule. Unreachable when the loop threw (the reader raises that
-        // first) and unreachable under cancellation (ReadAllAsync raises OperationCanceledException).
+        // first), and not reached under cancellation either — though not thanks to the reader, which
+        // can report the clean end the receive loop wrote in reaction to the cancel: the token check
+        // after the read loop above raises OperationCanceledException first.
         if (!yieldedAudio)
         {
             throw new SpeechProviderEmptyResultException(

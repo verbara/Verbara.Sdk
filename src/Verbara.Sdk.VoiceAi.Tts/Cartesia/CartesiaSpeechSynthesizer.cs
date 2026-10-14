@@ -155,12 +155,20 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
             yield return frame;
         }
 
+        // The reader's own token check is not enough: a cancel can land after that check and before
+        // the reader sees the channel's state, while the receive loop, reacting to the same cancel, ends
+        // the channel cleanly. The reader then reports a clean end, so the caller's token decides the
+        // ending here, before the empty-result rule can report a cancelled session as empty.
+        ct.ThrowIfCancellationRequested();
+
         // Propagate any exceptions from send/receive tasks.
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
 
         // ADR-0050 E5, the synthesis rule: the session ended clean, said nothing, and produced no
         // audio. Not reachable when the loop threw — the reader raises that first — and not reachable
-        // under cancellation, which ReadAllAsync raises as OperationCanceledException (E6).
+        // under cancellation either, though not thanks to the reader, which can report the clean end
+        // the receive loop wrote in reaction to the cancel: the token check after the read loop above
+        // raises OperationCanceledException first (E6).
         if (!yieldedAudio)
         {
             throw new SpeechProviderEmptyResultException(
