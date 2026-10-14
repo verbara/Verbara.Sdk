@@ -261,10 +261,10 @@ and the stop returns once the handler has returned. For the counters, compare `s
 `completed + failed + cancelled` per arm after a load test: the difference is what is still in flight, and zero once
 the host is idle.
 
-## Cancelled sessions, tagged latency and the server's stop (2.9.0)
+## Cancelled sessions, tagged latency, the server's stop and the Realtime health entry (2.9.0)
 
-Four behaviours move in 2.9.0, all in telemetry and in how a session ends. Nothing stops compiling, and the only
-public additions are two counter fields.
+Five behaviours move in 2.9.0, all in telemetry, health reporting and in how a session ends. Nothing stops compiling,
+and the only public additions are two counter fields.
 
 ### A cancelled session is counted `cancelled`, not `completed`
 
@@ -343,9 +343,31 @@ a second longer; the stop never throws for it.
 Registering `AddAudioSocketServer` first is still what the package READMEs show, and `AddOpenAiRealtimeBridge` still
 requires it.
 
+### The `openai-realtime` health entry reports the vendor's rejections
+
+**Before 2.9.0:** the `openai-realtime` entry that `AddOpenAiRealtimeBridge` registers (`RealtimeHealthCheck`)
+reported `Healthy` whenever an API key was configured, also while OpenAI rejected every session (a revoked key gets the
+upgrade and then a close with code `3000`, before any audio).
+
+**From 2.9.0:** the entry also reads what the vendor did with the bridge's sessions. It reports `Degraded` once the last
+3 consecutive sessions were rejected — refused at the upgrade with a 4xx status, or closed by the vendor with a failure
+code before any of its audio reached the caller — and `Healthy` again on the first session the vendor served. A session
+the host cancelled, or one that ended on a transport failure, counts neither way, and there is no time window. With no
+API key it still reports `Unhealthy`. Rejections never make it `Unhealthy`, so a default health endpoint keeps
+answering 200 while the vendor rejects sessions. The entry's data carries `consecutiveRejections` and, once a rejection
+has happened, `lastRejection` (the close code or the HTTP status) and `lastRejectionAt` (an ISO 8601 string).
+
+A readiness or liveness probe that includes `openai-realtime`, or that reads every entry, sees `Degraded` where it saw
+`Healthy`. A probe that maps `Degraded` to a failure (a custom `ResultStatusCodes`, or a check of `report.Status ==
+HealthStatus.Healthy`) now fails while the vendor rejects sessions; to keep the old behaviour, exclude the entry from
+that probe with a predicate, or map `Degraded` to 200. A `RealtimeHealthCheck` you construct yourself reads the
+configuration only, as before.
+
 ### How to check (2.9.0)
 
 Cancel the token you pass to a session handler, or stop a host whose shutdown budget runs out with a call up:
 `…sessions.cancelled` moves and `…sessions.completed` does not, and `started = completed + failed + cancelled` per
 handler once the host is idle. Stop an `AudioSocketServer` registered after the pipeline with a call up through
-`AudioSocket()` followed by `NoOp()`: the dialplan goes on after `AudioSocket()`.
+`AudioSocket()` followed by `NoOp()`: the dialplan goes on after `AudioSocket()`. Point the bridge at a key the vendor
+rejects and run three calls: the `openai-realtime` entry reads `Degraded` with `consecutiveRejections` 3; one call the
+vendor serves brings it back to `Healthy`.

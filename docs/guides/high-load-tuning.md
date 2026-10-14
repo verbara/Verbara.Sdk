@@ -103,7 +103,9 @@ The same `voiceai.ending` value rides on the latency sample of a cancelled turn 
 filter on the tag's absence to read them, or aggregate over it to read every sample as before.
 
 HealthChecks exposed via `/health` when using the standard ASP.NET Core pipeline:
-`VoiceAiHealthCheck`, `SttHealthCheck`, `TtsHealthCheck`, `AudioSocketHealthCheck`, `OpenAiRealtimeHealthCheck`.
+`VoiceAiHealthCheck`, `SttHealthCheck`, `TtsHealthCheck`, `AudioSocketHealthCheck`, `RealtimeHealthCheck` (entry
+`openai-realtime`). The Realtime entry reports `Degraded` once the vendor rejected the last 3 consecutive sessions and
+`Healthy` again on the first one it served; `Degraded` keeps a default endpoint answering 200.
 
 **Discovery at runtime** (avoid hard-coding strings):
 
