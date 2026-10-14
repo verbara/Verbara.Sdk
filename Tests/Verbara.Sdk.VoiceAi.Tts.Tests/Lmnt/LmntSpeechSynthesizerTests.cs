@@ -98,6 +98,12 @@ public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
     /// </summary>
     private static readonly TimeSpan FirstFrameTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// Ceiling on the wait for the fake to park a held frame. Reaching it is a failure, never a pace:
+    /// no assertion depends on its length.
+    /// </summary>
+    private static readonly TimeSpan HoldTimeout = TimeSpan.FromSeconds(10);
+
     public LmntSpeechSynthesizerWsTests()
     {
         _server = new LmntWsFakeServer();
@@ -536,7 +542,8 @@ public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
     /// <para>
     /// It also needs none of the sibling's machinery: no <c>HoldOpenUntilDisposed</c>, no
     /// <c>FirstMessageReceived</c> wait, no fire-and-forget trigger task. The gate is the hold, and
-    /// the caller's own first iteration is the trigger. The gate counts the fake's
+    /// the caller's own first iteration is the trigger, fired once <see cref="OutboundFrameGate.Held"/>
+    /// says the fake has parked its next frame. The gate counts the fake's
     /// <em>outbound</em> messages; this surface sends no greeting, so a hold at 1 means the first
     /// binary audio frame was delivered and the second was not — the recorded audio chunks into
     /// six, so the <c>finish</c> terminator behind them is never reached.
@@ -561,6 +568,14 @@ public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
             await foreach (var _ in synth.SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz, cts.Token))
             {
                 observed++;
+
+                // The cancel waits for the fake to park its second frame. The first frame reaching
+                // the caller does not mean the fake has reached the second: a cancel fired before it
+                // does lets the client tear the socket down first, the fake's send loop then finds
+                // the socket closed and stops without ever parking, and "mid-delivery" was never the
+                // condition the cancel met. A fake that never parks surfaces here as a
+                // TimeoutException instead of the expected cancellation.
+                await gate.Held.WaitAsync(HoldTimeout);
                 stateAtCancel = _server.SocketState;
                 await cts.CancelAsync();
             }
