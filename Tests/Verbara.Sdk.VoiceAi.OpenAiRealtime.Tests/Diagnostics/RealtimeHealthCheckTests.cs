@@ -144,6 +144,45 @@ public sealed class RealtimeHealthCheckTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CheckHealthAsync_ShouldCountTheSessionServed_WhenTheVendorClosesWithAFailureAfterItsAudioReachedTheCaller()
+    {
+        // A failure close is a rejection only before any vendor audio reached the caller: after it, the vendor had
+        // accepted the session, so the session ends the streak.
+        var (bridge, health) = Build();
+
+        await RunRejectedSessionAsync(bridge, closeCode: 3000);
+        await RunRejectedSessionAsync(bridge, closeCode: 3000);
+        await RunFailedAfterAudioSessionAsync(bridge, closeCode: 4000);
+
+        var entry = await CheckAsync(health);
+
+        using (new AssertionScope())
+        {
+            entry.Status.Should().Be(HealthStatus.Healthy);
+            entry.Data.Should().Contain("consecutiveRejections", 0, "the vendor served that session before it failed");
+            entry.Data.Should().Contain("lastRejection", 3000, "the last rejection is still reported");
+        }
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_ShouldReportHealthyWithoutData_WhenBuiltByHandWithAKey()
+    {
+        // A guard, green before the tracker existed: built by hand, the check reads the configuration only.
+        var sut = new RealtimeHealthCheck(Options.Create(new OpenAiRealtimeOptions { ApiKey = "test-key", Model = "gpt-realtime" }));
+
+        var result = await sut.CheckHealthAsync(new HealthCheckContext
+        {
+            Registration = new HealthCheckRegistration(EntryName, sut, failureStatus: null, tags: null),
+        });
+
+        using (new AssertionScope())
+        {
+            result.Status.Should().Be(HealthStatus.Healthy, "a key is configured");
+            result.Data.Should().BeEmpty("a check built by hand sees no session");
+        }
+    }
+
+    [Fact]
     public async Task CheckHealthAsync_ShouldReportUnhealthy_WhenNoApiKeyIsConfigured()
     {
         // A guard, green before the tracker existed: the check built by hand behaves as it always did.
@@ -202,6 +241,19 @@ public sealed class RealtimeHealthCheckTests : IAsyncLifetime
         fake.EventsToSend.Add(AudioDelta);
         fake.Start();
         await RunSessionAsync(bridge, fake.Port, _ => Task.CompletedTask);
+    }
+
+    /// <summary>The vendor sends audio, which reaches the caller, and then closes with <paramref name="closeCode"/>.</summary>
+    private static async Task RunFailedAfterAudioSessionAsync(OpenAiRealtimeBridge bridge, int closeCode)
+    {
+        await using var fake = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fake.Start();
+        await RunSessionAsync(bridge, fake.Port, async _ =>
+        {
+            await fake.SessionUpdateReceived.WaitAsync(SignalTimeout);
+            await fake.SendEventAsync(AudioDelta);
+            await fake.SendCloseAsync((WebSocketCloseStatus)closeCode, "server_error");
+        });
     }
 
     /// <summary>The host cancels the session while the vendor holds it open, having answered nothing.</summary>
