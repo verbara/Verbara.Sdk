@@ -190,6 +190,9 @@ public sealed class AudioSocketServerTests : IAsyncLifetime
             await _server.DisposeAsync().AsTask().WaitAsync(SignalTimeout);
 
         var read = await peer.ReadToEndAsync(SignalTimeout);
+        // The stop returns once the session is closed; its hangup is raised afterwards, by the read loop's
+        // ending. HungUp completes after every OnHangup handler has returned, so the count below is final.
+        await session.HungUp.WaitAsync(SignalTimeout);
         using (new AssertionScope())
         {
             read.ReachedEnd.Should().BeTrue($"the {ending} closes the connection (read: {read.Describe()})");
