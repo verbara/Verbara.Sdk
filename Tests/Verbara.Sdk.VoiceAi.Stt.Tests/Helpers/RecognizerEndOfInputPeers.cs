@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Stt.AssemblyAi;
 using Verbara.Sdk.VoiceAi.Stt.Cartesia;
@@ -33,11 +34,16 @@ internal static class RecognizerEndOfInputPeers
     /// <param name="client">The recognizer.</param>
     /// <param name="mode">What the peer does once the end of input has arrived.</param>
     /// <param name="progress">Replaces the profile's <see cref="EndOfInputPeer.Progress"/> round when given.</param>
-    public static EndOfInputPeer Create(string client, EndOfInputPeerMode mode, IReadOnlyList<PeerFrame>? progress = null) => client switch
+    /// <param name="silent">
+    /// When true, the vendor says nothing before the end of input either: no <see cref="EndOfInputPeer.Preamble"/>
+    /// and no <see cref="EndOfInputPeer.Replies"/>, so the session produces no result and no vendor message.
+    /// </param>
+    public static EndOfInputPeer Create(
+        string client, EndOfInputPeerMode mode, IReadOnlyList<PeerFrame>? progress = null, bool silent = false) => client switch
     {
         "Deepgram" => new EndOfInputPeer(mode)
         {
-            Preamble = [PeerFrame.Text(DeepgramFakeServer.BuildResultJson("hello", 0.9f, isFinal: false))],
+            Preamble = silent ? [] : [PeerFrame.Text(DeepgramFakeServer.BuildResultJson("hello", 0.9f, isFinal: false))],
             IsEndOfInput = static t => t.Contains("CloseStream", StringComparison.Ordinal),
             Progress = progress ?? [PeerFrame.Text(DeepgramFakeServer.BuildResultJson("hello", 0.9f, isFinal: false))],
             Answer =
@@ -48,11 +54,12 @@ internal static class RecognizerEndOfInputPeers
         },
         "AssemblyAI" => new EndOfInputPeer(mode)
         {
-            Preamble =
-            [
-                PeerFrame.Text(AssemblyAiFakeServer.BuildBeginJson()),
-                PeerFrame.Text(AssemblyAiFakeServer.BuildTurnJson("hello", endOfTurn: false)),
-            ],
+            Preamble = silent
+                ? []
+                : [
+                    PeerFrame.Text(AssemblyAiFakeServer.BuildBeginJson()),
+                    PeerFrame.Text(AssemblyAiFakeServer.BuildTurnJson("hello", endOfTurn: false)),
+                  ],
             IsEndOfInput = static t => t.Contains("Terminate", StringComparison.Ordinal),
             Progress = progress ?? [PeerFrame.Text(AssemblyAiFakeServer.BuildTurnJson("hello", endOfTurn: false))],
             Answer =
@@ -63,7 +70,7 @@ internal static class RecognizerEndOfInputPeers
         },
         "Cartesia" => new EndOfInputPeer(mode)
         {
-            Preamble = [PeerFrame.Text(CartesiaSttFake.BuildTranscriptJson("hello", 0.9f, isFinal: false))],
+            Preamble = silent ? [] : [PeerFrame.Text(CartesiaSttFake.BuildTranscriptJson("hello", 0.9f, isFinal: false))],
             IsEndOfInput = static t => t == "done",
             Progress = progress ?? [PeerFrame.Text(CartesiaSttFake.BuildTranscriptJson("hello", 0.9f, isFinal: false))],
             Answer =
@@ -75,7 +82,7 @@ internal static class RecognizerEndOfInputPeers
         "Speechmatics" => new EndOfInputPeer(mode)
         {
             // Speechmatics speaks only after the client's StartRecognition.
-            Replies = static t => t.Contains("StartRecognition", StringComparison.Ordinal)
+            Replies = t => !silent && t.Contains("StartRecognition", StringComparison.Ordinal)
                 ? [
                     PeerFrame.Text(SpeechmaticsFakeServer.BuildRecognitionStartedJson()),
                     PeerFrame.Text(SpeechmaticsFakeServer.BuildPartialTranscriptJson("hello", 0.9f)),
@@ -96,10 +103,17 @@ internal static class RecognizerEndOfInputPeers
     /// The recognizer <paramref name="client"/> names, pointed at a peer on <paramref name="port"/>,
     /// with its bounds on <paramref name="clock"/> (<see cref="TimeProvider.System"/> when none is given)
     /// and its <c>ConnectTimeoutSeconds</c> at <paramref name="connectTimeoutSeconds"/> (the option's own
-    /// default when none is given).
+    /// default when none is given). <paramref name="resultReader"/> wraps the reader its iterator reads
+    /// results through, and <paramref name="receiveLoopStarted"/> runs first in its receive loop's task;
+    /// neither is set when none is given.
     /// </summary>
     public static SpeechRecognizer CreateRecognizer(
-        string client, int port, TimeProvider? clock = null, int? connectTimeoutSeconds = null) => client switch
+        string client,
+        int port,
+        TimeProvider? clock = null,
+        int? connectTimeoutSeconds = null,
+        Func<ChannelReader<SpeechRecognitionResult>, ChannelReader<SpeechRecognitionResult>>? resultReader = null,
+        Action? receiveLoopStarted = null) => client switch
     {
         "Deepgram" => new DeepgramSpeechRecognizer(Options.Create(new DeepgramOptions
         {
@@ -109,6 +123,8 @@ internal static class RecognizerEndOfInputPeers
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
+            ResultReader = resultReader ?? (static reader => reader),
+            ReceiveLoopStarted = receiveLoopStarted ?? (static () => { }),
         },
         "AssemblyAI" => new AssemblyAiSpeechRecognizer(Options.Create(new AssemblyAiOptions
         {
@@ -118,6 +134,8 @@ internal static class RecognizerEndOfInputPeers
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
+            ResultReader = resultReader ?? (static reader => reader),
+            ReceiveLoopStarted = receiveLoopStarted ?? (static () => { }),
         },
         "Cartesia" => new CartesiaSpeechRecognizer(Options.Create(new CartesiaOptions
         {
@@ -127,6 +145,8 @@ internal static class RecognizerEndOfInputPeers
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
+            ResultReader = resultReader ?? (static reader => reader),
+            ReceiveLoopStarted = receiveLoopStarted ?? (static () => { }),
         },
         "Speechmatics" => new SpeechmaticsSpeechRecognizer(Options.Create(new SpeechmaticsOptions
         {
@@ -136,6 +156,8 @@ internal static class RecognizerEndOfInputPeers
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
+            ResultReader = resultReader ?? (static reader => reader),
+            ReceiveLoopStarted = receiveLoopStarted ?? (static () => { }),
         },
         _ => throw new ArgumentOutOfRangeException(nameof(client), client, null),
     };

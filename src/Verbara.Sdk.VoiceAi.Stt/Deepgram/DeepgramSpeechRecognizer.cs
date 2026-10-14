@@ -25,6 +25,15 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
     // after the end of input. Settable by tests (via InternalsVisibleTo) to drive them on a manual clock.
     internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
+    // How the iterator reads its result channel: the channel's own reader unless a test wraps it.
+    // Settable by tests (via InternalsVisibleTo) to hold a read between its token check and its
+    // read of the channel's completion, the window a cancel can fall into.
+    internal Func<System.Threading.Channels.ChannelReader<SpeechRecognitionResult>, System.Threading.Channels.ChannelReader<SpeechRecognitionResult>> ResultReader { get; set; } = static reader => reader;
+
+    // Runs first in the receive loop's task, so a test can cancel knowing the loop is running and
+    // will end the result channel. A no-op unless a test sets it (via InternalsVisibleTo).
+    internal Action ReceiveLoopStarted { get; set; } = static () => { };
+
     /// <inheritdoc />
     public override string ProviderName => "Deepgram";
 
@@ -96,6 +105,7 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
         var sawVendorFrame = false;
         var receiveTask = Task.Run(async () =>
         {
+            ReceiveLoopStarted();
             try
             {
                 sawVendorFrame = await ReceiveLoopAsync(ws, channel.Writer, ProviderName, silence, ct)
@@ -111,7 +121,7 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
         }, ct);
 
         // Yield results as they arrive from the receive loop.
-        await foreach (var result in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        await foreach (var result in ResultReader(channel.Reader).ReadAllAsync(ct).ConfigureAwait(false))
             yield return result;
 
         // Ensure both tasks complete (propagate exceptions via AggregateException).

@@ -29,6 +29,15 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
     // after the end of input. Settable by tests (via InternalsVisibleTo) to drive them on a manual clock.
     internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
+    // How the iterator reads its result channel: the channel's own reader unless a test wraps it.
+    // Settable by tests (via InternalsVisibleTo) to hold a read between its token check and its
+    // read of the channel's completion, the window a cancel can fall into.
+    internal Func<ChannelReader<ReadOnlyMemory<byte>>, ChannelReader<ReadOnlyMemory<byte>>> ResultReader { get; set; } = static reader => reader;
+
+    // Runs first in the receive loop's task, so a test can cancel knowing the loop is running and
+    // will end the result channel. A no-op unless a test sets it (via InternalsVisibleTo).
+    internal Action ReceiveLoopStarted { get; set; } = static () => { };
+
     /// <inheritdoc />
     public override string ProviderName => "ElevenLabs";
 
@@ -103,6 +112,7 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
         // when there is one.
         var receiveTask = Task.Run(async () =>
         {
+            ReceiveLoopStarted();
             try
             {
                 await ReceiveFramesAsync(ws, channel.Writer, ProviderName, silence, ct).ConfigureAwait(false);
@@ -118,7 +128,7 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
 
         // Yield frames as they arrive from the receive loop (true streaming).
         var yieldedAudio = false;
-        await foreach (var frame in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        await foreach (var frame in ResultReader(channel.Reader).ReadAllAsync(ct).ConfigureAwait(false))
         {
             if (frame.Length > 0) yieldedAudio = true;
             yield return frame;
