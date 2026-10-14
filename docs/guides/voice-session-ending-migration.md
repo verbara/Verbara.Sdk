@@ -346,8 +346,8 @@ requires it.
 ### The `openai-realtime` health entry reports the vendor's rejections
 
 **Before 2.9.0:** the `openai-realtime` entry that `AddOpenAiRealtimeBridge` registers (`RealtimeHealthCheck`)
-reported `Healthy` whenever an API key was configured, also while OpenAI rejected every session (a revoked key gets the
-upgrade and then a close with code `3000`, before any audio).
+reported `Healthy` whenever an API key was configured, also while OpenAI rejected every session (an invalid key gets the
+upgrade, then an `error` frame and a close with code `3000`, before any audio).
 
 **From 2.9.0:** the entry also reads what the vendor did with the bridge's sessions. It reports `Degraded` once the last
 3 consecutive sessions were rejected — refused at the upgrade with a 4xx status, or closed by the vendor with a failure
