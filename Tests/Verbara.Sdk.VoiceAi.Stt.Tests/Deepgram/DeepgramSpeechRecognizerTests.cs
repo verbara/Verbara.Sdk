@@ -386,6 +386,14 @@ public class DeepgramSpeechRecognizerTests : IAsyncLifetime
                                SttFrameGenerators.EndlessFrames(), AudioFormat.Slin16Mono8kHz, cts.Token))
             {
                 observed++;
+
+                // The cancel waits for the fake to park its next frame. An item reaching the caller
+                // does not mean the fake has reached the frame after it: a cancel fired before it
+                // does lets the client tear the socket down first, the fake's send loop then finds
+                // the socket closed and stops without ever parking, and "mid-delivery" was never the
+                // condition the cancel met. A fake that never parks surfaces here as a
+                // TimeoutException instead of the expected cancellation.
+                await gate.Held.WaitAsync(HoldTimeout);
                 stateAtCancel = _server.SocketState;
                 await cts.CancelAsync();
             }
@@ -535,6 +543,12 @@ public class DeepgramSpeechRecognizerTests : IAsyncLifetime
         var query = new Uri($"ws://localhost{_server.ReceivedRequestUri}").Query;
         query.Should().Contain("model=nova-3").And.Contain("language=pt");
     }
+
+    /// <summary>
+    /// Ceiling on the wait for the fake to park a held frame. Reaching it is a failure, never a pace:
+    /// no assertion depends on its length.
+    /// </summary>
+    private static readonly TimeSpan HoldTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
     private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
