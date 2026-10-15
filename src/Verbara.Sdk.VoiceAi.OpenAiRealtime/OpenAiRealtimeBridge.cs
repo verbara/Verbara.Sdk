@@ -100,12 +100,20 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     /// <summary>Observable stream of Realtime bridge events from all active sessions.</summary>
     public IObservable<RealtimeEvent> Events => _events;
 
+    /// <summary>
+    /// What the vendor did with this bridge's sessions, written once per session by the terminal block and read by
+    /// the <c>openai-realtime</c> health check that the registration builds over the same instance.
+    /// </summary>
+    internal RealtimeRejectionTracker Rejections { get; }
+
     /// <summary>Creates a new bridge instance.</summary>
     internal OpenAiRealtimeBridge(
         IOptions<OpenAiRealtimeOptions> options,
         RealtimeFunctionRegistry registry,
-        ILogger<OpenAiRealtimeBridge> logger)
+        ILogger<OpenAiRealtimeBridge> logger,
+        RealtimeRejectionTracker? rejections = null)
     {
+        Rejections = rejections ?? new RealtimeRejectionTracker();
         _options = options.Value;
 
         // No validator runs for Options.Create or a hand-made registration: a FunctionCallTimeout that cannot bound
@@ -128,6 +136,9 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         // ── Per-session state (stack-lifetime) ──────────────────────────────
         using var ws = new ClientWebSocket();
         ws.Options.SetRequestHeader("Authorization", $"Bearer {_options.ApiKey}");
+        // A refused upgrade surfaces only as WebSocketException; its HTTP status says whether the vendor rejected the
+        // session (a 4xx), which the health check counts.
+        ws.Options.CollectHttpResponseDetails = true;
         using var wsWriteLock = new SemaphoreSlim(1, 1);
 
         var inputRate = _options.InputFormat.SampleRate;
@@ -138,6 +149,13 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
         var sessionFailed = false;
         var sessionCancelled = false;
+
+        // What the health check learns from this session, decided where the session is classified and written once
+        // in the terminal block: a rejection's code, or that the vendor served it. Neither, for a session the host
+        // cancelled or one that ended on a transport failure.
+        int? rejection = null;
+        var served = false;
+        var vendorAudio = new VendorAudio();
 
         // The two loops and the two sources only they use, declared out here so the terminal block can
         // wait for the loops before anything they use is released. Declared inside the try, the sources
@@ -179,7 +197,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             // running out.
             silence = new EndOfInputSilenceBound(CloseAnswerBound, TimeProvider, ct);
             input = InputLoop(session, ws, wsWriteLock, upsampler, inputCts.Token);
-            output = OutputLoop(session, ws, wsWriteLock, downsampler, silence, ct);
+            output = OutputLoop(session, ws, wsWriteLock, downsampler, silence, vendorAudio, ct);
             var first = await Task.WhenAny(input, output).ConfigureAwait(false);
 
             if (first == output && !input.IsCompleted)
@@ -257,6 +275,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             // filter below: OutputLoop ends its read on the token without throwing. The token ended
             // that session all the same, so it is counted cancelled too.
             sessionCancelled = ct.IsCancellationRequested;
+            served = !sessionCancelled;
         }
         // The filter tests the token, never ex.CancellationToken: a cancelled ConnectAsync surfaces
         // a TaskCanceledException carrying a *different* token, so an identity check would silently
@@ -267,6 +286,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         catch (Exception ex)
         {
             sessionFailed = true;
+            (rejection, served) = Verdict(ex, ws, vendorAudio.Delivered, ct);
             sessionActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             RealtimeLog.SessionError(_logger, channelId, ex.Message);
             throw;
@@ -306,8 +326,49 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 RealtimeMetrics.SessionsCancelled.Add(1);
             else
                 RealtimeMetrics.SessionsCompleted.Add(1);
+
+            if (rejection is { } code)
+                Rejections.Rejected(code, TimeProvider.GetUtcNow());
+            else if (served)
+                Rejections.Served();
             RealtimeLog.SessionEnded(_logger, channelId);
         }
+    }
+
+    /// <summary>
+    /// What a failed session tells the health check. A rejection is a failure close before any vendor audio reached
+    /// the caller (its close code), or an upgrade the vendor refused with a 4xx (its status). A failure close after the
+    /// vendor's audio reached the caller is a session the vendor served. Anything else — a transport failure, or any
+    /// ending while the host's token is cancelled — counts neither way.
+    /// </summary>
+    private static (int? Rejection, bool Served) Verdict(
+        Exception ex, ClientWebSocket ws, bool audioDelivered, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested)
+            return (null, false);
+
+        if (ex is SpeechProviderFailureException { Signal: SpeechProviderFailureSignal.CloseCode })
+        {
+            if (audioDelivered)
+                return (null, true);
+            if (ws.CloseStatus is { } status)
+                return ((int)status, false);
+        }
+
+        if (ex is WebSocketException && (int)ws.HttpStatusCode is >= 400 and < 500 and var refused)
+            return (refused, false);
+
+        return (null, false);
+    }
+
+    /// <summary>Whether any vendor audio reached the caller in a session, set by the output loop.</summary>
+    private sealed class VendorAudio
+    {
+        private int _delivered;
+
+        public bool Delivered => Volatile.Read(ref _delivered) != 0;
+
+        public void MarkDelivered() => Volatile.Write(ref _delivered, 1);
     }
 
     // Releases the two sources only a session's loops use, in this order, each only if it was made.
@@ -387,6 +448,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         SemaphoreSlim wsWriteLock,
         PolyphaseResampler? downsampler,
         EndOfInputSilenceBound silence,
+        VendorAudio vendorAudio,
         CancellationToken ct)
     {
         var channelId = session.ChannelId;
@@ -482,6 +544,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     // fixed for, two hundred lines away (ADR-0053).
                     try { await session.WriteAudioAsync(pcm, ct).ConfigureAwait(false); }
                     catch (ObjectDisposedException) { return false; }
+                    vendorAudio.MarkDelivered();
                     break;
                 }
 

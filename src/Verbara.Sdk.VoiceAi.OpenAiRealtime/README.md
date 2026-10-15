@@ -70,6 +70,16 @@ is no longer graceful, the broker's disposal), and its `openai_realtime.session.
 Register `AddAudioSocketServer` before `AddOpenAiRealtimeBridge` (the prerequisite above), so the
 broker stops before the server and every call ends with a hangup frame.
 
+## Health
+
+`AddOpenAiRealtimeBridge` registers the `openai-realtime` health entry (`RealtimeHealthCheck`). It reports
+`Unhealthy` with no API key configured, `Degraded` once the vendor rejected the bridge's last 3 consecutive sessions
+(an upgrade refused with a 4xx, or a failure close before any vendor audio reached the caller), and `Healthy`
+otherwise, again from the first session the vendor serves. A session the host cancelled, or one that ended on a
+transport failure, counts neither way. Its data carries `consecutiveRejections` and, once a rejection happened,
+`lastRejection` and `lastRejectionAt`. Rejections never report `Unhealthy`, so a default health endpoint keeps
+answering 200.
+
 ## Documentation
 
 See the [main README](../../README.md) for full documentation. Upgrading from 2.6.1: [voice-session-ending-migration.md](../../docs/guides/voice-session-ending-migration.md) and [voice-bounds-migration.md](../../docs/guides/voice-bounds-migration.md).

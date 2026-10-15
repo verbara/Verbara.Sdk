@@ -14,6 +14,11 @@ public interface IAriClient : IAsyncDisposable
     bool IsConnected { get; }
 
     /// <summary>Connect to the ARI WebSocket event stream.</summary>
+    /// <remarks>
+    /// <paramref name="cancellationToken"/> bounds the dial of this connect and nothing after it: cancelling it once
+    /// the connect has returned does not end the connection, its events or a reconnect. End the connection with
+    /// <see cref="DisconnectAsync"/> or by disposing the client.
+    /// </remarks>
     ValueTask ConnectAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Disconnect from the ARI WebSocket event stream.</summary>

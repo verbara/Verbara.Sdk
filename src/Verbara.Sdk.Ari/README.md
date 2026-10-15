@@ -37,6 +37,10 @@ var bridge = await client.Bridges.CreateAsync("mixing", "mybridge");
 await client.Bridges.AddChannelAsync(bridge.Id!, channels[0].Id!);
 ```
 
+The token you hand `ConnectAsync` bounds the dial only: cancelling it once the connect has returned (a host's start
+or stopping token, a request token) does not end the connection, its events or a reconnect. End the connection with
+`DisconnectAsync` or by disposing the client.
+
 ## Documentation
 
 - [High-Load Tuning Guide](../../docs/guides/high-load-tuning.md)

@@ -4,6 +4,7 @@ using Verbara.Sdk.VoiceAi.OpenAiRealtime.FunctionCalling;
 using Verbara.Sdk.VoiceAi.Pipeline;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -35,16 +36,28 @@ public static class RealtimeServiceCollectionExtensions
         services.TryAddSingleton<RealtimeFunctionRegistry>(sp =>
             new RealtimeFunctionRegistry(sp.GetServices<IRealtimeFunctionHandler>()));
 
+        // One tracker for the bridge and the health check: the bridge writes what the vendor did with each session,
+        // the check reads it.
+        services.TryAddSingleton<RealtimeRejectionTracker>(_ => new RealtimeRejectionTracker());
+
         services.TryAddSingleton<OpenAiRealtimeBridge>(sp =>
             new OpenAiRealtimeBridge(
                 sp.GetRequiredService<IOptions<OpenAiRealtimeOptions>>(),
                 sp.GetRequiredService<RealtimeFunctionRegistry>(),
-                sp.GetRequiredService<ILogger<OpenAiRealtimeBridge>>()));
+                sp.GetRequiredService<ILogger<OpenAiRealtimeBridge>>(),
+                sp.GetRequiredService<RealtimeRejectionTracker>()));
 
         services.TryAddSingleton<ISessionHandler>(
             sp => sp.GetRequiredService<OpenAiRealtimeBridge>());
 
-        services.AddHealthChecks().AddCheck<RealtimeHealthCheck>("openai-realtime");
+        // A factory, not AddCheck<T>: the check that reads the tracker has an internal constructor.
+        services.AddHealthChecks().Add(new HealthCheckRegistration(
+            "openai-realtime",
+            sp => new RealtimeHealthCheck(
+                sp.GetRequiredService<IOptions<OpenAiRealtimeOptions>>(),
+                sp.GetRequiredService<RealtimeRejectionTracker>()),
+            failureStatus: null,
+            tags: null));
 
         services.TryAddSingleton<VoiceAiSessionBroker>();
         services.AddHostedService<VoiceAiSessionBroker>(
