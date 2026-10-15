@@ -165,31 +165,34 @@ internal static class ChannelReadCancelScanner
     /// </summary>
     private static (bool IsRead, string? Token) WaitToReadToken(ExpressionSyntax condition)
     {
-        foreach (var awaitedExpression in condition.DescendantNodesAndSelf().OfType<AwaitExpressionSyntax>().Select(a => a.Expression))
+        foreach (var current in condition.DescendantNodesAndSelf().OfType<AwaitExpressionSyntax>().Select(a => Unwrap(a.Expression)))
         {
-            var current = awaitedExpression;
-            while (true)
-            {
-                if (current is ParenthesizedExpressionSyntax parenthesized)
-                {
-                    current = parenthesized.Expression;
-                    continue;
-                }
-
-                if (current is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.Text: "ConfigureAwait" } configure })
-                {
-                    current = configure.Expression;
-                    continue;
-                }
-
-                break;
-            }
-
             if (current is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.Text: "WaitToReadAsync" } } wait)
                 return (true, FirstArgument(wait));
         }
 
         return (false, null);
+    }
+
+    /// <summary>The awaited expression without its parentheses and <c>ConfigureAwait(…)</c> wrappers.</summary>
+    private static ExpressionSyntax Unwrap(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            if (expression is ParenthesizedExpressionSyntax parenthesized)
+            {
+                expression = parenthesized.Expression;
+                continue;
+            }
+
+            if (expression is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.Text: "ConfigureAwait" } configure })
+            {
+                expression = configure.Expression;
+                continue;
+            }
+
+            return expression;
+        }
     }
 
     /// <summary>
