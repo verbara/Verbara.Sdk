@@ -178,9 +178,16 @@ public sealed class AriClient : IAriClient
 
         // This attempt's own source and socket, in the fields before anything is awaited. What a previous
         // connection left there (one that connected and has since ended: disconnected, or lost with nothing
-        // reconnecting it) is taken out and released here instead of being dropped: its source is linked to that
-        // caller's token and stays registered on it until disposed. An attempt that ended without a connection
-        // already released its own. What a loop or another dial still runs on is theirs, and is left to them.
+        // reconnecting it) is taken out and released here instead of being dropped. An attempt that ended without a
+        // connection already released its own. What a loop or another dial still runs on is theirs, and is left to
+        // them.
+        //
+        // The source is the connection's, owned by this client and linked to nothing: the events loop and the
+        // reconnect run on it, and only DisconnectAsync and DisposeAsync cancel it. The caller's token reaches the
+        // dial and nothing after it — a host that connects on its start or stopping token, or a request handler on
+        // its request token, cancels that token once the connect has returned, and the connection goes on. Linked
+        // to the caller's token, the source let that cancellation end the events loop in silence, abort the socket
+        // and leave the state reading Connected.
         //
         // Nothing is caught here: the exception, its type and its stack reach the caller exactly as
         // they did before. The flag is the only thing the dial reports back, and it is set after the
@@ -190,16 +197,17 @@ public sealed class AriClient : IAriClient
         //
         // The dial is bounded by ConnectTimeout, as the reconnect loop's is: an Asterisk that takes the
         // connection and never answers the upgrade faults the attempt (a WebSocketException carrying a
-        // TimeoutException) instead of holding it for as long as the caller's token allows. It runs on the
-        // attempt's own token, linked to the caller's, so a DisconnectAsync or DisposeAsync during the dial
-        // ends it at once instead of leaving it to the bound.
+        // TimeoutException) instead of holding it for as long as the caller's token allows. It runs on a source
+        // of its own, linked to the caller's token and to the connection's, and released as the dial returns: the
+        // caller can still withdraw the dial, and a DisconnectAsync or DisposeAsync during it ends it at once
+        // instead of leaving it to the bound.
         var othersDialing = Interlocked.Increment(ref _dialsInFlight) > 1;
         var connected = false;
         CancellationTokenSource? cts = null;
         ClientWebSocket? socket = null;
         try
         {
-            cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts = new CancellationTokenSource();
             socket = new ClientWebSocket();
             var releasePrevious = !othersDialing && _eventLoop is null or { IsCompleted: true };
             ReleaseIf(releasePrevious, Interlocked.Exchange(ref _cts, cts));
@@ -214,7 +222,8 @@ public sealed class AriClient : IAriClient
                 .Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase);
             var uri = new Uri($"{wsUrl}/ari/events?api_key={Uri.EscapeDataString(_options.Username)}:{Uri.EscapeDataString(_options.Password)}&app={Uri.EscapeDataString(_options.Application)}");
 
-            await AriConnectBound.ConnectAsync(socket, uri, ConnectTimeout, TimeProvider, cts.Token);
+            using (var dial = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token))
+                await AriConnectBound.ConnectAsync(socket, uri, ConnectTimeout, TimeProvider, dial.Token);
             connected = true;
 
             // Written inside the try, not after it. A finally runs BEFORE the statement that
@@ -229,13 +238,13 @@ public sealed class AriClient : IAriClient
             Interlocked.Decrement(ref _dialsInFlight);
             if (!connected)
             {
-                // Which terminal state is decided by who ended the attempt, read from the attempt's own
-                // source — cancelled by the caller's token, by DisconnectAsync or by DisposeAsync — never
-                // from the exception. A cancellation raised inside the transport carries a token nobody
-                // here held, so neither the exception's type nor its own CancellationToken can say
-                // whether the attempt was withdrawn. A withdrawal is not a failure, and rests where
+                // Which terminal state is decided by who ended the attempt, read from the two sources that can
+                // withdraw it — the caller's token, and the connection's source that DisconnectAsync and
+                // DisposeAsync cancel — never from the exception. A cancellation raised inside the transport
+                // carries a token nobody here held, so neither the exception's type nor its own CancellationToken
+                // can say whether the attempt was withdrawn. A withdrawal is not a failure, and rests where
                 // DisconnectAsync leaves the client; anything else, the bound's expiry included, faulted.
-                SetState(cts?.IsCancellationRequested == true
+                SetState(cancellationToken.IsCancellationRequested || cts?.IsCancellationRequested == true
                     ? AriConnectionState.Disconnected
                     : AriConnectionState.Faulted);
                 ReleaseAttempt(cts, socket);
@@ -268,8 +277,8 @@ public sealed class AriClient : IAriClient
             previous?.Dispose();
     }
 
-    // An attempt that ended without a connection is over, so its source (registered on the caller's token) and its
-    // socket are released now, not left for the next attempt or for disposal. Each field is cleared only while it
+    // An attempt that ended without a connection is over, so its source and its socket are released now, not left
+    // for the next attempt or for disposal. Each field is cleared only while it
     // still holds this attempt's, since a concurrent ConnectAsync may have replaced it.
     private void ReleaseAttempt(CancellationTokenSource? cts, ClientWebSocket? socket)
     {
@@ -342,12 +351,11 @@ public sealed class AriClient : IAriClient
         }
         catch (OperationCanceledException)
         {
-            // The client's own teardown. `ct` is `_cts.Token`, a source linked to the token the caller
-            // handed `ConnectAsync` and cancelled by `DisconnectAsync`, by `DisposeAsync`, or by that
-            // caller's own token — so a cancellation reaching here is the receive loop being told to
-            // stop, never a socket that failed. Swallowing it is what lets control fall through to the
-            // auto-reconnect check below, which re-reads the same `ct`: a cancelled loop leaves the
-            // method without dialling.
+            // The client's own teardown. `ct` is `_cts.Token`, the connection's source, which only
+            // `DisconnectAsync` and `DisposeAsync` cancel — the token the caller handed `ConnectAsync` does not
+            // reach it — so a cancellation reaching here is the receive loop being told to stop, never a
+            // socket that failed. Swallowing it is what lets control fall through to the auto-reconnect check
+            // below, which re-reads the same `ct`: a cancelled loop leaves the method without dialling.
             /* Best effort — the client is disconnecting */
         }
         catch (WebSocketException ex)

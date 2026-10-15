@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: the `openai-realtime` health entry reports the vendor's rejections (#421)
+
+`RealtimeHealthCheck`, registered by `AddOpenAiRealtimeBridge` as `openai-realtime`, reported `Healthy` whenever an
+API key was configured, also while OpenAI rejected every session: an invalid key gets the upgrade, then an `error`
+frame and a close with code `3000` before any audio (measured against the live vendor), and the entry still read
+`Healthy` (measured in process against the in-tree fake of the vendor). The entry now also reads what the vendor did with the bridge's sessions. It reports `Degraded` once the last 3
+consecutive sessions were rejected — an upgrade refused with a 4xx status (the bridge now collects the upgrade's
+response details), or a failure close before any vendor audio reached the caller — and `Healthy` again on the first
+session the vendor served. A session the host cancelled, or one that ended on a transport failure, counts neither way;
+there is no time window. Rejections never report `Unhealthy`, so a default health endpoint keeps answering 200. The
+entry's data carries `consecutiveRejections` and, once a rejection happened, `lastRejection` (the close code or the
+HTTP status) and `lastRejectionAt` (ISO 8601). With no API key the entry still reports `Unhealthy`. A probe that
+includes this entry, or reads every entry, sees `Degraded` where it saw `Healthy`; a probe that treats `Degraded` as a
+failure now fails while the vendor rejects sessions. A `RealtimeHealthCheck` built by hand reads the configuration
+only, as before. The registration now builds the check with a factory. No public API signature changes.
+
+**Migration guide:** [`docs/guides/voice-session-ending-migration.md`](docs/guides/voice-session-ending-migration.md#the-openai-realtime-health-entry-reports-the-vendors-rejections)
+
+### Fixed: cancelling the token passed to `AriClient.ConnectAsync` after it returned no longer kills the connection (#421)
+
+`AriClient` ran its events loop and its reconnect on a source linked to the token the caller passed `ConnectAsync`, so
+cancelling that token after the connect had returned ended the events loop without a word, aborted the WebSocket,
+started no reconnect, and left `State` reading `Connected` over a connection that delivered nothing more (measured in
+process, 20 of 20). A host that connects on its start or stopping token, or a request handler on its request token,
+did exactly that — the SDK's own `AriConnectionHostedService` connects on the host's start token. The token now
+bounds the dial only: the connection runs on a source the client owns, which `DisconnectAsync` and `DisposeAsync`
+cancel, and a connection lost after the caller's token was cancelled is reconnected. Cancelling the token during the
+dial still withdraws it, and the attempt still ends `Disconnected`, not `Faulted`. The `IAriClient.ConnectAsync` XML
+doc states the token's reach. No public API signature changes.
+
+### Fixed: the high-load tuning guide names the Realtime health check that exists (#421)
+
+`docs/guides/high-load-tuning.md` listed `OpenAiRealtimeHealthCheck` among the health checks; no such type has ever
+existed. It now names `RealtimeHealthCheck` and its entry, `openai-realtime`, and says when that entry reports
+`Degraded`. The package README of `Verbara.Sdk.VoiceAi.OpenAiRealtime` gains a *Health* section, and the
+`Verbara.Sdk.Ari` README states the reach of the token passed to `ConnectAsync`.
+
 ### Changed — BREAKING: an activity ends `Cancelled` only when someone asked it to stop (#413)
 
 The three activity base classes (`ActivityBase`, `AmiActivityBase`, `AriActivityBase`, so all fifteen shipped

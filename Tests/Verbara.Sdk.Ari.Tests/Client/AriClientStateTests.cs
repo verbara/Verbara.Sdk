@@ -1235,8 +1235,9 @@ public sealed class AriClientStateTests
     public async Task ConnectAsync_ShouldReleaseEachAttemptsSocketAndSource_WhenItsBoundElapses()
     {
         // Three attempts against a far end that never answers, each run out on the clock. Each attempt's
-        // events socket and its cancellation source (linked to the caller's token) are released once the
-        // attempt has ended, so a caller that retries accumulates nothing.
+        // events socket and its connection source are released once the attempt has ended, so a caller that
+        // retries accumulates nothing. (The dial's own source, the one linked to the caller's token, is scoped to
+        // the dial and released as it returns.)
         const int attempts = 3;
         var clock = new FakeTimeProvider();
         await using var peer = new DialPeer(answer: _ => false);
@@ -1270,7 +1271,7 @@ public sealed class AriClientStateTests
             {
                 held.Should().HaveCount(attempts);
                 undisposedSources.Should().Be(0,
-                    "each attempt's source, linked to the caller's token, is released when its attempt ended");
+                    "each attempt's source is released when its attempt ended");
                 undisposedSockets.Should().Be(0, "each attempt's events socket is released when its attempt ended");
             }
         }
@@ -1285,7 +1286,8 @@ public sealed class AriClientStateTests
     public async Task ConnectAsync_ShouldReleaseEachAttemptsSocketAndSource_WhenTheDialIsRefused()
     {
         // The same release with no bound involved: three dials refused at once by a port with no listener.
-        // Before the release each refused attempt left its source registered on the caller's token.
+        // Before the release each refused attempt left its source registered on the caller's token (it was linked
+        // to it then; the connection's source is linked to nothing now, and the dial's is released as it returns).
         const int attempts = 3;
         int port;
         using (var vacated = new TcpListener(IPAddress.Loopback, 0))
@@ -1340,7 +1342,7 @@ public sealed class AriClientStateTests
                 endedBeforeRead.Should().Be(0, "each attempt's fields are read while the attempt is still running");
                 held.Should().OnlyContain(h => h.Source != null && h.Socket != null, "each attempt opened a source and a socket");
                 undisposedSources.Should().Be(0,
-                    "each refused attempt's source, linked to the caller's token, is released when its attempt ended");
+                    "each refused attempt's source is released when its attempt ended");
                 undisposedSockets.Should().Be(0, "each refused attempt's events socket is released when its attempt ended");
             }
         }
