@@ -422,12 +422,16 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
                 else
                 {
                     // ADR-0050 E9, and the whole reason it is additive: reaching this line means the
-                    // synthesizer finished, was not cancelled and threw nothing, so the eight WebSocket
-                    // clients in this SDK cannot arrive here empty — they raise
-                    // SpeechProviderEmptyResultException and land in the catch below. What can arrive here
-                    // empty is the residual: an HTTP-backed synthesizer, or any third-party subclass of the
-                    // public base, returning silence in silence. `ttfaRecorded` is the flag to test because
-                    // it is set exactly once, on the first chunk yielded.
+                    // synthesizer finished and threw nothing. For the eight WebSocket clients in this SDK
+                    // it also means it was not cancelled: their reader alone could report a cancelled
+                    // synthesis as a clean end (the receive loop ends the stream in reaction to the same
+                    // cancel), so each re-checks its token once the stream has ended and raises
+                    // OperationCanceledException into the clauses below. Nor can they arrive here empty —
+                    // a clean session with no audio raises SpeechProviderEmptyResultException and lands
+                    // in the catch below. What can arrive here empty is the residual: an HTTP-backed
+                    // synthesizer, or any third-party subclass of the public base, returning silence in
+                    // silence. `ttfaRecorded` is the flag to test because it is set exactly once, on the
+                    // first chunk yielded.
                     //
                     // Only the provider is tagged. The two-type discriminator that E8 substitutes for D2's
                     // is not a variable at this site — nothing was thrown here, which is precisely what

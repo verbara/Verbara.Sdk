@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a cancelled WebSocket recognizer or synthesizer always throws `OperationCanceledException` (#423)
+
+The four WebSocket recognizers (Deepgram, AssemblyAI, Cartesia, Speechmatics) and the four WebSocket synthesizers
+(Cartesia, Deepgram, ElevenLabs, and LMNT on its WebSocket transport) could lose the caller's cancellation. Each runs a
+receive loop that, on the caller's cancel, ends the result stream cleanly; when that happened after the iterator had
+checked the token and before it read the end of the stream, the iterator saw a clean end. A stream that had already
+delivered something then ended normally, and one that had delivered nothing threw `SpeechProviderEmptyResultException`,
+which both base classes document as raised only for a session that was not cancelled. CI met it once, on Deepgram.
+For `VoiceAiPipeline`, a barge-in lost this way after the first audio chunk counted the synthesis completed and added
+the interrupted reply to the conversation history as if it had been spoken in full; lost before the first chunk, it
+counted and published a provider failure. Each client now re-checks the caller's token as soon as its result stream
+has ended, before the empty-result rule, so a cancelled `StreamAsync` or `SynthesizeAsync` always throws
+`OperationCanceledException`. A cancel that lands after the vendor has genuinely finished also throws now, as the base
+contracts state. No public API changes. The HTTP recognizers and synthesizers read with the token on every call and
+were not affected.
+
 ### Changed — BREAKING: the `openai-realtime` health entry reports the vendor's rejections (#421)
 
 `RealtimeHealthCheck`, registered by `AddOpenAiRealtimeBridge` as `openai-realtime`, reported `Healthy` whenever an

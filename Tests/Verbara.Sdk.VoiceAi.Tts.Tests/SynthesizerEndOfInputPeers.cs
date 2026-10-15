@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Tts.Cartesia;
 using Verbara.Sdk.VoiceAi.Tts.Deepgram;
@@ -33,33 +34,38 @@ internal static class SynthesizerEndOfInputPeers
     /// <param name="client">The synthesizer.</param>
     /// <param name="mode">What the peer does once the end of input has arrived.</param>
     /// <param name="progress">Replaces the profile's <see cref="EndOfInputPeer.Progress"/> round when given.</param>
-    public static EndOfInputPeer Create(string client, EndOfInputPeerMode mode, IReadOnlyList<PeerFrame>? progress = null) => client switch
+    /// <param name="silent">
+    /// When true, the vendor sends nothing on the end of input (<see cref="EndOfInputPeer.OnEndOfInput"/>
+    /// is empty), so the synthesis produces no audio and no vendor message.
+    /// </param>
+    public static EndOfInputPeer Create(
+        string client, EndOfInputPeerMode mode, IReadOnlyList<PeerFrame>? progress = null, bool silent = false) => client switch
     {
         "Cartesia" => new EndOfInputPeer(mode)
         {
             IsEndOfInput = static t => t.Contains("\"transcript\"", StringComparison.Ordinal),
-            OnEndOfInput = [PeerFrame.Text(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.ChunkFrame))],
+            OnEndOfInput = silent ? [] : [PeerFrame.Text(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.ChunkFrame))],
             Progress = progress ?? [PeerFrame.Text(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.ChunkFrame))],
             Answer = [PeerFrame.Text(CartesiaFakeServer.ReadFrame(CartesiaFakeServer.DoneFrame))],
         },
         "Deepgram" => new EndOfInputPeer(mode)
         {
             IsEndOfInput = static t => t.Contains("\"Close\"", StringComparison.Ordinal),
-            OnEndOfInput = [PeerFrame.Binary(320)],
+            OnEndOfInput = silent ? [] : [PeerFrame.Binary(320)],
             Progress = progress ?? [PeerFrame.Binary(320)],
             Answer = [PeerFrame.Text(DeepgramTtsFakeServer.ReadFrame(DeepgramTtsFakeServer.FlushedFrame))],
         },
         "ElevenLabs" => new EndOfInputPeer(mode)
         {
             IsEndOfInput = static t => t.Contains("\"text\":\"\"", StringComparison.Ordinal),
-            OnEndOfInput = [PeerFrame.Text(ElevenLabsFakeServer.ReadFrame(ElevenLabsFakeServer.AudioOutputFrame))],
+            OnEndOfInput = silent ? [] : [PeerFrame.Text(ElevenLabsFakeServer.ReadFrame(ElevenLabsFakeServer.AudioOutputFrame))],
             Progress = progress ?? [PeerFrame.Text(ElevenLabsFakeServer.ReadFrame(ElevenLabsFakeServer.AudioOutputFrame))],
             Answer = [PeerFrame.Text("""{"isFinal":true}""")],
         },
         "LMNT" => new EndOfInputPeer(mode)
         {
             IsEndOfInput = static t => t.Contains("\"eof\"", StringComparison.Ordinal),
-            OnEndOfInput = [PeerFrame.Binary(320)],
+            OnEndOfInput = silent ? [] : [PeerFrame.Binary(320)],
             Progress = progress ?? [PeerFrame.Binary(320)],
             Answer = [PeerFrame.Text(LmntWsFakeServer.ReadFrame(LmntWsFakeServer.FinishFrame))],
         },
@@ -70,10 +76,17 @@ internal static class SynthesizerEndOfInputPeers
     /// The synthesizer <paramref name="client"/> names, pointed at a peer on <paramref name="port"/>,
     /// with its bounds on <paramref name="clock"/> (<see cref="TimeProvider.System"/> when none is given)
     /// and its <c>ConnectTimeoutSeconds</c> at <paramref name="connectTimeoutSeconds"/> (the option's own
-    /// default when none is given).
+    /// default when none is given). <paramref name="resultReader"/> wraps the reader its iterator reads
+    /// audio through, and <paramref name="receiveLoopStarted"/> runs first in its receive loop's task;
+    /// neither is set when none is given.
     /// </summary>
     public static SpeechSynthesizer CreateSynthesizer(
-        string client, int port, TimeProvider? clock = null, int? connectTimeoutSeconds = null) => client switch
+        string client,
+        int port,
+        TimeProvider? clock = null,
+        int? connectTimeoutSeconds = null,
+        Func<ChannelReader<ReadOnlyMemory<byte>>, ChannelReader<ReadOnlyMemory<byte>>>? resultReader = null,
+        Action? receiveLoopStarted = null) => client switch
     {
         "Cartesia" => new CartesiaSpeechSynthesizer(Options.Create(new CartesiaOptions
         {
@@ -84,6 +97,8 @@ internal static class SynthesizerEndOfInputPeers
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
+            ResultReader = resultReader ?? (static reader => reader),
+            ReceiveLoopStarted = receiveLoopStarted ?? (static () => { }),
         },
         "Deepgram" => new DeepgramSpeechSynthesizer(Options.Create(new DeepgramTtsOptions
         {
@@ -93,6 +108,8 @@ internal static class SynthesizerEndOfInputPeers
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
+            ResultReader = resultReader ?? (static reader => reader),
+            ReceiveLoopStarted = receiveLoopStarted ?? (static () => { }),
         },
         "ElevenLabs" => new ElevenLabsSpeechSynthesizer(Options.Create(new ElevenLabsOptions
         {
@@ -103,6 +120,8 @@ internal static class SynthesizerEndOfInputPeers
         }))
         {
             TimeProvider = clock ?? TimeProvider.System,
+            ResultReader = resultReader ?? (static reader => reader),
+            ReceiveLoopStarted = receiveLoopStarted ?? (static () => { }),
         },
         "LMNT" => new LmntSpeechSynthesizer(Options.Create(new LmntTtsOptions
         {
@@ -113,6 +132,8 @@ internal static class SynthesizerEndOfInputPeers
         }), port)
         {
             TimeProvider = clock ?? TimeProvider.System,
+            ResultReader = resultReader ?? (static reader => reader),
+            ReceiveLoopStarted = receiveLoopStarted ?? (static () => { }),
         },
         _ => throw new ArgumentOutOfRangeException(nameof(client), client, null),
     };

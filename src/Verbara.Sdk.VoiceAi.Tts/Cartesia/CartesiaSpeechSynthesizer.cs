@@ -31,6 +31,15 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
     // after the end of input. Settable by tests (via InternalsVisibleTo) to drive them on a manual clock.
     internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
+    // How the iterator reads its result channel: the channel's own reader unless a test wraps it.
+    // Settable by tests (via InternalsVisibleTo) to hold a read between its token check and its
+    // read of the channel's completion, the window a cancel can fall into.
+    internal Func<ChannelReader<ReadOnlyMemory<byte>>, ChannelReader<ReadOnlyMemory<byte>>> ResultReader { get; set; } = static reader => reader;
+
+    // Runs first in the receive loop's task, so a test can cancel knowing the loop is running and
+    // will end the result channel. A no-op unless a test sets it (via InternalsVisibleTo).
+    internal Action ReceiveLoopStarted { get; set; } = static () => { };
+
     /// <inheritdoc />
     public override string ProviderName => "Cartesia";
 
@@ -117,6 +126,7 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
         // Receive loop writes decoded audio to the channel, stops on `done`, throws on a failure.
         var receiveTask = Task.Run(async () =>
         {
+            ReceiveLoopStarted();
             try
             {
                 await ReceiveFramesAsync(ws, channel.Writer, ProviderName, silence, sessionCts.Token)
@@ -139,18 +149,26 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
 
         // Yield binary audio frames as they arrive (true streaming).
         var yieldedAudio = false;
-        await foreach (var frame in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        await foreach (var frame in ResultReader(channel.Reader).ReadAllAsync(ct).ConfigureAwait(false))
         {
             if (frame.Length > 0) yieldedAudio = true;
             yield return frame;
         }
+
+        // The reader's own token check is not enough: a cancel can land after that check and before
+        // the reader sees the channel's state, while the receive loop, reacting to the same cancel, ends
+        // the channel cleanly. The reader then reports a clean end, so the caller's token decides the
+        // ending here, before the empty-result rule can report a cancelled session as empty.
+        ct.ThrowIfCancellationRequested();
 
         // Propagate any exceptions from send/receive tasks.
         await Task.WhenAll(sendTask, receiveTask).ConfigureAwait(false);
 
         // ADR-0050 E5, the synthesis rule: the session ended clean, said nothing, and produced no
         // audio. Not reachable when the loop threw — the reader raises that first — and not reachable
-        // under cancellation, which ReadAllAsync raises as OperationCanceledException (E6).
+        // under cancellation either, though not thanks to the reader, which can report the clean end
+        // the receive loop wrote in reaction to the cancel: the token check after the read loop above
+        // raises OperationCanceledException first (E6).
         if (!yieldedAudio)
         {
             throw new SpeechProviderEmptyResultException(

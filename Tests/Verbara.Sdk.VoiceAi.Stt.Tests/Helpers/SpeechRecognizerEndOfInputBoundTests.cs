@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.TestInfrastructure.Channels;
 using Verbara.Sdk.TestInfrastructure.WebSocket;
 using Verbara.Sdk.VoiceAi.Stt.Tests.Deepgram;
 using FluentAssertions;
@@ -293,6 +294,118 @@ public sealed class SpeechRecognizerEndOfInputBoundTests
             caller.Transcripts.Should().Equal(["hello"]);
         }
     }
+
+    /// <summary>
+    /// The lost cancel: the caller cancels while its reader is past its token check and before it has
+    /// read the channel's state; the receive loop, reacting to the same cancel, ends the result stream
+    /// without an error; the reader then sees a clean end. The caller asked for the ending, so the
+    /// stream throws <see cref="OperationCanceledException"/> instead of completing normally.
+    /// </summary>
+    /// <remarks>
+    /// The window is held open by a <see cref="HeldReadWindow{T}"/>, released only once the receive loop
+    /// has completed the stream cleanly, so the read lands in it on every run rather than when the
+    /// scheduler allows. CI met the same window unheld, on Deepgram.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Clients))]
+    public async Task StreamAsync_ShouldThrowOperationCanceled_WhenTheReceiveLoopEndsTheStreamBeforeTheReaderSeesTheCancel(string client)
+    {
+        // Arrange, Act — one transcript delivered, then the cancel lands in the held window.
+        var run = await LoseTheCancelRaceAsync(client, silent: false);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            run.Ending.Should().BeAssignableTo<OperationCanceledException>("the caller asked for the ending");
+            run.Ending.Should().NotBeAssignableTo<SpeechProviderException>();
+            run.Transcripts.Should().Equal(["hello"], "the transcript delivered before the cancel is the only one");
+        }
+    }
+
+    /// <summary>
+    /// The lost cancel before the vendor has said anything: the clean end the reader sees would reach
+    /// the empty-result rule and report a cancelled session as <see cref="SpeechProviderEmptyResultException"/>,
+    /// which is raised only for a session that was not cancelled.
+    /// </summary>
+    /// <remarks>
+    /// The vendor stays silent from the start, so the stream holds no item the clean end would have to
+    /// wait behind, and the cancel is issued only once the receive loop is running, so it cannot skip
+    /// the loop and leave the stream open.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Clients))]
+    public async Task StreamAsync_ShouldThrowOperationCanceled_WhenTheReceiveLoopEndsTheStreamBeforeTheReaderSeesACancelThatPrecedesAnyVendorMessage(string client)
+    {
+        // Arrange, Act — nothing from the vendor, then the cancel lands in the held window.
+        var run = await LoseTheCancelRaceAsync(client, silent: true);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            run.Ending.Should().BeAssignableTo<OperationCanceledException>("the caller asked for the ending");
+            run.Ending.Should().NotBeAssignableTo<SpeechProviderException>(
+                "a cancelled session is not an empty result");
+            run.Transcripts.Should().BeEmpty();
+        }
+    }
+
+    /// <summary>
+    /// Runs one stream to the lost cancel: holds the caller's read in its window, cancels, waits for the
+    /// receive loop to have ended the stream cleanly (and fails if it did not, so a run that missed the
+    /// window cannot pass), then releases the read and returns how the stream ended.
+    /// </summary>
+    /// <param name="client">The recognizer.</param>
+    /// <param name="silent">
+    /// False: the vendor delivers one transcript and the window is the read after it. True: the vendor
+    /// says nothing and the window is the first read.
+    /// </param>
+    private static async Task<LostCancelRun> LoseTheCancelRaceAsync(string client, bool silent)
+    {
+        await using var peer = RecognizerEndOfInputPeers.Create(client, EndOfInputPeerMode.NeverAnswer, silent: silent);
+        peer.Start();
+        var window = new HeldReadWindow<SpeechRecognitionResult>(itemsBeforeTheHold: silent ? 0 : 1);
+        var loopStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cts = new CancellationTokenSource();
+        var caller = new StreamingCaller(
+            RecognizerEndOfInputPeers.CreateRecognizer(
+                client,
+                peer.Port,
+                new FakeTimeProvider(),
+                resultReader: window.Wrap,
+                receiveLoopStarted: () => loopStarted.TrySetResult()),
+            RecognizerEndOfInputPeers.Frames(25),
+            cts.Token);
+
+        try
+        {
+            if (!silent)
+                await caller.NextTranscriptAsync().WaitAsync(SignalTimeout);
+
+            await loopStarted.Task.WaitAsync(SignalTimeout);
+            await window.WindowEntered.WaitAsync(SignalTimeout);
+
+            await cts.CancelAsync();
+            var inner = await window.Inner.WaitAsync(SignalTimeout);
+            await Task.WhenAny(inner.Completion).WaitAsync(SignalTimeout);
+
+            using (new AssertionScope())
+            {
+                inner.Completion.IsCompletedSuccessfully.Should().BeTrue(
+                    "the receive loop ended the stream without an error, which is the window under test");
+                inner.Count.Should().Be(0, "no item is left for the released read to return");
+            }
+        }
+        finally
+        {
+            window.Release();
+        }
+
+        var ending = await Record.ExceptionAsync(() => caller.Run.WaitAsync(SignalTimeout));
+        return new LostCancelRun(ending, caller.Transcripts);
+    }
+
+    /// <summary>How a stream that lost the cancel race ended, and what it delivered first.</summary>
+    private sealed record LostCancelRun(Exception? Ending, IReadOnlyList<string> Transcripts);
 
     /// <summary>
     /// Waits until the recognizer has armed its silence bound on <paramref name="clock"/>: its end of
