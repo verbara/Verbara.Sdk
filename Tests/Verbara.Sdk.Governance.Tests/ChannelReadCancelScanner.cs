@@ -165,9 +165,9 @@ internal static class ChannelReadCancelScanner
     /// </summary>
     private static (bool IsRead, string? Token) WaitToReadToken(ExpressionSyntax condition)
     {
-        foreach (var awaited in condition.DescendantNodesAndSelf().OfType<AwaitExpressionSyntax>())
+        foreach (var awaitedExpression in condition.DescendantNodesAndSelf().OfType<AwaitExpressionSyntax>().Select(a => a.Expression))
         {
-            var current = awaited.Expression;
+            var current = awaitedExpression;
             while (true)
             {
                 if (current is ParenthesizedExpressionSyntax parenthesized)
