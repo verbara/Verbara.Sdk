@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: a cancelled WebSocket recognizer or synthesizer always throws `OperationCanceledException` (#NNN)
+### Fixed: a cancelled WebSocket recognizer or synthesizer always throws `OperationCanceledException` (#423)
 
 The four WebSocket recognizers (Deepgram, AssemblyAI, Cartesia, Speechmatics) and the four WebSocket synthesizers
 (Cartesia, Deepgram, ElevenLabs, and LMNT on its WebSocket transport) could lose the caller's cancellation. Each runs a
