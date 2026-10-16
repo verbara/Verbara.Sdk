@@ -1,20 +1,33 @@
 using System.Collections.Concurrent;
 using System.Reactive.Subjects;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Verbara.Sdk.Sessions.Internal;
 
 namespace Verbara.Sdk.Sessions.Manager;
 
-internal sealed class AgentSessionTracker : IAgentSessionTracker, IDisposable
+internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDisposable
 {
     private readonly ConcurrentDictionary<string, AgentSession> _agents = new();
     private readonly Subject<AgentSessionStateChanged> _stateChanges = new();
     private readonly ICallSessionManager _manager;
     private readonly SessionOptions _options;
     private readonly IDisposable _subscription;
+    private readonly ILogger<AgentSessionTracker> _logger;
+    private readonly SubscriberGuardedObservable<AgentSessionStateChanged> _guardedStateChanges;
 
-    public AgentSessionTracker(ICallSessionManager manager, IOptions<SessionOptions> options)
+    public AgentSessionTracker(
+        ICallSessionManager manager,
+        IOptions<SessionOptions> options,
+        ILogger<AgentSessionTracker> logger)
     {
         _manager = manager;
+        _logger = logger;
+        _guardedStateChanges = new SubscriberGuardedObservable<AgentSessionStateChanged>(
+            _stateChanges,
+            reportNext: (ex, change) => LogStateChangeSubscriberFault(
+                ex, change.AgentId, change.PreviousState, change.NewState),
+            reportTerminal: (ex, signal) => LogStateChangeSubscriberFaultOnSignal(ex, signal));
         _options = options.Value;
         _subscription = _manager.Events.Subscribe(new EventObserver(this));
     }
@@ -27,7 +40,22 @@ internal sealed class AgentSessionTracker : IAgentSessionTracker, IDisposable
     public IEnumerable<AgentSession> GetByState(AgentSessionState state) =>
         _agents.Values.Where(a => a.State == state);
 
-    public IObservable<AgentSessionStateChanged> StateChanges => _stateChanges;
+    // Every subscription goes through its own guard over the subject TransitionState publishes on, so a subscriber's
+    // exception reaches neither the other subscribers nor the session notification that caused the change, where it
+    // would be reported under the wrong stream.
+    /// <inheritdoc />
+    public IObservable<AgentSessionStateChanged> StateChanges => _guardedStateChanges;
+
+    [LoggerMessage(EventId = 5, EventName = nameof(LogStateChangeSubscriberFault), Level = LogLevel.Warning,
+        Message = "A subscriber of the agent state changes threw on the change of agent {AgentId} from {PreviousState} "
+            + "to {NewState}; the other subscribers and the agent tracker went on")]
+    private partial void LogStateChangeSubscriberFault(
+        Exception ex, string agentId, AgentSessionState previousState, AgentSessionState newState);
+
+    [LoggerMessage(EventId = 6, EventName = nameof(LogStateChangeSubscriberFaultOnSignal), Level = LogLevel.Warning,
+        Message = "A subscriber of the agent state changes threw on {EventType}; the other subscribers and the agent "
+            + "tracker went on")]
+    private partial void LogStateChangeSubscriberFaultOnSignal(Exception ex, string eventType);
 
     private AgentSession GetOrCreate(string agentId) =>
         _agents.GetOrAdd(agentId, id => new AgentSession(id));
