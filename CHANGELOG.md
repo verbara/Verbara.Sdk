@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: `SendFlashAction` reaches Asterisk (#NNN)
+
+`SendFlashAction` sent `Action: Flash`, a name no Asterisk version registers, so every Asterisk answered
+`Invalid/unknown command: Flash` and no hook flash was ever sent. It now sends `Action: SendFlash`, the name
+Asterisk registers. Measured on Asterisk 22 and 23: for a live channel Asterisk answers `Flash successfully queued`
+and raises a `Flash` event, and for an unknown channel it answers `Channel not found`. The public API is unchanged.
+
 ### Fixed — BREAKING: a yes from Asterisk reads true (#424)
 
 Every `bool?` member of an AMI event or response read only `1` and `true` as true and turned every other value into
