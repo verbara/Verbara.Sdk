@@ -329,11 +329,11 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
                 break;
 
             case PropertyType.NullableBool:
-                sb.AppendLine($"{indent}{{");
-                sb.AppendLine($"{indent}    var {ToLocalVar(prop.Name)}Str = {fieldAccess};");
-                sb.AppendLine($"{indent}    if ({ToLocalVar(prop.Name)}Str is not null)");
-                sb.AppendLine($"{indent}        {varName}.{prop.Name} = string.Equals({ToLocalVar(prop.Name)}Str, \"1\", StringComparison.Ordinal) || string.Equals({ToLocalVar(prop.Name)}Str, \"true\", StringComparison.OrdinalIgnoreCase);");
-                sb.AppendLine($"{indent}}}");
+                // One public reader holds Asterisk's true/false vocabulary for every bool? member; the
+                // emitted code must reach only public members of Verbara.Sdk.Ami, because this generator
+                // package is published on its own and runs in compilations other than Ami's.
+                sb.AppendLine($"{indent}if (global::Verbara.Sdk.Ami.AmiBoolean.Parse({fieldAccess}) is {{ }} {ToLocalVar(prop.Name)}Bool)");
+                sb.AppendLine($"{indent}    {varName}.{prop.Name} = {ToLocalVar(prop.Name)}Bool;");
                 break;
         }
     }

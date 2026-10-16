@@ -26,17 +26,30 @@ public sealed class GeneratorEdgeCaseTests
     }
 
     [Theory]
-    [InlineData("1", true)]
+    [InlineData("yes", true)]
+    [InlineData("Yes", true)]
     [InlineData("true", true)]
     [InlineData("True", true)]
-    [InlineData("TRUE", true)]
-    [InlineData("0", false)]
-    [InlineData("false", false)]
-    [InlineData("yes", false)]
+    [InlineData("y", true)]
+    [InlineData("t", true)]
+    [InlineData("1", true)]
+    [InlineData("on", true)]
+    [InlineData("ON", true)]
+    [InlineData("enabled", true)]
+    [InlineData("Enabled", true)]
     [InlineData("no", false)]
-    public void BooleanParsing_ShouldOnlyRecognize1AndTrue(string fieldValue, bool expected)
+    [InlineData("No", false)]
+    [InlineData("false", false)]
+    [InlineData("FALSE", false)]
+    [InlineData("n", false)]
+    [InlineData("f", false)]
+    [InlineData("0", false)]
+    [InlineData("off", false)]
+    [InlineData("disabled", false)]
+    [InlineData("Disabled", false)]
+    public void BooleanParsing_ShouldReadAsteriskVocabulary_WhenTokenIsKnown(string fieldValue, bool expected)
     {
-        // ConfbridgeTalkingEvent.TalkingStatus is bool?
+        // ConfbridgeTalkingEvent.TalkingStatus is bool?; Asterisk sends it as on/off.
         var msg = CreateMessage("ConfbridgeTalking", new Dictionary<string, string>
         {
             ["TalkingStatus"] = fieldValue,
@@ -47,6 +60,23 @@ public sealed class GeneratorEdgeCaseTests
         evt.Should().BeOfType<ConfbridgeTalkingEvent>();
         var typed = (ConfbridgeTalkingEvent)evt;
         typed.TalkingStatus.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("maybe")]
+    [InlineData("")]
+    public void BooleanParsing_ShouldReturnNull_WhenTokenIsUnknown(string fieldValue)
+    {
+        var msg = CreateMessage("ConfbridgeTalking", new Dictionary<string, string>
+        {
+            ["TalkingStatus"] = fieldValue,
+        });
+
+        var evt = GeneratedEventDeserializer.Deserialize(msg);
+
+        evt.Should().BeOfType<ConfbridgeTalkingEvent>();
+        var typed = (ConfbridgeTalkingEvent)evt;
+        typed.TalkingStatus.Should().BeNull();
     }
 
     [Fact]
