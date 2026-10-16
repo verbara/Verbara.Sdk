@@ -26,6 +26,40 @@ var sessionManager = app.Services.GetRequiredService<ICallSessionManager>();
 sessionManager.Events.Subscribe(evt => Console.WriteLine(evt));
 ```
 
+## Domain Events
+
+`ICallSessionManager.Events` delivers each notification to every subscriber in turn, on the thread that raised it — the
+thread delivering the server's event, a reload, a sweep or the disposal — and, for some kinds, while the engine holds
+that call's lock. A subscriber that blocks holds them up; keep handlers short and hand long work off.
+
+**A subscriber that throws fails alone.** Its exception is caught at that subscriber, logged once at `Warning` with the
+exception and counted on `sessions.events.subscriber_faults` (meter `Verbara.Sdk.Sessions`):
+
+| EventId | Line |
+|---|---|
+| 3 | `A subscriber of the session events threw on {EventType} for session {SessionId}; the other subscribers and the session engine went on` |
+| 4 | `A subscriber of the session events threw on {EventType}; the other subscribers and the session engine went on` — the stream's `completion` at disposal (or an `error`), with no session |
+
+The other subscribers still receive the notification, and the engine's own work for the call (the store, the channel
+index, the metrics), the live state's later handlers, and a reload or sweep that raised it complete as with no failing
+subscriber. Nothing a subscriber throws reaches the code that raised the notification. Up to 2.8.x it did: the later
+subscribers, the SDK's own queue and agent trackers among them, missed that notification, a call could stay held with
+its ending never saved, and a reload stopped part way.
+
+- **A subscriber subscribed directly stays subscribed** and receives the next notification.
+- **A subscription composed through an operator (`Where`, `Select`, `OfType`, …) is gone after its first failure.** The
+  operator ends it on the first exception from its own function or from the handler behind it; the guard reports that
+  one failure and cannot keep it alive. So one `Warning` can mean that subscriber receives nothing more. To stay
+  subscribed, subscribe directly and filter inside the handler.
+- **Only what throws on the delivering thread is caught.** A subscriber that moves its work elsewhere — `ObserveOn` or
+  `SubscribeOn`, an `async void` handler, work pushed to `Task.Run` — throws on another thread, where this does not
+  catch it.
+
+`IAgentSessionTracker.StateChanges` behaves the same way, on the thread that raised the agent's change and under that
+agent's lock. Its failures log at `Warning` under the tracker's own category, EventId 5 (`A subscriber of the agent
+state changes threw on the change of agent {AgentId} from {PreviousState} to {NewState}; …`) and EventId 6 (its
+completion or error), and count on the same `sessions.events.subscriber_faults`.
+
 ## Queue metrics
 
 `IQueueSessionTracker` keeps one `QueueSession` per queue. Its counters cover a rolling window

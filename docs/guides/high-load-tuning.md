@@ -77,6 +77,12 @@ Use `dotnet-counters`, OpenTelemetry, or Prometheus to track these metrics.
 | `ari.rest.roundtrip` | Histogram (ms) | p99 > 5000ms | REST API roundtrip time |
 | `ari.reconnections` | Counter | > 0 | WebSocket reconnection attempts |
 
+### Session Metrics (`Verbara.Sdk.Sessions`)
+
+| Metric | Type | Alert Threshold | Description |
+|--------|------|-----------------|-------------|
+| `sessions.events.subscriber_faults` | Counter | > 0 | Subscriber failures: a subscriber of `ICallSessionManager.Events` or `IAgentSessionTracker.StateChanges` threw, one per failure, each also logged at Warning (`A subscriber of the session events threw on <EventType> …` or `A subscriber of the agent state changes threw …`) with the exception. The other subscribers and the session engine go on. A subscriber subscribed directly stays subscribed; one composed through an operator (`Where`, `Select`, `OfType`, …) is gone after its first failure, so a single count can mean a subscriber that receives nothing more. Counted apart from `ami.events.observer_faults`, which no longer counts these. **Action:** fix the subscriber |
+
 ### VoiceAi Telemetry (v1.9.0+)
 
 All five VoiceAi packages publish a `Meter` + `ActivitySource` + `IHealthCheck`. Auto-registered by `AddVoiceAiPipeline<THandler>()` in `Verbara.Sdk.VoiceAi` and the `AddStt*` / `AddTts*` / `AddAudioSocketServer()` / `AddOpenAiRealtime*` DI helpers.
