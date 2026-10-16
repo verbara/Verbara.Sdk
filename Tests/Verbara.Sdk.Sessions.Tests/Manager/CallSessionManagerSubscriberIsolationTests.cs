@@ -254,7 +254,7 @@ public sealed class CallSessionManagerSubscriberIsolationTests
     public async Task Events_ShouldLogOneWarningAndCountOneFault_WhenASubscriberThrowsOnceOnCallStarted()
     {
         var logger = new RecordingLogger();
-        using var faults = new FaultCounter();
+        using var faults = new SubscriberFaultCounter();
         await using var rig = new Rig(logger);
         using var thrower = rig.Manager.Events.Subscribe(new Thrower(e => e is CallStartedEvent));
 
@@ -280,7 +280,7 @@ public sealed class CallSessionManagerSubscriberIsolationTests
     public async Task Events_ShouldLogAndCountEveryFailure_WhenASubscriberThrowsOnEveryNotification()
     {
         var logger = new RecordingLogger();
-        using var faults = new FaultCounter();
+        using var faults = new SubscriberFaultCounter();
         await using var rig = new Rig(logger);
         using var thrower = rig.Manager.Events.Subscribe(new Thrower(_ => true));
 
@@ -307,7 +307,7 @@ public sealed class CallSessionManagerSubscriberIsolationTests
     public async Task DisposeAsync_ShouldLogOneWarningNamingTheCompletion_WhenASubscriberThrowsOnCompletion()
     {
         var logger = new RecordingLogger();
-        using var faults = new FaultCounter();
+        using var faults = new SubscriberFaultCounter();
         var rig = new Rig(logger);
         using var first = rig.Manager.Events.Subscribe(new Thrower(_ => false, throwsOnCompleted: true));
 
@@ -457,28 +457,6 @@ public sealed class CallSessionManagerSubscriberIsolationTests
                 properties.GetValueOrDefault("SessionId") as string,
                 exception?.GetType().Name));
         }
-    }
-
-    /// <summary>Sums what is added to <c>sessions.events.subscriber_faults</c> while it listens.</summary>
-    private sealed class FaultCounter : IDisposable
-    {
-        private readonly MeterListener _listener = new();
-        private long _total;
-
-        public FaultCounter()
-        {
-            _listener.InstrumentPublished = (instrument, listener) =>
-            {
-                if (ReferenceEquals(instrument, SessionMetrics.SubscriberFaults))
-                    listener.EnableMeasurementEvents(instrument);
-            };
-            _listener.SetMeasurementEventCallback<long>((_, value, _, _) => Interlocked.Add(ref _total, value));
-            _listener.Start();
-        }
-
-        public long Total => Interlocked.Read(ref _total);
-
-        public void Dispose() => _listener.Dispose();
     }
 
     /// <summary>A subscriber that records every notification it receives and its completion.</summary>
