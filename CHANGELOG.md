@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: a subscriber of the session events that throws no longer silences the others (#NNN)
+
+An exception thrown by a subscriber of `ICallSessionManager.Events` or `IAgentSessionTracker.StateChanges` used to
+unwind out of the notification. The subscribers after it, the SDK's own queue and agent trackers among them, missed
+that notification. The session engine's work for the call stopped part way: a call whose channels were gone could stay
+held with its ending never saved. A reload stopped reconciling (measured: of three gone calls, two were still held and
+neither of the two listed channels was admitted). A reconciliation sweep ended the dropped calls one verification late.
+Each failure is now caught at the subscriber that threw, logged at Warning with the exception, and counted on
+`sessions.events.subscriber_faults`; the other subscribers, the engine and the reload or sweep go on as with no failing
+subscriber. These failures no longer appear as `[AMI_EVENT] Observer threw on <EventType>` or on
+`ami.events.observer_faults`. A subscriber subscribed directly stays subscribed; one composed through an operator
+(`Where`, `Select`, `OfType`, …) is still ended by that operator on its first failure, so subscribe directly and filter
+inside the handler. What a subscriber throws on another thread is not caught. The public API is unchanged.
+
 ### Fixed: `SendFlashAction` reaches Asterisk (#430)
 
 `SendFlashAction` sent `Action: Flash`, a name no Asterisk version registers, so every Asterisk answered
