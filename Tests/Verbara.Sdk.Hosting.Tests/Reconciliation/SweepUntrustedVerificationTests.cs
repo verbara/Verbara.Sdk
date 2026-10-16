@@ -133,29 +133,48 @@ public sealed class SweepUntrustedVerificationTests : IAsyncLifetime
         var kept = _rig.DialingCall("kept");
         _rig.Age(kept);
         var keptBefore = SweepRig.Look(kept);
-        _rig.AsteriskLists("kept");
+        // The first verification is answered at once; every later one is held until the test has read what the first
+        // did, so what is read is the first verification's work and nothing a later one finished.
+        var later = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _rig.StatusReply = (number, token) => number == 1
+            ? _rig.ListedNow(["kept"], token)
+            : ListedOnceReleased(later.Task, ["kept"], token);
         using var throwing = _rig.Manager.Events.Subscribe(new ThrowsOnCallEnded());
         var loop = await _rig.StartLoopAsync(_rig.BuildSweep());
 
-        (await _rig.WaitUntilAsync(() => _rig.StatusRequests >= 3 || loop.Sweeps >= 3)).Should().BeTrue(
-            $"premise: the loop completes its sweeps. Measured: {_rig.Describe()}");
-        new
+        (await _rig.WaitUntilAsync(() => _rig.StatusRequests >= 2)).Should().BeTrue(
+            "the loop survives the first verification and asks Asterisk again for the call it still lists. "
+            + $"Measured: {_rig.Describe()}");
+        var afterTheFirstVerification = new
         {
             DroppedDialing = new { droppedDialing.State, Cause = droppedDialing.Metadata.GetValueOrDefault("cause"), Endings = _rig.EndingsOf(droppedDialing) },
             DroppedConnected = new { droppedConnected.State, Cause = droppedConnected.Metadata.GetValueOrDefault("cause"), Endings = _rig.EndingsOf(droppedConnected) },
             Kept = SweepRig.Look(kept),
-        }.Should().BeEquivalentTo(
+        };
+        later.TrySetResult();
+        await loop.StopAsync();
+
+        afterTheFirstVerification.Should().BeEquivalentTo(
             new
             {
                 DroppedDialing = new { State = CallSessionState.Failed, Cause = "reload", Endings = 1 },
                 DroppedConnected = new { State = CallSessionState.Completed, Cause = "reload", Endings = 1 },
                 Kept = keptBefore,
             },
-            "a subscriber that throws on an ending interrupts that verification, not the loop: the next one ends "
-            + $"what the first left, and the call Asterisk still lists is left alone. Measured: {_rig.Describe()}");
-        (await _rig.WaitUntilAsync(() => _rig.StatusRequests >= 3)).Should().BeTrue(
-            $"the loop keeps verifying the call Asterisk still lists. Measured: {_rig.Describe()}");
-        await loop.StopAsync();
+            "a subscriber that throws on an ending interrupts nothing: the first verification ends both calls Asterisk "
+            + $"no longer lists, each once, and leaves alone the call it still lists. Measured: {_rig.Describe()}");
+    }
+
+    /// <summary>
+    /// A <c>Status</c> answer that lists the legs of <paramref name="calls"/> once <paramref name="release"/> has
+    /// completed, honouring its token.
+    /// </summary>
+    private async IAsyncEnumerable<ManagerEvent> ListedOnceReleased(
+        Task release, IReadOnlyList<string> calls, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await release.WaitAsync(cancellationToken);
+        await foreach (var listed in _rig.ListedNow(calls, cancellationToken))
+            yield return listed;
     }
 
     /// <summary>A <c>Status</c> answer that lists nothing until <paramref name="release"/>, honouring its token.</summary>

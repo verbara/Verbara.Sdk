@@ -226,6 +226,15 @@ internal sealed class BootingAsterisk
         .CloseFromPeer();
 
     /// <summary>
+    /// Asterisk reports an event nobody asked for, such as a channel's <c>Newchannel</c> or <c>Hangup</c>, on the
+    /// session this peer serves. Returns <see langword="false"/> when the session had already ended.
+    /// </summary>
+    public Task<bool> SendEventAsync(string eventType, IEnumerable<KeyValuePair<string, string>> fields) =>
+        (Volatile.Read(ref _socket)
+            ?? throw new InvalidOperationException("The peer reports events on the session it serves, and it serves none yet."))
+        .WriteEventAsync(eventType, fields);
+
+    /// <summary>
     /// The actions the connection sent on this session after it ended, by name, once the peer has stopped serving.
     /// The peer reads nothing after a close, so these are the actions it was sent and never answered.
     /// </summary>

@@ -2,12 +2,14 @@ using System.Reactive.Subjects;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Sessions;
 using Verbara.Sdk.Sessions.Manager;
+using Verbara.Sdk.Sessions.Tests.Manager;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace Verbara.Sdk.Sessions.Tests;
 
+[Collection(SessionSubscriberFaultsGroup.Name)]
 public sealed class AgentSessionTrackerTests : IDisposable
 {
     private readonly Subject<SessionDomainEvent> _events = new();
