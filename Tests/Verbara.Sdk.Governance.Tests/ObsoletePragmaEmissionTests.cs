@@ -20,6 +20,12 @@ public sealed class ObsoletePragmaEmissionTests
     private const string Deserializer = nameof(EventDeserializerGenerator);
     private const string ProbeId = "PROBE0001";
 
+    /// <summary>What a bare <c>#pragma warning disable</c>, with no id, reads as: it silences every diagnostic.</summary>
+    private const string Bare = "(bare: every diagnostic)";
+
+    /// <summary>The ids that silence an obsolete diagnostic: the two compiler ones and the probe's <c>DiagnosticId</c>.</summary>
+    private static readonly HashSet<string> ObsoleteIds = new(StringComparer.Ordinal) { "CS0612", "CS0618", ProbeId, Bare };
+
     private const string NoObsoleteSymbol = """
         using Verbara.Sdk;
         using Verbara.Sdk.Attributes;
@@ -72,7 +78,7 @@ public sealed class ObsoletePragmaEmissionTests
         """;
 
     private static readonly Regex DisablePragma = new(
-        @"^\s*#pragma\s+warning\s+disable\s+(?<ids>[^/\r\n]+)", RegexOptions.Multiline, TimeSpan.FromSeconds(1));
+        @"^[ \t]*#[ \t]*pragma[ \t]+warning[ \t]+disable\b(?<ids>[^/\r\n]*)", RegexOptions.Multiline, TimeSpan.FromSeconds(1));
 
     [Fact]
     public void Generators_ShouldEmitNoObsoleteSuppression_WhenNoBoundSymbolIsObsolete()
@@ -124,12 +130,24 @@ public sealed class ObsoletePragmaEmissionTests
     }
 
     [Fact]
-    public void DisabledIds_ShouldReadEveryIdOfEveryPragma_WhenAFileCarriesSeveral()
+    public void DisabledIds_ShouldReadEveryObsoleteIdOfEveryPragma_WhenAFileCarriesSeveral()
     {
-        // The reader's control: a file with two pragmas, one of them listing two ids and a trailing comment.
-        var text = "#nullable enable\n#pragma warning disable CS0618 // why\n  #pragma warning disable PROBE0001, CS0612\n";
+        // The reader's control: two pragmas, one listing two ids and a trailing comment; a non-obsolete id is not read.
+        var text = "#nullable enable\n#pragma warning disable CS0618 // why\n  #pragma warning disable PROBE0001, CS0612\n"
+            + "#pragma warning disable CS1591 // a doc comment, not an obsolete diagnostic\n#pragma warning restore CS0618\n"
+            + "#pragma warning disable 612\n";
 
         ReadDisabledIds(text).Should().Equal(["CS0612", "CS0618", "PROBE0001"]);
+    }
+
+    [Theory]
+    [InlineData("#pragma warning disable\n")]
+    [InlineData("#pragma warning disable // everything\n")]
+    [InlineData("  #pragma warning disable   \r\n")]
+    public void DisabledIds_ShouldReadABareDisableAsAnObsoleteSuppression_WhenItNamesNoId(string text)
+    {
+        // A bare disable silences CS0618 along with everything else, so it counts as an obsolete suppression.
+        ReadDisabledIds(text).Should().Equal([Bare]);
     }
 
     private static string Mark(string source, bool withId) =>
@@ -138,10 +156,22 @@ public sealed class ObsoletePragmaEmissionTests
     private static IReadOnlyList<string> DisabledIds(GeneratorRun run, string generator) =>
         ReadDisabledIds(run.Single(generator).Text);
 
+    /// <summary>A bare number is the compiler's own id: <c>618</c> disables <c>CS0618</c>.</summary>
+    private static string Normalize(string id) =>
+        id.Length > 0 && id.All(char.IsAsciiDigit) ? "CS" + id.PadLeft(4, '0') : id;
+
+    /// <summary>
+    /// The obsolete-diagnostic ids every <c>#pragma warning disable</c> of <paramref name="text"/> names, plus
+    /// <see cref="Bare"/> for one that names no id. Ids of other diagnostics are not this requirement's concern.
+    /// </summary>
     private static IReadOnlyList<string> ReadDisabledIds(string text) =>
     [
         .. DisablePragma.Matches(text)
-            .SelectMany(static m => m.Groups["ids"].Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .SelectMany(static m => m.Groups["ids"].Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) is { Length: > 0 } ids
+                ? ids
+                : [Bare])
+            .Select(Normalize)
+            .Where(ObsoleteIds.Contains)
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal),
     ];
