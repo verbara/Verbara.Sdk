@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — BREAKING: a yes from Asterisk reads true (#NNN)
+### Fixed — BREAKING: a yes from Asterisk reads true (#424)
 
 Every `bool?` member of an AMI event or response read only `1` and `true` as true and turned every other value into
 `false`, so a `Yes`, `on` or `Enabled` sent by Asterisk read `false`. Sixteen event members were affected:
@@ -24,7 +24,7 @@ Asterisk 20 built with chan_sip, the 5 Y/N members of `SipShowPeerResponse` and 
 in this release until the obsolete-member removal lands; its `Dynamic` and `Trunk` readings are fixed regardless. A
 consumer that branched on `false` for one of these members now takes the other branch.
 
-### Added: `AmiBoolean.Parse` reads a yes/no value the way Asterisk writes it (#NNN)
+### Added: `AmiBoolean.Parse` reads a yes/no value the way Asterisk writes it (#424)
 
 `Verbara.Sdk.Ami.AmiBoolean.Parse(string?)` returns `true`, `false` or `null` with the vocabulary above. The
 generated deserializers use it for every `bool?` member, and a consumer can use it for the yes/no members the SDK
