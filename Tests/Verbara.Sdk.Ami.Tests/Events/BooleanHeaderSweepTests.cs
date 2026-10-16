@@ -98,34 +98,28 @@ public sealed class BooleanHeaderSweepTests(ITestOutputHelper output)
     [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test code: reads the public properties of the Ami assembly's own types, never trimmed here.")]
     private static List<BooleanMember> EnumerateBooleanMembers()
     {
+        var mappedTypes = typeof(AmiBoolean).Assembly.GetTypes()
+            .Where(static type => type.IsClass && !type.IsAbstract
+                && (type.IsSubclassOf(typeof(ManagerEvent)) || type.IsSubclassOf(typeof(ManagerResponse))))
+            .Select(static type => (Type: type, MappingName: type.GetCustomAttribute<VerbaraMappingAttribute>(inherit: false)?.Name))
+            .Where(static mapped => !string.IsNullOrEmpty(mapped.MappingName));
+
         var members = new List<BooleanMember>();
-        foreach (var type in typeof(AmiBoolean).Assembly.GetTypes())
+        foreach (var (type, mappingName) in mappedTypes)
         {
-            if (!type.IsClass || type.IsAbstract)
-                continue;
-
             var isEvent = type.IsSubclassOf(typeof(ManagerEvent));
-            if (!isEvent && !type.IsSubclassOf(typeof(ManagerResponse)))
-                continue;
+            var booleanProperties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(static property => property.PropertyType == typeof(bool?)
+                    && property.GetIndexParameters().Length == 0
+                    && property.GetMethod is { IsPublic: true }
+                    && property.SetMethod is { IsPublic: true });
 
-            var mappingName = type.GetCustomAttribute<VerbaraMappingAttribute>(inherit: false)?.Name;
-            if (string.IsNullOrEmpty(mappingName))
-                continue;
-
-            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var property in booleanProperties)
             {
-                if (property.PropertyType != typeof(bool?)
-                    || property.GetIndexParameters().Length != 0
-                    || property.GetMethod is not { IsPublic: true }
-                    || property.SetMethod is not { IsPublic: true })
-                {
-                    continue;
-                }
-
                 var header = property.GetCustomAttribute<VerbaraMappingAttribute>(inherit: false)?.Name;
                 members.Add(new BooleanMember(
                     type,
-                    mappingName,
+                    mappingName!,
                     isEvent,
                     property,
                     string.IsNullOrEmpty(header) ? property.Name : header));

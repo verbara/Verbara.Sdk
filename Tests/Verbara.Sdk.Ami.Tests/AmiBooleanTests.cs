@@ -73,16 +73,12 @@ public sealed class AmiBooleanTests
     // Each token is written lower case; adds it in upper case and with its first letter upper case.
     private static TheoryData<string> Casings(params string[] tokens)
     {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var forms = tokens
+            .SelectMany(static token => new[] { token, token.ToUpperInvariant(), char.ToUpperInvariant(token[0]) + token[1..] })
+            .Distinct(StringComparer.Ordinal);
         var data = new TheoryData<string>();
-        foreach (var token in tokens)
-        {
-            foreach (var form in new[] { token, token.ToUpperInvariant(), char.ToUpperInvariant(token[0]) + token[1..] })
-            {
-                if (seen.Add(form))
-                    data.Add(form);
-            }
-        }
+        foreach (var form in forms)
+            data.Add(form);
 
         return data;
     }
