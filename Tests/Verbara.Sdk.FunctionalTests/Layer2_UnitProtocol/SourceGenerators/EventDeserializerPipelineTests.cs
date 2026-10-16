@@ -89,7 +89,8 @@ public sealed class EventDeserializerPipelineTests
         var msg = CreateMessage("ConfbridgeTalking", new Dictionary<string, string>
         {
             ["Conference"] = "100",
-            ["TalkingStatus"] = "1",
+            // Asterisk 20.20.1, 22.10.1 and 23.4.1 send TalkingStatus as on/off.
+            ["TalkingStatus"] = "on",
         });
 
         var evt = GeneratedEventDeserializer.Deserialize(msg);

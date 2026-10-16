@@ -7,6 +7,13 @@ namespace Verbara.Sdk.Ami.Events;
 public sealed class LocalOptimizationEndEvent : ManagerEvent
 {
     public int? Id { get; set; }
+    /// <summary>Asterisk's <c>Success</c> header, verbatim; not an outcome flag.</summary>
+    /// <remarks>
+    /// This is Asterisk's <c>Success</c> header, verbatim. For a swap optimization Asterisk reports
+    /// <c>No</c> when the move completed and <c>Yes</c> when it did not; for a merge optimization it
+    /// reports <c>Yes</c> when it completed. A completed optimization is shown by the Local channels'
+    /// hangup.
+    /// </remarks>
     public bool? Success { get; set; }
     public string? LocalOneChannel { get; set; }
     public string? LocalOneChannelState { get; set; }

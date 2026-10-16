@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: a yes from Asterisk reads true (#424)
+
+Every `bool?` member of an AMI event or response read only `1` and `true` as true and turned every other value into
+`false`, so a `Yes`, `on` or `Enabled` sent by Asterisk read `false`. Sixteen event members were affected:
+`ConfbridgeListEvent.Admin` and `MarkedUser`, `ConfbridgeListRoomsEvent.Locked`, `ConfbridgeTalkingEvent.TalkingStatus`,
+the six options of `VoicemailUserEntryEvent` (`SayEnvelope`, `SayCid`, `AttachMessage`, `DeleteMessage`, `CanReview`,
+`CallOperator`), `PeerEntryEvent.Dynamic` and `Trunk`, `TransportDetail.RequireClientCert`, `LogChannelEvent.Enabled`,
+`DahdiShowChannelsEvent.Dnd`, and `LocalOptimizationEndEvent.Success`, which carries Asterisk's `Success` header
+verbatim and is not an outcome flag (for a swap optimization, `Yes` means the move did not complete). Eleven of them
+were measured on the wire on Asterisk 20, 22 and 23, each sending `Yes` or `on` that read `false`. A boolean header
+is now read with Asterisk's own vocabulary: `yes`, `true`, `y`, `t`, `1`, `on` and `enabled` read `true`; `no`,
+`false`, `n`, `f`, `0`, `off` and `disabled` read `false`, in any case. A value outside the set, or an empty one,
+reads `null`, as the numeric members already did; no supported Asterisk sends one. An absent header still leaves the
+member `null`. Members whose wire is already `0`/`1` or `true`/`false` (queue member `Paused` and `Ringinuse`,
+`MailboxStatusResponse.Waiting`, the PJSIP endpoint booleans, `ShutdownEvent.Restart`) read as before. On an
+Asterisk 20 built with chan_sip, the 5 Y/N members of `SipShowPeerResponse` and 4 `PeerEntryEvent` members
+(`ForceRport`, `VideoSupport`, `TextSupport`, `Acl`) also change reading. `PeerEntryEvent` is still marked obsolete
+in this release until the obsolete-member removal lands; its `Dynamic` and `Trunk` readings are fixed regardless. A
+consumer that branched on `false` for one of these members now takes the other branch.
+
+### Added: `AmiBoolean.Parse` reads a yes/no value the way Asterisk writes it (#424)
+
+`Verbara.Sdk.Ami.AmiBoolean.Parse(string?)` returns `true`, `false` or `null` with the vocabulary above. The
+generated deserializers use it for every `bool?` member, and a consumer can use it for the yes/no members the SDK
+keeps as text, such as `ConfbridgeListEvent.Muted` and `Talking`. It allocates nothing and does not trim the value.
+
 ### Fixed: a cancelled WebSocket recognizer or synthesizer always throws `OperationCanceledException` (#423)
 
 The four WebSocket recognizers (Deepgram, AssemblyAI, Cartesia, Speechmatics) and the four WebSocket synthesizers
