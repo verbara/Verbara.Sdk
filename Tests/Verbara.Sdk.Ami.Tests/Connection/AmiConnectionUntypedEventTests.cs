@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Connection;
+using Verbara.Sdk.Ami.Events;
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Microsoft.Extensions.Logging;
 using static Verbara.Sdk.Ami.Tests.Connection.AmiDispatchTestKit;
 
 namespace Verbara.Sdk.Ami.Tests.Connection;
@@ -22,12 +24,18 @@ public sealed class AmiConnectionUntypedEventTests
     /// <summary>A list item no SDK type maps, before or after the removal of the obsolete event types.</summary>
     private const string UntypedListItem = "MeetmeList";
 
+    /// <summary>
+    /// The untyped <c>MeetmeJoin</c> and a typed <c>ConfbridgeJoin</c> travel the same connection, then the sentinel.
+    /// The connection logs whatever it logs about an event before it reads past that event or before it delivers the
+    /// next one, so once both subscribers have seen the sentinel the log holds every entry the two events produced.
+    /// </summary>
     [Fact]
     public async Task Subscribers_ShouldReceiveABaseManagerEventWithEveryHeader_WhenAnEventWithNoTypedClassArrives()
     {
         using var peer = new CancellationTokenSource(Bound * 2);
         var factory = new PipedSocketFactory();
-        await using var connection = Create(factory, new DispatchLogger());
+        var logger = new DispatchLogger();
+        await using var connection = Create(factory, logger);
         var observer = new RecordingSubscriber();
         var handler = new RecordingSubscriber();
         using var subscription = connection.Subscribe(observer);
@@ -36,6 +44,8 @@ public sealed class AmiConnectionUntypedEventTests
 
         (await socket.WriteEventAsync("MeetmeJoin",
             [new("Meetme", "200"), new("Usernum", "1"), new("Channel", "PJSIP/a-1")])).Should().BeTrue();
+        (await socket.WriteEventAsync("ConfbridgeJoin",
+            [new("Conference", "300"), new("Channel", "PJSIP/b-1")])).Should().BeTrue();
         await WriteSentinelAsync(socket);
         var observerReached = await CompletesWithinBoundAsync(observer.SentinelReached);
         var handlerReached = await CompletesWithinBoundAsync(handler.SentinelReached);
@@ -46,6 +56,10 @@ public sealed class AmiConnectionUntypedEventTests
             handlerReached.Should().BeTrue("the handler receives every event up to the sentinel written last");
             AssertMeetmeJoin(observer.Received, "the observer");
             AssertMeetmeJoin(handler.Received, "the OnEvent handler");
+            AssertConfbridgeJoin(observer.Received, "the observer");
+            AssertConfbridgeJoin(handler.Received, "the OnEvent handler");
+            logger.Entries.Where(static e => e.Level >= LogLevel.Warning).Select(static e => $"{e.Level}: {e.Line}")
+                .Should().BeEmpty("an event with no typed class is delivered, not logged as an error or warning");
         }
     }
 
@@ -82,19 +96,31 @@ public sealed class AmiConnectionUntypedEventTests
 
     private static void AssertMeetmeJoin(IReadOnlyList<ManagerEvent> received, string who)
     {
-        received.Should().ContainSingle($"{who} receives the one event written before the sentinel");
-        if (received.Count != 1)
+        var named = received.Where(static e => e.EventType == "MeetmeJoin").ToList();
+        named.Should().ContainSingle($"{who} receives the one MeetmeJoin written before the sentinel");
+        if (named.Count != 1)
             return;
 
-        var evt = received[0];
+        var evt = named[0];
         evt.GetType().Should().Be<ManagerEvent>( $"{who} receives the event as a base ManagerEvent, no typed class");
-        evt.EventType.Should().Be("MeetmeJoin", "the name is kept exactly as Asterisk spelled it");
         evt.RawFields.Should().Contain(
         [
             new KeyValuePair<string, string>("Meetme", "200"),
             new KeyValuePair<string, string>("Usernum", "1"),
             new KeyValuePair<string, string>("Channel", "PJSIP/a-1"),
         ], "every header of the message reaches {0}", who);
+    }
+
+    private static void AssertConfbridgeJoin(IReadOnlyList<ManagerEvent> received, string who)
+    {
+        var named = received.Where(static e => e.EventType == "ConfbridgeJoin").ToList();
+        named.Should().ContainSingle($"{who} receives the one ConfbridgeJoin written before the sentinel");
+        if (named.Count != 1)
+            return;
+
+        named[0].Should().BeOfType<ConfbridgeJoinEvent>($"a typed event keeps its type on its way to {who}")
+            .Which.Conference.Should().Be("300");
+        received.Should().HaveCount(2, $"{who} receives the two events written before the sentinel, and no other");
     }
 
     private static async Task<IReadOnlyList<ManagerEvent>> ReadToEndAsync(IAsyncEnumerable<ManagerEvent> events)
