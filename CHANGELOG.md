@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: `SendFlashAction` reaches Asterisk (#NNN)
+### Fixed: `SendFlashAction` reaches Asterisk (#430)
 
 `SendFlashAction` sent `Action: Flash`, a name no Asterisk version registers, so every Asterisk answered
 `Invalid/unknown command: Flash` and no hook flash was ever sent. It now sends `Action: SendFlash`, the name
