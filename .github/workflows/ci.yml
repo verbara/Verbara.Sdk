@@ -105,7 +105,7 @@ jobs:
           --blame-hang-timeout 5m --blame-hang-dump-type none
       - name: Upload raw coverage results
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: coverage-raw-${{ github.sha }}
           path: coverage/**/coverage.cobertura.xml
@@ -147,7 +147,7 @@ jobs:
         # (ADR-0013). ubuntu runners ship python3 + pip.
         run: pip install --disable-pip-version-check diff_cover==10.3.0
       - name: Download raw coverage results
-        uses: actions/download-artifact@v8.0.1
+        uses: actions/download-artifact@v8.0.2
         with:
           name: coverage-raw-${{ github.sha }}
           path: coverage
@@ -173,7 +173,7 @@ jobs:
         run: python3 scripts/check-exclusion-baseline.py coverage-exclusion-baseline.json .
       - name: Upload coverage report
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: coverage-${{ github.sha }}
           path: coverage/report
