@@ -1,7 +1,12 @@
+using System.Buffers;
+using System.IO.Pipelines;
+using System.Text;
 using Verbara.Sdk;
 using Verbara.Sdk.Attributes;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
+using Verbara.Sdk.Ami.Generated;
+using Verbara.Sdk.Ami.Internal;
 using FluentAssertions;
 
 namespace Verbara.Sdk.Ami.Tests.Actions;
@@ -232,7 +237,26 @@ public class SprintCActionTests
             .GetCustomAttributes(typeof(VerbaraMappingAttribute), false);
         attr.Should().ContainSingle()
             .Which.Should().BeOfType<VerbaraMappingAttribute>()
-            .Which.Name.Should().Be("Flash");
+            .Which.Name.Should().Be("SendFlash");
+    }
+
+    [Fact]
+    public async Task SendFlashAction_ShouldWriteSendFlashOnTheWire_WhenSerializedAsAConnectionSendsIt()
+    {
+        // The path AmiConnection takes for every send: the generated serializer names the action and
+        // yields its fields, and the protocol writer encodes them. Asterisk registers the manager action
+        // as SendFlash and answers any other name with "Invalid/unknown command".
+        var action = new SendFlashAction { Channel = "Local/100@default-00000000;2" };
+        var pipe = new Pipe();
+        var writer = new AmiProtocolWriter(pipe.Writer);
+
+        await writer.WriteActionAsync(
+            GeneratedActionSerializer.GetActionName(action), "flash-1", GeneratedActionSerializer.Serialize(action));
+
+        await pipe.Writer.CompleteAsync();
+        var result = await pipe.Reader.ReadAsync();
+        var wire = Encoding.UTF8.GetString(result.Buffer.ToArray());
+        wire.Should().Be("Action: SendFlash\r\nActionID: flash-1\r\nChannel: Local/100@default-00000000;2\r\n\r\n");
     }
 
     [Fact]
