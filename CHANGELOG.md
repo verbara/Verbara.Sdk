@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed: a subscriber of the session events that throws no longer silences the others (#NNN)
+### Changed: a subscriber of the session events that throws no longer silences the others (#431)
 
 An exception thrown by a subscriber of `ICallSessionManager.Events` or `IAgentSessionTracker.StateChanges` used to
 unwind out of the notification. The subscribers after it, the SDK's own queue and agent trackers among them, missed
