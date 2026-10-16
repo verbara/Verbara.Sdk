@@ -20,7 +20,9 @@ public interface ICallSessionManager : IAsyncDisposable
     /// event, a reload, a sweep or the disposal — and, for some kinds of notification, while the engine holds that
     /// call's lock. A subscriber that blocks holds them up.</para>
     /// <para>An exception a subscriber throws is caught at that subscriber, logged once at Warning with the
-    /// notification's type and session id, and counted on <c>sessions.events.subscriber_faults</c>. The other
+    /// notification's type and session id (a failure on the stream's completion is logged naming <c>completion</c>, with
+    /// no session id), and counted on <c>sessions.events.subscriber_faults</c>; an <c>OutOfMemoryException</c> is not
+    /// caught. The other
     /// subscribers still receive the notification, and the engine's own work for the call, the live state's handlers
     /// and a reload or sweep that raised it complete as with no failing subscriber. A subscriber subscribed directly
     /// stays subscribed and receives later notifications.</para>

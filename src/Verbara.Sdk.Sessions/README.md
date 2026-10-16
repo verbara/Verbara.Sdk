@@ -42,7 +42,7 @@ exception and counted on `sessions.events.subscriber_faults` (meter `Verbara.Sdk
 
 The other subscribers still receive the notification, and the engine's own work for the call (the store, the channel
 index, the metrics), the live state's later handlers, and a reload or sweep that raised it complete as with no failing
-subscriber. Nothing a subscriber throws reaches the code that raised the notification. Up to 2.8.x it did: the later
+subscriber. Nothing a subscriber throws (an `OutOfMemoryException` excepted) reaches the code that raised the notification. Up to 2.8.x it did: the later
 subscribers, the SDK's own queue and agent trackers among them, missed that notification, a call could stay held with
 its ending never saved, and a reload stopped part way.
 
