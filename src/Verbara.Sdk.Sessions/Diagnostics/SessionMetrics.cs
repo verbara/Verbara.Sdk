@@ -30,6 +30,15 @@ public static class SessionMetrics
     public static readonly Counter<long> SessionsOrphaned =
         Meter.CreateCounter<long>("sessions.orphaned", "sessions", "Orphaned sessions detected");
 
+    /// <summary>
+    /// Subscriber failures: a subscriber of the session notifications, or of the agent tracker's state changes, whose
+    /// handler threw, one per failure. Each is also logged at Warning; the other subscribers and the session engine go
+    /// on, and a subscriber subscribed directly stays subscribed.
+    /// </summary>
+    internal static readonly Counter<long> SubscriberFaults =
+        Meter.CreateCounter<long>("sessions.events.subscriber_faults", "faults",
+            "Subscriber failures (a subscriber's handler threw); delivery goes on");
+
     public static readonly Histogram<double> WaitTimeMs =
         Meter.CreateHistogram<double>("sessions.wait_time", "ms", "Queue wait time");
     public static readonly Histogram<double> TalkTimeMs =

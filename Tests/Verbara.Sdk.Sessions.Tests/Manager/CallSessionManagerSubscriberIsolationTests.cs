@@ -2,11 +2,13 @@ using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Reactive.Linq;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Server;
+using Verbara.Sdk.Sessions.Diagnostics;
 using Verbara.Sdk.Sessions.Extensions;
 using Verbara.Sdk.Sessions.Manager;
 
@@ -248,6 +250,79 @@ public sealed class CallSessionManagerSubscriberIsolationTests
             + $"removal, whatever a subscriber of the engine throws. Measured: {rig.Describe()}");
     }
 
+    [Fact]
+    public async Task Events_ShouldLogOneWarningAndCountOneFault_WhenASubscriberThrowsOnceOnCallStarted()
+    {
+        var logger = new RecordingLogger();
+        using var faults = new FaultCounter();
+        await using var rig = new Rig(logger);
+        using var thrower = rig.Manager.Events.Subscribe(new Thrower(e => e is CallStartedEvent));
+
+        rig.NewCall("c-1", "L-1");
+        var call = rig.Manager.GetByLinkedId("L-1")
+            ?? throw new InvalidOperationException("premise: the new channel opened a call");
+        rig.HangUp("c-1");
+
+        new { Warnings = logger.Warnings(), Counted = faults.Total }.Should().BeEquivalentTo(
+            new
+            {
+                Warnings = new[]
+                {
+                    new Report(nameof(CallStartedEvent), call.SessionId, nameof(InvalidOperationException)),
+                },
+                Counted = 1L,
+            },
+            "one failure is reported once: one Warning naming the call-started notification and its session, with "
+            + $"the exception, and one fault counted. Measured: {rig.Describe()}");
+    }
+
+    [Fact]
+    public async Task Events_ShouldLogAndCountEveryFailure_WhenASubscriberThrowsOnEveryNotification()
+    {
+        var logger = new RecordingLogger();
+        using var faults = new FaultCounter();
+        await using var rig = new Rig(logger);
+        using var thrower = rig.Manager.Events.Subscribe(new Thrower(_ => true));
+
+        rig.NewCall("c-1", "L-1");
+        var call = rig.Manager.GetByLinkedId("L-1")
+            ?? throw new InvalidOperationException("premise: the new channel opened a call");
+        rig.HangUp("c-1");
+
+        new { Warnings = logger.Warnings(), Counted = faults.Total }.Should().BeEquivalentTo(
+            new
+            {
+                Warnings = new[]
+                {
+                    new Report(nameof(CallStartedEvent), call.SessionId, nameof(InvalidOperationException)),
+                    new Report(nameof(CallEndedEvent), call.SessionId, nameof(InvalidOperationException)),
+                },
+                Counted = 2L,
+            },
+            "a subscriber that throws on the call's start and on its ending is reported for each failure: two "
+            + $"Warnings and two faults counted. Measured: {rig.Describe()}");
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ShouldLogOneWarningNamingTheCompletion_WhenASubscriberThrowsOnCompletion()
+    {
+        var logger = new RecordingLogger();
+        using var faults = new FaultCounter();
+        var rig = new Rig(logger);
+        using var first = rig.Manager.Events.Subscribe(new Thrower(_ => false, throwsOnCompleted: true));
+
+        await rig.Manager.DisposeAsync();
+        await rig.Server.DisposeAsync();
+
+        new { Warnings = logger.Warnings(), Counted = faults.Total }.Should().BeEquivalentTo(
+            new
+            {
+                Warnings = new[] { new Report("completion", null, nameof(InvalidOperationException)) },
+                Counted = 1L,
+            },
+            "a failure on the completion is reported once, naming the completion and no session, and counted once");
+    }
+
     /// <summary>
     /// A manager attached to a server over a substituted connection, saving to <see cref="CountingStore"/>.
     /// </summary>
@@ -255,12 +330,12 @@ public sealed class CallSessionManagerSubscriberIsolationTests
     {
         private readonly IAmiConnection _connection = Substitute.For<IAmiConnection>();
 
-        public Rig()
+        public Rig(ILogger<CallSessionManager>? logger = null)
         {
             _connection.AsteriskVersion.Returns("22.9.0");
             Server = new VerbaraServer(_connection, NullLogger<VerbaraServer>.Instance);
             Manager = new CallSessionManager(
-                Options.Create(new SessionOptions()), NullLogger<CallSessionManager>.Instance, Store);
+                Options.Create(new SessionOptions()), logger ?? NullLogger<CallSessionManager>.Instance, Store);
             Manager.AttachToServer(Server, ServerId);
         }
 
@@ -348,6 +423,62 @@ public sealed class CallSessionManagerSubscriberIsolationTests
             if (throwsOnCompleted)
                 throw new InvalidOperationException("A subscriber failed on completion.");
         }
+    }
+
+    /// <summary>One Warning as the report reads it: the notification's type, its session id, the exception's type.</summary>
+    private sealed record Report(string? EventType, string? SessionId, string? Exception);
+
+    /// <summary>Keeps every Warning written to it, read as a <see cref="Report"/>.</summary>
+    private sealed class RecordingLogger : ILogger<CallSessionManager>
+    {
+        private readonly ConcurrentQueue<Report> _warnings = new();
+
+        public Report[] Warnings() => [.. _warnings];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel != LogLevel.Warning)
+                return;
+
+            var properties = new Dictionary<string, object?>(StringComparer.Ordinal);
+            if (state is IEnumerable<KeyValuePair<string, object?>> pairs)
+            {
+                foreach (var pair in pairs)
+                    properties[pair.Key] = pair.Value;
+            }
+
+            _warnings.Enqueue(new Report(
+                properties.GetValueOrDefault("EventType") as string,
+                properties.GetValueOrDefault("SessionId") as string,
+                exception?.GetType().Name));
+        }
+    }
+
+    /// <summary>Sums what is added to <c>sessions.events.subscriber_faults</c> while it listens.</summary>
+    private sealed class FaultCounter : IDisposable
+    {
+        private readonly MeterListener _listener = new();
+        private long _total;
+
+        public FaultCounter()
+        {
+            _listener.InstrumentPublished = (instrument, listener) =>
+            {
+                if (ReferenceEquals(instrument, SessionMetrics.SubscriberFaults))
+                    listener.EnableMeasurementEvents(instrument);
+            };
+            _listener.SetMeasurementEventCallback<long>((_, value, _, _) => Interlocked.Add(ref _total, value));
+            _listener.Start();
+        }
+
+        public long Total => Interlocked.Read(ref _total);
+
+        public void Dispose() => _listener.Dispose();
     }
 
     /// <summary>A subscriber that records every notification it receives and its completion.</summary>

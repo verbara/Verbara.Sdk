@@ -47,6 +47,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     private readonly ILogger<CallSessionManager> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly Meter _residencyMeter;
+    private readonly SubscriberGuardedObservable<SessionDomainEvent> _guardedEvents;
     private CancellationToken _shutdownToken;
 
     public CallSessionManager(
@@ -85,6 +86,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         _residencyMeter = SessionMetrics.CreateResidencyMeter(
             active: () => CountHeld(ended: false),
             retained: () => CountHeld(ended: true));
+        _guardedEvents = new SubscriberGuardedObservable<SessionDomainEvent>(
+            _events,
+            reportNext: (ex, evt) => LogSubscriberFault(ex, evt.GetType().Name, evt.SessionId),
+            reportTerminal: (ex, signal) => LogSubscriberFaultOnSignal(ex, signal));
     }
 
     /// <summary>
@@ -143,7 +148,21 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             _store.OnReleasedByManager(session);
     }
 
-    public IObservable<SessionDomainEvent> Events => _events;
+    // Every subscription goes through its own guard over the one subject every raise publishes on, so no raise,
+    // present or future, lets a subscriber's exception reach the code after it: the save, the channel index, the
+    // release queue, the metrics, and the live state's handler, reload or sweep that raised it.
+    /// <inheritdoc />
+    public IObservable<SessionDomainEvent> Events => _guardedEvents;
+
+    [LoggerMessage(EventId = 3, EventName = nameof(LogSubscriberFault), Level = LogLevel.Warning,
+        Message = "A subscriber of the session events threw on {EventType} for session {SessionId}; the other "
+            + "subscribers and the session engine went on")]
+    private partial void LogSubscriberFault(Exception ex, string eventType, string sessionId);
+
+    [LoggerMessage(EventId = 4, EventName = nameof(LogSubscriberFaultOnSignal), Level = LogLevel.Warning,
+        Message = "A subscriber of the session events threw on {EventType}; the other subscribers and the session "
+            + "engine went on")]
+    private partial void LogSubscriberFaultOnSignal(Exception ex, string eventType);
 
     public IEnumerable<CallSession> ActiveSessions => _sessions.Values.Where(s => !HasEnded(s));
 
