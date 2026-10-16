@@ -15,6 +15,8 @@ namespace Verbara.Sdk.Sessions.Internal;
 /// <para>A subscriber subscribed directly whose handler throws stays subscribed. One composed through an operator
 /// (<c>Where</c>, <c>Select</c>, <c>OfType</c>, …) is ended by that operator on its first failure; the guard reports
 /// that one failure and cannot keep the subscription alive. Only what throws on the delivering thread is caught.</para>
+/// <para>The fault is counted before it is reported, and an exception the report itself throws (a logger whose
+/// provider fails, for one) is dropped: it reaches neither the raiser nor the later subscribers.</para>
 /// <para><see cref="OutOfMemoryException"/> is not caught.</para>
 /// </remarks>
 /// <param name="source">The stream the guards subscribe to.</param>
@@ -38,6 +40,20 @@ internal sealed class SubscriberGuardedObservable<T>(
 
     private sealed class Guard(SubscriberGuardedObservable<T> owner, IObserver<T> inner) : IObserver<T>
     {
+        /// <summary>Hands a subscriber's failure to the owner's report; what the report throws goes no further.</summary>
+        private static void Report<TArg>(Action<Exception, TArg> report, Exception failure, TArg argument)
+        {
+            try
+            {
+                report(failure, argument);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The report is the only trace a subscriber's failure leaves; when it fails too, the fault stays
+                // counted and the notification goes on to the later subscribers.
+            }
+        }
+
         public void OnNext(T value)
         {
             try
@@ -47,7 +63,7 @@ internal sealed class SubscriberGuardedObservable<T>(
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 SessionMetrics.SubscriberFaults.Add(1);
-                owner._reportNext(ex, value);
+                Report(owner._reportNext, ex, value);
             }
         }
 
@@ -60,7 +76,7 @@ internal sealed class SubscriberGuardedObservable<T>(
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 SessionMetrics.SubscriberFaults.Add(1);
-                owner._reportTerminal(ex, "error");
+                Report(owner._reportTerminal, ex, "error");
             }
         }
 
@@ -73,7 +89,7 @@ internal sealed class SubscriberGuardedObservable<T>(
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 SessionMetrics.SubscriberFaults.Add(1);
-                owner._reportTerminal(ex, "completion");
+                Report(owner._reportTerminal, ex, "completion");
             }
         }
     }

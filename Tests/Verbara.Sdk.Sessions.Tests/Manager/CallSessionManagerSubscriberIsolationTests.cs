@@ -323,6 +323,79 @@ public sealed class CallSessionManagerSubscriberIsolationTests
             "a failure on the completion is reported once, naming the completion and no session, and counted once");
     }
 
+    [Fact]
+    public async Task Events_ShouldDeliverToALaterSubscriberAndCountTheFault_WhenTheReportOfAnEarlierSubscribersFailureThrows()
+    {
+        using var faults = new SubscriberFaultCounter();
+        await using var rig = new Rig(new ThrowingLogger());
+        using var first = rig.Manager.Events.Subscribe(new Thrower(e => e is CallStartedEvent));
+        var second = new Recorder();
+        using var secondSubscription = rig.Manager.Events.Subscribe(second);
+
+        rig.NewCall("c-1", "L-1");
+
+        new { Escaped = rig.Escaped.ToArray(), SecondReceived = second.Kinds(), Counted = faults.Total }
+            .Should().BeEquivalentTo(
+                new
+                {
+                    Escaped = Array.Empty<string>(),
+                    SecondReceived = new[] { nameof(CallStartedEvent) },
+                    Counted = 1L,
+                },
+                "a logger that fails while reporting the first subscriber's failure is not the second subscriber's "
+                + "concern: nothing reaches the raiser, the second still receives the call's start, and the fault is "
+                + $"counted. Measured: {rig.Describe()}");
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ShouldCompleteEverySubscriberAndWithdrawTheResidencyGauges_WhenTheReportOfACompletionFailureThrows()
+    {
+        var rig = new Rig(new ThrowingLogger());
+        var withdrawn = new ConcurrentBag<string>();
+        using var gauges = new MeterListener();
+        gauges.InstrumentPublished = (instrument, listener) =>
+        {
+            if (ReferenceEquals(instrument.Meter, rig.Manager.ResidencyMeter)
+                && instrument.Name is "sessions.active" or "sessions.retained")
+                listener.EnableMeasurementEvents(instrument);
+        };
+        gauges.MeasurementsCompleted = (instrument, _) => withdrawn.Add(instrument.Name);
+        gauges.Start();
+        using var first = rig.Manager.Events.Subscribe(new Thrower(_ => false, throwsOnCompleted: true));
+        var second = new Recorder();
+        using var secondSubscription = rig.Manager.Events.Subscribe(second);
+
+        Exception? escaped = null;
+        try
+        {
+            await rig.Manager.DisposeAsync();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            escaped = ex;
+        }
+
+        // Read before the clean-up below, as in the test above: a disposal cut short leaves the gauges published.
+        var withdrawnByTheDisposal = withdrawn.Order(StringComparer.Ordinal).ToArray();
+        rig.Manager.ResidencyMeter.Dispose();
+        await rig.Server.DisposeAsync();
+
+        new
+        {
+            Escaped = escaped?.GetType().Name,
+            SecondCompleted = second.Completed,
+            Withdrawn = withdrawnByTheDisposal,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Escaped = (string?)null,
+                SecondCompleted = true,
+                Withdrawn = ResidencyGauges,
+            },
+            "a logger that fails while reporting the first subscriber's failure on completion neither escapes the "
+            + "disposal nor keeps the second subscriber from completing, and the disposal still withdraws the gauges");
+    }
+
     /// <summary>
     /// A manager attached to a server over a substituted connection, saving to <see cref="CountingStore"/>.
     /// </summary>
@@ -456,6 +529,25 @@ public sealed class CallSessionManagerSubscriberIsolationTests
                 properties.GetValueOrDefault("EventType") as string,
                 properties.GetValueOrDefault("SessionId") as string,
                 exception?.GetType().Name));
+        }
+    }
+
+    /// <summary>
+    /// A logger that fails on every report of a subscriber's failure, as the framework's logger does when one of its
+    /// providers throws: it gathers the providers' exceptions and rethrows them together. Every other write is
+    /// dropped, so only the report of a subscriber's failure can throw.
+    /// </summary>
+    private sealed class ThrowingLogger : ILogger<CallSessionManager>
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (eventId.Name?.StartsWith("LogSubscriberFault", StringComparison.Ordinal) == true)
+                throw new AggregateException(new IOException("A log provider failed to write."));
         }
     }
 
