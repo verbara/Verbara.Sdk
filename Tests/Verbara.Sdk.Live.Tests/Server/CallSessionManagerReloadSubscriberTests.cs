@@ -92,7 +92,7 @@ public sealed class CallSessionManagerReloadSubscriberTests
         }.Should().BeEquivalentTo(
             new
             {
-                Escaped = (string?)null,
+                Escaped = default(string),
                 GoneStillHeld = 0,
                 GoneCallsEnded = 3,
                 CallEndedEvents = 3,

@@ -240,7 +240,7 @@ public sealed class AgentSessionTrackerTests : IDisposable
             events.OnNext(new CallConnectedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow,
                 "agent-A", "queue-1", TimeSpan.Zero));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             escaped = ex;
         }
@@ -265,7 +265,7 @@ public sealed class AgentSessionTrackerTests : IDisposable
                 },
                 SessionReports = Array.Empty<string>(),
                 Counted = 1L,
-                Escaped = (string?)null,
+                Escaped = default(string),
             },
             "a state change an earlier subscriber throws on still reaches the later one, the tracker keeps its "
             + "state, and the failure is reported once by the tracker, naming the agent and both states, not as a "

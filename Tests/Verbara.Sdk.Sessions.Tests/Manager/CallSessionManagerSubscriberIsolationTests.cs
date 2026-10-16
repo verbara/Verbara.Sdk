@@ -180,7 +180,7 @@ public sealed class CallSessionManagerSubscriberIsolationTests
         }.Should().BeEquivalentTo(
             new
             {
-                Escaped = (string?)null,
+                Escaped = default(string),
                 SecondCompleted = true,
                 Withdrawn = ResidencyGauges,
             },
@@ -211,7 +211,7 @@ public sealed class CallSessionManagerSubscriberIsolationTests
                 Escaped = Array.Empty<string>(),
                 State = CallSessionState.Failed,
                 LastSaved = (CallSessionState?)CallSessionState.Failed,
-                ChannelLookup = (string?)null,
+                ChannelLookup = default(string),
             },
             "the hangup is handled without an exception reaching the live state, the store's last save of the call "
             + $"carries its ended state, and the channel's id no longer finds it. Measured: {rig.Describe()}");
@@ -388,7 +388,7 @@ public sealed class CallSessionManagerSubscriberIsolationTests
         }.Should().BeEquivalentTo(
             new
             {
-                Escaped = (string?)null,
+                Escaped = default(string),
                 SecondCompleted = true,
                 Withdrawn = ResidencyGauges,
             },
