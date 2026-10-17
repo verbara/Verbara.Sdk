@@ -9,8 +9,9 @@ using FluentAssertions;
 
 /// <summary>
 /// Tests for IVR menu navigation via DTMF input.
-/// Ext 160 runs Background(silence/1) + WaitExten(5).
-/// WaitExten targets: 1 -> 165, 2 -> 166, i -> 160 (retry), t -> Hangup.
+/// Ext 160 of [test-functional] enters the menu at 160 of [ivr-menu], which runs Wait(1) + WaitExten(5):
+/// the image ships no sound files, so no prompt plays. WaitExten targets: 1 -> 165, 2 -> 166,
+/// i -> 160 (retry), t -> Hangup.
 /// </summary>
 [Collection("Functional")]
 [Trait("Category", "Functional")]
@@ -30,6 +31,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -57,13 +59,12 @@ public sealed class IvrNavigationTests : FunctionalTestBase
 
         // Wait for channel to come up
         var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (upResult != channelUp.Task)
-            return;
+        upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
-        // Background(silence/1) takes ~1s, then WaitExten starts
+        // Wait(1) takes ~1s, then WaitExten starts
         var wxResult = await Task.WhenAny(waitExtenReached.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         wxResult.Should().Be(waitExtenReached.Task,
-            "NewExtenEvent with Application=WaitExten must fire after Background completes");
+            "NewExtenEvent with Application=WaitExten must fire after Wait(1) completes");
 
         var wxEvent = await waitExtenReached.Task;
         wxEvent.Extension.Should().Be("160",
@@ -72,7 +73,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
 
     /// <summary>
     /// Presses digit "1" during WaitExten and verifies navigation to ext 165.
-    /// Dialplan: exten => 1,1,Goto(test-functional,165,1)
+    /// Dialplan: exten => 1,1,Goto(ivr-menu,165,1)
     /// </summary>
     [Fact]
     public async Task IvrOption1_ShouldNavigateToExtension165()
@@ -81,6 +82,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -107,8 +109,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         });
 
         var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (upResult != channelUp.Task)
-            return;
+        upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
 
@@ -133,7 +134,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
 
     /// <summary>
     /// Presses digit "2" during WaitExten and verifies navigation to ext 166.
-    /// Dialplan: exten => 2,1,Goto(test-functional,166,1)
+    /// Dialplan: exten => 2,1,Goto(ivr-menu,166,1)
     /// </summary>
     [Fact]
     public async Task IvrOption2_ShouldNavigateToExtension166()
@@ -142,6 +143,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -168,8 +170,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         });
 
         var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (upResult != channelUp.Task)
-            return;
+        upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
         await Task.Delay(TimeSpan.FromSeconds(3));
@@ -201,6 +202,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(20);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -230,11 +232,10 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         });
 
         var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (upResult != channelUp.Task)
-            return;
+        upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
         // Do NOT send any DTMF — let WaitExten(5) time out
-        // Background(silence/1) ~1s + WaitExten(5) = ~6s total, plus margin
+        // Wait(1) ~1s + WaitExten(5) = ~6s total, plus margin
         var hangupResult = await Task.WhenAny(hangupReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
         hangupResult.Should().Be(hangupReceived.Task,
             "WaitExten timeout must trigger the 't' handler which hangs up the channel");
@@ -251,6 +252,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -288,8 +290,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         });
 
         var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (upResult != channelUp.Task)
-            return;
+        upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
         await Task.Delay(TimeSpan.FromSeconds(3));
@@ -316,7 +317,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
 
     /// <summary>
     /// Collects all NewExtenEvent events during a full IVR call flow (option 1)
-    /// and verifies the dialplan progression includes Background, WaitExten, and target extension.
+    /// and verifies the dialplan progression includes Wait, WaitExten, and target extension.
     /// </summary>
     [Fact]
     public async Task NewExtenEvent_ShouldTrackDialplanFlow()
@@ -325,6 +326,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -353,8 +355,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         });
 
         var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (upResult != channelUp.Task)
-            return;
+        upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
         await Task.Delay(TimeSpan.FromSeconds(3));
@@ -368,8 +369,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(reachedExt165.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (result != reachedExt165.Task)
-            return;
+        result.Should().Be(reachedExt165.Task, "pressing 1 in the ivr-menu must reach ext 165 within 10 s");
 
         // Allow final events to propagate
         await Task.Delay(TimeSpan.FromSeconds(1));
@@ -383,8 +383,8 @@ public sealed class IvrNavigationTests : FunctionalTestBase
             .Select(e => e.Application!)
             .ToList();
 
-        applications.Should().Contain(a => a.Contains("Background", StringComparison.OrdinalIgnoreCase),
-            "dialplan flow must include Background application");
+        applications.Should().Contain("Wait",
+            "dialplan flow must include the menu's Wait application, which stands where a prompt would play");
         applications.Should().Contain(a => a.Contains("WaitExten", StringComparison.OrdinalIgnoreCase),
             "dialplan flow must include WaitExten application");
 
@@ -396,6 +396,16 @@ public sealed class IvrNavigationTests : FunctionalTestBase
 
         extensions.Should().Contain("160", "flow must pass through IVR menu extension 160");
         extensions.Should().Contain("165", "flow must reach target extension 165");
+    }
+
+    /// <summary>
+    /// NewExten belongs to the dialplan class, which the default test user does not read, so Asterisk
+    /// sends it no NewExten at all; these tests connect as the user that reads it.
+    /// </summary>
+    private static void UseDialplanFlowUser(Verbara.Sdk.Ami.Connection.AmiConnectionOptions opts)
+    {
+        opts.Username = "dialplanflow";
+        opts.Password = "dialplanflowpass";
     }
 
     /// <summary>
@@ -415,6 +425,11 @@ public sealed class IvrNavigationTests : FunctionalTestBase
                     break;
                 case NewChannelEvent nce when nce.ChannelStateDesc == "Up" && nce.Channel is not null:
                     onChannelUp?.Invoke(nce.Channel);
+                    break;
+                // A Local channel is created Down and reports Up through Newstate when its dialplan answers.
+                case NewStateEvent nse when nse.ChannelStateDesc == "Up"
+                    && nse.Channel is { } name && name.StartsWith("Local/", StringComparison.Ordinal):
+                    onChannelUp?.Invoke(name);
                     break;
                 case HangupEvent he:
                     onHangup?.Invoke(he);

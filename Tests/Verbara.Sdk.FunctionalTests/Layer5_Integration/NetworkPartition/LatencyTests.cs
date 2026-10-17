@@ -123,26 +123,13 @@ public sealed class LatencyTests : FunctionalTestBase
             if (connection.State == AmiConnectionState.Connected)
                 reconnected.TrySetResult();
 
-            // Wait for reconnection (60s for proxy reconnect)
-            using var reconnectCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-            reconnectCts.Token.Register(() => reconnected.TrySetCanceled());
-
-            try
-            {
-                await reconnected.Task;
-                connection.State.Should().Be(AmiConnectionState.Connected);
-                var response = await connection.SendActionAsync(new PingAction());
-                response.Response.Should().Be("Success");
-            }
-            catch (TaskCanceledException)
-            {
-                // Reconnect through proxy may take longer than expected.
-                connection.State.Should().BeOneOf(
-                    AmiConnectionState.Connecting,
-                    AmiConnectionState.Reconnecting,
-                    AmiConnectionState.Connected,
-                    AmiConnectionState.Disconnected);
-            }
+            // Wait for reconnection (60s for proxy reconnect); a reconnect that never happens fails the test
+            var completed = await Task.WhenAny(reconnected.Task, Task.Delay(TimeSpan.FromSeconds(60))); // fence-allow: GUARD-TIMEOUT — failure bound on an observed condition; a green run leaves on the condition
+            completed.Should().Be(reconnected.Task,
+                "once the toxic is removed, AutoReconnect must restore the AMI connection through the proxy within 60 s");
+            connection.State.Should().Be(AmiConnectionState.Connected);
+            var response = await connection.SendActionAsync(new PingAction());
+            response.Response.Should().Be("Success");
         }
         finally
         {
