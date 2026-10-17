@@ -212,6 +212,43 @@ public sealed class ProviderEndpointGuardTests
     }
 
     [Fact]
+    public void Scan_ShouldIgnore_WhenEndpointIsTheUrlFormatOfAnObsoleteAttribute()
+    {
+        // The deprecation link the compiler prints with the diagnostic; no client dials it.
+        const string source =
+            "[System.Obsolete(\"Use B.\", DiagnosticId = \"X0001\", UrlFormat = \"https://docs.vendor.example/guide#x0001\")]\n" +
+            "class A { }";
+
+        var violations = ProviderEndpointScanner.Scan(source, "x.cs");
+
+        violations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Scan_ShouldFlag_WhenEndpointIsTheMessageOfAnObsoleteAttribute()
+    {
+        const string source =
+            "[System.Obsolete(\"Point the client at https://api.vendor.example instead.\", UrlFormat = \"https://docs.vendor.example/guide\")]\n" +
+            "class A { }";
+
+        var violations = ProviderEndpointScanner.Scan(source, "x.cs");
+
+        violations.Should().ContainSingle().Which.Endpoint.Should().Contain("api.vendor.example");
+    }
+
+    [Fact]
+    public void Scan_ShouldFlag_WhenEndpointIsTheUrlFormatOfAnotherAttribute()
+    {
+        const string source =
+            "[Vendor(UrlFormat = \"https://api.vendor.example/v1\")]\n" +
+            "class A { }";
+
+        var violations = ProviderEndpointScanner.Scan(source, "x.cs");
+
+        violations.Should().ContainSingle().Which.Line.Should().Be(1);
+    }
+
+    [Fact]
     public void Scan_ShouldIgnore_WhenSchemeIsFollowedByASpace()
     {
         const string source =
