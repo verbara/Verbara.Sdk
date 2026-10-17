@@ -36,19 +36,29 @@ public sealed class TransferTests : FunctionalTestBase
     [Fact]
     public async Task BlindTransfer_ShouldRedirectChannel()
     {
+        // NewExten belongs to the dialplan class, which the default test user does not read.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            opts.Username = "dialplanflow";
+            opts.Password = "dialplanflowpass";
         });
         await connection.ConnectAsync();
 
         var newExtenEvents = new ConcurrentBag<NewExtenEvent>();
         var channelNames = new ConcurrentBag<string>();
 
+        // Only this test's call runs ext 100's Answer after the subscription; a call an earlier test left
+        // in ext 100's Wait reports no Answer, so it cannot be picked.
         using var subscription = connection.Subscribe(new TransferEventObserver(
-            onNewExten: newExtenEvents.Add,
-            onChannel: name => channelNames.Add(name)));
+            onNewExten: e =>
+            {
+                newExtenEvents.Add(e);
+                if (e.Application == "Answer" && e.Channel is not null
+                    && e.Channel.StartsWith("Local/100@test-functional", StringComparison.Ordinal))
+                    channelNames.Add(e.Channel);
+            }));
 
         // Originate a channel to ext 100 (Answer + Wait(5))
         await connection.SendActionAsync(new OriginateAction
@@ -177,6 +187,7 @@ public sealed class TransferTests : FunctionalTestBase
 
         var server = new VerbaraServer(connection, LoggerFactory.CreateLogger<VerbaraServer>());
         await server.StartAsync();
+        var existingBefore = server.Channels.ActiveChannels.Select(c => c.UniqueId).ToHashSet();
 
         // Originate a channel to ext 100 (Answer + Wait(5))
         await connection.SendActionAsync(new OriginateAction
@@ -192,8 +203,9 @@ public sealed class TransferTests : FunctionalTestBase
         // Wait for the channel to appear in the manager
         await Task.Delay(TimeSpan.FromSeconds(2));
 
-        var channels = server.Channels.ActiveChannels.ToList();
-        var targetChannel = channels.FirstOrDefault(c => c.Name.Contains("Local/", StringComparison.Ordinal));
+        // Pick this test's call: an earlier test's ext 100 call may still be in its Wait and end at any moment.
+        var targetChannel = server.Channels.ActiveChannels.FirstOrDefault(c =>
+            c.Name.StartsWith("Local/100@test-functional", StringComparison.Ordinal) && !existingBefore.Contains(c.UniqueId));
 
         targetChannel.Should().NotBeNull(
             "originating Local/100@test-functional must put a Local/ channel in the ChannelManager within 2 s");
@@ -236,6 +248,7 @@ public sealed class TransferTests : FunctionalTestBase
 
         var server = new VerbaraServer(connection, LoggerFactory.CreateLogger<VerbaraServer>());
         await server.StartAsync();
+        var existingBefore = server.Channels.ActiveChannels.Select(c => c.UniqueId).ToHashSet();
 
         // Originate a channel to ext 100
         await connection.SendActionAsync(new OriginateAction
@@ -251,8 +264,9 @@ public sealed class TransferTests : FunctionalTestBase
         // Wait for the channel to be established
         await Task.Delay(TimeSpan.FromSeconds(2));
 
-        var channels = server.Channels.ActiveChannels.ToList();
-        var targetChannel = channels.FirstOrDefault(c => c.Name.Contains("Local/", StringComparison.Ordinal));
+        // Pick this test's call: an earlier test's ext 100 call may still be in its Wait and end at any moment.
+        var targetChannel = server.Channels.ActiveChannels.FirstOrDefault(c =>
+            c.Name.StartsWith("Local/100@test-functional", StringComparison.Ordinal) && !existingBefore.Contains(c.UniqueId));
 
         targetChannel.Should().NotBeNull(
             "originating Local/100@test-functional must put a Local/ channel in the ChannelManager within 2 s");

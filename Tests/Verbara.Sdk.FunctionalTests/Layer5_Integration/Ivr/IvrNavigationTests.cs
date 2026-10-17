@@ -31,6 +31,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -81,6 +82,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -141,6 +143,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -199,6 +202,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(20);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -248,6 +252,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -321,6 +326,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            UseDialplanFlowUser(opts);
         });
         await connection.ConnectAsync();
 
@@ -395,6 +401,16 @@ public sealed class IvrNavigationTests : FunctionalTestBase
     /// <summary>
     /// Observer for IVR-related events: NewExtenEvent, channel-up state, and HangupEvent.
     /// </summary>
+    /// <summary>
+    /// NewExten belongs to the dialplan class, which the default test user does not read, so Asterisk
+    /// sends it no NewExten at all; these tests connect as the user that reads it.
+    /// </summary>
+    private static void UseDialplanFlowUser(Verbara.Sdk.Ami.Connection.AmiConnectionOptions opts)
+    {
+        opts.Username = "dialplanflow";
+        opts.Password = "dialplanflowpass";
+    }
+
     private sealed class IvrObserver(
         Action<string>? onChannelUp = null,
         Action<NewExtenEvent>? onNewExten = null,
@@ -409,6 +425,11 @@ public sealed class IvrNavigationTests : FunctionalTestBase
                     break;
                 case NewChannelEvent nce when nce.ChannelStateDesc == "Up" && nce.Channel is not null:
                     onChannelUp?.Invoke(nce.Channel);
+                    break;
+                // A Local channel is created Down and reports Up through Newstate when its dialplan answers.
+                case NewStateEvent nse when nse.ChannelStateDesc == "Up"
+                    && nse.Channel is { } name && name.StartsWith("Local/", StringComparison.Ordinal):
+                    onChannelUp?.Invoke(name);
                     break;
                 case HangupEvent he:
                     onHangup?.Invoke(he);

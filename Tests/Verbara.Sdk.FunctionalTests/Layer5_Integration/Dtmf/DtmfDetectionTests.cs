@@ -219,9 +219,16 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
 
         var endReceived = new TaskCompletionSource<DtmfEndEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         var channelUp = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        string? playedOn = null;
 
+        // The digit sent on one Local half is received on the other, which reports Direction Received;
+        // only the channel PlayDtmf targets can report Sent.
         using var subscription = connection.Subscribe(new DtmfEventObserver(
-            onEnd: e => endReceived.TrySetResult(e),
+            onEnd: e =>
+            {
+                if (e.RawFields?.GetValueOrDefault("Channel") is { } ch && ch == Volatile.Read(ref playedOn))
+                    endReceived.TrySetResult(e);
+            },
             onChannelUp: name => channelUp.TrySetResult(name)));
 
         await connection.SendActionAsync(new OriginateAction
@@ -241,6 +248,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         var channelName = await channelUp.Task;
         await Task.Delay(TimeSpan.FromMilliseconds(500));
 
+        Volatile.Write(ref playedOn, channelName);
         await connection.SendActionAsync(new PlayDtmfAction
         {
             Channel = channelName,
@@ -250,7 +258,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(endReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        result.Should().Be(endReceived.Task, "PlayDtmf with Receive=false on an Up channel must produce a DtmfEnd within 10 s");
+        result.Should().Be(endReceived.Task, "PlayDtmf with Receive=false on an Up channel must produce a DtmfEnd on that channel within 10 s");
 
         var endEvent = await endReceived.Task;
         var direction = endEvent.RawFields?.GetValueOrDefault("Direction");
@@ -407,6 +415,11 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
                     break;
                 case NewChannelEvent nce when nce.ChannelStateDesc == "Up" && nce.Channel is not null:
                     onChannelUp?.Invoke(nce.Channel);
+                    break;
+                // A Local channel is created Down and reports Up through Newstate when its dialplan answers.
+                case NewStateEvent nse when nse.ChannelStateDesc == "Up"
+                    && nse.Channel is { } name && name.StartsWith("Local/", StringComparison.Ordinal):
+                    onChannelUp?.Invoke(name);
                     break;
             }
         }

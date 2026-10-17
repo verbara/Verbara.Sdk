@@ -35,12 +35,12 @@ public sealed class CelSequenceTests : FunctionalTestBase
 
         using var subscription = connection.Subscribe(new CelCollector(collectedEvents, chanEndReceived));
 
-        // ext 100 = Answer + Wait(5) + Hangup — produces full CEL timeline
+        // ext 101 = Answer + Wait(5) + Hangup — produces full CEL timeline
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
@@ -49,7 +49,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
 
         // Wait for CHAN_END which is the final CEL event in a call
         var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        result.Should().Be(chanEndReceived.Task, "ext 100 answers, waits and hangs up, so the CEL stream must report CHAN_END within 30 s");
+        result.Should().Be(chanEndReceived.Task, "ext 101 answers, waits 5 s and hangs up, so the CEL stream must report CHAN_END within 30 s");
 
         // Allow a brief moment for any trailing events to arrive
         await Task.Delay(TimeSpan.FromMilliseconds(500));
@@ -59,7 +59,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
             .ToList();
 
         eventNames.Should().Contain("CHAN_START", "CEL must include channel start event");
-        eventNames.Should().Contain("ANSWER", "CEL must include answer event for ext 100");
+        eventNames.Should().Contain("ANSWER", "CEL must include answer event for ext 101");
         eventNames.Should().Contain("HANGUP", "CEL must include hangup event");
         eventNames.Should().Contain("CHAN_END", "CEL must include channel end event");
     }
@@ -81,9 +81,9 @@ public sealed class CelSequenceTests : FunctionalTestBase
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
@@ -91,7 +91,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        result.Should().Be(chanEndReceived.Task, "ext 100 answers, waits and hangs up, so the CEL stream must report CHAN_END within 30 s");
+        result.Should().Be(chanEndReceived.Task, "ext 101 answers, waits 5 s and hangs up, so the CEL stream must report CHAN_END within 30 s");
 
         await Task.Delay(TimeSpan.FromMilliseconds(500));
 
@@ -135,9 +135,9 @@ public sealed class CelSequenceTests : FunctionalTestBase
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
@@ -145,7 +145,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        result.Should().Be(chanEndReceived.Task, "ext 100 answers, waits and hangs up, so the CEL stream must report CHAN_END within 30 s");
+        result.Should().Be(chanEndReceived.Task, "ext 101 answers, waits 5 s and hangs up, so the CEL stream must report CHAN_END within 30 s");
 
         await Task.Delay(TimeSpan.FromMilliseconds(500));
 

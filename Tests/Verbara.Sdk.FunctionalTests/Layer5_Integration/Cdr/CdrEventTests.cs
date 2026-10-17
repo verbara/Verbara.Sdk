@@ -33,12 +33,12 @@ public sealed class CdrEventTests : FunctionalTestBase
         var cdrReceived = new TaskCompletionSource<CdrEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var subscription = connection.Subscribe(new CdrObserver(cdrReceived));
 
-        // ext 100 = Answer + Wait(5) + Hangup
+        // ext 101 = Answer + Wait(5) + Hangup
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
@@ -47,11 +47,11 @@ public sealed class CdrEventTests : FunctionalTestBase
 
         // CDR fires after hangup; Wait(5) + processing time = up to 30s
         var result = await Task.WhenAny(cdrReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        result.Should().Be(cdrReceived.Task, "ext 100 answers, waits and hangs up, so cdr_manager must report a Cdr event within 30 s");
+        result.Should().Be(cdrReceived.Task, "ext 101 answers, waits 5 s and hangs up, so cdr_manager must report a Cdr event within 30 s");
 
         var cdr = await cdrReceived.Task;
         cdr.Channel.Should().NotBeNullOrEmpty("CDR must include the originating channel");
-        cdr.Disposition.Should().Be("ANSWERED", "ext 100 answers the call");
+        cdr.Disposition.Should().Be("ANSWERED", "ext 101 answers the call");
         cdr.Duration.Should().BeGreaterThan(0, "answered call must have a non-zero duration");
         cdr.BillableSeconds.Should().BeGreaterThanOrEqualTo(0, "billable seconds must be non-negative");
 
@@ -127,9 +127,9 @@ public sealed class CdrEventTests : FunctionalTestBase
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
@@ -137,7 +137,7 @@ public sealed class CdrEventTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(cdrReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        result.Should().Be(cdrReceived.Task, "ext 100 answers, waits and hangs up, so cdr_manager must report a Cdr event within 30 s");
+        result.Should().Be(cdrReceived.Task, "ext 101 answers, waits 5 s and hangs up, so cdr_manager must report a Cdr event within 30 s");
 
         var cdr = await cdrReceived.Task;
 
@@ -202,9 +202,9 @@ public sealed class CdrEventTests : FunctionalTestBase
         // Originate answered call first
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
@@ -213,7 +213,7 @@ public sealed class CdrEventTests : FunctionalTestBase
 
         // Wait for the answered CDR (up to 30s for Wait(5) + hangup + CDR processing)
         var answeredResult = await Task.WhenAny(answeredReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        answeredResult.Should().Be(answeredReceived.Task, "ext 100 answers, waits and hangs up, so cdr_manager must report an ANSWERED Cdr event within 30 s");
+        answeredResult.Should().Be(answeredReceived.Task, "ext 101 answers, waits 5 s and hangs up, so cdr_manager must report an ANSWERED Cdr event within 30 s");
 
         // Originate unanswered call
         await connection.SendActionAsync(new OriginateAction
