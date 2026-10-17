@@ -156,37 +156,6 @@ public class AmiFlowIntegrationTests
     }
 
     [Fact]
-    public async Task LegacyEventAdapter_ShouldCreateDialEventFromDialBegin()
-    {
-        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Event"] = "DialBegin",
-            ["Uniqueid"] = "123.1",
-            ["Privilege"] = "call,all"
-        };
-        var msg = new AmiMessage(fields);
-
-        var legacy = LegacyEventAdapter.CreateLegacyEvent(msg);
-
-        legacy.Should().NotBeNull();
-        legacy!.EventType.Should().Be("Dial");
-        legacy.UniqueId.Should().Be("123.1");
-    }
-
-    [Fact]
-    public async Task LegacyEventAdapter_ShouldReturnNull_ForNonLegacyEvent()
-    {
-        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Event"] = "Hangup"
-        };
-        var msg = new AmiMessage(fields);
-
-        var legacy = LegacyEventAdapter.CreateLegacyEvent(msg);
-        legacy.Should().BeNull();
-    }
-
-    [Fact]
     public async Task ActiveBridgeTracker_ShouldTrackBridgeLifecycle()
     {
         var tracker = new ActiveBridgeTracker();

@@ -376,67 +376,9 @@ public sealed class CoverageEventPropertyTests
     }
 
     [Fact]
-    public void LeaveEvent_ShouldHaveProperties()
-    {
-#pragma warning disable CS0618 // Obsolete
-        var evt = new LeaveEvent { Position = 1 };
-#pragma warning restore CS0618
-        evt.Position.Should().Be(1);
-    }
-
-    [Fact]
     public void ChannelTalkingStopEvent_ShouldHaveProperties()
     {
         var evt = new ChannelTalkingStopEvent { Duration = 5000 };
         evt.Duration.Should().Be(5000);
-    }
-
-    [Fact]
-    public void MeetMeJoinEvent_ShouldHaveProperties()
-    {
-#pragma warning disable CS0618 // Obsolete
-        var evt = new MeetMeJoinEvent { Meetme = "1000", Usernum = 1, Duration = 0 };
-        evt.Meetme.Should().Be("1000");
-        evt.Usernum.Should().Be(1);
-#pragma warning restore CS0618
-    }
-
-    [Fact]
-    public void MeetMeLeaveEvent_ShouldHaveProperties()
-    {
-#pragma warning disable CS0618 // Obsolete
-        var evt = new MeetMeLeaveEvent { Meetme = "1000", Usernum = 2, Duration = 120 };
-        evt.Meetme.Should().Be("1000");
-        evt.Usernum.Should().Be(2);
-        evt.Duration.Should().Be(120);
-#pragma warning restore CS0618
-    }
-
-    [Fact]
-    public void MeetMeMuteEvent_ShouldHaveProperties()
-    {
-#pragma warning disable CS0618 // Obsolete
-        var evt = new MeetMeMuteEvent { Meetme = "1000", Usernum = 1, Status = true };
-        evt.Meetme.Should().Be("1000");
-        evt.Status.Should().BeTrue();
-#pragma warning restore CS0618
-    }
-
-    [Fact]
-    public void MeetMeTalkingEvent_ShouldHaveProperties()
-    {
-#pragma warning disable CS0618 // Obsolete
-        var evt = new MeetMeTalkingEvent { Meetme = "1000", Usernum = 1, Status = true };
-        evt.Status.Should().BeTrue();
-#pragma warning restore CS0618
-    }
-
-    [Fact]
-    public void MeetMeTalkingRequestEvent_ShouldHaveProperties()
-    {
-#pragma warning disable CS0618 // Obsolete
-        var evt = new MeetMeTalkingRequestEvent { Meetme = "1000", Usernum = 1, Status = true };
-        evt.Status.Should().BeTrue();
-#pragma warning restore CS0618
     }
 }

@@ -1181,20 +1181,10 @@ public sealed class VerbaraServer : IVerbaraServer
                         server.Queues.OnDeviceStateChanged(dsc.Device, dsc.State);
                     break;
 
-                // MeetMe/ConfBridge events
-#pragma warning disable CS0618 // MeetMe events still received from Asterisk 18-20
-                case MeetMeJoinEvent mmj:
-                    server.MeetMe.OnUserJoined(mmj.Meetme ?? "", mmj.Usernum ?? 0, mmj.Channel ?? "");
-                    break;
-
+                // ConfBridge events
                 case ConfbridgeJoinEvent cbj:
                     server.MeetMe.OnUserJoined(cbj.Conference ?? "", 0, cbj.Channel ?? "");
                     break;
-
-                case MeetMeLeaveEvent mml:
-                    server.MeetMe.OnUserLeft(mml.Meetme ?? "", mml.Usernum ?? 0);
-                    break;
-#pragma warning restore CS0618
 
                 case ConfbridgeLeaveEvent cbl:
                     server.MeetMe.OnUserLeft(cbl.Conference ?? "", 0);
