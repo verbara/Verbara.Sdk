@@ -35,7 +35,8 @@ captures. The queue-shape captures were made on a different topology and reduced
 are described in [The queue-shape captures](#the-queue-shape-captures). The reload captures reuse the
 queue-shape topology with a few additions; they are described in
 [The reload captures](#the-reload-captures). The exit and loop captures are described in
-[The queue-exit and queue-loop captures](#the-queue-exit-and-queue-loop-captures).
+[The queue-exit and queue-loop captures](#the-queue-exit-and-queue-loop-captures). A new capture is
+made with one command; see [Capturing on a new Asterisk build](#capturing-on-a-new-asterisk-build).
 
 ## Topology
 
@@ -866,3 +867,45 @@ ids below.
   by a single-character fill of the same length, in order of first appearance: `11111111-1111-1111-1111-111111111111`,
   then `22222222-…` and `33333333-…` (3 per file), for the recording redaction check.
 
+## Capturing on a new Asterisk build
+
+The fifteen files above were captured by hand-run probes. New captures are made by
+`scripts/capture-ami-recording.py`, which starts one throwaway Asterisk from an image pinned by digest,
+drives a fixed workload through a raw TCP tap, and writes the reduced recording here with a
+`<name>.provenance.json` sidecar:
+
+```sh
+python3 scripts/capture-ami-recording.py workloads
+python3 scripts/capture-ami-recording.py capture --workload bridges-and-conference \
+    --image <repo>:<tag>@sha256:<digest> [--image ...]
+python3 scripts/capture-ami-recording.py reduce <name>.tap.raw --out <dir> [--drop-events A,B] [--keep-steps s1,s2]
+```
+
+- **The build is in the bytes.** The first frame after the login is an `Event: UserEvent` with
+  `UserEvent: CaptureProvenance` and the headers `AsteriskVersion` (the container's `asterisk -V`),
+  `Image` (the reference the capture ran, digest included) and `Workload`. The sidecar repeats them with
+  the image id Docker resolved, the AMI banner, the steps, and the sha256 of the unreduced tap and of
+  the recording. The driver refuses an image whose id is not the digest it was given, and a tag that
+  names another version than `asterisk -V`. The file is named `<workload>-asterisk-<version>.raw`.
+- **Markers.** Before each step the tap sends `UserEvent: CaptureMarker` with `Step: <id>`; Asterisk
+  echoes it into the stream, so a replay can attribute every frame to its step. The tap's own action
+  answers stay in the file (they carry its `ActionID`s, `cap-<n>`); a replay that wants only live
+  events skips frames with an `ActionID`.
+- **What the reduction changes.** It keeps the banner and whole frames, byte-exact. It removes the login
+  answer, `SuccessfulAuth`, `FullyBooted`, `RTCPSent`, `RTCPReceived`, the challenge and failed-login
+  frames, a `VarSet` of `SIPDOMAIN`, and any type passed in `--drop-events`. It replaces each distinct
+  UUID and each bare 32-hex run by a single-character fill of the same length, in order of first
+  appearance, and each IPv4 address other than `0.0.0.0` and `127.0.0.1` by `192.0.2.<n>`. It is a pure
+  function of the tap and the options: re-reducing a kept tap gives the same bytes. It refuses a result
+  over 256 KiB (printing the bytes per frame type), one that still holds the run's manager secret, and
+  one that `scripts/check-recording-redaction.py` would reject.
+- **The tap is not committed.** It keeps the container's addresses and the manager account name, and
+  is written to `--raw-dir` (a temporary directory by default) with a `<name>.tap.json` beside it, which
+  is what `reduce` reads.
+
+The `bridges-and-conference` workload runs on one container, with Local channels only: an answered
+Local call; a two-party bridge (`Dial` between two Local channels) with `BridgeList`, `BridgeInfo` and
+`Status` sent while it is up; a ConfBridge room that two Local participants join and leave, with
+`ConfbridgeListRooms`, `ConfbridgeList` and `BridgeList` sent while both are in; and the two listings
+again once everything has ended (`ConfbridgeListRooms` then answers `Response: Error`,
+`Message: No active conferences.`). Its dialplan and ConfBridge profile are in the script.
