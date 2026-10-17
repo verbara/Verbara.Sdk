@@ -1,0 +1,55 @@
+# spec-gate — a feat/fix PR declares its OpenSpec change or carries the `no-spec` label
+# (verbara-meta/ADR-0027 §6 and its 2026-10-17 addendum). Byte-identical in every code repo;
+# the canonical text is that addendum. Not a required check: a red here is a signal any agent
+# or person reads on the PR, and verbara-meta's change ledger re-checks after merge that the
+# named change exists. The type/scope rule matches scripts/xr-change-ledger.sh exactly.
+name: spec-gate
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+  # Reports on the merge queue too (the step is skipped there, and a skipped step is a pass),
+  # so promoting this to a required check later cannot strand the queue (ADR-0016, ADR-0003).
+  merge_group:
+
+permissions: {}
+
+jobs:
+  spec-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: feat/fix PR names its change or carries no-spec
+        if: github.event_name == 'pull_request'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
+          BODY: ${{ github.event.pull_request.body }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          python3 - <<'PY'
+          import os, re, sys
+          title, head = os.environ["TITLE"].strip(), os.environ["HEAD"]
+          labels = set(os.environ["LABELS"].split(","))
+          m = re.match(r'^([a-z]+)(\([^)]*\))?!?:', title)
+          kind = m.group(1) if m else (head.split("/", 1)[0] if "/" in head else "")
+          scope = (m.group(2) or "")[1:-1] if m else ""
+          if kind not in ("feat", "fix") or scope in {"ci", "deps", "release"}:
+              print(f"not gated: type '{kind}', scope '{scope}'")
+              sys.exit(0)
+          if "no-spec" in labels:
+              print("exempt: label no-spec")
+              sys.exit(0)
+          body = os.environ["BODY"].replace("\r", "").split("\n")
+          ids = [mm.group(1) for l in body if (mm := re.match(r'^Change:\s*(\S+)\s*$', l.strip()))]
+          if ids:
+              print("declares Change: " + ", ".join(ids))
+              sys.exit(0)
+          print("::error title=spec-gate::A feat/fix PR declares its OpenSpec change with a "
+                "'Change: <change-id>' line in the PR body, or carries the GitHub label 'no-spec' "
+                "(the only exemption, for a PR that legitimately needs no change) — "
+                "verbara-meta/ADR-0027 §6. Edit the body or add the label; this check re-runs on "
+                "both. A marker in a commit message counts for nothing. Release bumps use "
+                "chore(release):, CI-only fixes fix(ci):.")
+          sys.exit(1)
+          PY
