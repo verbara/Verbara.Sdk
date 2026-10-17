@@ -31,8 +31,15 @@ namespace Verbara.Sdk.Governance.Tests;
 /// The scan fails closed. A dial whose extension it cannot resolve is a violation unless it is on
 /// <see cref="Unresolvable"/> with its reason, and so is any string in the suite that mentions <c>test-functional</c>
 /// in a shape the scan does not read: an under-report would read exactly like a clean result. A number dialled on
-/// purpose because it does not exist is on <see cref="DeliberatelyUndefined"/>, with its reason, and an entry of either
-/// list that no longer matches the tree is a violation too.
+/// purpose because it does not exist is on <see cref="DeliberatelyUndefined"/> with the file that dials it and its
+/// reason, so the same number dialled from any other file is a violation; an entry of either list that no longer
+/// matches the tree is a violation too. A local that is assigned again anywhere in its scope, or passed by
+/// <c>ref</c> or <c>out</c>, does not resolve to its initializer: it is unresolvable.
+/// </para>
+/// <para>
+/// A string given to a named attribute argument (<c>Skip = "…"</c>, <c>DisplayName = "…"</c>) never reaches a test body,
+/// so it is not a dial and not a mention. A positional attribute argument (<c>[InlineData("…")]</c>) is a value a
+/// theory runs with, and is scanned like any other string.
 /// </para>
 /// </remarks>
 internal static partial class DialplanCoverageScanner
@@ -49,11 +56,12 @@ internal static partial class DialplanCoverageScanner
     /// <summary>The dialplan context the suite dials into.</summary>
     public const string Context = "test-functional";
 
-    /// <summary>Numbers a test dials because they do not exist, each with the reason.</summary>
-    public static readonly IReadOnlyDictionary<string, string> DeliberatelyUndefined = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["9999"] = "TransferTests.BlindTransfer_ToNonExistentExtension_ShouldFail redirects a live call to a number that does not exist, to observe what Asterisk does with it",
-    };
+    /// <summary>Numbers a test dials because they do not exist: the file that dials each one, and the reason.</summary>
+    public static readonly IReadOnlyList<DeliberateDial> DeliberatelyUndefined =
+    [
+        new(SuitePath + "/Layer5_Integration/Bridge/TransferTests.cs", "9999",
+            "TransferTests.BlindTransfer_ToNonExistentExtension_ShouldFail redirects a live call to a number that does not exist, to observe what Asterisk does with it"),
+    ];
 
     /// <summary>Dials whose extension is a run-time value, each with the reason.</summary>
     public static readonly IReadOnlyList<UnresolvableDial> Unresolvable =
@@ -63,6 +71,9 @@ internal static partial class DialplanCoverageScanner
     ];
 
     private const long MaximumFileBytes = 1024 * 1024;
+
+    /// <summary>A number a file dials on purpose because <c>[test-functional]</c> does not define it.</summary>
+    public sealed record DeliberateDial(string Path, string Extension, string Reason);
 
     /// <summary>A dial whose extension the scan is told it cannot resolve: a file and the extension's expression.</summary>
     public sealed record UnresolvableDial(string Path, string Expression, string Reason);
@@ -99,7 +110,7 @@ internal static partial class DialplanCoverageScanner
     /// <summary>Scans the checkout rooted at <paramref name="repoRoot"/> against the allowlists given.</summary>
     public static Report Scan(
         string repoRoot,
-        IReadOnlyDictionary<string, string> deliberatelyUndefined,
+        IReadOnlyList<DeliberateDial> deliberatelyUndefined,
         IReadOnlyList<UnresolvableDial> unresolvable)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repoRoot);
@@ -123,7 +134,7 @@ internal static partial class DialplanCoverageScanner
             violations.Add($"{SuitePath}: found no dial into [{Context}] — the walk read nothing, so it proves nothing");
 
         var usedUnresolvable = new HashSet<UnresolvableDial>();
-        var usedUndefined = new HashSet<string>(StringComparer.Ordinal);
+        var usedUndefined = new HashSet<DeliberateDial>();
         foreach (var dial in dials)
         {
             if (dial.Extensions is null)
@@ -141,9 +152,11 @@ internal static partial class DialplanCoverageScanner
             {
                 if (IsDefined(extension, defined))
                     continue;
-                if (deliberatelyUndefined.ContainsKey(extension))
+                var deliberate = deliberatelyUndefined.FirstOrDefault(d =>
+                    string.Equals(d.Path, dial.Path, StringComparison.Ordinal) && string.Equals(d.Extension, extension, StringComparison.Ordinal));
+                if (deliberate is not null)
                 {
-                    usedUndefined.Add(extension);
+                    usedUndefined.Add(deliberate);
                     continue;
                 }
 
@@ -151,12 +164,12 @@ internal static partial class DialplanCoverageScanner
             }
         }
 
-        foreach (var (extension, _) in deliberatelyUndefined)
+        foreach (var entry in deliberatelyUndefined)
         {
-            if (IsDefined(extension, defined))
-                violations.Add($"{extension} is listed as deliberately undefined, but [{Context}] defines it: the tests that dial it no longer reach a missing number");
-            else if (!usedUndefined.Contains(extension))
-                violations.Add($"{extension} is listed as deliberately undefined, but no test dials it: remove the entry");
+            if (IsDefined(entry.Extension, defined))
+                violations.Add($"{entry.Path}: {entry.Extension} is listed as deliberately undefined, but [{Context}] defines it: the tests that dial it no longer reach a missing number");
+            else if (!usedUndefined.Contains(entry))
+                violations.Add($"{entry.Path}: {entry.Extension} is listed as deliberately undefined, but no dial there reaches it: remove the entry");
         }
 
         foreach (var entry in unresolvable.Where(u => !usedUnresolvable.Contains(u)))
@@ -231,6 +244,12 @@ internal static partial class DialplanCoverageScanner
 
         foreach (var node in root.DescendantNodes())
         {
+            if (IsNamedAttributeArgument(node))
+            {
+                classified.Add(node);
+                continue;
+            }
+
             switch (node)
             {
                 case LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression):
@@ -276,6 +295,15 @@ internal static partial class DialplanCoverageScanner
 
         return dials;
     }
+
+    /// <summary>
+    /// Whether <paramref name="node"/> is a string inside a named attribute argument (<c>Skip = "…"</c>), which never
+    /// reaches a test body. A positional or constructor-named attribute argument (<c>[InlineData("…")]</c>) can be a
+    /// theory's input and is scanned.
+    /// </summary>
+    private static bool IsNamedAttributeArgument(SyntaxNode node) =>
+        node is LiteralExpressionSyntax or InterpolatedStringExpressionSyntax
+        && node.Ancestors().OfType<AttributeArgumentSyntax>().FirstOrDefault() is { NameEquals: not null };
 
     private static void FindInterpolatedDials(InterpolatedStringExpressionSyntax interpolated, string path, SyntaxNode root,
         List<Dial> dials, HashSet<SyntaxNode> classified)
@@ -461,7 +489,9 @@ internal static partial class DialplanCoverageScanner
                 .SelectMany(d => d.Declaration.Variables)
                 .FirstOrDefault(v => v.Identifier.ValueText == name);
             if (local is not null)
-                return local.Initializer is null ? null : Resolve(local.Initializer.Value, root, depth + 1);
+                return local.Initializer is null || IsWrittenAgain(scope, name)
+                    ? null
+                    : Resolve(local.Initializer.Value, root, depth + 1);
 
             SeparatedSyntaxList<ParameterSyntax>? parameters = scope switch
             {
@@ -491,6 +521,26 @@ internal static partial class DialplanCoverageScanner
             .SelectMany(f => f.Declaration.Variables)
             .FirstOrDefault(v => v.Identifier.ValueText == name);
         return field?.Initializer is null ? null : Resolve(field.Initializer.Value, root, depth + 1);
+    }
+
+    /// <summary>
+    /// Whether the local <paramref name="name"/> is assigned anywhere in <paramref name="scope"/> after its declaration,
+    /// or passed by <c>ref</c> or <c>out</c>: then its initializer is not the value every use sees. An object initializer's
+    /// <c>Name = …</c> sets a member, not the local, and does not count.
+    /// </summary>
+    private static bool IsWrittenAgain(SyntaxNode scope, string name)
+    {
+        static bool Names(ExpressionSyntax expression, string name) =>
+            expression is IdentifierNameSyntax identifier && identifier.Identifier.ValueText == name;
+
+        return scope.DescendantNodes().Any(node => node switch
+        {
+            AssignmentExpressionSyntax assignment => assignment.Parent is not InitializerExpressionSyntax && Names(assignment.Left, name),
+            ArgumentSyntax argument => !argument.RefKindKeyword.IsKind(SyntaxKind.None) && !argument.RefKindKeyword.IsKind(SyntaxKind.InKeyword)
+                && Names(argument.Expression, name),
+            RefExpressionSyntax reference => Names(reference.Expression, name),
+            _ => false,
+        });
     }
 
     /// <summary>The values a parameter takes at every call site of its method in the same file.</summary>

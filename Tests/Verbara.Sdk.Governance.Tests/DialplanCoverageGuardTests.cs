@@ -37,7 +37,9 @@ public sealed class DialplanCoverageGuardTests(ITestOutputHelper output)
         parkpos = 751-770
         """;
 
-    private static readonly IReadOnlyDictionary<string, string> NoUndefined = new Dictionary<string, string>(StringComparer.Ordinal);
+    private const string OtherTest = DialplanCoverageScanner.SuitePath + "/Layer5_Integration/Other/OtherTests.cs";
+
+    private static readonly IReadOnlyList<DialplanCoverageScanner.DeliberateDial> NoUndefined = [];
 
     [Fact]
     public void Tree_ShouldDefineEveryExtensionTheFunctionalSuiteDials_WhenScanned()
@@ -127,6 +129,10 @@ public sealed class DialplanCoverageGuardTests(ITestOutputHelper output)
     [InlineData("var a = new RedirectAction { Channel = c, Context = \"test-functional\", Exten = parked.Exten };", 1)]
     [InlineData("await server.OriginateAsync(channel, \"test-functional\", Pick());", 1)]
     [InlineData("await rig.OriginateAsync(channel, context: \"test-functional\");", 1)]
+    [InlineData("var exten = \"100\";\nexten = Pick();\nvar a = $\"Local/{exten}@test-functional\";", 3)]
+    [InlineData("var exten = \"100\";\nif (late) { exten += \"1\"; }\nvar a = new RedirectAction { Channel = c, Context = \"test-functional\", Exten = exten };", 3)]
+    [InlineData("var exten = \"100\";\nRefill(ref exten);\nvar a = $\"Local/{exten}@test-functional\";", 3)]
+    [InlineData("var exten = \"100\";\nvar ok = TryPick(out exten);\nvar a = $\"Local/{exten}@test-functional\";", 3)]
     public void Scan_ShouldFailNamingTheSite_WhenADialCannotBeResolved(string body, int line)
     {
         using var tree = GreenTree(body);
@@ -149,14 +155,66 @@ public sealed class DialplanCoverageGuardTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Scan_ShouldResolveALocal_WhenOnlyAnInitializerMemberSharesItsName()
+    {
+        using var tree = GreenTree("var Exten = \"100\";\nvar a = new RedirectAction { Channel = c, Context = \"test-functional\", Exten = Exten };");
+
+        var report = Scan(tree);
+
+        report.IsClean.Should().BeTrue(report.ToString());
+        report.Dials.Should().ContainSingle().Which.Extensions.Should().Equal("100");
+    }
+
+    [Fact]
     public void Scan_ShouldPass_WhenAnUndefinedExtensionIsListedAsDeliberate()
     {
         using var tree = GreenTree("var a = new RedirectAction { Channel = c, Context = \"test-functional\", Exten = \"9999\" };");
 
-        var report = DialplanCoverageScanner.Scan(tree.Root,
-            new Dictionary<string, string>(StringComparer.Ordinal) { ["9999"] = "does not exist on purpose" }, []);
+        var report = DialplanCoverageScanner.Scan(tree.Root, [new(Test, "9999", "does not exist on purpose")], []);
 
         report.IsClean.Should().BeTrue(report.ToString());
+    }
+
+    [Fact]
+    public void Scan_ShouldNameTheSite_WhenADeliberatelyUndefinedNumberIsDialledFromAnotherFile()
+    {
+        using var tree = GreenTree("var a = new RedirectAction { Channel = c, Context = \"test-functional\", Exten = \"9999\" };");
+        tree.Write(OtherTest, "class OtherTests\n{\n    async Task M()\n    {\nvar a = \"Local/9999@test-functional\";\n    }\n}\n");
+
+        var report = DialplanCoverageScanner.Scan(tree.Root, [new(Test, "9999", "does not exist on purpose")], []);
+        output.WriteLine(report.ToString());
+
+        report.Violations.Should().ContainSingle()
+            .Which.Should().StartWith($"{OtherTest}:{1 + BodyOffset}: ").And.Contain("dials 9999,");
+    }
+
+    [Fact]
+    public void Scan_ShouldNotCountANamedAttributeArgument_AsADial()
+    {
+        using var tree = GreenTree("var a = \"Local/100@test-functional\";");
+        tree.Write(OtherTest,
+            "class OtherTests\n{\n    [Fact(Skip = \"an originate to Local/9998@test-functional produced no Cdr\")]\n    void M() { }\n}\n");
+
+        var report = DialplanCoverageScanner.Scan(tree.Root, [new(OtherTest, "9998", "kept only by the Skip reason")], []);
+        output.WriteLine(report.ToString());
+
+        report.Dials.Should().NotContain(d => d.Path == OtherTest, "a Skip reason never reaches the test body, so it dials nothing");
+        report.Violations.Should().ContainSingle()
+            .Which.Should().Be($"{OtherTest}: 9998 is listed as deliberately undefined, but no dial there reaches it: remove the entry");
+    }
+
+    [Fact]
+    public void Scan_ShouldCountAPositionalAttributeArgument_AsADial()
+    {
+        using var tree = GreenTree("var a = \"Local/100@test-functional\";");
+        tree.Write(OtherTest,
+            "class OtherTests\n{\n    [Theory]\n    [InlineData(\"Local/9997@test-functional\")]\n    void M(string channel) { }\n}\n");
+
+        var report = Scan(tree);
+        output.WriteLine(report.ToString());
+
+        report.Violations.Should().ContainSingle()
+            .Which.Should().StartWith($"{OtherTest}:4: ").And.Contain("dials 9997,");
     }
 
     [Fact]
@@ -165,12 +223,12 @@ public sealed class DialplanCoverageGuardTests(ITestOutputHelper output)
         using var tree = GreenTree("var a = \"Local/100@test-functional\";");
 
         var report = DialplanCoverageScanner.Scan(tree.Root,
-            new Dictionary<string, string>(StringComparer.Ordinal) { ["9999"] = "gone", ["100"] = "now defined" },
+            [new(Test, "9999", "gone"), new(Test, "100", "now defined")],
             [new(Test, "slot", "gone")]);
         output.WriteLine(report.ToString());
 
-        report.Violations.Should().Contain(v => v.StartsWith("9999 is listed as deliberately undefined, but no test dials it", StringComparison.Ordinal))
-            .And.Contain(v => v.StartsWith("100 is listed as deliberately undefined, but [test-functional] defines it", StringComparison.Ordinal))
+        report.Violations.Should().Contain(v => v.StartsWith($"{Test}: 9999 is listed as deliberately undefined, but no dial there reaches it", StringComparison.Ordinal))
+            .And.Contain(v => v.StartsWith($"{Test}: 100 is listed as deliberately undefined, but [test-functional] defines it", StringComparison.Ordinal))
             .And.Contain(v => v.Contains("'slot' is listed as unresolvable, but no dial there", StringComparison.Ordinal));
     }
 
