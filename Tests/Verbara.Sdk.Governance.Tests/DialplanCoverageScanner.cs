@@ -53,8 +53,6 @@ internal static partial class DialplanCoverageScanner
     public static readonly IReadOnlyDictionary<string, string> DeliberatelyUndefined = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["9999"] = "TransferTests.BlindTransfer_ToNonExistentExtension_ShouldFail redirects a live call to a number that does not exist, to observe what Asterisk does with it",
-        ["999"] = "CdrEventTests.CdrDisposition_ShouldMatchCallOutcome originates to a number that does not exist, for the CDR of a call that fails",
-        ["9998"] = "CdrEventTests.UnansweredCall_ShouldProduceCdr_WithFailedDisposition originates to a number that does not exist, for a FAILED disposition",
     };
 
     /// <summary>Dials whose extension is a run-time value, each with the reason.</summary>

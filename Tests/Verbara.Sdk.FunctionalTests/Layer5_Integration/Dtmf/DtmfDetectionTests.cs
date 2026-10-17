@@ -20,10 +20,13 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
     }
 
     /// <summary>
-    /// Plays a single DTMF digit on an answered channel and verifies that
-    /// both DtmfBeginEvent and DtmfEndEvent fire.
+    /// Plays a single DTMF digit into an answered call and verifies that both DtmfBeginEvent and DtmfEndEvent fire.
+    /// PlayDtmf with Receive=false hands the digit to the channel driver, and the Local driver delivers it to the
+    /// other half of the pair, which reports the begin and the end. (With Receive=true Asterisk queues only the end
+    /// of the digit, so the channel reports a DtmfEnd and no DtmfBegin — measured on Asterisk 23, 5 of 5 runs
+    /// pinned to one half.)
     /// </summary>
-    [Fact(Skip = "Measured: PlayDtmf with Receive=true produced no DTMFBegin within 10 s on Asterisk 22 and on one of three Asterisk 23 runs; the other two Asterisk 23 runs passed, so the begin event is not reliably reported for a queued digit")]
+    [Fact]
     public async Task PlayDtmf_ShouldGenerateBeginAndEndEvents()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -33,24 +36,46 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
+        // The originate names both halves: the digit is played on the ;1 half and arrives on the ;2 half.
+        var playedOnId = $"dtmf-begin-end-{Guid.NewGuid():N}";
+        var receivedOnId = playedOnId + "-2";
         var beginReceived = new TaskCompletionSource<DtmfBeginEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         var endReceived = new TaskCompletionSource<DtmfEndEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         var channelUp = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var seen = new ConcurrentQueue<string>();
 
         using var subscription = connection.Subscribe(new DtmfEventObserver(
-            onBegin: e => beginReceived.TrySetResult(e),
-            onEnd: e => endReceived.TrySetResult(e),
-            onChannelUp: name => channelUp.TrySetResult(name)));
+            onBegin: e =>
+            {
+                seen.Enqueue($"{e.GetType().Name}(raw Event {e.RawFields?.GetValueOrDefault("Event")}) {e.RawFields?.GetValueOrDefault("Channel")} {e.UniqueId} {e.RawFields?.GetValueOrDefault("Digit")} {e.RawFields?.GetValueOrDefault("DurationMs")}");
+                if (e.UniqueId == receivedOnId)
+                    beginReceived.TrySetResult(e);
+            },
+            onEnd: e =>
+            {
+                seen.Enqueue($"{e.GetType().Name}(raw Event {e.RawFields?.GetValueOrDefault("Event")}) {e.RawFields?.GetValueOrDefault("Channel")} {e.UniqueId} {e.RawFields?.GetValueOrDefault("Digit")} {e.RawFields?.GetValueOrDefault("DurationMs")}");
+                if (e.UniqueId == receivedOnId)
+                    endReceived.TrySetResult(e);
+            },
+            onChannelUp: (name, uniqueId) =>
+            {
+                if (uniqueId == playedOnId)
+                    channelUp.TrySetResult(name);
+            }));
 
-        // Originate to ext 100: Answer + Wait(5)
+        // The ;2 half runs ext 100 (Answer + Wait(30)); the ;1 half runs ext 152, which plays a tone into it, so the
+        // half the digit arrives on reads media. With both halves in Wait, the ;2 half sometimes reported the digit
+        // as two DtmfBegin and no DtmfEnd within 10 s (suite runs on Asterisk 22 and 23).
         await connection.SendActionAsync(new OriginateAction
         {
             Channel = "Local/100@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "152",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
+            ChannelId = playedOnId,
+            OtherChannelId = receivedOnId,
             ActionId = "dtmf-begin-end-01"
         });
 
@@ -59,25 +84,24 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         channelResult.Should().Be(channelUp.Task, "ext 100 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
-        await Task.Delay(TimeSpan.FromMilliseconds(500));
+        await Task.Delay(TimeSpan.FromMilliseconds(500)); // fence-allow: SETTLE — lets ext 152 start its tone before the digit is played
 
-        // Play DTMF digit "5" on the channel
         await connection.SendActionAsync(new PlayDtmfAction
         {
             Channel = channelName,
             Digit = "5",
             Duration = 250,
-            Receive = true
+            Receive = false
         });
 
-        // Wait for both events
         var beginResult = await Task.WhenAny(beginReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        beginResult.Should().Be(beginReceived.Task, "the digit PlayDtmf sends on the ;1 half must arrive on the ;2 half as a DtmfBegin within 10 s; DTMF events seen: {0}", string.Join("; ", seen));
         var endResult = await Task.WhenAny(endReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        endResult.Should().Be(endReceived.Task, "the digit PlayDtmf sends on the ;1 half must arrive on the ;2 half as a DtmfEnd within 10 s; DTMF events seen: {0}", string.Join("; ", seen));
 
-        beginResult.Should().Be(beginReceived.Task, "DtmfBeginEvent must fire after PlayDtmf");
-        endResult.Should().Be(endReceived.Task, "DtmfEndEvent must fire after PlayDtmf");
-
+        (await beginReceived.Task).RawFields?.GetValueOrDefault("Digit").Should().Be("5", "the DtmfBegin must carry the digit played");
         var endEvent = await endReceived.Task;
+        endEvent.RawFields?.GetValueOrDefault("Digit").Should().Be("5", "the DtmfEnd must carry the digit played");
         endEvent.DurationMs.Should().BeGreaterThan(0, "DTMF end event must report a non-zero duration");
     }
 
@@ -103,7 +127,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
                 var digit = e.RawFields?.GetValueOrDefault("Digit");
                 if (digit is not null) dtmfDigits.Add(digit);
             },
-            onChannelUp: name => channelUp.TrySetResult(name)));
+            onChannelUp: (name, _) => channelUp.TrySetResult(name)));
 
         // Originate to ext 100: Answer + Wait(5)
         await connection.SendActionAsync(new OriginateAction
@@ -168,7 +192,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
 
         using var subscription = connection.Subscribe(new DtmfEventObserver(
             onEnd: e => endReceived.TrySetResult(e),
-            onChannelUp: name => channelUp.TrySetResult(name)));
+            onChannelUp: (name, _) => channelUp.TrySetResult(name)));
 
         await connection.SendActionAsync(new OriginateAction
         {
@@ -205,9 +229,12 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
     }
 
     /// <summary>
-    /// Plays DTMF with Receive=false (sent direction) and verifies Direction is "Sent".
+    /// A digit a channel receives in a bridge is written to the other party, which reports it with Direction "Sent".
+    /// PlayDtmf with Receive=true plays the digit into one party of the two-party bridge of ext 170. (PlayDtmf with
+    /// Receive=false is no way to get "Sent": it hands the digit to the channel driver without writing it, and the
+    /// targeted channel reports nothing — measured on Asterisk 23, 5 of 5 runs pinned to one Local half.)
     /// </summary>
-    [Fact(Skip = "Measured on Asterisk 23: PlayDtmf with Receive=false produces no DTMFEnd on the channel it targets within 10 s; the only DTMFEnd comes from the other Local half, with Direction Received")]
+    [Fact]
     public async Task PlayDtmf_DirectionSent_ShouldSetCorrectDirection()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -217,53 +244,62 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
-        var endReceived = new TaskCompletionSource<DtmfEndEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var channelUp = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-        string? playedOn = null;
+        // callId names the caller of the bridge; the party it dialled is the one the digit is written to.
+        var callId = $"dtmf-dir-sent-{Guid.NewGuid():N}";
+        var callerEnter = new TaskCompletionSource<BridgeEnterEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var enters = new ConcurrentQueue<BridgeEnterEvent>();
+        var ends = new ConcurrentQueue<DtmfEndEvent>();
 
-        // The digit sent on one Local half is received on the other, which reports Direction Received;
-        // only the channel PlayDtmf targets can report Sent.
         using var subscription = connection.Subscribe(new DtmfEventObserver(
-            onEnd: e =>
+            onEnd: ends.Enqueue,
+            onBridgeEnter: e =>
             {
-                if (e.RawFields?.GetValueOrDefault("Channel") is { } ch && ch == Volatile.Read(ref playedOn))
-                    endReceived.TrySetResult(e);
-            },
-            onChannelUp: name => channelUp.TrySetResult(name)));
+                enters.Enqueue(e);
+                if (e.UniqueId == callId)
+                    callerEnter.TrySetResult(e);
+            }));
 
+        // ext 170 dials ext 171 (Dial tT), which answers: a two-party bridge.
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/171@test-functional/n",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "170",
             Priority = 1,
             IsAsync = true,
-            Timeout = 15000,
+            ChannelId = callId,
             ActionId = "dtmf-dir-sent-01"
         });
 
-        var channelResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        channelResult.Should().Be(channelUp.Task, "ext 100 answers, so the originated channel must report Up within 10 s");
+        var bridged = await Task.WhenAny(callerEnter.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        bridged.Should().Be(callerEnter.Task, "ext 170 dials ext 171, which answers, so the caller must enter a bridge within 10 s");
+        var caller = await callerEnter.Task;
+        var other = enters.FirstOrDefault(e => e.BridgeUniqueid == caller.BridgeUniqueid && e.UniqueId != callId);
+        other.Should().NotBeNull("the party ext 170 dialled must be in the caller's bridge");
 
-        var channelName = await channelUp.Task;
-        await Task.Delay(TimeSpan.FromMilliseconds(500));
-
-        Volatile.Write(ref playedOn, channelName);
         await connection.SendActionAsync(new PlayDtmfAction
         {
-            Channel = channelName,
+            Channel = caller.Channel,
             Digit = "8",
             Duration = 250,
-            Receive = false
+            Receive = true
         });
 
-        var result = await Task.WhenAny(endReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        result.Should().Be(endReceived.Task, "PlayDtmf with Receive=false on an Up channel must produce a DtmfEnd on that channel within 10 s");
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        DtmfEndEvent? written = null;
+        while (written is null && DateTime.UtcNow < deadline)
+        {
+            written = ends.FirstOrDefault(e => e.UniqueId == other!.UniqueId);
+            if (written is null)
+                await Task.Delay(TimeSpan.FromMilliseconds(50)); // fence-allow: GUARD-TIMEOUT — polls for the observed DtmfEnd; a green run leaves as soon as it arrives
+        }
 
-        var endEvent = await endReceived.Task;
-        var direction = endEvent.RawFields?.GetValueOrDefault("Direction");
-        direction.Should().Be("Sent",
-            "PlayDtmf with Receive=false must set Direction to 'Sent'");
+        written.Should().NotBeNull("the bridge must write the digit the caller received to the other party, which reports a DtmfEnd within 10 s");
+        written!.RawFields?.GetValueOrDefault("Digit").Should().Be("8", "the DtmfEnd must carry the digit played");
+        written.RawFields?.GetValueOrDefault("Direction").Should().Be("Sent",
+            "a digit written to a channel must be reported with Direction 'Sent'");
+
+        await BestEffort.SendAsync(connection, new HangupAction { Channel = caller.Channel!, Cause = 16 });
     }
 
     /// <summary>
@@ -336,26 +372,46 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
 
     /// <summary>
     /// Originates to ext 155 which runs Read() (waits for a digit).
-    /// Sends DTMF "7" via PlayDtmf. Read() consumes the digit, and a DtmfEvent fires.
+    /// Sends DTMF "7" via PlayDtmf. The channel running Read reports the digit as a DtmfEnd event, and Read()
+    /// consumes it into its variable.
     /// </summary>
-    [Fact(Skip = "Measured on Asterisk 23: PlayDtmf into the channel running Read produces no Dtmf event within 10 s; Asterisk reports DTMF as DTMFBegin and DTMFEnd events")]
+    [Fact]
     public async Task DtmfConsumedByRead_ShouldFireDtmfEvent()
     {
+        // VarSet belongs to the dialplan class, which the default test user does not read.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
         {
             opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
             opts.AutoReconnect = false;
+            opts.Username = "dialplanflow";
+            opts.Password = "dialplanflowpass";
         });
         await connection.ConnectAsync();
 
-        var dtmfEventReceived = new TaskCompletionSource<DtmfEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // The originate names the ;1 half, the channel this test plays the digit on and reads every event from.
+        var callId = $"dtmf-read-{Guid.NewGuid():N}";
         var channelUp = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dtmfEnd = new TaskCompletionSource<DtmfEndEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var readResult = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         using var subscription = connection.Subscribe(new DtmfEventObserver(
-            onDtmf: e => dtmfEventReceived.TrySetResult(e),
-            onChannelUp: name => channelUp.TrySetResult(name)));
+            onEnd: e =>
+            {
+                if (e.UniqueId == callId)
+                    dtmfEnd.TrySetResult(e);
+            },
+            onChannelUp: (name, uniqueId) =>
+            {
+                if (uniqueId == callId)
+                    channelUp.TrySetResult(name);
+            },
+            onVarSet: e =>
+            {
+                if (e.UniqueId == callId && e.Variable == "RESULT")
+                    readResult.TrySetResult(e.Value);
+            }));
 
-        // ext 155: Answer, Read(result,,1,,,5), Wait(2), Hangup
+        // ext 155: Answer, Read(RESULT,,1,,,5), Wait(2), Hangup
         await connection.SendActionAsync(new OriginateAction
         {
             Channel = "Local/155@test-functional",
@@ -364,6 +420,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
+            ChannelId = callId,
             ActionId = "dtmf-read-01"
         });
 
@@ -372,8 +429,8 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
 
         var channelName = await channelUp.Task;
 
-        // Wait for Read() to be active
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        // Read() runs right after Answer; its 5 s window outlasts this pause.
+        await Task.Delay(TimeSpan.FromSeconds(1)); // fence-allow: SETTLE — lets the channel enter Read() before the digit is queued; Read waits 5 s for it
 
         await connection.SendActionAsync(new PlayDtmfAction
         {
@@ -383,22 +440,28 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
             Receive = true
         });
 
-        var result = await Task.WhenAny(dtmfEventReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        result.Should().Be(dtmfEventReceived.Task, "PlayDtmf into a channel running Read must produce the Dtmf event this test claims within 10 s");
+        var result = await Task.WhenAny(dtmfEnd.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        result.Should().Be(dtmfEnd.Task, "PlayDtmf with Receive=true into the channel running Read must produce a DtmfEnd on that channel within 10 s");
 
-        var dtmfEvent = await dtmfEventReceived.Task;
-        dtmfEvent.Digit.Should().Be("7", "Read() should consume digit '7'");
-        dtmfEvent.Channel.Should().NotBeNullOrEmpty("DtmfEvent must include the channel name");
+        var endEvent = await dtmfEnd.Task;
+        endEvent.RawFields?.GetValueOrDefault("Digit").Should().Be("7", "the DtmfEnd must carry the digit PlayDtmf sent");
+        endEvent.RawFields?.GetValueOrDefault("Channel").Should().Be(channelName, "the DtmfEnd must come from the channel running Read");
+
+        var read = await Task.WhenAny(readResult.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        read.Should().Be(readResult.Task, "Read() must set its RESULT variable when it returns, within 10 s");
+        (await readResult.Task).Should().Be("7", "Read() must consume the digit '7'");
     }
 
     /// <summary>
-    /// Observer that captures DtmfBeginEvent, DtmfEndEvent, DtmfEvent, and channel-up state.
+    /// Observer that captures DtmfBeginEvent, DtmfEndEvent, VarSetEvent, BridgeEnterEvent, and channel-up state (name
+    /// and unique id).
     /// </summary>
     private sealed class DtmfEventObserver(
         Action<DtmfBeginEvent>? onBegin = null,
         Action<DtmfEndEvent>? onEnd = null,
-        Action<DtmfEvent>? onDtmf = null,
-        Action<string>? onChannelUp = null) : IObserver<ManagerEvent>
+        Action<string, string?>? onChannelUp = null,
+        Action<VarSetEvent>? onVarSet = null,
+        Action<BridgeEnterEvent>? onBridgeEnter = null) : IObserver<ManagerEvent>
     {
         public void OnNext(ManagerEvent value)
         {
@@ -410,16 +473,19 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
                 case DtmfEndEvent end:
                     onEnd?.Invoke(end);
                     break;
-                case DtmfEvent dtmf:
-                    onDtmf?.Invoke(dtmf);
+                case VarSetEvent varSet:
+                    onVarSet?.Invoke(varSet);
+                    break;
+                case BridgeEnterEvent enter:
+                    onBridgeEnter?.Invoke(enter);
                     break;
                 case NewChannelEvent nce when nce.ChannelStateDesc == "Up" && nce.Channel is not null:
-                    onChannelUp?.Invoke(nce.Channel);
+                    onChannelUp?.Invoke(nce.Channel, nce.UniqueId);
                     break;
                 // A Local channel is created Down and reports Up through Newstate when its dialplan answers.
                 case NewStateEvent nse when nse.ChannelStateDesc == "Up"
                     && nse.Channel is { } name && name.StartsWith("Local/", StringComparison.Ordinal):
-                    onChannelUp?.Invoke(name);
+                    onChannelUp?.Invoke(name, nse.UniqueId);
                     break;
             }
         }

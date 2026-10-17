@@ -399,9 +399,6 @@ public sealed class IvrNavigationTests : FunctionalTestBase
     }
 
     /// <summary>
-    /// Observer for IVR-related events: NewExtenEvent, channel-up state, and HangupEvent.
-    /// </summary>
-    /// <summary>
     /// NewExten belongs to the dialplan class, which the default test user does not read, so Asterisk
     /// sends it no NewExten at all; these tests connect as the user that reads it.
     /// </summary>
@@ -411,6 +408,9 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         opts.Password = "dialplanflowpass";
     }
 
+    /// <summary>
+    /// Observer for IVR-related events: NewExtenEvent, channel-up state, and HangupEvent.
+    /// </summary>
     private sealed class IvrObserver(
         Action<string>? onChannelUp = null,
         Action<NewExtenEvent>? onNewExten = null,
