@@ -14,6 +14,9 @@ using FluentAssertions;
 [Trait("Category", "Functional")]
 public sealed class AriStasisTests : FunctionalTestBase
 {
+    private const string StasisStartReason =
+        "a channel originated with Application=Stasis, Data=test-app must enter Stasis and produce a StasisStart within 10 s";
+
     public AriStasisTests() : base("Verbara.Sdk.Ari")
     {
     }
@@ -26,8 +29,9 @@ public sealed class AriStasisTests : FunctionalTestBase
     public async Task StasisStart_ShouldFireWhenChannelEntersStasis()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);
-        try { await ariClient.ConnectAsync(); }
-        catch (System.Net.WebSockets.WebSocketException) { return; } // Auth mismatch — skip
+        var connect = async () => await ariClient.ConnectAsync();
+        await connect.Should().NotThrowAsync(
+            "the functional fixture runs Asterisk with ARI enabled for user testari, so the event WebSocket for test-app must open");
 
         var tcs = new TaskCompletionSource<StasisStartEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -43,7 +47,7 @@ public sealed class AriStasisTests : FunctionalTestBase
 
         await amiConnection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/300@test-functional",
+            Channel = "Local/100@test-functional",
             Application = "Stasis",
             Data = "test-app",
             IsAsync = true,
@@ -51,8 +55,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (result != tcs.Task)
-            return; // Graceful skip — Stasis not reachable in this environment
+        result.Should().Be(tcs.Task, StasisStartReason);
 
         var evt = await tcs.Task;
         evt.Channel.Should().NotBeNull("StasisStartEvent must carry a channel");
@@ -70,8 +73,9 @@ public sealed class AriStasisTests : FunctionalTestBase
     public async Task StasisEnd_ShouldFireWhenChannelLeavesStasis()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);
-        try { await ariClient.ConnectAsync(); }
-        catch (System.Net.WebSockets.WebSocketException) { return; }
+        var connect = async () => await ariClient.ConnectAsync();
+        await connect.Should().NotThrowAsync(
+            "the functional fixture runs Asterisk with ARI enabled for user testari, so the event WebSocket for test-app must open");
 
         var startTcs = new TaskCompletionSource<StasisStartEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         var endTcs = new TaskCompletionSource<StasisEndEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -89,7 +93,7 @@ public sealed class AriStasisTests : FunctionalTestBase
 
         await amiConnection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/300@test-functional",
+            Channel = "Local/100@test-functional",
             Application = "Stasis",
             Data = "test-app",
             IsAsync = true,
@@ -97,8 +101,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         });
 
         var startResult = await Task.WhenAny(startTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (startResult != startTcs.Task)
-            return;
+        startResult.Should().Be(startTcs.Task, StasisStartReason);
 
         var startEvt = await startTcs.Task;
         var channelId = startEvt.Channel!.Id;
@@ -107,8 +110,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         await ariClient.Channels.HangupAsync(channelId);
 
         var endResult = await Task.WhenAny(endTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (endResult != endTcs.Task)
-            return;
+        endResult.Should().Be(endTcs.Task, "hanging up a channel in Stasis must produce a StasisEnd within 10 s");
 
         var endEvt = await endTcs.Task;
         endEvt.Channel.Should().NotBeNull("StasisEndEvent must carry a channel");
@@ -122,8 +124,9 @@ public sealed class AriStasisTests : FunctionalTestBase
     public async Task AriChannels_ShouldAnswerChannel()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);
-        try { await ariClient.ConnectAsync(); }
-        catch (System.Net.WebSockets.WebSocketException) { return; }
+        var connect = async () => await ariClient.ConnectAsync();
+        await connect.Should().NotThrowAsync(
+            "the functional fixture runs Asterisk with ARI enabled for user testari, so the event WebSocket for test-app must open");
 
         var tcs = new TaskCompletionSource<StasisStartEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -139,7 +142,7 @@ public sealed class AriStasisTests : FunctionalTestBase
 
         await amiConnection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/300@test-functional",
+            Channel = "Local/100@test-functional",
             Application = "Stasis",
             Data = "test-app",
             IsAsync = true,
@@ -147,8 +150,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (result != tcs.Task)
-            return;
+        result.Should().Be(tcs.Task, StasisStartReason);
 
         var evt = await tcs.Task;
         var channelId = evt.Channel!.Id;
@@ -169,8 +171,9 @@ public sealed class AriStasisTests : FunctionalTestBase
     public async Task AriChannels_ShouldHangupChannel()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);
-        try { await ariClient.ConnectAsync(); }
-        catch (System.Net.WebSockets.WebSocketException) { return; }
+        var connect = async () => await ariClient.ConnectAsync();
+        await connect.Should().NotThrowAsync(
+            "the functional fixture runs Asterisk with ARI enabled for user testari, so the event WebSocket for test-app must open");
 
         var startTcs = new TaskCompletionSource<StasisStartEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         var endTcs = new TaskCompletionSource<StasisEndEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -188,7 +191,7 @@ public sealed class AriStasisTests : FunctionalTestBase
 
         await amiConnection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/300@test-functional",
+            Channel = "Local/100@test-functional",
             Application = "Stasis",
             Data = "test-app",
             IsAsync = true,
@@ -196,8 +199,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         });
 
         var startResult = await Task.WhenAny(startTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (startResult != startTcs.Task)
-            return;
+        startResult.Should().Be(startTcs.Task, StasisStartReason);
 
         var startEvt = await startTcs.Task;
         var channelId = startEvt.Channel!.Id;
@@ -205,8 +207,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         await ariClient.Channels.HangupAsync(channelId);
 
         var endResult = await Task.WhenAny(endTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (endResult != endTcs.Task)
-            return;
+        endResult.Should().Be(endTcs.Task, "hanging up a channel in Stasis must produce a StasisEnd within 10 s");
 
         var endEvt = await endTcs.Task;
         endEvt.Channel.Should().NotBeNull("StasisEndEvent must carry a channel");
@@ -221,8 +222,9 @@ public sealed class AriStasisTests : FunctionalTestBase
     public async Task AriBridges_ShouldCreateAndDestroyBridge()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);
-        try { await ariClient.ConnectAsync(); }
-        catch (System.Net.WebSockets.WebSocketException) { return; }
+        var connect = async () => await ariClient.ConnectAsync();
+        await connect.Should().NotThrowAsync(
+            "the functional fixture runs Asterisk with ARI enabled for user testari, so the event WebSocket for test-app must open");
 
         var bridge = await ariClient.Bridges.CreateAsync(type: "mixing", name: "test-bridge-ari-01");
         bridge.Should().NotBeNull("CreateAsync must return a bridge");
@@ -245,8 +247,9 @@ public sealed class AriStasisTests : FunctionalTestBase
     public async Task AriBridges_ShouldAddChannelToBridge()
     {
         await using var ariClient = AriClientFactory.Create(LoggerFactory);
-        try { await ariClient.ConnectAsync(); }
-        catch (System.Net.WebSockets.WebSocketException) { return; }
+        var connect = async () => await ariClient.ConnectAsync();
+        await connect.Should().NotThrowAsync(
+            "the functional fixture runs Asterisk with ARI enabled for user testari, so the event WebSocket for test-app must open");
 
         var tcs = new TaskCompletionSource<StasisStartEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -267,7 +270,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         // Originate a channel into Stasis
         await amiConnection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/300@test-functional",
+            Channel = "Local/100@test-functional",
             Application = "Stasis",
             Data = "test-app",
             IsAsync = true,
@@ -279,8 +282,9 @@ public sealed class AriStasisTests : FunctionalTestBase
         {
             // Cleanup bridge even if channel never arrived
             await BestEffort.AriAsync(() => ariClient.Bridges.DestroyAsync(bridge.Id));
-            return;
         }
+
+        result.Should().Be(tcs.Task, StasisStartReason);
 
         var evt = await tcs.Task;
         var channelId = evt.Channel!.Id;

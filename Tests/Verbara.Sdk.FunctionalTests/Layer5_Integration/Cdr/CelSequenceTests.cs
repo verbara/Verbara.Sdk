@@ -35,12 +35,12 @@ public sealed class CelSequenceTests : FunctionalTestBase
 
         using var subscription = connection.Subscribe(new CelCollector(collectedEvents, chanEndReceived));
 
-        // ext 100 = Answer + Wait(5) + Hangup — produces full CEL timeline
+        // ext 101 = Answer + Wait(5) + Hangup — produces full CEL timeline
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
@@ -49,11 +49,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
 
         // Wait for CHAN_END which is the final CEL event in a call
         var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (result != chanEndReceived.Task)
-        {
-            // CEL module not loaded — skip gracefully
-            return;
-        }
+        result.Should().Be(chanEndReceived.Task, "ext 101 answers, waits 5 s and hangs up, so the CEL stream must report CHAN_END within 30 s");
 
         // Allow a brief moment for any trailing events to arrive
         await Task.Delay(TimeSpan.FromMilliseconds(500));
@@ -63,7 +59,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
             .ToList();
 
         eventNames.Should().Contain("CHAN_START", "CEL must include channel start event");
-        eventNames.Should().Contain("ANSWER", "CEL must include answer event for ext 100");
+        eventNames.Should().Contain("ANSWER", "CEL must include answer event for ext 101");
         eventNames.Should().Contain("HANGUP", "CEL must include hangup event");
         eventNames.Should().Contain("CHAN_END", "CEL must include channel end event");
     }
@@ -85,9 +81,9 @@ public sealed class CelSequenceTests : FunctionalTestBase
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
@@ -95,10 +91,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (result != chanEndReceived.Task)
-        {
-            return;
-        }
+        result.Should().Be(chanEndReceived.Task, "ext 101 answers, waits 5 s and hangs up, so the CEL stream must report CHAN_END within 30 s");
 
         await Task.Delay(TimeSpan.FromMilliseconds(500));
 
@@ -135,51 +128,49 @@ public sealed class CelSequenceTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
-        var collectedEvents = new ConcurrentBag<CelEvent>();
+        // The originate names its ;1 half, which is also the LinkedID of every CEL event of this call.
+        var callId = $"cel-monotonic-{Guid.NewGuid():N}";
+        var arrivals = new ConcurrentQueue<CelEvent>();
         var chanEndReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        using var subscription = connection.Subscribe(new CelCollector(collectedEvents, chanEndReceived));
+        using var subscription = connection.Subscribe(new CelArrivalCollector(callId, arrivals, chanEndReceived));
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
+            ChannelId = callId,
             ActionId = "cel-monotonic-01"
         });
 
         var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (result != chanEndReceived.Task)
-        {
-            return;
-        }
+        result.Should().Be(chanEndReceived.Task, "ext 101 answers, waits 5 s and hangs up, so the CEL stream must report this call's LINKEDID_END within 30 s");
 
-        await Task.Delay(TimeSpan.FromMilliseconds(500));
+        // The call's CEL events in the order they arrived — not sorted: the order is the claim.
+        var received = arrivals.ToList();
+        string Timeline() => string.Join(" → ", received.Select(e => $"{e.EventName}@{e.EventTime}"));
 
-        // Parse EventTime strings — CEL format: "YYYY-MM-DD HH:MM:SS.ffffff"
-        var timestamps = collectedEvents
-            .Where(e => !string.IsNullOrEmpty(e.EventTime))
-            .Select(e => TryParseEventTime(e.EventTime!))
-            .Where(dt => dt.HasValue)
-            .Select(dt => dt!.Value)
-            .OrderBy(dt => dt)
-            .ToList();
+        received.Should().HaveCountGreaterThanOrEqualTo(2, "a call's CEL timeline holds at least CHAN_START and CHAN_END");
+        var timestamps = received.Select(e => TryParseEventTime(e.EventTime ?? string.Empty)).ToList();
+        timestamps.Should().AllSatisfy(t => t.Should().NotBeNull("every CEL EventTime must parse; timeline: {0}", Timeline()));
 
-        if (timestamps.Count < 2)
-        {
-            // Not enough parseable timestamps — CEL module may use a different format
-            return;
-        }
-
-        // Verify monotonic ordering: each timestamp >= the previous
+        // The CEL manager events carry EventTime to the second (measured on Asterisk 23; a dateformat in cel.conf does
+        // not change it), so milestones within one second compare equal: the order is non-decreasing, not strict.
+        // Measured on Asterisk 23 in 8 runs, 3 of them with three concurrent calls: no CEL event arrived carrying an
+        // earlier EventTime than the one before it, across the whole stream and per channel.
         for (var i = 1; i < timestamps.Count; i++)
         {
-            timestamps[i].Should().BeOnOrAfter(timestamps[i - 1],
-                "CEL EventTime at position {0} must not precede position {1}", i, i - 1);
+            timestamps[i]!.Value.Should().BeOnOrAfter(timestamps[i - 1]!.Value,
+                "CEL event {0} must not carry an earlier EventTime than event {1}, the one that arrived before it; timeline: {2}",
+                i, i - 1, Timeline());
         }
+
+        timestamps[^1]!.Value.Should().BeAfter(timestamps[0]!.Value,
+            "the call lasts about 5 s, so its last CEL event must be later than its first; timeline: {0}", Timeline());
     }
 
     [Fact]
@@ -224,11 +215,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
 
             // Wait for at least one CEL event to confirm CEL is firing
             var result = await Task.WhenAny(chanStartReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
-            if (result != chanStartReceived.Task)
-            {
-                // CEL module not loaded — skip gracefully
-                return;
-            }
+            result.Should().Be(chanStartReceived.Task, "an originate into the queue must make the CEL stream report CHAN_START within 15 s");
 
             // Allow events to accumulate for a moment
             await Task.Delay(TimeSpan.FromSeconds(2));
@@ -298,6 +285,30 @@ public sealed class CelSequenceTests : FunctionalTestBase
 
             if (string.Equals(cel.EventName, "CHAN_END", StringComparison.OrdinalIgnoreCase))
                 chanEndTcs.TrySetResult(true);
+        }
+
+        public void OnError(Exception error) { }
+        public void OnCompleted() { }
+    }
+
+    /// <summary>
+    /// Queues, in arrival order, the CelEvents of the call whose LinkedID is <paramref name="linkedId"/>, and signals
+    /// its LINKEDID_END, the last CEL event of a call.
+    /// </summary>
+    private sealed class CelArrivalCollector(
+        string linkedId,
+        ConcurrentQueue<CelEvent> events,
+        TaskCompletionSource<bool> linkedIdEndTcs) : IObserver<ManagerEvent>
+    {
+        public void OnNext(ManagerEvent value)
+        {
+            if (value is not CelEvent cel || cel.LinkedID != linkedId)
+                return;
+
+            events.Enqueue(cel);
+
+            if (string.Equals(cel.EventName, "LINKEDID_END", StringComparison.OrdinalIgnoreCase))
+                linkedIdEndTcs.TrySetResult(true);
         }
 
         public void OnError(Exception error) { }

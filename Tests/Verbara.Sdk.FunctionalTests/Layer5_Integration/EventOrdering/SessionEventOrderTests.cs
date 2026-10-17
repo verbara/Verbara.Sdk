@@ -210,54 +210,55 @@ public sealed class SessionEventOrderTests : FunctionalTestBase
             eventLog.Enqueue((idx, e));
         });
 
-        // Single call with a short Wait so it completes naturally
+        // Single call with a short Wait so it completes naturally. The originate names the call, so the test reads
+        // only its own session: a call an earlier test left may end inside this window.
+        var callId = $"causal-order-{Guid.NewGuid():N}";
         await connection.SendActionAsync(new OriginateAction
         {
             Channel = "Local/100@test-functional",
             Application = "Wait",
             Data = "2",
             IsAsync = true,
+            ChannelId = callId,
             ActionId = "causal-order-01"
         });
 
-        // Wait for the full lifecycle: 2 s Wait + event propagation buffer
-        await Task.Delay(TimeSpan.FromSeconds(6));
-
-        var allEvents = eventLog.ToList();
-        allEvents.Should().NotBeEmpty("at least one session event must have been received");
-
-        // Group by session
-        var bySession = allEvents
-            .GroupBy(x => x.Event.SessionId)
-            .Where(g => g.Count() >= 2)
-            .ToList();
-
-        foreach (var group in bySession)
+        // The session the call belongs to, read while the call is up (it lasts the 2 s Wait).
+        string? sessionId = null;
+        var sessionDeadline = DateTime.UtcNow.AddSeconds(3);
+        while (sessionId is null && DateTime.UtcNow < sessionDeadline)
         {
-            var ordered = group.OrderBy(x => x.Index).ToList();
-            var eventTypes = ordered.Select(x => x.Event.GetType().Name).ToList();
+            sessionId = sessionManager.GetByChannelId(callId)?.SessionId;
+            if (sessionId is null)
+                await Task.Delay(TimeSpan.FromMilliseconds(50)); // fence-allow: GUARD-TIMEOUT — polls for the observed session; a green run leaves as soon as it exists
+        }
 
-            // CallStartedEvent must be the first event for the session
-            var startIndex = ordered.FindIndex(x => x.Event is CallStartedEvent);
-            var endIndex = ordered.FindIndex(x => x.Event is CallEndedEvent);
+        (sessionId is not null).Should().BeTrue("the originated call {0} must belong to a session within 3 s", callId);
 
-            if (startIndex >= 0 && endIndex >= 0)
-            {
-                startIndex.Should().BeLessThan(endIndex,
-                    "CallStartedEvent (position {0}) must precede CallEndedEvent (position {1}) " +
-                    "for session {2}. Actual order: {3}",
-                    startIndex, endIndex, group.Key,
-                    string.Join(" → ", eventTypes));
-            }
+        // Wait for the full lifecycle: the 2 s Wait, the hangup and its propagation.
+        var endDeadline = DateTime.UtcNow.AddSeconds(8);
+        while (!eventLog.Any(x => x.Event.SessionId == sessionId && x.Event is CallEndedEvent) && DateTime.UtcNow < endDeadline)
+            await Task.Delay(TimeSpan.FromMilliseconds(50)); // fence-allow: GUARD-TIMEOUT — polls for the observed CallEnded; a green run leaves as soon as it arrives
 
-            // Timestamps must be non-decreasing
-            for (var i = 1; i < ordered.Count; i++)
-            {
-                var prev = ordered[i - 1].Event.Timestamp;
-                var curr = ordered[i].Event.Timestamp;
-                curr.Should().BeOnOrAfter(prev,
-                    "event timestamps must be non-decreasing within a session");
-            }
+        var ordered = eventLog.Where(x => x.Event.SessionId == sessionId).OrderBy(x => x.Index).ToList();
+        var eventTypes = string.Join(" → ", ordered.Select(x => x.Event.GetType().Name));
+
+        var startIndex = ordered.FindIndex(x => x.Event is CallStartedEvent);
+        var endIndex = ordered.FindIndex(x => x.Event is CallEndedEvent);
+        startIndex.Should().BeGreaterThanOrEqualTo(0,
+            "the call's session {0} must report a CallStartedEvent. Actual order: {1}", sessionId, eventTypes);
+        endIndex.Should().BeGreaterThanOrEqualTo(0,
+            "the call ends after its 2 s Wait, so session {0} must report a CallEndedEvent within 8 s. Actual order: {1}",
+            sessionId, eventTypes);
+        startIndex.Should().BeLessThan(endIndex,
+            "CallStartedEvent (position {0}) must precede CallEndedEvent (position {1}) for session {2}. Actual order: {3}",
+            startIndex, endIndex, sessionId, eventTypes);
+
+        // Timestamps must be non-decreasing
+        for (var i = 1; i < ordered.Count; i++)
+        {
+            ordered[i].Event.Timestamp.Should().BeOnOrAfter(ordered[i - 1].Event.Timestamp,
+                "event timestamps must be non-decreasing within a session. Actual order: {0}", eventTypes);
         }
     }
 

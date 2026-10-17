@@ -52,9 +52,9 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
         await Task.Delay(TimeSpan.FromSeconds(4));
 
         var confJoin = joinEvents.FirstOrDefault(e => e.Conference == confName);
-        if (confJoin is null) return;
+        confJoin.Should().NotBeNull("Asterisk must report a ConfbridgeJoin for the conference the test originated into");
 
-        var joinedChannel = confJoin.Channel;
+        var joinedChannel = confJoin!.Channel;
         joinedChannel.Should().NotBeNullOrEmpty();
 
         await connection.SendActionAsync(new ConfbridgeMuteAction
@@ -101,9 +101,9 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
         await Task.Delay(TimeSpan.FromSeconds(4));
 
         var confJoin = joinEvents.FirstOrDefault(e => e.Conference == confName);
-        if (confJoin is null) return;
+        confJoin.Should().NotBeNull("Asterisk must report a ConfbridgeJoin for the conference the test originated into");
 
-        var joinedChannel = confJoin.Channel;
+        var joinedChannel = confJoin!.Channel;
         joinedChannel.Should().NotBeNullOrEmpty();
 
         // Mute first, then unmute
@@ -159,9 +159,9 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
         await Task.Delay(TimeSpan.FromSeconds(4));
 
         var confJoin = joinEvents.FirstOrDefault(e => e.Conference == confName);
-        if (confJoin is null) return;
+        confJoin.Should().NotBeNull("Asterisk must report a ConfbridgeJoin for the conference the test originated into");
 
-        var joinedChannel = confJoin.Channel;
+        var joinedChannel = confJoin!.Channel;
         joinedChannel.Should().NotBeNullOrEmpty();
 
         await connection.SendActionAsync(new ConfbridgeKickAction
@@ -208,7 +208,8 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
 
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        if (!joinEvents.Any(e => e.Conference == confName)) return;
+        joinEvents.Should().Contain(e => e.Conference == confName,
+            "Asterisk must report a ConfbridgeJoin for the conference the test originated into");
 
         var initialJoinCount = joinEvents.Count(e => e.Conference == confName);
 
@@ -270,7 +271,8 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
 
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        if (!joinEvents.Any(e => e.Conference == confName)) return;
+        joinEvents.Should().Contain(e => e.Conference == confName,
+            "Asterisk must report a ConfbridgeJoin for the conference the test originated into");
 
         // Lock then unlock
         await connection.SendActionAsync(new ConfbridgeLockAction
@@ -336,7 +338,8 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
 
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        if (joinEvents.IsEmpty) return;
+        joinEvents.Should().Contain(e => e.Conference == confName,
+            "Asterisk must report a ConfbridgeJoin for the conference the test originated into");
 
         await connection.SendActionAsync(new ConfbridgeStartRecordAction
         {
@@ -382,7 +385,8 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
 
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        if (joinEvents.IsEmpty) return;
+        joinEvents.Should().Contain(e => e.Conference == confName,
+            "Asterisk must report a ConfbridgeJoin for the conference the test originated into");
 
         // Start recording first
         await connection.SendActionAsync(new ConfbridgeStartRecordAction
@@ -442,12 +446,13 @@ public sealed class ConfBridgeAdvancedTests : FunctionalTestBase
 
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        if (joinEvents.IsEmpty) return;
+        joinEvents.Should().Contain(e => e.Conference == confName,
+            "Asterisk must report a ConfbridgeJoin for the conference the test originated into");
 
         startEvents.Should().NotBeEmpty(
             "ConfBridge must fire ConfbridgeStartEvent when the first participant joins");
 
-        var joinedChannel = joinEvents.First().Channel;
+        var joinedChannel = joinEvents.First(e => e.Conference == confName).Channel;
         joinedChannel.Should().NotBeNullOrEmpty();
 
         // Kick the channel to trigger the end event
