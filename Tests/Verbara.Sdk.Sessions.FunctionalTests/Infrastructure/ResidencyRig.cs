@@ -19,13 +19,15 @@ namespace Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
 /// still come from the wall clock.
 ///
 /// <para>It also reports two things about how it is used. <see cref="TimersCreated"/> counts the
-/// timers asked of it: release rides arrivals and endings, so the manager schedules nothing for
-/// release (<c>ADR-0063</c>, D4). A timer asked of it is one-shot and fires, on the thread that moves
-/// the clock, when <see cref="Advance"/> or <see cref="MoveTo"/> takes the clock to or past its due
-/// instant; nothing fires on its own. And <see cref="HoldNextRead"/> parks the next reader
+/// timers asked of it: release rides arrivals and endings, so the manager
+/// schedules nothing (<c>ADR-0063</c>, D4). And <see cref="HoldNextRead"/> parks the next reader
 /// inside its read — the release walk reads the clock under its own lock, so a walk parked there
 /// is a walk in progress, and another reader arriving meanwhile is a second walk running at the
 /// same time.</para>
+///
+/// <para>A timer asked of it is one-shot and fires, on the thread that moves the clock, when
+/// <see cref="Advance"/> or <see cref="MoveTo"/> takes the clock to or past its due instant; nothing
+/// fires on its own.</para>
 /// </summary>
 internal sealed class ManualClock(DateTimeOffset start) : TimeProvider
 {
