@@ -366,6 +366,54 @@ internal static class WrapUpFrames
         Hangup(caller),
     ];
 
+    /// <summary>
+    /// The member blind-transfers the caller out of their bridge, as a first capture on 22.10.1 ordered it:
+    /// <c>BlindTransfer</c>, the member's <c>BridgeLeave</c>, <c>AgentComplete</c> with <c>Reason: transfer</c>, the
+    /// caller's <c>BridgeLeave</c>, then the member's leg hangs up. The caller's leg stays up.
+    /// </summary>
+    public static ManagerEvent[] MemberBlindTransfers(string queue, string caller, string memberLeg, string member,
+        string context, string extension, string? agent = null) =>
+    [
+        BlindTransfer(Bridge(caller), caller, CallerChannel(caller), context, extension),
+        BridgeLeave(Bridge(caller), memberLeg),
+        AgentComplete(queue, caller, CallerChannel(caller), caller, member, memberLeg, MemberChannel(member, memberLeg),
+            60, "transfer", agent),
+        BridgeLeave(Bridge(caller), caller),
+        Hangup(memberLeg),
+    ];
+
+    /// <summary>The same caller joining <paramref name="queue"/> again and connected to another member there.</summary>
+    public static ManagerEvent[] SecondVisitConnected(string queue, string caller, string memberLeg, string member,
+        string? agent = null)
+    {
+        var callerChannel = CallerChannel(caller);
+        var memberChannel = MemberChannel(member, memberLeg);
+        var bridge = Bridge(caller) + "-2";
+        return
+        [
+            Join(queue, callerChannel, caller, caller),
+            NewChannel(memberLeg, memberChannel, "Down", caller, context: "agents"),
+            NewState(memberLeg, "Up"),
+            Leave(queue, callerChannel, caller, caller),
+            AgentConnect(queue, caller, callerChannel, caller, member, memberLeg, memberChannel, agent),
+            BridgeCreate(bridge),
+            BridgeEnter(bridge, memberLeg),
+            BridgeEnter(bridge, caller),
+        ];
+    }
+
+    /// <summary>The member of the second visit hangs up; its bridge is the second visit's.</summary>
+    public static ManagerEvent[] SecondMemberHangsUp(string queue, string caller, string memberLeg, string member,
+        string bridge, long talkTime = 15, string? agent = null) =>
+    [
+        BridgeLeave(bridge, memberLeg),
+        Hangup(memberLeg),
+        AgentComplete(queue, caller, CallerChannel(caller), caller, member, memberLeg, MemberChannel(member, memberLeg),
+            talkTime, "agent", agent),
+        BridgeLeave(bridge, caller),
+        Hangup(caller),
+    ];
+
     public static string CallerChannel(string caller) => $"PJSIP/trunk-{caller}";
 
     public static string MemberChannel(string member, string memberLeg) => $"{member}-{memberLeg}";

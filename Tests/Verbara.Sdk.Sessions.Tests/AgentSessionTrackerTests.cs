@@ -418,6 +418,117 @@ public sealed class AgentSessionTrackerTests : IDisposable
             + "adds its 30 s and leaves the agent on the new call. " + Describe(rig));
     }
 
+    // A queue call's wrap-up opens at the member's AgentComplete, which app_queue reports before the caller hangs up,
+    // so it can close before the call's CallEndedEvent reaches the tracker. The agent is known by name from an
+    // AgentLogin and its AgentConnect names it, so the manager's event carries the agent.
+
+    private const string TrackedQueue = "sales";
+    private const string SecondAgent = "agent-2";
+    private const string SecondMember = "PJSIP/agent2";
+
+    [Fact]
+    public async Task OnCallEnded_ShouldReportTheAgentIdle_WhenAZeroWrapUpClosedAtTheAgentsAgentCompleteBeforeTheCallEnded()
+    {
+        var clock = new FakeTimeProvider();
+        await using var rig = await WrapUpRig.StartAsync(clock, new SessionOptions { WrapUpDuration = TimeSpan.Zero });
+        using var tracker = TrackerOn(rig, clock);
+        rig.Deliver(WrapUpFrames.AgentLogin(TrackedAgent, TrackedMember, "login-1"));
+        rig.Deliver(WrapUpFrames.QueueCallConnected(TrackedQueue, "c1", "m1", TrackedMember, TrackedAgent));
+        clock.Advance(TimeSpan.FromMinutes(4));
+        rig.Deliver(WrapUpFrames.MemberHangsUp(TrackedQueue, "c1", "m1", TrackedMember, agent: TrackedAgent));
+        clock.Advance(TimeSpan.FromMinutes(5));
+        var agent = tracker.GetByAgentId(TrackedAgent);
+
+        new { agent?.State, agent?.CurrentCall, agent?.TotalWrapUpTime, agent?.CallsHandled }.Should().BeEquivalentTo(
+            new
+            {
+                State = (AgentSessionState?)AgentSessionState.Idle,
+                CurrentCall = default(CallSession),
+                TotalWrapUpTime = (TimeSpan?)TimeSpan.Zero,
+                CallsHandled = (int?)1,
+            },
+            "a wrap-up duration of zero closes the agent's wrap-up at its AgentComplete, before the caller's hangup "
+            + "ends the call, and the call's later ending finds that wrap-up already closed: the agent is Idle, the "
+            + "call counted, no wrap-up time added. " + Describe(rig));
+    }
+
+    [Fact]
+    public async Task OnCallEnded_ShouldReportTheAgentIdle_WhenTheCallerOutlivesTheWrapUpAfterTheAgentsBlindTransfer()
+    {
+        var clock = new FakeTimeProvider();
+        await using var rig = await WrapUpRig.StartAsync(clock, new SessionOptions { WrapUpDuration = TrackedWrapUp });
+        using var tracker = TrackerOn(rig, clock);
+        rig.Deliver(WrapUpFrames.AgentLogin(TrackedAgent, TrackedMember, "login-1"));
+        rig.Deliver(WrapUpFrames.QueueCallConnected(TrackedQueue, "c1", "m1", TrackedMember, TrackedAgent));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        rig.Deliver(WrapUpFrames.MemberBlindTransfers(TrackedQueue, "c1", "m1", TrackedMember, "ivr", "700", TrackedAgent));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        rig.Deliver(WrapUpFrames.Hangup("c1"));
+        clock.Advance(TimeSpan.FromMinutes(5));
+        var agent = tracker.GetByAgentId(TrackedAgent);
+
+        new { agent?.State, agent?.CurrentCall, agent?.TotalWrapUpTime, agent?.CallsHandled }.Should().BeEquivalentTo(
+            new
+            {
+                State = (AgentSessionState?)AgentSessionState.Idle,
+                CurrentCall = default(CallSession),
+                TotalWrapUpTime = (TimeSpan?)TrackedWrapUp,
+                CallsHandled = (int?)1,
+            },
+            "the agent's blind transfer opens its wrap-up while the caller stays up in an IVR; the wrap-up's 30 s pass "
+            + "before the caller hangs up, and the call's ending then finds it closed: the agent is Idle with the "
+            + "30 s counted. " + Describe(rig));
+    }
+
+    [Fact]
+    public async Task OnCallEnded_ShouldReportEveryAgentOfTheCallIdle_WhenOneCallVisitsTwoAgentsAndTheFirstWrapUpClosesBeforeTheCallEnds()
+    {
+        var clock = new FakeTimeProvider();
+        await using var rig = await WrapUpRig.StartAsync(clock, new SessionOptions { WrapUpDuration = TrackedWrapUp });
+        using var tracker = TrackerOn(rig, clock);
+        rig.Deliver(WrapUpFrames.AgentLogin(TrackedAgent, TrackedMember, "login-1"));
+        rig.Deliver(WrapUpFrames.AgentLogin(SecondAgent, SecondMember, "login-2"));
+        rig.Deliver(WrapUpFrames.QueueCallConnected(TrackedQueue, "c1", "m1", TrackedMember, TrackedAgent));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        rig.Deliver(WrapUpFrames.MemberBlindTransfers(TrackedQueue, "c1", "m1", TrackedMember, "queues", "support",
+            TrackedAgent));
+        clock.Advance(TimeSpan.FromSeconds(2));
+        rig.Deliver(WrapUpFrames.SecondVisitConnected("support", "c1", "m2", SecondMember, SecondAgent));
+        clock.Advance(TimeSpan.FromSeconds(40));
+        rig.Deliver(WrapUpFrames.SecondMemberHangsUp("support", "c1", "m2", SecondMember,
+            WrapUpFrames.Bridge("c1") + "-2", 40, SecondAgent));
+        clock.Advance(TimeSpan.FromMinutes(5));
+        var first = tracker.GetByAgentId(TrackedAgent);
+        var second = tracker.GetByAgentId(SecondAgent);
+
+        new
+        {
+            First = new { first?.State, first?.CurrentCall, first?.TotalWrapUpTime, first?.CallsHandled },
+            Second = new { second?.State, second?.CurrentCall, second?.TotalWrapUpTime, second?.CallsHandled },
+        }.Should().BeEquivalentTo(
+            new
+            {
+                First = new
+                {
+                    State = (AgentSessionState?)AgentSessionState.Idle,
+                    CurrentCall = default(CallSession),
+                    TotalWrapUpTime = (TimeSpan?)TrackedWrapUp,
+                    CallsHandled = (int?)1,
+                },
+                Second = new
+                {
+                    State = (AgentSessionState?)AgentSessionState.Idle,
+                    CurrentCall = default(CallSession),
+                    TotalWrapUpTime = (TimeSpan?)TrackedWrapUp,
+                    CallsHandled = (int?)1,
+                },
+            },
+            "the first agent transfers the caller to a second queue, where the second agent takes it; the first "
+            + "agent's 30 s of wrap-up pass while the second still talks, and the call's ending ends it for both "
+            + "agents: the first goes Idle at once, the second enters wrap-up and leaves it 30 s later. "
+            + Describe(rig));
+    }
+
     private static AgentSessionTracker TrackerOn(WrapUpRig rig, TimeProvider clock) =>
         new(rig.Manager, Options.Create(new SessionOptions { WrapUpDuration = TrackedWrapUp }),
             NullLogger<AgentSessionTracker>.Instance, clock);

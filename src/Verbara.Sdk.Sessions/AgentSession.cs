@@ -32,6 +32,13 @@ public sealed class AgentSession
         ? _timeProvider.GetUtcNow() - StateChangedAt.Value
         : TimeSpan.Zero;
 
+    /// <summary>
+    /// The session of <see cref="CurrentCall"/> whose wrap-up the session manager closed while the agent was still
+    /// on it, or <see langword="null"/>: the call's ending then takes the agent to Idle, not into a wrap-up. Read and
+    /// written under <see cref="SyncRoot"/>.
+    /// </summary>
+    internal string? WrapUpClosedForSessionId { get; set; }
+
     internal readonly Lock SyncRoot = new();
 
     private readonly TimeProvider _timeProvider;

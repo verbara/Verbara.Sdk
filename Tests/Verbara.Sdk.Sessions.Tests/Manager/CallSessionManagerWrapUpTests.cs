@@ -533,53 +533,6 @@ public sealed class CallSessionManagerWrapUpTests
 
     // --- Frames and helpers ---------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// The member blind-transfers the caller out of their bridge, as a first capture on 22.10.1 ordered it:
-    /// <c>BlindTransfer</c>, the member's <c>BridgeLeave</c>, <c>AgentComplete</c> with <c>Reason: transfer</c>, the
-    /// caller's <c>BridgeLeave</c>, then the member's leg hangs up. The caller's leg stays up.
-    /// </summary>
-    private static ManagerEvent[] MemberBlindTransfers(string queue, string caller, string memberLeg, string member,
-        string context, string extension) =>
-    [
-        BlindTransfer(Bridge(caller), caller, CallerChannel(caller), context, extension),
-        BridgeLeave(Bridge(caller), memberLeg),
-        AgentComplete(queue, caller, CallerChannel(caller), caller, member, memberLeg, MemberChannel(member, memberLeg),
-            60, "transfer"),
-        BridgeLeave(Bridge(caller), caller),
-        Hangup(memberLeg),
-    ];
-
-    /// <summary>The same caller joining <paramref name="queue"/> again and connected to another member there.</summary>
-    private static ManagerEvent[] SecondVisitConnected(string queue, string caller, string memberLeg, string member)
-    {
-        var callerChannel = CallerChannel(caller);
-        var memberChannel = MemberChannel(member, memberLeg);
-        var bridge = Bridge(caller) + "-2";
-        return
-        [
-            Join(queue, callerChannel, caller, caller),
-            NewChannel(memberLeg, memberChannel, "Down", caller, context: "agents"),
-            NewState(memberLeg, "Up"),
-            Leave(queue, callerChannel, caller, caller),
-            AgentConnect(queue, caller, callerChannel, caller, member, memberLeg, memberChannel),
-            BridgeCreate(bridge),
-            BridgeEnter(bridge, memberLeg),
-            BridgeEnter(bridge, caller),
-        ];
-    }
-
-    /// <summary>The member of the second visit hangs up; its bridge is the second visit's.</summary>
-    private static ManagerEvent[] SecondMemberHangsUp(string queue, string caller, string memberLeg, string member,
-        string bridge) =>
-    [
-        BridgeLeave(bridge, memberLeg),
-        Hangup(memberLeg),
-        AgentComplete(queue, caller, CallerChannel(caller), caller, member, memberLeg, MemberChannel(member, memberLeg),
-            15),
-        BridgeLeave(bridge, caller),
-        Hangup(caller),
-    ];
-
     /// <summary>Disposes the rig's manager, then returns what <paramref name="read"/> reads at that moment.</summary>
     private static async Task<int> DisposeThenRead(WrapUpRig rig, Func<int> read)
     {

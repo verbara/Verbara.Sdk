@@ -101,33 +101,42 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
         {
             agent.CurrentCall = _manager.GetById(evt.SessionId);
             agent.CurrentQueueName = evt.QueueName;
+            agent.WrapUpClosedForSessionId = null;
             TransitionState(agent, AgentSessionState.OnCall, evt.SessionId, evt.ServerId);
         }
     }
 
     private void OnCallEnded(CallEndedEvent evt)
     {
-        // Find the agent whose current call matches this session
-        var agent = FindAgentBySessionId(evt.SessionId);
-        if (agent is null)
-            return;
+        // Every agent whose current call this is: one call can visit several agents (a transfer to another queue),
+        // and each of them is left OnCall on it until its ending.
+        foreach (var agent in FindAgentsBySessionId(evt.SessionId))
+            EndCall(agent, evt);
+    }
 
+    private void EndCall(AgentSession agent, CallEndedEvent evt)
+    {
         lock (agent.SyncRoot)
         {
+            var call = agent.CurrentCall;
+            if (!string.Equals(call?.SessionId, evt.SessionId, StringComparison.Ordinal))
+                return;
+
             agent.CallsHandled++;
             if (evt.TalkTime.HasValue)
                 agent.TotalTalkTime += evt.TalkTime.Value;
 
-            var call = agent.CurrentCall;
-            if (call is not null)
-                agent.TotalHoldTime += call.HoldTime;
-
+            agent.TotalHoldTime += call!.HoldTime;
             agent.LastCallEndedAt = _timeProvider.GetUtcNow();
 
             // An ending a completed state reload reconciled was not observed: the session manager opens no wrap-up for
             // it, so the agent goes Idle at once with no wrap-up time, instead of waiting in WrapUp for an event that
-            // never comes. The provenance is the ending's marker on the session.
-            if (call is not null && IsEndedByReload(call))
+            // never comes. The provenance is the ending's marker on the session. A queue call's wrap-up opens at the
+            // agent's AgentComplete, before the caller hangs up, so it may already have closed (a duration of zero, or a
+            // caller kept up after a transfer): the agent then goes Idle at once too, its wrap-up time already counted.
+            var wrapUpClosed = string.Equals(agent.WrapUpClosedForSessionId, evt.SessionId, StringComparison.Ordinal);
+            agent.WrapUpClosedForSessionId = null;
+            if (wrapUpClosed || IsEndedByReload(call))
             {
                 agent.CurrentCall = null;
                 agent.CurrentQueueName = null;
@@ -167,10 +176,21 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
         {
             // Every wrap-up's time counts once. Only the close of the wrap-up of the call the agent is in wrap-up for
             // (its last-ended call, which stays CurrentCall until the next connect) moves it to Idle: a close that
-            // arrives after the agent's next call connected, or for another call, leaves its state alone.
+            // arrives after the agent's next call connected, or for another call, leaves its state alone. A close of
+            // the agent's current call that arrives while the agent is still OnCall on it (the wrap-up opened at the
+            // agent's AgentComplete and closed before the caller hung up) is remembered, so the call's ending sends the
+            // agent to Idle instead of into a wrap-up nothing would close.
             agent.TotalWrapUpTime += evt.WrapUpDuration;
-            if (agent.State != AgentSessionState.WrapUp
-                || !string.Equals(agent.CurrentCall?.SessionId, evt.SessionId, StringComparison.Ordinal))
+            if (!string.Equals(agent.CurrentCall?.SessionId, evt.SessionId, StringComparison.Ordinal))
+                return;
+
+            if (agent.State == AgentSessionState.OnCall)
+            {
+                agent.WrapUpClosedForSessionId = evt.SessionId;
+                return;
+            }
+
+            if (agent.State != AgentSessionState.WrapUp)
                 return;
 
             agent.CurrentCall = null;
@@ -179,8 +199,8 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
         }
     }
 
-    private AgentSession? FindAgentBySessionId(string sessionId) =>
-        _agents.Values.FirstOrDefault(a => a.CurrentCall?.SessionId == sessionId);
+    private List<AgentSession> FindAgentsBySessionId(string sessionId) =>
+        [.. _agents.Values.Where(a => a.CurrentCall?.SessionId == sessionId)];
 
     public void Dispose()
     {
