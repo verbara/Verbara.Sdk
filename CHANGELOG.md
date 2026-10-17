@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: a conference participant shows whether it is muted and talking (#NNN)
+
+`MeetMeUser.Muted` and `MeetMeUser.Talking` in `VerbaraServer.MeetMe` now follow what Asterisk reports: the
+`Muted` header of `ConfbridgeJoin`, `ConfbridgeMute`/`ConfbridgeUnmute`, and `ConfbridgeTalking`. Before, both were
+always `false`, so code that branched on `false` now takes the other branch for a muted or talking participant.
+The values are read with the same yes/no reader as the rest of the AMI layer (`Yes`, `1`, `on`, `true` and their
+opposites); a `ConfbridgeTalking` whose status cannot be read leaves `Talking` as it was. `Muted` is the
+participant's mute request, not whether it is audible. `Talking` needs `talk_detection_events=yes` in the ConfBridge
+user profile. A whole-room mute from the keypad sends no event, so it is not reflected. A reconnect still clears the
+conference table and does not reload it. `QueueMemberPause` now sets a live queue member's paused state from
+the typed `Paused` member, like the other queue member events; Asterisk sends `Paused: 1`/`0`, which reads the same
+as before.
+
+### Added: `MeetMeManager.UserStateChanged` (#NNN)
+
+Raised once, after the change, when a participant's `Muted` or `Talking` changes. A repeated value, a join and an
+event for a participant that is not held raise nothing.
+
 ### Fixed — BREAKING: a conference counts every caller (#433)
 
 `VerbaraServer.MeetMe` keyed each ConfBridge participant by user number, and `ConfbridgeJoin` carries none, so
