@@ -99,9 +99,9 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         var endResult = await Task.WhenAny(endReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         endResult.Should().Be(endReceived.Task, "the digit PlayDtmf sends on the ;1 half must arrive on the ;2 half as a DtmfEnd within 10 s; DTMF events seen: {0}", string.Join("; ", seen));
 
-        (await beginReceived.Task).RawFields?.GetValueOrDefault("Digit").Should().Be("5", "the DtmfBegin must carry the digit played");
+        ((await beginReceived.Task).RawFields?.GetValueOrDefault("Digit")).Should().Be("5", "the DtmfBegin must carry the digit played");
         var endEvent = await endReceived.Task;
-        endEvent.RawFields?.GetValueOrDefault("Digit").Should().Be("5", "the DtmfEnd must carry the digit played");
+        (endEvent.RawFields?.GetValueOrDefault("Digit")).Should().Be("5", "the DtmfEnd must carry the digit played");
         endEvent.DurationMs.Should().BeGreaterThan(0, "DTMF end event must report a non-zero duration");
     }
 
@@ -295,16 +295,18 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         }
 
         written.Should().NotBeNull("the bridge must write the digit the caller received to the other party, which reports a DtmfEnd within 10 s");
-        written!.RawFields?.GetValueOrDefault("Digit").Should().Be("8", "the DtmfEnd must carry the digit played");
-        written.RawFields?.GetValueOrDefault("Direction").Should().Be("Sent",
+        (written!.RawFields?.GetValueOrDefault("Digit")).Should().Be("8", "the DtmfEnd must carry the digit played");
+        (written.RawFields?.GetValueOrDefault("Direction")).Should().Be("Sent",
             "a digit written to a channel must be reported with Direction 'Sent'");
 
         await BestEffort.SendAsync(connection, new HangupAction { Channel = caller.Channel!, Cause = 16 });
     }
 
     /// <summary>
-    /// Originates to ext 150 which runs SendDTMF(123456789*#).
-    /// Verifies that sequential DtmfEndEvents fire in the correct digit order.
+    /// Originates <c>Local/150@test-functional/n</c> into ext 150, so both halves run SendDTMF(123456789*#,250,200)
+    /// and each half receives the other's digits. Verifies that each half reports the eleven digits as DtmfEnd events
+    /// in the order they were sent. Measured on Asterisk 22 and 23: each half reports all eleven, Direction Received,
+    /// about 450 ms apart, the last about 6.3 s after the originate.
     /// </summary>
     [Fact]
     public async Task SendDtmf_MultipleDigits_ShouldFireSequentialEvents()
@@ -316,26 +318,23 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
-        var dtmfDigits = new ConcurrentQueue<string>();
+        // The originate names both halves, so the test reads only its own call's digits.
+        var firstHalfId = $"dtmf-multi-{Guid.NewGuid():N}";
+        var secondHalfId = firstHalfId + "-2";
+        var expectedSequence = new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "#" };
+        var firstHalfDigits = new ConcurrentQueue<string>();
+        var secondHalfDigits = new ConcurrentQueue<string>();
         var allDigitsReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        const int expectedDigitCount = 11; // 1-9, *, #
 
         using var subscription = connection.Subscribe(new DtmfEventObserver(
             onEnd: e =>
             {
-                // Local channels have two halves (;1 and ;2) — both fire DtmfEnd events.
-                // Filter to only the ;1 half to avoid duplicate digits.
-                var channel = e.RawFields?.GetValueOrDefault("Channel") ?? "";
-                if (channel.Contains(";2", StringComparison.Ordinal))
+                var digits = e.UniqueId == firstHalfId ? firstHalfDigits : e.UniqueId == secondHalfId ? secondHalfDigits : null;
+                if (digits is null)
                     return;
-
-                var digit = e.RawFields?.GetValueOrDefault("Digit");
-                if (digit is not null)
-                {
-                    dtmfDigits.Enqueue(digit);
-                    if (dtmfDigits.Count >= expectedDigitCount)
-                        allDigitsReceived.TrySetResult(true);
-                }
+                digits.Enqueue(e.RawFields?.GetValueOrDefault("Digit") ?? "<no Digit>");
+                if (firstHalfDigits.Count >= expectedSequence.Length && secondHalfDigits.Count >= expectedSequence.Length)
+                    allDigitsReceived.TrySetResult(true);
             }));
 
         // ext 150: Answer, Wait(1), SendDTMF(123456789*#,250,200), Wait(2), Hangup
@@ -347,27 +346,19 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
+            ChannelId = firstHalfId,
+            OtherChannelId = secondHalfId,
             ActionId = "dtmf-multi-01"
         });
 
-        // SendDTMF takes ~11 digits * (250+200)ms = ~5s, plus overhead
+        // The last digit arrives about 6.3 s after the originate; 15 s bounds the failure.
         var result = await Task.WhenAny(allDigitsReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+        result.Should().Be(allDigitsReceived.Task,
+            "each half of the call must report the eleven digits the other half sends within 15 s; ;1 half: [{0}], ;2 half: [{1}]",
+            string.Join(",", firstHalfDigits), string.Join(",", secondHalfDigits));
 
-        if (result != allDigitsReceived.Task)
-        {
-            // Partial results — verify what we got
-            dtmfDigits.Should().NotBeEmpty("at least some DTMF events must fire from SendDTMF");
-            return;
-        }
-
-        var receivedDigits = dtmfDigits.ToArray();
-        receivedDigits.Should().HaveCountGreaterThanOrEqualTo(expectedDigitCount,
-            "SendDTMF(123456789*#) must produce at least 11 DtmfEndEvents");
-
-        // Verify order of first 11 digits
-        var expectedSequence = new[] { "1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "#" };
-        receivedDigits.Take(expectedDigitCount).Should().ContainInOrder(expectedSequence,
-            "digits must arrive in the order they were sent by SendDTMF");
+        firstHalfDigits.Should().Equal(expectedSequence, "the ;1 half must report the digits in the order SendDTMF sent them");
+        secondHalfDigits.Should().Equal(expectedSequence, "the ;2 half must report the digits in the order SendDTMF sent them");
     }
 
     /// <summary>
@@ -444,8 +435,8 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         result.Should().Be(dtmfEnd.Task, "PlayDtmf with Receive=true into the channel running Read must produce a DtmfEnd on that channel within 10 s");
 
         var endEvent = await dtmfEnd.Task;
-        endEvent.RawFields?.GetValueOrDefault("Digit").Should().Be("7", "the DtmfEnd must carry the digit PlayDtmf sent");
-        endEvent.RawFields?.GetValueOrDefault("Channel").Should().Be(channelName, "the DtmfEnd must come from the channel running Read");
+        (endEvent.RawFields?.GetValueOrDefault("Digit")).Should().Be("7", "the DtmfEnd must carry the digit PlayDtmf sent");
+        (endEvent.RawFields?.GetValueOrDefault("Channel")).Should().Be(channelName, "the DtmfEnd must come from the channel running Read");
 
         var read = await Task.WhenAny(readResult.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         read.Should().Be(readResult.Task, "Read() must set its RESULT variable when it returns, within 10 s");

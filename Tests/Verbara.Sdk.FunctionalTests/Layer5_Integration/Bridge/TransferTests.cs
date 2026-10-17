@@ -91,7 +91,7 @@ public sealed class TransferTests : FunctionalTestBase
             "RedirectAction to ext 161 must make the redirected channel run ext 161, reported as a NewExten on that channel within 5 s");
         var newExten = await reached161.Task;
         newExten.Channel.Should().Be(targetChannel, "the NewExten for ext 161 must come from the channel that was redirected");
-        newExten.RawFields?.GetValueOrDefault("Context").Should().Be(redirect.Context, "the NewExten must be in the context the redirect named");
+        (newExten.RawFields?.GetValueOrDefault("Context")).Should().Be(redirect.Context, "the NewExten must be in the context the redirect named");
     }
 
     /// <summary>
@@ -155,7 +155,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// After a RedirectAction, VerbaraServer's ChannelManager should reflect
     /// the channel's new extension context.
     /// </summary>
-    [Fact(Skip = "Measured on Asterisk 23: after a Redirect to ext 161 that Asterisk reports as a NewExten 161 on the channel, the ChannelManager still holds Extension 100, Priority 1, the values the channel was created with; it sets them from Newchannel and a state reload only")]
+    [Fact(Skip = "Measured on Asterisk 23 and 22 (red in run-5.3-ast23-rf7-unskip-UpdateChannelManager-884af523-dirty.trx and run-5.3-ast22-rf7-unskip-UpdateChannelManager-884af523-dirty.trx): after a Redirect to ext 161 that Asterisk reports as a NewExten 161 on the channel, the ChannelManager still holds Extension 100, the value the channel was created with; it sets it from Newchannel and a state reload only")]
     public async Task BlindTransfer_ShouldUpdateChannelManager()
     {
         // The connection reads the dialplan class, so the server receives the NewExten events of the redirect too.
@@ -546,9 +546,9 @@ public sealed class TransferTests : FunctionalTestBase
 
             await Task.Delay(TimeSpan.FromMilliseconds(500)); // fence-allow: SETTLE — the BridgeEnter has arrived; this lets the server's own subscriber process it
 
-            server.Bridges.GetBridgeForChannel(callId)?.BridgeUniqueid.Should().Be(originalBridgeId,
+            (server.Bridges.GetBridgeForChannel(callId)?.BridgeUniqueid).Should().Be(originalBridgeId,
                 "the BridgeManager must show the transferer back in the original bridge");
-            server.Bridges.GetBridgeForChannel(callee.UniqueId!)?.BridgeUniqueid.Should().Be(originalBridgeId,
+            (server.Bridges.GetBridgeForChannel(callee.UniqueId!)?.BridgeUniqueid).Should().Be(originalBridgeId,
                 "the BridgeManager must show the transferee still in the original bridge");
             events.OfType<AttendedTransferEvent>().Should().NotContain(e => e.OrigTransfererUniqueid == callId && e.Result == "Success",
                 "a transfer whose target hung up must not report success");
@@ -560,8 +560,11 @@ public sealed class TransferTests : FunctionalTestBase
     }
 
     /// <summary>
-    /// Bridge events must arrive in the order the bridge's life happens: it is created before anyone enters, a
-    /// channel enters before it leaves, and the bridge is destroyed after the last channel left.
+    /// The events of a completed attended transfer arrive in the order the transfer happens. Measured on Asterisk 22
+    /// and 23: the Atxfer creates the consultation bridge and the target enters it; the transferer leaves the original
+    /// bridge and enters the consultation bridge; when the transferer hangs up it leaves the consultation bridge, the
+    /// target moves into the original bridge, the AttendedTransfer event follows, and the consultation bridge is
+    /// destroyed.
     /// </summary>
     [Fact]
     public async Task AttendedTransfer_Events_ShouldBeChronological()
@@ -573,56 +576,56 @@ public sealed class TransferTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
-        var allEvents = new ConcurrentQueue<ManagerEvent>();
-        using var subscription = connection.Subscribe(new QueueingObserver(allEvents));
+        var events = new ConcurrentQueue<ManagerEvent>();
+        using var subscription = connection.Subscribe(new QueueingObserver(events));
 
-        // Two named channels join one conference, so only this test's bridge is read.
-        var callIds = new[] { NewCallId("atxfer-chrono-a"), NewCallId("atxfer-chrono-b") };
-        foreach (var callId in callIds)
+        var callId = NewCallId("atxfer-chrono");
+        var (caller, callee) = await BridgeTwoPartiesAsync(connection, events, callId, "atxfer-chrono-01");
+
+        try
         {
-            await connection.SendActionAsync(new OriginateAction
-            {
-                Channel = "Local/600@test-functional",
-                Application = "ConfBridge",
-                Data = "test-atxfer-05",
-                IsAsync = true,
-                ChannelId = callId,
-                ActionId = callId
-            });
+            var (evt, targetUniqueId) = await CompleteAttendedTransferAsync(connection, events, caller, "162");
+            evt.Result.Should().Be("Success", "the transferer hung up while talking to the target, which completes the transfer");
+            var origBridge = evt.OrigBridgeUniqueid;
+            var secondBridge = evt.SecondBridgeUniqueid;
+            origBridge.Should().Be(caller.BridgeUniqueid, "the transfer starts from the bridge the transferer was in");
+            secondBridge.Should().NotBeNullOrEmpty("AttendedTransferEvent must name the consultation bridge");
+
+            var destroyed = await WaitForAsync<BridgeDestroyEvent>(events, 0, e => e.BridgeUniqueid == secondBridge, TimeSpan.FromSeconds(3));
+            destroyed.Should().NotBeNull("the consultation bridge must be destroyed within 3 s of the transfer");
+
+            // This transfer's events, in the order the observer received them.
+            var received = events.ToList();
+            string Order() => string.Join(" → ", received.OfType<BridgeEventBase>()
+                .Where(e => e is AttendedTransferEvent || e.BridgeUniqueid == origBridge || e.BridgeUniqueid == secondBridge)
+                .Select(e => e is AttendedTransferEvent ? "AttendedTransfer" : $"{e.GetType().Name}({e.UniqueId} in {e.BridgeUniqueid})"));
+            int IndexOf<T>(Func<T, bool> match) where T : ManagerEvent => received.FindIndex(e => e is T t && match(t));
+            int LastIndexOf<T>(Func<T, bool> match) where T : ManagerEvent => received.FindLastIndex(e => e is T t && match(t));
+
+            var secondCreated = IndexOf<BridgeCreateEvent>(e => e.BridgeUniqueid == secondBridge);
+            var targetEntersSecond = IndexOf<BridgeEnterEvent>(e => e.UniqueId == targetUniqueId && e.BridgeUniqueid == secondBridge);
+            var callerLeavesOrig = IndexOf<BridgeLeaveEvent>(e => e.UniqueId == callId && e.BridgeUniqueid == origBridge);
+            var callerEntersSecond = IndexOf<BridgeEnterEvent>(e => e.UniqueId == callId && e.BridgeUniqueid == secondBridge);
+            var callerLeavesSecond = IndexOf<BridgeLeaveEvent>(e => e.UniqueId == callId && e.BridgeUniqueid == secondBridge);
+            var targetEntersOrig = LastIndexOf<BridgeEnterEvent>(e => e.UniqueId == targetUniqueId && e.BridgeUniqueid == origBridge);
+            var transfer = IndexOf<AttendedTransferEvent>(e => e.OrigTransfererUniqueid == callId);
+            var secondDestroyed = IndexOf<BridgeDestroyEvent>(e => e.BridgeUniqueid == secondBridge);
+
+            new[] { secondCreated, targetEntersSecond, callerLeavesOrig, callerEntersSecond, callerLeavesSecond, targetEntersOrig, transfer, secondDestroyed }
+                .Should().NotContain(-1, "every step of the transfer must have been received; order: {0}", Order());
+
+            secondCreated.Should().BeLessThan(targetEntersSecond, "the consultation bridge is created before the target enters it; order: {0}", Order());
+            callerLeavesOrig.Should().BeLessThan(callerEntersSecond, "the transferer leaves the original bridge before it enters the consultation bridge; order: {0}", Order());
+            targetEntersSecond.Should().BeLessThan(callerLeavesSecond, "the target is in the consultation bridge before the transferer hangs up; order: {0}", Order());
+            callerEntersSecond.Should().BeLessThan(callerLeavesSecond, "the transferer enters the consultation bridge before it leaves it; order: {0}", Order());
+            callerLeavesSecond.Should().BeLessThan(targetEntersOrig, "the target moves into the original bridge once the transferer hung up; order: {0}", Order());
+            targetEntersOrig.Should().BeLessThan(transfer, "the AttendedTransfer event reports a transfer whose parties are already joined; order: {0}", Order());
+            callerLeavesSecond.Should().BeLessThan(secondDestroyed, "the consultation bridge is destroyed after the transferer left it; order: {0}", Order());
+            evt.TransfereeUniqueid.Should().Be(callee.UniqueId, "the party the transferer was talking to is the one transferred");
         }
-
-        await Task.Delay(TimeSpan.FromSeconds(4));
-
-        var enters = allEvents.OfType<BridgeEnterEvent>().Where(e => callIds.Contains(e.UniqueId)).ToList();
-        enters.Should().HaveCount(2, "both named ConfBridge originates into test-atxfer-05 must enter the bridge within 4 s");
-        var bridgeId = enters[0].BridgeUniqueid;
-        enters.Should().AllSatisfy(e => e.BridgeUniqueid.Should().Be(bridgeId, "both callers joined the same conference"));
-
-        // Hang up both to generate leave/destroy events
-        foreach (var enter in enters)
-            await connection.SendActionAsync(new HangupAction { Channel = enter.Channel!, Cause = 16 });
-
-        await Task.Delay(TimeSpan.FromSeconds(4));
-
-        // This bridge's events, in the order the observer received them.
-        var bridgeEvents = allEvents.OfType<BridgeEventBase>().Where(e => e.BridgeUniqueid == bridgeId).ToList();
-        string Order() => string.Join(" → ", bridgeEvents.Select(e => $"{e.GetType().Name}({e.UniqueId})"));
-        int IndexOf<T>(string? uniqueId = null) where T : BridgeEventBase =>
-            bridgeEvents.FindIndex(e => e is T && (uniqueId is null || e.UniqueId == uniqueId));
-
-        var create = IndexOf<BridgeCreateEvent>();
-        var destroy = IndexOf<BridgeDestroyEvent>();
-        create.Should().BeGreaterThanOrEqualTo(0, "the bridge's BridgeCreate must have been received; order: {0}", Order());
-        destroy.Should().BeGreaterThanOrEqualTo(0, "hanging up both callers must destroy the bridge within 4 s; order: {0}", Order());
-
-        foreach (var callId in callIds)
+        finally
         {
-            var enter = IndexOf<BridgeEnterEvent>(callId);
-            var leave = IndexOf<BridgeLeaveEvent>(callId);
-            leave.Should().BeGreaterThanOrEqualTo(0, "the hung-up caller {0} must leave the bridge; order: {1}", callId, Order());
-            create.Should().BeLessThan(enter, "the bridge must be created before {0} enters it; order: {1}", callId, Order());
-            enter.Should().BeLessThan(leave, "{0} must enter the bridge before it leaves; order: {1}", callId, Order());
-            leave.Should().BeLessThan(destroy, "{0} must leave before the bridge is destroyed; order: {1}", callId, Order());
+            await HangUpAsync(connection, caller.Channel, callee.Channel);
         }
     }
 
