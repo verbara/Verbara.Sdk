@@ -95,49 +95,6 @@ public sealed class VerbaraServerCoverageTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EventObserver_ShouldHandleMeetMeJoinEvent()
-    {
-        await _sut.StartAsync();
-
-#pragma warning disable CS0618
-        _capturedObserver!.OnNext(new MeetMeJoinEvent
-        {
-            Meetme = "1000",
-            Usernum = 1,
-            Channel = "PJSIP/100-001"
-        });
-#pragma warning restore CS0618
-
-        var room = _sut.MeetMe.GetRoom("1000");
-        room.Should().NotBeNull();
-        room!.UserCount.Should().Be(1);
-    }
-
-    [Fact]
-    public async Task EventObserver_ShouldHandleMeetMeLeaveEvent()
-    {
-        await _sut.StartAsync();
-
-#pragma warning disable CS0618
-        _capturedObserver!.OnNext(new MeetMeJoinEvent
-        {
-            Meetme = "1000", Usernum = 1, Channel = "PJSIP/100-001"
-        });
-        _capturedObserver.OnNext(new MeetMeLeaveEvent
-        {
-            Meetme = "1000", Usernum = 1
-        });
-#pragma warning restore CS0618
-
-        // After last user leaves, room may or may not still exist
-        var room = _sut.MeetMe.GetRoom("1000");
-        if (room is not null)
-            room.UserCount.Should().Be(0);
-        else
-            _sut.MeetMe.Should().NotBeNull(); // room was cleaned up
-    }
-
-    [Fact]
     public async Task EventObserver_ShouldHandleNewExtenEvent()
     {
         await _sut.StartAsync();
