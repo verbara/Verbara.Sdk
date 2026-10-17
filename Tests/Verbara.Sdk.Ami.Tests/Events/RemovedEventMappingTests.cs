@@ -92,8 +92,8 @@ public sealed class RemovedEventMappingTests
     [InlineData("ConfbridgeJoin", "Verbara.Sdk.Ami.Events.ConfbridgeJoinEvent")]
     public void Registry_ShouldStillResolveTheTypedClass_WhenGivenAKeptMappingName(string name, string typeName)
     {
-        // Compared by name: PeerEntryEvent carries [Obsolete] until it loses it in the same change, and this control
-        // must compile on both sides of that edit without a suppression.
+        // Compared by name: PeerEntryEvent carried [Obsolete] when this control was written, so it compiled on both
+        // sides of the attribute's removal without a suppression.
         var created = GeneratedEventRegistry.Create(name);
         created.Should().NotBeNull($"'{name}' is registered");
         created!.GetType().FullName.Should().Be(typeName);

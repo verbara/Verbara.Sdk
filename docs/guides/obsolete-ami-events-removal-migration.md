@@ -14,7 +14,7 @@ can reach:
 - **`DeepgramVoices.Helios`** in `Verbara.Sdk.VoiceAi.Tts`, an alias of `HeliosLegacy`.
 
 `PeerEntryEvent` is **not** removed. `IAXpeerlist` and `IAXpeers` (chan_iax2) still answer with
-`Event: PeerEntry` on every supported Asterisk, so the type stays, and it is no longer `[Obsolete]`.
+`Event: PeerEntry` on the pinned 20, 22 and 23 images, so the type stays, and it is no longer `[Obsolete]`.
 A `#pragma warning disable CS0618` you kept around it can go.
 
 ## What you have to do
@@ -109,7 +109,7 @@ it as the place to look, not as a measured replacement.
 Asterisk 20 has no SDK support, but upstream still patches it, and 22 or 23 can be built by hand with
 app_meetme. On such a server the event still arrives. With no typed class for its name, it is
 delivered as a plain `ManagerEvent` to every `OnEvent` handler, every observer and any pending
-event-generating action. Nothing is dropped and nothing is logged.
+event-generating action. Nothing is dropped, and nothing is logged as a warning or an error for it.
 
 - `EventType` holds the name exactly as Asterisk spelled it: `MeetmeJoin`, not `MeetMeJoin`.
 - `RawFields` holds every distinct header name with its value. A header Asterisk repeats keeps its

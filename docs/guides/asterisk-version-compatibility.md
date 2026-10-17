@@ -35,7 +35,7 @@ These fields are nullable (`string?` / `int?`) and remain `null` on older Asteri
 
 ## Legacy AMI Events (removed in 2.9.0)
 
-The 26 legacy event types this section used to list — app_meetme, Monitor, the bridging, dialing and queue events before Asterisk 12, Skype and Zaptel — were marked `[Obsolete]` and were **removed in 2.9.0**, together with the public adapter that built three of them. No supported Asterisk sends any of them. The Legacy → Replacement tables, and what to do on an Asterisk that still sends one of these events, are in [obsolete-ami-events-removal-migration.md](obsolete-ami-events-removal-migration.md).
+The 26 legacy event types this section used to list — app_meetme, Monitor, the bridging, dialing and queue events before Asterisk 12, Skype and Zaptel — were marked `[Obsolete]` and were **removed in 2.9.0**, together with the public adapter that built three of them. None of the pinned 20, 22 and 23 test images sends any of them. The Legacy → Replacement tables, and what to do on an Asterisk that still sends one of these events, are in [obsolete-ami-events-removal-migration.md](obsolete-ami-events-removal-migration.md).
 
 An event that no longer has a typed class still arrives, as a `ManagerEvent` (see [Fallback Behavior](#fallback-behavior)).
 
