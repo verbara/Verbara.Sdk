@@ -15,14 +15,29 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
     private readonly IDisposable _subscription;
     private readonly ILogger<AgentSessionTracker> _logger;
     private readonly SubscriberGuardedObservable<AgentSessionStateChanged> _guardedStateChanges;
+    private readonly TimeProvider _timeProvider;
 
     public AgentSessionTracker(
         ICallSessionManager manager,
         IOptions<SessionOptions> options,
         ILogger<AgentSessionTracker> logger)
+        : this(manager, options, logger, TimeProvider.System)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a tracker on <paramref name="timeProvider"/>, so a test can give the tracker the same fake clock as
+    /// the session manager it follows. Nothing reads it yet: the tracker's timestamps still come from the wall clock.
+    /// </summary>
+    internal AgentSessionTracker(
+        ICallSessionManager manager,
+        IOptions<SessionOptions> options,
+        ILogger<AgentSessionTracker> logger,
+        TimeProvider timeProvider)
     {
         _manager = manager;
         _logger = logger;
+        _timeProvider = timeProvider;
         _guardedStateChanges = new SubscriberGuardedObservable<AgentSessionStateChanged>(
             _stateChanges,
             reportNext: (ex, change) => LogStateChangeSubscriberFault(

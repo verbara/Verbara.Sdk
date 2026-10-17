@@ -32,9 +32,21 @@ public sealed class AgentSession
 
     internal readonly Lock SyncRoot = new();
 
+    private readonly TimeProvider _timeProvider;
+
     public AgentSession(string agentId)
+        : this(agentId, TimeProvider.System)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a session on <paramref name="timeProvider"/>, the clock of the tracker that creates it. Nothing reads
+    /// it yet: <see cref="TrackedSince"/> and <see cref="IdleTime"/> still come from the wall clock.
+    /// </summary>
+    internal AgentSession(string agentId, TimeProvider timeProvider)
     {
         AgentId = agentId;
+        _timeProvider = timeProvider;
         TrackedSince = DateTimeOffset.UtcNow;
     }
 }
