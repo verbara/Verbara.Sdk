@@ -16,9 +16,16 @@ internal static partial class MeetMeManagerLog
 }
 
 /// <summary>
-/// Tracks ConfBridge (and legacy MeetMe) conference rooms in real-time. Each room holds one
-/// participant per channel, keyed by the channel name Asterisk sends on the participant's join.
+/// Tracks ConfBridge conference rooms in real-time (also usable for app_meetme through direct
+/// calls). Each room holds one participant per channel, keyed by the channel name Asterisk sends
+/// on the participant's join.
 /// </summary>
+/// <remarks>
+/// Calls are expected one at a time for a given room. <c>VerbaraServer</c> guarantees this: it
+/// applies conference events in order from a single event pump. A join that runs concurrently
+/// with the room's last leave or with <see cref="OnConferenceEnded"/> can land in a room that is
+/// being removed and is then lost.
+/// </remarks>
 public sealed class MeetMeManager
 {
     private readonly ConcurrentDictionary<string, MeetMeRoom> _rooms = new();
