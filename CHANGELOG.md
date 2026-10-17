@@ -134,6 +134,16 @@ subscriber. These failures no longer appear as `[AMI_EVENT] Observer threw on <E
 (`Where`, `Select`, `OfType`, …) is still ended by that operator on its first failure, so subscribe directly and filter
 inside the handler. What a subscriber throws on another thread is not caught. The public API is unchanged.
 
+### Fixed — BREAKING: an attended transfer Asterisk refuses ends `Failed` (#NNN)
+
+`AttendedTransferActivity` discarded the answer to its `Atxfer` action, so a transfer Asterisk refused with
+`Response: Error` (for example `Channel specified does not exist`, or `No attended transfer feature code found` on a
+server whose `features.conf` sets no `atxfer` code) ended `Completed`. It now ends `Failed`, and `StartAsync` throws
+`ActivityFailedException` carrying Asterisk's message. `Completed` still means only that Asterisk accepted and queued
+the transfer, not that it finished; the outcome arrives as an `AttendedTransferEvent`. Code that awaited
+`StartAsync` and branched on `Status` now gets an exception for a refusal; the
+[activity ending guide](docs/guides/activity-ending-migration.md) shows the catch.
+
 ### Fixed: `SendFlashAction` reaches Asterisk (#430)
 
 `SendFlashAction` sent `Action: Flash`, a name no Asterisk version registers, so every Asterisk answered
