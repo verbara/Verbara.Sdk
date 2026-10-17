@@ -13,7 +13,7 @@
 | `[CHANNEL]` | Channels | `ChannelManagerLog` | New, state change, hangup, rename, link/unlink |
 | `[QUEUE]` | Queues | `QueueManagerLog` | Params, member add/remove/pause/status, caller join/leave |
 | `[AGENT]` | Agents | `AgentManagerLog` | Login, logoff, connect, complete, pause |
-| `[CONFERENCE]` | Conferences | `MeetMeManagerLog` | Join, leave |
+| `[CONFERENCE]` | Conferences | `MeetMeManagerLog` | Join, leave, mute, talking |
 | `[AGI]` | FastAGI | `FastAgiServerLog` | Server start/stop, script map, connection |
 | `[ARI]` | ARI client | `AriClientLog` | Connect, disconnect, WS event, reconnect |
 | `[POOL]` | Multi-server | `VerbaraServerPoolLog` | Server dispose failed, AMI connection dispose failed (Error, with the server id and the exception; the pool's disposal, a removal or a failed add logs it and goes on) |
