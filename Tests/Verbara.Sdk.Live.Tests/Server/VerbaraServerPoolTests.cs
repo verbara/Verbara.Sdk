@@ -646,6 +646,32 @@ public sealed class VerbaraServerPoolTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RemoveServerAsync_ShouldReleaseTheServersInstruments_WhenItsAriClientThrows()
+    {
+        using var instruments = new ServerInstruments();
+        var logs = new RecordingLoggerFactory();
+        await using var pool = new VerbaraServerPool(_connectionFactory, logs);
+        var server = HandedInServer(NewConnection());
+        var ari = Substitute.For<IAriClient>();
+#pragma warning disable CA2012 // NSubstitute setup requires evaluating the ValueTask
+        ari.DisposeAsync().Returns(_ => throw new InvalidOperationException("ari-s1"));
+#pragma warning restore CA2012
+        server.SetAriClient(ari);
+        await instruments.StartAsync(server);
+        pool.AddExistingServer("s1", server);
+
+        var act = async () => await pool.RemoveServerAsync("s1");
+
+        await act.Should().NotThrowAsync("a removal never throws what the server threw");
+        using (new AssertionScope())
+        {
+            logs.PoolErrors.Select(e => e.Message).Should().Equal("[POOL] Server dispose failed: server=s1");
+            instruments.Published.Should().BePositive();
+            instruments.Completed.Should().Be(instruments.Published, "every instrument the removed server published is released");
+        }
+    }
+
+    [Fact]
     public async Task RemoveServerAsync_ShouldLeaveAnotherServersRoute_WhenTheSameAgentIdMovedThere()
     {
         await using var pool = new VerbaraServerPool(_connectionFactory, NullLoggerFactory.Instance);
