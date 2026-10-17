@@ -238,7 +238,7 @@ public sealed class TransferTests : FunctionalTestBase
     }
 
     /// <summary>
-    /// Redirecting a channel to a non-existent extension (999) should result
+    /// Redirecting a channel to a non-existent extension (9999) should result
     /// in the channel hanging up since no dialplan exists.
     /// </summary>
     [Fact]

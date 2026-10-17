@@ -43,7 +43,7 @@ public sealed class AriStasisTests : FunctionalTestBase
 
         await amiConnection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/300@test-functional",
+            Channel = "Local/100@test-functional",
             Application = "Stasis",
             Data = "test-app",
             IsAsync = true,
@@ -89,7 +89,7 @@ public sealed class AriStasisTests : FunctionalTestBase
 
         await amiConnection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/300@test-functional",
+            Channel = "Local/100@test-functional",
             Application = "Stasis",
             Data = "test-app",
             IsAsync = true,
@@ -139,7 +139,7 @@ public sealed class AriStasisTests : FunctionalTestBase
 
         await amiConnection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/300@test-functional",
+            Channel = "Local/100@test-functional",
             Application = "Stasis",
             Data = "test-app",
             IsAsync = true,
@@ -188,7 +188,7 @@ public sealed class AriStasisTests : FunctionalTestBase
 
         await amiConnection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/300@test-functional",
+            Channel = "Local/100@test-functional",
             Application = "Stasis",
             Data = "test-app",
             IsAsync = true,
@@ -267,7 +267,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         // Originate a channel into Stasis
         await amiConnection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/300@test-functional",
+            Channel = "Local/100@test-functional",
             Application = "Stasis",
             Data = "test-app",
             IsAsync = true,
