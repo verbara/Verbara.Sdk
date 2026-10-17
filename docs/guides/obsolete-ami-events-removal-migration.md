@@ -14,7 +14,8 @@ can reach:
 - **`DeepgramVoices.Helios`** in `Verbara.Sdk.VoiceAi.Tts`, an alias of `HeliosLegacy`.
 
 `PeerEntryEvent` is **not** removed. `IAXpeerlist` and `IAXpeers` (chan_iax2) still answer with
-`Event: PeerEntry` on the pinned 20, 22 and 23 images, so the type stays, and it is no longer `[Obsolete]`.
+`Event: PeerEntry` on the pinned 20, 22 and 23 images and on 24.0.0-rc2, so the type stays, and it is no
+longer `[Obsolete]`.
 A `#pragma warning disable CS0618` you kept around it can go.
 
 ## What you have to do
@@ -30,11 +31,15 @@ A `#pragma warning disable CS0618` you kept around it can go.
 
 ## The removed event types
 
-"Supported Asterisk" means 22 and 23. "Sent" was measured on the pinned 20.20.1, 22.10.1 and 23.4.1
-images, with one scripted workload each (two ConfBridge participants, MixMonitor, `Monitor()`,
-`MeetMe()`, a `Dial`, an answered queue call, `QueuePause` on then off, and the list actions of the
-removed modules). Each capture held 297 events, and none carried a removed name. The SDK's 15
-versioned AMI recordings (20.20.1, 22.9.0, 23.4.1) hold 7,074 events, none with a removed name either.
+"Supported Asterisk" means 22 and 24 (the LTS releases) first, and 23. "Sent" was measured on the
+pinned 20.20.1, 22.10.1 and 23.4.1 images, with one scripted workload each (two ConfBridge
+participants, MixMonitor, `Monitor()`, `MeetMe()`, a `Dial`, an answered queue call, `QueuePause` on
+then off, and the list actions of the removed modules). Each capture held 297 events, and none carried
+a removed name. The capture was then repeated on those three images and on 24.0.0-rc2 with a wider
+workload: every list action the SDK publishes that produces events, the AGI and Hangup actions on a
+live AsyncAGI call, and `IAXpeerlist` and `IAXpeers`. Each of those four captures held 414 events,
+none with a removed name and 4 with `PeerEntry`. The SDK's 15 versioned AMI recordings (20.20.1,
+22.9.0, 23.4.1) hold 7,074 events, none with a removed name either.
 
 Each replacement was checked against those captures, or against `manager show events` on 20, 22 and
 23 where the workload does not produce the event. The last column says which.
@@ -91,7 +96,7 @@ documents `QueueMemberPaused`, so a handler written against it never fires.
 ### Discontinued modules
 
 No version from 20 on sends or documents any of these names, and their list actions (`SkypeBuddies`,
-`SkypeLicenseList`, `ZapShowChannels`) answer `Invalid/unknown command` on 20, 22 and 23.
+`SkypeLicenseList`, `ZapShowChannels`) answer `Invalid/unknown command` on 20, 22, 23 and 24.0.0-rc2.
 
 | Removed types | Sent by a supported Asterisk? | Use instead |
 |---|---|---|
