@@ -191,6 +191,34 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
     }
 
     // ==========================================================================
+    // QueueMemberPauseEvent -> QueueManager
+    // ==========================================================================
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EventObserver_ShouldRouteQueueMemberPauseEventPaused_FromTypedMember(bool paused)
+    {
+        await StartAndGetObserverAsync();
+        CreateQueueWithMember("support", "PJSIP/2000");
+        _sut.Queues.GetByName("support")!.Members["PJSIP/2000"].Paused = !paused;
+
+        // RawFields carries no "Paused": the arm must read the typed member, the form its siblings use.
+        _observer!.OnNext(new QueueMemberPauseEvent
+        {
+            Paused = paused,
+            RawFields = new Dictionary<string, string>
+            {
+                ["Queue"] = "support",
+                ["Interface"] = "PJSIP/2000",
+            }
+        });
+
+        _sut.Queues.GetByName("support")!.Members["PJSIP/2000"].Paused.Should().Be(paused,
+            "QueueMemberPause carried Paused = {0}", paused);
+    }
+
+    // ==========================================================================
     // QueueCallerJoinEvent -> QueueManager
     // ==========================================================================
 

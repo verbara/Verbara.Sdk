@@ -168,13 +168,30 @@ If you run package validation with 2.8.0 as the baseline, `Verbara.Sdk.Live` rep
 - `M:Verbara.Sdk.Live.MeetMe.MeetMeRoom.get_Users`
 - `M:Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserLeft(System.String,System.Int32)`
 
-Both are the intended breaks above. The three added members raise nothing.
+Both are the intended breaks above. Package validation reports nothing for the added members,
+`UserStateChanged` among them.
+
+## Muted and Talking follow Asterisk
+
+From this release `MeetMeUser.Muted` and `MeetMeUser.Talking` are set; before, both always read
+`false`.
+
+- `Muted` is set from the join's `Muted` header (an absent or unreadable value reads `false`), before
+  `UserJoined` is raised, then by each `ConfbridgeMute` and `ConfbridgeUnmute` naming the
+  participant. It is the participant's mute request as Asterisk reports it, not whether the
+  participant is audible. A whole-room mute from the conference keypad sends no event; a reload reads
+  the real state.
+- `Talking` follows `ConfbridgeTalking`. Asterisk sends it only for a user profile with
+  `talk_detection_events=yes`; without it `Talking` stays `false`.
+- A mute, unmute or talking event for a participant the table does not hold changes nothing.
+- `MeetMeManager.UserStateChanged` is raised once when a participant's `Muted` or `Talking` changes;
+  not for an event that leaves the value as it was, and not on the join.
+
+If you read `ConfbridgeMute`, `ConfbridgeUnmute` or `ConfbridgeTalking` yourself to fill that state,
+you can read the participant instead.
 
 ## What did not change
 
-- `MeetMeUser.Muted` and `MeetMeUser.Talking` are still never set. `ConfbridgeMute`,
-  `ConfbridgeUnmute` and `ConfbridgeTalking` are not routed into the table yet; read those events
-  yourself if you need them.
 - `Rooms`, `GetRoom`, `UserCount`, `Clear`, `UserJoined` and `UserLeft` keep their signatures.
   `Clear` still raises nothing.
 - The type names stay `MeetMe*`: they track ConfBridge conferences.

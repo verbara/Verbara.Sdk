@@ -1109,7 +1109,7 @@ public sealed class VerbaraServer : IVerbaraServer
                     server.Queues.OnMemberPaused(
                         qmpe.RawFields?.GetValueOrDefault("Queue") ?? "",
                         qmpe.RawFields?.GetValueOrDefault("Location") ?? qmpe.RawFields?.GetValueOrDefault("Interface") ?? "",
-                        qmpe.RawFields?.GetValueOrDefault("Paused") == "1",
+                        qmpe.Paused ?? false,
                         qmpe.Pausedreason);
                     break;
 
@@ -1183,7 +1183,24 @@ public sealed class VerbaraServer : IVerbaraServer
 
                 // ConfBridge events
                 case ConfbridgeJoinEvent cbj:
-                    server.MeetMe.OnUserJoined(cbj.Conference ?? "", 0, cbj.Channel ?? "", cbj.UniqueId);
+                    server.MeetMe.OnUserJoined(cbj.Conference ?? "", 0, cbj.Channel ?? "", cbj.UniqueId,
+                        AmiBoolean.Parse(cbj.Muted) ?? false);
+                    break;
+
+                case ConfbridgeMuteEvent cbm:
+                    server.MeetMe.OnUserMuted(cbm.Conference ?? "", cbm.Channel ?? "", true);
+                    break;
+
+                case ConfbridgeUnmuteEvent cbu:
+                    server.MeetMe.OnUserMuted(cbu.Conference ?? "", cbu.Channel ?? "", false);
+                    break;
+
+                // TalkingStatus is null when absent or unreadable: the participant's talking state is left as it was.
+                case ConfbridgeTalkingEvent cbt:
+                    if (cbt.TalkingStatus is { } talking)
+                        server.MeetMe.OnUserTalking(cbt.Conference ?? "", cbt.Channel ?? "", talking);
+                    else
+                        MeetMeManagerLog.TalkingStatusUnreadable(server._logger, cbt.Conference, cbt.Channel);
                     break;
 
                 case ConfbridgeLeaveEvent cbl:
