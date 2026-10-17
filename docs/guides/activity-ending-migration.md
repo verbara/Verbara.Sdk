@@ -65,7 +65,17 @@ still end `Cancelled` without throwing; a failure nobody asked for still ends `F
    {
        // Asterisk did not answer within DefaultResponseTimeout; transfer.Status is Failed.
    }
+   catch (ActivityFailedException ex)
+   {
+       // Asterisk refused the Atxfer (Response: Error); ex.Message carries its reason and
+       // transfer.Status is Failed.
+   }
    ```
+
+   Since 2.9.0 `AttendedTransferActivity` also fails when Asterisk answers the `Atxfer` with
+   `Response: Error` (for example `Channel specified does not exist`, or
+   `No attended transfer feature code found` when `features.conf` sets no `atxfer` code). It used to
+   end `Completed`; now `StartAsync` throws `ActivityFailedException` with Asterisk's message.
 
 2. **Re-read code that branches on `Status` after the await.** `await StartAsync(); if (Status ==
    ActivityStatus.Cancelled)` used to catch timeouts too; now it sees only real requests to stop, and a
