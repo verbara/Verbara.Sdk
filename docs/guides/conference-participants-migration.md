@@ -168,7 +168,8 @@ If you run package validation with 2.8.0 as the baseline, `Verbara.Sdk.Live` rep
 - `M:Verbara.Sdk.Live.MeetMe.MeetMeRoom.get_Users`
 - `M:Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserLeft(System.String,System.Int32)`
 
-Both are the intended breaks above. The added members, `UserStateChanged` among them, raise nothing.
+Both are the intended breaks above. Package validation reports nothing for the added members,
+`UserStateChanged` among them.
 
 ## Muted and Talking follow Asterisk
 

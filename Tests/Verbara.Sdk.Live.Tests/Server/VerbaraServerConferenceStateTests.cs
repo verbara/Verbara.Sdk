@@ -82,16 +82,22 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
 
     // --- Mute state ---------------------------------------------------------------------------
 
-    [Fact]
-    public async Task ConfbridgeJoin_ShouldReadMuted_WhenJoinCarriesMutedYes()
+    [Theory]
+    [InlineData("Yes")]
+    [InlineData("yes")]
+    [InlineData("1")]
+    [InlineData("on")]
+    [InlineData("true")]
+    public async Task ConfbridgeJoin_ShouldReadMuted_WhenJoinCarriesAnAmiTrueWord(string muted)
     {
         bool? mutedSeenByUserJoined = null;
         _sut.MeetMe.UserJoined += (_, user) => mutedSeenByUserJoined = user.Muted;
         await StartAndGetObserverAsync();
 
-        Join(MutedChannel, "Yes");
+        Join(MutedChannel, muted);
 
-        Participant(MutedChannel).Muted.Should().BeTrue("the join carried Muted: Yes, sent for a start-muted user profile");
+        Participant(MutedChannel).Muted.Should().BeTrue(
+            "the join carried Muted: {0}, a true word of the vocabulary every AMI boolean header is read with", muted);
         mutedSeenByUserJoined.Should().BeTrue("the muted value is in place before UserJoined is raised");
     }
 
