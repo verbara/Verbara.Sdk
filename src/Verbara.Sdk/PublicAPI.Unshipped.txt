@@ -1,6 +1,7 @@
 #nullable enable
 Verbara.Sdk.VerbaraSemanticConventions
 Verbara.Sdk.VerbaraSemanticConventions.Agent
+Verbara.Sdk.VerbaraSemanticConventions.Audio
 Verbara.Sdk.VerbaraSemanticConventions.Bridge
 Verbara.Sdk.VerbaraSemanticConventions.Calls
 Verbara.Sdk.VerbaraSemanticConventions.Channel
@@ -12,6 +13,7 @@ Verbara.Sdk.VerbaraSemanticConventions.Sip
 Verbara.Sdk.VerbaraSemanticConventions.VoiceAi
 const Verbara.Sdk.VerbaraSemanticConventions.Agent.Id = "asterisk.agent.id" -> string!
 const Verbara.Sdk.VerbaraSemanticConventions.Agent.State = "asterisk.agent.state" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Audio.Transport = "audio.transport" -> string!
 const Verbara.Sdk.VerbaraSemanticConventions.Bridge.ChannelCount = "asterisk.bridge.channel_count" -> string!
 const Verbara.Sdk.VerbaraSemanticConventions.Bridge.Id = "asterisk.bridge.id" -> string!
 const Verbara.Sdk.VerbaraSemanticConventions.Bridge.Name = "asterisk.bridge.name" -> string!

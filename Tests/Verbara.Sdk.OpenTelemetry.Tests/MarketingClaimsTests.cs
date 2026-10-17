@@ -59,7 +59,7 @@ public sealed class MarketingClaimsTests
     [Fact]
     public void VerbaraSemanticConventions_ConstStringCount_ShouldMatchReadmeClaim()
     {
-        // README.md "Observability" claims 60 const strings across 14 nested classes.
+        // README.md "Observability" claims 61 const strings across 15 nested classes.
         var nestedClasses = typeof(VerbaraSemanticConventions)
             .GetNestedTypes(BindingFlags.Public | BindingFlags.Static)
             .Where(t => t.IsAbstract && t.IsSealed) // i.e. C# `static class`
@@ -69,8 +69,8 @@ public sealed class MarketingClaimsTests
             .SelectMany(t => t.GetFields(BindingFlags.Public | BindingFlags.Static))
             .Count(f => f.IsLiteral && !f.IsInitOnly && f.FieldType == typeof(string));
 
-        nestedClasses.Should().HaveCount(14);
-        constStringCount.Should().Be(60);
+        nestedClasses.Should().HaveCount(15);
+        constStringCount.Should().Be(61);
     }
 
     [Fact]

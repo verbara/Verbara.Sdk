@@ -67,7 +67,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 | 124 | 9 ActivitySources | ENFORCING | `MarketingClaimsTests.cs:45-50` | OK |
 | 125 | 15 Meters | ENFORCING | `MarketingClaimsTests.cs:52-57` | OK |
 | 126 | 12 IHealthChecks — 7 core + 5 VoiceAi | ENFORCING | `MarketingClaimsTests.cs:76-97` | PARTIAL — total pinned, the 7/5 split is not |
-| 127 | 60 const strings, 14 nested classes, "14+ unit tests" | ENFORCING | `MarketingClaimsTests.cs:59-74` | PARTIAL — the "14+ tests" sub-claim is unpinned |
+| 127 | 61 const strings, 15 nested classes, "14+ unit tests" | ENFORCING | `MarketingClaimsTests.cs:59-74` | PARTIAL — the "14+ tests" sub-claim is unpinned |
 | 155 | "First contact in 10 lines" | COHERENCE | — | WRONG — the snippet at :158-172 is 15 lines (13 non-blank); the old anchor :166-182 was already off before #322 |
 | 461 | Cartesia Sonic-3, no figure | — | — | **DELETED** — the figure moved to `src/Verbara.Sdk.VoiceAi.Tts/README.md`, cited; `40-90 ms` was never Cartesia's number (they publish sub-90 ms) |
 | 463 | smart-turn-v3.2-cpu, 94.26% in upstream's voice | ATTRIBUTED | citation + hash pin | **OK** — this line previously carried the figure with no citation at all |
@@ -125,7 +125,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 
 | location | claim | class | guard | status |
 |---|---|---|---|---|
-| `Verbara.Sdk/README.md:13` | 60 const strings, 14 nested classes | ENFORCING | `MarketingClaimsTests.cs:59-74` | OK |
+| `Verbara.Sdk/README.md:13` | 61 const strings, 15 nested classes | ENFORCING | `MarketingClaimsTests.cs:59-74` | OK |
 | `Verbara.Sdk/README.md:14` | 9 ActivitySources, 15 Meters | ENFORCING | `MarketingClaimsTests.cs:45-57` | OK |
 | `Verbara.Sdk/README.md:53` | 0 trim warnings **across the package family** | ENFORCING | AotCanary | PARTIAL — 17/28 runtime packages analyzed by ILC (see line 13); `Ami.SourceGenerators` is packable but an analyzer, so it has no trim surface to warn on. `Push.AspNetCore`, `Push.Nats`, `Sessions.Redis`, `Sessions.Postgres` and `VoiceAi.TurnDetection` were added with a real use 2026-10-11 |
 | `Verbara.Sdk.Ami/README.md:7` | 148 actions, 243 events, 17 response types | ENFORCING | — | GAP — corrected 2026-09-24 (was 111/261/17); 269 → 243 in 2.9.0 (26 obsolete event types removed); agrees with `README.md:45`. This file is the package's `PackageReadmeFile`, published verbatim on nuget.org |

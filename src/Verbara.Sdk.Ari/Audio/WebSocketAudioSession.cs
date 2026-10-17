@@ -10,20 +10,35 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Verbara.Sdk;
+using Verbara.Sdk.Ari.Diagnostics;
 
 namespace Verbara.Sdk.Ari.Audio;
+
+internal static partial class WebSocketAudioSessionLog
+{
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] Transport failed under a live session, which ends as Disconnected: channel_id={ChannelId}")]
+    public static partial void TransportFailed(ILogger logger, Exception exception, string channelId);
+}
 
 /// <summary>
 /// A single WebSocket audio connection. Receives binary frames via ManagedWebSocket
 /// (audio payload) and text frames parsed as <see cref="ChanWebSocketControlMessage"/>.
 /// </summary>
+/// <remarks>
+/// Records the <c>Verbara.Sdk.Ari.Audio</c> instruments, each measurement tagged
+/// <c>audio.transport=websocket</c>: the stream opened at its start and closed at its one ending, the
+/// non-empty binary messages and their payload bytes received and sent, the time from receipt to the
+/// consumer's read, and a transport failure under a live session. It records no hangup or error frames:
+/// those instruments count AudioSocket frames, and a <see cref="ChanWebSocketHangup"/> is a control message.
+/// </remarks>
 internal sealed class WebSocketAudioSession : IChanWebSocketSession
 {
     private readonly WebSocket _webSocket;
     private readonly AudioStreamStateChannel _state;
     private readonly Subject<ChanWebSocketControlMessage> _controlSubject = new();
-    private readonly Channel<ReadOnlyMemory<byte>> _audioInChannel;
+    private readonly Channel<ReceivedAudioFrame> _audioInChannel;
     private readonly CancellationTokenSource _cts = new();
+    private readonly ILogger _logger;
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private Task? _readPumpTask;
     private int _disposed;
@@ -45,18 +60,20 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     /// <param name="channelId">The upgrade path's last segment.</param>
     /// <param name="format">The audio format the connection carries.</param>
     /// <param name="logger">
-    /// Where a consumer's <see cref="StateChanges"/> observer that throws is reported. Required, so a
-    /// call site cannot compile without it and silently lose that line; the server passes its own.
+    /// Where a consumer's <see cref="StateChanges"/> observer that throws, and a transport failure under a
+    /// live session, are reported. Required, so a call site cannot compile without it and silently lose
+    /// those lines; the server passes its own.
     /// </param>
     internal WebSocketAudioSession(WebSocket webSocket, string channelId, string format, ILogger logger)
     {
         _webSocket = webSocket;
+        _logger = logger;
         ChannelId = channelId;
         _state = new AudioStreamStateChannel(AudioStreamState.Connected, logger, () => ChannelId);
         Format = format;
         SampleRate = FormatToSampleRate(format);
 
-        _audioInChannel = Channel.CreateBounded<ReadOnlyMemory<byte>>(new BoundedChannelOptions(1000)
+        _audioInChannel = Channel.CreateBounded<ReceivedAudioFrame>(new BoundedChannelOptions(1000)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = true,
@@ -66,6 +83,9 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
 
     internal void Start()
     {
+        // The stream is open from here: the server starts the session right after the upgrade. Its one
+        // ending, whoever publishes it, counts it closed with the same tag.
+        _state.RecordOpened(AudioStreamMetrics.WebSocketTransport);
         _readPumpTask = Task.Run(() => ReadPumpAsync(_cts.Token), CancellationToken.None);
     }
 
@@ -97,7 +117,11 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
                 switch (result.MessageType)
                 {
                     case WebSocketMessageType.Binary:
-                        _audioInChannel.Writer.TryWrite(bufferWriter.WrittenMemory.ToArray());
+                        // Non-empty by the check above, so an empty message counts as no frame received,
+                        // as an empty AudioSocket audio frame does.
+                        AudioStreamMetrics.FramesReceived.Add(1, AudioStreamMetrics.WebSocketTransport);
+                        AudioStreamMetrics.BytesReceived.Add(bufferWriter.WrittenCount, AudioStreamMetrics.WebSocketTransport);
+                        _audioInChannel.Writer.TryWrite(new ReceivedAudioFrame(bufferWriter.WrittenMemory.ToArray(), Stopwatch.GetTimestamp()));
                         break;
 
                     case WebSocketMessageType.Text:
@@ -110,9 +134,23 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         {
             // Pump cancelled — normal shutdown path.
         }
-        catch (WebSocketException)
+        catch (WebSocketException ex)
         {
-            // Peer closed or transport error — state transitions to Disconnected in finally.
+            // The peer's orderly ending is its close frame, which the loop above leaves on without an
+            // exception. Measured through the server: a connection reset raises ConnectionClosedPrematurely
+            // over the socket's reset, and a connection that ends without a close frame raises
+            // ConnectionClosedPrematurely with no inner exception; both are abnormal endings. The session
+            // is still Connected here: only this pump's `finally` and a disposal that has awaited this pump
+            // publish its ending. Reported before the `finally` publishes Disconnected, so whoever reacts
+            // to the ending already finds the line and the count. The ending stays Disconnected.
+            // The `_disposed` filter is defensive: an owner's disposal sets it before it cancels or closes
+            // anything, and that teardown surfaces here as OperationCanceledException; no measured
+            // teardown has reached this catch.
+            if (Volatile.Read(ref _disposed) == 0)
+            {
+                WebSocketAudioSessionLog.TransportFailed(_logger, ex, ChannelId);
+                AudioStreamMetrics.TransportFailures.Add(1, AudioStreamMetrics.WebSocketTransport);
+            }
         }
         finally
         {
@@ -215,7 +253,11 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         if (await _audioInChannel.Reader.WaitToReadAsync(cancellationToken)
             && _audioInChannel.Reader.TryRead(out var frame))
         {
-            return frame;
+            // Only non-empty messages are queued, so every read records one value.
+            AudioStreamMetrics.FrameLatency.Record(
+                Stopwatch.GetElapsedTime(frame.ReceivedTimestamp).TotalMilliseconds,
+                AudioStreamMetrics.WebSocketTransport);
+            return frame.Payload;
         }
         return ReadOnlyMemory<byte>.Empty;
     }
@@ -230,6 +272,13 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         finally
         {
             _sendLock.Release();
+        }
+
+        // Counted once the message was sent, and no frame for a write that carried no audio.
+        if (!audioData.IsEmpty)
+        {
+            AudioStreamMetrics.FramesSent.Add(1, AudioStreamMetrics.WebSocketTransport);
+            AudioStreamMetrics.BytesSent.Add(audioData.Length, AudioStreamMetrics.WebSocketTransport);
         }
     }
 
