@@ -56,9 +56,9 @@ public sealed class OriginateOutcomeTests : FunctionalTestBase
             using (new AssertionScope())
             {
                 error.Should().BeNull("Asterisk accepted the originate and reported its outcome in an OriginateResponse");
-                result?.Success.Should().BeTrue("the destination answered");
-                result?.Message.Should().Be("Success");
-                result?.ChannelId.Should().StartWith("Local/100@test-functional", "the outcome names the originated channel");
+                (result?.Success).Should().BeTrue("the destination answered");
+                (result?.Message).Should().Be("Success");
+                (result?.ChannelId).Should().StartWith("Local/100@test-functional", "the outcome names the originated channel");
             }
         }
         finally
@@ -96,9 +96,9 @@ public sealed class OriginateOutcomeTests : FunctionalTestBase
             {
                 error.Should().BeNull(
                     "the destination answered within the originate's Timeout, which bounds the wait, not the event timeout");
-                result?.Success.Should().BeTrue("the destination answered after ringing");
-                result?.Message.Should().Be("Success");
-                result?.ChannelId.Should().StartWith(LateAnsweringDestination, "the outcome names the originated channel");
+                (result?.Success).Should().BeTrue("the destination answered after ringing");
+                (result?.Message).Should().Be("Success");
+                (result?.ChannelId).Should().StartWith(LateAnsweringDestination, "the outcome names the originated channel");
             }
         }
         finally
@@ -127,8 +127,8 @@ public sealed class OriginateOutcomeTests : FunctionalTestBase
         {
             error.Should().BeNull(
                 "Asterisk accepts an originate to a technology it does not have and reports the failure in an OriginateResponse");
-            result?.Success.Should().BeFalse();
-            result?.Message.Should().Be("Failure");
+            (result?.Success).Should().BeFalse();
+            (result?.Message).Should().Be("Failure");
         }
     }
 }

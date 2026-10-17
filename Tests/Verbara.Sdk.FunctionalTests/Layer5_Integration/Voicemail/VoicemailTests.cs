@@ -1,6 +1,5 @@
 namespace Verbara.Sdk.FunctionalTests.Layer5_Integration.Voicemail;
 
-using System.Collections.Concurrent;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Ami.Responses;
@@ -11,8 +10,8 @@ using FluentAssertions;
 /// <summary>
 /// Tests for voicemail functionality: MessageWaiting events, mailbox status queries,
 /// and mailbox count via AMI actions.
-/// Extensions 950 (direct VM), 951 (ring then VM), 952 (VM check) are used.
-/// Mailbox 9001@default is configured with PIN 1234.
+/// Extension 950 runs VoiceMail(9001@default,st) and extension 953 VoiceMail(9002@default,st); extension 951 is the
+/// caller that leaves a message. Mailbox 9003@default receives no message.
 /// </summary>
 [Collection("Functional")]
 [Trait("Category", "Functional")]
@@ -23,10 +22,11 @@ public sealed class VoicemailTests : FunctionalTestBase
     }
 
     /// <summary>
-    /// Originating a channel to ext 950 (direct VoiceMail with skip-greeting flag)
-    /// should fire a MessageWaitingEvent for mailbox 9001.
-    /// Local channels produce no audio so the VoiceMail app may timeout quickly
-    /// without leaving a message; the test verifies the event flow gracefully.
+    /// A message left in mailbox 9002 fires a MessageWaitingEvent for it and raises its new-message count by one.
+    /// Mailbox 9002 is this test's alone: VoiceMail_ShouldShowMailboxInUserList leaves its messages in 9001, and one
+    /// of them could otherwise announce itself while this test waits. The ;2 half of
+    /// <c>Local/953@test-functional</c> runs VoiceMail(9002@default,st) and records; the ;1 half runs ext 951, which
+    /// plays a tone for 3 s and hangs up, which ends the recording and saves the message.
     /// </summary>
     [Fact]
     public async Task VoiceMail_ShouldFireMessageWaitingEvent()
@@ -38,60 +38,50 @@ public sealed class VoicemailTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
-        var messageWaitingEvents = new ConcurrentBag<MessageWaitingEvent>();
-        var hangupTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var before = await connection.SendActionAsync<MailboxCountResponse>(new MailboxCountAction
+        {
+            Mailbox = "9002@default",
+            ActionId = "voicemail-mwi-count-before"
+        });
+        before.Response.Should().Be("Success", "MailboxCount for a configured mailbox must succeed");
+        before.NewMessages.Should().NotBeNull("MailboxCount must report the new-message count");
+        var newBefore = before.NewMessages!.Value;
+
+        var messageWaiting = new TaskCompletionSource<MessageWaitingEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         using var subscription = connection.Subscribe(
             new VoicemailEventObserver(
-                onMessageWaiting: messageWaitingEvents.Add,
-                onHangup: e =>
+                onMessageWaiting: e =>
                 {
-                    if (e.Channel?.Contains("950", StringComparison.Ordinal) == true)
-                        hangupTcs.TrySetResult(true);
+                    if (e.Mailbox == "9002@default")
+                        messageWaiting.TrySetResult(e);
                 }));
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/950@test-functional",
+            Channel = "Local/953@test-functional",
             Context = "test-functional",
-            Exten = "950",
+            Exten = "951",
             Priority = 1,
             IsAsync = true,
             ActionId = "voicemail-mwi-01"
         });
 
-        // Wait for the channel to complete (VoiceMail app timeout or hangup)
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        try
-        {
-            await hangupTcs.Task.WaitAsync(cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            // Channel may take longer; continue with what we have
-        }
+        // The caller hangs up after 3 s; the message is saved and announced right after.
+        var result = await Task.WhenAny(messageWaiting.Task, Task.Delay(TimeSpan.FromSeconds(15))); // fence-allow: GUARD-TIMEOUT — failure bound on an observed condition; a green run leaves on the condition
+        result.Should().Be(messageWaiting.Task,
+            "a 3 s message left in mailbox 9002 must fire a MessageWaiting event for 9002@default within 15 s");
 
-        // Allow additional time for any trailing MWI events
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        var mwi = await messageWaiting.Task;
+        mwi.Waiting.Should().Be(1, "the mailbox now holds a message");
+        mwi.New.Should().Be(newBefore + 1, "the message this test left is the one new message added to the mailbox");
 
-        // Local channels with no audio may not leave a message, so MWI might not fire.
-        // If events did fire, validate their content.
-        var mailbox9001Events = messageWaitingEvents
-            .Where(e => e.Mailbox?.Contains("9001", StringComparison.Ordinal) == true)
-            .ToList();
-
-        if (mailbox9001Events.Count > 0)
+        var after = await connection.SendActionAsync<MailboxCountResponse>(new MailboxCountAction
         {
-            var evt = mailbox9001Events[0];
-            evt.Mailbox.Should().Contain("9001", "event must reference the target mailbox");
-        }
-        else
-        {
-            // Graceful: no MWI event fired (no message was actually left by the silent channel).
-            // Verify the originate at least succeeded by checking we got some events.
-            messageWaitingEvents.Should().BeEmpty(
-                "no MessageWaitingEvent expected when Local channel leaves no audio message");
-        }
+            Mailbox = "9002@default",
+            ActionId = "voicemail-mwi-count-after"
+        });
+        after.NewMessages.Should().Be(newBefore + 1, "MailboxCount must count the message this test left");
     }
 
     /// <summary>
@@ -138,8 +128,8 @@ public sealed class VoicemailTests : FunctionalTestBase
     }
 
     /// <summary>
-    /// MailboxCountAction for 9001@default should return a successful response
-    /// with mailbox count fields, verifying the AMI mailbox query API works.
+    /// MailboxCountAction for 9003@default, a mailbox no test leaves a message in, returns its state: no new and no
+    /// old messages.
     /// </summary>
     [Fact]
     public async Task MailboxCount_ShouldReturnMailboxState()
@@ -153,36 +143,28 @@ public sealed class VoicemailTests : FunctionalTestBase
 
         var response = await connection.SendActionAsync<MailboxCountResponse>(new MailboxCountAction
         {
-            Mailbox = "9001@default",
+            Mailbox = "9003@default",
             ActionId = "mailbox-count-01"
         });
 
         response.Should().NotBeNull("MailboxCountAction must return a response");
         response.Response.Should().Be("Success",
             "MailboxCount for a configured mailbox must succeed");
-        response.Mailbox.Should().Be("9001@default",
+        response.Mailbox.Should().Be("9003@default",
             "response must echo back the queried mailbox");
-
-        // Message counts should be non-negative (0 or more)
-        response.NewMessages.Should().NotBeNull("NewMessages field must be present");
-        response.NewMessages!.Value.Should().BeGreaterThanOrEqualTo(0,
-            "new message count must be non-negative");
-        response.OldMessages.Should().NotBeNull("OldMessages field must be present");
-        response.OldMessages!.Value.Should().BeGreaterThanOrEqualTo(0,
-            "old message count must be non-negative");
+        response.NewMessages.Should().Be(0, "no test leaves a message in mailbox 9003");
+        response.OldMessages.Should().Be(0, "no test leaves a message in mailbox 9003");
     }
 
     /// <summary>Observer that routes voicemail-related events to callbacks.</summary>
     private sealed class VoicemailEventObserver(
-        Action<MessageWaitingEvent>? onMessageWaiting = null,
-        Action<HangupEvent>? onHangup = null) : IObserver<ManagerEvent>
+        Action<MessageWaitingEvent>? onMessageWaiting = null) : IObserver<ManagerEvent>
     {
         public void OnNext(ManagerEvent value)
         {
             switch (value)
             {
                 case MessageWaitingEvent e: onMessageWaiting?.Invoke(e); break;
-                case HangupEvent e: onHangup?.Invoke(e); break;
             }
         }
 
