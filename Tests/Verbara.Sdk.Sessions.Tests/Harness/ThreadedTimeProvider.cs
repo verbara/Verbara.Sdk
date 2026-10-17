@@ -30,6 +30,7 @@ internal sealed class ThreadedTimeProvider : TimeProvider
     private readonly ConcurrentQueue<Exception> _faults = new();
     private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
     private FireHold? _hold;
+    private FireHold? _readHold;
     private int _timersCreated;
 
     /// <summary>How many timers have been asked of this clock.</summary>
@@ -42,6 +43,14 @@ internal sealed class ThreadedTimeProvider : TimeProvider
 
     public override DateTimeOffset GetUtcNow()
     {
+        var readHold = Interlocked.Exchange(ref _readHold, null);
+        if (readHold is not null)
+        {
+            readHold.Reach();
+            if (!readHold.WaitForRelease(Bound))
+                throw new TimeoutException("A held clock read was never released.");
+        }
+
         lock (_gate)
         {
             return _now;
@@ -73,6 +82,17 @@ internal sealed class ThreadedTimeProvider : TimeProvider
     {
         var hold = new FireHold();
         Volatile.Write(ref _hold, hold);
+        return hold;
+    }
+
+    /// <summary>
+    /// Parks the next caller of <see cref="GetUtcNow"/>, inside the read and before it returns, until the returned
+    /// hold is released: a test can act while code that reads the clock is stopped at that read.
+    /// </summary>
+    public FireHold HoldNextRead()
+    {
+        var hold = new FireHold();
+        Volatile.Write(ref _readHold, hold);
         return hold;
     }
 
@@ -178,8 +198,8 @@ internal sealed class ThreadedTimeProvider : TimeProvider
 }
 
 /// <summary>
-/// One timer callback held before it runs: <see cref="Reached"/> completes when the callback is parked, and it stays
-/// parked until <see cref="Release"/>.
+/// One timer callback held before it runs, or one clock read held inside it: <see cref="Reached"/> completes when it is
+/// parked, and it stays parked until <see cref="Release"/>.
 /// </summary>
 internal sealed class FireHold
 {

@@ -499,6 +499,60 @@ public sealed class CallSessionManagerWrapUpTests
             + Describe(rig));
     }
 
+    [Fact]
+    public async Task TimerClose_ShouldRaiseNothingAndThrowNothing_WhenAnAgentCompleteHandledDuringDisposalOpensAWrapUp()
+    {
+        var clock = new ThreadedTimeProvider();
+        await using var rig = await WrapUpRig.StartAsync(clock, Options());
+        rig.Deliver(QueueCallConnected(Queue, "c1", "m1", Member));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        var hangup = MemberHangsUp(Queue, "c1", "m1", Member);
+        rig.Deliver(hangup[0], hangup[1]);
+
+        // The AgentComplete is delivered on another thread and parked at its first clock read, inside the manager's
+        // handler and before its wrap-up is opened: an AMI handler already running when disposal starts, which
+        // detaching the servers cannot stop. Disposal runs to its end while it is parked.
+        var read = clock.HoldNextRead();
+        var delivery = Task.Run(() => rig.Deliver(hangup[2]));
+        (await Task.WhenAny(read.Reached, Task.Delay(Bound, TimeProvider.System))) // fence-allow: GUARD-TIMEOUT — failure bound on the parked handler, never the winning arm of a green run
+            .Should().BeSameAs(read.Reached, "premise: the AgentComplete's handler is parked at its clock read. "
+                + Describe(rig));
+        await rig.DisposeManagerAsync().AsTask().WaitAsync(Bound);
+        var completedBeforeRelease = rig.Completed;
+
+        read.Release();
+        Exception? escaped = null;
+        try
+        {
+            await delivery.WaitAsync(Bound);
+            await Task.WhenAll(clock.Advance(WrapUp)).WaitAsync(Bound);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            escaped = ex;
+        }
+
+        new
+        {
+            CompletedBeforeRelease = completedBeforeRelease,
+            clock.TimersCreated,
+            Escaped = escaped?.ToString(),
+            Faults = clock.Faults.Select(f => f.ToString()).ToArray(),
+            WrapUps = rig.WrapUps.Count,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                CompletedBeforeRelease = true,
+                TimersCreated = 1,
+                Escaped = default(string),
+                Faults = Array.Empty<string>(),
+                WrapUps = 0,
+            },
+            "a wrap-up opened by a handler that was already running when disposal started gets its timer after the "
+            + "event stream has completed and been disposed; when that timer fires on the pool its close raises "
+            + "nothing and throws nothing there. " + Describe(rig));
+    }
+
     // --- 1.9: a subscriber that throws on the wrap-up -----------------------------------------------------------
 
     [Fact]
