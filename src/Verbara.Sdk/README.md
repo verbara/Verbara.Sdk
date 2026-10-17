@@ -10,7 +10,7 @@ This package is referenced (transitively) by every other `Verbara.Sdk.*` package
 
 - **AMI core types** — `IAmiConnection`, `IAmiConnectionFactory`, `ManagerAction`, `ManagerEvent`, `ManagerResponse`, `IEventListener` and the protocol-defined enums consumed by source generators in `Verbara.Sdk.Ami`.
 - **AGI / ARI base types** — protocol-shared enums and base records mirrored across `Verbara.Sdk.Agi` and `Verbara.Sdk.Ari`.
-- **`VerbaraSemanticConventions`** — public static catalog of **60 const strings across 14 nested classes** (`Resource`, `Channel`, `Bridge`, `Calls`, `Dialplan`, `Sip`, `Media`, `Queues`, `Agent`, `VoiceAi`, `Events`, `Tenant`, `Event`, `Node`). Use these as `Activity.SetTag(...)` keys instead of hard-coded strings so dashboards survive SDK version bumps. Pinned by 14+ unit tests.
+- **`VerbaraSemanticConventions`** — public static catalog of **61 const strings across 15 nested classes** (`Resource`, `Channel`, `Bridge`, `Calls`, `Dialplan`, `Sip`, `Media`, `Audio`, `Queues`, `Agent`, `VoiceAi`, `Events`, `Tenant`, `Event`, `Node`). Use these as `Activity.SetTag(...)` keys instead of hard-coded strings so dashboards survive SDK version bumps. Pinned by 14+ unit tests.
 - **`VerbaraTelemetry`** — runtime-discoverable lists of every `ActivitySourceName` (9) and `MeterName` (15) shipped by the SDK family. Plug into `OpenTelemetry` with one call: `tracerBuilder.AddSource([.. VerbaraTelemetry.ActivitySourceNames])`.
 - **Source-generator attributes** — `[ManagerActionAttribute]`, `[ManagerEventAttribute]`, `[JsonSerializable(typeof(...))]` markers that drive the four Roslyn source generators in `Verbara.Sdk.Ami.SourceGenerators`. Replace runtime reflection entirely.
 
