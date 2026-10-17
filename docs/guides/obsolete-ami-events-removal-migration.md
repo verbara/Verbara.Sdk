@@ -18,6 +18,10 @@ can reach:
 longer `[Obsolete]`.
 A `#pragma warning disable CS0618` you kept around it can go.
 
+2.9.0 also **deprecates**, without removing, 44 types and one member that only a dead Asterisk module
+or a renamed wire name can reach. They compile with the `VSDK0005` warning and are removed in 2.10.0;
+see [VSDK0005](#vsdk0005).
+
 ## What you have to do
 
 1. **Move every `Verbara.Sdk.*` package to 2.9.0 together.** Do not mix versions. `Verbara.Sdk.Live`
@@ -186,6 +190,140 @@ options.Model = DeepgramVoices.HeliosLegacy;
 
 `Helios` was a `const`, so its value was copied into your assembly when you compiled it. A binary
 built against an earlier version keeps working; only the next compile fails, with `CS0117`.
+
+## VSDK0005
+
+Deprecated in 2.9.0, removed in 2.10.0.
+
+These 44 types and one member stay in 2.9.0, marked `[Obsolete]` with the diagnostic id `VSDK0005`.
+Each one reaches only an Asterisk module that is gone or deprecated upstream, a module whose publisher
+discontinued it, or a wire name Asterisk renamed or removed in version 12. Naming one in your code
+reports the `VSDK0005` **warning**, never an error; the warning's message says what to use instead.
+
+**Nothing changes at run time.** Every marked action still serializes and is sent as before, every
+marked response and event is still parsed when Asterisk sends it, and the SDK maps each wire name to
+the same type as in 2.8.0. `UseConfBridge = false` still runs MeetMe. Only the compiler output changes.
+
+### Silencing it
+
+Replace each use with the type in the last column before 2.10.0. Until then, if you build with
+`TreatWarningsAsErrors`, you can opt out of this deprecation alone, without silencing `CS0618` across
+your project:
+
+```xml
+<PropertyGroup>
+  <NoWarn>$(NoWarn);VSDK0005</NoWarn>
+</PropertyGroup>
+```
+
+To keep the warning elsewhere, wrap only the line that needs the type in
+`#pragma warning disable VSDK0005` / `#pragma warning restore VSDK0005`.
+
+### chan_sip (use PJSIP)
+
+chan_sip was removed in Asterisk 21 (deprecated since 17).
+
+| Symbol | Module or wire-name status | Use instead |
+|---|---|---|
+| `SipPeersAction` | `SIPpeers`: chan_sip, removed in Asterisk 21 | `PJSipShowEndpointsAction` |
+| `SipShowPeerAction` | `SIPshowpeer`: chan_sip, removed in Asterisk 21 | `PJSipShowEndpointAction` |
+| `SipShowRegistryAction` | `SIPshowregistry`: chan_sip, removed in Asterisk 21 | `PJSipShowRegistrationsOutboundAction` |
+| `SipNotifyAction` | `SIPnotify`: chan_sip, removed in Asterisk 21 | `PJSIPNotifyAction` |
+| `SipShowPeerResponse` | the answer to `SIPshowpeer`: chan_sip, removed in Asterisk 21 | `PJSipShowEndpointAction` and its `EndpointDetail` events |
+| `ChannelReloadEvent` | `ChannelReload`: sent only by chan_sip, removed in Asterisk 21 | none |
+
+### res_monitor (use MixMonitor)
+
+res_monitor was removed in Asterisk 21 (deprecated since 16).
+
+| Symbol | Module or wire-name status | Use instead |
+|---|---|---|
+| `MonitorAction` | `Monitor`: res_monitor, removed in Asterisk 21 | `MixMonitorAction` |
+| `StopMonitorAction` | `StopMonitor`: res_monitor, removed in Asterisk 21 | `StopMixMonitorAction` |
+| `ChangeMonitorAction` | `ChangeMonitor`: res_monitor, removed in Asterisk 21 | none: stop the MixMonitor and start a new one |
+| `PauseMonitorAction` | `PauseMonitor`: res_monitor, removed in Asterisk 21 | `MixMonitorMuteAction` |
+| `UnpauseMonitorAction` | `UnpauseMonitor`: res_monitor, removed in Asterisk 21 | `MixMonitorMuteAction` |
+
+### app_meetme (use app_confbridge)
+
+app_meetme is **deprecated** since Asterisk 19, not removed: it is still in the source tree, but it is
+not built by default and it needs DAHDI. None of the pinned images ships it.
+
+| Symbol | Module or wire-name status | Use instead |
+|---|---|---|
+| `MeetMeMuteAction` | `MeetmeMute`: app_meetme, deprecated since Asterisk 19 | `ConfbridgeMuteAction` |
+| `MeetMeUnmuteAction` | `MeetmeUnmute`: app_meetme, deprecated since Asterisk 19 | `ConfbridgeUnmuteAction` |
+| `MeetMeEventBase` | app_meetme, deprecated since Asterisk 19; no event derives from it since 2.9.0 | `ConfbridgeEventBase` |
+| `MeetmeCompatibility` | app_meetme, deprecated since Asterisk 19 | none |
+| `MeetmeCommand` (`Verbara.Sdk.Agi`) | `EXEC MeetMe`: app_meetme, deprecated since Asterisk 19 | `ConfbridgeCommand` |
+| `MeetmeActivity.UseConfBridge` (`Verbara.Sdk.Activities`) | `false` runs MeetMe: app_meetme, deprecated since Asterisk 19 | none: ConfBridge is the default, so remove the assignment. From 2.10.0 `MeetmeActivity` runs ConfBridge only |
+
+`MeetmeActivity` itself, `MeetMeManager`, `MeetMeRoom`, `MeetMeUser` and `MeetMeUserState` are not
+deprecated: they carry a MeetMe name, but ConfBridge feeds them.
+
+### Skype for Asterisk (discontinued)
+
+A commercial module, never part of Asterisk itself. Its publisher stopped selling it after 2011-07-26.
+`SkypeBuddies` and `SkypeLicenseList` answer `Invalid/unknown command` on 20, 22, 23 and 24.0.0-rc2.
+
+| Symbol | Module or wire-name status | Use instead |
+|---|---|---|
+| `SkypeAccountPropertyAction` | `SkypeAccountProperty`: Skype for Asterisk, discontinued in 2011 | none |
+| `SkypeAddBuddyAction` | `SkypeAddBuddy`: Skype for Asterisk, discontinued in 2011 | none |
+| `SkypeBuddiesAction` | `SkypeBuddies`: Skype for Asterisk, discontinued in 2011 | none |
+| `SkypeBuddyAction` | `SkypeBuddy`: Skype for Asterisk, discontinued in 2011 | none |
+| `SkypeChatSendAction` | `SkypeChatSend`: Skype for Asterisk, discontinued in 2011 | none |
+| `SkypeLicenseListAction` | `SkypeLicenseList`: Skype for Asterisk, discontinued in 2011 | none |
+| `SkypeLicenseStatusAction` | `SkypeLicenseStatus`: Skype for Asterisk, discontinued in 2011 | none |
+| `SkypeRemoveBuddyAction` | `SkypeRemoveBuddy`: Skype for Asterisk, discontinued in 2011 | none |
+| `SkypeBuddyResponse` | the answer to `SkypeBuddy`: Skype for Asterisk, discontinued in 2011 | none |
+| `SkypeLicenseStatusResponse` | the answer to `SkypeLicenseStatus`: Skype for Asterisk, discontinued in 2011 | none |
+
+The commercial fax module's `FaxLicenseListAction`, `FaxLicenseStatusAction` and
+`FaxLicenseStatusResponse` are not deprecated: that module is still sold.
+
+### Zaptel action names (use the DAHDI names)
+
+Asterisk 1.6 replaced chan_zap with chan_dahdi, which registers these actions under `DAHDI*` names
+only. The SDK types only `DahdiShowChannelsAction`; send the other `DAHDI*` actions by name. chan_dahdi
+is not loaded in the pinned images, so none of these replacements is measured.
+
+| Symbol | Module or wire-name status | Use instead |
+|---|---|---|
+| `ZapDialOffhookAction` | `ZapDialOffhook`: renamed `DAHDIDialOffhook` in Asterisk 1.6 | the `DAHDIDialOffhook` action (not typed) |
+| `ZapDndOffAction` | `ZapDNDoff`: renamed `DAHDIDNDoff` in Asterisk 1.6 | the `DAHDIDNDoff` action (not typed) |
+| `ZapDndOnAction` | `ZapDNDon`: renamed `DAHDIDNDon` in Asterisk 1.6 | the `DAHDIDNDon` action (not typed) |
+| `ZapHangupAction` | `ZapHangup`: renamed `DAHDIHangup` in Asterisk 1.6 | the `DAHDIHangup` action (not typed) |
+| `ZapRestartAction` | `ZapRestart`: renamed `DAHDIRestart` in Asterisk 1.6 | the `DAHDIRestart` action (not typed) |
+| `ZapShowChannelsAction` | `ZapShowChannels`: renamed `DAHDIShowChannels` in Asterisk 1.6 | `DahdiShowChannelsAction` |
+| `ZapTransferAction` | `ZapTransfer`: renamed `DAHDITransfer` in Asterisk 1.6 | the `DAHDITransfer` action (not typed) |
+
+### chan_agent and app_setcdruserfield
+
+| Symbol | Module or wire-name status | Use instead |
+|---|---|---|
+| `AgentCallbackLoginAction` | `AgentCallbackLogin`: removed in Asterisk 1.6; chan_agent removed in Asterisk 12 | none: the `AgentLogin` dialplan application |
+| `AgentCallbackLoginEvent` | `Agentcallbacklogin`: not sent since Asterisk 1.6 | `AgentLoginEvent` |
+| `AgentCallbackLogoffEvent` | `AgentCallbackLogoff`: not sent since Asterisk 11 | `AgentLogoffEvent` |
+| `SetCdrUserFieldAction` | `SetCDRUserField`: app_setcdruserfield, removed in Asterisk 1.6 | `SetVarAction` with `CDR(userfield)` |
+
+### Event names Asterisk 12 renamed or removed
+
+The modules behind these events are alive; Asterisk 12 sends the event under another name, or no
+longer sends it. A handler written against the old type never fires on a supported Asterisk.
+
+| Symbol | Module or wire-name status | Use instead |
+|---|---|---|
+| `QueueMemberPausedEvent` | `QueueMemberPaused`: renamed `QueueMemberPause` in Asterisk 12 | `QueueMemberPauseEvent` |
+| `MusicOnHoldEvent` | `MusicOnHold`: split into `MusicOnHoldStart` and `MusicOnHoldStop` in Asterisk 12 | `MusicOnHoldStartEvent`, `MusicOnHoldStopEvent` |
+| `FaxReceivedEvent` | `FaxReceived`: renamed `ReceiveFAX` in Asterisk 12 | `ReceiveFaxEvent` |
+| `DtmfEvent` | `DTMF`: split into `DTMFBegin` and `DTMFEnd` in Asterisk 12 | `DtmfBeginEvent`, `DtmfEndEvent` |
+| `TransferEvent` | `Transfer`: replaced by `BlindTransfer` and `AttendedTransfer` in Asterisk 12 | `BlindTransferEvent`, `AttendedTransferEvent` |
+| `ChannelUpdateEvent` | `ChannelUpdate`: removed in Asterisk 12 | none |
+| `JabberEventEvent` | `JabberEvent`: removed in Asterisk 12 | none |
+
+`QueueMemberPausedEvent` and `QueueMemberPauseEvent` are two types: the live `QueueMemberPause` still
+parses as `QueueMemberPauseEvent`, which is not deprecated.
 
 ## Moved from the compatibility guide
 

@@ -40,7 +40,7 @@ dotnet add package Verbara.Sdk.Activities
 - `DialActivity` — originate outbound call; exposes `DialStatus` (ANSWER, BUSY, NOANSWER, CANCEL, CONGESTION)
 - `HoldActivity` — put a channel on music-on-hold with configurable class
 - `BridgeActivity` — bridge the current channel to a target channel by name
-- `HangupActivity`, `PlayMessageActivity`, `QueueActivity`, `ParkActivity`, `BlindTransferActivity`, `MeetmeActivity`, `VoicemailActivity`, `ExternalMediaActivity`
+- `HangupActivity`, `PlayMessageActivity`, `QueueActivity`, `ParkActivity`, `BlindTransferActivity`, `MeetmeActivity` (ConfBridge only from 2.10.0), `VoicemailActivity`, `ExternalMediaActivity`
 - `IActivity` — common interface: `StartAsync()`, `CancelAsync()`, `Status`, `StatusChanges` (`IObservable<ActivityStatus>`)
 - Native AOT compatible
 
