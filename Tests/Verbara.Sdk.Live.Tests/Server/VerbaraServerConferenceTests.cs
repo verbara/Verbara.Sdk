@@ -80,6 +80,22 @@ public sealed class VerbaraServerConferenceTests : IAsyncLifetime
         room!.UserCount.Should().Be(2, "two distinct channels joined the conference");
         room.Users.Values.Select(u => u.Channel).Should().BeEquivalentTo(
             [FirstChannel, SecondChannel], "each joined channel is held as its own participant");
+        room.Users.Keys.Should().BeEquivalentTo([FirstChannel, SecondChannel], "participants are keyed by channel");
+        room.Users[FirstChannel].Channel.Should().Be(FirstChannel);
+        room.Users[SecondChannel].Channel.Should().Be(SecondChannel);
+    }
+
+    [Fact]
+    public async Task ConfbridgeJoin_ShouldStoreJoinUniqueId_WhenJoinCarriesOne()
+    {
+        await StartAndGetObserverAsync();
+
+        JoinBoth();
+
+        var room = _sut.MeetMe.GetRoom(Conference);
+        room.Should().NotBeNull("two joins open the conference");
+        room!.Users[FirstChannel].UniqueId.Should().Be(FirstUniqueId, "the participant carries its join's Uniqueid");
+        room.Users[SecondChannel].UniqueId.Should().Be(SecondUniqueId, "the participant carries its join's Uniqueid");
     }
 
     [Fact]
@@ -93,6 +109,8 @@ public sealed class VerbaraServerConferenceTests : IAsyncLifetime
         (_sut.MeetMe.GetRoom(Conference)?.UserCount).Should().Be(1, "one participant is still in the conference");
         (_sut.MeetMe.GetRoom(Conference)?.Users.Values.Select(u => u.Channel)).Should().BeEquivalentTo(
             [SecondChannel], "only the channel that left is removed");
+        (_sut.MeetMe.GetRoom(Conference)?.Users.Keys).Should().BeEquivalentTo(
+            [SecondChannel], "the remaining participant is keyed by its channel");
     }
 
     [Fact]

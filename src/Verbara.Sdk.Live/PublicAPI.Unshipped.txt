@@ -1,6 +1,14 @@
 #nullable enable
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserLeft(string! roomNumber, int userNum) -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeRoom.Users.get -> System.Collections.Concurrent.ConcurrentDictionary<int, Verbara.Sdk.Live.MeetMe.MeetMeUser!>!
 Verbara.Sdk.Live.Bridges.BridgeManager.ActiveBridgeCount.get -> int
 Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck
 Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
 Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck.VerbaraServerPoolHealthCheck(Verbara.Sdk.Live.Server.VerbaraServerPool! pool) -> void
+Verbara.Sdk.Live.MeetMe.MeetMeManager.OnConferenceEnded(string! roomNumber) -> void
+Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserJoined(string! roomNumber, int userNum, string! channel, string? uniqueId) -> void
+Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserLeft(string! roomNumber, string! channel) -> void
+Verbara.Sdk.Live.MeetMe.MeetMeRoom.Users.get -> System.Collections.Concurrent.ConcurrentDictionary<string!, Verbara.Sdk.Live.MeetMe.MeetMeUser!>!
+Verbara.Sdk.Live.MeetMe.MeetMeUser.UniqueId.get -> string?
+Verbara.Sdk.Live.MeetMe.MeetMeUser.UniqueId.init -> void
 Verbara.Sdk.Live.Server.VerbaraServer.ReconcileChannelsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask

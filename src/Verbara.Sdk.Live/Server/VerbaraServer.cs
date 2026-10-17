@@ -1183,11 +1183,15 @@ public sealed class VerbaraServer : IVerbaraServer
 
                 // ConfBridge events
                 case ConfbridgeJoinEvent cbj:
-                    server.MeetMe.OnUserJoined(cbj.Conference ?? "", 0, cbj.Channel ?? "");
+                    server.MeetMe.OnUserJoined(cbj.Conference ?? "", 0, cbj.Channel ?? "", cbj.UniqueId);
                     break;
 
                 case ConfbridgeLeaveEvent cbl:
-                    server.MeetMe.OnUserLeft(cbl.Conference ?? "", 0);
+                    server.MeetMe.OnUserLeft(cbl.Conference ?? "", cbl.Channel ?? "");
+                    break;
+
+                case ConfbridgeEndEvent cbe:
+                    server.MeetMe.OnConferenceEnded(cbe.Conference ?? "");
                     break;
 
                 // Bridge events
