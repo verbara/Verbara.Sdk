@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Verbara.Sdk.Live.Agents;
+using Verbara.Sdk.Sessions.Internal;
 
 namespace Verbara.Sdk.Sessions.Manager;
 
@@ -14,13 +15,6 @@ internal sealed record WrapUpLeg(string ServerId, string? Interface, string Key,
 
 public sealed partial class CallSessionManager
 {
-    /// <summary>
-    /// The largest due time <see cref="TimeProvider.System"/>'s timer accepts, 4 294 967 294 ms: one more throws.
-    /// A configured duration above it is clamped here so a timer is never refused on a call's path; start-up
-    /// validation rejects such a value before any call is handled.
-    /// </summary>
-    private static readonly TimeSpan MaxWrapUpTimerDue = TimeSpan.FromMilliseconds(4_294_967_294);
-
     /// <summary>
     /// The open wrap-ups, one per key: an agent known by name (<see cref="AgentWrapUpKey"/>) or a member interface on
     /// the server that reported it (<see cref="MemberWrapUpKey"/>). Whoever removes an entry closes it, so each is
@@ -190,8 +184,10 @@ public sealed partial class CallSessionManager
     {
         var now = _timeProvider.GetUtcNow();
         var duration = _options.WrapUpDuration;
-        if (duration > MaxWrapUpTimerDue)
-            duration = MaxWrapUpTimerDue;
+        // Start-up validation rejects a duration above the largest due time the system timer accepts; one that got
+        // past it (options built by hand) is clamped, so a timer is never refused on a call's path.
+        if (duration > WrapUpDurationRangeAttribute.Max)
+            duration = WrapUpDurationRangeAttribute.Max;
         else if (duration < TimeSpan.Zero)
             duration = TimeSpan.Zero;
 
