@@ -48,6 +48,10 @@ public enum PeerClose
 /// <param name="ChannelState">Asterisk's numeric channel state; 6 is <c>Up</c>.</param>
 internal sealed record StatusChannel(string UniqueId, string Channel, string LinkedId, int ChannelState = 6);
 
+/// <summary>A caller the peer lists waiting in <see cref="BootingAsterisk.QueueName"/> on <c>QueueStatus</c>.</summary>
+/// <param name="Wait">The <c>Wait</c> header: seconds the caller had waited when Asterisk answered.</param>
+internal sealed record QueueCaller(string Channel, string UniqueId, int Position, long Wait = 0);
+
 /// <summary>
 /// Plays, over one <see cref="PipedSocket"/> session, an Asterisk that accepted the AMI login before its modules
 /// had finished loading.
@@ -70,7 +74,7 @@ internal sealed record StatusChannel(string UniqueId, string Channel, string Lin
 /// <para>
 /// It answers <c>Status</c> with <see cref="StatusChannels"/>, or refuses it with <c>Permission denied</c> from the
 /// <see cref="StatusRefusedFromAsk"/>-th ask on; <c>QueueStatus</c> with one queue, <c>rqq</c> (<c>ringall</c>, one
-/// static member); <c>Agents</c> with agent <c>1001</c>; an async <c>Originate</c>, when
+/// static member, and the callers of <see cref="QueueEntries"/>); <c>Agents</c> with agent <c>1001</c>; an async <c>Originate</c>, when
 /// <see cref="OriginateOutcome"/> is set, with its <c>Response: Success</c> and then one <c>OriginateResponse</c>, as
 /// Asterisk 20.20.1, 22.9.0 and 23.4.1 do; and anything else with <c>Success</c>. It counts every action it reads, by
 /// name, and <see cref="AskedAtLeast"/> turns a count into a signal.
@@ -158,6 +162,13 @@ internal sealed class BootingAsterisk
     /// measured on 20.20.1, 22.9.0 and 23.4.1). <see cref="TimeSpan.Zero"/> reports it at once.
     /// </summary>
     public TimeSpan OriginateRings { get; init; }
+
+    /// <summary>
+    /// The callers the peer lists waiting in <see cref="QueueName"/> on <c>QueueStatus</c>, one <c>QueueEntry</c> each,
+    /// after the queue's member, with the headers Asterisk 22.9.0 sent for one (captured in the queue-reload recording).
+    /// Settable between two loads.
+    /// </summary>
+    public IReadOnlyList<QueueCaller> QueueEntries { get; set; } = [];
 
     /// <summary>The channels the peer lists on <c>Status</c>. Settable between two loads.</summary>
     public IReadOnlyList<StatusChannel> StatusChannels { get; set; } = [];
@@ -450,8 +461,9 @@ internal sealed class BootingAsterisk
         ]);
     }
 
-    private static async Task AnswerQueueStatusAsync(PipedSocket socket, string id)
+    private async Task AnswerQueueStatusAsync(PipedSocket socket, string id)
     {
+        var entries = QueueEntries;
         await socket.RespondAsync("Success", id,
             [new("EventList", "start"), new("Message", "Queue status will follow")]);
         await socket.WriteEventAsync("QueueParams",
@@ -465,8 +477,23 @@ internal sealed class BootingAsterisk
             new("ActionID", id), new("Queue", QueueName), new("Name", "Agent One"), new("Location", MemberLocation),
             new("StateInterface", "Custom:ag1"), new("Penalty", "0"), new("Status", "1"), new("Paused", "0"),
         ]);
+        foreach (var caller in entries)
+        {
+            await socket.WriteEventAsync("QueueEntry",
+            [
+                new("Queue", QueueName), new("Position", caller.Position.ToString(CultureInfo.InvariantCulture)),
+                new("Channel", caller.Channel), new("Uniqueid", caller.UniqueId), new("CallerIDNum", "5552101"),
+                new("CallerIDName", "QRA"), new("ConnectedLineNum", "unknown"), new("ConnectedLineName", "unknown"),
+                new("Wait", caller.Wait.ToString(CultureInfo.InvariantCulture)), new("Priority", "0"),
+                new("ActionID", id),
+            ]);
+        }
+
         await socket.WriteEventAsync("QueueStatusComplete",
-            [new("ActionID", id), new("EventList", "Complete"), new("ListItems", "2")]);
+        [
+            new("ActionID", id), new("EventList", "Complete"),
+            new("ListItems", (2 + entries.Count).ToString(CultureInfo.InvariantCulture)),
+        ]);
     }
 
     private static async Task AnswerAgentsAsync(PipedSocket socket, string id)
