@@ -214,6 +214,13 @@ internal static class AmiCaptureReplay
         // arrives here, and the change read from the tracker is that event's change.
         using var scoring = manager.Events.Subscribe(evt =>
         {
+            // The queue tracker does not handle a wrap-up, so it moves no queue count. The change pending
+            // when it arrives belongs to the event that follows: a member's next connect closes the wrap-up
+            // of the member's previous call just before that call's CallConnectedEvent, and the caller's
+            // leave the tracker learned before it, with no event of its own, is the connected call's.
+            if (evt is CallWrapUpEvent)
+                return;
+
             if (evt is CallStartedEvent started
                 && QueueShapes.Of(started.CallerIdNum, FirstChannel(manager.GetById(started.SessionId))) is { } startedShape
                 && shapeBySessionId.TryAdd(started.SessionId, startedShape)

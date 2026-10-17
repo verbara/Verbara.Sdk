@@ -1175,6 +1175,11 @@ public sealed class VerbaraServer : IVerbaraServer
                         acoe.Agent ?? "",
                         acoe.TalkTime ?? 0,
                         acoe.HoldTime ?? 0);
+                    // app_queue's own report that the member left the caller, agent or not: where the
+                    // member's after-call work starts. Raised after OnAgentComplete so a known agent's
+                    // handlers run first, and keyed by the caller's Uniqueid, as the connect report is.
+                    server.Agents.OnQueueCallerCompleted(new QueueCallerCompletion(
+                        acoe.UniqueId, acoe.LinkedId, acoe.Interface, acoe.TalkTime ?? 0));
                     break;
 
                 // Device state events
