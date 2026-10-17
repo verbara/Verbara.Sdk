@@ -113,6 +113,41 @@ public sealed class ObsoletePragmaEmissionTests
     }
 
     [Theory]
+    [InlineData("Obsolete", "CS0612")]
+    [InlineData("Obsolete(null)", "CS0612")]
+    [InlineData("Obsolete(null, true)", "CS0612")]
+    public void Generators_ShouldSuppressTheCompilersId_WhenTheObsoleteTypeCarriesNoMessage(string attribute, string expected)
+    {
+        // With no message the compiler raises CS0612, and only a warning even when error is true.
+        var run = GeneratorHarness.Run(Attribute(ObsoleteType, attribute), new EventRegistryGenerator(), new EventDeserializerGenerator());
+
+        using (new FluentAssertions.Execution.AssertionScope())
+        {
+            DisabledIds(run, Registry).Should().Equal([expected],
+                "the registry binds the obsolete type, and a mark with no message raises CS0612, not CS0618");
+            DisabledIds(run, Deserializer).Should().Equal([expected],
+                "the deserializer binds the obsolete type, and a mark with no message raises CS0612, not CS0618");
+            run.WarningsAndErrors.Should().BeEmpty("the one obsolete type is suppressed under the id the compiler raises");
+        }
+    }
+
+    [Fact]
+    public void Generators_ShouldEmitNoSuppression_WhenTheObsoleteTypeIsAnError()
+    {
+        // An obsolete error with a message (CS0619) cannot be silenced by a pragma, so none is written and the build fails.
+        var run = GeneratorHarness.Run(
+            Attribute(ObsoleteType, "Obsolete(\"m\", true)"), new EventRegistryGenerator(), new EventDeserializerGenerator());
+
+        using (new FluentAssertions.Execution.AssertionScope())
+        {
+            DisabledIds(run, Registry).Should().BeEmpty("no pragma can suppress CS0619");
+            DisabledIds(run, Deserializer).Should().BeEmpty("no pragma can suppress CS0619");
+            run.WarningsAndErrors.Should().Contain(d => d.Contains("error CS0619", StringComparison.Ordinal),
+                "binding a type marked as an obsolete error fails the build, and the generator does not hide it");
+        }
+    }
+
+    [Theory]
     [InlineData(false, "CS0618")]
     [InlineData(true, ProbeId)]
     public void Deserializer_ShouldSuppressExactlyTheMembersDiagnostic_WhenABoundEventMemberIsObsolete(bool withId, string expected)
@@ -149,6 +184,9 @@ public sealed class ObsoletePragmaEmissionTests
         // A bare disable silences CS0618 along with everything else, so it counts as an obsolete suppression.
         ReadDisabledIds(text).Should().Equal([Bare]);
     }
+
+    private static string Attribute(string source, string attribute) =>
+        source.Replace("[Obsolete(\"The module that sent it is gone.\"__ID__)]", $"[{attribute}]", StringComparison.Ordinal);
 
     private static string Mark(string source, bool withId) =>
         source.Replace("__ID__", withId ? $", DiagnosticId = \"{ProbeId}\"" : "", StringComparison.Ordinal);

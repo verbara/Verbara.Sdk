@@ -20,9 +20,10 @@ internal static class ObsoleteDiagnostics
 
     /// <summary>
     /// The diagnostic id that referencing <paramref name="symbol"/> raises, or <see langword="null"/> when it is not
-    /// obsolete: the attribute's <c>DiagnosticId</c> when it names one, <c>CS0612</c> for a bare <c>[Obsolete]</c>,
-    /// and <c>CS0618</c> for one with a message. An <c>[Obsolete(..., true)]</c> raises an error no pragma can
-    /// suppress, so it yields nothing.
+    /// obsolete: the attribute's <c>DiagnosticId</c> when it names one, <c>CS0612</c> when there is no message
+    /// (a bare <c>[Obsolete]</c>, <c>[Obsolete(null)]</c>, and <c>[Obsolete(null, true)]</c>, which the compiler still
+    /// reports as a warning), and <c>CS0618</c> for one with a message. An <c>[Obsolete("...", true)]</c> raises
+    /// <c>CS0619</c>, an error no pragma can suppress, so it yields nothing.
     /// </summary>
     public static string? IdOf(ISymbol? symbol)
     {
@@ -40,10 +41,14 @@ internal static class ObsoleteDiagnostics
                 return id;
         }
 
+        // With no message the compiler raises the CS0612 warning, even when error is true.
+        if (attr.ConstructorArguments.Length == 0 || attr.ConstructorArguments[0].Value is null)
+            return "CS0612";
+
         if (attr.ConstructorArguments.Length >= 2 && attr.ConstructorArguments[1].Value is true)
             return null;
 
-        return attr.ConstructorArguments.Length == 0 ? "CS0612" : "CS0618";
+        return "CS0618";
     }
 
     /// <summary>The distinct ids that referencing any of <paramref name="symbols"/> raises, sorted ordinally.</summary>
