@@ -1,4 +1,3 @@
-#pragma warning disable CS0618 // Tests intentionally verify obsolete event types
 using Verbara.Sdk;
 using Verbara.Sdk.Attributes;
 using Verbara.Sdk.Ami.Events;
@@ -134,27 +133,6 @@ public class EventInheritanceTests
         evt.UniqueId.Should().Be("123.1");
         evt.Timestamp.Should().Be(1234567890.123);
         evt.EventType.Should().Be("TestEvent");
-    }
-
-    [Fact]
-    public void DialEvent_ShouldInheritFromManagerEvent()
-    {
-        typeof(DialEvent).Should().BeAssignableTo<ManagerEvent>();
-    }
-
-    [Fact]
-    public void DialEvent_ShouldHaveExpectedProperties()
-    {
-        var evt = new DialEvent
-        {
-            SubEvent = "Begin",
-            Channel = "SIP/2000-0001",
-            Destination = "SIP/3000-0002"
-        };
-
-        evt.SubEvent.Should().Be("Begin");
-        evt.Channel.Should().Be("SIP/2000-0001");
-        evt.Destination.Should().Be("SIP/3000-0002");
     }
 
     [Fact]

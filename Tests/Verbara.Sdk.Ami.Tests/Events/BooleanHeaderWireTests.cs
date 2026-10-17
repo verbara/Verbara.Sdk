@@ -371,9 +371,7 @@ public sealed class BooleanHeaderWireTests
     {
         var evt = await ParseAsync(IaxPeerEntry);
 
-#pragma warning disable CS0618 // PeerEntryEvent is marked obsolete; IAX still sends it.
         evt.Should().BeOfType<PeerEntryEvent>().Which.Dynamic.Should().BeTrue();
-#pragma warning restore CS0618
     }
 
     // ---- Captured: a false value ----
@@ -427,9 +425,7 @@ public sealed class BooleanHeaderWireTests
     {
         var evt = await ParseAsync(IaxPeerEntry);
 
-#pragma warning disable CS0618 // PeerEntryEvent is marked obsolete; IAX still sends it.
         evt.Should().BeOfType<PeerEntryEvent>().Which.Trunk.Should().BeFalse();
-#pragma warning restore CS0618
     }
 
     [Fact]
@@ -521,9 +517,7 @@ public sealed class BooleanHeaderWireTests
             Status: Unmonitored
             """);
 
-#pragma warning disable CS0618 // PeerEntryEvent is marked obsolete; the chan_sip SIPpeers list sends it.
         var peer = evt.Should().BeOfType<PeerEntryEvent>().Subject;
-#pragma warning restore CS0618
         using (new AssertionScope())
         {
             peer.ForceRport.Should().BeTrue();

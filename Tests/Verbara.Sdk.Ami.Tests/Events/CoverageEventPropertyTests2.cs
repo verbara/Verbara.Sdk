@@ -144,7 +144,6 @@ public sealed class CoverageEventPropertyTests2
     [Fact]
     public void PeerEntryEvent_ShouldHaveAllProperties()
     {
-#pragma warning disable CS0618
         var evt = new PeerEntryEvent
         {
             ChannelType = "SIP", ObjectName = "100", ObjectUserName = "100",
@@ -155,7 +154,6 @@ public sealed class CoverageEventPropertyTests2
             AutoComedia = "yes", AutoForcerport = "yes", Comedia = "no",
             Description = "Test Peer", Accountcode = "acc1"
         };
-#pragma warning restore CS0618
         evt.ChannelType.Should().Be("SIP");
         evt.ObjectName.Should().Be("100");
         evt.ObjectUserName.Should().Be("100");
@@ -258,16 +256,6 @@ public sealed class CoverageEventPropertyTests2
     }
 
     [Fact]
-    public void JoinEvent_ShouldHaveAllProperties()
-    {
-#pragma warning disable CS0618
-        var evt = new JoinEvent { CallerId = "5551234", Position = 3 };
-#pragma warning restore CS0618
-        evt.CallerId.Should().Be("5551234");
-        evt.Position.Should().Be(3);
-    }
-
-    [Fact]
     public void QueueCallerAbandonEvent_ShouldHaveAllProperties()
     {
         var evt = new QueueCallerAbandonEvent
@@ -294,36 +282,6 @@ public sealed class CoverageEventPropertyTests2
         evt.Language.Should().Be("en");
         evt.LinkedId.Should().Be("linked-1");
         evt.Accountcode.Should().Be("acc1");
-    }
-
-    [Fact]
-    public void MeetMeMuteEvent_ShouldHaveAllProperties()
-    {
-#pragma warning disable CS0618
-        var evt = new MeetMeMuteEvent { Meetme = "1000", Status = true };
-#pragma warning restore CS0618
-        evt.Meetme.Should().Be("1000");
-        evt.Status.Should().BeTrue();
-    }
-
-    [Fact]
-    public void MeetMeTalkingEvent_ShouldHaveAllProperties()
-    {
-#pragma warning disable CS0618
-        var evt = new MeetMeTalkingEvent { Meetme = "1000", Status = true };
-#pragma warning restore CS0618
-        evt.Meetme.Should().Be("1000");
-        evt.Status.Should().BeTrue();
-    }
-
-    [Fact]
-    public void MeetMeTalkingRequestEvent_ShouldHaveAllProperties()
-    {
-#pragma warning disable CS0618
-        var evt = new MeetMeTalkingRequestEvent { Meetme = "1000", Status = true };
-#pragma warning restore CS0618
-        evt.Meetme.Should().Be("1000");
-        evt.Status.Should().BeTrue();
     }
 
     [Fact]
@@ -447,35 +405,6 @@ public sealed class CoverageEventPropertyTests2
     }
 
     [Fact]
-    public void ZapShowChannelsEvent_ShouldHaveAllProperties()
-    {
-#pragma warning disable CS0618
-        var evt = new ZapShowChannelsEvent { Channel = 1, Signalling = "FXO Kewlstart", Dnd = false, Alarm = "No Alarm" };
-#pragma warning restore CS0618
-        evt.Channel.Should().Be(1);
-        evt.Signalling.Should().Be("FXO Kewlstart");
-        evt.Dnd.Should().BeFalse();
-        evt.Alarm.Should().Be("No Alarm");
-    }
-
-    [Fact]
-    public void SkypeLicenseEvent_ShouldHaveAllProperties()
-    {
-#pragma warning disable CS0618
-        var evt = new SkypeLicenseEvent
-        {
-            Key = "ABCD-1234", Expires = "2030-01-01", HostId = "host-1",
-            Channels = 10, Status = "Active"
-        };
-#pragma warning restore CS0618
-        evt.Key.Should().Be("ABCD-1234");
-        evt.Expires.Should().Be("2030-01-01");
-        evt.HostId.Should().Be("host-1");
-        evt.Channels.Should().Be(10);
-        evt.Status.Should().Be("Active");
-    }
-
-    [Fact]
     public void ChannelsHungupListComplete_ShouldBeInstantiable()
     {
         var evt = new ChannelsHungupListComplete();
@@ -486,15 +415,6 @@ public sealed class CoverageEventPropertyTests2
     public void FAXSessionsCompleteEvent_ShouldBeInstantiable()
     {
         var evt = new FAXSessionsCompleteEvent();
-        evt.Should().NotBeNull();
-    }
-
-    [Fact]
-    public void SkypeBuddyListCompleteEvent_ShouldBeInstantiable()
-    {
-#pragma warning disable CS0618
-        var evt = new SkypeBuddyListCompleteEvent();
-#pragma warning restore CS0618
         evt.Should().NotBeNull();
     }
 

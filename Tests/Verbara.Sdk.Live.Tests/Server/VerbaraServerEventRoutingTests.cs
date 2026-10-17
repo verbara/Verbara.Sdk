@@ -366,51 +366,46 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
     }
 
     // ==========================================================================
-    // MeetMeJoinEvent -> MeetMeManager
+    // ConfbridgeJoinEvent -> MeetMeManager
     // ==========================================================================
 
     [Fact]
-    public async Task EventObserver_ShouldRouteMeetMeJoinEvent_ToMeetMeManager()
+    public async Task EventObserver_ShouldRouteConfbridgeJoinEvent_ToMeetMeManager()
     {
         await StartAndGetObserverAsync();
 
-#pragma warning disable CS0618 // MeetMe events are obsolete but still received from Asterisk 18-20
-        _observer!.OnNext(new MeetMeJoinEvent
+        _observer!.OnNext(new ConfbridgeJoinEvent
         {
-            Meetme = "300",
-            Usernum = 1,
+            Conference = "300",
             Channel = "PJSIP/2000-001"
         });
-#pragma warning restore CS0618
 
         var room = _sut.MeetMe.GetRoom("300");
-        room.Should().NotBeNull();
+        room.Should().NotBeNull("a ConfBridge join opens the room in the MeetMe manager");
         room!.UserCount.Should().Be(1);
     }
 
     // ==========================================================================
-    // MeetMeLeaveEvent -> MeetMeManager
+    // ConfbridgeLeaveEvent -> MeetMeManager
     // ==========================================================================
 
     [Fact]
-    public async Task EventObserver_ShouldRouteMeetMeLeaveEvent_ToMeetMeManager()
+    public async Task EventObserver_ShouldRouteConfbridgeLeaveEvent_ToMeetMeManager()
     {
         await StartAndGetObserverAsync();
 
-#pragma warning disable CS0618
-        _observer!.OnNext(new MeetMeJoinEvent
+        _observer!.OnNext(new ConfbridgeJoinEvent
         {
-            Meetme = "300",
-            Usernum = 1,
+            Conference = "300",
             Channel = "PJSIP/2000-001"
         });
+        _sut.MeetMe.GetRoom("300").Should().NotBeNull("the join opened the room before the leave is routed");
 
-        _observer!.OnNext(new MeetMeLeaveEvent
+        _observer!.OnNext(new ConfbridgeLeaveEvent
         {
-            Meetme = "300",
-            Usernum = 1
+            Conference = "300",
+            Channel = "PJSIP/2000-001"
         });
-#pragma warning restore CS0618
 
         _sut.MeetMe.GetRoom("300").Should().BeNull("room should be removed when last user leaves");
     }

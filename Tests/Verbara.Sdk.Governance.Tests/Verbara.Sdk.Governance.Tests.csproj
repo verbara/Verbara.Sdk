@@ -13,4 +13,10 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Referenced as an ordinary assembly, not as an analyzer: the generator harness runs the AMI generators itself
+         over synthetic compilations. -->
+    <ProjectReference Include="..\..\src\Verbara.Sdk.Ami.SourceGenerators\Verbara.Sdk.Ami.SourceGenerators.csproj" />
+  </ItemGroup>
+
 </Project>

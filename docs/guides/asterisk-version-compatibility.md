@@ -33,48 +33,11 @@ These fields are nullable (`string?` / `int?`) and remain `null` on older Asteri
 |-------|--------|-------------|
 | `tech_cause` | `ChannelHangupRequestEvent`, `ChannelDestroyedEvent` | Technology-specific cause code |
 
-## Events Removed in Asterisk 21+
+## Legacy AMI Events (removed in 2.9.0)
 
-The following modules were removed in Asterisk 21. Their events are marked `[Obsolete]` in the SDK but **not deleted**, ensuring backwards compatibility with Asterisk 18-20.
+The 26 legacy event types this section used to list — app_meetme, Monitor, the bridging, dialing and queue events before Asterisk 12, Skype and Zaptel — were marked `[Obsolete]` and were **removed in 2.9.0**, together with the public adapter that built three of them. None of the pinned 20, 22 and 23 test images, nor 24.0.0-rc2, sends any of them. The Legacy → Replacement tables, and what to do on an Asterisk that still sends one of these events, are in [obsolete-ami-events-removal-migration.md](obsolete-ami-events-removal-migration.md).
 
-### app_meetme (replaced by app_confbridge)
-
-| Legacy Event | Replacement |
-|-------------|-------------|
-| `MeetMeJoinEvent` | `ConfbridgeJoinEvent` |
-| `MeetMeLeaveEvent` | `ConfbridgeLeaveEvent` |
-| `MeetMeEndEvent` | `ConfbridgeEndEvent` |
-| `MeetMeTalkingEvent` | `ConfbridgeTalkingEvent` |
-| `MeetMeStopTalkingEvent` | `ConfbridgeTalkingEvent` |
-| `MeetMeTalkingRequestEvent` | No direct replacement |
-| `MeetMeMuteEvent` | `ConfbridgeMuteEvent` |
-
-### app_monitor (replaced by app_mixmonitor)
-
-| Legacy Event | Replacement |
-|-------------|-------------|
-| `MonitorStartEvent` | `MixMonitorStartEvent` |
-| `MonitorStopEvent` | `MixMonitorStopEvent` |
-
-### Legacy bridging/dialing (replaced in Asterisk 12)
-
-| Legacy Event | Replacement |
-|-------------|-------------|
-| `LinkEvent` | `BridgeEnterEvent` |
-| `UnlinkEvent` | `BridgeLeaveEvent` |
-| `BridgeEvent` | `BridgeCreateEvent` / `BridgeEnterEvent` |
-| `DialEvent` | `DialBeginEvent` / `DialEndEvent` |
-| `JoinEvent` | `QueueCallerJoinEvent` |
-| `LeaveEvent` | `QueueCallerLeaveEvent` |
-| `PausedEvent` | `QueueMemberPausedEvent` |
-| `UnpausedEvent` | `QueueMemberPausedEvent` |
-
-### Discontinued modules
-
-| Legacy Events | Notes |
-|--------------|-------|
-| `SkypeAccountStatusEvent`, `SkypeBuddyEntryEvent`, `SkypeBuddyListCompleteEvent`, `SkypeBuddyStatusEvent`, `SkypeChatMessageEvent`, `SkypeLicenseEvent`, `SkypeLicenseListCompleteEvent` | Skype for Asterisk discontinued |
-| `ZapShowChannelsEvent`, `ZapShowChannelsCompleteEvent` | Zaptel replaced by DAHDI |
+An event that no longer has a typed class still arrives, as a `ManagerEvent` (see [Fallback Behavior](#fallback-behavior)).
 
 ## ARI Event Coverage by Version
 
@@ -107,50 +70,7 @@ All core ARI events (StasisStart/End, Channel*, Bridge*, Playback*, Recording*, 
 
 ## Migration Guide
 
-### MeetMe to ConfBridge
-
-If migrating from Asterisk 18-20 to 21+, replace MeetMe event handlers:
-
-<!-- skip-doc-snippet -->
-```csharp
-// Before (Asterisk 18-20)
-case MeetMeJoinEvent mmj:
-    OnUserJoined(mmj.Meetme, mmj.Usernum, mmj.Channel);
-    break;
-
-// After (Asterisk 21+)
-case ConfbridgeJoinEvent cbj:
-    OnUserJoined(cbj.Conference, 0, cbj.Channel);
-    break;
-```
-
-The SDK handles both simultaneously — keep both cases if supporting mixed-version environments.
-
-### Monitor to MixMonitor
-
-<!-- skip-doc-snippet -->
-```csharp
-// Before
-case MonitorStartEvent ms: ...
-
-// After
-case MixMonitorStartEvent mms: ...
-```
-
-### Legacy Dial to DialBegin/DialEnd
-
-<!-- skip-doc-snippet -->
-```csharp
-// Before (Asterisk < 12)
-case DialEvent de when de.SubEvent == "Begin": ...
-case DialEvent de when de.SubEvent == "End": ...
-
-// After (Asterisk 12+)
-case DialBeginEvent db: ...
-case DialEndEvent de: ...
-```
-
-The SDK includes `LegacyEventAdapter` which automatically synthesizes legacy events from modern ones for backwards compatibility.
+The MeetMe → ConfBridge, Monitor → MixMonitor and legacy Dial → DialBegin/DialEnd examples moved to [obsolete-ami-events-removal-migration.md](obsolete-ami-events-removal-migration.md): the types they migrate from were removed in 2.9.0.
 
 ## Fallback Behavior
 
