@@ -174,15 +174,15 @@ public sealed class ConcurrentEventTests : FunctionalTestBase
             .Where(g => g.Count() >= 2)
             .ToList();
 
-        if (channelEvents.Count > 0)
+        channelEvents.Should().NotBeEmpty(
+            "a Local/s@default originate running Wait(2) must produce at least two events for one UniqueId within 5 s");
+
+        // For any channel, events should arrive in order they were added
+        // Verify by checking arrival indices are monotonically increasing
+        foreach (var group in channelEvents)
         {
-            // For any channel, events should arrive in order they were added
-            // Verify by checking arrival indices are monotonically increasing
-            foreach (var group in channelEvents)
-            {
-                group.Select(e => observer.Events.IndexOf(e)).ToList().Should().BeInAscendingOrder(
-                    "events for the same channel must maintain causal order");
-            }
+            group.Select(e => observer.Events.IndexOf(e)).ToList().Should().BeInAscendingOrder(
+                "events for the same channel must maintain causal order");
         }
     }
 

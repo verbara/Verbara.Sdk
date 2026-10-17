@@ -56,8 +56,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
 
         // Wait for channel to be answered
         var channelResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (channelResult != channelUp.Task)
-            return; // Channel never came up — skip gracefully
+        channelResult.Should().Be(channelUp.Task, "ext 100 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
         await Task.Delay(TimeSpan.FromMilliseconds(500));
@@ -119,8 +118,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
 
         var channelResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (channelResult != channelUp.Task)
-            return;
+        channelResult.Should().Be(channelUp.Task, "ext 100 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
         await Task.Delay(TimeSpan.FromMilliseconds(500));
@@ -184,8 +182,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
 
         var channelResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (channelResult != channelUp.Task)
-            return;
+        channelResult.Should().Be(channelUp.Task, "ext 100 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
         await Task.Delay(TimeSpan.FromMilliseconds(500));
@@ -199,8 +196,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(endReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (result != endReceived.Task)
-            return;
+        result.Should().Be(endReceived.Task, "PlayDtmf with Receive=true on an Up channel must produce a DtmfEnd within 10 s");
 
         var endEvent = await endReceived.Task;
         var direction = endEvent.RawFields?.GetValueOrDefault("Direction");
@@ -240,8 +236,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
 
         var channelResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (channelResult != channelUp.Task)
-            return;
+        channelResult.Should().Be(channelUp.Task, "ext 100 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
         await Task.Delay(TimeSpan.FromMilliseconds(500));
@@ -255,8 +250,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(endReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (result != endReceived.Task)
-            return;
+        result.Should().Be(endReceived.Task, "PlayDtmf with Receive=false on an Up channel must produce a DtmfEnd within 10 s");
 
         var endEvent = await endReceived.Task;
         var direction = endEvent.RawFields?.GetValueOrDefault("Direction");
@@ -366,8 +360,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
 
         var channelResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (channelResult != channelUp.Task)
-            return;
+        channelResult.Should().Be(channelUp.Task, "ext 155 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
 
@@ -383,11 +376,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(dtmfEventReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (result != dtmfEventReceived.Task)
-        {
-            // DtmfEvent may not fire separately when consumed by Read — verify via DtmfEnd instead
-            return;
-        }
+        result.Should().Be(dtmfEventReceived.Task, "PlayDtmf into a channel running Read must produce the Dtmf event this test claims within 10 s");
 
         var dtmfEvent = await dtmfEventReceived.Task;
         dtmfEvent.Digit.Should().Be("7", "Read() should consume digit '7'");

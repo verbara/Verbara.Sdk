@@ -61,37 +61,20 @@ public sealed class VoicemailTests : FunctionalTestBase
         });
 
         // Wait for the channel to complete (VoiceMail app timeout or hangup)
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        try
-        {
-            await hangupTcs.Task.WaitAsync(cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            // Channel may take longer; continue with what we have
-        }
+        var hungUp = await Task.WhenAny(hangupTcs.Task, Task.Delay(TimeSpan.FromSeconds(20))); // fence-allow: GUARD-TIMEOUT — failure bound on an observed condition; a green run leaves on the condition
+        hungUp.Should().Be(hangupTcs.Task,
+            "ext 950 runs VoiceMail(9001@default) and then Hangup, so the channel must hang up within 20 s");
 
         // Allow additional time for any trailing MWI events
         await Task.Delay(TimeSpan.FromSeconds(2));
 
-        // Local channels with no audio may not leave a message, so MWI might not fire.
-        // If events did fire, validate their content.
         var mailbox9001Events = messageWaitingEvents
             .Where(e => e.Mailbox?.Contains("9001", StringComparison.Ordinal) == true)
             .ToList();
 
-        if (mailbox9001Events.Count > 0)
-        {
-            var evt = mailbox9001Events[0];
-            evt.Mailbox.Should().Contain("9001", "event must reference the target mailbox");
-        }
-        else
-        {
-            // Graceful: no MWI event fired (no message was actually left by the silent channel).
-            // Verify the originate at least succeeded by checking we got some events.
-            messageWaitingEvents.Should().BeEmpty(
-                "no MessageWaitingEvent expected when Local channel leaves no audio message");
-        }
+        mailbox9001Events.Should().NotBeEmpty(
+            "a call that reached VoiceMail(9001@default) is the message this test claims fires a MessageWaiting event for 9001");
+        mailbox9001Events[0].Mailbox.Should().Contain("9001", "event must reference the target mailbox");
     }
 
     /// <summary>

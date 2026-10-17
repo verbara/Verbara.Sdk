@@ -47,11 +47,7 @@ public sealed class CdrEventTests : FunctionalTestBase
 
         // CDR fires after hangup; Wait(5) + processing time = up to 30s
         var result = await Task.WhenAny(cdrReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (result != cdrReceived.Task)
-        {
-            // CDR module may not be loaded — skip gracefully
-            return;
-        }
+        result.Should().Be(cdrReceived.Task, "ext 100 answers, waits and hangs up, so cdr_manager must report a Cdr event within 30 s");
 
         var cdr = await cdrReceived.Task;
         cdr.Channel.Should().NotBeNullOrEmpty("CDR must include the originating channel");
@@ -105,11 +101,7 @@ public sealed class CdrEventTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(cdrReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
-        if (result != cdrReceived.Task)
-        {
-            // CDR module not loaded or call produced no CDR — skip gracefully
-            return;
-        }
+        result.Should().Be(cdrReceived.Task, "an originate to 9998, which the functional dialplan does not define, must still produce a Cdr event within 15 s");
 
         var cdr = await cdrReceived.Task;
         cdr.Disposition.Should().NotBe("ANSWERED",
@@ -145,10 +137,7 @@ public sealed class CdrEventTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(cdrReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (result != cdrReceived.Task)
-        {
-            return;
-        }
+        result.Should().Be(cdrReceived.Task, "ext 100 answers, waits and hangs up, so cdr_manager must report a Cdr event within 30 s");
 
         var cdr = await cdrReceived.Task;
 
@@ -173,12 +162,10 @@ public sealed class CdrEventTests : FunctionalTestBase
         startDate.Should().BeOnOrBefore(endDate, "EndTime must not precede StartTime");
 
         // Duration should approximately match EndTime - StartTime (±2s tolerance)
-        if (cdr.Duration.HasValue)
-        {
-            var clockDuration = (endDate - startDate).TotalSeconds;
-            clockDuration.Should().BeApproximately(cdr.Duration.Value, 2.0,
-                "CDR Duration must be within 2 seconds of EndTime - StartTime");
-        }
+        cdr.Duration.Should().NotBeNull("a Cdr event for an answered call must carry Duration");
+        var clockDuration = (endDate - startDate).TotalSeconds;
+        clockDuration.Should().BeApproximately(cdr.Duration!.Value, 2.0,
+            "CDR Duration must be within 2 seconds of EndTime - StartTime");
     }
 
     [Fact]
@@ -226,11 +213,7 @@ public sealed class CdrEventTests : FunctionalTestBase
 
         // Wait for the answered CDR (up to 30s for Wait(5) + hangup + CDR processing)
         var answeredResult = await Task.WhenAny(answeredReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (answeredResult != answeredReceived.Task)
-        {
-            // CDR module not loaded — skip
-            return;
-        }
+        answeredResult.Should().Be(answeredReceived.Task, "ext 100 answers, waits and hangs up, so cdr_manager must report an ANSWERED Cdr event within 30 s");
 
         // Originate unanswered call
         await connection.SendActionAsync(new OriginateAction
@@ -245,10 +228,7 @@ public sealed class CdrEventTests : FunctionalTestBase
         });
 
         var failedResult = await Task.WhenAny(failedReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
-        if (failedResult != failedReceived.Task)
-        {
-            return;
-        }
+        failedResult.Should().Be(failedReceived.Task, "an originate to 999, which the functional dialplan does not define, must produce a non-ANSWERED Cdr event within 15 s");
 
         answeredCdrs.Should().NotBeEmpty("answered call must produce a CDR with ANSWERED disposition");
         failedCdrs.Should().NotBeEmpty("failed call must produce a CDR with non-ANSWERED disposition");

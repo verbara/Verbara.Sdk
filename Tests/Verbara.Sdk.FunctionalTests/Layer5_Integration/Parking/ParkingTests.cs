@@ -1,6 +1,7 @@
 namespace Verbara.Sdk.FunctionalTests.Layer5_Integration.Parking;
 
 using System.Collections.Concurrent;
+using System.Globalization;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.FunctionalTests.Infrastructure.Fixtures;
@@ -59,11 +60,7 @@ public sealed class ParkingTests : FunctionalTestBase
 
         // Wait for the channel to be established
         var channelResult = await Task.WhenAny(originatedChannel.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (channelResult != originatedChannel.Task)
-        {
-            // Channel did not appear — skip gracefully
-            return;
-        }
+        channelResult.Should().Be(originatedChannel.Task, "originating Local/100@test-functional must report the originated channel within 10 s");
 
         var channel = await originatedChannel.Task;
 
@@ -78,21 +75,17 @@ public sealed class ParkingTests : FunctionalTestBase
 
         // Wait for ParkedCallEvent
         var waitResult = await Task.WhenAny(parkedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (waitResult != parkedTcs.Task)
-        {
-            // res_parking may not be loaded — skip gracefully
-            return;
-        }
+        waitResult.Should().Be(parkedTcs.Task, "a redirect to 750 must park the call in the parkedcalls lot and produce a ParkedCall event within 10 s");
 
         var parked = await parkedTcs.Task;
         parked.Channel.Should().NotBeNullOrEmpty("ParkedCallEvent must include the parked channel");
 
         // Parking space is conveyed in the Exten field (751-770 range per res_parking.conf)
-        if (parked.Exten is not null && int.TryParse(parked.Exten, out var space))
-        {
-            space.Should().BeInRange(751, 770,
-                "parking space must be within the configured parkpos range 751-770");
-        }
+        parked.Exten.Should().NotBeNull("ParkedCallEvent must convey the parking space");
+        int.TryParse(parked.Exten, NumberStyles.Integer, CultureInfo.InvariantCulture, out var space)
+            .Should().BeTrue("the parking space '{0}' must be a number", parked.Exten);
+        space.Should().BeInRange(751, 770,
+            "parking space must be within the configured parkpos range 751-770");
     }
 
     /// <summary>
@@ -135,8 +128,7 @@ public sealed class ParkingTests : FunctionalTestBase
         });
 
         var channelResult = await Task.WhenAny(originatedChannel.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (channelResult != originatedChannel.Task)
-            return;
+        channelResult.Should().Be(originatedChannel.Task, "originating Local/100@test-functional must report the originated channel within 10 s");
 
         var channel = await originatedChannel.Task;
 
@@ -149,8 +141,7 @@ public sealed class ParkingTests : FunctionalTestBase
         });
 
         var parkedResult = await Task.WhenAny(parkedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (parkedResult != parkedTcs.Task)
-            return;
+        parkedResult.Should().Be(parkedTcs.Task, "a redirect to 750 must park the call in the parkedcalls lot and produce a ParkedCall event within 10 s");
 
         var parked = await parkedTcs.Task;
 
@@ -170,11 +161,7 @@ public sealed class ParkingTests : FunctionalTestBase
         });
 
         var unparkedResult = await Task.WhenAny(unparkedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (unparkedResult != unparkedTcs.Task)
-        {
-            // UnParkedCallEvent did not fire — skip gracefully
-            return;
-        }
+        unparkedResult.Should().Be(unparkedTcs.Task, "dialling the parked space must unpark the call and produce an UnParkedCall event within 10 s");
 
         var unparked = await unparkedTcs.Task;
         unparked.Channel.Should().NotBeNullOrEmpty("UnParkedCallEvent must include the channel that was unparked");
@@ -221,8 +208,7 @@ public sealed class ParkingTests : FunctionalTestBase
         });
 
         var channelResult = await Task.WhenAny(originatedChannel.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (channelResult != originatedChannel.Task)
-            return;
+        channelResult.Should().Be(originatedChannel.Task, "originating Local/100@test-functional must report the originated channel within 10 s");
 
         var channel = await originatedChannel.Task;
 
@@ -236,16 +222,11 @@ public sealed class ParkingTests : FunctionalTestBase
         });
 
         var parkedResult = await Task.WhenAny(parkedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (parkedResult != parkedTcs.Task)
-            return;
+        parkedResult.Should().Be(parkedTcs.Task, "a redirect to 750 must park the call in the parkedcalls lot and produce a ParkedCall event within 10 s");
 
         // Wait for parkingtime (10s) + buffer — total 15s wait for timeout event
         var timeoutResult = await Task.WhenAny(timeoutTcs.Task, Task.Delay(TimeSpan.FromSeconds(15)));
-        if (timeoutResult != timeoutTcs.Task)
-        {
-            // Timeout event did not fire within expected window — skip gracefully
-            return;
-        }
+        timeoutResult.Should().Be(timeoutTcs.Task, "the parkedcalls lot has parkingtime 10, so a ParkedCallTimeOut event must arrive within 15 s");
 
         var timedOut = await timeoutTcs.Task;
         timedOut.Channel.Should().NotBeNullOrEmpty(
@@ -292,8 +273,7 @@ public sealed class ParkingTests : FunctionalTestBase
         });
 
         var channelResult = await Task.WhenAny(originatedChannel.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (channelResult != originatedChannel.Task)
-            return;
+        channelResult.Should().Be(originatedChannel.Task, "originating Local/100@test-functional must report the originated channel within 10 s");
 
         var channel = await originatedChannel.Task;
 
@@ -307,15 +287,13 @@ public sealed class ParkingTests : FunctionalTestBase
         });
 
         var parkedResult = await Task.WhenAny(parkedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (parkedResult != parkedTcs.Task)
-            return;
+        parkedResult.Should().Be(parkedTcs.Task, "a redirect to 750 must park the call in the parkedcalls lot and produce a ParkedCall event within 10 s");
 
         var parked = await parkedTcs.Task;
 
         // Hang up the parked channel to trigger GiveUp
         var parkedChannel = parked.Channel;
-        if (parkedChannel is null)
-            return;
+        parkedChannel.Should().NotBeNull("a ParkedCall event must name the parked channel");
 
         try
         {
@@ -331,11 +309,7 @@ public sealed class ParkingTests : FunctionalTestBase
         }
 
         var giveUpResult = await Task.WhenAny(giveUpTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
-        if (giveUpResult != giveUpTcs.Task)
-        {
-            // GiveUp event did not fire — skip gracefully
-            return;
-        }
+        giveUpResult.Should().Be(giveUpTcs.Task, "hanging up a parked channel must produce a ParkedCallGiveUp event within 10 s");
 
         var giveUp = await giveUpTcs.Task;
         giveUp.Channel.Should().NotBeNullOrEmpty(

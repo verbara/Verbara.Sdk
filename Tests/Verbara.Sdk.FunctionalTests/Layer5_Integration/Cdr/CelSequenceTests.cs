@@ -49,11 +49,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
 
         // Wait for CHAN_END which is the final CEL event in a call
         var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (result != chanEndReceived.Task)
-        {
-            // CEL module not loaded — skip gracefully
-            return;
-        }
+        result.Should().Be(chanEndReceived.Task, "ext 100 answers, waits and hangs up, so the CEL stream must report CHAN_END within 30 s");
 
         // Allow a brief moment for any trailing events to arrive
         await Task.Delay(TimeSpan.FromMilliseconds(500));
@@ -95,10 +91,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (result != chanEndReceived.Task)
-        {
-            return;
-        }
+        result.Should().Be(chanEndReceived.Task, "ext 100 answers, waits and hangs up, so the CEL stream must report CHAN_END within 30 s");
 
         await Task.Delay(TimeSpan.FromMilliseconds(500));
 
@@ -152,10 +145,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (result != chanEndReceived.Task)
-        {
-            return;
-        }
+        result.Should().Be(chanEndReceived.Task, "ext 100 answers, waits and hangs up, so the CEL stream must report CHAN_END within 30 s");
 
         await Task.Delay(TimeSpan.FromMilliseconds(500));
 
@@ -168,11 +158,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
             .OrderBy(dt => dt)
             .ToList();
 
-        if (timestamps.Count < 2)
-        {
-            // Not enough parseable timestamps — CEL module may use a different format
-            return;
-        }
+        timestamps.Should().HaveCountGreaterThanOrEqualTo(2, "a call's CEL events must carry at least two parseable EventTime values to compare");
 
         // Verify monotonic ordering: each timestamp >= the previous
         for (var i = 1; i < timestamps.Count; i++)
@@ -224,11 +210,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
 
             // Wait for at least one CEL event to confirm CEL is firing
             var result = await Task.WhenAny(chanStartReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
-            if (result != chanStartReceived.Task)
-            {
-                // CEL module not loaded — skip gracefully
-                return;
-            }
+            result.Should().Be(chanStartReceived.Task, "an originate into the queue must make the CEL stream report CHAN_START within 15 s");
 
             // Allow events to accumulate for a moment
             await Task.Delay(TimeSpan.FromSeconds(2));

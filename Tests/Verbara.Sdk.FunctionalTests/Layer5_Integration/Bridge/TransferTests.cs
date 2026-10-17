@@ -66,11 +66,8 @@ public sealed class TransferTests : FunctionalTestBase
 
         // Find an active channel to redirect
         var targetChannel = channelNames.FirstOrDefault(n => n.Contains("Local/", StringComparison.Ordinal));
-        if (targetChannel is null)
-        {
-            // No channel detected — skip gracefully
-            return;
-        }
+        targetChannel.Should().NotBeNull(
+            "originating Local/100@test-functional must report a NewExten for a Local/ channel within 2 s");
 
         // Redirect the channel to ext 161 (Answer + Wait(10))
         await connection.SendActionAsync(new RedirectAction
@@ -140,10 +137,7 @@ public sealed class TransferTests : FunctionalTestBase
 
         // Find a channel to redirect
         var targetChannel = enterEvents.FirstOrDefault()?.Channel;
-        if (targetChannel is null)
-        {
-            return;
-        }
+        targetChannel.Should().NotBeNull("two ConfBridge originates into test-transfer conferences must produce a BridgeEnter within 4 s");
 
         // Redirect one party to ext 161
         await connection.SendActionAsync(new RedirectAction
@@ -157,14 +151,8 @@ public sealed class TransferTests : FunctionalTestBase
         // Wait for transfer event
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        // BlindTransferEvent may or may not fire depending on Asterisk version and bridge type.
-        // When it does fire, it must carry a valid Extension field.
-        if (blindTransferEvents.IsEmpty)
-        {
-            // Asterisk may not emit BlindTransferEvent for ConfBridge redirects in all versions.
-            // This is a known limitation — the redirect still works (verified by other tests).
-            return;
-        }
+        blindTransferEvents.Should().NotBeEmpty(
+            "redirecting a ConfBridge party to ext 161 is the blind transfer this test claims fires a BlindTransfer event");
 
         var transferEvent = blindTransferEvents.First();
         transferEvent.BridgeUniqueid.Should().NotBeNullOrEmpty(
@@ -207,11 +195,8 @@ public sealed class TransferTests : FunctionalTestBase
         var channels = server.Channels.ActiveChannels.ToList();
         var targetChannel = channels.FirstOrDefault(c => c.Name.Contains("Local/", StringComparison.Ordinal));
 
-        if (targetChannel is null)
-        {
-            // No channel available — skip gracefully
-            return;
-        }
+        targetChannel.Should().NotBeNull(
+            "originating Local/100@test-functional must put a Local/ channel in the ChannelManager within 2 s");
 
         // Redirect the channel to ext 161
         await connection.SendActionAsync(new RedirectAction
@@ -228,13 +213,11 @@ public sealed class TransferTests : FunctionalTestBase
         // The channel should still exist in the manager (ext 161 does Wait(10))
         var updatedChannel = server.Channels.GetByUniqueId(targetChannel.UniqueId);
 
-        // Channel should still be alive after redirect to ext 161 (Wait(10))
-        // It may have been removed if the redirect failed, but if present it should be consistent
-        if (updatedChannel is not null)
-        {
-            server.Channels.GetByName(updatedChannel.Name).Should().NotBeNull(
-                "channel must be in both indices after redirect");
-        }
+        // Channel should still be alive after redirect to ext 161 (Answer, Wait(10))
+        updatedChannel.Should().NotBeNull(
+            "ext 161 holds the channel for 10 s, so the ChannelManager must still track it 3 s after the redirect");
+        server.Channels.GetByName(updatedChannel!.Name).Should().NotBeNull(
+            "channel must be in both indices after redirect");
     }
 
     /// <summary>
@@ -271,12 +254,10 @@ public sealed class TransferTests : FunctionalTestBase
         var channels = server.Channels.ActiveChannels.ToList();
         var targetChannel = channels.FirstOrDefault(c => c.Name.Contains("Local/", StringComparison.Ordinal));
 
-        if (targetChannel is null)
-        {
-            return;
-        }
+        targetChannel.Should().NotBeNull(
+            "originating Local/100@test-functional must put a Local/ channel in the ChannelManager within 2 s");
 
-        var uniqueId = targetChannel.UniqueId;
+        var uniqueId = targetChannel!.UniqueId;
 
         // Redirect to ext 9999 which does not exist in the dialplan
         await connection.SendActionAsync(new RedirectAction
@@ -290,22 +271,11 @@ public sealed class TransferTests : FunctionalTestBase
         // Wait for the channel to hang up due to invalid extension
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        // Channel should have been removed from the manager after hangup.
-        // However, Asterisk may silently reject the redirect to a non-existent extension,
-        // leaving the channel on its original dialplan. Both outcomes are valid.
+        // The functional dialplan defines no 9999 and no 'i' extension, so the redirected channel's PBX
+        // ends and Asterisk hangs it up; the ChannelManager must have removed it.
         var afterRedirect = server.Channels.GetByUniqueId(uniqueId);
-
-        if (afterRedirect is null)
-        {
-            // Channel was hung up — redirect caused extension-not-found hangup
-            return;
-        }
-
-        // Channel survived — Asterisk rejected the redirect silently.
-        // Verify the channel manager is still consistent (the real test goal).
-        var byName = server.Channels.GetByName(afterRedirect.Name);
-        byName.Should().NotBeNull(
-            "if channel survived redirect, both indices must remain consistent");
+        afterRedirect.Should().BeNull(
+            "a redirect to 9999, which the functional dialplan does not define, must hang the channel up within 4 s");
     }
 
     /// <summary>
@@ -350,17 +320,12 @@ public sealed class TransferTests : FunctionalTestBase
         // Wait for both to enter bridge
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        if (enterEvents.Count < 2)
-        {
-            return;
-        }
+        enterEvents.Should().HaveCountGreaterThanOrEqualTo(2,
+            "two ConfBridge originates into test-transfer-05 must produce two BridgeEnter events within 4 s");
 
         // Redirect only the first channel
         var channelToTransfer = enterEvents.First().Channel;
-        if (channelToTransfer is null)
-        {
-            return;
-        }
+        channelToTransfer.Should().NotBeNull("a BridgeEnter event must name the channel that entered");
 
         await connection.SendActionAsync(new RedirectAction
         {
@@ -436,10 +401,7 @@ public sealed class TransferTests : FunctionalTestBase
         await Task.Delay(TimeSpan.FromSeconds(4));
 
         var targetChannel = enterEvents.FirstOrDefault()?.Channel;
-        if (targetChannel is null)
-        {
-            return;
-        }
+        targetChannel.Should().NotBeNull("two ConfBridge originates into test-transfer conferences must produce a BridgeEnter within 4 s");
 
         // Attempt attended transfer — may succeed or fail depending on bridge features
         try
@@ -509,10 +471,7 @@ public sealed class TransferTests : FunctionalTestBase
         await Task.Delay(TimeSpan.FromSeconds(4));
 
         var targetChannel = enterEvents.FirstOrDefault()?.Channel;
-        if (targetChannel is null)
-        {
-            return;
-        }
+        targetChannel.Should().NotBeNull("two ConfBridge originates into test-transfer conferences must produce a BridgeEnter within 4 s");
 
         try
         {
@@ -531,16 +490,13 @@ public sealed class TransferTests : FunctionalTestBase
 
         await Task.Delay(TimeSpan.FromSeconds(5));
 
-        // AttendedTransferEvent may or may not fire depending on bridge configuration.
-        // When it fires, validate its structure.
-        if (!attendedTransferEvents.IsEmpty)
-        {
-            var evt = attendedTransferEvents.First();
-            evt.Result.Should().NotBeNullOrEmpty(
-                "AttendedTransferEvent must include a Result field");
-            evt.OrigTransfererChannel.Should().NotBeNullOrEmpty(
-                "AttendedTransferEvent must identify the original transferer");
-        }
+        attendedTransferEvents.Should().NotBeEmpty(
+            "an Atxfer of a bridged party to ext 162 is the attended transfer this test claims fires an AttendedTransfer event");
+        var evt = attendedTransferEvents.First();
+        evt.Result.Should().NotBeNullOrEmpty(
+            "AttendedTransferEvent must include a Result field");
+        evt.OrigTransfererChannel.Should().NotBeNullOrEmpty(
+            "AttendedTransferEvent must identify the original transferer");
 
         // Regardless of transfer outcome, connection must be intact
         var ping = await connection.SendActionAsync(new PingAction());
@@ -566,8 +522,10 @@ public sealed class TransferTests : FunctionalTestBase
         await server.StartAsync();
 
         var attendedTransferEvents = new ConcurrentBag<AttendedTransferEvent>();
+        var enterEvents = new ConcurrentBag<BridgeEnterEvent>();
         using var subscription = connection.Subscribe(new TransferEventObserver(
-            onAttendedTransfer: attendedTransferEvents.Add));
+            onAttendedTransfer: attendedTransferEvents.Add,
+            onBridgeEnter: enterEvents.Add));
 
         // Create a bridge
         await connection.SendActionAsync(new OriginateAction
@@ -589,17 +547,35 @@ public sealed class TransferTests : FunctionalTestBase
 
         await Task.Delay(TimeSpan.FromSeconds(5));
 
-        // If an AttendedTransferEvent fires, verify bridge manager state
-        if (!attendedTransferEvents.IsEmpty)
+        // Before this test sent no transfer at all, so the event below could never fire.
+        var targetChannel = enterEvents.FirstOrDefault()?.Channel;
+        targetChannel.Should().NotBeNull(
+            "two ConfBridge originates into test-transfer conferences must produce a BridgeEnter within 5 s");
+
+        try
         {
-            var evt = attendedTransferEvents.First();
-            if (evt.OrigBridgeUniqueid is not null)
+            await connection.SendActionAsync(new AtxferAction
             {
-                var bridge = server.Bridges.GetById(evt.OrigBridgeUniqueid);
-                bridge.Should().NotBeNull(
-                    "BridgeManager must track the bridge referenced by AttendedTransferEvent");
-            }
+                Channel = targetChannel,
+                Context = "test-functional",
+                Exten = "161",
+                Priority = 1
+            });
         }
+        catch (OperationCanceledException)
+        {
+            // The response timeout is not the claim; the event below is.
+        }
+
+        await Task.Delay(TimeSpan.FromSeconds(5)); // fence-allow: SETTLE — the window in which Asterisk reports the AttendedTransfer event, as the sibling attended-transfer test waits
+
+        attendedTransferEvents.Should().NotBeEmpty(
+            "an Atxfer of a bridged party to ext 161 must fire an AttendedTransfer event for the bridge to be checked");
+        var evt = attendedTransferEvents.First();
+        evt.OrigBridgeUniqueid.Should().NotBeNullOrEmpty(
+            "AttendedTransferEvent must name the original bridge");
+        server.Bridges.GetById(evt.OrigBridgeUniqueid!).Should().NotBeNull(
+            "BridgeManager must track the bridge referenced by AttendedTransferEvent");
 
         // Verify BridgeManager tracks at least one bridge from the ConfBridge setup
         server.Bridges.BridgeCount.Should().BeGreaterThan(0,
@@ -648,14 +624,14 @@ public sealed class TransferTests : FunctionalTestBase
 
         await Task.Delay(TimeSpan.FromSeconds(4));
 
-        // Record bridge state before transfer attempt
-        var bridgeCountBefore = server.Bridges.ActiveBridges.Count();
-
-        var targetChannel = enterEvents.FirstOrDefault()?.Channel;
-        if (targetChannel is null)
-        {
-            return;
-        }
+        var enter = enterEvents.FirstOrDefault();
+        enter.Should().NotBeNull("two ConfBridge originates into test-transfer conferences must produce a BridgeEnter within 4 s");
+        var targetChannel = enter!.Channel;
+        targetChannel.Should().NotBeNull("a BridgeEnter event must name the channel that entered");
+        var originalBridgeId = enter.BridgeUniqueid;
+        originalBridgeId.Should().NotBeNullOrEmpty("a BridgeEnter event must name the bridge it entered");
+        server.Bridges.ActiveBridges.Should().Contain(b => b.BridgeUniqueid == originalBridgeId,
+            "VerbaraServer must track the ConfBridge bridge before the transfer attempt");
 
         // Attempt transfer to a short-lived extension, then immediately cancel via hangup
         try
@@ -676,10 +652,8 @@ public sealed class TransferTests : FunctionalTestBase
         // Wait a moment, then verify original bridge is still intact
         await Task.Delay(TimeSpan.FromSeconds(3));
 
-        var bridgeCountAfter = server.Bridges.ActiveBridges.Count();
-
         // The original bridge should still exist (transfer cancelled or not initiated)
-        bridgeCountAfter.Should().BeGreaterThanOrEqualTo(bridgeCountBefore > 0 ? 1 : 0,
+        server.Bridges.ActiveBridges.Should().Contain(b => b.BridgeUniqueid == originalBridgeId,
             "original bridge should persist when attended transfer does not complete");
     }
 
@@ -754,11 +728,8 @@ public sealed class TransferTests : FunctionalTestBase
                      or BridgeDestroyEvent)
             .ToList();
 
-        if (bridgeEvents.Count < 2)
-        {
-            // Not enough events to verify ordering
-            return;
-        }
+        bridgeEvents.Should().HaveCountGreaterThanOrEqualTo(2,
+            "two ConfBridge joins and their hangups must produce at least two bridge events to order");
 
         // Events must have been received in monotonically non-decreasing order
         for (var i = 1; i < bridgeEvents.Count; i++)
