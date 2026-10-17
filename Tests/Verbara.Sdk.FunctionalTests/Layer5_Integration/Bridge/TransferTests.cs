@@ -155,7 +155,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// After a RedirectAction, VerbaraServer's ChannelManager should reflect
     /// the channel's new extension context.
     /// </summary>
-    [Fact(Skip = "Measured on Asterisk 23 and 22 (red in run-5.3-ast23-rf7-unskip-UpdateChannelManager-884af523-dirty.trx and run-5.3-ast22-rf7-unskip-UpdateChannelManager-884af523-dirty.trx): after a Redirect to ext 161 that Asterisk reports as a NewExten 161 on the channel, the ChannelManager still holds Extension 100, the value the channel was created with; it sets it from Newchannel and a state reload only")]
+    [Fact(Skip = "Measured on Asterisk 23 and 22: after a Redirect to ext 161 that Asterisk reports as a NewExten 161 on the channel, the ChannelManager still holds Extension 100, the value the channel was created with; it sets it from Newchannel and a state reload only")]
     public async Task BlindTransfer_ShouldUpdateChannelManager()
     {
         // The connection reads the dialplan class, so the server receives the NewExten events of the redirect too.
