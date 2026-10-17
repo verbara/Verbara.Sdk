@@ -13,7 +13,8 @@ namespace Verbara.Sdk.Ari.Tests.TestSupport;
 /// reads what the component emitted.
 /// </para>
 /// <para>
-/// The instrument is process-wide and carries no tags, so this counts every session in the process.
+/// The instrument is process-wide and tagged only with the transport, not the session, so this counts
+/// every session in the process, whatever its tags.
 /// A test that asserts on it runs in <see cref="AudioStreamMetricsGroup"/>.
 /// </para>
 /// <para>

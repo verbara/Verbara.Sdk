@@ -75,8 +75,8 @@ public sealed class AudioStreamMetricsWitnessTests
         // Assert
         using (new AssertionScope())
         {
-            AssertCountedOnce(recorder, StreamsOpened, AudioSocket, "one session was identified");
-            AssertCountedOnce(recorder, StreamsClosed, AudioSocket, "that one session ended once, on its hangup frame");
+            MeterAssert.CountedOnce(recorder, StreamsOpened, AudioSocket, "one session was identified");
+            MeterAssert.CountedOnce(recorder, StreamsClosed, AudioSocket, "that one session ended once, on its hangup frame");
         }
     }
 
@@ -95,8 +95,8 @@ public sealed class AudioStreamMetricsWitnessTests
         // Assert
         using (new AssertionScope())
         {
-            AssertCountedOnce(recorder, StreamsOpened, AudioSocket, "one session was identified");
-            AssertCountedOnce(recorder, StreamsClosed, AudioSocket, "two disposals of one session close one stream");
+            MeterAssert.CountedOnce(recorder, StreamsOpened, AudioSocket, "one session was identified");
+            MeterAssert.CountedOnce(recorder, StreamsClosed, AudioSocket, "two disposals of one session close one stream");
         }
     }
 
@@ -134,7 +134,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await RunAudioSocketCallWithAnEmptyFrameBetweenTwoAudioFramesAsync();
 
         // Assert
-        AssertTotal(recorder, FramesReceived, 2, AudioSocket,
+        MeterAssert.Total(recorder, FramesReceived, 2, AudioSocket,
             "two audio frames carried audio; the empty one between them carried none and is not counted");
     }
 
@@ -148,7 +148,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await RunAudioSocketCallWithAnEmptyFrameBetweenTwoAudioFramesAsync();
 
         // Assert
-        AssertTotal(recorder, BytesReceived, 2 * CapturedPayloadLength, AudioSocket,
+        MeterAssert.Total(recorder, BytesReceived, 2 * CapturedPayloadLength, AudioSocket,
             "the payload bytes of the two audio frames, headers excluded");
     }
 
@@ -168,8 +168,8 @@ public sealed class AudioStreamMetricsWitnessTests
         // Assert
         using (new AssertionScope())
         {
-            AssertTotal(recorder, FramesReceived, 1, AudioSocket, "audio received from Asterisk before the Uuid frame was still received");
-            AssertTotal(recorder, BytesReceived, CapturedPayloadLength, AudioSocket, "and its payload bytes");
+            MeterAssert.Total(recorder, FramesReceived, 1, AudioSocket, "audio received from Asterisk before the Uuid frame was still received");
+            MeterAssert.Total(recorder, BytesReceived, CapturedPayloadLength, AudioSocket, "and its payload bytes");
         }
     }
 
@@ -183,7 +183,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await RunAudioSocketCallWhereTheConsumerWritesTwoFramesAsync();
 
         // Assert
-        AssertTotal(recorder, FramesSent, 2, AudioSocket, "the consumer wrote two frames and both reached the wire");
+        MeterAssert.Total(recorder, FramesSent, 2, AudioSocket, "the consumer wrote two frames and both reached the wire");
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await RunAudioSocketCallWhereTheConsumerWritesTwoFramesAsync();
 
         // Assert
-        AssertTotal(recorder, BytesSent, 2 * CapturedPayloadLength, AudioSocket,
+        MeterAssert.Total(recorder, BytesSent, 2 * CapturedPayloadLength, AudioSocket,
             "two writes of 320 audio bytes; the three-byte AudioSocket header is not audio");
     }
 
@@ -217,7 +217,7 @@ public sealed class AudioStreamMetricsWitnessTests
         // Assert
         using (new AssertionScope())
         {
-            AssertCountedOnce(recorder, HangupFrames, AudioSocket, "one hangup frame arrived");
+            MeterAssert.CountedOnce(recorder, HangupFrames, AudioSocket, "one hangup frame arrived");
             recorder.Of(ErrorFrames).Should().BeEmpty("no error frame arrived");
         }
     }
@@ -237,7 +237,7 @@ public sealed class AudioStreamMetricsWitnessTests
         // Assert
         using (new AssertionScope())
         {
-            AssertCountedOnce(recorder, ErrorFrames, AudioSocket, "one error frame arrived");
+            MeterAssert.CountedOnce(recorder, ErrorFrames, AudioSocket, "one error frame arrived");
             recorder.Of(HangupFrames).Should().BeEmpty("no hangup frame arrived");
         }
     }
@@ -265,7 +265,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await call.WaitUntilReleasedAsync();
 
         // Assert
-        AssertLatency(recorder, expectedValues: 2, AudioSocket);
+        MeterAssert.Latency(recorder, expectedValues: 2, AudioSocket);
     }
 
     // ================================================================ AudioSocket — internal instruments
@@ -283,7 +283,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await call.WaitUntilReleasedAsync();
 
         // Assert
-        AssertCountedOnce(recorder, TransportFailures, AudioSocket, "one live session lost its transport");
+        MeterAssert.CountedOnce(recorder, TransportFailures, AudioSocket, "one live session lost its transport");
     }
 
     // ================================================================ WebSocket — lifecycle
@@ -303,8 +303,8 @@ public sealed class AudioStreamMetricsWitnessTests
         // Assert
         using (new AssertionScope())
         {
-            AssertCountedOnce(recorder, StreamsOpened, WebSocket, "one session was upgraded and started");
-            AssertCountedOnce(recorder, StreamsClosed, WebSocket, "that one session ended once, on the close frame");
+            MeterAssert.CountedOnce(recorder, StreamsOpened, WebSocket, "one session was upgraded and started");
+            MeterAssert.CountedOnce(recorder, StreamsClosed, WebSocket, "that one session ended once, on the close frame");
         }
     }
 
@@ -323,8 +323,8 @@ public sealed class AudioStreamMetricsWitnessTests
         // Assert
         using (new AssertionScope())
         {
-            AssertCountedOnce(recorder, StreamsOpened, WebSocket, "one session was started");
-            AssertCountedOnce(recorder, StreamsClosed, WebSocket, "two disposals of one session close one stream");
+            MeterAssert.CountedOnce(recorder, StreamsOpened, WebSocket, "one session was started");
+            MeterAssert.CountedOnce(recorder, StreamsClosed, WebSocket, "two disposals of one session close one stream");
         }
     }
 
@@ -340,7 +340,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await RunWebSocketCallWithAnEmptyMessageBetweenTwoAudioMessagesAsync();
 
         // Assert
-        AssertTotal(recorder, FramesReceived, 2, WebSocket, "two binary messages carried audio; the empty one is not counted");
+        MeterAssert.Total(recorder, FramesReceived, 2, WebSocket, "two binary messages carried audio; the empty one is not counted");
     }
 
     [Fact]
@@ -353,7 +353,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await RunWebSocketCallWithAnEmptyMessageBetweenTwoAudioMessagesAsync();
 
         // Assert
-        AssertTotal(recorder, BytesReceived, 2 * CapturedPayloadLength, WebSocket, "the payload bytes of the two audio messages");
+        MeterAssert.Total(recorder, BytesReceived, 2 * CapturedPayloadLength, WebSocket, "the payload bytes of the two audio messages");
     }
 
     [Fact]
@@ -366,7 +366,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await RunWebSocketCallWhereTheConsumerWritesTwoFramesAsync();
 
         // Assert
-        AssertTotal(recorder, FramesSent, 2, WebSocket, "the consumer wrote two frames and both reached the client");
+        MeterAssert.Total(recorder, FramesSent, 2, WebSocket, "the consumer wrote two frames and both reached the client");
     }
 
     [Fact]
@@ -379,7 +379,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await RunWebSocketCallWhereTheConsumerWritesTwoFramesAsync();
 
         // Assert
-        AssertTotal(recorder, BytesSent, 2 * CapturedPayloadLength, WebSocket, "two writes of 320 audio bytes");
+        MeterAssert.Total(recorder, BytesSent, 2 * CapturedPayloadLength, WebSocket, "two writes of 320 audio bytes");
     }
 
     // ================================================================ WebSocket — latency
@@ -405,7 +405,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await call.WaitUntilReleasedAsync();
 
         // Assert
-        AssertLatency(recorder, expectedValues: 2, WebSocket);
+        MeterAssert.Latency(recorder, expectedValues: 2, WebSocket);
     }
 
     // ================================================================ WebSocket — transport failure
@@ -428,7 +428,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await call.WaitUntilReleasedAsync();
 
         // Assert
-        AssertCountedOnce(recorder, TransportFailures, WebSocket, "a reset under a live session is the transport failing");
+        MeterAssert.CountedOnce(recorder, TransportFailures, WebSocket, "a reset under a live session is the transport failing");
     }
 
     /// <summary>
@@ -449,7 +449,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await call.WaitUntilReleasedAsync();
 
         // Assert
-        AssertCountedOnce(recorder, TransportFailures, WebSocket, "a WebSocket that ends without its close frame ended abnormally");
+        MeterAssert.CountedOnce(recorder, TransportFailures, WebSocket, "a WebSocket that ends without its close frame ended abnormally");
     }
 
     /// <summary>
@@ -491,7 +491,7 @@ public sealed class AudioStreamMetricsWitnessTests
         await server.WhenRefusalReported.WaitAsync(ServedAudioCall.SignalTimeout);
 
         // Assert
-        AssertCountedOnce(recorder, ConnectionsRefused, transport == Transport.AudioSocket ? AudioSocket : WebSocket,
+        MeterAssert.CountedOnce(recorder, ConnectionsRefused, transport == Transport.AudioSocket ? AudioSocket : WebSocket,
             "one connection was refused at the limit");
     }
 
@@ -576,56 +576,62 @@ public sealed class AudioStreamMetricsWitnessTests
     // ================================================================ assertions
 
     /// <summary>
-    /// Exactly one measurement of <paramref name="instrument"/>, of value 1, carrying exactly the
-    /// <c>audio.transport</c> tag with <paramref name="transport"/>.
+    /// The assertions every witness ends on: what the meter recorded for one instrument, and its transport tag.
     /// </summary>
-    private static void AssertCountedOnce(AudioMeasurementRecorder recorder, string instrument, string transport, string because)
+    private static class MeterAssert
     {
-        var measurements = recorder.Of(instrument);
-        measurements.Should().ContainSingle(
-            "{0} — expected one measurement of {1}, but the meter recorded {2}", because, instrument, recorder.Describe());
-        if (measurements.Count == 1)
+        /// <summary>
+        /// Exactly one measurement of <paramref name="instrument"/>, of value 1, carrying exactly the
+        /// <c>audio.transport</c> tag with <paramref name="transport"/>.
+        /// </summary>
+        public static void CountedOnce(AudioMeasurementRecorder recorder, string instrument, string transport, string because)
         {
-            measurements[0].Value.Should().Be(1, because);
-            AssertTagged(measurements[0], transport);
+            var measurements = recorder.Of(instrument);
+            measurements.Should().ContainSingle(
+                "{0} — expected one measurement of {1}, but the meter recorded {2}", because, instrument, recorder.Describe());
+            if (measurements.Count == 1)
+            {
+                measurements[0].Value.Should().Be(1, because);
+                Tagged(measurements[0], transport);
+            }
         }
-    }
 
-    /// <summary>
-    /// The values of <paramref name="instrument"/> sum to <paramref name="expected"/>, and every one of its
-    /// measurements carries the <c>audio.transport</c> tag with <paramref name="transport"/>.
-    /// </summary>
-    private static void AssertTotal(AudioMeasurementRecorder recorder, string instrument, double expected, string transport, string because)
-    {
-        using var scope = new AssertionScope();
-        var measurements = recorder.Of(instrument);
-        recorder.Total(instrument).Should().Be(
-            expected, "{0} — the meter recorded {1}", because, recorder.Describe());
-        foreach (var measurement in measurements)
-            AssertTagged(measurement, transport);
-    }
-
-    private static void AssertLatency(AudioMeasurementRecorder recorder, int expectedValues, string transport)
-    {
-        using var scope = new AssertionScope();
-        var values = recorder.Of(FrameLatency);
-        values.Should().HaveCount(
-            expectedValues,
-            "one latency value is recorded per frame the consumer read, not per frame received; the meter recorded {0}",
-            recorder.Describe());
-        foreach (var value in values)
+        /// <summary>
+        /// The values of <paramref name="instrument"/> sum to <paramref name="expected"/>, and every one of its
+        /// measurements carries the <c>audio.transport</c> tag with <paramref name="transport"/>.
+        /// </summary>
+        public static void Total(AudioMeasurementRecorder recorder, string instrument, double expected, string transport, string because)
         {
-            value.Value.Should().BeGreaterThanOrEqualTo(0, "a frame is read after it was received");
-            AssertTagged(value, transport);
+            using var scope = new AssertionScope();
+            var measurements = recorder.Of(instrument);
+            recorder.Total(instrument).Should().Be(
+                expected, "{0} — the meter recorded {1}", because, recorder.Describe());
+            foreach (var measurement in measurements)
+                Tagged(measurement, transport);
         }
-    }
 
-    private static void AssertTagged(AudioMeasurement measurement, string transport)
-    {
-        measurement.Tags.Select(tag => tag.Key).Should().Equal(
-            [TransportTag],
-            "{0} carries exactly one tag, the transport", measurement.Instrument);
-        measurement.Tag(TransportTag).Should().Be(transport, "{0} came through {1}", measurement.Instrument, transport);
+        public static void Latency(AudioMeasurementRecorder recorder, int expectedValues, string transport)
+        {
+            using var scope = new AssertionScope();
+            var values = recorder.Of(FrameLatency);
+            values.Should().HaveCount(
+                expectedValues,
+                "one latency value is recorded per frame the consumer read, not per frame received; the meter recorded {0}",
+                recorder.Describe());
+            foreach (var value in values)
+            {
+                value.Value.Should().BeGreaterThanOrEqualTo(0, "a frame is read after it was received");
+                Tagged(value, transport);
+            }
+        }
+
+        public static void Tagged(AudioMeasurement measurement, string transport)
+        {
+            measurement.Tags.Select(tag => tag.Key).Should().Equal(
+                [TransportTag],
+                "{0} carries exactly one tag, the transport", measurement.Instrument);
+            measurement.Tag(TransportTag).Should().Be(transport, "{0} came through {1}", measurement.Instrument, transport);
+        }
     }
 
     // ================================================================ refusal helpers

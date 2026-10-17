@@ -17,8 +17,8 @@ namespace Verbara.Sdk.Ari.Tests.Audio;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every test here reads <c>audio.transport.failures</c>, which is process-wide and carries no tags,
-/// so the class runs in <see cref="AudioStreamMetricsGroup"/>, alone.
+/// Every test here reads <c>audio.transport.failures</c>, which is process-wide and tagged only with
+/// the transport, not the session, so the class runs in <see cref="AudioStreamMetricsGroup"/>, alone.
 /// </para>
 /// <para>
 /// The server-level tests drive a real loopback connection through the public server. The server

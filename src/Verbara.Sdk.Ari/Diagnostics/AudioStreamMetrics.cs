@@ -8,10 +8,26 @@ namespace Verbara.Sdk.Ari.Diagnostics;
 /// <para>
 /// Usage: <c>dotnet-counters monitor --process-id &lt;pid&gt; Verbara.Sdk.Ari.Audio</c>
 /// </para>
+/// <para>
+/// Every measurement carries one tag, <see cref="VerbaraSemanticConventions.Audio.Transport"/>
+/// (<c>audio.transport</c>), naming the transport the stream came through: <c>audiosocket</c> or
+/// <c>websocket</c>.
+/// </para>
 /// </summary>
 public static class AudioStreamMetrics
 {
     public static readonly Meter Meter = new("Verbara.Sdk.Ari.Audio", "1.0.0");
+
+    /// <summary>
+    /// The <c>audio.transport</c> tag of a measurement recorded for an AudioSocket connection. One cached
+    /// instance, so recording on the frame path boxes and allocates nothing.
+    /// </summary>
+    internal static readonly KeyValuePair<string, object?> AudioSocketTransport =
+        new(VerbaraSemanticConventions.Audio.Transport, "audiosocket");
+
+    /// <summary>The <c>audio.transport</c> tag of a measurement recorded for a WebSocket connection.</summary>
+    internal static readonly KeyValuePair<string, object?> WebSocketTransport =
+        new(VerbaraSemanticConventions.Audio.Transport, "websocket");
 
     // --- Stream lifecycle ---
 

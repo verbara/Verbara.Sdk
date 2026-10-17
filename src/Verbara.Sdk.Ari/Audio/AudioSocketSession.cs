@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.IO.Pipelines;
 using System.Text;
 using System.Threading.Channels;
@@ -20,13 +21,19 @@ internal static partial class AudioSocketSessionLog
 /// A single AudioSocket connection. Read pump parses frames via AudioSocketProtocol,
 /// audio frames are queued for consumer via Channel&lt;T&gt;.
 /// </summary>
+/// <remarks>
+/// Records the <c>Verbara.Sdk.Ari.Audio</c> instruments, each measurement tagged
+/// <c>audio.transport=audiosocket</c>: the stream opened at its first identification and closed at its one
+/// ending, the audio frames and payload bytes received and sent (empty audio counts as neither), the hangup
+/// and error frames, and the time from receipt to the consumer's read.
+/// </remarks>
 internal sealed class AudioSocketSession : IAudioStream
 {
     private readonly Stream _stream;
     private readonly Pipe _inputPipe;
     private readonly AudioStreamStateChannel _state;
     private readonly TaskCompletionSource<bool> _identified = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly Channel<ReadOnlyMemory<byte>> _audioInChannel;
+    private readonly Channel<ReceivedAudioFrame> _audioInChannel;
     private readonly CancellationTokenSource _cts = new();
     private readonly ILogger _logger;
     private Exception? _transportFailure;
@@ -79,7 +86,7 @@ internal sealed class AudioSocketSession : IAudioStream
             useSynchronizationContext: false);
 
         _inputPipe = new Pipe(pipeOptions);
-        _audioInChannel = Channel.CreateBounded<ReadOnlyMemory<byte>>(new BoundedChannelOptions(1000)
+        _audioInChannel = Channel.CreateBounded<ReceivedAudioFrame>(new BoundedChannelOptions(1000)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = true,
@@ -162,10 +169,20 @@ internal sealed class AudioSocketSession : IAudioStream
                             break;
 
                         case AudioFrameType.Audio:
-                            _audioInChannel.Writer.TryWrite(payload.ToArray());
+                            // Counted whether or not the session has identified itself yet: it was received
+                            // from Asterisk. An empty frame carries no audio, so it counts as neither, and
+                            // is still queued as it always was.
+                            if (!payload.IsEmpty)
+                            {
+                                AudioStreamMetrics.FramesReceived.Add(1, AudioStreamMetrics.AudioSocketTransport);
+                                AudioStreamMetrics.BytesReceived.Add(payload.Length, AudioStreamMetrics.AudioSocketTransport);
+                            }
+
+                            _audioInChannel.Writer.TryWrite(new ReceivedAudioFrame(payload.ToArray(), Stopwatch.GetTimestamp()));
                             break;
 
                         case AudioFrameType.Hangup:
+                            AudioStreamMetrics.HangupFrames.Add(1, AudioStreamMetrics.AudioSocketTransport);
                             _state.TryEnd(error: false);
                             _audioInChannel.Writer.TryComplete();
                             return;
@@ -173,6 +190,7 @@ internal sealed class AudioSocketSession : IAudioStream
                         case AudioFrameType.Error:
                             // Error and then Disconnected, in this one step: the disposal publishes the
                             // ending only when no one has, so a Disconnected left to it would be lost.
+                            AudioStreamMetrics.ErrorFrames.Add(1, AudioStreamMetrics.AudioSocketTransport);
                             _state.TryEnd(error: true);
                             _audioInChannel.Writer.TryComplete();
                             return;
@@ -211,7 +229,7 @@ internal sealed class AudioSocketSession : IAudioStream
             if (endsLive && failure is not null && Volatile.Read(ref _disposed) == 0)
             {
                 AudioSocketSessionLog.TransportFailed(_logger, failure, ChannelId);
-                AudioStreamMetrics.TransportFailures.Add(1);
+                AudioStreamMetrics.TransportFailures.Add(1, AudioStreamMetrics.AudioSocketTransport);
             }
 
             _audioInChannel.Writer.TryComplete();
@@ -239,6 +257,7 @@ internal sealed class AudioSocketSession : IAudioStream
                 return;
 
             ChannelId = id;
+            _state.RecordOpened(AudioStreamMetrics.AudioSocketTransport);
             _state.PublishConnected();
             _identified.TrySetResult(true);
             return;
@@ -256,7 +275,15 @@ internal sealed class AudioSocketSession : IAudioStream
         if (await _audioInChannel.Reader.WaitToReadAsync(cancellationToken)
             && _audioInChannel.Reader.TryRead(out var frame))
         {
-            return frame;
+            // Per frame of audio read, so an empty frame, which counted as no frame received, records none.
+            if (!frame.Payload.IsEmpty)
+            {
+                AudioStreamMetrics.FrameLatency.Record(
+                    Stopwatch.GetElapsedTime(frame.ReceivedTimestamp).TotalMilliseconds,
+                    AudioStreamMetrics.AudioSocketTransport);
+            }
+
+            return frame.Payload;
         }
         return ReadOnlyMemory<byte>.Empty;
     }
@@ -268,6 +295,14 @@ internal sealed class AudioSocketSession : IAudioStream
         AudioSocketProtocol.WriteFrame(writer, AudioFrameType.Audio, audioData.Span);
         await _stream.WriteAsync(writer.WrittenMemory, cancellationToken);
         await _stream.FlushAsync(cancellationToken);
+
+        // Counted once the frame reached the wire: its audio bytes, the header excluded, and no frame for
+        // a write that carried no audio.
+        if (!audioData.IsEmpty)
+        {
+            AudioStreamMetrics.FramesSent.Add(1, AudioStreamMetrics.AudioSocketTransport);
+            AudioStreamMetrics.BytesSent.Add(audioData.Length, AudioStreamMetrics.AudioSocketTransport);
+        }
     }
 
     private static string ParseUuid(ReadOnlySequence<byte> payload)
