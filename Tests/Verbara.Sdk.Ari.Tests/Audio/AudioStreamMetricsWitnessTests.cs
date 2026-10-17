@@ -495,6 +495,66 @@ public sealed class AudioStreamMetricsWitnessTests
             "one connection was refused at the limit");
     }
 
+    // ================================================================ the class doc's dotnet-counters sentence
+
+    [Theory]
+    [InlineData(Transport.AudioSocket)]
+    [InlineData(Transport.WebSocket)]
+    public async Task DotnetCountersMonitorVerbaraSdkAriAudio_ShouldSeeARealSessionsMeasurements_WhenSubscribedByTheMeterNameAlone(Transport transport)
+    {
+        // Arrange — what `dotnet-counters monitor ... Verbara.Sdk.Ari.Audio` asks for: every instrument of the
+        // meter with that name, none named one by one. The listener enables an instrument by its meter's name
+        // only, so an instrument published under any other meter name is never seen.
+        var seen = new System.Collections.Concurrent.ConcurrentQueue<(string Instrument, object? Transport)>();
+        using var listener = new System.Diagnostics.Metrics.MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (string.Equals(instrument.Meter.Name, "Verbara.Sdk.Ari.Audio", StringComparison.Ordinal))
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, _, tags, _) =>
+            seen.Enqueue((instrument.Name, TagValue(tags))));
+        listener.SetMeasurementEventCallback<double>((instrument, _, tags, _) =>
+            seen.Enqueue((instrument.Name, TagValue(tags))));
+        listener.Start();
+        var expectedTransport = transport == Transport.AudioSocket ? AudioSocket : WebSocket;
+
+        // Act — one real call, one audio frame received, ended by the far end
+        if (transport == Transport.AudioSocket)
+        {
+            await using var call = await AudioSocketCall.StartAsync();
+            await call.IdentifyAsync();
+            await call.SendAsync(AudioSocketCall.CapturedAudioFrame());
+            await call.SendAsync(AudioSocketCall.HangupFrame());
+            await call.WaitUntilReleasedAsync();
+        }
+        else
+        {
+            await using var call = await WebSocketCall.StartAsync();
+            await call.UpgradeAsync();
+            await call.SendBinaryAsync(CapturedPayload());
+            await call.SendCloseFrameAsync();
+            await call.WaitUntilReleasedAsync();
+        }
+
+        // Assert — the session's measurements reached a subscriber that named only the meter
+        var fromThisTransport = seen.Where(m => Equals(m.Transport, expectedTransport)).Select(m => m.Instrument).ToHashSet();
+        fromThisTransport.Should().Contain(
+            [StreamsOpened, FramesReceived, BytesReceived, StreamsClosed],
+            "a subscriber to the meter Verbara.Sdk.Ari.Audio by name sees what a real {0} session records", expectedTransport);
+    }
+
+    private static object? TagValue(ReadOnlySpan<KeyValuePair<string, object?>> tags)
+    {
+        foreach (var tag in tags)
+        {
+            if (string.Equals(tag.Key, TransportTag, StringComparison.Ordinal))
+                return tag.Value;
+        }
+
+        return null;
+    }
+
     // ================================================================ scenarios
 
     private static async Task RunAudioSocketCallWithAnEmptyFrameBetweenTwoAudioFramesAsync()
