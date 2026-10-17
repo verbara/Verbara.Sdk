@@ -27,7 +27,8 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
 
     /// <summary>
     /// Initializes a tracker on <paramref name="timeProvider"/>, so a test can give the tracker the same fake clock as
-    /// the session manager it follows. Nothing reads it yet: the tracker's timestamps still come from the wall clock.
+    /// the session manager it follows. The tracker stamps every agent's state changes and call endings with it, and
+    /// creates its <see cref="AgentSession"/>s on it.
     /// </summary>
     internal AgentSessionTracker(
         ICallSessionManager manager,
@@ -73,7 +74,7 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
     private partial void LogStateChangeSubscriberFaultOnSignal(Exception ex, string eventType);
 
     private AgentSession GetOrCreate(string agentId) =>
-        _agents.GetOrAdd(agentId, id => new AgentSession(id));
+        _agents.GetOrAdd(agentId, static (id, clock) => new AgentSession(id, clock), _timeProvider);
 
     private void TransitionState(AgentSession agent, AgentSessionState newState, string sessionId, string serverId)
     {
@@ -81,11 +82,12 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
         if (previous == newState)
             return;
 
+        var now = _timeProvider.GetUtcNow();
         agent.State = newState;
-        agent.StateChangedAt = DateTimeOffset.UtcNow;
+        agent.StateChangedAt = now;
 
         _stateChanges.OnNext(new AgentSessionStateChanged(
-            sessionId, serverId, DateTimeOffset.UtcNow,
+            sessionId, serverId, now,
             agent.AgentId, previous, newState));
     }
 
@@ -120,10 +122,31 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
             if (call is not null)
                 agent.TotalHoldTime += call.HoldTime;
 
-            agent.LastCallEndedAt = DateTimeOffset.UtcNow;
+            agent.LastCallEndedAt = _timeProvider.GetUtcNow();
+
+            // An ending a completed state reload reconciled was not observed: the session manager opens no wrap-up for
+            // it, so the agent goes Idle at once with no wrap-up time, instead of waiting in WrapUp for an event that
+            // never comes. The provenance is the ending's marker on the session.
+            if (call is not null && IsEndedByReload(call))
+            {
+                agent.CurrentCall = null;
+                agent.CurrentQueueName = null;
+                TransitionState(agent, AgentSessionState.Idle, evt.SessionId, evt.ServerId);
+                return;
+            }
+
             TransitionState(agent, AgentSessionState.WrapUp, evt.SessionId, evt.ServerId);
         }
     }
+
+    // The session manager's ending-provenance marker: the key and the one value it writes when a completed reload
+    // proved a call gone without observing its end. The reload tests pin both literals on both sides.
+    private const string EndingProvenanceKey = "cause";
+    private const string EndingProvenanceReload = "reload";
+
+    private static bool IsEndedByReload(CallSession call) =>
+        call.Metadata.TryGetValue(EndingProvenanceKey, out var cause)
+        && string.Equals(cause, EndingProvenanceReload, StringComparison.Ordinal);
 
     private void OnRingNoAnswer(CallRingNoAnswerEvent evt)
     {
@@ -142,7 +165,14 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
         var agent = GetOrCreate(evt.AgentId);
         lock (agent.SyncRoot)
         {
+            // Every wrap-up's time counts once. Only the close of the wrap-up of the call the agent is in wrap-up for
+            // (its last-ended call, which stays CurrentCall until the next connect) moves it to Idle: a close that
+            // arrives after the agent's next call connected, or for another call, leaves its state alone.
             agent.TotalWrapUpTime += evt.WrapUpDuration;
+            if (agent.State != AgentSessionState.WrapUp
+                || !string.Equals(agent.CurrentCall?.SessionId, evt.SessionId, StringComparison.Ordinal))
+                return;
+
             agent.CurrentCall = null;
             agent.CurrentQueueName = null;
             TransitionState(agent, AgentSessionState.Idle, evt.SessionId, evt.ServerId);

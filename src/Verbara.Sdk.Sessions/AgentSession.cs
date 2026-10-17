@@ -26,8 +26,10 @@ public sealed class AgentSession
         ? (TotalTalkTime + TotalHoldTime + TotalWrapUpTime) / CallsHandled
         : TimeSpan.Zero;
 
-    public TimeSpan IdleTime => State == AgentSessionState.Idle && LastCallEndedAt.HasValue
-        ? DateTimeOffset.UtcNow - LastCallEndedAt.Value
+    // Idle time counts from the instant the agent became Idle (the end of its wrap-up, not of its call), on the clock
+    // of the tracker that created the session.
+    public TimeSpan IdleTime => State == AgentSessionState.Idle && StateChangedAt.HasValue
+        ? _timeProvider.GetUtcNow() - StateChangedAt.Value
         : TimeSpan.Zero;
 
     internal readonly Lock SyncRoot = new();
@@ -40,13 +42,13 @@ public sealed class AgentSession
     }
 
     /// <summary>
-    /// Initializes a session on <paramref name="timeProvider"/>, the clock of the tracker that creates it. Nothing reads
-    /// it yet: <see cref="TrackedSince"/> and <see cref="IdleTime"/> still come from the wall clock.
+    /// Initializes a session on <paramref name="timeProvider"/>, the clock of the tracker that creates it:
+    /// <see cref="TrackedSince"/> and <see cref="IdleTime"/> are read from it.
     /// </summary>
     internal AgentSession(string agentId, TimeProvider timeProvider)
     {
         AgentId = agentId;
         _timeProvider = timeProvider;
-        TrackedSince = DateTimeOffset.UtcNow;
+        TrackedSince = timeProvider.GetUtcNow();
     }
 }
