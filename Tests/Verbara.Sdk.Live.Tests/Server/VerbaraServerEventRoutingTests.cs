@@ -377,12 +377,20 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
         _observer!.OnNext(new ConfbridgeJoinEvent
         {
             Conference = "300",
-            Channel = "PJSIP/2000-001"
+            Channel = "PJSIP/2000-001",
+            UniqueId = "1792103773.1"
+        });
+        _observer!.OnNext(new ConfbridgeJoinEvent
+        {
+            Conference = "300",
+            Channel = "PJSIP/3000-002",
+            UniqueId = "1792103775.5"
         });
 
         var room = _sut.MeetMe.GetRoom("300");
         room.Should().NotBeNull("a ConfBridge join opens the room in the MeetMe manager");
-        room!.UserCount.Should().Be(1);
+        room!.UserCount.Should().Be(2, "two channels joined one conference, both with user number 0");
+        room.Users["PJSIP/2000-001"].UniqueId.Should().Be("1792103773.1", "the arm passes the join's Uniqueid");
     }
 
     // ==========================================================================
@@ -399,7 +407,12 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
             Conference = "300",
             Channel = "PJSIP/2000-001"
         });
-        _sut.MeetMe.GetRoom("300").Should().NotBeNull("the join opened the room before the leave is routed");
+        _observer!.OnNext(new ConfbridgeJoinEvent
+        {
+            Conference = "300",
+            Channel = "PJSIP/3000-002"
+        });
+        (_sut.MeetMe.GetRoom("300")?.UserCount).Should().Be(2, "both joins were applied before the leave is routed");
 
         _observer!.OnNext(new ConfbridgeLeaveEvent
         {
@@ -407,7 +420,28 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
             Channel = "PJSIP/2000-001"
         });
 
-        _sut.MeetMe.GetRoom("300").Should().BeNull("room should be removed when last user leaves");
+        var room = _sut.MeetMe.GetRoom("300");
+        room.Should().NotBeNull("the other participant is still in the conference");
+        room!.Users.Keys.Should().BeEquivalentTo(["PJSIP/3000-002"], "the leave removes only the channel it names");
+    }
+
+    // ==========================================================================
+    // ConfbridgeEndEvent -> MeetMeManager
+    // ==========================================================================
+
+    [Fact]
+    public async Task EventObserver_ShouldRouteConfbridgeEndEvent_ToMeetMeManager()
+    {
+        var left = new List<string>();
+        _sut.MeetMe.UserLeft += (_, user) => left.Add(user.Channel);
+        await StartAndGetObserverAsync();
+        _observer!.OnNext(new ConfbridgeJoinEvent { Conference = "300", Channel = "PJSIP/2000-001" });
+        _observer!.OnNext(new ConfbridgeJoinEvent { Conference = "300", Channel = "PJSIP/3000-002" });
+
+        _observer!.OnNext(new ConfbridgeEndEvent { Conference = "300" });
+
+        _sut.MeetMe.GetRoom("300").Should().BeNull("the conference ended");
+        left.Should().BeEquivalentTo(["PJSIP/2000-001", "PJSIP/3000-002"], "each participant still held gets UserLeft once");
     }
 
     // ==========================================================================

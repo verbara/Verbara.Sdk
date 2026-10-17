@@ -163,12 +163,12 @@ images builds app_meetme. Log one event's `RawFields` from your own server befor
 ## `VerbaraServer.MeetMe`
 
 `VerbaraServer` no longer routes `MeetMeJoin` or `MeetMeLeave`. `VerbaraServer.MeetMe` is now fed by
-ConfBridge only (`ConfbridgeJoin` and `ConfbridgeLeave`). On an Asterisk that still runs app_meetme,
+ConfBridge only (`ConfbridgeJoin`, `ConfbridgeLeave` and `ConfbridgeEnd`). On an Asterisk that still runs app_meetme,
 its rooms no longer appear there; the raw events still reach your handlers, as above.
 
-Know one limitation before you rely on it for ConfBridge. Every ConfBridge participant is recorded
-as user number 0, so a room with two participants reports one user, and the first participant to
-leave removes the room. That behaviour predates 2.9.0 and is not changed by it.
+In 2.9.0 its ConfBridge participants are keyed by channel, so every caller counts and a room stays
+until its last participant leaves or the conference ends; see
+[Conference participants keyed by channel](conference-participants-migration.md).
 
 ## `DeepgramVoices.Helios` → `DeepgramVoices.HeliosLegacy`
 

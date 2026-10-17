@@ -85,10 +85,10 @@ public sealed class LiveObjectBaseSetFieldTests
     public void MeetMeRoom_UserCount_ShouldReflectUsersCollection()
     {
         var room = new MeetMeRoom { RoomNumber = "1000" };
-        room.Users.TryAdd(1, new MeetMeUser { UserNum = 1, Channel = "SIP/100" });
-        room.Users.TryAdd(2, new MeetMeUser { UserNum = 2, Channel = "SIP/200" });
+        room.Users.TryAdd("SIP/100-00000001", new MeetMeUser { UserNum = 0, Channel = "SIP/100-00000001" });
+        room.Users.TryAdd("SIP/200-00000002", new MeetMeUser { UserNum = 0, Channel = "SIP/200-00000002" });
 
-        room.UserCount.Should().Be(2);
+        room.UserCount.Should().Be(2, "two channels sharing ConfBridge user number 0 are two participants");
         room.RoomNumber.Should().Be("1000");
     }
 

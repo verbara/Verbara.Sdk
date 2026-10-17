@@ -65,6 +65,7 @@ public sealed class DocSnippetCompilationTests
             "README.md",
             "docs/README-technical.md",
             "docs/guides/asterisk-version-compatibility.md",
+            "docs/guides/conference-participants-migration.md",
             "docs/guides/high-load-tuning.md",
             "docs/guides/obsolete-ami-events-removal-migration.md",
             "docs/guides/session-store-backends.md",
