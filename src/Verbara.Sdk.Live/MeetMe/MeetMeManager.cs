@@ -133,12 +133,15 @@ public sealed class MeetMeManager
 
         foreach (var channel in room.Users.Keys)
         {
-            if (room.Users.TryRemove(channel, out var user))
+            if (!room.Users.TryRemove(channel, out var user))
             {
-                user.State = MeetMeUserState.Left;
-                MeetMeManagerLog.UserLeft(_logger, roomNumber, user.Channel, user.UserNum);
-                UserLeft?.Invoke(room, user);
+                // A leave already removed this participant and raised its UserLeft.
+                continue;
             }
+
+            user.State = MeetMeUserState.Left;
+            MeetMeManagerLog.UserLeft(_logger, roomNumber, user.Channel, user.UserNum);
+            UserLeft?.Invoke(room, user);
         }
 
         _rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(roomNumber, room));
