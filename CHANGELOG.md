@@ -4,11 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed — BREAKING: types of dead Asterisk modules are deprecated with `VSDK0005` (#436)
+### Changed — BREAKING: types of dead Asterisk modules are deprecated with `VSDK0005` (#436, #NNN)
 
-Forty-four types and one member are now `[Obsolete]` with diagnostic id `VSDK0005`, as a warning, never an error.
+Forty-nine types and one member are now `[Obsolete]` with diagnostic id `VSDK0005`, as a warning, never an error.
 Each reaches only an Asterisk module that is gone or deprecated upstream, a module its publisher discontinued, or a
-wire name Asterisk renamed or removed in version 12:
+wire name Asterisk renamed or removed in version 10 or 12:
 
 - **chan_sip** (removed in Asterisk 21): `SipPeersAction`, `SipShowPeerAction`, `SipShowRegistryAction`,
   `SipNotifyAction`, `SipShowPeerResponse`, `ChannelReloadEvent`.
@@ -22,8 +22,9 @@ wire name Asterisk renamed or removed in version 12:
 - **Zaptel action names** (renamed `DAHDI*` in Asterisk 1.6): the seven `Zap*` actions.
 - **chan_agent and app_setcdruserfield**: `AgentCallbackLoginAction`, `AgentCallbackLoginEvent`,
   `AgentCallbackLogoffEvent`, `SetCdrUserFieldAction`.
-- **Event names Asterisk 12 renamed or removed**: `QueueMemberPausedEvent`, `MusicOnHoldEvent`, `FaxReceivedEvent`,
-  `DtmfEvent`, `TransferEvent`, `ChannelUpdateEvent`, `JabberEventEvent`.
+- **Event names Asterisk 10 or 12 renamed or removed**: `QueueMemberPausedEvent`, `MusicOnHoldEvent`,
+  `FaxReceivedEvent`, `DtmfEvent`, `TransferEvent`, `ChannelUpdateEvent`, `JabberEventEvent`, `AgiExecEvent`,
+  `AsyncAgiEvent`, `SendFaxStatusEvent`, `BridgeExecEvent`, `ModuleLoadReportEvent`.
 
 Nothing changes at run time: every marked action is still sent, every marked response and event is still parsed,
 and each wire name maps to the same type as in 2.8.0. Only the compiler output changes. A consumer that builds with
@@ -157,8 +158,8 @@ reads `null`, as the numeric members already did; no supported Asterisk sends on
 member `null`. Members whose wire is already `0`/`1` or `true`/`false` (queue member `Paused` and `Ringinuse`,
 `MailboxStatusResponse.Waiting`, the PJSIP endpoint booleans, `ShutdownEvent.Restart`) read as before. On an
 Asterisk 20 built with chan_sip, the 5 Y/N members of `SipShowPeerResponse` and 4 `PeerEntryEvent` members
-(`ForceRport`, `VideoSupport`, `TextSupport`, `Acl`) also change reading. `PeerEntryEvent` is still marked obsolete
-in this release until the obsolete-member removal lands; its `Dynamic` and `Trunk` readings are fixed regardless. A
+(`ForceRport`, `VideoSupport`, `TextSupport`, `Acl`) also change reading. `PeerEntryEvent` is not obsolete
+(see its entry above); its `Dynamic` and `Trunk` readings are fixed. A
 consumer that branched on `false` for one of these members now takes the other branch.
 
 ### Added: `AmiBoolean.Parse` reads a yes/no value the way Asterisk writes it (#424)
