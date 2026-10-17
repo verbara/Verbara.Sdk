@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed — BREAKING: the obsolete AMI event types, `LegacyEventAdapter` and `DeepgramVoices.Helios` are removed (#NNN)
+### Changed — BREAKING: the obsolete AMI event types, `LegacyEventAdapter` and `DeepgramVoices.Helios` are removed (#432)
 
 Twenty-six AMI event types that had been marked `[Obsolete]` are removed from `Verbara.Sdk.Ami`: `MeetMeEndEvent`,
 `MeetMeJoinEvent`, `MeetMeLeaveEvent`, `MeetMeMuteEvent`, `MeetMeStopTalkingEvent`, `MeetMeTalkingEvent`,
@@ -21,7 +21,7 @@ fails with `TypeLoadException` when it loads one. Every `Verbara.Sdk.*` package 
 and a recipe for an Asterisk that still sends one of these events are in
 [the migration guide](docs/guides/obsolete-ami-events-removal-migration.md).
 
-### Changed: `PeerEntryEvent` is no longer obsolete (#NNN)
+### Changed: `PeerEntryEvent` is no longer obsolete (#432)
 
 `IAXpeerlist` and `IAXpeers` (chan_iax2) still answer with `Event: PeerEntry` on Asterisk 20, 22, 23 and 24.0.0-rc2,
 so `PeerEntryEvent` stays and loses its `[Obsolete]` mark. A `#pragma warning disable CS0618` kept around it can be
