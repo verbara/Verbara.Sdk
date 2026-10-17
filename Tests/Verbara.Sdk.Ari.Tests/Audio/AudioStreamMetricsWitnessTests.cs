@@ -122,6 +122,57 @@ public sealed class AudioStreamMetricsWitnessTests
             recorder.Describe());
     }
 
+    [Fact]
+    public async Task AudioSocketStreams_ShouldCountOneOpenedAndOneClosedWithoutAnnouncing_WhenTheStopBeginsBeforeRegistration()
+    {
+        // Arrange — the server's stop begins inside the window between the session opening (identified) and
+        // its registration, which the server reads as a refusal
+        using var recorder = new AudioMeasurementRecorder(StreamsOpened, StreamsClosed, ConnectionsRefused);
+        await using var call = await AudioSocketCall.StartAsync();
+        var stopBegun = StartStopInTheRegistrationWindow(call.AudioSocketServer.StopAsync, hook => call.AudioSocketServer.BeforeRegistration = hook);
+
+        // Act
+        await call.SendAsync(Verbara.Sdk.TestInfrastructure.Wire.AudioSocketWireCapture.IdentificationFrame());
+        var stop = await stopBegun.WaitAsync(ServedAudioCall.SignalTimeout);
+        await stop.WaitAsync(ServedAudioCall.SignalTimeout);
+        await call.WaitUntilReleasedAsync();
+
+        // Assert
+        using (new AssertionScope())
+        {
+            call.WasAnnounced.Should().BeFalse("the stop began before the server announced the stream");
+            MeterAssert.CountedOnce(recorder, StreamsOpened, AudioSocket, "the session opened when it identified itself");
+            MeterAssert.CountedOnce(recorder, StreamsClosed, AudioSocket, "the opened session was closed by the stopping server");
+            recorder.Of(ConnectionsRefused).Should().BeEmpty("the server was stopping, not full");
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AudioSocketProtocolFrames_ShouldCountTheFrameButNoStream_WhenItArrivesBeforeTheIdentificationFrame(bool hangup)
+    {
+        // Arrange
+        var counted = hangup ? HangupFrames : ErrorFrames;
+        var other = hangup ? ErrorFrames : HangupFrames;
+        using var recorder = new AudioMeasurementRecorder(HangupFrames, ErrorFrames, StreamsOpened, StreamsClosed);
+        await using var call = await AudioSocketCall.StartAsync();
+
+        // Act — the frame arrives first, and ends the connection before any identification
+        await call.SendAsync(hangup ? AudioSocketCall.HangupFrame() : AudioSocketCall.ErrorFrame());
+        await call.WaitUntilReleasedAsync();
+
+        // Assert
+        using (new AssertionScope())
+        {
+            call.WasAnnounced.Should().BeFalse("the connection never identified itself");
+            MeterAssert.CountedOnce(recorder, counted, AudioSocket, "the frame was received from Asterisk, identified or not");
+            recorder.Of(other).Should().BeEmpty("only one protocol frame arrived");
+            recorder.Of(StreamsOpened).Should().BeEmpty("a connection that never identified never opened");
+            recorder.Of(StreamsClosed).Should().BeEmpty("a stream that never opened is never closed");
+        }
+    }
+
     // ================================================================ AudioSocket — data
 
     [Fact]
@@ -200,6 +251,32 @@ public sealed class AudioStreamMetricsWitnessTests
             "two writes of 320 audio bytes; the three-byte AudioSocket header is not audio");
     }
 
+    [Fact]
+    public async Task AudioSocketFramesSent_ShouldCountNeitherFrameNorBytes_WhenTheConsumerWritesAnEmptyFrameBetweenTwoAudioFrames()
+    {
+        // Arrange
+        using var recorder = new AudioMeasurementRecorder(FramesSent, BytesSent);
+        await using var call = await AudioSocketCall.StartAsync();
+        var stream = await call.IdentifyAsync();
+
+        // Act
+        await stream.WriteFrameAsync(CapturedPayload());
+        await stream.WriteFrameAsync(ReadOnlyMemory<byte>.Empty);
+        await stream.WriteFrameAsync(CapturedPayload());
+        var received = await call.ReceiveAsync(2 * (3 + CapturedPayloadLength) + 3);
+        await call.SendAsync(AudioSocketCall.HangupFrame());
+        await call.WaitUntilReleasedAsync();
+
+        // Assert
+        using (new AssertionScope())
+        {
+            received.Length.Should().Be(2 * (3 + CapturedPayloadLength) + 3,
+                "all three writes reached the far end, the empty one as a header-only frame");
+            MeterAssert.Total(recorder, FramesSent, 2, AudioSocket, "the empty write carried no audio and is not a frame sent");
+            MeterAssert.Total(recorder, BytesSent, 2 * CapturedPayloadLength, AudioSocket, "only the two audio payloads are bytes sent");
+        }
+    }
+
     // ================================================================ AudioSocket — protocol frames
 
     [Fact]
@@ -268,6 +345,33 @@ public sealed class AudioStreamMetricsWitnessTests
         MeterAssert.Latency(recorder, expectedValues: 2, AudioSocket);
     }
 
+    [Fact]
+    public async Task AudioSocketFrameLatency_ShouldRecordNoValueForTheEmptyFrame_WhenTheConsumerReadsPastIt()
+    {
+        // Arrange — an audio frame, an empty one, an audio frame
+        using var recorder = new AudioMeasurementRecorder(FrameLatency);
+        await using var call = await AudioSocketCall.StartAsync();
+        var stream = await call.IdentifyAsync();
+        await call.SendAsync(AudioSocketCall.CapturedAudioFrame());
+        await call.SendAsync(AudioSocketCall.EmptyAudioFrame());
+        await call.SendAsync(AudioSocketCall.CapturedAudioFrame());
+
+        // Act — the consumer reads all three
+        var lengths = new List<int>();
+        for (var i = 0; i < 3; i++)
+            lengths.Add((await stream.ReadFrameAsync().AsTask().WaitAsync(ServedAudioCall.SignalTimeout)).Length);
+
+        await call.SendAsync(AudioSocketCall.HangupFrame());
+        await call.WaitUntilReleasedAsync();
+
+        // Assert
+        using (new AssertionScope())
+        {
+            lengths.Should().Equal([CapturedPayloadLength, 0, CapturedPayloadLength], "the empty frame is still queued and read");
+            MeterAssert.Latency(recorder, expectedValues: 2, AudioSocket);
+        }
+    }
+
     // ================================================================ AudioSocket — internal instruments
 
     [Fact]
@@ -328,6 +432,31 @@ public sealed class AudioStreamMetricsWitnessTests
         }
     }
 
+    [Fact]
+    public async Task WebSocketStreams_ShouldCountOneOpenedAndOneClosedWithoutAnnouncing_WhenTheStopBeginsBeforeRegistration()
+    {
+        // Arrange — the server's stop begins inside the window between the session starting (past its
+        // upgrade) and its registration, which the server reads as a refusal
+        using var recorder = new AudioMeasurementRecorder(StreamsOpened, StreamsClosed, ConnectionsRefused);
+        await using var call = await WebSocketCall.StartAsync();
+        var stopBegun = StartStopInTheRegistrationWindow(call.WebSocketServer.StopAsync, hook => call.WebSocketServer.BeforeRegistration = hook);
+
+        // Act
+        await call.SendUpgradeAsync();
+        var stop = await stopBegun.WaitAsync(ServedAudioCall.SignalTimeout);
+        await stop.WaitAsync(ServedAudioCall.SignalTimeout);
+        await call.WaitUntilReleasedAsync();
+
+        // Assert
+        using (new AssertionScope())
+        {
+            call.WasAnnounced.Should().BeFalse("the stop began before the server announced the stream");
+            MeterAssert.CountedOnce(recorder, StreamsOpened, WebSocket, "the session started right after the upgrade");
+            MeterAssert.CountedOnce(recorder, StreamsClosed, WebSocket, "the started session was closed by the stopping server");
+            recorder.Of(ConnectionsRefused).Should().BeEmpty("the server was stopping, not full");
+        }
+    }
+
     // ================================================================ WebSocket — data
 
     [Fact]
@@ -380,6 +509,33 @@ public sealed class AudioStreamMetricsWitnessTests
 
         // Assert
         MeterAssert.Total(recorder, BytesSent, 2 * CapturedPayloadLength, WebSocket, "two writes of 320 audio bytes");
+    }
+
+    [Fact]
+    public async Task WebSocketFramesSent_ShouldCountNeitherFrameNorBytes_WhenTheConsumerWritesAnEmptyFrameBetweenTwoAudioFrames()
+    {
+        // Arrange
+        using var recorder = new AudioMeasurementRecorder(FramesSent, BytesSent);
+        await using var call = await WebSocketCall.StartAsync();
+        var stream = await call.UpgradeAsync();
+
+        // Act
+        await stream.WriteFrameAsync(CapturedPayload());
+        await stream.WriteFrameAsync(ReadOnlyMemory<byte>.Empty);
+        await stream.WriteFrameAsync(CapturedPayload());
+        var lengths = new List<int>();
+        for (var i = 0; i < 3; i++)
+            lengths.Add((await call.ReceiveBinaryAsync()).Length);
+        await call.SendCloseFrameAsync();
+        await call.WaitUntilReleasedAsync();
+
+        // Assert
+        using (new AssertionScope())
+        {
+            lengths.Should().Equal([CapturedPayloadLength, 0, CapturedPayloadLength], "all three writes reached the client, the empty one as an empty message");
+            MeterAssert.Total(recorder, FramesSent, 2, WebSocket, "the empty write carried no audio and is not a frame sent");
+            MeterAssert.Total(recorder, BytesSent, 2 * CapturedPayloadLength, WebSocket, "only the two audio payloads are bytes sent");
+        }
     }
 
     // ================================================================ WebSocket — latency
@@ -471,6 +627,46 @@ public sealed class AudioStreamMetricsWitnessTests
 
         // Assert
         recorder.Of(TransportFailures).Should().BeEmpty("a close frame is the orderly ending, not a transport failure");
+    }
+
+    /// <summary>
+    /// A <b>zero</b> assertion, meaningful only alongside the RST and FIN witnesses above, which show the same
+    /// instrument counting: the owner's own teardown of a live session is not a transport failure.
+    /// </summary>
+    [Fact]
+    public async Task WebSocketTransportFailures_ShouldCountNothing_WhenTheConsumerDisposesALiveSession()
+    {
+        // Arrange
+        using var recorder = new AudioMeasurementRecorder(TransportFailures);
+        await using var call = await WebSocketCall.StartAsync();
+        var stream = await call.UpgradeAsync();
+
+        // Act
+        await stream.DisposeAsync().AsTask().WaitAsync(ServedAudioCall.SignalTimeout);
+        await call.WaitUntilReleasedAsync();
+
+        // Assert
+        recorder.Of(TransportFailures).Should().BeEmpty("the consumer ended the session; its transport did not fail");
+    }
+
+    /// <summary>
+    /// A <b>zero</b> assertion, meaningful only alongside the RST and FIN witnesses above: a server stop that
+    /// disposes a live session is not a transport failure.
+    /// </summary>
+    [Fact]
+    public async Task WebSocketTransportFailures_ShouldCountNothing_WhenTheServerStopsWithALiveSession()
+    {
+        // Arrange
+        using var recorder = new AudioMeasurementRecorder(TransportFailures);
+        await using var call = await WebSocketCall.StartAsync();
+        await call.UpgradeAsync();
+
+        // Act
+        await call.StopServerAsync().WaitAsync(ServedAudioCall.SignalTimeout);
+        await call.WaitUntilReleasedAsync();
+
+        // Assert
+        recorder.Of(TransportFailures).Should().BeEmpty("the stopping server ended the session; its transport did not fail");
     }
 
     // ================================================================ both — refusal
@@ -632,6 +828,24 @@ public sealed class AudioStreamMetricsWitnessTests
 
     /// <summary>The captured audio frame's payload, its header removed.</summary>
     private static byte[] CapturedPayload() => AudioSocketCall.CapturedAudioFrame()[3..];
+
+    /// <summary>
+    /// Installs a one-shot registration hook that begins the server's stop on the connection's handler, inside
+    /// the window between the session opening and its registration. Returns the stop as it was begun, without
+    /// blocking the handler on it.
+    /// </summary>
+    private static Task<Task> StartStopInTheRegistrationWindow(
+        Func<CancellationToken, ValueTask> stopAsync, Action<Action> setHook)
+    {
+        var stopBegun = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var once = 0;
+        setHook(() =>
+        {
+            if (Interlocked.Exchange(ref once, 1) == 0)
+                stopBegun.TrySetResult(stopAsync(CancellationToken.None).AsTask());
+        });
+        return stopBegun.Task;
+    }
 
     // ================================================================ assertions
 

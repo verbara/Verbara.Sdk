@@ -264,6 +264,16 @@ internal sealed class WebSocketCall : ServedAudioCall
     /// <summary>Sends the upgrade, reads the 101, and waits until the server announces the stream.</summary>
     public async Task<IAudioStream> UpgradeAsync()
     {
+        await SendUpgradeAsync();
+        return await WaitAnnouncedAsync();
+    }
+
+    /// <summary>
+    /// Sends the upgrade and reads the 101, without waiting for an announcement: the server starts the session
+    /// right after the 101, whether or not it goes on to announce it.
+    /// </summary>
+    public async Task SendUpgradeAsync()
+    {
         var request =
             $"GET /ws/{ChannelId} HTTP/1.1\r\n" +
             "Host: 127.0.0.1\r\n" +
@@ -291,7 +301,6 @@ internal sealed class WebSocketCall : ServedAudioCall
         _client = WebSocket.CreateFromStream(
             new NetworkStream(Peer, ownsSocket: false),
             new WebSocketCreationOptions { IsServer = false, KeepAliveInterval = TimeSpan.Zero });
-        return await WaitAnnouncedAsync();
     }
 
     /// <summary>Sends one binary message.</summary>
