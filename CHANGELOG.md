@@ -81,7 +81,7 @@ as before.
 Raised once, after the change, when a participant's `Muted` or `Talking` changes. A repeated value, a join and an
 event for a participant that is not held raise nothing.
 
-### Fixed: a server releases its instruments when its ARI client throws on disposal (#NNN)
+### Fixed: a server releases its instruments when its ARI client throws on disposal (#441)
 
 `VerbaraServer.DisposeAsync` disposed the ARI client set through `SetAriClient` before the server's own meter, with
 nothing around it, so an ARI client that threw on disposal left the meter undisposed and its eight instruments
