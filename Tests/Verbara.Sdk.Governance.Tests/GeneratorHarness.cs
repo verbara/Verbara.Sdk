@@ -18,13 +18,14 @@ namespace Verbara.Sdk.Governance.Tests;
 /// </para>
 /// <para>
 /// <see cref="Stubs"/> declares, with the same names and namespaces, the few SDK types the generated code binds:
-/// <c>ManagerEvent</c>, <c>VerbaraMappingAttribute</c>, <c>AmiMessage</c> and <c>AmiBoolean</c>. The compilation
+/// <c>ManagerEvent</c>, <c>ManagerAction</c>, <c>ManagerResponse</c>, <c>IHasExtraFields</c>,
+/// <c>VerbaraMappingAttribute</c>, <c>AmiMessage</c> and <c>AmiBoolean</c>. The compilation
 /// references the framework assemblies of the running runtime only, so nothing of the SDK itself leaks into it.
 /// </para>
 /// </remarks>
 internal static class GeneratorHarness
 {
-    /// <summary>The SDK types the generated registry and deserializer bind, declared as the SDK declares them.</summary>
+    /// <summary>The SDK types the generated serializer, registry and deserializers bind, declared as the SDK declares them.</summary>
     public const string Stubs = """
         #nullable enable
         using System;
@@ -51,6 +52,24 @@ internal static class GeneratorHarness
                 public string? EventType { get; set; }
                 public IReadOnlyDictionary<string, string>? RawFields { get; set; }
             }
+
+            public abstract class ManagerAction
+            {
+                public string? ActionId { get; set; }
+            }
+
+            public class ManagerResponse
+            {
+                public string? ActionId { get; set; }
+                public string? Response { get; set; }
+                public string? Message { get; set; }
+                public IReadOnlyDictionary<string, string>? RawFields { get; set; }
+            }
+
+            public interface IHasExtraFields
+            {
+                IEnumerable<KeyValuePair<string, string>> GetExtraFields();
+            }
         }
 
         namespace Verbara.Sdk.Ami
@@ -72,6 +91,10 @@ internal static class GeneratorHarness
                 public string? this[string key] => _fields.TryGetValue(key, out var value) ? value : null;
 
                 public string? EventType => this["Event"];
+
+                public string? ResponseStatus => this["Response"];
+
+                public string? ActionId => this["ActionID"];
 
                 public IReadOnlyDictionary<string, string> Fields => _fields;
             }

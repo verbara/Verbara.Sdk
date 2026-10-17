@@ -171,6 +171,7 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
     // QueueMemberPausedEvent -> QueueManager
     // ==========================================================================
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public async Task EventObserver_ShouldRouteQueueMemberPausedEvent_ToQueueManager()
     {
@@ -189,6 +190,35 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
         member.Paused.Should().BeTrue();
         member.PausedReason.Should().Be("lunch break");
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EventObserver_ShouldShowTheMembersPause_WhenQueueMemberPausedArrivesAsAsterisk11SendsIt(bool paused)
+    {
+        // Asterisk 11 named the member by Location, not Interface; no supported version sends this event, and the
+        // queue member must still show what it carried until the type leaves.
+        await StartAndGetObserverAsync();
+        CreateQueueWithMember("support", "SIP/2000");
+        _sut.Queues.GetByName("support")!.Members["SIP/2000"].Paused = !paused;
+
+        _observer!.OnNext(new QueueMemberPausedEvent
+        {
+            Queue = "support",
+            Location = "SIP/2000",
+            MemberName = "Agent 2000",
+            Paused = paused,
+            Reason = "lunch",
+        });
+
+        var member = _sut.Queues.GetByName("support")!.Members["SIP/2000"];
+        using (new AssertionScope())
+        {
+            member.Paused.Should().Be(paused, "QueueMemberPaused carried Paused = {0}", paused);
+            member.PausedReason.Should().Be("lunch");
+        }
+    }
+#pragma warning restore VSDK0005
 
     // ==========================================================================
     // QueueMemberPauseEvent -> QueueManager

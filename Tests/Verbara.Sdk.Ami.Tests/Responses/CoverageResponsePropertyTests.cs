@@ -29,6 +29,7 @@ public sealed class CoverageResponsePropertyTests
         response.Waiting.Should().BeTrue();
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void SipShowPeerResponse_ShouldHaveKeyProperties()
     {
@@ -115,6 +116,7 @@ public sealed class CoverageResponsePropertyTests
         response.SipT38MaxDtgrm.Should().Be(400);
         response.Description.Should().Be("Test phone");
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public void ExtensionStateResponse_ShouldHaveProperties()
@@ -141,10 +143,12 @@ public sealed class CoverageResponsePropertyTests
         response.PortsLicensed.Should().Be(4);
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void SkypeLicenseStatusResponse_ShouldHaveProperties()
     {
         var response = new SkypeLicenseStatusResponse { CallsLicensed = 10 };
         response.CallsLicensed.Should().Be(10);
     }
+#pragma warning restore VSDK0005
 }

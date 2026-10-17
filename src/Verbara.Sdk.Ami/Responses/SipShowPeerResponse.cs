@@ -3,6 +3,10 @@ using Verbara.Sdk.Attributes;
 
 namespace Verbara.Sdk.Ami.Responses;
 
+[Obsolete(
+    "chan_sip was removed in Asterisk 21 (deprecated since 17); no supported Asterisk answers SIPshowpeer. Use PJSipShowEndpointAction and its EndpointDetail events. This type is removed in Verbara.Sdk 2.10.0.",
+    DiagnosticId = "VSDK0005",
+    UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/obsolete-ami-events-removal-migration.md#vsdk0005")]
 [VerbaraMapping("SipShowPeer")]
 public sealed class SipShowPeerResponse : ManagerResponse
 {

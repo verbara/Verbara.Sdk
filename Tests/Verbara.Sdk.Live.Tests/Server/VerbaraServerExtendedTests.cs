@@ -275,6 +275,7 @@ public sealed class VerbaraServerExtendedTests : IAsyncLifetime
         _sut.Queues.GetByName("sales")!.MemberCount.Should().Be(0);
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public async Task EventObserver_ShouldRouteQueueMemberPausedEvent()
     {
@@ -293,6 +294,7 @@ public sealed class VerbaraServerExtendedTests : IAsyncLifetime
         member.Paused.Should().BeTrue();
         member.PausedReason.Should().Be("Break");
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public async Task EventObserver_ShouldRouteQueueMemberStatusEvent()

@@ -153,6 +153,7 @@ public sealed class EventDeserializerPipelineTests
         typed.CauseTxt.Should().Be("Normal Clearing");
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void Deserialize_ShouldHandleIntermediateBaseWithMixedTypes()
     {
@@ -192,6 +193,7 @@ public sealed class EventDeserializerPipelineTests
         // Leaf property
         typed.Reason.Should().Be("Break");
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public void Deserialize_CdrEvent_ShouldMapAll18Fields()

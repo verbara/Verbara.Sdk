@@ -1090,6 +1090,7 @@ public sealed class VerbaraServer : IVerbaraServer
                         qmr.Location ?? qmr.Interface ?? "");
                     break;
 
+#pragma warning disable VSDK0005 // Asterisk 11 and earlier send QueueMemberPaused; no supported version does
                 case QueueMemberPausedEvent qmp:
                     server.Queues.OnMemberPaused(
                         qmp.Queue ?? "",
@@ -1097,6 +1098,7 @@ public sealed class VerbaraServer : IVerbaraServer
                         qmp.Paused ?? false,
                         qmp.Reason);
                     break;
+#pragma warning restore VSDK0005
 
                 case QueueMemberStatusEvent qms:
                     server.Queues.OnMemberStatusChanged(

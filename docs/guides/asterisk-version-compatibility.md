@@ -39,6 +39,8 @@ The 26 legacy event types this section used to list — app_meetme, Monitor, the
 
 An event that no longer has a typed class still arrives, as a `ManagerEvent` (see [Fallback Behavior](#fallback-behavior)).
 
+The actions, responses and events of chan_sip, res_monitor, app_meetme, Skype for Asterisk, the Zaptel action names, chan_agent's callback login, app_setcdruserfield and the event names Asterisk 12 renamed or removed are deprecated in 2.9.0 under the `VSDK0005` warning and removed in 2.10.0: see [VSDK0005](obsolete-ami-events-removal-migration.md#vsdk0005).
+
 ## ARI Event Coverage by Version
 
 ### Events Available Since Asterisk 12+

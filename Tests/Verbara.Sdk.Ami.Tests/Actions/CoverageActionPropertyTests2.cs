@@ -103,12 +103,14 @@ public sealed class CoverageActionPropertyTests2
         action.Direction.Should().Be("both");
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void PauseMonitorAction_ShouldHaveProperties()
     {
         var action = new PauseMonitorAction { Channel = "SIP/100" };
         action.Channel.Should().Be("SIP/100");
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public void PJSIPNotifyAction_ShouldHaveProperties()
@@ -159,6 +161,7 @@ public sealed class CoverageActionPropertyTests2
         action.Caller.Should().Be("SIP/100-001");
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void SetCdrUserFieldAction_ShouldHaveProperties()
     {
@@ -195,6 +198,7 @@ public sealed class CoverageActionPropertyTests2
         var action = new UnpauseMonitorAction { Channel = "SIP/100" };
         action.Channel.Should().Be("SIP/100");
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public void VoicemailBoxSummaryAction_ShouldHaveProperties()
@@ -246,6 +250,7 @@ public sealed class CoverageActionPropertyTests2
         action.ID.Should().Be("msg001");
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void SkypeAccountPropertyAction_ShouldHaveProperties()
     {
@@ -330,4 +335,5 @@ public sealed class CoverageActionPropertyTests2
         var action = new ZapTransferAction { ZapChannel = 1 };
         action.ZapChannel.Should().Be(1);
     }
+#pragma warning restore VSDK0005
 }
