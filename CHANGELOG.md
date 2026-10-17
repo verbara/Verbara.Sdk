@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: the audio sessions record the audio meter's instruments (#435)
+
+The `Verbara.Sdk.Ari.Audio` meter published ten instruments in `AudioStreamMetrics` and the sessions recorded none
+of them, so a dashboard watching the meter saw nothing. `AudioSocketSession` and `WebSocketAudioSession` now
+record `audio.streams.opened` and `audio.streams.closed` once per stream (a connection that never identifies or is
+never upgraded counts neither), `audio.frames.received`/`audio.bytes.received` and `audio.frames.sent`/
+`audio.bytes.sent` for non-empty audio payloads (headers excluded), and `audio.frame.latency` per frame the
+consumer reads. `audio.hangup.frames` and `audio.error.frames` are AudioSocket frames and are recorded by the
+AudioSocket session only; a chan_websocket control message is not counted there. A WebSocket session that ends
+without a close frame, or on a reset, now logs a Warning and counts `audio.transport.failures`, as the AudioSocket
+session already did. A connection the server closes because its stop began before announcing it counts one
+opened and one closed stream.
+
+### Fixed — BREAKING: `AudioStreamMetrics.BufferUnderruns` is obsolete with `VSDK0003` (#435)
+
+`audio.buffer.underruns` describes a write pump the SDK does not have: audio goes out when the caller writes it,
+so nothing ever recorded it. The field is now `[Obsolete]` with diagnostic id `VSDK0003`. A consumer that builds
+with `TreatWarningsAsErrors` and reads the field by symbol gets `error VSDK0003`, and can silence exactly this
+with `<NoWarn>VSDK0003</NoWarn>`. Nothing is removed: the instrument is still published on the meter, so an
+exporter that subscribes by meter name is unaffected, and a binary built against an earlier release that reads the field still runs (checked against 2.6.0).
+
+### Added: an `audio.transport` tag on every audio meter measurement (#435)
+
+Every `Verbara.Sdk.Ari.Audio` measurement now carries `audio.transport` with value `audiosocket` or `websocket`,
+declared as `VerbaraSemanticConventions.Audio.Transport`. This includes the two instruments that already emitted,
+`audio.transport.failures` and `audio.connections.refused`: their series gain the tag, so a dashboard or alert
+that matches them by an exact label set must add it. `audio.transport.failures` also counts WebSocket sessions
+now, and its description says so.
+
 ### Fixed — BREAKING: a conference participant shows whether it is muted and talking (#434)
 
 `MeetMeUser.Muted` and `MeetMeUser.Talking` in `VerbaraServer.MeetMe` now follow what Asterisk reports: the

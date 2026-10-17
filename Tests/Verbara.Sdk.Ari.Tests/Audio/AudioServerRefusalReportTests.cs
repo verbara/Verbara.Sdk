@@ -18,7 +18,7 @@ namespace Verbara.Sdk.Ari.Tests.Audio;
 /// <remarks>
 /// <para>
 /// Every test here reads instruments of the <c>Verbara.Sdk.Ari.Audio</c> meter, which are process-wide
-/// and carry no tags, so the class runs in <see cref="AudioStreamMetricsGroup"/>, alone.
+/// and tagged only with the transport, not the session, so the class runs in <see cref="AudioStreamMetricsGroup"/>, alone.
 /// </para>
 /// <para>
 /// No wait is a delay. A refused client is read to its end, which proves the server closed it; the

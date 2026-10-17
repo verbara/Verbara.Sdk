@@ -142,6 +142,16 @@ public static class VerbaraSemanticConventions
         public const string FramesLost = "media.frames_lost";
     }
 
+    /// <summary>ARI audio stream attributes (the <c>Verbara.Sdk.Ari.Audio</c> meter's <c>audio.*</c> instruments).</summary>
+    public static class Audio
+    {
+        /// <summary>
+        /// The transport the audio stream came through (<c>audiosocket</c>, <c>websocket</c>). Carried by every
+        /// measurement of the <c>Verbara.Sdk.Ari.Audio</c> meter.
+        /// </summary>
+        public const string Transport = "audio.transport";
+    }
+
     /// <summary>Queue / agent attributes.</summary>
     public static class Queues
     {

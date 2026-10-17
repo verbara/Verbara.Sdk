@@ -5,7 +5,7 @@ namespace Verbara.Sdk.Ari.Tests.TestSupport;
 /// <c>audio.transport.failures</c>, runs in this collection and nowhere else.
 /// </summary>
 /// <remarks>
-/// The instruments are process-wide and carry no tags, and this assembly runs its test classes in
+/// The instruments are process-wide and tagged only with the transport, not the session, and this assembly runs its test classes in
 /// parallel: any other test that resets a live session moves the same counter, so an assertion that
 /// it moved by exactly one, or did not move, is only sound while nothing else runs. xunit runs a
 /// collection with parallelization disabled on its own, after the parallel ones. The Realtime

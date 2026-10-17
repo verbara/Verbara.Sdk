@@ -3,15 +3,53 @@ using System.Diagnostics.Metrics;
 namespace Verbara.Sdk.Ari.Diagnostics;
 
 /// <summary>
-/// Audio streaming metrics exposed via System.Diagnostics.Metrics.
-/// Compatible with OpenTelemetry, Prometheus, dotnet-counters, and any .NET metrics consumer.
+/// Audio streaming metrics of the ARI audio servers, exposed via System.Diagnostics.Metrics on the meter
+/// <c>Verbara.Sdk.Ari.Audio</c>. Any .NET metrics consumer that subscribes to that meter by name sees them:
+/// OpenTelemetry, dotnet-counters, or a <see cref="MeterListener"/>.
 /// <para>
 /// Usage: <c>dotnet-counters monitor --process-id &lt;pid&gt; Verbara.Sdk.Ari.Audio</c>
+/// </para>
+/// <para>
+/// Every measurement carries one tag, <see cref="VerbaraSemanticConventions.Audio.Transport"/>
+/// (<c>audio.transport</c>), naming the transport the stream came through: <c>audiosocket</c> or
+/// <c>websocket</c>.
+/// </para>
+/// <para>
+/// What each transport records:
+/// <list type="bullet">
+/// <item><description>Both transports: <see cref="StreamsOpened"/> and <see cref="StreamsClosed"/>, once each
+/// per session that opened (an AudioSocket connection opens when it identifies itself, a WebSocket one when
+/// its session starts; a connection that ends before it opens counts neither); <see cref="FramesReceived"/>,
+/// <see cref="BytesReceived"/>, <see cref="FramesSent"/> and <see cref="BytesSent"/>, counting non-empty audio
+/// payloads only, and payload bytes without any frame header; <see cref="FrameLatency"/>, once per non-empty frame the
+/// consumer reads; and <c>audio.transport.failures</c> and <c>audio.connections.refused</c>.</description></item>
+/// <item><description>AudioSocket only: <see cref="HangupFrames"/> and <see cref="ErrorFrames"/>, counted
+/// whenever they arrive, before the identification frame too, since they were received from Asterisk (a
+/// connection that ends that way never opened, so it counts no <see cref="StreamsOpened"/> or
+/// <see cref="StreamsClosed"/>). A WebSocket has no such frames; its hangup is a text control message,
+/// counted by neither.</description></item>
+/// </list>
+/// </para>
+/// <para>
+/// One public instrument is not emitted: <see cref="BufferUnderruns"/> (<c>audio.buffer.underruns</c>).
+/// The SDK has no write pump, since audio goes out when the caller writes it, so nothing can observe
+/// an underrun. The field is obsolete with <c>VSDK0003</c>, and the instrument stays published.
 /// </para>
 /// </summary>
 public static class AudioStreamMetrics
 {
     public static readonly Meter Meter = new("Verbara.Sdk.Ari.Audio", "1.0.0");
+
+    /// <summary>
+    /// The <c>audio.transport</c> tag of a measurement recorded for an AudioSocket connection. One cached
+    /// instance, so recording on the frame path boxes and allocates nothing.
+    /// </summary>
+    internal static readonly KeyValuePair<string, object?> AudioSocketTransport =
+        new(VerbaraSemanticConventions.Audio.Transport, "audiosocket");
+
+    /// <summary>The <c>audio.transport</c> tag of a measurement recorded for a WebSocket connection.</summary>
+    internal static readonly KeyValuePair<string, object?> WebSocketTransport =
+        new(VerbaraSemanticConventions.Audio.Transport, "websocket");
 
     // --- Stream lifecycle ---
 
@@ -49,7 +87,22 @@ public static class AudioStreamMetrics
 
     // --- Health ---
 
-    /// <summary>Write pump starved — no audio to send.</summary>
+    /// <summary>Write pump starved — no audio to send. Not emitted: nothing records this instrument.</summary>
+    /// <remarks>
+    /// <para>
+    /// The SDK has no write pump. Audio goes out when the caller writes it, so the SDK never sees the far
+    /// end starve, and <c>audio.buffer.underruns</c> stays at zero. The instrument is still published on the
+    /// meter under the same name, and the field still compiles: deprecating it removes nothing.
+    /// </para>
+    /// <para>
+    /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can
+    /// suppress this one deprecation with <c>&lt;NoWarn&gt;VSDK0003&lt;/NoWarn&gt;</c> instead of
+    /// silencing every <c>CS0618</c> in their tree.
+    /// </para>
+    /// </remarks>
+    [Obsolete(
+        "Not emitted: nothing records audio.buffer.underruns. The SDK has no write pump; audio goes out when the caller writes it, so the SDK never sees the far end starve.",
+        DiagnosticId = "VSDK0003")]
     public static readonly Counter<long> BufferUnderruns =
         Meter.CreateCounter<long>("audio.buffer.underruns", "underruns",
             "Write pump starved - no audio to send");
@@ -65,15 +118,17 @@ public static class AudioStreamMetrics
             "AudioSocket error frames received");
 
     /// <summary>
-    /// AudioSocket sessions whose transport failed while the session was live: the connection was
-    /// reset, or a read from the socket otherwise failed, after the identification frame and before
-    /// any hangup or error frame. Such a session still ends as <c>Disconnected</c>, exactly as a
-    /// hangup does, so this counter and the session's Warning are what tell the two apart. Internal:
+    /// Audio sessions, AudioSocket or WebSocket, whose transport failed while the session was live. On
+    /// AudioSocket: the connection was reset, or a read from the socket otherwise failed, after the
+    /// identification frame and before any hangup or error frame. On WebSocket: the connection was reset,
+    /// or otherwise ended without the peer's close frame. Such a session still ends as
+    /// <c>Disconnected</c>, exactly as a hangup or a close does, so this counter and the session's
+    /// Warning are what tell the two apart. Internal:
     /// the instrument's name is the contract an exporter sees, and the field adds no public API.
     /// </summary>
     internal static readonly Counter<long> TransportFailures =
         Meter.CreateCounter<long>("audio.transport.failures", "sessions",
-            "AudioSocket sessions that ended because their transport failed, not on a hangup");
+            "Audio sessions that ended because their transport failed, not on a hangup or a close");
 
     /// <summary>
     /// Connections an ARI audio server closed at the accept, before reading anything, because
