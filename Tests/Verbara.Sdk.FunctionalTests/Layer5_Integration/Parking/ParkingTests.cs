@@ -9,7 +9,8 @@ using FluentAssertions;
 
 /// <summary>
 /// Tests for call parking events (ParkedCall, UnParkedCall, ParkedCallTimeOut, ParkedCallGiveUp).
-/// Parking is configured in res_parking.conf: parkext=750, parkpos=751-770, parkingtime=10s.
+/// Parking is configured in res_parking.conf: parkext=750, parkpos=751-770, parkingtime=10s, in the lot
+/// context [parkedcalls], which [test-functional] includes.
 /// </summary>
 [Collection("Functional")]
 [Trait("Category", "Functional")]
