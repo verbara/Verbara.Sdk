@@ -3,8 +3,9 @@ using System.Diagnostics.Metrics;
 namespace Verbara.Sdk.Ari.Diagnostics;
 
 /// <summary>
-/// Audio streaming metrics exposed via System.Diagnostics.Metrics.
-/// Compatible with OpenTelemetry, Prometheus, dotnet-counters, and any .NET metrics consumer.
+/// Audio streaming metrics of the ARI audio servers, exposed via System.Diagnostics.Metrics on the meter
+/// <c>Verbara.Sdk.Ari.Audio</c>. Any .NET metrics consumer that subscribes to that meter by name sees them:
+/// OpenTelemetry, dotnet-counters, or a <see cref="MeterListener"/>.
 /// <para>
 /// Usage: <c>dotnet-counters monitor --process-id &lt;pid&gt; Verbara.Sdk.Ari.Audio</c>
 /// </para>
@@ -12,6 +13,19 @@ namespace Verbara.Sdk.Ari.Diagnostics;
 /// Every measurement carries one tag, <see cref="VerbaraSemanticConventions.Audio.Transport"/>
 /// (<c>audio.transport</c>), naming the transport the stream came through: <c>audiosocket</c> or
 /// <c>websocket</c>.
+/// </para>
+/// <para>
+/// What each transport records:
+/// <list type="bullet">
+/// <item><description>Both transports: <see cref="StreamsOpened"/> and <see cref="StreamsClosed"/>, once each
+/// per session that opened (an AudioSocket connection opens when it identifies itself, a WebSocket one when
+/// its session starts; a connection that ends before it opens counts neither); <see cref="FramesReceived"/>,
+/// <see cref="BytesReceived"/>, <see cref="FramesSent"/> and <see cref="BytesSent"/>, counting non-empty audio
+/// payloads only, and payload bytes without any frame header; <see cref="FrameLatency"/>, once per non-empty frame the
+/// consumer reads; and <c>audio.transport.failures</c> and <c>audio.connections.refused</c>.</description></item>
+/// <item><description>AudioSocket only: <see cref="HangupFrames"/> and <see cref="ErrorFrames"/>. A WebSocket
+/// has no such frames; its hangup is a text control message, counted by neither.</description></item>
+/// </list>
 /// </para>
 /// <para>
 /// One public instrument is not emitted: <see cref="BufferUnderruns"/> (<c>audio.buffer.underruns</c>).
