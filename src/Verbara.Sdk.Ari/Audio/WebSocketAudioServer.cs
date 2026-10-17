@@ -459,7 +459,8 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 
                 // The stop is read before the registration and again after the add, as the Voice AI
                 // server does. A connection whose stop has begun is refused: closed, never announced or
-                // counted, and nothing is logged.
+                // counted on audio.connections.refused, and nothing is logged. Its session has started, so
+                // its disposal counts audio.streams.closed.
                 BeforeRegistration?.Invoke();
                 if (ct.IsCancellationRequested)
                     return;

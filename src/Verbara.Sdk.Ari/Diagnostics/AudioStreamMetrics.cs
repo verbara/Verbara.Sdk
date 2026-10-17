@@ -23,8 +23,11 @@ namespace Verbara.Sdk.Ari.Diagnostics;
 /// <see cref="BytesReceived"/>, <see cref="FramesSent"/> and <see cref="BytesSent"/>, counting non-empty audio
 /// payloads only, and payload bytes without any frame header; <see cref="FrameLatency"/>, once per non-empty frame the
 /// consumer reads; and <c>audio.transport.failures</c> and <c>audio.connections.refused</c>.</description></item>
-/// <item><description>AudioSocket only: <see cref="HangupFrames"/> and <see cref="ErrorFrames"/>. A WebSocket
-/// has no such frames; its hangup is a text control message, counted by neither.</description></item>
+/// <item><description>AudioSocket only: <see cref="HangupFrames"/> and <see cref="ErrorFrames"/>, counted
+/// whenever they arrive, before the identification frame too, since they were received from Asterisk (a
+/// connection that ends that way never opened, so it counts no <see cref="StreamsOpened"/> or
+/// <see cref="StreamsClosed"/>). A WebSocket has no such frames; its hangup is a text control message,
+/// counted by neither.</description></item>
 /// </list>
 /// </para>
 /// <para>
@@ -86,14 +89,16 @@ public static class AudioStreamMetrics
 
     /// <summary>Write pump starved — no audio to send. Not emitted: nothing records this instrument.</summary>
     /// <remarks>
+    /// <para>
     /// The SDK has no write pump. Audio goes out when the caller writes it, so the SDK never sees the far
     /// end starve, and <c>audio.buffer.underruns</c> stays at zero. The instrument is still published on the
     /// meter under the same name, and the field still compiles: deprecating it removes nothing.
-    /// </remarks>
-    /// <remarks>
+    /// </para>
+    /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can
     /// suppress this one deprecation with <c>&lt;NoWarn&gt;VSDK0003&lt;/NoWarn&gt;</c> instead of
     /// silencing every <c>CS0618</c> in their tree.
+    /// </para>
     /// </remarks>
     [Obsolete(
         "Not emitted: nothing records audio.buffer.underruns. The SDK has no write pump; audio goes out when the caller writes it, so the SDK never sees the far end starve.",
