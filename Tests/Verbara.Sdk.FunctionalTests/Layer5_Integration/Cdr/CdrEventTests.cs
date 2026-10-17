@@ -1,6 +1,5 @@
 namespace Verbara.Sdk.FunctionalTests.Layer5_Integration.Cdr;
 
-using System.Collections.Concurrent;
 using System.Globalization;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
@@ -33,12 +32,12 @@ public sealed class CdrEventTests : FunctionalTestBase
         var cdrReceived = new TaskCompletionSource<CdrEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var subscription = connection.Subscribe(new CdrObserver(cdrReceived));
 
-        // ext 100 = Answer + Wait(5) + Hangup
+        // ext 101 = Answer + Wait(5) + Hangup
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
@@ -47,15 +46,11 @@ public sealed class CdrEventTests : FunctionalTestBase
 
         // CDR fires after hangup; Wait(5) + processing time = up to 30s
         var result = await Task.WhenAny(cdrReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (result != cdrReceived.Task)
-        {
-            // CDR module may not be loaded — skip gracefully
-            return;
-        }
+        result.Should().Be(cdrReceived.Task, "ext 101 answers, waits 5 s and hangs up, so cdr_manager must report a Cdr event within 30 s");
 
         var cdr = await cdrReceived.Task;
         cdr.Channel.Should().NotBeNullOrEmpty("CDR must include the originating channel");
-        cdr.Disposition.Should().Be("ANSWERED", "ext 100 answers the call");
+        cdr.Disposition.Should().Be("ANSWERED", "ext 101 answers the call");
         cdr.Duration.Should().BeGreaterThan(0, "answered call must have a non-zero duration");
         cdr.BillableSeconds.Should().BeGreaterThanOrEqualTo(0, "billable seconds must be non-negative");
 
@@ -81,23 +76,20 @@ public sealed class CdrEventTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
-        // Drain any stale CDR events from prior tests
-        await Task.Delay(TimeSpan.FromSeconds(1));
-
         var cdrReceived = new TaskCompletionSource<CdrEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        // Filter CDR events to only match our specific originate channel
+        // Only this call's CDRs: both halves of the Local channel this test originates are named after ext 131.
         using var subscription = connection.Subscribe(new FilteredCdrObserver(
-            cdr => (cdr.DestinationChannel?.Contains("9998", StringComparison.Ordinal) ?? false)
-                || (cdr.Channel?.Contains("9998", StringComparison.Ordinal) ?? false),
+            cdr => cdr.Channel?.StartsWith("Local/131@test-functional-", StringComparison.Ordinal) ?? false,
             cdrReceived));
 
-        // ext 9998 does not exist — call fails immediately with FAILED disposition
+        // ext 131 runs Congestion() without answering, so the call is created and ends unanswered. Measured on
+        // Asterisk 23: both halves' CDRs carry Disposition FAILED (Busy() gives BUSY, a ring timeout NO ANSWER).
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/9998@test-functional",
+            Channel = "Local/131@test-functional",
             Context = "test-functional",
-            Exten = "9998",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 5000,
@@ -105,19 +97,12 @@ public sealed class CdrEventTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(cdrReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
-        if (result != cdrReceived.Task)
-        {
-            // CDR module not loaded or call produced no CDR — skip gracefully
-            return;
-        }
+        result.Should().Be(cdrReceived.Task, "ext 131 runs Congestion() on a channel it never answers, so cdr_manager must report its Cdr within 15 s");
 
         var cdr = await cdrReceived.Task;
-        cdr.Disposition.Should().NotBe("ANSWERED",
-            "unanswered call to non-existent extension must not have ANSWERED disposition");
-
-        // BillableSeconds should be 0 or null for unanswered calls
-        var billable = cdr.BillableSeconds ?? 0;
-        billable.Should().Be(0, "unanswered call should have 0 billable seconds");
+        cdr.Disposition.Should().Be("FAILED", "a call that ends in Congestion() without being answered is a failed call");
+        cdr.AnswerTime.Should().BeNullOrEmpty("the call was never answered");
+        (cdr.BillableSeconds ?? 0).Should().Be(0, "an unanswered call has no billable seconds");
     }
 
     [Fact]
@@ -135,9 +120,9 @@ public sealed class CdrEventTests : FunctionalTestBase
 
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
@@ -145,10 +130,7 @@ public sealed class CdrEventTests : FunctionalTestBase
         });
 
         var result = await Task.WhenAny(cdrReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (result != cdrReceived.Task)
-        {
-            return;
-        }
+        result.Should().Be(cdrReceived.Task, "ext 101 answers, waits 5 s and hangs up, so cdr_manager must report a Cdr event within 30 s");
 
         var cdr = await cdrReceived.Task;
 
@@ -173,12 +155,10 @@ public sealed class CdrEventTests : FunctionalTestBase
         startDate.Should().BeOnOrBefore(endDate, "EndTime must not precede StartTime");
 
         // Duration should approximately match EndTime - StartTime (±2s tolerance)
-        if (cdr.Duration.HasValue)
-        {
-            var clockDuration = (endDate - startDate).TotalSeconds;
-            clockDuration.Should().BeApproximately(cdr.Duration.Value, 2.0,
-                "CDR Duration must be within 2 seconds of EndTime - StartTime");
-        }
+        cdr.Duration.Should().NotBeNull("a Cdr event for an answered call must carry Duration");
+        var clockDuration = (endDate - startDate).TotalSeconds;
+        clockDuration.Should().BeApproximately(cdr.Duration!.Value, 2.0,
+            "CDR Duration must be within 2 seconds of EndTime - StartTime");
     }
 
     [Fact]
@@ -191,73 +171,51 @@ public sealed class CdrEventTests : FunctionalTestBase
         });
         await connection.ConnectAsync();
 
-        var answeredCdrs = new ConcurrentBag<CdrEvent>();
-        var failedCdrs = new ConcurrentBag<CdrEvent>();
+        var answeredReceived = new TaskCompletionSource<CdrEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var busyReceived = new TaskCompletionSource<CdrEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var answeredReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var failedReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-
+        // Each outcome is read from the CDR of its own call, named after the extension it dialled.
         using var subscription = connection.Subscribe(new ClassifyingCdrObserver(
             cdr =>
             {
-                if (cdr.Disposition == "ANSWERED")
-                {
-                    answeredCdrs.Add(cdr);
-                    answeredReceived.TrySetResult(true);
-                }
-                else
-                {
-                    failedCdrs.Add(cdr);
-                    failedReceived.TrySetResult(true);
-                }
+                if (cdr.Channel?.StartsWith("Local/101@test-functional-", StringComparison.Ordinal) == true)
+                    answeredReceived.TrySetResult(cdr);
+                else if (cdr.Channel?.StartsWith("Local/130@test-functional-", StringComparison.Ordinal) == true)
+                    busyReceived.TrySetResult(cdr);
             }));
 
-        // Originate answered call first
+        // An answered call: ext 101 answers, waits 5 s and hangs up.
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/100@test-functional",
+            Channel = "Local/101@test-functional",
             Context = "test-functional",
-            Exten = "100",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 15000,
             ActionId = "cdr-disposition-answered"
         });
 
-        // Wait for the answered CDR (up to 30s for Wait(5) + hangup + CDR processing)
-        var answeredResult = await Task.WhenAny(answeredReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
-        if (answeredResult != answeredReceived.Task)
-        {
-            // CDR module not loaded — skip
-            return;
-        }
-
-        // Originate unanswered call
+        // A busy call: ext 130 runs Busy() without answering.
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/999@test-functional",
+            Channel = "Local/130@test-functional",
             Context = "test-functional",
-            Exten = "999",
+            Exten = "101",
             Priority = 1,
             IsAsync = true,
             Timeout = 5000,
-            ActionId = "cdr-disposition-failed"
+            ActionId = "cdr-disposition-busy"
         });
 
-        var failedResult = await Task.WhenAny(failedReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
-        if (failedResult != failedReceived.Task)
-        {
-            return;
-        }
+        var busyResult = await Task.WhenAny(busyReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+        busyResult.Should().Be(busyReceived.Task, "ext 130 runs Busy() on a channel it never answers, so cdr_manager must report its Cdr within 15 s");
 
-        answeredCdrs.Should().NotBeEmpty("answered call must produce a CDR with ANSWERED disposition");
-        failedCdrs.Should().NotBeEmpty("failed call must produce a CDR with non-ANSWERED disposition");
+        var answeredResult = await Task.WhenAny(answeredReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        answeredResult.Should().Be(answeredReceived.Task, "ext 101 answers, waits 5 s and hangs up, so cdr_manager must report its Cdr within 30 s");
 
-        answeredCdrs.Should().AllSatisfy(c =>
-            c.Disposition.Should().Be("ANSWERED"));
-
-        failedCdrs.Should().AllSatisfy(c =>
-            c.Disposition.Should().NotBe("ANSWERED"));
+        (await answeredReceived.Task).Disposition.Should().Be("ANSWERED", "ext 101 answers the call");
+        (await busyReceived.Task).Disposition.Should().Be("BUSY", "ext 130 ends the call in Busy() without answering it");
     }
 
     /// <summary>Captures the first CdrEvent and signals a TaskCompletionSource.</summary>
