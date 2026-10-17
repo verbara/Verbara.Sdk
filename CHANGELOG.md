@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: the audio sessions record the audio meter's instruments (#N)
+### Fixed: the audio sessions record the audio meter's instruments (#435)
 
 The `Verbara.Sdk.Ari.Audio` meter published ten instruments in `AudioStreamMetrics` and the sessions recorded none
 of them, so a dashboard watching the meter saw nothing. `AudioSocketSession` and `WebSocketAudioSession` now
@@ -17,7 +17,7 @@ without a close frame, or on a reset, now logs a Warning and counts `audio.trans
 session already did. A connection the server closes because its stop began before announcing it counts one
 opened and one closed stream.
 
-### Fixed — BREAKING: `AudioStreamMetrics.BufferUnderruns` is obsolete with `VSDK0003` (#N)
+### Fixed — BREAKING: `AudioStreamMetrics.BufferUnderruns` is obsolete with `VSDK0003` (#435)
 
 `audio.buffer.underruns` describes a write pump the SDK does not have: audio goes out when the caller writes it,
 so nothing ever recorded it. The field is now `[Obsolete]` with diagnostic id `VSDK0003`. A consumer that builds
@@ -25,7 +25,7 @@ with `TreatWarningsAsErrors` and reads the field by symbol gets `error VSDK0003`
 with `<NoWarn>VSDK0003</NoWarn>`. Nothing is removed: the instrument is still published on the meter, so an
 exporter that subscribes by meter name is unaffected, and a binary built against an earlier release that reads the field still runs (checked against 2.6.0).
 
-### Added: an `audio.transport` tag on every audio meter measurement (#N)
+### Added: an `audio.transport` tag on every audio meter measurement (#435)
 
 Every `Verbara.Sdk.Ari.Audio` measurement now carries `audio.transport` with value `audiosocket` or `websocket`,
 declared as `VerbaraSemanticConventions.Audio.Transport`. This includes the two instruments that already emitted,
