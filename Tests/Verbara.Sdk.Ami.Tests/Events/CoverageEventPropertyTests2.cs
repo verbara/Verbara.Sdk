@@ -357,6 +357,7 @@ public sealed class CoverageEventPropertyTests2
         evt.OriginalStateDesc.Should().Be("Up");
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void ModuleLoadReportEvent_ShouldHaveAllProperties()
     {
@@ -365,6 +366,7 @@ public sealed class CoverageEventPropertyTests2
         evt.ModuleCount.Should().Be(150);
         evt.ModuleSelection.Should().Be("All");
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public void NewCallerIdEvent_ShouldHaveAllProperties()
