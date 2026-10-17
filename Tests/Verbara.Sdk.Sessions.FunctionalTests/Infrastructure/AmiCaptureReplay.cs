@@ -113,10 +113,25 @@ internal static class AmiCaptureReplay
     /// Optional. A frame for which it returns <see langword="true"/> is read but not delivered, as if Asterisk
     /// had never sent it; a marker frame still names the scenario that follows it.
     /// </param>
+    /// <param name="clock">
+    /// Optional. The manager's clock seam; with none, the manager is built with its public constructor, on the
+    /// system clock, as before. The replay does not move it: the caller does, in <paramref name="afterLastFrame"/>.
+    /// </param>
+    /// <param name="afterLastFrame">
+    /// Optional, and only with <paramref name="clock"/>. Called with the clock once the last frame is delivered and
+    /// before the manager is disposed, so a caller that moves the clock there sees what fires, recorded on the
+    /// replayed calls like every other domain event.
+    /// </param>
     public static async Task<CaptureReplay> ReplayAsync(
-        string fixture, SessionOptions? options = null, Func<ManagerEvent, bool>? drop = null)
+        string fixture, SessionOptions? options = null, Func<ManagerEvent, bool>? drop = null,
+        ManualClock? clock = null, Action<ManualClock>? afterLastFrame = null)
     {
-        await using var rig = await ReplayRig.StartAsync(options ?? new SessionOptions());
+        if (afterLastFrame is not null && clock is null)
+            throw new ArgumentException("Moving the clock after the last frame needs the clock.", nameof(afterLastFrame));
+
+        await using var rig = clock is null
+            ? await ReplayRig.StartAsync(options ?? new SessionOptions())
+            : await ReplayRig.StartAsync(options ?? new SessionOptions(), clock);
         var manager = rig.Manager;
 
         var scenario = BeforeFirstMarker;
@@ -158,6 +173,9 @@ internal static class AmiCaptureReplay
             if (rig.Deliver(evt) is { } thrown)
                 swallowed.Add(new SwallowedObserverException(scenario, evt.EventType ?? "", thrown));
         }
+
+        if (clock is not null)
+            afterLastFrame?.Invoke(clock);
 
         return new CaptureReplay(fixture, calls, swallowed);
     }
@@ -341,8 +359,12 @@ internal static class AmiCaptureReplay
     /// (<see cref="ReloadableConnection"/>). An exception the observer throws is caught and recorded, as the
     /// dispatcher does.
     /// </remarks>
+    /// <param name="afterLastFrame">
+    /// Optional. Called with <paramref name="clock"/> once the call's last frame is delivered and before the
+    /// manager is disposed, so a caller that moves the clock there sees what fires before the result is read.
+    /// </param>
     public static async Task<QueueReloadReplay> ReplayQueueReloadAsync(string fixture, string callerNumber,
-        CapturedSnapshot? reloadWith, Outage? outage, ManualClock clock)
+        CapturedSnapshot? reloadWith, Outage? outage, ManualClock clock, Action<ManualClock>? afterLastFrame = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
         if (outage is not null && reloadWith is null)
@@ -435,6 +457,8 @@ internal static class AmiCaptureReplay
                 if (thrown is not null)
                     swallowed.Add(new SwallowedObserverException(callerNumber, frame.EventType ?? "", thrown));
             }
+
+            afterLastFrame?.Invoke(clock);
 
             var counts = tracker.ActiveQueues.ToDictionary(
                 q => q.QueueName,
@@ -755,7 +779,17 @@ internal static class AmiCaptureReplay
 
         public CallSessionManager Manager { get; }
 
-        public static async Task<ReplayRig> StartAsync(SessionOptions options)
+        /// <summary>Starts a rig whose manager is built with its public constructor, on the system clock.</summary>
+        public static Task<ReplayRig> StartAsync(SessionOptions options) => StartOnAsync(options, clock: null);
+
+        /// <summary>Starts a rig whose manager runs on <paramref name="clock"/>, through its internal constructor.</summary>
+        public static Task<ReplayRig> StartAsync(SessionOptions options, TimeProvider clock)
+        {
+            ArgumentNullException.ThrowIfNull(clock);
+            return StartOnAsync(options, clock);
+        }
+
+        private static async Task<ReplayRig> StartOnAsync(SessionOptions options, TimeProvider? clock)
         {
             var connection = Substitute.For<IAmiConnection>();
             connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
@@ -765,10 +799,16 @@ internal static class AmiCaptureReplay
                 .Returns(Substitute.For<IDisposable>());
 
             var server = new VerbaraServer(connection, NullLogger<VerbaraServer>.Instance);
-            var manager = new CallSessionManager(
-                Options.Create(options),
-                NullLogger<CallSessionManager>.Instance,
-                new InMemorySessionStore());
+            var manager = clock is null
+                ? new CallSessionManager(
+                    Options.Create(options),
+                    NullLogger<CallSessionManager>.Instance,
+                    new InMemorySessionStore())
+                : new CallSessionManager(
+                    Options.Create(options),
+                    NullLogger<CallSessionManager>.Instance,
+                    new InMemorySessionStore(),
+                    clock);
             try
             {
                 manager.AttachToServer(server, "replay");

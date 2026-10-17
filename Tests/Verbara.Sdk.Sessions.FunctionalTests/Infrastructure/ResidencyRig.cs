@@ -19,8 +19,10 @@ namespace Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
 /// still come from the wall clock.
 ///
 /// <para>It also reports two things about how it is used. <see cref="TimersCreated"/> counts the
-/// timers asked of it, which it never fires: release rides arrivals and endings, so the manager
-/// schedules nothing (<c>ADR-0063</c>, D4). And <see cref="HoldNextRead"/> parks the next reader
+/// timers asked of it: release rides arrivals and endings, so the manager schedules nothing for
+/// release (<c>ADR-0063</c>, D4). A timer asked of it is one-shot and fires, on the thread that moves
+/// the clock, when <see cref="Advance"/> or <see cref="MoveTo"/> takes the clock to or past its due
+/// instant; nothing fires on its own. And <see cref="HoldNextRead"/> parks the next reader
 /// inside its read — the release walk reads the clock under its own lock, so a walk parked there
 /// is a walk in progress, and another reader arriving meanwhile is a second walk running at the
 /// same time.</para>
@@ -28,6 +30,7 @@ namespace Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
 internal sealed class ManualClock(DateTimeOffset start) : TimeProvider
 {
     private readonly Lock _gate = new();
+    private readonly List<FiringTimer> _scheduled = [];
     private DateTimeOffset _now = start;
     private ReadHold? _hold;
     private int _timersCreated;
@@ -45,12 +48,17 @@ internal sealed class ManualClock(DateTimeOffset start) : TimeProvider
         }
     }
 
+    /// <summary>Moves the clock forward by <paramref name="by"/> and fires every timer that has come due, in due order.</summary>
     public void Advance(TimeSpan by)
     {
+        List<FiringTimer> due;
         lock (_gate)
         {
             _now += by;
+            due = TakeDue();
         }
+
+        Fire(due);
     }
 
     /// <summary>
@@ -60,13 +68,17 @@ internal sealed class ManualClock(DateTimeOffset start) : TimeProvider
     /// </summary>
     public void MoveTo(DateTimeOffset instant)
     {
+        List<FiringTimer> due;
         lock (_gate)
         {
             if (instant < _now)
                 throw new InvalidOperationException($"The clock is at {_now:O} and cannot move back to {instant:O}.");
 
             _now = instant;
+            due = TakeDue();
         }
+
+        Fire(due);
     }
 
     /// <summary>Parks the next reader of this clock until the returned hold is released.</summary>
@@ -77,23 +89,96 @@ internal sealed class ManualClock(DateTimeOffset start) : TimeProvider
         return hold;
     }
 
-    /// <summary>Counts the timer and returns one that never fires.</summary>
+    /// <summary>
+    /// Counts the timer and schedules it on this clock: it fires once, when <see cref="Advance"/> or
+    /// <see cref="MoveTo"/> takes the clock to or past <paramref name="dueTime"/> from now. Copied from the
+    /// fake timer of the live-state tests' harness; only one-shot timers are supported.
+    /// </summary>
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {
+        ArgumentNullException.ThrowIfNull(callback);
+        ThrowIfPeriodic(period);
+
         Interlocked.Increment(ref _timersCreated);
-        return new InertTimer();
+        var timer = new FiringTimer(this, callback, state);
+        Schedule(timer, dueTime);
+        return timer;
     }
 
-    private sealed class InertTimer : ITimer
+    /// <summary>Takes every scheduled timer due at or before now off the schedule, in due order. Under the lock.</summary>
+    private List<FiringTimer> TakeDue()
     {
-        public bool Change(TimeSpan dueTime, TimeSpan period) => true;
-
-        public void Dispose()
+        List<FiringTimer> due = [.. _scheduled.Where(t => t.DueAt <= _now).OrderBy(t => t.DueAt)];
+        foreach (var timer in due)
         {
-            // Nothing was scheduled, so there is nothing to cancel.
+            _scheduled.Remove(timer);
+            timer.DueAt = null;
         }
 
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        return due;
+    }
+
+    /// <summary>
+    /// Runs the callbacks of <paramref name="due"/> on the calling thread, outside the lock: a callback may read
+    /// the clock or create its next timer.
+    /// </summary>
+    private static void Fire(List<FiringTimer> due)
+    {
+        foreach (var timer in due)
+            timer.Fire();
+    }
+
+    private void Schedule(FiringTimer timer, TimeSpan dueTime)
+    {
+        lock (_gate)
+        {
+            _scheduled.Remove(timer);
+            timer.DueAt = dueTime == Timeout.InfiniteTimeSpan ? null : _now.Add(dueTime);
+            if (timer.DueAt is not null)
+                _scheduled.Add(timer);
+        }
+    }
+
+    private void Unschedule(FiringTimer timer)
+    {
+        lock (_gate)
+        {
+            _scheduled.Remove(timer);
+            timer.DueAt = null;
+        }
+    }
+
+    private static void ThrowIfPeriodic(TimeSpan period)
+    {
+        if (period != Timeout.InfiniteTimeSpan)
+            throw new NotSupportedException("Only one-shot timers are faked; nothing under test asks for a period.");
+    }
+
+    /// <summary>A one-shot timer on the manual clock.</summary>
+    private sealed class FiringTimer(ManualClock owner, TimerCallback callback, object? state) : ITimer
+    {
+        /// <summary>
+        /// When the timer fires on the manual clock, or <see langword="null"/> once it has fired or been disposed.
+        /// Read and written under the owner's lock only.
+        /// </summary>
+        public DateTimeOffset? DueAt { get; set; }
+
+        public bool Change(TimeSpan dueTime, TimeSpan period)
+        {
+            ThrowIfPeriodic(period);
+            owner.Schedule(this, dueTime);
+            return true;
+        }
+
+        public void Dispose() => owner.Unschedule(this);
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+
+        public void Fire() => callback(state);
     }
 }
 
