@@ -139,11 +139,14 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
             // The peer's orderly ending is its close frame, which the loop above leaves on without an
             // exception. Measured through the server: a connection reset raises ConnectionClosedPrematurely
             // over the socket's reset, and a connection that ends without a close frame raises
-            // ConnectionClosedPrematurely with no inner exception; both are abnormal endings. Reported
-            // only for a live session the owner is not tearing down — a disposal sets `_disposed` before
-            // it cancels or closes anything — and before the `finally` publishes Disconnected, so whoever
-            // reacts to the ending already finds the line and the count. The ending stays Disconnected.
-            if (_state.Value == AudioStreamState.Connected && Volatile.Read(ref _disposed) == 0)
+            // ConnectionClosedPrematurely with no inner exception; both are abnormal endings. The session
+            // is still Connected here: only this pump's `finally` and a disposal that has awaited this pump
+            // publish its ending. Reported before the `finally` publishes Disconnected, so whoever reacts
+            // to the ending already finds the line and the count. The ending stays Disconnected.
+            // The `_disposed` filter is defensive: an owner's disposal sets it before it cancels or closes
+            // anything, and that teardown surfaces here as OperationCanceledException; no measured
+            // teardown has reached this catch.
+            if (Volatile.Read(ref _disposed) == 0)
             {
                 WebSocketAudioSessionLog.TransportFailed(_logger, ex, ChannelId);
                 AudioStreamMetrics.TransportFailures.Add(1, AudioStreamMetrics.WebSocketTransport);
