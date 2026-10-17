@@ -294,8 +294,11 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
                 await Task.Delay(TimeSpan.FromMilliseconds(50)); // fence-allow: GUARD-TIMEOUT — polls for the observed DtmfEnd; a green run leaves as soon as it arrives
         }
 
-        written.Should().NotBeNull("the bridge must write the digit the caller received to the other party, which reports a DtmfEnd within 10 s");
-        (written!.RawFields?.GetValueOrDefault("Digit")).Should().Be("8", "the DtmfEnd must carry the digit played");
+        // Assert.True, not Should().NotBeNull(): its [DoesNotReturnIf(false)] carries "not null past this line" to flow
+        // analysis — the compiler's and CodeQL's — which Should() cannot.
+        Assert.True(written is not null,
+            "the bridge must write the digit the caller received to the other party, which reports a DtmfEnd within 10 s");
+        (written.RawFields?.GetValueOrDefault("Digit")).Should().Be("8", "the DtmfEnd must carry the digit played");
         (written.RawFields?.GetValueOrDefault("Direction")).Should().Be("Sent",
             "a digit written to a channel must be reported with Direction 'Sent'");
 

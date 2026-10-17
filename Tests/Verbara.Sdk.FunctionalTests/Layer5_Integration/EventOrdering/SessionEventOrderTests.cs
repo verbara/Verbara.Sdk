@@ -233,7 +233,7 @@ public sealed class SessionEventOrderTests : FunctionalTestBase
                 await Task.Delay(TimeSpan.FromMilliseconds(50)); // fence-allow: GUARD-TIMEOUT — polls for the observed session; a green run leaves as soon as it exists
         }
 
-        sessionId.Should().NotBeNull("the originated call {0} must belong to a session within 3 s", callId);
+        (sessionId is not null).Should().BeTrue("the originated call {0} must belong to a session within 3 s", callId);
 
         // Wait for the full lifecycle: the 2 s Wait, the hangup and its propagation.
         var endDeadline = DateTime.UtcNow.AddSeconds(8);

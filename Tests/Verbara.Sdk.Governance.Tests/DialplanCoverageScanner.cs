@@ -148,10 +148,8 @@ internal static partial class DialplanCoverageScanner
                 continue;
             }
 
-            foreach (var extension in dial.Extensions)
+            foreach (var extension in dial.Extensions.Where(extension => !IsDefined(extension, defined)))
             {
-                if (IsDefined(extension, defined))
-                    continue;
                 var deliberate = deliberatelyUndefined.FirstOrDefault(d =>
                     string.Equals(d.Path, dial.Path, StringComparison.Ordinal) && string.Equals(d.Extension, extension, StringComparison.Ordinal));
                 if (deliberate is not null)
@@ -329,20 +327,18 @@ internal static partial class DialplanCoverageScanner
             return;
 
         classified.Add(interpolated);
-        foreach (Match match in matches)
+        foreach (var exten in matches.Select(match => match.Groups[1].Value))
         {
-            var exten = match.Groups[1].Value;
             var used = exten.Where(c => c >= 0xE000 && c < 0xE000 + holes.Count).Select(c => holes[c - 0xE000]).ToList();
             var expression = used.Count == 1 && exten.Length == 1
                 ? used[0].Expression.ToString()
                 : interpolated.ToString();
 
             List<string>? values = [string.Empty];
-            foreach (var c in exten)
+            foreach (var part in exten.Select(IReadOnlyList<string?>? (c) => c >= 0xE000 && c < 0xE000 + holes.Count
+                         ? Resolve(holes[c - 0xE000].Expression, root, depth: 0)
+                         : [new string(c, 1)]))
             {
-                IReadOnlyList<string?>? part = c >= 0xE000 && c < 0xE000 + holes.Count
-                    ? Resolve(holes[c - 0xE000].Expression, root, depth: 0)
-                    : [new string(c, 1)];
                 if (part is null || part.Count == 0 || part.Any(v => v is null))
                 {
                     values = null;
@@ -363,12 +359,15 @@ internal static partial class DialplanCoverageScanner
         ExpressionSyntax? exten = null;
         foreach (var assignment in initializer.Expressions.OfType<AssignmentExpressionSyntax>())
         {
-            if (assignment.Left is not IdentifierNameSyntax name)
-                continue;
-            if (name.Identifier.ValueText == "Context")
-                context = assignment.Right;
-            else if (name.Identifier.ValueText == "Exten")
-                exten = assignment.Right;
+            switch (assignment.Left)
+            {
+                case IdentifierNameSyntax { Identifier.ValueText: "Context" }:
+                    context = assignment.Right;
+                    break;
+                case IdentifierNameSyntax { Identifier.ValueText: "Exten" }:
+                    exten = assignment.Right;
+                    break;
+            }
         }
 
         if (context is null || !IsContextLiteral(context))
@@ -448,23 +447,22 @@ internal static partial class DialplanCoverageScanner
                 var right = Resolve(binary.Right, root, depth + 1);
                 if (left is null || right is null || left.Any(v => v is null) || right.Any(v => v is null))
                     return null;
-                return left.SelectMany(l => right.Select(r => (string?)(l + r))).ToList();
+                return left.SelectMany(l => right.Select(r => l + r)).ToList();
             }
 
             case InterpolatedStringExpressionSyntax interpolated:
             {
                 IReadOnlyList<string?> values = [string.Empty];
-                foreach (var content in interpolated.Contents)
+                foreach (var part in interpolated.Contents.Select(IReadOnlyList<string?>? (content) => content switch
+                         {
+                             InterpolatedStringTextSyntax text => [text.TextToken.ValueText],
+                             InterpolationSyntax hole when hole.AlignmentClause is null && hole.FormatClause is null => Resolve(hole.Expression, root, depth + 1),
+                             _ => null,
+                         }))
                 {
-                    IReadOnlyList<string?>? part = content switch
-                    {
-                        InterpolatedStringTextSyntax text => [text.TextToken.ValueText],
-                        InterpolationSyntax hole when hole.AlignmentClause is null && hole.FormatClause is null => Resolve(hole.Expression, root, depth + 1),
-                        _ => null,
-                    };
                     if (part is null || part.Any(v => v is null))
                         return null;
-                    values = values.SelectMany(v => part.Select(p => (string?)(v + p))).ToList();
+                    values = values.SelectMany(v => part.Select(p => v + p)).ToList();
                 }
 
                 return values;
@@ -558,9 +556,8 @@ internal static partial class DialplanCoverageScanner
             return null;
 
         var values = new List<string?>();
-        foreach (var call in calls)
+        foreach (var arguments in calls.Select(call => call.ArgumentList.Arguments))
         {
-            var arguments = call.ArgumentList.Arguments;
             var argument = arguments.FirstOrDefault(a => a.NameColon?.Name.Identifier.ValueText == parameter.Identifier.ValueText)
                 ?? (index < arguments.Count && arguments.Take(index + 1).All(a => a.NameColon is null) ? arguments[index] : null);
             var resolved = argument is not null
@@ -577,12 +574,8 @@ internal static partial class DialplanCoverageScanner
     private static void ReadDialplan(string text, Dictionary<string, DialplanContext> contexts)
     {
         DialplanContext? current = null;
-        foreach (var raw in text.Split('\n'))
+        foreach (var line in text.Split('\n').Select(raw => StripComment(raw).Trim()).Where(line => line.Length != 0))
         {
-            var line = StripComment(raw).Trim();
-            if (line.Length == 0)
-                continue;
-
             if (line.StartsWith('['))
             {
                 var name = line[1..line.IndexOf(']', StringComparison.Ordinal)].Trim();
@@ -615,11 +608,8 @@ internal static partial class DialplanCoverageScanner
     {
         var lots = new List<Dictionary<string, string>>();
         Dictionary<string, string>? lot = null;
-        foreach (var raw in text.Split('\n'))
+        foreach (var line in text.Split('\n').Select(raw => StripComment(raw).Trim()).Where(line => line.Length != 0))
         {
-            var line = StripComment(raw).Trim();
-            if (line.Length == 0)
-                continue;
             if (line.StartsWith('['))
             {
                 var name = line[1..line.IndexOf(']', StringComparison.Ordinal)].Trim();

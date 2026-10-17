@@ -486,9 +486,11 @@ public sealed class TransferTests : FunctionalTestBase
                 await Task.Delay(TimeSpan.FromMilliseconds(100)); // fence-allow: GUARD-TIMEOUT — polls the BridgeManager for the observed transfer; a green run leaves as soon as both are in one bridge
             }
 
-            transferee.Should().NotBeNull("the BridgeManager must show the transferee in a bridge after the transfer");
-            target.Should().Be(transferee, "the BridgeManager must show the transferee and the target in the same bridge");
-            transferee!.BridgeId.Should().Be(evt.DestBridgeUniqueid, "that bridge is the one the AttendedTransfer event names");
+            // Assert.True, not Should().NotBeNull(): its [DoesNotReturnIf(false)] carries "not null past this line" to
+            // flow analysis — the compiler's and CodeQL's — which Should() cannot.
+            Assert.True(transferee is not null, "the BridgeManager must show the transferee in a bridge after the transfer");
+            transferee.Should().Be(target, "the BridgeManager must show the transferee and the target in the same bridge");
+            transferee.BridgeId.Should().Be(evt.DestBridgeUniqueid, "that bridge is the one the AttendedTransfer event names");
         }
         finally
         {
