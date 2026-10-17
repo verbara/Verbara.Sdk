@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — BREAKING: a conference counts every caller (#NNN)
+### Fixed — BREAKING: a conference counts every caller (#433)
 
 `VerbaraServer.MeetMe` keyed each ConfBridge participant by user number, and `ConfbridgeJoin` carries none, so
 every participant was recorded as user 0. A conference with two callers reported one, and the first caller to leave
