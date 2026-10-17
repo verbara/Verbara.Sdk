@@ -16,6 +16,7 @@ namespace Verbara.Sdk.Ami.Tests.Actions;
 /// </remarks>
 public sealed class DeadModuleActionWireBaselineTests
 {
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     /// <summary>Each marked action, populated with a distinct value in every property it declares.</summary>
     private static readonly Dictionary<string, Func<ManagerAction>> Populated = new(StringComparer.Ordinal)
     {
@@ -84,6 +85,7 @@ public sealed class DeadModuleActionWireBaselineTests
         [nameof(ZapShowChannelsAction)] = "ZapShowChannels",
         [nameof(ZapTransferAction)] = "ZapTransfer|ZapChannel=3",
     };
+#pragma warning restore VSDK0005
 
     public static TheoryData<string> MarkedActions => [.. Populated.Keys.Order(StringComparer.Ordinal)];
 

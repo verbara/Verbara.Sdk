@@ -171,6 +171,7 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
     // QueueMemberPausedEvent -> QueueManager
     // ==========================================================================
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public async Task EventObserver_ShouldRouteQueueMemberPausedEvent_ToQueueManager()
     {
@@ -217,6 +218,7 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
             member.PausedReason.Should().Be("lunch");
         }
     }
+#pragma warning restore VSDK0005
 
     // ==========================================================================
     // QueueMemberPauseEvent -> QueueManager

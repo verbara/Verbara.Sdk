@@ -332,6 +332,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
             "digits must arrive in the order they were sent by SendDTMF");
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     /// <summary>
     /// Originates to ext 155 which runs Read() (waits for a digit).
     /// Sends DTMF "7" via PlayDtmf. Read() consumes the digit, and a DtmfEvent fires.
@@ -425,4 +426,5 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         public void OnError(Exception error) { }
         public void OnCompleted() { }
     }
+#pragma warning restore VSDK0005
 }

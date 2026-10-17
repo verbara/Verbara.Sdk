@@ -244,6 +244,7 @@ public class SpeechRecognizeCommandTests
 
 public class MeetmeCommandTests
 {
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Theory]
     [InlineData("100", null, null, "EXEC MeetMe 100")]
     [InlineData("100", "dM", null, "EXEC MeetMe 100,dM")]
@@ -261,6 +262,7 @@ public class MeetmeCommandTests
 
         cmd.BuildCommand().Should().Be(expected);
     }
+#pragma warning restore VSDK0005
 }
 
 public class SayDateTimeCommandTests
@@ -456,7 +458,9 @@ public class SimpleCommandBatchTests
             new GetVariableCommand(),
             new GosubCommand(),
             new HangupCommand(),
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
             new MeetmeCommand(),
+#pragma warning restore VSDK0005
             new NoopCommand(),
             new QueueCommand(),
             new ReceiveCharCommand(),

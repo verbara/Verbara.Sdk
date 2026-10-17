@@ -16,6 +16,7 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// </remarks>
 public sealed class DeadModuleEventDeliveryBaselineTests
 {
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     public static TheoryData<string, Type> MarkedEventNames => new()
     {
         { "Agentcallbacklogin", typeof(AgentCallbackLoginEvent) },
@@ -29,6 +30,7 @@ public sealed class DeadModuleEventDeliveryBaselineTests
         { "ChannelUpdate", typeof(ChannelUpdateEvent) },
         { "JabberEvent", typeof(JabberEventEvent) },
     };
+#pragma warning restore VSDK0005
 
     [Theory]
     [MemberData(nameof(MarkedEventNames))]
@@ -44,6 +46,7 @@ public sealed class DeadModuleEventDeliveryBaselineTests
         }
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public async Task Subscribers_ShouldReceiveTheQueuePauseFields_WhenQueueMemberPausedArrives()
     {
@@ -61,6 +64,7 @@ public sealed class DeadModuleEventDeliveryBaselineTests
             paused.Reason.Should().Be("lunch");
         }
     }
+#pragma warning restore VSDK0005
 
     private static async Task<IReadOnlyList<ManagerEvent>> DeliverAsync(string wireName, KeyValuePair<string, string>[] headers)
     {
