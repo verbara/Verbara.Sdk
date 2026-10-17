@@ -4,7 +4,7 @@ namespace Verbara.Sdk.Governance.Tests;
 
 /// <summary>
 /// The surface of dead Asterisk modules carries one deprecation id, as a warning, with one link, on exactly the ruled set
-/// of 44 types and one member; nothing else carries it, nothing suppresses it project-wide, every site-local suppression
+/// of 49 types and one member; nothing else carries it, nothing suppresses it project-wide, every site-local suppression
 /// is restored in its file and gives its reason, and the migration guide holds the one section the link points at.
 /// </summary>
 /// <remarks>
@@ -28,18 +28,18 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
 
         report.SourceFiles.Should().BeGreaterThan(0, "a guard that read no source would pass on nothing");
         report.IsClean.Should().BeTrue(
-            $"each of the 44 types and the member carries [Obsolete] with DiagnosticId = \"{Id}\", as a warning, with " +
+            $"each of the 49 types and the member carries [Obsolete] with DiagnosticId = \"{Id}\", as a warning, with " +
             "the guide's link; nothing else carries it; nothing suppresses it project-wide; every site-local " +
             "suppression is restored and gives its reason; the guide holds one section for it. Found:" +
             Environment.NewLine + report);
     }
 
     [Fact]
-    public void RuledSet_ShouldHoldFortyFourTypesAndOneMember_WhenRead()
+    public void RuledSet_ShouldHoldFortyNineTypesAndOneMember_WhenRead()
     {
         var set = DeadModuleDeprecationScanner.RuledSet;
 
-        set.Should().HaveCount(45).And.OnlyHaveUniqueItems();
+        set.Should().HaveCount(50).And.OnlyHaveUniqueItems();
         set.Count(s => s.Key.Contains('.', StringComparison.Ordinal)).Should().Be(1, "one member: MeetmeActivity.UseConfBridge");
     }
 

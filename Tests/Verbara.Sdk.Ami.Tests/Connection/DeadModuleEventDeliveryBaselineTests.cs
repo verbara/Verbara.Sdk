@@ -7,7 +7,7 @@ using static Verbara.Sdk.Ami.Tests.Connection.AmiDispatchTestKit;
 namespace Verbara.Sdk.Ami.Tests.Connection;
 
 /// <summary>
-/// The event names that dead Asterisk modules sent, or that Asterisk 12 renamed or dropped, still reach every subscriber
+/// The event names that dead Asterisk modules sent, or that Asterisk 10 or 12 renamed or dropped, still reach every subscriber
 /// as their typed class: a deprecation mark changes what the compiler reports, never what the connection delivers.
 /// </summary>
 /// <remarks>
@@ -29,6 +29,11 @@ public sealed class DeadModuleEventDeliveryBaselineTests
         { "ChannelReload", typeof(ChannelReloadEvent) },
         { "ChannelUpdate", typeof(ChannelUpdateEvent) },
         { "JabberEvent", typeof(JabberEventEvent) },
+        { "AGIExec", typeof(AgiExecEvent) },
+        { "AsyncAGI", typeof(AsyncAgiEvent) },
+        { "SendFAXStatus", typeof(SendFaxStatusEvent) },
+        { "BridgeExec", typeof(BridgeExecEvent) },
+        { "ModuleLoadReport", typeof(ModuleLoadReportEvent) },
     };
 #pragma warning restore VSDK0005
 
