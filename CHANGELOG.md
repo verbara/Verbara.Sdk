@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: the obsolete AMI event types, `LegacyEventAdapter` and `DeepgramVoices.Helios` are removed (#NNN)
+
+Twenty-six AMI event types that had been marked `[Obsolete]` are removed from `Verbara.Sdk.Ami`: `MeetMeEndEvent`,
+`MeetMeJoinEvent`, `MeetMeLeaveEvent`, `MeetMeMuteEvent`, `MeetMeStopTalkingEvent`, `MeetMeTalkingEvent`,
+`MeetMeTalkingRequestEvent`, `MonitorStartEvent`, `MonitorStopEvent`, `BridgeEvent`, `DialEvent`, `JoinEvent`,
+`LeaveEvent`, `LinkEvent`, `UnlinkEvent`, `PausedEvent`, `UnpausedEvent`, the seven `Skype*` events and
+`ZapShowChannelsEvent`/`ZapShowChannelsCompleteEvent`. None of their wire names was sent by Asterisk 20, 22, 23 or
+24.0.0-rc2 in a capture that drove every event-generating action the SDK publishes. Also removed: the public
+`Verbara.Sdk.Ami.Internal.LegacyEventAdapter`, which nothing in the SDK called, and `DeepgramVoices.Helios`, an alias
+of `HeliosLegacy`. An event whose type is gone, or any event the SDK has no type for, still arrives as a base
+`ManagerEvent` with its `EventType` and `RawFields`, and is not logged as a warning or an error. `VerbaraServer.MeetMe`
+is now fed by ConfBridge events only. Code that names a removed type must be recompiled; a binary built against 2.8.0
+fails with `TypeLoadException` when it loads one. Every `Verbara.Sdk.*` package moves to 2.9.0 together:
+`Verbara.Sdk.Live` 2.8.0 next to `Verbara.Sdk.Ami` 2.9.0 cannot resolve two of the removed types. The replacements
+and a recipe for an Asterisk that still sends one of these events are in
+[the migration guide](docs/guides/obsolete-ami-events-removal-migration.md).
+
+### Changed: `PeerEntryEvent` is no longer obsolete (#NNN)
+
+`IAXpeerlist` and `IAXpeers` (chan_iax2) still answer with `Event: PeerEntry` on Asterisk 20, 22, 23 and 24.0.0-rc2,
+so `PeerEntryEvent` stays and loses its `[Obsolete]` mark. A `#pragma warning disable CS0618` kept around it can be
+removed.
+
 ### Changed: a subscriber of the session events that throws no longer silences the others (#431)
 
 An exception thrown by a subscriber of `ICallSessionManager.Events` or `IAgentSessionTracker.StateChanges` used to
