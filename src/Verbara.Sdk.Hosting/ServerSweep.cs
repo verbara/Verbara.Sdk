@@ -77,8 +77,9 @@ internal sealed partial class ServerSweep
         }
         finally
         {
-            // Counted however the verification ended: one that threw after it had ended some calls (a subscriber to
-            // an ending that threw) reports those.
+            // Counted however the verification ended, so one that threw part-way reports the calls it had already
+            // ended. A subscriber to an ending that throws is not such a case: its exception is caught at that
+            // subscriber, and the verification ends every call the snapshot no longer lists.
             var ended = candidates.Count(HasEnded);
             activity?.SetTag("sessions.ended", ended);
             if (serverId is null)

@@ -111,7 +111,8 @@ public sealed class EndingOnceTests
     public async Task AgentStatistics_ShouldCountTheCallOnce_WhenALegReusingItsLinkedIdHangsUpAfterItEnded()
     {
         await using var rig = new ResidencyRig();
-        using var tracker = new AgentSessionTracker(rig.Manager, Microsoft.Extensions.Options.Options.Create(rig.Options));
+        using var tracker = new AgentSessionTracker(rig.Manager, Microsoft.Extensions.Options.Options.Create(rig.Options),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentSessionTracker>.Instance);
         rig.Server.Agents.OnAgentLogin("agent-1", "PJSIP/100");
         var call = rig.OpenAnsweredCall("g");
         rig.Server.Agents.OnAgentConnect("agent-1", "PJSIP/100", linkedId: ResidencyRig.LinkedIdOf("g"),

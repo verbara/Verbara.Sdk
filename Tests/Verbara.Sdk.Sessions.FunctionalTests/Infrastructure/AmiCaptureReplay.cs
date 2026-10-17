@@ -124,13 +124,20 @@ internal static class AmiCaptureReplay
         var callsBySessionId = new Dictionary<string, ReplayedCall>(StringComparer.Ordinal);
         var swallowed = new List<SwallowedObserverException>();
 
+        // A broken premise is recorded with what the server's observer let out, not thrown: the session events catch
+        // a subscriber's exception and only log it, so a throw here would reach no assertion.
         using var domainEvents = manager.Events.Subscribe(evt =>
         {
             if (evt is CallStartedEvent)
             {
-                var session = manager.GetById(evt.SessionId)
-                    ?? throw new InvalidOperationException(
-                        $"CallStartedEvent for {evt.SessionId}, which the manager does not hold.");
+                if (manager.GetById(evt.SessionId) is not { } session)
+                {
+                    swallowed.Add(new SwallowedObserverException(scenario, nameof(CallStartedEvent),
+                        new InvalidOperationException(
+                            $"CallStartedEvent for {evt.SessionId}, which the manager does not hold.")));
+                    return;
+                }
+
                 var call = new ReplayedCall(scenario, session);
                 calls.Add(call);
                 callsBySessionId[evt.SessionId] = call;
