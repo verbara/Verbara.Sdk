@@ -113,11 +113,10 @@ internal static class DeadModuleDeprecationScanner
 
     private static IEnumerable<FoundMark> FindMarks(SyntaxTree tree, string relativeFile)
     {
-        foreach (var attribute in tree.GetRoot().DescendantNodes().OfType<AttributeSyntax>())
+        var obsoletes = tree.GetRoot().DescendantNodes().OfType<AttributeSyntax>()
+            .Where(attribute => ObsoleteNames.Contains(attribute.Name.ToString(), StringComparer.Ordinal));
+        foreach (var attribute in obsoletes)
         {
-            if (!ObsoleteNames.Contains(attribute.Name.ToString(), StringComparer.Ordinal))
-                continue;
-
             var args = attribute.ArgumentList?.Arguments ?? default;
             string? diagnosticId = null;
             string? urlFormat = null;
@@ -176,11 +175,11 @@ internal static class DeadModuleDeprecationScanner
 
     private static void CheckAssemblySuppressions(SyntaxTree tree, string relative, List<string> violations)
     {
-        foreach (var list in tree.GetRoot().DescendantNodes().OfType<AttributeListSyntax>())
+        var targetLists = tree.GetRoot().DescendantNodes().OfType<AttributeListSyntax>()
+            .Where(list => list.Target?.Identifier.ValueText is "assembly" or "module");
+        foreach (var list in targetLists)
         {
-            if (list.Target?.Identifier.ValueText is not ("assembly" or "module"))
-                continue;
-
+            var target = list.Target!.Identifier.ValueText;
             foreach (var attribute in list.Attributes)
             {
                 var name = attribute.Name.ToString();
@@ -189,7 +188,7 @@ internal static class DeadModuleDeprecationScanner
                 if (attribute.ArgumentList?.Arguments.Any(a => LiteralText(a.Expression)?.Contains(DiagnosticId, StringComparison.Ordinal) == true) == true)
                 {
                     var line = attribute.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-                    violations.Add($"{relative}:{line}: [{list.Target.Identifier.ValueText}: SuppressMessage] suppresses {DiagnosticId} project-wide");
+                    violations.Add($"{relative}:{line}: [{target}: SuppressMessage] suppresses {DiagnosticId} project-wide");
                 }
             }
         }

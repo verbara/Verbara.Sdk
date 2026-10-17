@@ -150,12 +150,11 @@ public sealed class ObsoleteActionResponsePragmaTests
     /// <summary>No mark (<see langword="null"/>), a plain <c>[Obsolete("…")]</c>, or one carrying the deprecation id.</summary>
     private static string Mark(string source, bool? withId) => source.Replace(
         "__MARK__",
-        withId switch
-        {
-            null => "",
-            false => "[Obsolete(\"The module that served it is gone.\")]",
-            true => $"[Obsolete(\"The module that served it is gone.\", DiagnosticId = \"{DeprecationId}\")]",
-        },
+        withId is not { } carriesId
+            ? ""
+            : carriesId
+                ? $"[Obsolete(\"The module that served it is gone.\", DiagnosticId = \"{DeprecationId}\")]"
+                : "[Obsolete(\"The module that served it is gone.\")]",
         StringComparison.Ordinal);
 
     /// <summary>A bare number is the compiler's own id: <c>618</c> disables <c>CS0618</c>.</summary>
