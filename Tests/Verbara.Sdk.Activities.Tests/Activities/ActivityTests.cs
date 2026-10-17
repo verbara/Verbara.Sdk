@@ -137,6 +137,7 @@ public class ActivityTests
         await _channel.Received(1).ExecAsync("ConfBridge", "100", Arg.Any<CancellationToken>());
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public async Task MeetmeActivity_WithLegacyMeetMe()
     {
@@ -146,6 +147,7 @@ public class ActivityTests
 
         await _channel.Received(1).ExecAsync("MeetMe", "100", Arg.Any<CancellationToken>());
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public async Task VoicemailActivity_ShouldCallVoiceMail()

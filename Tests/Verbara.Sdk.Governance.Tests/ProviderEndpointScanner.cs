@@ -127,7 +127,7 @@ internal static class ProviderEndpointScanner
             if (shape is null || !NamesProductionEndpoint(shape))
                 continue;
 
-            if (IsDeclaredOnce(node))
+            if (IsDeclaredOnce(node) || IsDeprecationLink(node))
                 continue;
 
             if (IsAllowed(node, markerLines, commentLines) != excused)
@@ -230,6 +230,27 @@ internal static class ProviderEndpointScanner
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// True when the node is the <c>UrlFormat</c> argument of an <c>[Obsolete]</c> attribute: the
+    /// documentation link the compiler prints next to the deprecation diagnostic. It is metadata a
+    /// reader follows, never a route a client dials, and an attribute argument cannot name a constant
+    /// from another package, so "declare it once" has no shape to take there. Only that one named
+    /// argument is excused: a URL in the attribute's message, or in any other attribute, still reports.
+    /// </summary>
+    private static bool IsDeprecationLink(SyntaxNode node)
+    {
+        if (node.Parent is not AttributeArgumentSyntax { NameEquals.Name.Identifier.ValueText: "UrlFormat" } argument
+            || argument.Parent?.Parent is not AttributeSyntax attribute)
+            return false;
+
+        var name = attribute.Name.ToString();
+        if (name.StartsWith("global::", StringComparison.Ordinal))
+            name = name["global::".Length..];
+        if (name.StartsWith("System.", StringComparison.Ordinal))
+            name = name["System.".Length..];
+        return name is "Obsolete" or "ObsoleteAttribute";
     }
 
     /// <summary>

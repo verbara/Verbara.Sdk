@@ -150,6 +150,7 @@ public sealed class VerbaraServerCoverageTests : IAsyncLifetime
         act.Should().NotThrow();
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public async Task EventObserver_ShouldHandleMusicOnHoldEvent()
     {
@@ -161,6 +162,7 @@ public sealed class VerbaraServerCoverageTests : IAsyncLifetime
         });
         act.Should().NotThrow();
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public async Task DisposeAsync_ShouldBeIdempotent()

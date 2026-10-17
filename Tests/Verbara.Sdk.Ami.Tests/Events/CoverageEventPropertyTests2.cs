@@ -124,6 +124,7 @@ public sealed class CoverageEventPropertyTests2
         evt.LinkedId.Should().Be("linked-1");
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void FaxReceivedEvent_ShouldHaveAllProperties()
     {
@@ -140,6 +141,7 @@ public sealed class CoverageEventPropertyTests2
         evt.TransferRate.Should().Be(14400);
         evt.Filename.Should().Be("/tmp/fax.tif");
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public void PeerEntryEvent_ShouldHaveAllProperties()
@@ -207,6 +209,7 @@ public sealed class CoverageEventPropertyTests2
         evt.Muted.Should().Be("No");
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void ChannelReloadEvent_ShouldHaveAllProperties()
     {
@@ -221,6 +224,7 @@ public sealed class CoverageEventPropertyTests2
         evt.PeerCount.Should().Be(5);
         evt.RegistryCount.Should().Be(2);
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public void FullyBootedEvent_ShouldHaveAllProperties()
@@ -582,6 +586,7 @@ public sealed class CoverageEventPropertyTests2
         evt.EndpointName.Should().Be("100");
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void AgentCallbackLogoffEvent_ShouldHaveAllProperties()
     {
@@ -590,6 +595,7 @@ public sealed class CoverageEventPropertyTests2
         evt.Reason.Should().Be("logout");
         evt.LoginTime.Should().Be(3600);
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public void OriginateResponseEvent_ShouldHaveAllProperties()
@@ -628,6 +634,7 @@ public sealed class CoverageEventPropertyTests2
         evt.CallerIDNum.Should().Be("5551234");
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void TransferEvent_ShouldHaveAllProperties()
     {
@@ -647,6 +654,7 @@ public sealed class CoverageEventPropertyTests2
         evt.TransferContext.Should().Be("default");
         evt.Transfer2Parking.Should().BeFalse();
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public void ListDialplanEvent_ShouldHaveAllProperties()

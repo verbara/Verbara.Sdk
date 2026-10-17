@@ -162,6 +162,7 @@ public sealed class CoverageActionPropertyTests
         action.Options.Should().Be("r");
     }
 
+#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void MonitorAction_ShouldHaveProperties()
     {
@@ -171,6 +172,7 @@ public sealed class CoverageActionPropertyTests
         action.Format.Should().Be("wav");
         action.Mix.Should().BeTrue();
     }
+#pragma warning restore VSDK0005
 
     [Fact]
     public void PlayDtmfAction_ShouldHaveProperties()
