@@ -134,7 +134,7 @@ subscriber. These failures no longer appear as `[AMI_EVENT] Observer threw on <E
 (`Where`, `Select`, `OfType`, …) is still ended by that operator on its first failure, so subscribe directly and filter
 inside the handler. What a subscriber throws on another thread is not caught. The public API is unchanged.
 
-### Fixed — BREAKING: an attended transfer Asterisk refuses ends `Failed` (#NNN)
+### Fixed — BREAKING: an attended transfer Asterisk refuses ends `Failed` (#440)
 
 `AttendedTransferActivity` discarded the answer to its `Atxfer` action, so a transfer Asterisk refused with
 `Response: Error` (for example `Channel specified does not exist`, or `No attended transfer feature code found` on a
