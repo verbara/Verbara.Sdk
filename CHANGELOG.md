@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — BREAKING: a conference participant shows whether it is muted and talking (#NNN)
+### Fixed — BREAKING: a conference participant shows whether it is muted and talking (#434)
 
 `MeetMeUser.Muted` and `MeetMeUser.Talking` in `VerbaraServer.MeetMe` now follow what Asterisk reports: the
 `Muted` header of `ConfbridgeJoin`, `ConfbridgeMute`/`ConfbridgeUnmute`, and `ConfbridgeTalking`. Before, both were
@@ -17,7 +17,7 @@ conference table and does not reload it. `QueueMemberPause` now sets a live queu
 the typed `Paused` member, like the other queue member events; Asterisk sends `Paused: 1`/`0`, which reads the same
 as before.
 
-### Added: `MeetMeManager.UserStateChanged` (#NNN)
+### Added: `MeetMeManager.UserStateChanged` (#434)
 
 Raised once, after the change, when a participant's `Muted` or `Talking` changes. A repeated value, a join and an
 event for a participant that is not held raise nothing.
