@@ -56,8 +56,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
 
         // Wait for channel to be established
         var channelResult = await Task.WhenAny(channelTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
-        if (channelResult != channelTcs.Task)
-            return; // Graceful skip — channel did not appear in time
+        channelResult.Should().Be(channelTcs.Task, "originating Local/100@test-functional must report the originated channel within 5 s");
 
         var channelName = (await channelTcs.Task).Channel!;
 
@@ -111,8 +110,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
         });
 
         var channelResult = await Task.WhenAny(channelTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
-        if (channelResult != channelTcs.Task)
-            return;
+        channelResult.Should().Be(channelTcs.Task, "originating Local/100@test-functional must report the originated channel within 5 s");
 
         var channelName = (await channelTcs.Task).Channel!;
 
@@ -174,8 +172,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
         });
 
         var channelResult = await Task.WhenAny(channelTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
-        if (channelResult != channelTcs.Task)
-            return;
+        channelResult.Should().Be(channelTcs.Task, "originating Local/100@test-functional must report the originated channel within 5 s");
 
         var channelName = (await channelTcs.Task).Channel!;
 
