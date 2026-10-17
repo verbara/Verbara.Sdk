@@ -8,6 +8,7 @@ Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck.VerbaraServerPoolHealt
 Verbara.Sdk.Live.MeetMe.MeetMeManager.OnConferenceEnded(string! roomNumber) -> void
 Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserJoined(string! roomNumber, int userNum, string! channel, string? uniqueId) -> void
 Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserLeft(string! roomNumber, string! channel) -> void
+Verbara.Sdk.Live.MeetMe.MeetMeManager.UserStateChanged -> System.Action<Verbara.Sdk.Live.MeetMe.MeetMeRoom!, Verbara.Sdk.Live.MeetMe.MeetMeUser!>?
 Verbara.Sdk.Live.MeetMe.MeetMeRoom.Users.get -> System.Collections.Concurrent.ConcurrentDictionary<string!, Verbara.Sdk.Live.MeetMe.MeetMeUser!>!
 Verbara.Sdk.Live.MeetMe.MeetMeUser.UniqueId.get -> string?
 Verbara.Sdk.Live.MeetMe.MeetMeUser.UniqueId.init -> void

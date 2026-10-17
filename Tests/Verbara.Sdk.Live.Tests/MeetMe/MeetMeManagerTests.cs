@@ -326,6 +326,190 @@ public sealed class MeetMeManagerTests
         logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Debug && e.Message.Contains("event=end"));
     }
 
+    // --- Mute and talking state ----------------------------------------------------------------
+
+    [Fact]
+    public void OnUserJoined_ShouldSetMutedBeforeUserJoined_WhenJoinCarriesMuted()
+    {
+        bool? mutedSeenByUserJoined = null;
+        var stateChanged = 0;
+        _sut.UserJoined += (_, user) => mutedSeenByUserJoined = user.Muted;
+        _sut.UserStateChanged += (_, _) => stateChanged++;
+
+        _sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA, muted: true);
+
+        _sut.GetRoom(Room)!.Users[ChannelA].Muted.Should().BeTrue();
+        _sut.GetRoom(Room)!.Users[ChannelA].Talking.Should().BeFalse("a participant starts not talking");
+        mutedSeenByUserJoined.Should().BeTrue("the muted value is in place before UserJoined is raised");
+        stateChanged.Should().Be(0, "a join raises UserJoined only");
+    }
+
+    [Fact]
+    public void OnUserJoined_ShouldReadNotMuted_WhenRecordedThroughPublicOverloads()
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA);
+        _sut.OnUserJoined(Room, 0, ChannelB, UniqueIdB);
+
+        _sut.GetRoom(Room)!.Users[ChannelA].Muted.Should().BeFalse();
+        _sut.GetRoom(Room)!.Users[ChannelB].Muted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void OnUserJoined_ShouldReseedMutedAndClearTalking_WhenHeldChannelJoinsAgain()
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA, muted: true);
+        _sut.OnUserTalking(Room, ChannelA, true);
+
+        _sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA, muted: false);
+
+        var user = _sut.GetRoom(Room)!.Users[ChannelA];
+        user.Muted.Should().BeFalse("the new join carried not muted");
+        user.Talking.Should().BeFalse("the new join starts not talking");
+    }
+
+    [Fact]
+    public void OnUserMuted_ShouldMuteNamedParticipantAndRaiseOnce_WhenMuteThenRepeatThenUnmute()
+    {
+        JoinBoth();
+        var notified = new List<(MeetMeRoom Room, MeetMeUser User, bool Muted)>();
+        _sut.UserStateChanged += (room, user) => notified.Add((room, user, user.Muted));
+
+        _sut.OnUserMuted(Room, ChannelA, true);
+
+        _sut.GetRoom(Room)!.Users[ChannelA].Muted.Should().BeTrue();
+        _sut.GetRoom(Room)!.Users[ChannelB].Muted.Should().BeFalse("the mute named the other participant");
+        notified.Should().ContainSingle();
+        notified[0].Room.RoomNumber.Should().Be(Room);
+        notified[0].User.Channel.Should().Be(ChannelA);
+        notified[0].Muted.Should().BeTrue("the notification is raised after the write");
+
+        _sut.OnUserMuted(Room, ChannelA, true);
+        notified.Should().ContainSingle("a mute of a muted participant changes nothing");
+
+        _sut.OnUserMuted(Room, ChannelA, false);
+        _sut.GetRoom(Room)!.Users[ChannelA].Muted.Should().BeFalse();
+        notified.Should().HaveCount(2, "the unmute changed the state");
+        notified[1].Muted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void OnUserMuted_ShouldRaiseNothing_WhenUnmutingParticipantNotMuted()
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
+        var notified = 0;
+        _sut.UserStateChanged += (_, _) => notified++;
+
+        _sut.OnUserMuted(Room, ChannelA, false);
+
+        notified.Should().Be(0);
+        _sut.GetRoom(Room)!.Users[ChannelA].Muted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void OnUserTalking_ShouldSetTalkingAndRaiseOncePerChange_WhenOnRepeatThenOff()
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
+        var notified = new List<bool>();
+        _sut.UserStateChanged += (_, user) => notified.Add(user.Talking);
+
+        _sut.OnUserTalking(Room, ChannelA, true);
+        _sut.GetRoom(Room)!.Users[ChannelA].Talking.Should().BeTrue();
+
+        _sut.OnUserTalking(Room, ChannelA, true);
+        _sut.OnUserTalking(Room, ChannelA, false);
+
+        _sut.GetRoom(Room)!.Users[ChannelA].Talking.Should().BeFalse();
+        notified.Should().Equal([true, false], "on and off are changes, the repeated on is not");
+    }
+
+    [Fact]
+    public void OnUserMutedAndOnUserTalking_ShouldLeaveEachOtherUnchanged()
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
+
+        _sut.OnUserTalking(Room, ChannelA, true);
+        _sut.OnUserMuted(Room, ChannelA, true);
+
+        var user = _sut.GetRoom(Room)!.Users[ChannelA];
+        user.Talking.Should().BeTrue("a mute does not change the talking state");
+        user.Muted.Should().BeTrue();
+
+        _sut.OnUserTalking(Room, ChannelA, false);
+        user.Muted.Should().BeTrue("a talking event does not change the mute state");
+    }
+
+    [Fact]
+    public void OnUserMutedAndOnUserTalking_ShouldLogAppliedEvents()
+    {
+        var logger = new CapturingLogger();
+        var sut = new MeetMeManager(logger);
+        sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
+
+        sut.OnUserMuted(Room, ChannelA, true);
+        sut.OnUserTalking(Room, ChannelA, true);
+
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Debug && e.Message.StartsWith("[CONFERENCE] User muted", StringComparison.Ordinal) && e.Message.Contains("muted=True"));
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Debug && e.Message.StartsWith("[CONFERENCE] User talking", StringComparison.Ordinal) && e.Message.Contains("talking=True"));
+    }
+
+    [Theory]
+    [InlineData("300", ChannelA, "mute")]
+    [InlineData(Room, ChannelB, "mute")]
+    [InlineData("300", ChannelA, "talking")]
+    [InlineData(Room, ChannelB, "talking")]
+    public void OnUserMutedOrOnUserTalking_ShouldChangeNothing_WhenRoomOrParticipantIsNotHeld(string roomNumber, string channel, string eventName)
+    {
+        var logger = new CapturingLogger();
+        var sut = new MeetMeManager(logger);
+        sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
+        var notified = 0;
+        sut.UserStateChanged += (_, _) => notified++;
+
+        if (eventName == "mute")
+        {
+            sut.OnUserMuted(roomNumber, channel, true);
+        }
+        else
+        {
+            sut.OnUserTalking(roomNumber, channel, true);
+        }
+
+        sut.Rooms.Select(r => r.RoomNumber).Should().BeEquivalentTo([Room], "a state event never creates a room");
+        sut.GetRoom(Room)!.Users.Keys.Should().BeEquivalentTo([ChannelA], "a state event never creates a participant");
+        sut.GetRoom(Room)!.Users[ChannelA].Muted.Should().BeFalse();
+        sut.GetRoom(Room)!.Users[ChannelA].Talking.Should().BeFalse();
+        notified.Should().Be(0);
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Debug && e.Message.Contains("participant not held") && e.Message.Contains($"event={eventName}"));
+    }
+
+    [Theory]
+    [InlineData("", ChannelA, "mute")]
+    [InlineData(Room, "", "mute")]
+    [InlineData("", ChannelA, "talking")]
+    [InlineData(Room, "", "talking")]
+    public void OnUserMutedOrOnUserTalking_ShouldNotApply_WhenConferenceOrChannelIsEmpty(string roomNumber, string channel, string eventName)
+    {
+        var logger = new CapturingLogger();
+        var sut = new MeetMeManager(logger);
+        sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
+        var notified = 0;
+        sut.UserStateChanged += (_, _) => notified++;
+
+        if (eventName == "mute")
+        {
+            sut.OnUserMuted(roomNumber, channel, true);
+        }
+        else
+        {
+            sut.OnUserTalking(roomNumber, channel, true);
+        }
+
+        sut.GetRoom(Room)!.Users[ChannelA].Muted.Should().BeFalse();
+        sut.GetRoom(Room)!.Users[ChannelA].Talking.Should().BeFalse();
+        notified.Should().Be(0);
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Debug && e.Message.Contains("missing conference or channel") && e.Message.Contains($"event={eventName}"));
+    }
+
     [Fact]
     public void GetRoom_ShouldReturnNull_WhenRoomDoesNotExist()
     {

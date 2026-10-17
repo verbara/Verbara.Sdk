@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 
 namespace Verbara.Sdk.Live.MeetMe;
@@ -13,6 +14,18 @@ internal static partial class MeetMeManagerLog
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFERENCE] Event not applied, missing conference or channel: event={EventName} room={RoomNumber} channel={Channel}")]
     public static partial void EventNotApplied(ILogger logger, string eventName, string? roomNumber, string? channel);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFERENCE] User muted: room={RoomNumber} channel={Channel} muted={Muted} changed={Changed}")]
+    public static partial void UserMuted(ILogger logger, string roomNumber, string channel, bool muted, bool changed);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFERENCE] User talking: room={RoomNumber} channel={Channel} talking={Talking} changed={Changed}")]
+    public static partial void UserTalking(ILogger logger, string roomNumber, string channel, bool talking, bool changed);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFERENCE] Event not applied, participant not held: event={EventName} room={RoomNumber} channel={Channel}")]
+    public static partial void ParticipantNotHeld(ILogger logger, string eventName, string roomNumber, string channel);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFERENCE] Event not applied, no readable talking status: room={RoomNumber} channel={Channel}")]
+    public static partial void TalkingStatusUnreadable(ILogger logger, string? roomNumber, string? channel);
 }
 
 /// <summary>
@@ -33,6 +46,15 @@ public sealed class MeetMeManager
 
     public event Action<MeetMeRoom, MeetMeUser>? UserJoined;
     public event Action<MeetMeRoom, MeetMeUser>? UserLeft;
+
+    /// <summary>
+    /// Raised once, with the room and the participant, after a ConfBridge mute, unmute or talking
+    /// event changes the participant's <see cref="MeetMeUser.Muted"/> or
+    /// <see cref="MeetMeUser.Talking"/>. Not raised when the event leaves the value as it was, for
+    /// an event naming a participant that is not held, or for a join: <see cref="UserJoined"/>
+    /// already carries the state the join set.
+    /// </summary>
+    public event Action<MeetMeRoom, MeetMeUser>? UserStateChanged;
 
     public MeetMeManager(ILogger logger) => _logger = logger;
 
@@ -62,7 +84,21 @@ public sealed class MeetMeManager
     /// <param name="userNum">The user number Asterisk sent, stored only; <c>0</c> for ConfBridge, which sends none.</param>
     /// <param name="channel">The participant's channel name, which is its key. A missing or empty value is not applied.</param>
     /// <param name="uniqueId">The join's <c>Uniqueid</c>, stored as data only; it never identifies, replaces or removes a participant.</param>
-    public void OnUserJoined(string roomNumber, int userNum, string channel, string? uniqueId)
+    public void OnUserJoined(string roomNumber, int userNum, string channel, string? uniqueId) =>
+        OnUserJoined(roomNumber, userNum, channel, uniqueId, muted: false);
+
+    /// <summary>
+    /// Records a participant's join as the public overload does, and sets
+    /// <see cref="MeetMeUser.Muted"/> to <paramref name="muted"/> before the participant is stored
+    /// and before <see cref="UserJoined"/> is raised. <see cref="MeetMeUser.Talking"/> starts
+    /// <see langword="false"/>, also for a join that replaces a held participant.
+    /// </summary>
+    /// <param name="roomNumber">The conference name. A missing or empty value is not applied.</param>
+    /// <param name="userNum">The user number Asterisk sent, stored only; <c>0</c> for ConfBridge, which sends none.</param>
+    /// <param name="channel">The participant's channel name, which is its key. A missing or empty value is not applied.</param>
+    /// <param name="uniqueId">The join's <c>Uniqueid</c>, stored as data only.</param>
+    /// <param name="muted">The muted value the join carried.</param>
+    internal void OnUserJoined(string roomNumber, int userNum, string channel, string? uniqueId, bool muted)
     {
         if (string.IsNullOrEmpty(roomNumber) || string.IsNullOrEmpty(channel))
         {
@@ -77,6 +113,7 @@ public sealed class MeetMeManager
             Channel = channel,
             UniqueId = uniqueId,
             State = MeetMeUserState.Joined,
+            Muted = muted,
         };
         room.Users[channel] = user;
         MeetMeManagerLog.UserJoined(_logger, roomNumber, channel, userNum);
@@ -109,6 +146,72 @@ public sealed class MeetMeManager
                 _rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(roomNumber, room));
             }
         }
+    }
+
+    /// <summary>
+    /// Records a ConfBridge mute (<paramref name="muted"/> <see langword="true"/>) or unmute
+    /// (<see langword="false"/>) for the participant keyed by <paramref name="channel"/>, and raises
+    /// <see cref="UserStateChanged"/> once when the value changed. A room or participant that is not
+    /// held is never created and nothing is raised.
+    /// </summary>
+    /// <param name="roomNumber">The conference name. A missing or empty value is not applied.</param>
+    /// <param name="channel">The channel name the event names. A missing or empty value is not applied.</param>
+    /// <param name="muted">The participant's new mute state.</param>
+    internal void OnUserMuted(string roomNumber, string channel, bool muted)
+    {
+        if (TryGetHeld("mute", roomNumber, channel, out var room, out var user))
+        {
+            var changed = user.Muted != muted;
+            user.Muted = muted;
+            MeetMeManagerLog.UserMuted(_logger, roomNumber, channel, muted, changed);
+            if (changed)
+            {
+                UserStateChanged?.Invoke(room, user);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Records a ConfBridge talking status for the participant keyed by <paramref name="channel"/>,
+    /// and raises <see cref="UserStateChanged"/> once when the value changed. A room or participant
+    /// that is not held is never created and nothing is raised.
+    /// </summary>
+    /// <param name="roomNumber">The conference name. A missing or empty value is not applied.</param>
+    /// <param name="channel">The channel name the event names. A missing or empty value is not applied.</param>
+    /// <param name="talking">The participant's new talking state.</param>
+    internal void OnUserTalking(string roomNumber, string channel, bool talking)
+    {
+        if (TryGetHeld("talking", roomNumber, channel, out var room, out var user))
+        {
+            var changed = user.Talking != talking;
+            user.Talking = talking;
+            MeetMeManagerLog.UserTalking(_logger, roomNumber, channel, talking, changed);
+            if (changed)
+            {
+                UserStateChanged?.Invoke(room, user);
+            }
+        }
+    }
+
+    private bool TryGetHeld(string eventName, string roomNumber, string channel,
+        [NotNullWhen(true)] out MeetMeRoom? room, [NotNullWhen(true)] out MeetMeUser? user)
+    {
+        room = null;
+        user = null;
+        if (string.IsNullOrEmpty(roomNumber) || string.IsNullOrEmpty(channel))
+        {
+            MeetMeManagerLog.EventNotApplied(_logger, eventName, roomNumber, channel);
+            return false;
+        }
+
+        if (!_rooms.TryGetValue(roomNumber, out room) || !room.Users.TryGetValue(channel, out user))
+        {
+            room = null;
+            MeetMeManagerLog.ParticipantNotHeld(_logger, eventName, roomNumber, channel);
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -183,6 +286,31 @@ public sealed class MeetMeUser
     public string? UniqueId { get; init; }
 
     public MeetMeUserState State { get; set; }
+
+    /// <summary>
+    /// Whether the participant is muted, as Asterisk last reported it: set from the join's
+    /// <c>Muted</c> header (an absent or unreadable value reads <see langword="false"/>), then by
+    /// each <c>ConfbridgeMute</c> (<see langword="true"/>) and <c>ConfbridgeUnmute</c>
+    /// (<see langword="false"/>) that names this participant.
+    /// </summary>
+    /// <remarks>
+    /// This is the participant's mute request as Asterisk reports it, not whether the participant is
+    /// audible: a participant on hold music, or a wait-marked participant with no marked user present,
+    /// is silent while reading <see langword="false"/>. A whole-room mute from the conference keypad
+    /// sends no event, so the participants keep reading <see langword="false"/> until a later
+    /// per-participant event or a reload of the conference table reads the real state.
+    /// </remarks>
     public bool Muted { get; set; }
+
+    /// <summary>
+    /// Whether the participant is talking, as the last <c>ConfbridgeTalking</c> naming it reported
+    /// (<c>TalkingStatus</c>; an absent or unreadable status leaves the value unchanged).
+    /// <see langword="false"/> from the join.
+    /// </summary>
+    /// <remarks>
+    /// Asterisk sends <c>ConfbridgeTalking</c> only for a ConfBridge user profile with
+    /// <c>talk_detection_events=yes</c> (the default is <c>no</c>); without it this stays
+    /// <see langword="false"/>.
+    /// </remarks>
     public bool Talking { get; set; }
 }

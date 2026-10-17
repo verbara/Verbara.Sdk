@@ -226,6 +226,58 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
         Participant(MutedChannel).Talking.Should().BeFalse("a new join starts not talking");
     }
 
+    // --- State-changed notification -----------------------------------------------------------
+
+    [Fact]
+    public async Task UserStateChanged_ShouldBeRaisedOnce_WhenParticipantIsMutedTwice()
+    {
+        var notified = new List<(MeetMeRoom Room, MeetMeUser User, bool Muted)>();
+        _sut.MeetMe.UserStateChanged += (room, user) => notified.Add((room, user, user.Muted));
+        await StartAndGetObserverAsync();
+        Join(AdminChannel, "No");
+        notified.Should().BeEmpty("a join raises UserJoined, not UserStateChanged");
+
+        Mute(AdminChannel);
+
+        notified.Should().ContainSingle("the mute changed the participant's mute state");
+        notified[0].Room.RoomNumber.Should().Be(Conference);
+        notified[0].User.Channel.Should().Be(AdminChannel);
+        notified[0].Muted.Should().BeTrue("the notification is raised after the write");
+
+        Mute(AdminChannel);
+
+        notified.Should().ContainSingle("a second mute leaves the state as it was");
+    }
+
+    [Fact]
+    public async Task UserStateChanged_ShouldNotBeRaised_WhenParticipantJoinsMuted()
+    {
+        var notified = 0;
+        _sut.MeetMe.UserStateChanged += (_, _) => notified++;
+        await StartAndGetObserverAsync();
+
+        Join(MutedChannel, "Yes");
+
+        notified.Should().Be(0, "UserJoined already carries the state the join set");
+        Participant(MutedChannel).Muted.Should().BeTrue("the join carried Muted: Yes");
+    }
+
+    [Fact]
+    public async Task UserStateChanged_ShouldBeRaisedOncePerChange_WhenTalkingStatusChangesAndRepeats()
+    {
+        var notified = 0;
+        _sut.MeetMe.UserStateChanged += (_, _) => notified++;
+        await StartAndGetObserverAsync();
+        Join(TalkerChannel, "No");
+
+        Talking(TalkerChannel, true);
+        Talking(TalkerChannel, true);
+        Talking(TalkerChannel, null);
+        Talking(TalkerChannel, false);
+
+        notified.Should().Be(2, "on and off are changes; a repeated on and an unreadable status are not");
+    }
+
     // --- Events for participants the server does not hold -------------------------------------
 
     [Fact]
