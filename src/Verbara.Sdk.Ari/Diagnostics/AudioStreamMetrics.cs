@@ -13,6 +13,11 @@ namespace Verbara.Sdk.Ari.Diagnostics;
 /// (<c>audio.transport</c>), naming the transport the stream came through: <c>audiosocket</c> or
 /// <c>websocket</c>.
 /// </para>
+/// <para>
+/// One public instrument is not emitted: <see cref="BufferUnderruns"/> (<c>audio.buffer.underruns</c>).
+/// The SDK has no write pump, since audio goes out when the caller writes it, so nothing can observe
+/// an underrun. The field is obsolete with <c>VSDK0003</c>, and the instrument stays published.
+/// </para>
 /// </summary>
 public static class AudioStreamMetrics
 {
@@ -65,7 +70,20 @@ public static class AudioStreamMetrics
 
     // --- Health ---
 
-    /// <summary>Write pump starved — no audio to send.</summary>
+    /// <summary>Write pump starved — no audio to send. Not emitted: nothing records this instrument.</summary>
+    /// <remarks>
+    /// The SDK has no write pump. Audio goes out when the caller writes it, so the SDK never sees the far
+    /// end starve, and <c>audio.buffer.underruns</c> stays at zero. The instrument is still published on the
+    /// meter under the same name, and the field still compiles: deprecating it removes nothing.
+    /// </remarks>
+    /// <remarks>
+    /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can
+    /// suppress this one deprecation with <c>&lt;NoWarn&gt;VSDK0003&lt;/NoWarn&gt;</c> instead of
+    /// silencing every <c>CS0618</c> in their tree.
+    /// </remarks>
+    [Obsolete(
+        "Not emitted: nothing records audio.buffer.underruns. The SDK has no write pump; audio goes out when the caller writes it, so the SDK never sees the far end starve.",
+        DiagnosticId = "VSDK0003")]
     public static readonly Counter<long> BufferUnderruns =
         Meter.CreateCounter<long>("audio.buffer.underruns", "underruns",
             "Write pump starved - no audio to send");
