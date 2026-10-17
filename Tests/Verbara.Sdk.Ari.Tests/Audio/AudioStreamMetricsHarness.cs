@@ -224,6 +224,7 @@ internal sealed class WebSocketCall : ServedAudioCall
     private const string ChannelId = "ws-metrics-witness";
     private readonly WebSocketAudioServer _server;
     private WebSocket? _client;
+    private NetworkStream? _clientStream;
 
     private WebSocketCall()
     {
@@ -298,8 +299,9 @@ internal sealed class WebSocketCall : ServedAudioCall
         if (!status.StartsWith("HTTP/1.1 101", StringComparison.Ordinal))
             throw new InvalidOperationException($"The upgrade was not accepted: {status}");
 
+        _clientStream = new NetworkStream(Peer, ownsSocket: false);
         _client = WebSocket.CreateFromStream(
-            new NetworkStream(Peer, ownsSocket: false),
+            _clientStream,
             new WebSocketCreationOptions { IsServer = false, KeepAliveInterval = TimeSpan.Zero });
     }
 
@@ -330,6 +332,8 @@ internal sealed class WebSocketCall : ServedAudioCall
     public override async ValueTask DisposeAsync()
     {
         _client?.Dispose();
+        if (_clientStream is not null)
+            await _clientStream.DisposeAsync();
         await base.DisposeAsync();
     }
 

@@ -158,8 +158,9 @@ public sealed class AudioStreamStateChannelLifecycleTests
                     act(i);
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
+                // Any failure of the racing action, an assertion included, is reported, not lost on the thread.
                 failures.Enqueue(ex);
                 barrier.RemoveParticipant();
             }
@@ -168,11 +169,8 @@ public sealed class AudioStreamStateChannelLifecycleTests
         var threads = new[] { new Thread(() => Loop(first)), new Thread(() => Loop(second)) };
         foreach (var thread in threads)
             thread.Start();
-        foreach (var thread in threads)
-        {
-            if (!thread.Join(RaceTimeout))
-                failures.Enqueue(new TimeoutException("A racing thread did not finish."));
-        }
+        foreach (var _ in threads.Where(thread => !thread.Join(RaceTimeout)))
+            failures.Enqueue(new TimeoutException("A racing thread did not finish."));
 
         return failures;
     }
