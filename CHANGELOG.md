@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: a conference counts every caller (#NNN)
+
+`VerbaraServer.MeetMe` keyed each ConfBridge participant by user number, and `ConfbridgeJoin` carries none, so
+every participant was recorded as user 0. A conference with two callers reported one, and the first caller to leave
+removed the room while the other was still in it. Participants are now keyed by the channel name of their join:
+`UserCount` counts every caller, a leave removes only the participant whose channel it names, the room goes when
+its last participant leaves, and `UserJoined`/`UserLeft` are raised once per participant. `ConfbridgeEnd` is now
+handled too: each participant still held gets `UserLeft`, then the room is removed. `MeetMeUser.UniqueId` carries
+the join's `Uniqueid` as data. Two public members change shape: `MeetMeRoom.Users` is a
+`ConcurrentDictionary<string, MeetMeUser>` keyed by channel, and `MeetMeManager.OnUserLeft` takes
+`(string roomNumber, string channel)`. Code that names either must be recompiled; a binary built against 2.8.0
+fails with `MissingMethodException` when it calls one. Added: `MeetMeManager.OnUserJoined` with a `uniqueId`
+argument and `MeetMeManager.OnConferenceEnded`. `UserNum` stays 0 for ConfBridge, and `Muted`/`Talking` are
+still not set. Before/after code is in
+[the migration guide](docs/guides/conference-participants-migration.md).
+
 ### Changed — BREAKING: the obsolete AMI event types, `LegacyEventAdapter` and `DeepgramVoices.Helios` are removed (#432)
 
 Twenty-six AMI event types that had been marked `[Obsolete]` are removed from `Verbara.Sdk.Ami`: `MeetMeEndEvent`,

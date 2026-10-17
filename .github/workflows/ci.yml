@@ -48,7 +48,7 @@ jobs:
   # codeql.yml, which is merge_group-wired — paths-ignore there is BANNED and `needs:` cannot cross
   # workflow files, so codeql.yml carries its own gate job.
   #
-  # Allowlist: docs/** CHANGELOG.md, top-level *.md, **/README.md — MINUS the seven
+  # Allowlist: docs/** CHANGELOG.md, top-level *.md, **/README.md — MINUS the eight
   # Markdown files Verbara.Sdk.DocSnippets.Tests Roslyn-compiles inside the (gated) Unit Tests job.
   gate:
     name: Docs-only gate
