@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reactive.Subjects;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging;
+using Verbara.Sdk.Ari.Diagnostics;
 
 namespace Verbara.Sdk.Ari.Audio;
 
@@ -38,6 +39,14 @@ internal static partial class AudioStreamStateLog
 /// while the wrapper's call into it is in progress, and a publication from the read pump arrives on
 /// another thread.
 /// </para>
+/// <para>
+/// <b>The lifecycle counts.</b> <see cref="RecordOpened"/> counts the stream on
+/// <c>audio.streams.opened</c> once, and the <see cref="TryEnd"/> call that publishes the ending counts it on
+/// <c>audio.streams.closed</c>, before anything is published, only if it was counted opened. Both are
+/// decided by one atomic step, so a stream that ended before it opened (an AudioSocket connection that
+/// never identified itself) counts neither, and an opened stream is closed exactly once however many
+/// parties end it. A stream that never calls <see cref="RecordOpened"/> records nothing.
+/// </para>
 /// </remarks>
 internal sealed class AudioStreamStateChannel : IObservable<AudioStreamState>, IDisposable
 {
@@ -48,6 +57,12 @@ internal sealed class AudioStreamStateChannel : IObservable<AudioStreamState>, I
     private int _current;
     private int _endPublished;
     private int _completed;
+    private int _lifecycle;
+    private KeyValuePair<string, object?> _transport;
+
+    private const int LifecycleNotOpened = 0;
+    private const int LifecycleOpened = 1;
+    private const int LifecycleEnded = 2;
 
     /// <summary>Initializes a channel whose subscribers are first replayed <paramref name="initial"/>.</summary>
     /// <param name="initial">The state a subscriber is replayed before anything is published.</param>
@@ -80,6 +95,23 @@ internal sealed class AudioStreamStateChannel : IObservable<AudioStreamState>, I
     }
 
     /// <summary>
+    /// Counts the stream on <c>audio.streams.opened</c>, tagged with <paramref name="transport"/>, unless it
+    /// was already counted or has already ended; its ending then counts it closed with the same tag.
+    /// Returns whether this call counted it.
+    /// </summary>
+    /// <param name="transport">The <c>audio.transport</c> tag of the stream's door, a cached instance.</param>
+    public bool RecordOpened(KeyValuePair<string, object?> transport)
+    {
+        // Written before the exchange, which is a full fence: the TryEnd that sees Opened sees the tag.
+        _transport = transport;
+        if (Interlocked.CompareExchange(ref _lifecycle, LifecycleOpened, LifecycleNotOpened) != LifecycleNotOpened)
+            return false;
+
+        AudioStreamMetrics.StreamsOpened.Add(1, transport);
+        return true;
+    }
+
+    /// <summary>
     /// Publishes the stream's ending if no one has: <see cref="AudioStreamState.Error"/> first when
     /// <paramref name="error"/> is set, then <see cref="AudioStreamState.Disconnected"/>. Returns whether
     /// this call published it.
@@ -88,6 +120,11 @@ internal sealed class AudioStreamStateChannel : IObservable<AudioStreamState>, I
     {
         if (Interlocked.Exchange(ref _endPublished, 1) != 0)
             return false;
+
+        // Counted before anything is published, so whoever reacts to the ending already finds the count;
+        // and closed only when opened, so the two counts stay a pair.
+        if (Interlocked.Exchange(ref _lifecycle, LifecycleEnded) == LifecycleOpened)
+            AudioStreamMetrics.StreamsClosed.Add(1, _transport);
 
         _ended.TrySetResult();
         if (error)
