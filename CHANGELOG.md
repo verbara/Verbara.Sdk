@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: types of dead Asterisk modules are deprecated with `VSDK0005` (#NNN)
+
+Forty-four types and one member are now `[Obsolete]` with diagnostic id `VSDK0005`, as a warning, never an error.
+Each reaches only an Asterisk module that is gone or deprecated upstream, a module its publisher discontinued, or a
+wire name Asterisk renamed or removed in version 12:
+
+- **chan_sip** (removed in Asterisk 21): `SipPeersAction`, `SipShowPeerAction`, `SipShowRegistryAction`,
+  `SipNotifyAction`, `SipShowPeerResponse`, `ChannelReloadEvent`.
+- **res_monitor** (removed in Asterisk 21): `MonitorAction`, `StopMonitorAction`, `ChangeMonitorAction`,
+  `PauseMonitorAction`, `UnpauseMonitorAction`.
+- **app_meetme** (deprecated since Asterisk 19, not built by default): `MeetMeMuteAction`, `MeetMeUnmuteAction`,
+  `MeetMeEventBase`, `MeetmeCompatibility`, `MeetmeCommand` (`Verbara.Sdk.Agi`) and the member
+  `MeetmeActivity.UseConfBridge` (`Verbara.Sdk.Activities`).
+- **Skype for Asterisk** (discontinued in 2011): the eight `Skype*` actions, `SkypeBuddyResponse`,
+  `SkypeLicenseStatusResponse`.
+- **Zaptel action names** (renamed `DAHDI*` in Asterisk 1.6): the seven `Zap*` actions.
+- **chan_agent and app_setcdruserfield**: `AgentCallbackLoginAction`, `AgentCallbackLoginEvent`,
+  `AgentCallbackLogoffEvent`, `SetCdrUserFieldAction`.
+- **Event names Asterisk 12 renamed or removed**: `QueueMemberPausedEvent`, `MusicOnHoldEvent`, `FaxReceivedEvent`,
+  `DtmfEvent`, `TransferEvent`, `ChannelUpdateEvent`, `JabberEventEvent`.
+
+Nothing changes at run time: every marked action is still sent, every marked response and event is still parsed,
+and each wire name maps to the same type as in 2.8.0. Only the compiler output changes. A consumer that builds with
+`TreatWarningsAsErrors` and names one of these symbols gets `error VSDK0005`, and can silence exactly this with
+`<NoWarn>$(NoWarn);VSDK0005</NoWarn>` without hiding other obsolete warnings. The marked symbols are removed in
+2.10.0. The warning's link opens
+[the replacement for each symbol](docs/guides/obsolete-ami-events-removal-migration.md#vsdk0005).
+`MeetmeActivity`, the `VerbaraServer.MeetMe` types, `QueueMemberPauseEvent` and the fax-license types are not
+deprecated.
+
 ### Fixed: the audio sessions record the audio meter's instruments (#435)
 
 The `Verbara.Sdk.Ari.Audio` meter published ten instruments in `AudioStreamMetrics` and the sessions recorded none
