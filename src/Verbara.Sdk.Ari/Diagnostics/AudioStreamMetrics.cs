@@ -81,15 +81,17 @@ public static class AudioStreamMetrics
             "AudioSocket error frames received");
 
     /// <summary>
-    /// AudioSocket sessions whose transport failed while the session was live: the connection was
-    /// reset, or a read from the socket otherwise failed, after the identification frame and before
-    /// any hangup or error frame. Such a session still ends as <c>Disconnected</c>, exactly as a
-    /// hangup does, so this counter and the session's Warning are what tell the two apart. Internal:
+    /// Audio sessions, AudioSocket or WebSocket, whose transport failed while the session was live. On
+    /// AudioSocket: the connection was reset, or a read from the socket otherwise failed, after the
+    /// identification frame and before any hangup or error frame. On WebSocket: the connection was reset,
+    /// or otherwise ended without the peer's close frame. Such a session still ends as
+    /// <c>Disconnected</c>, exactly as a hangup or a close does, so this counter and the session's
+    /// Warning are what tell the two apart. Internal:
     /// the instrument's name is the contract an exporter sees, and the field adds no public API.
     /// </summary>
     internal static readonly Counter<long> TransportFailures =
         Meter.CreateCounter<long>("audio.transport.failures", "sessions",
-            "AudioSocket sessions that ended because their transport failed, not on a hangup");
+            "Audio sessions that ended because their transport failed, not on a hangup or a close");
 
     /// <summary>
     /// Connections an ARI audio server closed at the accept, before reading anything, because

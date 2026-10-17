@@ -219,7 +219,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                     // whoever has seen the Warning has seen the count.
                     if (IsRunning)
                     {
-                        AudioStreamMetrics.ConnectionsRefused.Add(1);
+                        AudioStreamMetrics.ConnectionsRefused.Add(1, AudioStreamMetrics.WebSocketTransport);
                         WebSocketAudioServerLog.StreamLimitReached(_logger, _options.MaxConcurrentStreams);
                     }
 
