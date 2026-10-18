@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added: an AMI capture on a new Asterisk build is one command (#NNN)
+### Added: an AMI capture on a new Asterisk build is one command (#445)
 
 `scripts/capture-ami-recording.py` starts one throwaway Asterisk from an image pinned by digest, drives a fixed
 workload through a raw TCP tap, and writes a reduced recording under `Recordings/` with a provenance sidecar. The
