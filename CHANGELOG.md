@@ -14,7 +14,7 @@ was given. The reduction keeps whole frames byte-exact, fills UUIDs and addresse
 one that still holds the run's manager secret, or one the recording redaction check rejects; the same tap always
 reduces to the same bytes. Its tests run in the always-run `Coverage Script Tests` job. No package changes.
 
-### Changed — BREAKING: types of dead Asterisk modules are deprecated with `VSDK0005` (#436, #NNN)
+### Changed — BREAKING: types of dead Asterisk modules are deprecated with `VSDK0005` (#436, #439)
 
 Forty-nine types and one member are now `[Obsolete]` with diagnostic id `VSDK0005`, as a warning, never an error.
 Each reaches only an Asterisk module that is gone or deprecated upstream, a module its publisher discontinued, or a
