@@ -903,7 +903,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// whether the SDK may have lost events since the visit opened: the event-loss epoch of the leave differs from the
     /// one recorded when the visit opened (a reconnect, or an event the AMI connection's full buffer dropped).
     /// <para>
-    /// A reconnect clears Live's queue table without any leave, raw or public, so a caller the reload then finds still
+    /// A reconnect raises no raw leave, and Live's own removals raise none either, so a caller the reload then finds still
     /// waiting keeps its visit open, which is what lets the reload recognise it. app_queue sends the leave before it
     /// connects the caller, so the mark never keeps a visit from being announced.
     /// </para>

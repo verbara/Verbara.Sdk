@@ -33,6 +33,12 @@ internal static partial class QueueManagerLog
 
     [LoggerMessage(Level = LogLevel.Information, Message = "[QUEUE] Queue removed: queue={QueueName}")]
     public static partial void QueueRemoved(ILogger logger, string queueName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[QUEUE] Caller removed, its leave was not observed: queue={QueueName} channel={Channel} reason={Reason}")]
+    public static partial void CallerRemovedUnobserved(ILogger logger, string queueName, string channel, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "[QUEUE] Member removed, the completed queue snapshot no longer lists it: queue={QueueName} interface={Interface}")]
+    public static partial void MemberRemovedBySnapshot(ILogger logger, string queueName, string @interface);
 }
 
 /// <summary>
@@ -79,9 +85,9 @@ public sealed class QueueManager
 
     /// <summary>
     /// Raised for each <c>QueueCallerLeave</c> Asterisk sends, whether or not this manager's table holds the caller:
-    /// <see cref="CallerLeft"/> is raised only when it does, and a reconnect clears the table without raising it, so
-    /// a leave that arrives before the reload's queue snapshot is read would otherwise reach nobody. Asterisk sends it
-    /// in the <c>agent</c> class. Internal: the session layer reads it.
+    /// <see cref="CallerLeft"/> is raised only when it does, and is raised as well for a caller removed with no leave
+    /// observed, so it cannot tell the session layer that Asterisk reported one. Asterisk sends it in the <c>agent</c>
+    /// class. Internal: the session layer reads it.
     /// </summary>
     internal event Action<QueueCallerLeaveReport>? CallerLeaveReported;
 
@@ -139,6 +145,40 @@ public sealed class QueueManager
 
     /// <summary>Handle QueueMemberAdded event.</summary>
     public void OnMemberAdded(string queueName, string iface, string? memberName, int penalty, bool paused, int status)
+    {
+        // A member added outside a snapshot while a snapshot window is open: that snapshot may have been answered before
+        // it, so its silence about this member does not remove it.
+        foreach (var window in Volatile.Read(ref _windows))
+            window.OnLiveMember(queueName, iface);
+
+        AddMember(queueName, iface, memberName, penalty, paused, status);
+    }
+
+    /// <summary>
+    /// Handle a queue's <c>QueueParams</c> as the <c>QueueStatus</c> snapshot read through <paramref name="window"/>
+    /// reports it: as <see cref="OnQueueParams"/>, and the queue is listed in the window, so the completion keeps it.
+    /// </summary>
+    internal void OnSnapshotQueueParams(QueueSnapshotWindow window, string queueName, int max, string? strategy,
+        int calls, int holdTime, int talkTime, int completed, int abandoned)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        window.ListQueue(queueName);
+        OnQueueParams(queueName, max, strategy, calls, holdTime, talkTime, completed, abandoned);
+    }
+
+    /// <summary>
+    /// Handle a <c>QueueMember</c> as the <c>QueueStatus</c> snapshot read through <paramref name="window"/> reports it:
+    /// as <see cref="OnMemberAdded"/>, and the member is listed in the window, so the completion keeps it.
+    /// </summary>
+    internal void OnSnapshotMember(QueueSnapshotWindow window, string queueName, string iface, string? memberName,
+        int penalty, bool paused, int status)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        window.ListMember(queueName, iface);
+        AddMember(queueName, iface, memberName, penalty, paused, status);
+    }
+
+    private void AddMember(string queueName, string iface, string? memberName, int penalty, bool paused, int status)
     {
         var queue = _queues.GetOrAdd(queueName, _ => new AsteriskQueue { Name = queueName });
         var member = new AsteriskQueueMember
@@ -242,7 +282,7 @@ public sealed class QueueManager
                 return;
             }
 
-            window.ListLocked(uniqueId, channel);
+            window.ListLocked(queueName, uniqueId, channel);
             Join(queueName, channel, callerId, position, fromSnapshot: true, reportedWaitSeconds, uniqueId, lossEpoch);
         }
     }
@@ -271,18 +311,145 @@ public sealed class QueueManager
         }
     }
 
-    /// <summary>Raises <see cref="QueueSnapshotCompleted"/> for the snapshot read through <paramref name="window"/>.</summary>
+    /// <summary>
+    /// Applies the completed <c>QueueStatus</c> snapshot read through <paramref name="window"/> to the table, then raises
+    /// <see cref="QueueSnapshotCompleted"/> for it. Called only for a snapshot Asterisk answered to the end.
+    /// <list type="bullet">
+    /// <item>A held caller the snapshot does not list in its queue, and whose join was handled before the snapshot was
+    /// asked for, is removed: counted left, with no wait sample, and announced with <see cref="CallerLeft"/>, its leave
+    /// marked as not observed (<see cref="AsteriskQueueEntry.LeaveNotObserved"/>).</item>
+    /// <item>A queue the snapshot does not list loses those callers the same way, and is removed once it holds no caller
+    /// and no member added outside the snapshot while it was read. No event is raised for the queue.</item>
+    /// <item>A member a listed queue holds and the snapshot does not list is removed, unless it was added outside the
+    /// snapshot while it was read. No event is raised for it, as none was when a reconnect cleared the table.</item>
+    /// </list>
+    /// A caller who joined after the request, and a member added after it, are kept: the snapshot could not list them.
+    /// </summary>
     internal void CompleteSnapshot(QueueSnapshotWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
+        var view = window.TableView();
+        foreach (var queue in _queues.Values)
+            ApplySnapshot(queue, view);
+
         QueueSnapshotCompleted?.Invoke(window.Complete());
     }
 
+    private void ApplySnapshot(AsteriskQueue queue, QueueSnapshotTableView view)
+    {
+        var listed = view.ListsQueue(queue.Name);
+        List<AsteriskQueueEntry>? gone = null;
+        List<string>? membersGone = null;
+        var removeQueue = false;
+        lock (queue.SyncRoot)
+        {
+            foreach (var (key, entry) in queue.Entries)
+            {
+                if (entry.JoinOrdinal > view.OrderPoint
+                    || (listed && view.ListsCaller(queue.Name, entry.UniqueId, entry.Channel)))
+                {
+                    continue;
+                }
+
+                if (queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
+                    (gone ??= []).Add(entry);
+            }
+
+            foreach (var iface in queue.Members.Keys)
+            {
+                if ((listed && view.ListsMember(queue.Name, iface)) || view.MemberAddedLive(queue.Name, iface))
+                    continue;
+
+                if (listed && queue.Members.TryRemove(iface, out _))
+                    (membersGone ??= []).Add(iface);
+            }
+
+            removeQueue = !listed && queue.Entries.IsEmpty
+                && !queue.Members.Keys.Any(iface => view.MemberAddedLive(queue.Name, iface));
+        }
+
+        if (gone is not null)
+        {
+            foreach (var entry in gone)
+                LeftUnobserved(queue.Name, entry, "snapshot", announce: true);
+        }
+
+        if (membersGone is not null)
+        {
+            foreach (var iface in membersGone)
+            {
+                if (_queuesByMember.TryGetValue(iface, out var queues))
+                    queues.TryRemove(queue.Name, out _);
+                QueueManagerLog.MemberRemovedBySnapshot(_logger, queue.Name, iface);
+            }
+        }
+
+        if (removeQueue && _queues.TryRemove(new KeyValuePair<string, AsteriskQueue>(queue.Name, queue)))
+        {
+            ForgetMembers(queue);
+            QueueManagerLog.QueueRemoved(_logger, queue.Name);
+        }
+    }
+
+    /// <summary>
+    /// A caller removed from the table without an observed leave: counted left with no wait sample, and marked
+    /// (<see cref="AsteriskQueueEntry.LeaveNotObserved"/>). <see cref="CallerLeft"/> is raised when
+    /// <paramref name="announce"/> is set; <see cref="CallerLeaveReported"/> never is, since Asterisk sent no leave.
+    /// </summary>
+    private void LeftUnobserved(string queueName, AsteriskQueueEntry entry, string reason, bool announce)
+    {
+        entry.MarkLeaveNotObserved();
+        LiveMetrics.QueueCallsLeft.Add(1);
+        QueueManagerLog.CallerRemovedUnobserved(_logger, queueName, entry.Channel, reason);
+        if (announce)
+            CallerLeft?.Invoke(queueName, entry);
+    }
+
+    /// <summary>
+    /// A channel reconciliation removed a channel Asterisk no longer has: every caller waiting on it (by its Uniqueid,
+    /// or by its name for an entry that carries no Uniqueid) leaves the table, counted left with no wait sample and
+    /// announced with <see cref="CallerLeft"/>, its leave marked as not observed; never <see cref="CallerLeaveReported"/>.
+    /// </summary>
+    internal void OnChannelRemovedByReconciliation(string uniqueId, string channelName)
+    {
+        foreach (var queue in _queues.Values)
+        {
+            List<AsteriskQueueEntry>? gone = null;
+            lock (queue.SyncRoot)
+            {
+                foreach (var (key, entry) in queue.Entries)
+                {
+                    var onChannel = entry.UniqueId is { } held
+                        ? string.Equals(held, uniqueId, StringComparison.Ordinal)
+                        : string.Equals(entry.Channel, channelName, StringComparison.Ordinal);
+                    if (onChannel && queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
+                        (gone ??= []).Add(entry);
+                }
+            }
+
+            if (gone is null)
+                continue;
+
+            foreach (var entry in gone)
+                LeftUnobserved(queue.Name, entry, "channel-reconciled", announce: true);
+        }
+    }
+
+    /// <summary>
+    /// The core of every join, live or from a snapshot. A caller the table does not hold is a new insertion: the entry
+    /// is stored, <c>live.queue.calls.joined</c> advances, and <see cref="CallerJoined"/> carries the stored entry. A
+    /// caller it holds already (by Uniqueid, else by channel) is a replacement: the held entry is kept with its
+    /// <see cref="AsteriskQueueEntry.JoinedAt"/>, <see cref="AsteriskQueueEntry.FromSnapshot"/> and
+    /// <see cref="AsteriskQueueEntry.ReportedWaitSeconds"/>, only its position follows the join, nothing is counted, and
+    /// <see cref="CallerJoined"/> carries the join as it was reported, which the session layer reads to tell a visit it
+    /// holds from a new one. A live join over a held caller also moves the held entry's
+    /// <see cref="AsteriskQueueEntry.JoinOrdinal"/>, since Asterisk reported it joining after any snapshot asked earlier.
+    /// </summary>
     private void Join(string queueName, string channel, string? callerId, int position,
         bool fromSnapshot, long? reportedWaitSeconds, string? uniqueId, EventLossEpoch? lossEpoch)
     {
         var queue = _queues.GetOrAdd(queueName, _ => new AsteriskQueue { Name = queueName });
-        var entry = new AsteriskQueueEntry
+        var reported = new AsteriskQueueEntry
         {
             Channel = channel,
             CallerId = callerId,
@@ -300,20 +467,87 @@ public sealed class QueueManager
         if (!fromSnapshot)
         {
             foreach (var window in Volatile.Read(ref _windows))
-                window.OnLiveJoin(entry.UniqueId, channel);
+                window.OnLiveJoin(reported.UniqueId, channel);
         }
 
-        queue.Entries[channel] = entry;
-        LiveMetrics.QueueCallsJoined.Add(1);
+        AsteriskQueueEntry? displaced = null;
+        bool inserted;
+        lock (queue.SyncRoot)
+        {
+            var held = FindHeldLocked(queue, reported.UniqueId, channel);
+            if (held is not null)
+            {
+                inserted = false;
+                held.Position = position;
+                if (!fromSnapshot)
+                    held.JoinOrdinal = reported.JoinOrdinal;
+
+                // Held under another channel name (renamed since): re-keyed under the name the join reports, so the
+                // caller's leave finds it, with everything else kept.
+                if (!string.Equals(held.Channel, channel, StringComparison.Ordinal))
+                {
+                    queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(held.Channel, held));
+                    displaced = queue.Entries.GetValueOrDefault(channel);
+                    queue.Entries[channel] = held.RenamedTo(channel);
+                }
+            }
+            else
+            {
+                inserted = true;
+                // Another caller held under this channel name (one whose Uniqueid differs): it is no longer there.
+                displaced = queue.Entries.GetValueOrDefault(channel);
+                queue.Entries[channel] = reported;
+            }
+        }
+
+        if (displaced is not null)
+            LeftUnobserved(queueName, displaced, "displaced", announce: true);
+
+        if (inserted)
+            LiveMetrics.QueueCallsJoined.Add(1);
         QueueManagerLog.CallerJoined(_logger, queueName, channel, position);
-        CallerJoined?.Invoke(queueName, entry);
+        CallerJoined?.Invoke(queueName, reported);
+    }
+
+    /// <summary>
+    /// The entry <paramref name="queue"/> holds for this caller, under its lock: by channel when that entry is the same
+    /// caller (same Uniqueid, or either carries none), else by Uniqueid under another channel name.
+    /// </summary>
+    private static AsteriskQueueEntry? FindHeldLocked(AsteriskQueue queue, string? uniqueId, string channel)
+    {
+        if (queue.Entries.TryGetValue(channel, out var byChannel)
+            && (byChannel.UniqueId is null || uniqueId is null
+                || string.Equals(byChannel.UniqueId, uniqueId, StringComparison.Ordinal)))
+        {
+            return byChannel;
+        }
+
+        if (uniqueId is null)
+            return null;
+
+        foreach (var entry in queue.Entries.Values)
+        {
+            if (string.Equals(entry.UniqueId, uniqueId, StringComparison.Ordinal))
+                return entry;
+        }
+
+        return null;
     }
 
     /// <summary>Handle QueueCallerLeave event.</summary>
     public void OnCallerLeft(string queueName, string channel)
     {
-        if (_queues.TryGetValue(queueName, out var queue)
-            && queue.Entries.TryRemove(channel, out var entry))
+        if (!_queues.TryGetValue(queueName, out var queue))
+            return;
+
+        AsteriskQueueEntry? entry;
+        bool removed;
+        lock (queue.SyncRoot)
+        {
+            removed = queue.Entries.TryRemove(channel, out entry);
+        }
+
+        if (removed && entry is not null)
         {
             LiveMetrics.QueueCallsLeft.Add(1);
             var waitMs = (DateTimeOffset.UtcNow - entry.JoinedAt).TotalMilliseconds + ReportedWaitMilliseconds(entry);
@@ -401,20 +635,42 @@ public sealed class QueueManager
     }
 
     /// <summary>Remove a queue entirely from the in-memory state.</summary>
+    /// <remarks>
+    /// Each caller the queue held is counted in <c>live.queue.calls.left</c>, with no <c>live.queue.wait_time</c>
+    /// sample since no leave was observed, so that <c>live.queue.calls.joined</c> minus <c>live.queue.calls.left</c>
+    /// keeps counting the callers held. No event is raised.
+    /// </remarks>
     public bool RemoveQueue(string queueName)
     {
         if (!_queues.TryRemove(queueName, out var queue))
             return false;
 
-        // Clean up reverse member index
+        List<AsteriskQueueEntry> gone = [];
+        lock (queue.SyncRoot)
+        {
+            foreach (var (key, entry) in queue.Entries)
+            {
+                if (queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
+                    gone.Add(entry);
+            }
+        }
+
+        foreach (var entry in gone)
+            LeftUnobserved(queue.Name, entry, "queue-removed", announce: false);
+
+        ForgetMembers(queue);
+        QueueManagerLog.QueueRemoved(_logger, queueName);
+        return true;
+    }
+
+    /// <summary>Drops a removed queue from the reverse member index.</summary>
+    private void ForgetMembers(AsteriskQueue queue)
+    {
         foreach (var iface in queue.Members.Keys)
         {
             if (_queuesByMember.TryGetValue(iface, out var queues))
-                queues.TryRemove(queueName, out _);
+                queues.TryRemove(queue.Name, out _);
         }
-
-        QueueManagerLog.QueueRemoved(_logger, queueName);
-        return true;
     }
 
     public void Clear()
@@ -507,7 +763,31 @@ public sealed class AsteriskQueueEntry
     /// ordinal is above a snapshot's <see cref="QueueSnapshotCompletion.OrderPoint"/> was handled after that snapshot
     /// was asked for.
     /// </summary>
-    internal long JoinOrdinal { get; init; }
+    internal long JoinOrdinal { get; set; }
+
+    /// <summary>
+    /// True once the entry left the table without an observed <c>QueueCallerLeave</c>: a completed queue snapshot no
+    /// longer listed it, its queue was removed, or a channel reconciliation removed its channel. Set before
+    /// <see cref="QueueManager.CallerLeft"/> is raised for it; such a removal records no <c>live.queue.wait_time</c>
+    /// sample.
+    /// </summary>
+    internal bool LeaveNotObserved { get; private set; }
+
+    internal void MarkLeaveNotObserved() => LeaveNotObserved = true;
+
+    /// <summary>A copy of this entry under another channel name, with everything else kept.</summary>
+    internal AsteriskQueueEntry RenamedTo(string channel) => new()
+    {
+        Channel = channel,
+        CallerId = CallerId,
+        Position = Position,
+        JoinedAt = JoinedAt,
+        FromSnapshot = FromSnapshot,
+        ReportedWaitSeconds = ReportedWaitSeconds,
+        UniqueId = UniqueId,
+        LossEpoch = LossEpoch,
+        JoinOrdinal = JoinOrdinal,
+    };
 }
 
 /// <summary>A <c>QueueCallerLeave</c> as Asterisk reported it, with the event-loss epoch of the event.</summary>
@@ -524,6 +804,13 @@ internal sealed class QueueSnapshotWindow : IDisposable
     private readonly HashSet<string> _leftChannels = new(StringComparer.Ordinal);
     private readonly HashSet<string> _listedUniqueIds = new(StringComparer.Ordinal);
     private readonly HashSet<string> _listedChannels = new(StringComparer.Ordinal);
+
+    // What the snapshot listed per queue, for the table: queues by name, callers and members as (queue, key) pairs.
+    // Queue names are compared as the manager keys queues (ordinal, ignoring case).
+    private readonly HashSet<string> _listedQueues = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<(string Queue, string Key)> _listedCallers = new(QueueKeyComparer.Instance);
+    private readonly HashSet<(string Queue, string Key)> _listedMembers = new(QueueKeyComparer.Instance);
+    private readonly HashSet<(string Queue, string Key)> _liveMembers = new(QueueKeyComparer.Instance);
 
     internal QueueSnapshotWindow(QueueManager owner, long orderPoint)
     {
@@ -563,12 +850,57 @@ internal sealed class QueueSnapshotWindow : IDisposable
         (!string.IsNullOrEmpty(uniqueId) && _leftUniqueIds.Contains(uniqueId))
         || (!string.IsNullOrEmpty(channel) && _leftChannels.Contains(channel));
 
-    internal void ListLocked(string? uniqueId, string channel)
+    internal void ListLocked(string queueName, string? uniqueId, string channel)
     {
         if (!string.IsNullOrEmpty(uniqueId))
+        {
             _listedUniqueIds.Add(uniqueId);
+            _listedCallers.Add((queueName, "u:" + uniqueId));
+        }
+
         if (!string.IsNullOrEmpty(channel))
+        {
             _listedChannels.Add(channel);
+            _listedCallers.Add((queueName, "c:" + channel));
+        }
+    }
+
+    internal void ListQueue(string queueName)
+    {
+        lock (Gate)
+        {
+            _listedQueues.Add(queueName);
+        }
+    }
+
+    internal void ListMember(string queueName, string iface)
+    {
+        lock (Gate)
+        {
+            _listedQueues.Add(queueName);
+            _listedMembers.Add((queueName, iface));
+        }
+    }
+
+    internal void OnLiveMember(string queueName, string iface)
+    {
+        lock (Gate)
+        {
+            _liveMembers.Add((queueName, iface));
+        }
+    }
+
+    /// <summary>A copy of what the snapshot listed per queue, for the table's completion.</summary>
+    internal QueueSnapshotTableView TableView()
+    {
+        lock (Gate)
+        {
+            return new QueueSnapshotTableView(OrderPoint,
+                new HashSet<string>(_listedQueues, StringComparer.OrdinalIgnoreCase),
+                new HashSet<(string, string)>(_listedCallers, QueueKeyComparer.Instance),
+                new HashSet<(string, string)>(_listedMembers, QueueKeyComparer.Instance),
+                new HashSet<(string, string)>(_liveMembers, QueueKeyComparer.Instance));
+        }
     }
 
     internal QueueSnapshotCompletion Complete()
@@ -582,6 +914,43 @@ internal sealed class QueueSnapshotWindow : IDisposable
     }
 
     public void Dispose() => _owner.CloseSnapshotWindow(this);
+}
+
+/// <summary>
+/// What a completed <c>QueueStatus</c> snapshot listed per queue, as the queue table applies it: the queues, the callers
+/// of each (by Uniqueid or channel), the members of each, and the members added outside the snapshot while it was read.
+/// </summary>
+internal sealed class QueueSnapshotTableView(
+    long orderPoint,
+    IReadOnlySet<string> queues,
+    IReadOnlySet<(string Queue, string Key)> callers,
+    IReadOnlySet<(string Queue, string Key)> members,
+    IReadOnlySet<(string Queue, string Key)> liveMembers)
+{
+    /// <summary>The ordinal of the last join the manager had handled before the snapshot was asked for.</summary>
+    internal long OrderPoint { get; } = orderPoint;
+
+    internal bool ListsQueue(string queueName) => queues.Contains(queueName);
+
+    internal bool ListsCaller(string queueName, string? uniqueId, string channel) =>
+        (!string.IsNullOrEmpty(uniqueId) && callers.Contains((queueName, "u:" + uniqueId)))
+        || (!string.IsNullOrEmpty(channel) && callers.Contains((queueName, "c:" + channel)));
+
+    internal bool ListsMember(string queueName, string iface) => members.Contains((queueName, iface));
+
+    internal bool MemberAddedLive(string queueName, string iface) => liveMembers.Contains((queueName, iface));
+}
+
+/// <summary>Compares (queue, key) pairs: the queue ordinally ignoring case, as queues are keyed; the key ordinally.</summary>
+internal sealed class QueueKeyComparer : IEqualityComparer<(string Queue, string Key)>
+{
+    public static readonly QueueKeyComparer Instance = new();
+
+    public bool Equals((string Queue, string Key) x, (string Queue, string Key) y) =>
+        StringComparer.OrdinalIgnoreCase.Equals(x.Queue, y.Queue) && StringComparer.Ordinal.Equals(x.Key, y.Key);
+
+    public int GetHashCode((string Queue, string Key) obj) =>
+        HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Queue), StringComparer.Ordinal.GetHashCode(obj.Key));
 }
 
 /// <summary>

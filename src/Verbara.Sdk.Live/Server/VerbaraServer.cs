@@ -215,6 +215,16 @@ public sealed class VerbaraServer : IVerbaraServer
         MeetMe = new MeetMeManager(logger);
         Bridges = new BridgeManager(logger);
         _instanceMeter = new Meter("Verbara.Sdk.Live", "1.0.0");
+
+        // A channel a reconciliation proved gone takes its waiting caller out of the queue table, in the same
+        // reconciliation: no QueueCallerLeave will come for it.
+        Channels.ChannelRemoved += OnChannelRemoved;
+    }
+
+    private void OnChannelRemoved(AsteriskChannel channel)
+    {
+        if (channel.RemovedByReload)
+            Queues.OnChannelRemovedByReconciliation(channel.UniqueId, channel.Name);
     }
 
     /// <summary>
@@ -314,10 +324,10 @@ public sealed class VerbaraServer : IVerbaraServer
             // was never told the channels went away, and a call that ended during the outage
             // stayed "in progress" for the life of the process. RequestInitialStateAsync now
             // buffers Asterisk's snapshot to completion and reconciles the table against it
-            // instead (ADR-0062, design D1/D2), which announces the difference on the event
-            // consumers already subscribe to. The four managers below hold no session identity,
-            // so they keep their clear-and-reload — an explicit non-goal, not an oversight.
-            Queues.Clear();
+            // instead, which announces the difference on the event consumers already subscribe to.
+            // The queue table is not cleared either: the load's completed QueueStatus reconciles it,
+            // keeping each caller still waiting with its join time, and counting left each one gone.
+            // The managers below still clear and reload.
             Agents.Clear();
             MeetMe.Clear();
             Bridges.Clear();
@@ -547,13 +557,13 @@ public sealed class VerbaraServer : IVerbaraServer
             switch (evt)
             {
                 case QueueParamsEvent qp:
-                    Queues.OnQueueParams(
+                    Queues.OnSnapshotQueueParams(window,
                         qp.Queue ?? "", qp.Max ?? 0, qp.Strategy,
                         qp.Calls ?? 0, qp.HoldTime ?? 0, qp.TalkTime ?? 0,
                         qp.Completed ?? 0, qp.Abandoned ?? 0);
                     break;
                 case QueueMemberEvent qm:
-                    Queues.OnMemberAdded(
+                    Queues.OnSnapshotMember(window,
                         qm.Queue ?? "", qm.Location ?? qm.Interface ?? "", qm.MemberName,
                         qm.Penalty ?? 0, qm.Paused ?? false, qm.Status ?? 0);
                     break;
