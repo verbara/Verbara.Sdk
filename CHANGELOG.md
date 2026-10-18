@@ -130,7 +130,7 @@ and a recipe for an Asterisk that still sends one of these events are in
 so `PeerEntryEvent` stays and loses its `[Obsolete]` mark. A `#pragma warning disable CS0618` kept around it can be
 removed.
 
-### Changed — BREAKING: `CallWrapUpEvent` is raised, and `SessionOptions.WrapUpDuration` is applied (#NNN)
+### Changed — BREAKING: `CallWrapUpEvent` is raised, and `SessionOptions.WrapUpDuration` is applied (#443)
 
 Since 1.7.0 nothing raised `CallWrapUpEvent`, so an agent's wrap-up was never opened, timed or closed. The session
 manager now raises one `CallWrapUpEvent` per agent leg. A queue call's wrap-up opens at the member's `AgentComplete`,
