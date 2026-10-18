@@ -158,6 +158,10 @@ public sealed class AmiConnection : IAmiConnection
     // Written only by SetStateLocked, the funnel that announces each change on StateChanged.
     private volatile AmiConnectionState _state = AmiConnectionState.Initial;
 
+    // Whether the caller's own ConnectAsync, DisconnectAsync or DisposeAsync wrote _state, rather than the reader, the
+    // heartbeat or the reconnect loop. Written with _state, under _notifyLock; read with it by StateAndWriter.
+    private bool _stateWrittenByCaller;
+
     // Set by DisconnectAsync and DisposeAsync. A connection that ended on its own (the peer closed, or a
     // heartbeat timeout with AutoReconnect off) is released too, but its caller may still connect it again.
     private volatile bool _closedByCaller;
@@ -229,6 +233,26 @@ public sealed class AmiConnection : IAmiConnection
     private Task _notifyTail = Task.CompletedTask;
 
     public AmiConnectionState State => _state;
+
+    /// <summary>
+    /// <see cref="State"/> and whether the caller wrote it, read together and synchronously: <see langword="true"/> when
+    /// the caller's own <c>ConnectAsync</c>, <c>DisconnectAsync</c> or <c>DisposeAsync</c> made the last change, and
+    /// <see langword="false"/> when the reader, the heartbeat or the reconnect loop did (or nothing changed it yet). Read
+    /// by Verbara.Sdk.Live: a load cut short by the end of its session tells from it whether a reload will follow, since
+    /// a caller's connect raises no <see cref="Reconnected"/>. Unlike <see cref="StateChanged"/>, whose handlers run on a
+    /// queue, it is true at the moment it is read.
+    /// </summary>
+    internal (AmiConnectionState State, bool WrittenByCaller) StateAndWriter
+    {
+        get
+        {
+            lock (_notifyLock)
+            {
+                return (_state, _stateWrittenByCaller);
+            }
+        }
+    }
+
     public string? AsteriskVersion { get; private set; }
 
     /// <summary>
@@ -876,6 +900,7 @@ public sealed class AmiConnection : IAmiConnection
                 return;
 
             _state = next;
+            _stateWrittenByCaller = byCaller;
             if (StateChanged is null)
                 return;
 

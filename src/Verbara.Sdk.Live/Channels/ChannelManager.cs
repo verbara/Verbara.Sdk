@@ -517,12 +517,16 @@ public sealed class ChannelManager
     /// There is deliberately no overload without one: a caller that cannot say when its snapshot
     /// was taken cannot be allowed to end calls with it.
     /// </param>
+    /// <param name="removeAbsent">
+    /// <see langword="false"/> applies only the non-destructive half, for a snapshot whose wait for the event pump ran
+    /// out: what it lists and the table lacks is admitted, and nothing is removed.
+    /// </param>
     /// <exception cref="ObjectDisposedException">
     /// <paramref name="window"/> is already closed: the departures it recorded may be gone, so its
     /// snapshot can no longer be told from a stale one.
     /// </exception>
     internal void ReconcileWithSnapshot(
-        IReadOnlyCollection<ChannelSnapshotEntry> snapshot, SnapshotReadWindow window)
+        IReadOnlyCollection<ChannelSnapshotEntry> snapshot, SnapshotReadWindow window, bool removeAbsent = true)
     {
         ObjectDisposedException.ThrowIf(window.IsClosed, window);
         var admittedThrough = window.Mark;
@@ -539,7 +543,7 @@ public sealed class ChannelManager
         // ConcurrentDictionary.Values hands back a snapshot, so removing inside the loop is safe.
         var removed = 0;
         var newerThanSnapshot = 0;
-        foreach (var held in _channelsByUniqueId.Values.Where(channel => !present.Contains(channel.UniqueId)))
+        foreach (var held in _channelsByUniqueId.Values.Where(channel => removeAbsent && !present.Contains(channel.UniqueId)))
         {
             // The snapshot was requested before this channel was admitted, so it could not have
             // reported it and its silence is not evidence. Removing it here would end a call that

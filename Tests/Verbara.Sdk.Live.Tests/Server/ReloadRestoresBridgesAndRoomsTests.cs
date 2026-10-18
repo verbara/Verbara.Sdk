@@ -48,6 +48,8 @@ public sealed class ReloadRestoresBridgesAndRoomsTests
         new("1792274561.11", "Local/conf@capture-00000007;2", "1792274561.10"),
     ];
 
+    private static readonly Leg WaitingCaller = new("1792274570.1", "PJSIP/queue-caller-00000001", "1792274570.1");
+
     private static readonly Leg Announcer = new("1792274561.5", "CBAnn/capture-room-00000001;1", "1792274561.5");
 
     // ---- The reload restores the bridge and conference tables ----
@@ -357,6 +359,116 @@ public sealed class ReloadRestoresBridgesAndRoomsTests
 
     private static string[] Members(VerbaraServer server, string bridgeId) =>
         server.Bridges.GetById(bridgeId)?.Channels.Keys.Order().ToArray() ?? [];
+
+    // ---- A wedged handler: the listings wait for the pump, and only add once the wait runs out ----
+
+    [Fact]
+    public async Task Load_ShouldRemoveNothingTheListingsOmitAndScheduleOneFullReload_WhenAWedgedHandlerOutlastsTheBound()
+    {
+        var second = new BootingAsterisk { BootedAtLogin = true };
+        await using var rig = await Rig.StartAsync(second);
+        await rig.LearnAsync([BridgeX], Participants);
+        var run = rig.Run;
+        var callerJoined = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        run.Server.Queues.CallerJoined += (_, _) => callerJoined.TrySetResult();
+        await rig.First.SendEventAsync("QueueCallerJoin",
+            AsteriskFrames.QueueCallerJoin(WaitingCaller.UniqueId, WaitingCaller.Channel, BootingAsterisk.QueueName, 1, 1));
+        await callerJoined.Task.WaitAsync(Run.Bound);
+        using var gate = new DispatchGate();
+        using var gateSubscription = run.Connection.Subscribe(gate);
+        await rig.First.SendEventAsync("UserEvent", DispatchGate.Frame());
+        await gate.Held.WaitAsync(Run.Bound);
+
+        // Asterisk now lists neither bridge X, nor the third participant, nor the waiting caller (QueueStatus lists no
+        // entry): what a completed reconciliation would remove.
+        rig.First.Bridges = [];
+        rig.First.Rooms = [new ListedRoom(Room, Participants.Take(2).Select(Listed).ToArray())];
+        var seen = rig.Watch();
+
+        // The start's load may have armed a wait of its own that the pump met at once; the timers counted below are this
+        // load's only.
+        while (run.Clock.TimersCreated.TryRead(out _))
+        {
+            // Drained: an earlier, finished wait's timer.
+        }
+
+        var load = run.Server.RequestInitialStateAsync().AsTask();
+        var waitsRunOut = await RunOutEveryBarrierAsync(run, load);
+        var whileHeld = new
+        {
+            WaitsRunOut = waitsRunOut,
+            XHeld = run.Server.Bridges.GetById(BridgeX.Id) is { DestroyedAt: null },
+            RoomParticipants = RoomParticipants(run.Server),
+            Destroyed = seen.DestroyedIds,
+            Left = seen.UsersLeft,
+            CallersWaiting = CallersWaiting(run.Server),
+            BarrierWarnings = run.ServerLog.Entries.Count(e => e.Level == LogLevel.Warning
+                && e.Line.Contains("barrier ran out", StringComparison.Ordinal)),
+        };
+        gate.Release();
+        await run.ServerLog.Logged(StateLoaded, 3).WaitAsync(Run.Bound);
+
+        new
+        {
+            WhileHeld = whileHeld,
+            DestroyedAfter = seen.DestroyedIds.Contains(BridgeX.Id),
+            LeftAfter = seen.UsersLeft,
+            RoomParticipantsAfter = RoomParticipants(run.Server),
+            CallersWaitingAfter = CallersWaiting(run.Server),
+            GateTimedOut = gate.TimedOut,
+            PeerFault = rig.First.Fault?.Message,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                WhileHeld = new
+                {
+                    WaitsRunOut = 1,
+                    XHeld = true,
+                    RoomParticipants = Participants.Select(p => p.Channel).Order().ToArray(),
+                    Destroyed = Array.Empty<string>(),
+                    Left = Array.Empty<string>(),
+                    CallersWaiting = 1,
+                    BarrierWarnings = 1,
+                },
+                DestroyedAfter = true,
+                LeftAfter = new[] { Participants[2].Channel },
+                RoomParticipantsAfter = Participants.Take(2).Select(p => p.Channel).Order().ToArray(),
+                CallersWaitingAfter = 0,
+                GateTimedOut = false,
+                PeerFault = default(string),
+            },
+            "while a handler holds the pump, the load waits for it once (one bound run out, not one per listing), warns once when the bound runs out, and its bridge "
+            + "and conference listings and its queue snapshot then only add: nothing they omit is destroyed or leaves. The "
+            + "full reload it schedules runs once the pump moves, and removes all three. Server log: "
+            + string.Join(" | ", run.ServerLog.Entries.Select(e => $"{e.Level}: {e.Line}")));
+    }
+
+    /// <summary>
+    /// Runs <paramref name="work"/> to its end, advancing the run's clock past each timer it arms on the way (each wait for
+    /// the pump running out), so the test reaches the end without the held handler returning. Returns how many it ran out.
+    /// </summary>
+    private static async Task<int> RunOutEveryBarrierAsync(Run run, Task work)
+    {
+        var runOut = 0;
+        while (!work.IsCompleted)
+        {
+            using var stop = new CancellationTokenSource();
+            var timer = run.Clock.TimersCreated.ReadAsync(stop.Token).AsTask();
+            var first = await Task.WhenAny(work, timer).WaitAsync(Run.Bound);
+            await stop.CancelAsync();
+            if (first == timer && timer.IsCompletedSuccessfully)
+            {
+                runOut++;
+                run.Clock.Advance(timer.Result.DueTime);
+            }
+        }
+
+        await work;
+        return runOut;
+    }
+
+    private static int CallersWaiting(VerbaraServer server) =>
+        server.Queues.GetByName(BootingAsterisk.QueueName)?.EntryCount ?? 0;
 
     private static string[] RoomParticipants(VerbaraServer server) =>
         server.MeetMe.GetRoom(Room)?.Users.Keys.Order().ToArray() ?? [];

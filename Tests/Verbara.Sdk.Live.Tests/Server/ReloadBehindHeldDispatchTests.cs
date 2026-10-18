@@ -164,11 +164,11 @@ public sealed class ReloadBehindHeldDispatchTests
         await peer.SendEventAsync("UserEvent", DispatchGate.Frame());
         await gate.Held.WaitAsync(Run.Bound);
         statusAnswer.TrySetResult();
-        await EndsOrWaitsOnItsBarrierAsync(run, start);
+        var statusBarrier = await EndsOrWaitsOnItsBarrierAsync(run, start);
 
         // A Hangup Asterisk sends after its Status answer, for a channel that answer listed: queued behind the handler.
         await peer.SendEventAsync("Hangup", AsteriskFrames.Hangup(listedUid, listedChannel, listedUid));
-        await RunOutEveryBarrierAsync(run, start);
+        await RunOutEveryBarrierAsync(run, start, statusBarrier);
         var admittedByTheLoad = run.Server.Channels.GetByUniqueId(listedUid) is not null;
         var removedDuringTheLoad = removed.Count;
         gate.Release();
@@ -240,22 +240,30 @@ public sealed class ReloadBehindHeldDispatchTests
 
     /// <summary>
     /// Waits until <paramref name="work"/> has ended (unfixed code: nothing makes it wait for the pump) or has begun to
-    /// wait on its barrier, which arms the barrier's bound as a timer on the run's clock.
+    /// wait on its barrier, which arms the barrier's bound as a timer on the run's clock. Returns that timer, read off the
+    /// clock and so no longer there for <see cref="RunOutEveryBarrierAsync"/> to find; <see langword="null"/> when the work
+    /// ended first.
     /// </summary>
-    private static async Task EndsOrWaitsOnItsBarrierAsync(Run run, Task work)
+    private static async Task<FakeTimeProvider.FakeTimer?> EndsOrWaitsOnItsBarrierAsync(Run run, Task work)
     {
         using var stop = new CancellationTokenSource();
         var timer = run.Clock.TimersCreated.ReadAsync(stop.Token).AsTask();
-        await Task.WhenAny(work, timer).WaitAsync(Run.Bound);
+        var first = await Task.WhenAny(work, timer).WaitAsync(Run.Bound);
         await stop.CancelAsync();
+        return first == timer && timer.IsCompletedSuccessfully ? timer.Result : null;
     }
 
     /// <summary>
     /// Runs <paramref name="work"/> to its end, advancing the run's clock past each timer it arms on the way — each
-    /// barrier's bound running out — so the test reaches the end without the held handler returning.
+    /// barrier's bound running out — so the test reaches the end without the held handler returning. A timer
+    /// <see cref="EndsOrWaitsOnItsBarrierAsync"/> already read is passed as <paramref name="alreadyRead"/>, and is run out
+    /// first.
     /// </summary>
-    private static async Task RunOutEveryBarrierAsync(Run run, Task work)
+    private static async Task RunOutEveryBarrierAsync(Run run, Task work, FakeTimeProvider.FakeTimer? alreadyRead = null)
     {
+        if (alreadyRead is not null && !work.IsCompleted)
+            run.Clock.Advance(alreadyRead.DueTime);
+
         while (!work.IsCompleted)
         {
             using var stop = new CancellationTokenSource();

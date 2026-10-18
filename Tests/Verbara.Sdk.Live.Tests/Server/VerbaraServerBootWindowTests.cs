@@ -58,12 +58,27 @@ public sealed class VerbaraServerBootWindowTests
     /// </summary>
     private const int MaxWaitsDriven = 150;
 
+    /// <summary>
+    /// <see cref="Run.ConnectAsync"/>, with the server's wait for the event pump bounded on a clock of its own. These tests
+    /// count every timer on <see cref="Run.Clock"/> as one of the load's waits for a starting Asterisk, and that wait arms
+    /// one whenever the pump has not yet dispatched a list's end when the load reads it.
+    /// </summary>
+    private static Task<Run> ConnectRunAsync(BootingAsterisk firstPeer, BootingAsterisk? secondPeer = null,
+        bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null) =>
+        Run.ConnectAsync(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay,
+            barrierClock: new FakeTimeProvider());
+
+    /// <summary><see cref="Run.StartAsync"/>, with the clock <see cref="ConnectRunAsync"/> gives the wait for the pump.</summary>
+    private static Task<Run> StartRunAsync(BootingAsterisk firstPeer, BootingAsterisk? secondPeer = null,
+        bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null) =>
+        Run.StartAsync(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay, barrierClock: new FakeTimeProvider());
+
     [Fact]
     public async Task StartAsync_ShouldLoadTheQueueItsMemberAndTheAgentAskingEachOnce_WhenAsteriskHasBootedAndTheUserReceivesFullyBooted()
     {
         var peer = new BootingAsterisk { BootedAtLogin = true, SendsFullyBooted = true };
 
-        await using var run = await Run.StartAsync(peer);
+        await using var run = await StartRunAsync(peer);
         var loaded = await CompletesWithinBoundAsync(run.ServerLog.Logged(StateLoaded));
 
         var queue = run.Server.Queues.GetByName(BootingAsterisk.QueueName);
@@ -92,7 +107,7 @@ public sealed class VerbaraServerBootWindowTests
         // A user with `system`: Asterisk reports FullyBooted once it has started, and the test lets it finish starting
         // as soon as the first refusal has been answered.
         var peer = new BootingAsterisk { SendsFullyBooted = true };
-        await using var run = await Run.ConnectAsync(peer);
+        await using var run = await ConnectRunAsync(peer);
 
         var start = run.StartServerAsync();
         var refused = await CompletesWithinBoundAsync(peer.FirstRefusalAnswered);
@@ -123,7 +138,7 @@ public sealed class VerbaraServerBootWindowTests
         // first session must not stand for the second one.
         var first = new BootingAsterisk { BootedAtLogin = true, SendsFullyBooted = true };
         var second = new BootingAsterisk { SendsFullyBooted = true };
-        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+        await using var run = await StartRunAsync(first, second, autoReconnect: true);
         var loadedAtStart = run.Server.Queues.GetByName(BootingAsterisk.QueueName) is not null;
 
         run.ReleaseSecondPeer();
@@ -159,7 +174,7 @@ public sealed class VerbaraServerBootWindowTests
         // A user without `system`: no FullyBooted ever arrives, so the load asks again at the interval. The test
         // moves the clock one interval per step, and Asterisk finishes starting after the second step.
         var peer = new BootingAsterisk { SendsFullyBooted = false };
-        await using var run = await Run.ConnectAsync(peer);
+        await using var run = await ConnectRunAsync(peer);
 
         var start = run.StartServerAsync();
         const int stepsRefused = 2;
@@ -203,7 +218,7 @@ public sealed class VerbaraServerBootWindowTests
         // The accepted residual: a user without `system` cannot tell a module still loading from one that is not
         // loaded at all, so the load asks at the interval until the budget runs out, and then loads without it.
         var peer = new BootingAsterisk { BootedAtLogin = true, SendsFullyBooted = false, HasAppQueue = false };
-        await using var run = await Run.ConnectAsync(peer);
+        await using var run = await ConnectRunAsync(peer);
 
         var began = run.Clock.GetTimestamp();
         var start = run.StartServerAsync();
@@ -235,7 +250,7 @@ public sealed class VerbaraServerBootWindowTests
         {
             BootedAtLogin = true, SendsFullyBooted = false, HasAppQueue = false, HasAgentPool = false,
         };
-        await using var run = await Run.ConnectAsync(peer);
+        await using var run = await ConnectRunAsync(peer);
 
         var began = run.Clock.GetTimestamp();
         var start = run.StartServerAsync();
@@ -270,7 +285,7 @@ public sealed class VerbaraServerBootWindowTests
         // the connection's own delay: the test waits on the reconnect's log line and on Reconnected, never on a clock.
         var first = new BootingAsterisk { BootedAtLogin = true, Close = PeerClose.AfterConnect };
         var second = new BootingAsterisk { BootedAtLogin = true };
-        await using var run = await Run.ConnectAsync(first, second, autoReconnect: true,
+        await using var run = await ConnectRunAsync(first, second, autoReconnect: true,
             reconnectInitialDelay: TimeSpan.FromSeconds(1));
 
         var reconnecting = await CompletesWithinBoundAsync(run.ConnectionLog.Logged("[AMI] Reconnecting"));
@@ -305,7 +320,7 @@ public sealed class VerbaraServerBootWindowTests
     public async Task StartAsync_ShouldThrowNotConnected_WhenTheSessionEndsDuringTheLastRequestAndAutoReconnectIsOff()
     {
         var peer = new BootingAsterisk { BootedAtLogin = true, Close = PeerClose.WhenAsked, CloseWhenAsked = "Agents" };
-        await using var run = await Run.ConnectAsync(peer);
+        await using var run = await ConnectRunAsync(peer);
 
         var outcome = await Record.ExceptionAsync(run.StartServerAsync);
 
@@ -335,7 +350,7 @@ public sealed class VerbaraServerBootWindowTests
                 new StatusChannel("1700000000.2", "PJSIP/1002-00000002", LinkedId: "1700000000.2"),
             ],
         };
-        await using var run = await Run.StartAsync(peer);
+        await using var run = await StartRunAsync(peer);
         var heldAtStart = run.Server.Channels.ChannelCount;
         var removed = new ConcurrentQueue<string>();
         run.Server.Channels.ChannelRemoved += channel => removed.Enqueue(channel.UniqueId);
@@ -372,7 +387,7 @@ public sealed class VerbaraServerBootWindowTests
                 new StatusChannel("1700000000.2", "PJSIP/1002-00000002", LinkedId: "1700000000.2"),
             ],
         };
-        await using var run = await Run.StartAsync(peer);
+        await using var run = await StartRunAsync(peer);
         var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         peer.Close = PeerClose.DuringStatus;
         peer.StatusChannelsBeforeClose = 1;
@@ -413,7 +428,7 @@ public sealed class VerbaraServerBootWindowTests
         {
             BootedAtLogin = true, Close = PeerClose.WhenAsked, CloseWhenAsked = "QueueStatus",
         };
-        await using var run = await Run.ConnectAsync(peer);
+        await using var run = await ConnectRunAsync(peer);
 
         var outcome = await Record.ExceptionAsync(run.StartServerAsync);
         var sentAfterClose = await peer.ActionsSentAfterCloseAsync(Run.Bound);
@@ -437,7 +452,7 @@ public sealed class VerbaraServerBootWindowTests
         // ended session meets a connection that is reconnecting.
         var first = new BootingAsterisk { SendsFullyBooted = true, Close = PeerClose.AfterFirstRefusal };
         var second = new BootingAsterisk { BootedAtLogin = true };
-        await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
+        await using var run = await ConnectRunAsync(first, second, autoReconnect: true);
 
         var outcome = await Record.ExceptionAsync(run.StartServerAsync);
         run.ReleaseSecondPeer();
@@ -472,7 +487,7 @@ public sealed class VerbaraServerBootWindowTests
         // or is refused by the connection with AmiNotConnectedException because the session has ended: both are an
         // ask the load should not have made. The reconnect's socket is never served here.
         var peer = new BootingAsterisk { SendsFullyBooted = true, Close = PeerClose.AfterFirstRefusal };
-        await using var run = await Run.ConnectAsync(peer, autoReconnect: true);
+        await using var run = await ConnectRunAsync(peer, autoReconnect: true);
 
         var outcome = await Record.ExceptionAsync(run.StartServerAsync);
         var sentAfterClose = await peer.ActionsSentAfterCloseAsync(Run.Bound);
@@ -497,7 +512,7 @@ public sealed class VerbaraServerBootWindowTests
     {
         // The same closure with nothing left to reload it: the start fails rather than run on an empty table.
         var peer = new BootingAsterisk { SendsFullyBooted = true, Close = PeerClose.AfterFirstRefusal };
-        await using var run = await Run.ConnectAsync(peer);
+        await using var run = await ConnectRunAsync(peer);
 
         var outcome = await Record.ExceptionAsync(run.StartServerAsync);
 
@@ -522,7 +537,7 @@ public sealed class VerbaraServerBootWindowTests
         // the next reconnect's.
         var first = new BootingAsterisk { BootedAtLogin = true };
         var second = new BootingAsterisk { BootedAtLogin = true, Close = PeerClose.WhenAsked, CloseWhenAsked = "QueueStatus" };
-        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+        await using var run = await StartRunAsync(first, second, autoReconnect: true);
 
         run.ReleaseSecondPeer();
         first.CloseSession();
@@ -560,7 +575,7 @@ public sealed class VerbaraServerBootWindowTests
     public async Task StartAsync_ShouldAskOnce_WhenAppQueueIsNotLoadedAtAll()
     {
         var peer = new BootingAsterisk { BootedAtLogin = true, SendsFullyBooted = true, HasAppQueue = false };
-        await using var run = await Run.ConnectAsync(peer);
+        await using var run = await ConnectRunAsync(peer);
 
         var start = run.StartServerAsync();
         var waits = await DriveTheLoadAsync(run, start);
@@ -594,7 +609,7 @@ public sealed class VerbaraServerBootWindowTests
         {
             BootedAtLogin = true, SendsFullyBooted = true, FullyBootedAt = placement, HasAppQueue = false,
         };
-        await using var run = await Run.ConnectAsync(peer);
+        await using var run = await ConnectRunAsync(peer);
 
         var start = run.StartServerAsync();
         var waits = await DriveTheLoadAsync(run, start);
@@ -622,7 +637,7 @@ public sealed class VerbaraServerBootWindowTests
     public async Task StartAsync_ShouldNotWait_WhenTheUserNeverReceivesFullyBootedAndAsteriskHasBooted()
     {
         var peer = new BootingAsterisk { BootedAtLogin = true, SendsFullyBooted = false };
-        await using var run = await Run.ConnectAsync(peer);
+        await using var run = await ConnectRunAsync(peer);
 
         var start = run.StartServerAsync();
         var waits = await DriveTheLoadAsync(run, start);
@@ -658,7 +673,7 @@ public sealed class VerbaraServerBootWindowTests
             BootedAtLogin = true, SendsFullyBooted = false, HasAppQueue = false, HasAgentPool = false,
             RefusalMessage = BootingAsterisk.PermissionDenied,
         };
-        await using var run = await Run.ConnectAsync(peer);
+        await using var run = await ConnectRunAsync(peer);
 
         var start = run.StartServerAsync();
         var waits = await DriveTheLoadAsync(run, start);
@@ -787,7 +802,7 @@ public sealed class VerbaraServerBootWindowTests
     public async Task StartAsync_ShouldThrowNotConnected_WhenItBeginsWhileTheReconnectLoopIsConnecting()
     {
         var first = new BootingAsterisk { BootedAtLogin = true, Close = PeerClose.AfterConnect };
-        await using var run = await Run.ConnectAsync(first, autoReconnect: true);
+        await using var run = await ConnectRunAsync(first, autoReconnect: true);
 
         var attempting = await CompletesWithinBoundAsync(run.SecondSocketCreated);
         var stateAtStart = run.Connection.State;

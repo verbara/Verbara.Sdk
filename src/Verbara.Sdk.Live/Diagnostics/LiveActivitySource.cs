@@ -57,6 +57,14 @@ public static class LiveActivitySource
     internal static void SetStatusRefused(Activity? activity, string message) =>
         activity?.SetTag("live.status.refused", message);
 
+    /// <summary>
+    /// Tags a state load or a channel reconciliation one of whose lists applied only its non-destructive half, because
+    /// the event pump had not dispatched every event received before the list completed within the bound: the list's
+    /// action name.
+    /// </summary>
+    internal static void SetReconcileDeferred(Activity? activity, string list) =>
+        activity?.SetTag("live.reconcile.deferred", list);
+
     internal static Activity? StartOriginate(string channel, string context, string extension)
     {
         var activity = Source.StartActivity($"live originate {channel}", ActivityKind.Client);

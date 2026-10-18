@@ -10,6 +10,7 @@ using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Ami.Events.Base;
+using Verbara.Sdk.Ami.Internal;
 using Verbara.Sdk.Live.Agents;
 using Verbara.Sdk.Live.Bridges;
 using Verbara.Sdk.Live.Channels;
@@ -68,6 +69,30 @@ internal static partial class VerbaraServerLog
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "[LIVE] {Action} answered with an error: {Message}; the table it lists was not reconciled from it")]
     public static partial void ListingNotApplied(ILogger logger, string action, string message);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "[LIVE] {List} barrier: waited {WaitMs} ms for the event pump to dispatch through event {Ordinal}, outcome={Outcome}")]
+    public static partial void BarrierWaited(ILogger logger, string list, double waitMs, long ordinal, string outcome);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[LIVE] {List} barrier ran out after {BoundSeconds} s: the event pump had not dispatched every event received before the listing completed, so only its non-destructive half was applied (what it lists was admitted, nothing was removed or ended)")]
+    public static partial void BarrierDeferred(ILogger logger, string list, int boundSeconds);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "[LIVE] {List}: only its non-destructive half was applied, since this load's wait for the event pump had already run out and the pump has not reached the listing's end")]
+    public static partial void BarrierStillDeferred(ILogger logger, string list);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "[LIVE] {List} reconciled without waiting for the event pump: the reconciliation runs inside an event handler, which holds the dispatch it would wait for")]
+    public static partial void BarrierSkippedInDispatch(ILogger logger, string list);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "[LIVE] A load's wait for the event pump ran out: one full reload runs once the pump has dispatched what it held")]
+    public static partial void DeferredReloadScheduled(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[LIVE] The full reload scheduled after a load's wait for the event pump ran out failed")]
+    public static partial void DeferredReloadFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "[LIVE] Initial state load interrupted: its AMI session ended and the connection is {State}, so the start returns and the reload that follows the reconnect loads the state ({Reason})")]
@@ -131,6 +156,14 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </remarks>
     internal const string UnknownCommandPrefix = "Invalid/unknown command";
 
+    /// <summary>
+    /// How long a list's reconciliation waits for the AMI connection's event pump to dispatch every event received before
+    /// the list completed. Fixed, and below the 30 s reconciliation interval, so one server whose handlers are stuck does
+    /// not stretch every server's sweep. When it runs out, the reconciliation applies only its non-destructive half, and a
+    /// load schedules one full reload. A load waits it out once: its later lists no longer wait.
+    /// </summary>
+    internal static readonly TimeSpan BarrierBound = TimeSpan.FromSeconds(10);
+
     private readonly IAmiConnection _connection;
     private readonly ILogger<VerbaraServer> _logger;
     private IDisposable? _subscription;
@@ -185,6 +218,15 @@ public sealed class VerbaraServer : IVerbaraServer
     // is measured with GetTimestamp so that a step of the wall clock cannot stretch or cut it. Settable by tests (via
     // InternalsVisibleTo) to drive both on a manual clock.
     internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
+    // The clock a list reconciliation's wait for the event pump is bounded on, when not the server's own: null reads
+    // TimeProvider at the moment of the wait, so a test that replaces the server's clock after construction moves this
+    // wait with it. Set by a test (via InternalsVisibleTo) whose count of the timers on TimeProvider must not see it.
+    internal TimeProvider? BarrierClock { get; set; }
+
+    // Cancelled once DisposeAsync has begun: a full reload scheduled before it stops waiting and does not start after it.
+    // Never disposed, so a scheduled reload may read its token at any time.
+    private readonly CancellationTokenSource _disposing = new();
 
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
@@ -267,13 +309,15 @@ public sealed class VerbaraServer : IVerbaraServer
     /// When the AMI session ends before the load completes and the connection is reconnecting, the start returns
     /// without an exception and logs a warning: the reload that follows the reconnect loads the state, and until then
     /// the managers hold what the load had read. Whether the connection is reconnecting is read from its state when
-    /// the load stops, so a reconnect that gives up after the start has returned is not reported by the start.
+    /// the load stops, so a reconnect that gives up after the start has returned is not reported by the start. A
+    /// <c>Connecting</c> or <c>Connected</c> written by the caller's own <c>ConnectAsync</c> is not reconnecting: a
+    /// caller's connect raises no <see cref="IAmiConnection.Reconnected"/>, so no reload follows it, and the start throws.
     /// </para>
     /// </remarks>
     /// <exception cref="AmiNotConnectedException">
     /// The connection was not established when the start began; or its AMI session ended before the load completed
     /// and the connection will not come back, because automatic reconnection is off, the reconnect gave up, or the
-    /// caller ended the connection. The state is not reported as loaded.
+    /// caller ended the connection or connected it again itself. The state is not reported as loaded.
     /// </exception>
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
@@ -396,6 +440,14 @@ public sealed class VerbaraServer : IVerbaraServer
     /// a load whose <c>Status</c> is answered. Only an <see cref="AmiConnection"/> reports the refusal; over any other
     /// <see cref="IAmiConnection"/> it reads as a snapshot with no channels.
     /// </para>
+    /// <para>
+    /// Over an <see cref="AmiConnection"/>, before a completed listing removes anything, the load waits until the
+    /// connection has delivered to its handlers every event it received before that listing ended, so that a
+    /// <c>Hangup</c> or a leave still queued behind a slow handler is applied first, as what it is. It waits for at most
+    /// 10 s in all. When that runs out, the listings apply only what they add, a <c>Warning</c> is logged, and once the
+    /// load has completed it schedules one full reload. Called from inside an event handler, the load does not wait: the
+    /// handler holds the delivery it would wait for.
+    /// </para>
     /// </remarks>
     /// <exception cref="AmiNotConnectedException">
     /// The connection is not established, or its AMI session ended before the load completed.
@@ -436,6 +488,13 @@ public sealed class VerbaraServer : IVerbaraServer
     /// brings back one the other saw leave.
     /// </para>
     /// <para>
+    /// Over an <see cref="AmiConnection"/>, before the completed snapshot removes anything, it waits until the connection
+    /// has delivered to its handlers every event it received before <c>StatusComplete</c>, so that a <c>Hangup</c> still
+    /// queued behind a slow handler ends its call with its own cause. It waits for at most 10 s; when that runs out it
+    /// only admits what the snapshot lists, removes nothing and logs a <c>Warning</c>. Called from inside an event
+    /// handler it does not wait, since that handler holds the delivery it would wait for, and says so at <c>Debug</c>.
+    /// </para>
+    /// <para>
     /// It is traced as a <c>live channel-reconcile</c> activity, tagged with the channels held once it has reconciled
     /// (<c>live.channels</c>) and, for a refused <c>Status</c>, with Asterisk's message (<c>live.status.refused</c>); its
     /// result is logged at <c>Debug</c>. It is never reported as a state load.
@@ -455,7 +514,7 @@ public sealed class VerbaraServer : IVerbaraServer
         try
         {
             reconciled = await ReconcileChannelTableAsync(
-                session, states, activity, ChannelReader.Reconciliation, cancellationToken) is not null;
+                session, states, activity, ChannelReader.Reconciliation, new Barriers(), cancellationToken) is not null;
         }
         catch (AmiNotConnectedException) when (states.AtStop is null && states.BeganOnASession)
         {
@@ -486,7 +545,7 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <see langword="null"/> when Asterisk refused the <c>Status</c>, which reconciles nothing.
     /// </summary>
     private async ValueTask<List<ChannelSnapshotEntry>?> ReconcileChannelTableAsync(LoadSession? session, LoadConnectionStates states,
-        Activity? activity, ChannelReader reader, CancellationToken cancellationToken)
+        Activity? activity, ChannelReader reader, Barriers barriers, CancellationToken cancellationToken)
     {
         // Buffer first, then reconcile: a snapshot that throws, is cancelled or never completes must leave every held
         // channel alone, and it can only do that if nothing was mutated while it was being read.
@@ -497,12 +556,88 @@ public sealed class VerbaraServer : IVerbaraServer
         // up is not brought back. It is closed on every way out of them — completed, refused, thrown, cancelled or ended
         // with the session — so nothing it keeps outlives this snapshot.
         using var window = Channels.OpenReadWindow();
-        var channelSnapshot = await ReadChannelSnapshotAsync(session, states, activity, reader, cancellationToken);
+        var mark = session is not null ? new ListSnapshotMark() : null;
+        var channelSnapshot = await ReadChannelSnapshotAsync(session, mark, states, activity, reader, cancellationToken);
         if (channelSnapshot is null)
             return null;
 
-        Channels.ReconcileWithSnapshot(channelSnapshot, window);
+        // Before the snapshot removes anything, the pump dispatches every event received before StatusComplete, so a
+        // Hangup still queued then removes its channel first, as the hangup it is. The window stays open while it waits.
+        var full = await AwaitBarrierAsync(session, mark, "Status", states, reader.Name, activity, barriers, cancellationToken);
+        Channels.ReconcileWithSnapshot(channelSnapshot, window, removeAbsent: full);
         return channelSnapshot;
+    }
+
+    /// <summary>What the barriers of one load or one channel reconciliation found.</summary>
+    private sealed class Barriers
+    {
+        /// <summary>Whether one of them ran out, so its reconciliation applied only its non-destructive half.</summary>
+        public bool Deferred => DeferredOn is not null;
+
+        /// <summary>The list whose wait ran out first, or <see langword="null"/>.</summary>
+        public ListSnapshotMark? DeferredOn { get; set; }
+    }
+
+    /// <summary>
+    /// Waits until the AMI connection's event pump has dispatched every event received up to the end of the list
+    /// <paramref name="mark"/> describes, for at most <see cref="BarrierBound"/> on <see cref="BarrierClock"/> (the
+    /// server's <see cref="TimeProvider"/> by default). Returns <see langword="true"/> when the reconciliation may apply
+    /// its destructive half, and <see langword="false"/> when the bound ran out: it then applies only what the list adds,
+    /// and logs a <c>Warning</c>. Once one wait of <paramref name="barriers"/> has run out, the later ones do not wait:
+    /// they apply their destructive half only if the pump has already reached their list.
+    /// </summary>
+    /// <remarks>
+    /// Without a mark — a connection other than <see cref="AmiConnection"/>, or a list that did not complete — there is
+    /// nothing to wait for. From inside an event handler the wait is skipped and logged at <c>Debug</c>: the pump is held
+    /// by that same handler, so it could never be met. A session that ends during the wait stops the reconciliation, as
+    /// an ending under the read does.
+    /// </remarks>
+    private async ValueTask<bool> AwaitBarrierAsync(LoadSession? session, ListSnapshotMark? mark, string list,
+        LoadConnectionStates states, string readerName, Activity? activity, Barriers barriers,
+        CancellationToken cancellationToken)
+    {
+        if (session is null || mark is null)
+            return true;
+
+        if (session.Connection.InDispatch)
+        {
+            VerbaraServerLog.BarrierSkippedInDispatch(_logger, list);
+            return true;
+        }
+
+        var clock = BarrierClock ?? TimeProvider;
+        var started = clock.GetTimestamp();
+        var outcome = await mark.WaitDispatchedThroughAsync(
+            barriers.Deferred ? TimeSpan.Zero : BarrierBound, clock, cancellationToken);
+        var waitedMs = clock.GetElapsedTime(started).TotalMilliseconds;
+        VerbaraServerLog.BarrierWaited(_logger, list, waitedMs, mark.CompleteOrdinal, outcome switch
+        {
+            DispatchBarrierOutcome.Reached => "reached",
+            DispatchBarrierOutcome.TimedOut => "timed_out",
+            _ => "ended",
+        });
+
+        switch (outcome)
+        {
+            case DispatchBarrierOutcome.Reached:
+                return true;
+            case DispatchBarrierOutcome.TimedOut:
+                // Warned once, for the wait that ran out; a later list of the same load did not wait.
+                if (barriers.Deferred)
+                {
+                    VerbaraServerLog.BarrierStillDeferred(_logger, list);
+                }
+                else
+                {
+                    barriers.DeferredOn = mark;
+                    VerbaraServerLog.BarrierDeferred(_logger, list, (int)BarrierBound.TotalSeconds);
+                    LiveActivitySource.SetReconcileDeferred(activity, list);
+                }
+
+                return false;
+            default:
+                throw states.Stop($"the AMI session ended while the {readerName} waited for the event pump after {list}");
+        }
     }
 
     /// <summary>
@@ -511,16 +646,58 @@ public sealed class VerbaraServer : IVerbaraServer
     /// because its AMI session ended, the state then: what the start reads to tell whether a reload will follow.
     /// It is counted in <see cref="IsLoadInFlight"/> from its first step to its last, however it ends.
     /// </summary>
-    private async ValueTask LoadAsync(LoadConnectionStates states, CancellationToken cancellationToken)
+    /// <remarks>
+    /// A load one of whose lists waited out <see cref="BarrierBound"/> applied only that list's non-destructive half, and
+    /// nothing else would retry it (the sweep never runs over an empty table, and there is none without Hosting): once
+    /// it has completed, it schedules one full reload, which starts when the pump has dispatched every event received
+    /// before that list ended, so that it does not meet the same backlog. A reload so scheduled schedules none. When the
+    /// session ends first, it does not run: the reconnect's reload, if one follows, loads the state.
+    /// </remarks>
+    private async ValueTask LoadAsync(LoadConnectionStates states, CancellationToken cancellationToken,
+        bool scheduledAfterDeferral = false)
     {
+        var barriers = new Barriers();
         Interlocked.Increment(ref _loadsInFlight);
         try
         {
-            await ReadStateAsync(states, cancellationToken);
+            await ReadStateAsync(states, barriers, cancellationToken);
         }
         finally
         {
             Interlocked.Decrement(ref _loadsInFlight);
+        }
+
+        if (barriers.DeferredOn is { } deferredOn && !scheduledAfterDeferral)
+        {
+            VerbaraServerLog.DeferredReloadScheduled(_logger);
+            _ = Task.Run(() => RunDeferredReloadAsync(deferredOn), CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// The full reload a load whose barrier ran out scheduled: it waits, with no bound, until the pump has dispatched
+    /// through <paramref name="deferredOn"/>, then loads. It does not run when the pump stops first (the session ended)
+    /// or the server is disposed. Its failure is logged, never thrown.
+    /// </summary>
+    private async Task RunDeferredReloadAsync(ListSnapshotMark deferredOn)
+    {
+        var disposing = _disposing.Token;
+        try
+        {
+            var outcome = await deferredOn.WaitDispatchedThroughAsync(
+                Timeout.InfiniteTimeSpan, BarrierClock ?? TimeProvider, disposing);
+            if (outcome != DispatchBarrierOutcome.Reached || disposing.IsCancellationRequested)
+                return;
+
+            await LoadAsync(new LoadConnectionStates(_connection), disposing, scheduledAfterDeferral: true);
+        }
+        catch (OperationCanceledException) when (disposing.IsCancellationRequested)
+        {
+            // The server was disposed: nothing is reloaded into it.
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            VerbaraServerLog.DeferredReloadFailed(_logger, ex);
         }
     }
 
@@ -528,7 +705,8 @@ public sealed class VerbaraServer : IVerbaraServer
     /// The steps of <see cref="LoadAsync"/>: the channels, then — only after a completed <c>Status</c> — the bridges and
     /// the conference rooms, then the queues, then the agents.
     /// </summary>
-    private async ValueTask ReadStateAsync(LoadConnectionStates states, CancellationToken cancellationToken)
+    private async ValueTask ReadStateAsync(LoadConnectionStates states, Barriers barriers,
+        CancellationToken cancellationToken)
     {
         using var activity = LiveActivitySource.StartStateLoad(_connection.AsteriskVersion ?? "unknown");
 
@@ -546,19 +724,21 @@ public sealed class VerbaraServer : IVerbaraServer
             using (var bridgeWindow = Bridges.OpenSnapshotWindow())
             {
                 var channelSnapshot = await ReconcileChannelTableAsync(
-                    session, states, activity, ChannelReader.Load, cancellationToken);
+                    session, states, activity, ChannelReader.Load, barriers, cancellationToken);
                 if (channelSnapshot is not null)
                 {
                     request = "BridgeList";
-                    await LoadBridgesAsync(session, states, bridgeWindow, channelSnapshot, cancellationToken);
+                    await LoadBridgesAsync(session, states, activity, barriers, bridgeWindow, channelSnapshot,
+                        cancellationToken);
 
                     request = "ConfbridgeListRooms";
-                    await LoadConferencesAsync(session, states, name => request = name, cancellationToken);
+                    await LoadConferencesAsync(session, states, activity, barriers, name => request = name,
+                        cancellationToken);
                 }
             }
 
             request = "QueueStatus";
-            await LoadQueuesAsync(session, states, cancellationToken);
+            await LoadQueuesAsync(session, states, activity, barriers, cancellationToken);
 
             request = "Agents";
             await PopulateAgentsAsync(session, states, cancellationToken);
@@ -576,16 +756,17 @@ public sealed class VerbaraServer : IVerbaraServer
         LiveActivitySource.SetStateLoadResult(activity, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
     }
 
-    private async ValueTask LoadQueuesAsync(
-        LoadSession? session, LoadConnectionStates states, CancellationToken cancellationToken)
+    private async ValueTask LoadQueuesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
+        Barriers barriers, CancellationToken cancellationToken)
     {
         // Populate queues from QueueStatusAction. The window opens before the request is sent: a leave Asterisk reports
         // after that moment is newer than the snapshot, which then does not bring that caller back, and a join after it
         // is one the snapshot cannot list.
         using var window = Queues.OpenSnapshotWindow();
         var asked = new AskOutcome();
+        var mark = session is not null ? new ListSnapshotMark() : null;
         await foreach (var evt in AskWhileAsteriskStartsAsync(
-            "QueueStatus", static () => new QueueStatusAction(), session, states, cancellationToken, asked))
+            "QueueStatus", static () => new QueueStatusAction(), session, states, cancellationToken, asked, mark))
         {
             switch (evt)
             {
@@ -615,8 +796,15 @@ public sealed class VerbaraServer : IVerbaraServer
         // Only a snapshot Asterisk answered to the end is evidence of who is waiting: one the token cut short, or one
         // refused (the queue module not loaded, or still loading when the budget ran out), lists no one for a reason
         // other than an empty queue. A session that ended under it threw above.
-        if (!cancellationToken.IsCancellationRequested && !asked.Refused)
+        // Before the snapshot removes anyone, the pump dispatches every join and leave received before
+        // QueueStatusComplete. When that wait runs out, only the non-destructive half applies: the entries were admitted
+        // above, and no held entry, member or queue is removed.
+        if (!cancellationToken.IsCancellationRequested && !asked.Refused
+            && await AwaitBarrierAsync(session, mark, "QueueStatus", states, ChannelReader.Load.Name, activity, barriers,
+                cancellationToken))
+        {
             Queues.CompleteSnapshot(window);
+        }
     }
 
     /// <summary>
@@ -625,10 +813,12 @@ public sealed class VerbaraServer : IVerbaraServer
     /// or that Asterisk answered with an error, changes nothing; over a connection that cannot tell, only the
     /// non-destructive half applies.
     /// </summary>
-    private async ValueTask LoadBridgesAsync(LoadSession? session, LoadConnectionStates states,
-        BridgeSnapshotWindow window, List<ChannelSnapshotEntry> channelSnapshot, CancellationToken cancellationToken)
+    private async ValueTask LoadBridgesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
+        Barriers barriers, BridgeSnapshotWindow window, List<ChannelSnapshotEntry> channelSnapshot,
+        CancellationToken cancellationToken)
     {
-        var listing = await ReadListingAsync(new BridgeListAction(), "BridgeList", session, states, cancellationToken);
+        var mark = session is not null ? new ListSnapshotMark() : null;
+        var listing = await ReadListingAsync(new BridgeListAction(), "BridgeList", session, states, mark, cancellationToken);
         if (listing.Rejection is { } rejection)
         {
             VerbaraServerLog.ListingNotApplied(_logger, "BridgeList", rejection);
@@ -653,7 +843,11 @@ public sealed class VerbaraServer : IVerbaraServer
             members[group.Key] = group.Select(static c => c.UniqueId).ToHashSet(StringComparer.Ordinal);
         }
 
-        Bridges.ReconcileWithSnapshot(window, bridges, members, removeOmitted: listing.Complete);
+        // Before the listing removes anything, the pump dispatches every event received before BridgeListComplete.
+        var removeOmitted = listing.Complete
+            && await AwaitBarrierAsync(session, mark, "BridgeList", states, ChannelReader.Load.Name, activity, barriers,
+                cancellationToken);
+        Bridges.ReconcileWithSnapshot(window, bridges, members, removeOmitted);
     }
 
     /// <summary>
@@ -663,12 +857,19 @@ public sealed class VerbaraServer : IVerbaraServer
     /// session and at <c>Debug</c> after that; any other error, or a listing that did not complete, changes nothing for
     /// what it lists.
     /// </summary>
-    private async ValueTask LoadConferencesAsync(LoadSession? session, LoadConnectionStates states,
-        Action<string> sending, CancellationToken cancellationToken)
+    private async ValueTask LoadConferencesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
+        Barriers barriers, Action<string> sending, CancellationToken cancellationToken)
     {
         using var window = MeetMe.OpenSnapshotWindow();
+
+        // The listings are read one after the other on one session, so the last one that completed ends furthest into the
+        // event stream: the barrier waits on it.
+        ListSnapshotMark? lastCompleted = null;
+        var roomsMark = session is not null ? new ListSnapshotMark() : null;
         var roomListing = await ReadListingAsync(
-            new ConfbridgeListRoomsAction(), "ConfbridgeListRooms", session, states, cancellationToken);
+            new ConfbridgeListRoomsAction(), "ConfbridgeListRooms", session, states, roomsMark, cancellationToken);
+        if (roomsMark is { CompleteOrdinal: > 0 })
+            lastCompleted = roomsMark;
         if (!TryReadConferenceListing("ConfbridgeListRooms", roomListing, out var roomsComplete))
             return;
 
@@ -687,8 +888,11 @@ public sealed class VerbaraServer : IVerbaraServer
         foreach (var room in rooms)
         {
             sending("ConfbridgeList");
+            var mark = session is not null ? new ListSnapshotMark() : null;
             var listing = await ReadListingAsync(
-                new ConfbridgeListAction { Conference = room }, "ConfbridgeList", session, states, cancellationToken);
+                new ConfbridgeListAction { Conference = room }, "ConfbridgeList", session, states, mark, cancellationToken);
+            if (mark is { CompleteOrdinal: > 0 })
+                lastCompleted = mark;
             if (!TryReadConferenceListing("ConfbridgeList", listing, out var complete))
                 continue;
 
@@ -702,7 +906,11 @@ public sealed class VerbaraServer : IVerbaraServer
                 .ToList();
         }
 
-        MeetMe.ReconcileWithSnapshot(window, rooms, participants, removeOmitted: allComplete);
+        // Before the listings remove anyone, the pump dispatches every event received before the last of them completed.
+        var removeOmitted = allComplete
+            && await AwaitBarrierAsync(session, lastCompleted, "ConfbridgeList", states, ChannelReader.Load.Name, activity,
+                barriers, cancellationToken);
+        MeetMe.ReconcileWithSnapshot(window, rooms, participants, removeOmitted);
     }
 
     /// <summary>
@@ -761,11 +969,13 @@ public sealed class VerbaraServer : IVerbaraServer
     /// as the events it delivered, neither complete nor refused.
     /// </summary>
     private async ValueTask<Listing> ReadListingAsync(ManagerAction action, string actionName, LoadSession? session,
-        LoadConnectionStates states, CancellationToken cancellationToken)
+        LoadConnectionStates states, ListSnapshotMark? mark, CancellationToken cancellationToken)
     {
         var outcome = session is not null || _connection.ReportsEventActionOutcome ? new EventActionOutcome() : null;
         var source = session is not null
-            ? session.Connection.SendEventGeneratingActionAsync(action, outcome, cancellationToken)
+            ? mark is not null
+                ? session.Connection.SendEventGeneratingActionAsync(action, outcome, mark, cancellationToken)
+                : session.Connection.SendEventGeneratingActionAsync(action, outcome, cancellationToken)
             : outcome is not null
                 ? _connection.SendEventGeneratingActionAsync(action, outcome, cancellationToken)
                 : _connection.SendEventGeneratingActionAsync(action, cancellationToken);
@@ -831,7 +1041,8 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </para>
     /// </summary>
     private async ValueTask<List<ChannelSnapshotEntry>?> ReadChannelSnapshotAsync(LoadSession? session,
-        LoadConnectionStates states, Activity? activity, ChannelReader reader, CancellationToken cancellationToken)
+        ListSnapshotMark? mark, LoadConnectionStates states, Activity? activity, ChannelReader reader,
+        CancellationToken cancellationToken)
     {
         var snapshot = new List<ChannelSnapshotEntry>();
 
@@ -840,7 +1051,9 @@ public sealed class VerbaraServer : IVerbaraServer
         // and its configured Status comes through the plain overload as before.
         var outcome = session is not null || _connection.ReportsEventActionOutcome ? new EventActionOutcome() : null;
         var events = session is not null
-            ? session.Connection.SendEventGeneratingActionAsync(new StatusAction(), outcome, cancellationToken)
+            ? mark is not null
+                ? session.Connection.SendEventGeneratingActionAsync(new StatusAction(), outcome, mark, cancellationToken)
+                : session.Connection.SendEventGeneratingActionAsync(new StatusAction(), outcome, cancellationToken)
             : outcome is not null
                 ? _connection.SendEventGeneratingActionAsync(new StatusAction(), outcome, cancellationToken)
                 : _connection.SendEventGeneratingActionAsync(new StatusAction(), cancellationToken);
@@ -1001,9 +1214,11 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <param name="states">The load's record of the connection's state, which an ending of the session completes.</param>
     /// <param name="cancellationToken">Cancels the request and any wait between two asks.</param>
     /// <param name="asked">Optional. Told, once the request has ended, whether Asterisk's last answer was a refusal.</param>
+    /// <param name="mark">Optional. Receives where the answer's list completed in the session's event stream.</param>
     private async IAsyncEnumerable<ManagerEvent> AskWhileAsteriskStartsAsync(
         string actionName, Func<ManagerAction> newAction, LoadSession? session, LoadConnectionStates states,
-        [EnumeratorCancellation] CancellationToken cancellationToken, AskOutcome? asked = null)
+        [EnumeratorCancellation] CancellationToken cancellationToken, AskOutcome? asked = null,
+        ListSnapshotMark? mark = null)
     {
         if (session is null)
         {
@@ -1021,7 +1236,10 @@ public sealed class VerbaraServer : IVerbaraServer
             var reportedBeforeAsk = session.FullyBooted.IsCompletedSuccessfully;
 
             var outcome = new EventActionOutcome();
-            await foreach (var evt in session.Connection.SendEventGeneratingActionAsync(newAction(), outcome, cancellationToken))
+            var events = mark is not null
+                ? session.Connection.SendEventGeneratingActionAsync(newAction(), outcome, mark, cancellationToken)
+                : session.Connection.SendEventGeneratingActionAsync(newAction(), outcome, cancellationToken);
+            await foreach (var evt in events)
                 yield return evt;
 
             if (outcome.SessionEnded)
@@ -1117,6 +1335,13 @@ public sealed class VerbaraServer : IVerbaraServer
         public AmiConnectionState? AtStop { get; private set; }
 
         /// <summary>
+        /// Whether the caller's own <c>ConnectAsync</c>, <c>DisconnectAsync</c> or <c>DisposeAsync</c> wrote
+        /// <see cref="AtStop"/>, read with it. Known only over an <see cref="AmiConnection"/>; <see langword="false"/> over
+        /// any other connection.
+        /// </summary>
+        public bool AtStopWrittenByCaller { get; private set; }
+
+        /// <summary>
         /// Whether the load began on a session, or while the reconnect loop was replacing one that had ended. From any
         /// other state the connection was not established, and the load's first request fails as it always did.
         /// </summary>
@@ -1128,9 +1353,13 @@ public sealed class VerbaraServer : IVerbaraServer
         /// <c>Disconnecting</c> and <c>Disconnected</c> mean that automatic reconnection is off, that the reconnect gave
         /// up, or that the caller ended the connection. A load that began in any other state reads as never connected,
         /// including one that began in <c>Connecting</c>: the state cannot tell a caller's first connect still running
-        /// from the reconnect loop's attempt, and a caller's connect raises no reload.
+        /// from the reconnect loop's attempt, and a caller's connect raises no reload. For the same reason a
+        /// <c>Connecting</c> or <c>Connected</c> the caller's own connect wrote when the load stopped reads as no reload:
+        /// over an <see cref="AmiConnection"/> the stop reads who wrote the state with it; over any other connection it
+        /// cannot tell.
         /// </summary>
         public bool ReconnectWillReload => AtStop is { } stop
+            && !(AtStopWrittenByCaller && stop is AmiConnectionState.Connecting or AmiConnectionState.Connected)
             && (AtStart == AmiConnectionState.Reconnecting
                 || (AtStart == AmiConnectionState.Connected
                     && stop is AmiConnectionState.Reconnecting or AmiConnectionState.Connecting
@@ -1142,8 +1371,11 @@ public sealed class VerbaraServer : IVerbaraServer
         /// </summary>
         public AmiNotConnectedException Stop(string what)
         {
-            var state = connection.State;
+            // Read in one step with who wrote it, at this moment: StateChanged's handlers run on a queue, and one may not
+            // have seen a change the load reads 0.1 ms after it was written.
+            var (state, byCaller) = connection is AmiConnection ami ? ami.StateAndWriter : (connection.State, false);
             AtStop = state;
+            AtStopWrittenByCaller = byCaller;
             return new AmiNotConnectedException($"Not connected: {what}. Current state: {state}");
         }
     }
@@ -1225,6 +1457,7 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </exception>
     public async ValueTask DisposeAsync()
     {
+        await _disposing.CancelAsync();
         _connection.Reconnected -= OnReconnected;
         if (_connection is AmiConnection amiConnection)
             amiConnection.Lost -= OnConnectionLost;
