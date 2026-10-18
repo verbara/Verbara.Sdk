@@ -1,4 +1,5 @@
 using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Tests.Harness;
 using FluentAssertions;
 
 namespace Verbara.Sdk.Sessions.Tests;
@@ -36,30 +37,40 @@ public sealed class AgentSessionTests
         session.AvgHandleTime.Should().Be(TimeSpan.FromMinutes(8));
     }
 
+    // The three IdleTime cases run on the fake clock through the session's internal clock constructor, and assert the
+    // exact value: idle time is counted from the instant the agent became Idle (StateChangedAt), on the tracker's
+    // clock, not from the end of its last call on the wall clock.
+
     [Fact]
     public void IdleTime_ShouldReturnZero_WhenNotIdle()
     {
-        var session = new AgentSession("agent-1");
+        var clock = new FakeTimeProvider();
+        var session = new AgentSession("agent-1", clock);
         session.State = AgentSessionState.OnCall;
-        session.LastCallEndedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        session.StateChangedAt = clock.GetUtcNow().AddMinutes(-5);
+        session.LastCallEndedAt = clock.GetUtcNow().AddMinutes(-5);
 
         session.IdleTime.Should().Be(TimeSpan.Zero);
     }
 
     [Fact]
-    public void IdleTime_ShouldReturnElapsed_WhenIdleWithLastCall()
+    public void IdleTime_ShouldReturnTheTimeSinceTheAgentBecameIdle_WhenIdle()
     {
-        var session = new AgentSession("agent-1");
+        var clock = new FakeTimeProvider();
+        var session = new AgentSession("agent-1", clock);
         session.State = AgentSessionState.Idle;
-        session.LastCallEndedAt = DateTimeOffset.UtcNow.AddSeconds(-10);
+        session.LastCallEndedAt = clock.GetUtcNow().AddSeconds(-40);
+        session.StateChangedAt = clock.GetUtcNow().AddSeconds(-10);
 
-        session.IdleTime.Should().BeCloseTo(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1));
+        session.IdleTime.Should().Be(TimeSpan.FromSeconds(10),
+            "the agent became Idle 10 s ago on its clock, when its wrap-up ended; its call ended 40 s ago");
     }
 
     [Fact]
-    public void IdleTime_ShouldReturnZero_WhenIdleWithNoLastCall()
+    public void IdleTime_ShouldReturnZero_WhenIdleAndNeverChangedState()
     {
-        var session = new AgentSession("agent-1");
+        var clock = new FakeTimeProvider();
+        var session = new AgentSession("agent-1", clock);
         session.State = AgentSessionState.Idle;
 
         session.IdleTime.Should().Be(TimeSpan.Zero);

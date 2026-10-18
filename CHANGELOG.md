@@ -130,6 +130,26 @@ and a recipe for an Asterisk that still sends one of these events are in
 so `PeerEntryEvent` stays and loses its `[Obsolete]` mark. A `#pragma warning disable CS0618` kept around it can be
 removed.
 
+### Changed — BREAKING: `CallWrapUpEvent` is raised, and `SessionOptions.WrapUpDuration` is applied (#443)
+
+Since 1.7.0 nothing raised `CallWrapUpEvent`, so an agent's wrap-up was never opened, timed or closed. The session
+manager now raises one `CallWrapUpEvent` per agent leg. A queue call's wrap-up opens at the member's `AgentComplete`,
+which Asterisk sends before the caller hangs up, also after a blind transfer. A named agent's call outside any queue
+opens it when the call ends. It closes when `WrapUpDuration` passes, at the agent's next connect, or when its next
+leg ends, and the event carries the time measured. `AgentSessionTracker` leaves `WrapUp` when the wrap-up closes, so
+`TotalWrapUpTime`, `AvgHandleTime` and `IdleTime` (now counted from the end of the wrap-up) change accordingly. A
+call whose ending only a reconnect's reload saw opens no wrap-up and leaves the agent `Idle`. When one call visits
+two named agents, the call now ends for both of them (before, the second stayed `OnCall`), and each counts the call
+and adds the call's whole talk and hold time, because the ending carries no per-agent time. Set `WrapUpDuration` to
+the queue's `wrapuptime`: the SDK cannot read that value from Asterisk. Zero closes the wrap-up at once.
+
+**Newly rejected at start** (`OptionsValidationException` naming `WrapUpDuration`): a negative duration, a duration
+above 4,294,967,294 ms (about 49.7 days), and `Timeout.InfiniteTimeSpan`. There is no "never ends".
+
+**Migration:** zero is the nearest equivalent of the old behaviour for the counters (no wrap-up time is added), not
+for the state: the agent is `Idle` at once, where before it stayed `WrapUp` until its next call. A
+`WrapUpDuration` longer than `CompletedRetention` can deliver the event after the call is released.
+
 ### Changed: a subscriber of the session events that throws no longer silences the others (#431)
 
 An exception thrown by a subscriber of `ICallSessionManager.Events` or `IAgentSessionTracker.StateChanges` used to
