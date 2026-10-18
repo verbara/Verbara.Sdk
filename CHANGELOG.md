@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: an AMI capture on a new Asterisk build is one command (#445)
+
+`scripts/capture-ami-recording.py` starts one throwaway Asterisk from an image pinned by digest, drives a fixed
+workload through a raw TCP tap, and writes a reduced recording under `Recordings/` with a provenance sidecar. The
+recording names its build in its own bytes (a first `UserEvent: CaptureProvenance` with `asterisk -V` and the image
+reference), and markers attribute every frame to its step. The driver refuses an image whose id is not the digest it
+was given. The reduction keeps whole frames byte-exact, fills UUIDs and addresses, and refuses a file over 256 KiB,
+one that still holds the run's manager secret, or one the recording redaction check rejects; the same tap always
+reduces to the same bytes. Its tests run in the always-run `Coverage Script Tests` job. No package changes.
+
 ### Changed — BREAKING: types of dead Asterisk modules are deprecated with `VSDK0005` (#436, #NNN)
 
 Forty-nine types and one member are now `[Obsolete]` with diagnostic id `VSDK0005`, as a warning, never an error.
