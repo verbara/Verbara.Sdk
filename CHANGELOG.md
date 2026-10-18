@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added: one migration guide for 2.9.0 (#NNN)
+### Added: one migration guide for 2.9.0 (#446)
 
 [`docs/guides/migration-2.9.0.md`](docs/guides/migration-2.9.0.md) has one section per breaking entry of 2.9.0,
 ordered by package, each saying what changed, who it reaches and what to do, with code where a change is needed and
