@@ -151,15 +151,27 @@ What was not measured: a masquerade that does take a participant out of a confer
 participants (attended transfer, call pickup). If one of those produced a leave under another channel
 name, the participant would stay held until `ConfbridgeEnd` for its conference removes it, raising
 `UserLeft` then. If that end is missed too, for example while the AMI connection is down, the
-reconnect clears it (next section).
+reload after the reconnect removes it (next section).
 
 ## Reconnect
 
-A reconnect still clears the whole conference table and raises no `UserLeft` for what it drops. The
-conference table is not reloaded from Asterisk afterwards: a participant who was already in a
-conference is held again only when it joins again, and a leave for a participant that is not held
-changes nothing. If you keep state per participant, reset it when the connection comes back, as you
-did in 2.8.0.
+From 2.9.0 a reconnect no longer clears the conference table. The reload after it asks Asterisk
+for its rooms (`ConfbridgeListRooms`, then one `ConfbridgeList` per room) and reconciles the table
+against the answers:
+
+- A room or participant Asterisk lists and the table lacks is added, with its muted and talking
+  state from the listing, and raises no `UserJoined`.
+- A participant the table holds and the listing no longer reports is removed and raises `UserLeft`
+  once, whether its room is still listed or not. `No active conferences.` empties the table, with
+  one `UserLeft` per participant it held.
+- A participant held and still listed is kept; `UserStateChanged` is raised if the listing shows a
+  different muted or talking state.
+
+The listings need `reporting` in the AMI user's `write` line. Without it Asterisk refuses them
+(`Permission denied`), the table keeps what it held, and the load logs the refusal at Warning once
+per AMI session. If you reset per-participant state when the connection came back, as 2.8.0 needed,
+you can follow `UserJoined` and `UserLeft` instead. A start of the server loads the rooms the same
+way.
 
 ## Package validation against 2.8.0
 

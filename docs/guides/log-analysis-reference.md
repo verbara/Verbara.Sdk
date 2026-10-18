@@ -9,7 +9,7 @@
 | `[AMI]` | AMI connection | `AmiConnectionLog` | Connect, disconnect, reconnect, reconnect gave up, reader error, notification handler error, notification handler that has not returned |
 | `[AMI_EVENT]` | AMI events | `AmiConnectionLog` | Event received, dropped, discarded on caller ending, `OnEvent` handler fault, observer fault |
 | `[AMI_ACTION]` | AMI actions | `AmiConnectionLog` | Response received |
-| `[LIVE]` | Live state | `VerbaraServerLog` | Initial state, reconnect reload, `Status` refused |
+| `[LIVE]` | Live state | `VerbaraServerLog` | Initial state, reconnect reload, `Status` refused, conference listing refused, the wait for the event pump before a reconciliation |
 | `[CHANNEL]` | Channels | `ChannelManagerLog` | New, state change, hangup, rename, link/unlink |
 | `[QUEUE]` | Queues | `QueueManagerLog` | Params, member add/remove/pause/status, caller join/leave |
 | `[AGENT]` | Agents | `AgentManagerLog` | Login, logoff, connect, complete, pause |
@@ -50,6 +50,8 @@
 | `A subscriber of the agent state changes threw on the change of agent <AgentId> from <PreviousState> to <NewState>; …` | Bug: an application subscriber of `IAgentSessionTracker.StateChanges` failed (exception attached); the same report and the same caveat as the session line above | P1 |
 | `[POOL] Server dispose failed` or `[POOL] AMI connection dispose failed` | Bug: a server's ARI client or an AMI connection threw while the pool released it (exception attached); the pool still released everything else, and the call it came from (`DisposeAsync`, `RemoveServerAsync`, or a failed `AddServerAsync`, which rethrows its start's exception) never throws this one | P1 |
 | `[LIVE] Status refused` | Config: the AMI user may not run `Status` (needs `system`, `call` or `reporting` in `write`); no channel was reconciled | — |
+| `[LIVE] ConfbridgeListRooms refused` (or `ConfbridgeList`) | Config: the AMI user may not list conferences (needs `reporting` in `write`); the conference rooms were not restored and keep what they held | — |
+| `[LIVE] <List> barrier ran out after 10 s` | Bug or load: an event handler held the events received before a listing for 10 s; the reload removed and ended nothing, and runs one full reload once the handlers catch up. Keep handlers short | P1 |
 | `[QUEUE] Caller left` without Exception | Expected: caller hung up | Ignore |
 | `[AGENT] Logoff` without Exception | Expected: agent disconnected | Ignore |
 | `[CALL_FLOW] Completed` without Exception | Expected: call ended | Ignore |

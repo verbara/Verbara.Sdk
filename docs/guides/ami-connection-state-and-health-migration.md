@@ -193,6 +193,30 @@ connection.StateChanged += change =>
 };
 ```
 
+**With a `VerbaraServer` on the connection, reload it yourself.** Live reloads its state only after
+a reconnect the connection made itself (`AutoReconnect` on), because only that raises `Reconnected`.
+Your own `ConnectAsync` raises nothing, so with `AutoReconnect` off Live keeps the tables it held at
+the loss: calls that ended during the outage stay held, and what started during it is missing. Call
+`RequestInitialStateAsync` once your `ConnectAsync` has returned:
+
+```csharp
+connection.StateChanged += change =>
+{
+    // AutoReconnect off: reconnect on the loss, then reload Live from Asterisk.
+    if (change.IsLoss)
+        _ = Task.Run(async () =>
+        {
+            await connection.ConnectAsync(shutdownToken);
+            await server.RequestInitialStateAsync(shutdownToken);
+        });
+};
+```
+
+The reload reconciles every table against what Asterisk reports, as the reconnect's own reload
+does. A `VerbaraServer.StartAsync` whose load was cut short while your connect was under way throws
+`AmiNotConnectedException` (it used to return, and nothing reloaded), and the state is not reported
+as loaded: here too, call `RequestInitialStateAsync` once your connect has returned.
+
 ### What this means for code you may have written
 
 - **An event handler must not await, without a token, external work that reconnects** — a worker

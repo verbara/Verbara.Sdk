@@ -145,7 +145,9 @@ Code that relied on one participant per room, or on the room vanishing at the fi
 now gets the right numbers.
 
 **What to do.** Look participants up by channel name, and pass the leave's `Channel` to `OnUserLeft` if you feed a
-`MeetMeManager` yourself. A reconnect still clears the table without reloading it.
+`MeetMeManager` yourself. A reconnect no longer clears the table: the reload restores it from Asterisk's
+conference listings, raising `UserLeft` for each participant they no longer report (see
+[Reconnect](conference-participants-migration.md#reconnect)).
 
 Guide, with before and after code: [Conference participants keyed by channel](conference-participants-migration.md).
 
