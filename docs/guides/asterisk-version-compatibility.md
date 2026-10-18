@@ -41,6 +41,12 @@ An event that no longer has a typed class still arrives, as a `ManagerEvent` (se
 
 The actions, responses and events of chan_sip, res_monitor, app_meetme, Skype for Asterisk, the Zaptel action names, chan_agent's callback login, app_setcdruserfield and the event names Asterisk 10 and 12 renamed or removed are deprecated in 2.9.0 under the `VSDK0005` warning and removed in 2.10.0: see [VSDK0005](obsolete-ami-events-removal-migration.md#vsdk0005).
 
+## An AMI Event Held Until the Client Writes (before 20.21.0, 22.11.0 and 23.5.0)
+
+On Asterisk before 20.21.0, 22.11.0 and 23.5.0, the manager can hold an event on a session until the client next writes to it. The session's thread marks itself to be woken, releases its lock and only then waits on the socket with no timeout; an event queued in that gap misses the wake-up. Asterisk replaced that mechanism with a per-session alert pipe in 20.21.0, 22.11.0 and 23.5.0, and 24 does not have it.
+
+Measured on 23.4.1 and 22.10.1: 5 of about 5.4 million events and 7 of about 3.9 million were held; each arrived about a millisecond after the client's next action, and none was lost. With the SDK, the next write on a session that sends nothing else is the heartbeat `Ping`, so such an event waits at most `AmiConnectionOptions.HeartbeatInterval` (30 seconds by default, with `EnableHeartbeat` on, the default). On these versions, lower the interval if a quiet session must see every event sooner, or upgrade Asterisk.
+
 ## ARI Event Coverage by Version
 
 ### Events Available Since Asterisk 12+
