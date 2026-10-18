@@ -46,6 +46,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     private readonly SessionStoreBase _store;
     private readonly ILogger<CallSessionManager> _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly IWrapUpDurationProvider? _wrapUpDurations;
     private readonly Meter _residencyMeter;
     private readonly SubscriberGuardedObservable<SessionDomainEvent> _guardedEvents;
     private CancellationToken _shutdownToken;
@@ -55,6 +56,21 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         ILogger<CallSessionManager> logger,
         SessionStoreBase store)
         : this(options, logger, store, TimeProvider.System)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a manager that asks <paramref name="wrapUpDurations"/> for the length of each queue member's
+    /// wrap-up, per server and queue, with <see cref="SessionOptions.WrapUpDuration"/> as the fallback. The service
+    /// container picks this constructor when an <see cref="IWrapUpDurationProvider"/> is registered, and the one
+    /// without it otherwise.
+    /// </summary>
+    public CallSessionManager(
+        IOptions<SessionOptions> options,
+        ILogger<CallSessionManager> logger,
+        SessionStoreBase store,
+        IWrapUpDurationProvider wrapUpDurations)
+        : this(options, logger, store, TimeProvider.System, wrapUpDurations ?? throw new ArgumentNullException(nameof(wrapUpDurations)))
     {
     }
 
@@ -78,12 +94,14 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         IOptions<SessionOptions> options,
         ILogger<CallSessionManager> logger,
         SessionStoreBase store,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IWrapUpDurationProvider? wrapUpDurations = null)
     {
         _options = options.Value;
         _logger = logger;
         _store = store;
         _timeProvider = timeProvider;
+        _wrapUpDurations = wrapUpDurations;
         _correlator = new SessionCorrelator(_options);
         _residencyMeter = SessionMetrics.CreateResidencyMeter(
             active: () => CountHeld(ended: false),
@@ -100,6 +118,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// <c>Verbara.Sdk.Sessions</c> name; a test picks this manager's gauges out by it.
     /// </summary>
     internal Meter ResidencyMeter => _residencyMeter;
+
+    /// <summary>The wrap-up duration provider this manager was built with, or <see langword="null"/> for none.</summary>
+    internal IWrapUpDurationProvider? WrapUpDurations => _wrapUpDurations;
 
     /// <summary>
     /// Sets the token <em>every</em> persistence call runs under, not only the ones at shutdown.

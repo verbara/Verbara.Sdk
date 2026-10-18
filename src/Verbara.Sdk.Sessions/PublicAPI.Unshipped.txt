@@ -10,3 +10,6 @@ Verbara.Sdk.Sessions.ISessionStore.GetByLinkedIdAsync(string! linkedId, System.T
 Verbara.Sdk.Sessions.ISessionStore.SaveAsync(Verbara.Sdk.Sessions.CallSession! session, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.Sessions.ISessionStore.SaveBatchAsync(System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Sessions.CallSession!>! sessions, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask
 static Verbara.Sdk.Sessions.Extensions.VerbaraSessionsBuilderExtensions.UseInMemory(this Verbara.Sdk.Sessions.Extensions.ISessionsBuilder! builder) -> Verbara.Sdk.Sessions.Extensions.ISessionsBuilder!
+Verbara.Sdk.Sessions.Manager.CallSessionManager.CallSessionManager(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.Sessions.Manager.SessionOptions!>! options, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.Sessions.Manager.CallSessionManager!>! logger, Verbara.Sdk.Sessions.Extensions.SessionStoreBase! store, Verbara.Sdk.Sessions.Manager.IWrapUpDurationProvider! wrapUpDurations) -> void
+Verbara.Sdk.Sessions.Manager.IWrapUpDurationProvider
+Verbara.Sdk.Sessions.Manager.IWrapUpDurationProvider.GetWrapUpDuration(string! serverId, string! queueName) -> System.TimeSpan?
