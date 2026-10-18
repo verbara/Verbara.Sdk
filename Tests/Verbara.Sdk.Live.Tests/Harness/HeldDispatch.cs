@@ -92,6 +92,46 @@ internal static class AsteriskFrames
         new("Cause-txt", causeText),
     ];
 
+    /// <summary>
+    /// <c>BridgeCreate</c>, with the headers Asterisk 22.12, 23.6 and 24.0 rc2 sent (the bridges-and-conference recordings
+    /// captured on 2026-10-18): <c>basic</c>/<c>simple_bridge</c> for a two-party bridge, <c>base</c>/<c>softmix</c>
+    /// for a ConfBridge room's bridge.
+    /// </summary>
+    public static KeyValuePair<string, string>[] BridgeCreate(string bridgeId, string type = "basic",
+        string technology = "simple_bridge", string creator = "<unknown>", string name = "<unknown>") =>
+    [
+        new("Privilege", "call,all"), new("BridgeUniqueid", bridgeId), new("BridgeType", type),
+        new("BridgeTechnology", technology), new("BridgeCreator", creator), new("BridgeName", name),
+        new("BridgeNumChannels", "0"), new("BridgeVideoSourceMode", "none"),
+    ];
+
+    /// <summary><c>BridgeEnter</c> for a channel entering <paramref name="bridgeId"/>, as in the same captures.</summary>
+    public static KeyValuePair<string, string>[] BridgeEnter(string bridgeId, int numChannels, string uniqueId,
+        string channel, string linkedId, string type = "basic", string technology = "simple_bridge") =>
+    [
+        new("Privilege", "call,all"), new("BridgeUniqueid", bridgeId), new("BridgeType", type),
+        new("BridgeTechnology", technology), new("BridgeCreator", "<unknown>"), new("BridgeName", "<unknown>"),
+        new("BridgeNumChannels", numChannels.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        new("BridgeVideoSourceMode", "none"), new("Channel", channel), new("ChannelState", "6"),
+        new("ChannelStateDesc", "Up"), new("CallerIDNum", "7001"), new("CallerIDName", "Capture"),
+        new("Context", "capture"), new("Exten", "conf"), new("Priority", "1"), new("Uniqueid", uniqueId),
+        new("Linkedid", linkedId),
+    ];
+
+    /// <summary><c>ConfbridgeJoin</c> for a participant joining <paramref name="conference"/>, as in the same captures.</summary>
+    public static KeyValuePair<string, string>[] ConfbridgeJoin(string conference, string bridgeId, int numChannels,
+        string uniqueId, string channel, string linkedId) =>
+    [
+        new("Privilege", "call,all"), new("Conference", conference), new("BridgeUniqueid", bridgeId),
+        new("BridgeType", "base"), new("BridgeTechnology", "softmix"), new("BridgeCreator", "ConfBridge"),
+        new("BridgeName", conference),
+        new("BridgeNumChannels", numChannels.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        new("BridgeVideoSourceMode", "none"), new("Channel", channel), new("ChannelState", "6"),
+        new("ChannelStateDesc", "Up"), new("CallerIDNum", "7002"), new("CallerIDName", "Capture"),
+        new("Context", "capture"), new("Exten", "conf"), new("Priority", "3"), new("Uniqueid", uniqueId),
+        new("Linkedid", linkedId), new("Admin", "No"), new("Muted", "No"),
+    ];
+
     public static KeyValuePair<string, string>[] QueueCallerJoin(string uniqueId, string channel, string queue,
         int position, int count) => QueueCaller(uniqueId, channel, queue, position, count);
 
