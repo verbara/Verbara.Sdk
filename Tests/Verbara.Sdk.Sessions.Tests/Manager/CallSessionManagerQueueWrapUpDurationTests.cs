@@ -261,6 +261,94 @@ public sealed class CallSessionManagerQueueWrapUpDurationTests
     }
 
     [Fact]
+    public async Task AgentComplete_ShouldOpenTheMembersWrapUpAndAskForTheQueueItNames_WhenTheManagerNeverSawTheCallerJoinAndTheMemberIsNotAnAgent_Synthetic()
+    {
+        const string member = "PJSIP/m";
+        var clock = new FakeTimeProvider();
+        var provider = new RecordingProvider((_, _, _) => TimeSpan.FromSeconds(20));
+        await using var rig = await WrapUpRig.StartAsync(clock, Options(), provider, logger: null);
+
+        // Synthetic: app_queue's connect names q and a member with no Agent header, but the caller's QueueCallerJoin
+        // was never seen, so the connect records nothing. First call: its wrap-up runs the provider's 20 s.
+        rig.Deliver(MissedJoinConnected("c1", "m1", member));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        var firstCompletedAt = clock.GetUtcNow();
+        rig.Deliver(MemberHangsUp(Queue, "c1", "m1", member));
+        var first = rig.Session("c1").SessionId;
+        clock.Advance(TimeSpan.FromMinutes(1));
+
+        // Second call, the same way; 5 s after its AgentComplete the member's next (seen) queue call connects, which
+        // closes the wrap-up keyed by that interface on this server.
+        rig.Deliver(MissedJoinConnected("c2", "m2", member));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        var secondCompletedAt = clock.GetUtcNow();
+        rig.Deliver(MemberHangsUp(Queue, "c2", "m2", member));
+        var second = rig.Session("c2").SessionId;
+        clock.Advance(TimeSpan.FromSeconds(5));
+        rig.Deliver(QueueCallConnected(Queue, "c3", "m3", member));
+        clock.Advance(TimeSpan.FromMinutes(5));
+
+        new { Asks = provider.Asks, WrapUps = rig.WrapUps.ToArray() }.Should().BeEquivalentTo(
+            new
+            {
+                Asks = new[] { (ServerId, Queue), (ServerId, Queue) },
+                WrapUps = new[]
+                {
+                    new CallWrapUpEvent(first, ServerId, firstCompletedAt + TimeSpan.FromSeconds(20), null, Queue,
+                        TimeSpan.FromSeconds(20)),
+                    new CallWrapUpEvent(second, ServerId, secondCompletedAt + TimeSpan.FromSeconds(5), null, Queue,
+                        TimeSpan.FromSeconds(5)),
+                },
+            },
+            options => options.WithStrictOrdering(),
+            "a member not known by name whose caller's join the manager missed still has its AgentComplete, naming q: "
+            + "that AgentComplete opens the member's wrap-up, keyed by its interface on this server (so its next "
+            + "connect there cuts it short), asks the provider once for q, runs the answer, and its CallWrapUpEvent "
+            + "carries QueueName q and no agent. " + Describe(rig, provider));
+    }
+
+    [Fact]
+    public async Task AgentComplete_ShouldOpenTheOnlyWrapUpOfTheLeg_WhenTheManagerNeverSawTheCallerJoinAndTheAgentIsKnownByName_Synthetic()
+    {
+        var clock = new FakeTimeProvider();
+        await using var rig = await WrapUpRig.StartAsync(clock, Options(), wrapUpDurations: null, logger: null);
+        rig.Deliver(AgentLogin("agent-1", Member, "login-1"));
+        // Synthetic: app_queue's connect names the agent and q, but the caller's QueueCallerJoin was never seen.
+        rig.Deliver(MissedJoinConnected("c1", "m1", Member, agent: "agent-1"));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        var hangup = MemberHangsUp(Queue, "c1", "m1", Member, agent: "agent-1");
+        rig.Deliver(hangup[0], hangup[1], hangup[2]);
+        var completedAt = clock.GetUtcNow();
+        // The caller hangs up 5 s after the AgentComplete, so the two open instants differ.
+        clock.Advance(TimeSpan.FromSeconds(5));
+        var endedAt = clock.GetUtcNow();
+        rig.Deliver(hangup[3], hangup[4]);
+        var sessionId = rig.Session("c1").SessionId;
+        var callEnded = rig.Events.OfType<CallEndedEvent>().Count(e => e.SessionId == sessionId);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        var wrapUps = rig.WrapUps.Where(w => w.SessionId == sessionId).ToArray();
+
+        new
+        {
+            CallEnded = callEnded,
+            Count = wrapUps.Length,
+            OpenedAt = wrapUps.Select(w => w.Timestamp - w.WrapUpDuration).ToArray(),
+            WrapUps = wrapUps,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                CallEnded = 1,
+                Count = 1,
+                OpenedAt = new[] { completedAt },
+                WrapUps = new[] { new CallWrapUpEvent(sessionId, ServerId, completedAt + WrapUp, "agent-1", Queue, WrapUp) },
+            },
+            options => options.WithStrictOrdering(),
+            "an agent known by name whose caller's join the manager missed gets exactly one wrap-up for that leg: its "
+            + "AgentComplete naming q opens it, 5 s before the call's CallEndedEvent (" + endedAt.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)
+            + "), and the call's end opens none. " + Describe(rig, provider: null));
+    }
+
+    [Fact]
     public async Task AgentConnect_ShouldCutAPerQueueWrapUpShortBeforeAnnouncingTheCall_WhenTheMembersNextCallConnectsDuringIt()
     {
         // The global duration is shorter than the cut, so only the provider's 60 s keeps the wrap-up open until it.
@@ -749,6 +837,28 @@ public sealed class CallSessionManagerQueueWrapUpDurationTests
     // --- Frames and helpers ---------------------------------------------------------------------------------------
 
     private static string QueueNumber(int i) => string.Create(CultureInfo.InvariantCulture, $"q-{i:D4}");
+
+    /// <summary>
+    /// Synthetic: a call app_queue connects to <paramref name="member"/> in this file's queue, with no
+    /// <c>QueueCallerJoin</c> before it (the manager missed the caller's join); the connect carries an <c>Agent</c>
+    /// header only when <paramref name="agent"/> is given.
+    /// </summary>
+    private static ManagerEvent[] MissedJoinConnected(string caller, string memberLeg, string member, string? agent = null)
+    {
+        var callerChannel = CallerChannel(caller);
+        var memberChannel = MemberChannel(member, memberLeg);
+        return
+        [
+            NewChannel(caller, callerChannel, "Ring", caller, context: "from-trunk", exten: "500"),
+            NewChannel(memberLeg, memberChannel, "Down", caller, context: "agents"),
+            NewState(memberLeg, "Up"),
+            AgentConnect(Queue, caller, callerChannel, caller, member, memberLeg, memberChannel, agent),
+            NewState(caller, "Up"),
+            BridgeCreate(Bridge(caller)),
+            BridgeEnter(Bridge(caller), memberLeg),
+            BridgeEnter(Bridge(caller), caller),
+        ];
+    }
 
     /// <summary>
     /// Synthetic: the member's <c>AgentComplete</c> for <paramref name="caller"/> with the <c>Queue</c> header removed,
