@@ -122,16 +122,22 @@ internal static class AmiCaptureReplay
     /// before the manager is disposed, so a caller that moves the clock there sees what fires, recorded on the
     /// replayed calls like every other domain event.
     /// </param>
+    /// <param name="wrapUpDurations">
+    /// Optional, and only with <paramref name="clock"/>. The wrap-up duration provider the manager is built with.
+    /// </param>
     public static async Task<CaptureReplay> ReplayAsync(
         string fixture, SessionOptions? options = null, Func<ManagerEvent, bool>? drop = null,
-        ManualClock? clock = null, Action<ManualClock>? afterLastFrame = null)
+        ManualClock? clock = null, Action<ManualClock>? afterLastFrame = null,
+        IWrapUpDurationProvider? wrapUpDurations = null)
     {
         if (afterLastFrame is not null && clock is null)
             throw new ArgumentException("Moving the clock after the last frame needs the clock.", nameof(afterLastFrame));
+        if (wrapUpDurations is not null && clock is null)
+            throw new ArgumentException("A wrap-up duration provider needs the clock.", nameof(wrapUpDurations));
 
         await using var rig = clock is null
             ? await ReplayRig.StartAsync(options ?? new SessionOptions())
-            : await ReplayRig.StartAsync(options ?? new SessionOptions(), clock);
+            : await ReplayRig.StartAsync(options ?? new SessionOptions(), clock, wrapUpDurations);
         var manager = rig.Manager;
 
         var scenario = BeforeFirstMarker;
@@ -199,24 +205,31 @@ internal static class AmiCaptureReplay
     /// Optional, and only with <paramref name="clock"/>. Called with the clock once the last frame is delivered and
     /// before the manager is disposed, so what it makes fire is scored like every other domain event.
     /// </param>
+    /// <param name="wrapUpDurations">
+    /// Optional, and only with <paramref name="clock"/>. The wrap-up duration provider the manager is built with.
+    /// </param>
     public static Task<QueueShapeReplay> ReplayQueueShapesAsync(string fixture, QueueShapeDispatch? dispatch = null,
-        ManualClock? clock = null, Action<ManualClock>? afterLastFrame = null) =>
-        ReplayQueueShapesFromFileAsync(FixturePath(fixture), dispatch, clock, afterLastFrame);
+        ManualClock? clock = null, Action<ManualClock>? afterLastFrame = null,
+        IWrapUpDurationProvider? wrapUpDurations = null) =>
+        ReplayQueueShapesFromFileAsync(FixturePath(fixture), dispatch, clock, afterLastFrame, wrapUpDurations);
 
     /// <summary>
     /// <see cref="ReplayQueueShapesAsync"/> over any file with the same shapes, such as a capture kept
     /// outside the suite's <c>Recordings/</c> folder, to compare it with the fixture reduced from it.
     /// </summary>
     public static async Task<QueueShapeReplay> ReplayQueueShapesFromFileAsync(string path, QueueShapeDispatch? dispatch = null,
-        ManualClock? clock = null, Action<ManualClock>? afterLastFrame = null)
+        ManualClock? clock = null, Action<ManualClock>? afterLastFrame = null,
+        IWrapUpDurationProvider? wrapUpDurations = null)
     {
         if (afterLastFrame is not null && clock is null)
             throw new ArgumentException("Moving the clock after the last frame needs the clock.", nameof(afterLastFrame));
+        if (wrapUpDurations is not null && clock is null)
+            throw new ArgumentException("A wrap-up duration provider needs the clock.", nameof(wrapUpDurations));
 
         var options = new SessionOptions();
         await using var rig = clock is null
             ? await ReplayRig.StartAsync(options)
-            : await ReplayRig.StartAsync(options, clock);
+            : await ReplayRig.StartAsync(options, clock, wrapUpDurations);
         var manager = rig.Manager;
         using var tracker = new QueueSessionTracker(manager, Options.Create(options));
 
@@ -853,14 +866,19 @@ internal static class AmiCaptureReplay
         /// <summary>Starts a rig whose manager is built with its public constructor, on the system clock.</summary>
         public static Task<ReplayRig> StartAsync(SessionOptions options) => StartOnAsync(options, clock: null);
 
-        /// <summary>Starts a rig whose manager runs on <paramref name="clock"/>, through its internal constructor.</summary>
-        public static Task<ReplayRig> StartAsync(SessionOptions options, TimeProvider clock)
+        /// <summary>
+        /// Starts a rig whose manager runs on <paramref name="clock"/>, through its internal constructor, with
+        /// <paramref name="wrapUpDurations"/> when one is given.
+        /// </summary>
+        public static Task<ReplayRig> StartAsync(SessionOptions options, TimeProvider clock,
+            IWrapUpDurationProvider? wrapUpDurations = null)
         {
             ArgumentNullException.ThrowIfNull(clock);
-            return StartOnAsync(options, clock);
+            return StartOnAsync(options, clock, wrapUpDurations);
         }
 
-        private static async Task<ReplayRig> StartOnAsync(SessionOptions options, TimeProvider? clock)
+        private static async Task<ReplayRig> StartOnAsync(SessionOptions options, TimeProvider? clock,
+            IWrapUpDurationProvider? wrapUpDurations = null)
         {
             var connection = Substitute.For<IAmiConnection>();
             connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
@@ -879,7 +897,8 @@ internal static class AmiCaptureReplay
                     Options.Create(options),
                     NullLogger<CallSessionManager>.Instance,
                     new InMemorySessionStore(),
-                    clock);
+                    clock,
+                    wrapUpDurations);
             try
             {
                 manager.AttachToServer(server, "replay");
