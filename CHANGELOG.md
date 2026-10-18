@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: one migration guide for 2.9.0 (#NNN)
+
+[`docs/guides/migration-2.9.0.md`](docs/guides/migration-2.9.0.md) has one section per breaking entry of 2.9.0,
+ordered by package, each saying what changed, who it reaches and what to do, with code where a change is needed and
+a link to the longer guide where one exists. Its C# snippets are compiled by the documentation snippet tests.
+
 ### Added: an AMI capture on a new Asterisk build is one command (#445)
 
 `scripts/capture-ami-recording.py` starts one throwaway Asterisk from an image pinned by digest, drives a fixed
