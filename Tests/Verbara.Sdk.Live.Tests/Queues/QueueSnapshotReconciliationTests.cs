@@ -171,8 +171,8 @@ public sealed class QueueSnapshotReconciliationTests
         }.Should().BeEquivalentTo(
             new
             {
-                HeldUniqueId = (string?)"u5",
-                LeftUniqueIds = new[] { (string?)"u4" },
+                HeldUniqueId = "u5",
+                LeftUniqueIds = new List<string> { "u4" },
                 LeftUnobserved = true,
                 Joined = 1L,
                 Left = 1L,

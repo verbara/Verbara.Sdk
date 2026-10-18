@@ -857,15 +857,12 @@ public sealed class VerbaraServer : IVerbaraServer
             return;
         }
 
-        var bridges = new List<BridgeSnapshotEntry>();
-        foreach (var evt in listing.Events)
-        {
-            if (evt is BridgeListItemEvent item && !string.IsNullOrEmpty(item.BridgeUniqueid))
-            {
-                bridges.Add(new BridgeSnapshotEntry(item.BridgeUniqueid, item.BridgeType, item.BridgeTechnology,
-                    item.BridgeCreator, item.BridgeName));
-            }
-        }
+        var bridges = listing.Events
+            .OfType<BridgeListItemEvent>()
+            .Where(static item => !string.IsNullOrEmpty(item.BridgeUniqueid))
+            .Select(static item => new BridgeSnapshotEntry(item.BridgeUniqueid!, item.BridgeType, item.BridgeTechnology,
+                item.BridgeCreator, item.BridgeName))
+            .ToList();
 
         var members = new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal);
         foreach (var group in channelSnapshot
@@ -906,15 +903,13 @@ public sealed class VerbaraServer : IVerbaraServer
         if (!TryReadConferenceListing("ConfbridgeListRooms", roomListing, out var roomsComplete))
             return;
 
-        var rooms = new List<string>();
-        foreach (var evt in roomListing.Events)
-        {
-            if (evt is ConfbridgeListRoomsEvent room && !string.IsNullOrEmpty(room.Conference)
-                && !rooms.Contains(room.Conference, StringComparer.Ordinal))
-            {
-                rooms.Add(room.Conference);
-            }
-        }
+        var rooms = roomListing.Events
+            .OfType<ConfbridgeListRoomsEvent>()
+            .Select(static room => room.Conference)
+            .Where(static conference => !string.IsNullOrEmpty(conference))
+            .Select(static conference => conference!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
         var participants = new Dictionary<string, IReadOnlyList<ConferenceSnapshotParticipant>>(StringComparer.Ordinal);
         var allComplete = roomsComplete;

@@ -390,11 +390,8 @@ public sealed class MeetMeManager
                 var keep = rows is null
                     ? null
                     : new HashSet<string>(rows.Select(static r => r.Channel), StringComparer.Ordinal);
-                foreach (var held in room.Users.Values)
+                foreach (var held in room.Users.Values.Where(user => keep?.Contains(user.Channel) != true))
                 {
-                    if (keep?.Contains(held.Channel) == true)
-                        continue;
-
                     if (held.JoinMark > window.Mark)
                     {
                         newer++;
@@ -422,11 +419,8 @@ public sealed class MeetMeManager
             if (!rooms.Contains(roomNumber))
                 continue;
 
-            foreach (var row in rows)
+            foreach (var row in rows.Where(static row => !string.IsNullOrEmpty(row.Channel)))
             {
-                if (string.IsNullOrEmpty(row.Channel))
-                    continue;
-
                 MeetMeRoom? room;
                 MeetMeUser? held;
                 lock (_windowGate)

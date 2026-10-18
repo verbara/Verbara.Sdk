@@ -453,14 +453,10 @@ public sealed class BridgeManager
 
             lock (_windowGate)
             {
-                foreach (var uniqueId in listed)
+                // Neither held already nor seen leaving after this listing's read opened.
+                foreach (var uniqueId in listed.Where(id => !bridge.Channels.ContainsKey(id)
+                             && !(_leftDuringRead.TryGetValue((bridge.BridgeUniqueid, id), out var stamp) && stamp > window.Mark)))
                 {
-                    if (bridge.Channels.ContainsKey(uniqueId))
-                        continue;
-
-                    if (_leftDuringRead.TryGetValue((bridge.BridgeUniqueid, uniqueId), out var stamp) && stamp > window.Mark)
-                        continue;
-
                     bridge.Channels.TryAdd(uniqueId, 0);
                     bridge.EnterMarks[uniqueId] = Interlocked.Increment(ref _changes);
                     added.Add(uniqueId);
@@ -469,14 +465,10 @@ public sealed class BridgeManager
 
             if (removeOmitted)
             {
-                foreach (var uniqueId in bridge.Channels.Keys)
+                // Not listed, and not entered after this listing's read opened.
+                foreach (var uniqueId in bridge.Channels.Keys.Where(id => !listed.Contains(id)
+                             && !(bridge.EnterMarks.TryGetValue(id, out var entered) && entered > window.Mark)))
                 {
-                    if (listed.Contains(uniqueId))
-                        continue;
-
-                    if (bridge.EnterMarks.TryGetValue(uniqueId, out var entered) && entered > window.Mark)
-                        continue;
-
                     bridge.Channels.TryRemove(uniqueId, out _);
                     bridge.EnterMarks.Remove(uniqueId);
                     taken.Add(uniqueId);

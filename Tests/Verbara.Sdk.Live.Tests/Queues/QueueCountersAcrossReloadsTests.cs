@@ -97,7 +97,7 @@ public sealed class QueueCountersAcrossReloadsTests
         await rig.StartAsync();
         rig.LiveJoin(Uid(0), Chan(0), position: 2);
         var before = rig.Server.Queues.GetByName(Queue)!.Entries[Chan(0)];
-        var was = new { before.JoinedAt, before.FromSnapshot, before.ReportedWaitSeconds, before.Position };
+        var was = (before.JoinedAt, before.FromSnapshot, before.ReportedWaitSeconds, before.Position);
         using var counters = new LiveCounters();
 
         rig.QueueStatus = [SubstituteRig.Params(), SubstituteRig.Entry(Uid(0), Chan(0), position: 1, wait: 42)];

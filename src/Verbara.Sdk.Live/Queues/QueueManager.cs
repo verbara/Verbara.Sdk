@@ -367,12 +367,12 @@ public sealed class QueueManager
                     (gone ??= []).Add(entry);
             }
 
-            foreach (var iface in queue.Members.Keys)
+            // Only a listed queue loses members: one the listing omits, unless it was added live during the read.
+            foreach (var iface in queue.Members.Keys.Where(iface =>
+                         listed && !view.ListsMember(queue.Name, iface) && !view.MemberAddedLive(queue.Name, iface)))
             {
-                if ((listed && view.ListsMember(queue.Name, iface)) || view.MemberAddedLive(queue.Name, iface))
-                    continue;
-
-                if (listed && queue.Members.TryRemove(iface, out _))
+                var removed = queue.Members.TryRemove(iface, out _);
+                if (removed)
                     (membersGone ??= []).Add(iface);
             }
 
@@ -708,10 +708,7 @@ public sealed class QueueManager
     private void ForgetMembers(AsteriskQueue queue)
     {
         foreach (var iface in queue.Members.Keys)
-        {
-            if (_queuesByMember.TryGetValue(iface, out var queues))
-                queues.TryRemove(queue.Name, out _);
-        }
+            _queuesByMember.GetValueOrDefault(iface)?.TryRemove(queue.Name, out _);
     }
 
     public void Clear()
