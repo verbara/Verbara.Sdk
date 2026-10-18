@@ -9,6 +9,10 @@ internal static partial class BridgeManagerLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "[BRIDGE] Duplicate BridgeCreate: bridge_id={BridgeId}")]
     public static partial void DuplicateBridgeCreate(ILogger logger, string bridgeId);
 
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "[BRIDGE] BridgeCreate for a bridge a listing admitted: bridge_id={BridgeId}; announced as its creation, not counted again")]
+    public static partial void SnapshotBridgeCreateObserved(ILogger logger, string bridgeId);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "[BRIDGE] BridgeEnter for unknown bridge: bridge_id={BridgeId}")]
     public static partial void UnknownBridgeEnter(ILogger logger, string bridgeId);
 
@@ -68,7 +72,9 @@ public sealed class BridgeManager
     internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
     /// <summary>
-    /// Fires when a new bridge is created. Not raised for a bridge a reload only read from Asterisk's bridge listing.
+    /// Fires when a new bridge is created. Not raised for a bridge a reload only read from Asterisk's bridge listing; when
+    /// Asterisk's <c>BridgeCreate</c> for such a bridge is delivered afterwards, it is raised then, once, and the bridge is
+    /// not counted again.
     /// </summary>
     public event Action<AsteriskBridge>? BridgeCreated;
 
@@ -135,6 +141,13 @@ public sealed class BridgeManager
         {
             CountInsertion();
             BridgeCreated?.Invoke(bridge);
+        }
+        else if (_bridges.TryGetValue(bridgeId, out var admitted) && admitted.TryClaimObservedCreate())
+        {
+            // A listing admitted the bridge silently while this BridgeCreate waited in the pump, or before Asterisk wrote
+            // it: this is the bridge's creation, observed. Announced once; counted already, at its admission.
+            BridgeManagerLog.SnapshotBridgeCreateObserved(_logger, bridgeId);
+            BridgeCreated?.Invoke(admitted);
         }
         else
         {
@@ -399,6 +412,7 @@ public sealed class BridgeManager
                         Creator = entry.Creator,
                         Name = entry.Name,
                         InsertMark = Interlocked.Increment(ref _changes),
+                        AdmittedBySnapshot = true,
                     };
                     inserted = _bridges.TryAdd(entry.Id, bridge);
                     if (!inserted)

@@ -224,9 +224,13 @@ public sealed class VerbaraServer : IVerbaraServer
     // wait with it. Set by a test (via InternalsVisibleTo) whose count of the timers on TimeProvider must not see it.
     internal TimeProvider? BarrierClock { get; set; }
 
-    // Cancelled once DisposeAsync has begun: a full reload scheduled before it stops waiting and does not start after it.
-    // Never disposed, so a scheduled reload may read its token at any time.
+    // Cancelled once DisposeAsync has begun: a full reload scheduled before it stops waiting and does not start after it,
+    // and a list reconciliation waiting for the event pump stops. Never disposed, so either may read its token at any time.
     private readonly CancellationTokenSource _disposing = new();
+
+    // The last full reload a load whose barrier ran out scheduled; it never throws. Read by tests (via
+    // InternalsVisibleTo) to tell when it has ended.
+    internal Task ScheduledReload { get; private set; } = Task.CompletedTask;
 
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
@@ -406,6 +410,10 @@ public sealed class VerbaraServer : IVerbaraServer
             // a defect of the reload: a reconnect that follows reloads once more.
             VerbaraServerLog.ReloadInterrupted(_logger, states?.AtStop ?? _connection.State, ex.Message);
         }
+        catch (OperationCanceledException) when (_disposing.IsCancellationRequested)
+        {
+            // The server was disposed while the reload waited for the event pump: nothing is reloaded into it.
+        }
         catch (Exception ex)
         {
             VerbaraServerLog.ReconnectReloadFailed(_logger, ex);
@@ -446,7 +454,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <c>Hangup</c> or a leave still queued behind a slow handler is applied first, as what it is. It waits for at most
     /// 10 s in all. When that runs out, the listings apply only what they add, a <c>Warning</c> is logged, and once the
     /// load has completed it schedules one full reload. Called from inside an event handler, the load does not wait: the
-    /// handler holds the delivery it would wait for.
+    /// handler holds the delivery it would wait for. A conference listing Asterisk answers <c>No active conferences.</c>
+    /// waits the same way, for every event received before that answer. Disposing the server during the wait ends it: the
+    /// load then throws <see cref="OperationCanceledException"/> and reconciles nothing more.
     /// </para>
     /// </remarks>
     /// <exception cref="AmiNotConnectedException">
@@ -590,7 +600,8 @@ public sealed class VerbaraServer : IVerbaraServer
     /// Without a mark — a connection other than <see cref="AmiConnection"/>, or a list that did not complete — there is
     /// nothing to wait for. From inside an event handler the wait is skipped and logged at <c>Debug</c>: the pump is held
     /// by that same handler, so it could never be met. A session that ends during the wait stops the reconciliation, as
-    /// an ending under the read does.
+    /// an ending under the read does; a server disposed during it stops it with <see cref="OperationCanceledException"/>.
+    /// A wait that begins on a server already disposed is not stopped: a load the caller asks of it still runs.
     /// </remarks>
     private async ValueTask<bool> AwaitBarrierAsync(LoadSession? session, ListSnapshotMark? mark, string list,
         LoadConnectionStates states, string readerName, Activity? activity, Barriers barriers,
@@ -607,8 +618,29 @@ public sealed class VerbaraServer : IVerbaraServer
 
         var clock = BarrierClock ?? TimeProvider;
         var started = clock.GetTimestamp();
-        var outcome = await mark.WaitDispatchedThroughAsync(
-            barriers.Deferred ? TimeSpan.Zero : BarrierBound, clock, cancellationToken);
+        DispatchBarrierOutcome outcome;
+
+        // A wait in flight when the server is disposed ends then. One that begins on a server already disposed waits as it
+        // always did: a load or reconciliation the caller asks of a disposed server still runs.
+        using (var wait = _disposing.IsCancellationRequested
+            ? null
+            : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposing.Token))
+        {
+            try
+            {
+                outcome = await mark.WaitDispatchedThroughAsync(
+                    barriers.Deferred ? TimeSpan.Zero : BarrierBound, clock, wait?.Token ?? cancellationToken);
+            }
+            catch (OperationCanceledException ex) when (wait is not null && _disposing.IsCancellationRequested
+                && !cancellationToken.IsCancellationRequested)
+            {
+                // Nothing is reconciled into a server once it is disposed.
+                throw new OperationCanceledException(
+                    $"The live server was disposed while the {readerName} waited for the event pump after {list}.",
+                    ex, _disposing.Token);
+            }
+        }
+
         var waitedMs = clock.GetElapsedTime(started).TotalMilliseconds;
         VerbaraServerLog.BarrierWaited(_logger, list, waitedMs, mark.CompleteOrdinal, outcome switch
         {
@@ -670,7 +702,7 @@ public sealed class VerbaraServer : IVerbaraServer
         if (barriers.DeferredOn is { } deferredOn && !scheduledAfterDeferral)
         {
             VerbaraServerLog.DeferredReloadScheduled(_logger);
-            _ = Task.Run(() => RunDeferredReloadAsync(deferredOn), CancellationToken.None);
+            ScheduledReload = Task.Run(() => RunDeferredReloadAsync(deferredOn), CancellationToken.None);
         }
     }
 
@@ -862,7 +894,8 @@ public sealed class VerbaraServer : IVerbaraServer
     {
         using var window = MeetMe.OpenSnapshotWindow();
 
-        // The listings are read one after the other on one session, so the last one that completed ends furthest into the
+        // The listings are read one after the other on one session, so the last one that ended — completed, or answered
+        // with an error such as 'No active conferences.', which marks where the error arrived — ends furthest into the
         // event stream: the barrier waits on it.
         ListSnapshotMark? lastCompleted = null;
         var roomsMark = session is not null ? new ListSnapshotMark() : null;
@@ -906,7 +939,7 @@ public sealed class VerbaraServer : IVerbaraServer
                 .ToList();
         }
 
-        // Before the listings remove anyone, the pump dispatches every event received before the last of them completed.
+        // Before the listings remove anyone, the pump dispatches every event received before the last of them ended.
         var removeOmitted = allComplete
             && await AwaitBarrierAsync(session, lastCompleted, "ConfbridgeList", states, ChannelReader.Load.Name, activity,
                 barriers, cancellationToken);

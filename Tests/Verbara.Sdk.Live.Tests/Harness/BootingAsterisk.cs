@@ -240,6 +240,13 @@ internal sealed class BootingAsterisk
     /// </summary>
     public Task? StatusAnsweredAfter { get; set; }
 
+    /// <summary>
+    /// Actions, by name, that the peer answers only once the task given for them has completed, so a test can act while
+    /// the connection waits for that answer: the peer counts the ask before it waits, so <see cref="AskedAtLeast"/> says
+    /// when the wait has begun. A wait that outlives <see cref="Run.Bound"/> fails the peer. Settable between two loads.
+    /// </summary>
+    public IReadOnlyDictionary<string, Task> AnsweredAfter { get; set; } = new Dictionary<string, Task>();
+
     /// <summary>Whether the peer answers as booted.</summary>
     public bool IsBooted => Volatile.Read(ref _booted);
 
@@ -404,6 +411,12 @@ internal sealed class BootingAsterisk
         {
             socket.CloseFromPeer();
             return false;
+        }
+
+        if (AnsweredAfter.FirstOrDefault(gate => string.Equals(gate.Key, name, StringComparison.OrdinalIgnoreCase))
+            .Value is { } answeredAfter)
+        {
+            await answeredAfter.WaitAsync(Run.Bound);
         }
 
         if (string.Equals(name, "Status", StringComparison.OrdinalIgnoreCase))

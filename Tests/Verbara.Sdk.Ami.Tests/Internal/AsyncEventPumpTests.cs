@@ -435,6 +435,28 @@ public class AsyncEventPumpTests
     }
 
     [Fact]
+    public async Task WaitDispatchedThroughAsync_ShouldEndAsEnded_WhenAPumpThatNeverStartedIsReleased()
+    {
+        // Never started: no consumer will ever run, so only the release can end a wait for an ordinal not yet reached.
+        var pump = new AsyncEventPump();
+        pump.TryEnqueue(CreateEvent("e1")).Should().BeTrue();
+        var barrier = pump.WaitDispatchedThroughAsync(1, Timeout.InfiniteTimeSpan, TimeProvider.System).AsTask();
+        var completedBeforeRelease = barrier.IsCompleted;
+
+        await pump.DisposeAsync();
+        var outcome = await barrier.WaitAsync(Bound);
+
+        using (new FluentAssertions.Execution.AssertionScope())
+        {
+            completedBeforeRelease.Should().BeFalse("e1 was never dispatched and the pump has not been released");
+            outcome.Should().Be(DispatchBarrierOutcome.Ended,
+                "a pump released without ever starting will dispatch nothing, so its waiters end instead of hanging");
+            (await pump.WaitDispatchedThroughAsync(1, Timeout.InfiniteTimeSpan, TimeProvider.System))
+                .Should().Be(DispatchBarrierOutcome.Ended, "a wait that begins after the release ends at once");
+        }
+    }
+
+    [Fact]
     public async Task DisposeAsync_ShouldNotThrow_WhenNotStarted()
     {
         var pump = new AsyncEventPump(5);

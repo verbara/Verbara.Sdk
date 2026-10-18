@@ -10,8 +10,9 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 
 /// <summary>
 /// Where a list's sequence ended in the session's event stream: the connection records the ordinal of the list's
-/// <c>…Complete</c> event in the session's pump, and a wait on that mark ends only once the pump has dispatched every
-/// event received up to it. Driven over a piped peer; no wall clock is read except the hang bound.
+/// <c>…Complete</c> event in the session's pump, or, for a list Asterisk refused, of the last event received before the
+/// refusal, and a wait on that mark ends only once the pump has dispatched every event received up to it. Driven over a
+/// piped peer; no wall clock is read except the hang bound.
 /// </summary>
 public sealed class AmiConnectionListSnapshotMarkTests
 {
@@ -77,7 +78,40 @@ public sealed class AmiConnectionListSnapshotMarkTests
     }
 
     [Fact]
-    public async Task SendEventGeneratingActionAsync_ShouldLeaveTheMarkEmpty_WhenAsteriskRefusesTheList()
+    public async Task SendEventGeneratingActionAsync_ShouldMarkTheLastEventReceivedBeforeTheRefusal_WhenAsteriskRefusesTheList()
+    {
+        // A conference listing with no conference up is answered 'Response: Error' / 'No active conferences.': the answer
+        // is a list with no entries, and the events received before it still have to be dispatched before it is applied.
+        await using var rig = await Rig.StartAsync(holdOn: "Hangup");
+
+        var mark = new ListSnapshotMark();
+        var outcomeOfAction = new EventActionOutcome();
+        var read = ReadAllAsync(rig.Connection.SendEventGeneratingActionAsync(new StatusAction(), outcomeOfAction, mark));
+        var id = await rig.ReadActionIdAsync();
+        await rig.Peer.WriteEventAsync("Hangup", [new("Channel", "PJSIP/a-1"), new("Uniqueid", "1.1"), new("Cause", "16")]);
+        await rig.Entered.WaitAsync(Bound);
+        await rig.Peer.RespondAsync("Error", id, [new("Message", "No active conferences.")]);
+        var received = await read.WaitAsync(Bound);
+
+        var wait = mark.WaitDispatchedThroughAsync(Bound, TimeProvider.System).AsTask();
+        var completedWhileHeld = wait.IsCompleted;
+        rig.Release();
+        var outcome = await wait.WaitAsync(Bound * 2);
+
+        using (new AssertionScope())
+        {
+            received.Should().BeEmpty();
+            outcomeOfAction.Rejection.Should().Be("No active conferences.");
+            mark.Pump.Should().NotBeNull("the refusal arrived on a live session");
+            mark.CompleteOrdinal.Should().Be(1, "the Hangup, the one event received before the refusal, is its mark");
+            completedWhileHeld.Should().BeFalse("the Hangup received before the refusal is still in its handler");
+            outcome.Should().Be(DispatchBarrierOutcome.Reached);
+            rig.Dispatched.Should().Equal(["Hangup"]);
+        }
+    }
+
+    [Fact]
+    public async Task SendEventGeneratingActionAsync_ShouldLeaveNothingToWaitFor_WhenAsteriskRefusesTheListBeforeAnyEvent()
     {
         await using var rig = await Rig.StartAsync(holdOn: null);
 
@@ -93,9 +127,8 @@ public sealed class AmiConnectionListSnapshotMarkTests
         {
             received.Should().BeEmpty();
             outcomeOfAction.Rejection.Should().Be("Permission denied");
-            mark.Pump.Should().BeNull("no event completed the list");
-            mark.CompleteOrdinal.Should().Be(0);
-            wait.IsCompleted.Should().BeTrue("an empty mark has nothing to wait for");
+            mark.CompleteOrdinal.Should().Be(0, "no event was received before the refusal");
+            wait.IsCompleted.Should().BeTrue("a mark before the first event has nothing to wait for");
             (await wait).Should().Be(DispatchBarrierOutcome.Reached);
         }
     }

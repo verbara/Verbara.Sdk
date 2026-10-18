@@ -41,6 +41,23 @@ public sealed class AsteriskBridge : LiveObjectBase
     // When the manager inserted the bridge, on its change ordinal: a snapshot requested before it cannot list it.
     internal long InsertMark { get; set; }
 
+    // 1 while the bridge is held only because a listing admitted it, silently: Asterisk's BridgeCreate for it, delivered
+    // later, is then its observed creation and is announced once. 0 once announced, or for a bridge created live.
+    private int _admittedBySnapshot;
+
+    internal bool AdmittedBySnapshot
+    {
+        get => Volatile.Read(ref _admittedBySnapshot) != 0;
+        init => _admittedBySnapshot = value ? 1 : 0;
+    }
+
+    // Claims the announcement of a snapshot-admitted bridge's creation: true once, for a bridge not destroyed since.
+    internal bool TryClaimObservedCreate()
+    {
+        lock (SyncRoot)
+            return DestroyedAt is null && Interlocked.Exchange(ref _admittedBySnapshot, 0) != 0;
+    }
+
     // When each channel in Channels entered, on the manager's change ordinal: a snapshot requested before a channel
     // entered cannot list it in the bridge. Guarded by SyncRoot.
     internal Dictionary<string, long> EnterMarks { get; } = new(StringComparer.Ordinal);

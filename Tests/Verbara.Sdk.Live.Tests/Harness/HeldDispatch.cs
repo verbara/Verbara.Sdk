@@ -105,6 +105,18 @@ internal static class AsteriskFrames
         new("BridgeNumChannels", "0"), new("BridgeVideoSourceMode", "none"),
     ];
 
+    /// <summary>
+    /// <c>BridgeDestroy</c>, with the headers Asterisk 24.0 rc2 sent for one (the conference-listings recording captured on
+    /// 2026-10-18).
+    /// </summary>
+    public static KeyValuePair<string, string>[] BridgeDestroy(string bridgeId, string type = "basic",
+        string technology = "simple_bridge", string creator = "<unknown>", string name = "<unknown>") =>
+    [
+        new("Privilege", "call,all"), new("BridgeUniqueid", bridgeId), new("BridgeType", type),
+        new("BridgeTechnology", technology), new("BridgeCreator", creator), new("BridgeName", name),
+        new("BridgeNumChannels", "0"), new("BridgeVideoSourceMode", "none"),
+    ];
+
     /// <summary><c>BridgeEnter</c> for a channel entering <paramref name="bridgeId"/>, as in the same captures.</summary>
     public static KeyValuePair<string, string>[] BridgeEnter(string bridgeId, int numChannels, string uniqueId,
         string channel, string linkedId, string type = "basic", string technology = "simple_bridge") =>
@@ -130,6 +142,24 @@ internal static class AsteriskFrames
         new("ChannelStateDesc", "Up"), new("CallerIDNum", "7002"), new("CallerIDName", "Capture"),
         new("Context", "capture"), new("Exten", "conf"), new("Priority", "3"), new("Uniqueid", uniqueId),
         new("Linkedid", linkedId), new("Admin", "No"), new("Muted", "No"),
+    ];
+
+    /// <summary>
+    /// <c>ConfbridgeLeave</c> for a participant leaving <paramref name="conference"/>, with the headers Asterisk 24.0 rc2
+    /// sent for one (the conference-listings recording captured on 2026-10-18).
+    /// </summary>
+    public static KeyValuePair<string, string>[] ConfbridgeLeave(string conference, string bridgeId, int numChannels,
+        string uniqueId, string channel, string linkedId) =>
+    [
+        new("Privilege", "call,all"), new("Conference", conference), new("BridgeUniqueid", bridgeId),
+        new("BridgeType", "base"), new("BridgeTechnology", "softmix"), new("BridgeCreator", "ConfBridge"),
+        new("BridgeName", conference),
+        new("BridgeNumChannels", numChannels.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        new("BridgeVideoSourceMode", "none"), new("Channel", channel), new("ChannelState", "6"),
+        new("ChannelStateDesc", "Up"), new("CallerIDNum", "7002"), new("CallerIDName", "Capture"),
+        new("ConnectedLineNum", "7002"), new("ConnectedLineName", "Capture"), new("Language", "en"),
+        new("AccountCode", ""), new("Context", "capture"), new("Exten", "conf"), new("Priority", "3"),
+        new("Uniqueid", uniqueId), new("Linkedid", linkedId), new("Admin", "No"),
     ];
 
     public static KeyValuePair<string, string>[] QueueCallerJoin(string uniqueId, string channel, string queue,

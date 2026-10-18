@@ -443,6 +443,304 @@ public sealed class ReloadRestoresBridgesAndRoomsTests
             + string.Join(" | ", run.ServerLog.Entries.Select(e => $"{e.Level}: {e.Line}")));
     }
 
+    // ---- Disposing the server ends what waits for the pump ----
+
+    [Fact]
+    public async Task DisposeAsync_ShouldCancelTheScheduledFullReload_WhenItStillWaitsOnAWedgedPump()
+    {
+        await using var rig = await Rig.StartAsync(new BootingAsterisk { BootedAtLogin = true });
+        await rig.LearnAsync([BridgeX], []);
+        var run = rig.Run;
+        using var gate = new DispatchGate();
+        using var gateSubscription = run.Connection.Subscribe(gate);
+        await rig.First.SendEventAsync("UserEvent", DispatchGate.Frame());
+        await gate.Held.WaitAsync(Run.Bound);
+        rig.First.Bridges = [];
+        var seen = rig.Watch();
+        while (run.Clock.TimersCreated.TryRead(out _))
+        {
+            // Drained: an earlier, finished wait's timer.
+        }
+
+        // The load's wait runs out, and it schedules one full reload, which waits for the pump to move.
+        await RunOutEveryBarrierAsync(run, run.Server.RequestInitialStateAsync().AsTask());
+        await run.ServerLog.Logged("[LIVE] A load's wait for the event pump ran out").WaitAsync(Run.Bound);
+        var scheduledBeforeDispose = !run.Server.ScheduledReload.IsCompleted;
+        var statusAsked = rig.First.Asked("Status");
+
+        await run.Server.DisposeAsync();
+        gate.Release();
+        await run.Server.ScheduledReload.WaitAsync(Run.Bound);
+
+        new
+        {
+            ScheduledBeforeDispose = scheduledBeforeDispose,
+            StatusAskedAfterDispose = rig.First.Asked("Status") - statusAsked,
+            Destroyed = seen.DestroyedIds,
+            ReloadFailures = run.ServerLog.Entries.Count(e => e.Line.Contains("scheduled after a load's wait", StringComparison.Ordinal)),
+            GateTimedOut = gate.TimedOut,
+            PeerFault = rig.First.Fault?.Message,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                ScheduledBeforeDispose = true,
+                StatusAskedAfterDispose = 0,
+                Destroyed = Array.Empty<string>(),
+                ReloadFailures = 0,
+                GateTimedOut = false,
+                PeerFault = default(string),
+            },
+            "the server was disposed while its scheduled full reload still waited for the pump: once the pump moves, that "
+            + "reload neither asks Asterisk for anything nor reconciles a table of the disposed server");
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ShouldEndALoadThatWaitsForAWedgedPump_WithoutReconcilingAnything()
+    {
+        await using var rig = await Rig.StartAsync(new BootingAsterisk { BootedAtLogin = true });
+        await rig.LearnAsync([BridgeX], []);
+        var run = rig.Run;
+        using var gate = new DispatchGate();
+        using var gateSubscription = run.Connection.Subscribe(gate);
+        await rig.First.SendEventAsync("UserEvent", DispatchGate.Frame());
+        await gate.Held.WaitAsync(Run.Bound);
+        rig.First.Bridges = [];
+        var seen = rig.Watch();
+        while (run.Clock.TimersCreated.TryRead(out _))
+        {
+            // Drained: an earlier, finished wait's timer.
+        }
+
+        // The load waits on its Status barrier, behind the held handler, on a clock nothing advances.
+        var load = run.Server.RequestInitialStateAsync().AsTask();
+        await run.NextTimerAsync();
+        await run.Server.DisposeAsync();
+        var thrown = await Record.ExceptionAsync(() => load.WaitAsync(Run.Bound));
+        gate.Release();
+
+        new
+        {
+            Thrown = thrown?.GetType(),
+            XHeld = run.Server.Bridges.GetById(BridgeX.Id) is { DestroyedAt: null },
+            Destroyed = seen.DestroyedIds,
+            Loaded = run.ServerLog.Entries.Count(e => e.Line.Contains(StateLoaded, StringComparison.Ordinal)),
+            GateTimedOut = gate.TimedOut,
+            PeerFault = rig.First.Fault?.Message,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Thrown = typeof(OperationCanceledException),
+                XHeld = true,
+                Destroyed = Array.Empty<string>(),
+                Loaded = 1,
+                GateTimedOut = false,
+                PeerFault = default(string),
+            },
+            "disposing the server ends the load's wait for the pump at once: the load throws OperationCanceledException "
+            + $"and reconciles nothing into the disposed server. Measured: {thrown?.Message}");
+    }
+
+    // ---- An event queued behind its own listing is applied first, as what it is ----
+
+    [Fact]
+    public async Task Load_ShouldApplyAQueuedLeaveBeforeTheQueueSnapshot_WhenItWaitsInThePumpAsQueueStatusCompletes()
+    {
+        await using var rig = await Rig.StartAsync(new BootingAsterisk { BootedAtLogin = true });
+        var run = rig.Run;
+        var callerJoined = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        run.Server.Queues.CallerJoined += (_, _) => callerJoined.TrySetResult();
+        await rig.First.SendEventAsync("QueueCallerJoin",
+            AsteriskFrames.QueueCallerJoin(WaitingCaller.UniqueId, WaitingCaller.Channel, BootingAsterisk.QueueName, 1, 1));
+        await callerJoined.Task.WaitAsync(Run.Bound);
+        using var counters = new LiveCounters();
+
+        // The caller left before Asterisk answered QueueStatus, which no longer lists it.
+        rig.First.QueueEntries = [];
+        var measured = await LoadWithAnEventQueuedBehindItsListingAsync(rig, "QueueStatus",
+            () => rig.First.SendEventAsync("QueueCallerLeave", AsteriskFrames.QueueCallerLeave(
+                WaitingCaller.UniqueId, WaitingCaller.Channel, BootingAsterisk.QueueName, 1, 0)),
+            () => CallersWaiting(run.Server));
+
+        new
+        {
+            WaitingWhileHeld = measured.WhileHeld,
+            WaitingAfter = CallersWaiting(run.Server),
+            counters.Left,
+            counters.WaitSamples,
+            measured.GateTimedOut,
+            PeerFault = rig.First.Fault?.Message,
+        }.Should().BeEquivalentTo(
+            new { WaitingWhileHeld = 1, WaitingAfter = 0, Left = 1L, WaitSamples = 1L, GateTimedOut = false, PeerFault = default(string) },
+            "the leave was received before QueueStatusComplete and waited in the pump behind a held handler; the queue "
+            + "snapshot removes nothing until the pump has applied it, so it is an observed leave, counted once with its "
+            + $"wait sample. Measured: {counters}");
+    }
+
+    [Fact]
+    public async Task Load_ShouldApplyAQueuedBridgeDestroyBeforeTheBridgeListing_WhenItWaitsInThePumpAsBridgeListCompletes()
+    {
+        await using var rig = await Rig.StartAsync(new BootingAsterisk { BootedAtLogin = true });
+        await rig.LearnAsync([BridgeX, BridgeY], []);
+        var seen = rig.Watch();
+
+        // Bridge Y was destroyed before Asterisk answered BridgeList; its legs are still up, in no bridge.
+        rig.First.StatusChannels = [.. Legs(BridgeX), Unbridged(BridgeY.Caller), Unbridged(BridgeY.Agent)];
+        rig.First.Bridges = [Listed(BridgeX)];
+        var measured = await LoadWithAnEventQueuedBehindItsListingAsync(rig, "BridgeList",
+            () => rig.First.SendEventAsync("BridgeDestroy", AsteriskFrames.BridgeDestroy(BridgeY.Id)),
+            () => seen.DestroyedIds);
+
+        new
+        {
+            DestroyedWhileHeld = measured.WhileHeld,
+            DestroyedAfter = seen.DestroyedIds,
+            XHeld = rig.Run.Server.Bridges.GetById(BridgeX.Id) is { DestroyedAt: null },
+            measured.GateTimedOut,
+            PeerFault = rig.First.Fault?.Message,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                DestroyedWhileHeld = Array.Empty<string>(),
+                DestroyedAfter = new[] { BridgeY.Id },
+                XHeld = true,
+                GateTimedOut = false,
+                PeerFault = default(string),
+            },
+            "the BridgeDestroy was received before BridgeListComplete and waited in the pump behind a held handler; the "
+            + "listing removes nothing until the pump has applied it, so bridge Y is destroyed once, by its own event, "
+            + $"and not a second time. Measured: {seen}");
+    }
+
+    [Fact]
+    public async Task Load_ShouldApplyAQueuedConfbridgeLeaveBeforeTheParticipantListing_WhenItWaitsInThePumpAsConfbridgeListCompletes()
+    {
+        await using var rig = await Rig.StartAsync(new BootingAsterisk { BootedAtLogin = true });
+        await rig.LearnAsync([], Participants);
+        var seen = rig.Watch();
+        var stayed = Participants[..2];
+        var leaver = Participants[2];
+
+        // The third participant left before Asterisk answered ConfbridgeList; its channel is still up, in no bridge.
+        rig.First.StatusChannels = [.. RoomLegs(stayed), Unbridged(leaver)];
+        rig.First.Bridges = [RoomListed(stayed.Length)];
+        rig.First.Rooms = [new ListedRoom(Room, stayed.Select(Listed).ToArray())];
+        var measured = await LoadWithAnEventQueuedBehindItsListingAsync(rig, "ConfbridgeList",
+            () => rig.First.SendEventAsync("ConfbridgeLeave", AsteriskFrames.ConfbridgeLeave(Room, RoomBridge,
+                stayed.Length, leaver.UniqueId, leaver.Channel, leaver.LinkedId)),
+            () => seen.UsersLeft);
+
+        new
+        {
+            LeftWhileHeld = measured.WhileHeld,
+            LeftAfter = seen.UsersLeft,
+            RoomParticipantsAfter = RoomParticipants(rig.Run.Server),
+            measured.GateTimedOut,
+            PeerFault = rig.First.Fault?.Message,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                LeftWhileHeld = Array.Empty<string>(),
+                LeftAfter = new[] { leaver.Channel },
+                RoomParticipantsAfter = stayed.Select(p => p.Channel).Order().ToArray(),
+                GateTimedOut = false,
+                PeerFault = default(string),
+            },
+            "the ConfbridgeLeave was received before ConfbridgeListComplete and waited in the pump behind a held handler; "
+            + "the listing removes nobody until the pump has applied it, so the participant leaves once, by its own "
+            + $"event. Measured: {seen}");
+    }
+
+    [Fact]
+    public async Task Load_ShouldApplyAQueuedConfbridgeLeaveBeforeTheEmptyListing_WhenItWaitsInThePumpAsAsteriskAnswersNoActiveConferences()
+    {
+        await using var rig = await Rig.StartAsync(new BootingAsterisk { BootedAtLogin = true });
+        await rig.LearnAsync([], Participants);
+        var seen = rig.Watch();
+        var leaver = Participants[2];
+
+        // The room ended before Asterisk answered ConfbridgeListRooms with 'No active conferences.'; one participant's
+        // leave still waits in the pump. Their channels are still up, in no bridge.
+        rig.First.StatusChannels = [.. Participants.Select(Unbridged)];
+        rig.First.Bridges = [];
+        rig.First.Rooms = [];
+        var measured = await LoadWithAnEventQueuedBehindItsListingAsync(rig, "ConfbridgeListRooms",
+            () => rig.First.SendEventAsync("ConfbridgeLeave", AsteriskFrames.ConfbridgeLeave(Room, RoomBridge,
+                Participants.Length - 1, leaver.UniqueId, leaver.Channel, leaver.LinkedId)),
+            () => seen.UsersLeft);
+
+        new
+        {
+            LeftWhileHeld = measured.WhileHeld,
+            FirstLeft = seen.UsersLeft.FirstOrDefault(),
+            LeftAfter = seen.UsersLeft.Order().ToArray(),
+            RoomHeld = rig.Run.Server.MeetMe.GetRoom(Room) is not null,
+            measured.GateTimedOut,
+            PeerFault = rig.First.Fault?.Message,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                LeftWhileHeld = Array.Empty<string>(),
+                FirstLeft = leaver.Channel,
+                LeftAfter = Participants.Select(p => p.Channel).Order().ToArray(),
+                RoomHeld = false,
+                GateTimedOut = false,
+                PeerFault = default(string),
+            },
+            "'No active conferences.' carries no ConfbridgeListRoomsComplete, but the leave received before it still "
+            + "waited in the pump: the empty listing removes nobody until the pump has applied that leave, and then "
+            + $"removes the other two participants and the room. Measured: {seen}");
+    }
+
+    /// <summary>What <see cref="LoadWithAnEventQueuedBehindItsListingAsync"/> read.</summary>
+    private sealed record Behind<T>(T WhileHeld, bool GateTimedOut);
+
+    /// <summary>
+    /// Runs a load over the first session in which the peer answers <paramref name="action"/> only after the test has
+    /// held the pump's dispatch and queued <paramref name="queue"/>'s event behind it, so the event is received before
+    /// the listing's answer and is still undispatched when the load reads it. Reads <paramref name="whileHeld"/> once the
+    /// load has either ended (nothing made it wait) or begun to wait on its barrier, then releases the dispatch and waits
+    /// for the load to end.
+    /// </summary>
+    private static async Task<Behind<T>> LoadWithAnEventQueuedBehindItsListingAsync<T>(Rig rig, string action,
+        Func<Task<bool>> queue, Func<T> whileHeld)
+    {
+        var run = rig.Run;
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var askedBefore = rig.First.Asked(action);
+        rig.First.AnsweredAfter = new Dictionary<string, Task> { [action] = answer.Task };
+        using var gate = new DispatchGate();
+        using var gateSubscription = run.Connection.Subscribe(gate);
+
+        var load = run.Server.RequestInitialStateAsync().AsTask();
+        await rig.First.AskedAtLeast(action, askedBefore + 1).WaitAsync(Run.Bound);
+
+        // The lists this load read before the held one are applied, and any wait they armed is spent: the next timer on
+        // the clock is the held list's own wait.
+        while (run.Clock.TimersCreated.TryRead(out _))
+        {
+            // Drained: an earlier, finished wait's timer.
+        }
+
+        if (!await rig.First.SendEventAsync("UserEvent", DispatchGate.Frame()) || !await queue())
+            throw new InvalidOperationException("The first session ended before the peer could queue the events.");
+        await gate.Held.WaitAsync(Run.Bound);
+        answer.TrySetResult();
+
+        using (var stop = new CancellationTokenSource())
+        {
+            var timer = run.Clock.TimersCreated.ReadAsync(stop.Token).AsTask();
+            await Task.WhenAny(load, timer).WaitAsync(Run.Bound);
+            await stop.CancelAsync();
+        }
+
+        var read = whileHeld();
+        gate.Release();
+        await load.WaitAsync(Run.Bound);
+        return new Behind<T>(read, gate.TimedOut);
+    }
+
+    private static StatusChannel Unbridged(Leg leg) => new(leg.UniqueId, leg.Channel, leg.LinkedId);
+
     /// <summary>
     /// Runs <paramref name="work"/> to its end, advancing the run's clock past each timer it arms on the way (each wait for
     /// the pump running out), so the test reaches the end without the held handler returning. Returns how many it ran out.

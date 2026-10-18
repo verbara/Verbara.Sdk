@@ -134,7 +134,6 @@ public sealed class MeetMeManager
             return;
         }
 
-        var room = _rooms.GetOrAdd(roomNumber, static rn => new MeetMeRoom { RoomNumber = rn });
         var user = new MeetMeUser
         {
             UserNum = userNum,
@@ -144,7 +143,21 @@ public sealed class MeetMeManager
             Muted = muted,
             JoinMark = Interlocked.Increment(ref _changes),
         };
-        room.Users[channel] = user;
+        MeetMeRoom room;
+        while (true)
+        {
+            room = _rooms.GetOrAdd(roomNumber, static rn => new MeetMeRoom { RoomNumber = rn });
+            lock (room.SyncRoot)
+            {
+                // Taken out of the table after GetOrAdd returned it: the participant joins the table's room instead.
+                if (room.RemovedFromTable)
+                    continue;
+
+                room.Users[channel] = user;
+                break;
+            }
+        }
+
         MeetMeManagerLog.UserJoined(_logger, roomNumber, channel, userNum);
         UserJoined?.Invoke(room, user);
     }
@@ -171,10 +184,7 @@ public sealed class MeetMeManager
             user.State = MeetMeUserState.Left;
             MeetMeManagerLog.UserLeft(_logger, roomNumber, user.Channel, user.UserNum);
             UserLeft?.Invoke(room, user);
-            if (room.Users.IsEmpty)
-            {
-                _rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(roomNumber, room));
-            }
+            RemoveIfEmpty(room);
         }
     }
 
@@ -278,7 +288,23 @@ public sealed class MeetMeManager
             UserLeft?.Invoke(room, user);
         }
 
-        _rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(roomNumber, room));
+        lock (room.SyncRoot)
+        {
+            if (_rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(roomNumber, room)))
+                room.RemovedFromTable = true;
+        }
+    }
+
+    // Takes a room out of the table when it holds no participant. Decided under the room's lock, where every participant
+    // is added: a join is either in the room before the decision, which then keeps it, or finds the room gone and joins
+    // the table's room.
+    private void RemoveIfEmpty(MeetMeRoom room)
+    {
+        lock (room.SyncRoot)
+        {
+            if (room.Users.IsEmpty && _rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(room.RoomNumber, room)))
+                room.RemovedFromTable = true;
+        }
     }
 
     /// <summary>
@@ -385,8 +411,7 @@ public sealed class MeetMeManager
                     UserLeft?.Invoke(room, held);
                 }
 
-                if (room.Users.IsEmpty)
-                    _rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(room.RoomNumber, room));
+                RemoveIfEmpty(room);
             }
         }
 
@@ -412,7 +437,6 @@ public sealed class MeetMeManager
                         continue;
                     }
 
-                    room = _rooms.GetOrAdd(roomNumber, static rn => new MeetMeRoom { RoomNumber = rn });
                     var user = new MeetMeUser
                     {
                         UserNum = 0,
@@ -423,7 +447,20 @@ public sealed class MeetMeManager
                         Talking = row.Talking ?? false,
                         JoinMark = Interlocked.Increment(ref _changes),
                     };
-                    held = room.Users.TryAdd(row.Channel, user) ? null : room.Users.GetValueOrDefault(row.Channel);
+                    while (true)
+                    {
+                        room = _rooms.GetOrAdd(roomNumber, static rn => new MeetMeRoom { RoomNumber = rn });
+                        lock (room.SyncRoot)
+                        {
+                            // Taken out of the table after GetOrAdd returned it: admitted into the table's room instead.
+                            if (room.RemovedFromTable)
+                                continue;
+
+                            held = room.Users.TryAdd(row.Channel, user) ? null : room.Users.GetValueOrDefault(row.Channel);
+                            break;
+                        }
+                    }
+
                     if (held is null)
                         admitted++;
                 }
@@ -501,6 +538,12 @@ internal sealed class ConferenceSnapshotWindow : IDisposable
 /// <summary>Represents a ConfBridge (or legacy MeetMe) conference room.</summary>
 public sealed class MeetMeRoom
 {
+    internal readonly Lock SyncRoot = new();
+
+    // Set, under SyncRoot, when the room is taken out of the manager's table; a participant that finds it set joins the
+    // table's room instead.
+    internal bool RemovedFromTable { get; set; }
+
     public string RoomNumber { get; init; } = string.Empty;
 
     /// <summary>

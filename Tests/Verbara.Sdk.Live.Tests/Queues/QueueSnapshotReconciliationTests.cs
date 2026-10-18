@@ -18,6 +18,7 @@ public sealed class QueueSnapshotReconciliationTests
     private static readonly EventLossEpoch Epoch = new(0, 1, 0);
     private static readonly string[] KeptMembers = ["PJSIP/agent-1", "PJSIP/agent-3"];
     private static readonly string[] RenamedKeys = ["PJSIP/new-1"];
+    private static readonly string[] JoinedDuringRemoval = ["PJSIP/b-1"];
 
     private readonly QueueManager _queues = new(NullLogger.Instance);
 
@@ -36,6 +37,31 @@ public sealed class QueueSnapshotReconciliationTests
         new { Held = _queues.GetByName(Queue)!.Entries.ContainsKey("PJSIP/a-1"), counters.Left }.Should().BeEquivalentTo(
             new { Held = true, Left = 0L },
             "the live join after the request is newer than the snapshot, so the snapshot's silence removes nothing");
+    }
+
+    [Fact]
+    public void CompleteSnapshot_ShouldKeepACallerWhoJoinsWhileTheSnapshotRemovesTheirQueue_WhenTheSnapshotOmitsTheQueue()
+    {
+        // The completed snapshot omits q-gone and removes its one caller. A live join into q-gone lands between that
+        // removal and the queue's: here inside CallerLeft, which the removal raises, as the event pump's join would on
+        // another thread.
+        _queues.OnCallerJoined("q-gone", "PJSIP/a-1", "100", 1, "u1", Epoch);
+        using var window = _queues.OpenSnapshotWindow();
+        _queues.OnSnapshotQueueParams(window, Queue, 0, "ringall", 0, 0, 0, 0, 0);
+        using var counters = new LiveCounters();
+        _queues.CallerLeft += (queue, entry) =>
+        {
+            if (queue == "q-gone" && entry.Channel == "PJSIP/a-1")
+                _queues.OnCallerJoined("q-gone", "PJSIP/b-1", "200", 1, "u2", Epoch);
+        };
+
+        _queues.CompleteSnapshot(window);
+
+        var held = _queues.GetByName("q-gone")?.Entries.Keys.ToArray() ?? [];
+        new { Held = held, counters.Joined, counters.Left }.Should().BeEquivalentTo(
+            new { Held = JoinedDuringRemoval, Joined = 1L, Left = 1L },
+            "the caller who joined while the snapshot removed the queue is held in the table, not lost in a queue object "
+            + "the table no longer holds, where its leave would never be counted and joined − left would stay one too high");
     }
 
     [Fact]

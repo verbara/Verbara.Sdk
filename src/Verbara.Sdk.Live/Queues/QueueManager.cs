@@ -180,7 +180,6 @@ public sealed class QueueManager
 
     private void AddMember(string queueName, string iface, string? memberName, int penalty, bool paused, int status)
     {
-        var queue = _queues.GetOrAdd(queueName, _ => new AsteriskQueue { Name = queueName });
         var member = new AsteriskQueueMember
         {
             Interface = iface,
@@ -189,7 +188,20 @@ public sealed class QueueManager
             Paused = paused,
             Status = (QueueMemberState)status
         };
-        queue.Members[iface] = member;
+        while (true)
+        {
+            var queue = _queues.GetOrAdd(queueName, _ => new AsteriskQueue { Name = queueName });
+            lock (queue.SyncRoot)
+            {
+                // Taken out of the table after GetOrAdd returned it: the member goes into the table's queue instead.
+                if (queue.RemovedFromTable)
+                    continue;
+
+                queue.Members[iface] = member;
+                break;
+            }
+        }
+
         _queuesByMember.GetOrAdd(iface, _ => new()).TryAdd(queueName, 0);
         QueueManagerLog.MemberAdded(_logger, queueName, iface, penalty);
         MemberAdded?.Invoke(queueName, member);
@@ -366,6 +378,14 @@ public sealed class QueueManager
 
             removeQueue = !listed && queue.Entries.IsEmpty
                 && !queue.Members.Keys.Any(iface => view.MemberAddedLive(queue.Name, iface));
+
+            // Taken out of the table under the queue's lock, where every join and member is added: a join is either in
+            // the queue before this decision, which then keeps it, or finds the queue gone and joins the table's queue.
+            if (removeQueue)
+            {
+                removeQueue = _queues.TryRemove(new KeyValuePair<string, AsteriskQueue>(queue.Name, queue));
+                queue.RemovedFromTable = removeQueue;
+            }
         }
 
         if (gone is not null)
@@ -384,7 +404,7 @@ public sealed class QueueManager
             }
         }
 
-        if (removeQueue && _queues.TryRemove(new KeyValuePair<string, AsteriskQueue>(queue.Name, queue)))
+        if (removeQueue)
         {
             ForgetMembers(queue);
             QueueManagerLog.QueueRemoved(_logger, queue.Name);
@@ -448,7 +468,6 @@ public sealed class QueueManager
     private void Join(string queueName, string channel, string? callerId, int position,
         bool fromSnapshot, long? reportedWaitSeconds, string? uniqueId, EventLossEpoch? lossEpoch)
     {
-        var queue = _queues.GetOrAdd(queueName, _ => new AsteriskQueue { Name = queueName });
         var reported = new AsteriskQueueEntry
         {
             Channel = channel,
@@ -472,31 +491,18 @@ public sealed class QueueManager
 
         AsteriskQueueEntry? displaced = null;
         bool inserted;
-        lock (queue.SyncRoot)
+        while (true)
         {
-            var held = FindHeldLocked(queue, reported.UniqueId, channel);
-            if (held is not null)
+            var queue = _queues.GetOrAdd(queueName, _ => new AsteriskQueue { Name = queueName });
+            lock (queue.SyncRoot)
             {
-                inserted = false;
-                held.Position = position;
-                if (!fromSnapshot)
-                    held.JoinOrdinal = reported.JoinOrdinal;
+                // Taken out of the table after GetOrAdd returned it (a snapshot that omitted it, or RemoveQueue): the
+                // caller joins the table's queue instead, so its leave is found and counted.
+                if (queue.RemovedFromTable)
+                    continue;
 
-                // Held under another channel name (renamed since): re-keyed under the name the join reports, so the
-                // caller's leave finds it, with everything else kept.
-                if (!string.Equals(held.Channel, channel, StringComparison.Ordinal))
-                {
-                    queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(held.Channel, held));
-                    displaced = queue.Entries.GetValueOrDefault(channel);
-                    queue.Entries[channel] = held.RenamedTo(channel);
-                }
-            }
-            else
-            {
-                inserted = true;
-                // Another caller held under this channel name (one whose Uniqueid differs): it is no longer there.
-                displaced = queue.Entries.GetValueOrDefault(channel);
-                queue.Entries[channel] = reported;
+                inserted = JoinLocked(queue, reported, channel, position, fromSnapshot, out displaced);
+                break;
             }
         }
 
@@ -507,6 +513,36 @@ public sealed class QueueManager
             LiveMetrics.QueueCallsJoined.Add(1);
         QueueManagerLog.CallerJoined(_logger, queueName, channel, position);
         CallerJoined?.Invoke(queueName, reported);
+    }
+
+    /// <summary>The table half of <see cref="Join"/>, under the queue's lock. Returns whether the caller was inserted.</summary>
+    private static bool JoinLocked(AsteriskQueue queue, AsteriskQueueEntry reported, string channel, int position,
+        bool fromSnapshot, out AsteriskQueueEntry? displaced)
+    {
+        displaced = null;
+        var held = FindHeldLocked(queue, reported.UniqueId, channel);
+        if (held is not null)
+        {
+            held.Position = position;
+            if (!fromSnapshot)
+                held.JoinOrdinal = reported.JoinOrdinal;
+
+            // Held under another channel name (renamed since): re-keyed under the name the join reports, so the
+            // caller's leave finds it, with everything else kept.
+            if (!string.Equals(held.Channel, channel, StringComparison.Ordinal))
+            {
+                queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(held.Channel, held));
+                displaced = queue.Entries.GetValueOrDefault(channel);
+                queue.Entries[channel] = held.RenamedTo(channel);
+            }
+
+            return false;
+        }
+
+        // Another caller held under this channel name (one whose Uniqueid differs): it is no longer there.
+        displaced = queue.Entries.GetValueOrDefault(channel);
+        queue.Entries[channel] = reported;
+        return true;
     }
 
     /// <summary>
@@ -642,12 +678,17 @@ public sealed class QueueManager
     /// </remarks>
     public bool RemoveQueue(string queueName)
     {
-        if (!_queues.TryRemove(queueName, out var queue))
+        if (!_queues.TryGetValue(queueName, out var queue))
             return false;
 
         List<AsteriskQueueEntry> gone = [];
         lock (queue.SyncRoot)
         {
+            // Under the lock every join takes, so a join after this one finds the queue gone and creates it anew.
+            if (!_queues.TryRemove(new KeyValuePair<string, AsteriskQueue>(queueName, queue)))
+                return false;
+
+            queue.RemovedFromTable = true;
             foreach (var (key, entry) in queue.Entries)
             {
                 if (queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
@@ -685,6 +726,10 @@ public sealed class QueueManager
 public sealed class AsteriskQueue
 {
     internal readonly Lock SyncRoot = new();
+
+    // Set, under SyncRoot, when the queue is taken out of the manager's table; a join or member that finds it set adds
+    // to the table's queue instead.
+    internal bool RemovedFromTable { get; set; }
 
     public string Name { get; init; } = string.Empty;
     public int Max { get; set; }

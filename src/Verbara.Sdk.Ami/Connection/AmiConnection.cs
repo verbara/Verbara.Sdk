@@ -1213,8 +1213,9 @@ public sealed class AmiConnection : IAmiConnection
     /// <see cref="SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome, CancellationToken)"/> that also
     /// writes to <paramref name="mark"/> where the sequence ended in the session's event stream: the pump that numbered
     /// its completing event (a list's <c>…Complete</c>, or an originate's <c>OriginateResponse</c>) and that event's
-    /// ordinal. The mark is written once the sequence has ended on its own, before the enumeration ends; a refused action,
-    /// or one whose session ended first, leaves it empty. Called by Verbara.Sdk.Live's load, which waits on the mark for
+    /// ordinal; for an action Asterisk refused, the ordinal of the last event received before the refusal (0 when none
+    /// was). The mark is written once the sequence has ended on its own, before the enumeration ends; an action whose
+    /// session ended first leaves it empty. Called by Verbara.Sdk.Live's load, which waits on the mark for
     /// the pump to dispatch every event received before the list completed.
     /// </summary>
     internal IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
@@ -1453,6 +1454,11 @@ public sealed class AmiConnection : IAmiConnection
                         && string.Equals(msg.ResponseStatus, "Error", StringComparison.OrdinalIgnoreCase)
                         && _pendingEventActions.TryRemove(msg.ActionId, out var errorCollector))
                     {
+                        // A refused list ends where its refusal arrived: after the last event this loop, the pump's one
+                        // writer, has handed over. A caller that reads the refusal as an empty list (Asterisk answers a
+                        // conference listing with no conference up this way) waits on that position like a completed one.
+                        var refusedPump = _eventPump;
+                        errorCollector.RecordCompleteOrdinal(refusedPump, refusedPump?.LastReceived ?? 0);
                         errorCollector.Reject(msg["Message"]);
                     }
                 }
@@ -2335,15 +2341,22 @@ internal sealed class ResponseEventCollector
     // 1 once the collector has ended, whichever way came first.
     private int _ended;
 
-    /// <summary>The pump that numbered the event that completed the action; <see langword="null"/> until then.</summary>
+    /// <summary>
+    /// The pump that numbered the event that completed the action, or that the refusal followed; <see langword="null"/>
+    /// until then.
+    /// </summary>
     public AsyncEventPump? CompletePump { get; private set; }
 
-    /// <summary>The ordinal of the event that completed the action, in <see cref="CompletePump"/>; 0 until then.</summary>
+    /// <summary>
+    /// The ordinal of the event that completed the action, or of the last event received before its refusal, in
+    /// <see cref="CompletePump"/>; 0 until then.
+    /// </summary>
     public long CompleteOrdinal { get; private set; }
 
     /// <summary>
-    /// Records the completing event's pump and ordinal. Written by the reader loop before <see cref="Complete"/>, so a
-    /// reader that sees the collector end sees them; ignored once the collector has ended another way.
+    /// Records where the action ended in the pump. Written by the reader loop before <see cref="Complete"/> or
+    /// <see cref="Reject"/>, so a reader that sees the collector end sees them; ignored once the collector has ended
+    /// another way.
     /// </summary>
     public void RecordCompleteOrdinal(AsyncEventPump? pump, long ordinal)
     {
@@ -2398,22 +2411,28 @@ internal sealed class ResponseEventCollector
 
 /// <summary>
 /// Where an action's sequence ended in its session's event stream: the pump that numbered the completing event (a list's
-/// <c>…Complete</c>, or an originate's <c>OriginateResponse</c>) and that event's ordinal. Filled by
-/// <see cref="AmiConnection"/> once the sequence has ended on its own; read by Verbara.Sdk.Live to wait for the pump to
-/// dispatch every event received before the list completed.
+/// <c>…Complete</c>, or an originate's <c>OriginateResponse</c>) and that event's ordinal, or, for an action Asterisk
+/// refused, the last event received before the refusal. Filled by <see cref="AmiConnection"/> once the sequence has ended
+/// on its own; read by Verbara.Sdk.Live to wait for the pump to dispatch every event received before the list ended.
 /// </summary>
 internal sealed class ListSnapshotMark
 {
-    /// <summary>The pump of the session that delivered the completing event; <see langword="null"/> when none arrived.</summary>
+    /// <summary>
+    /// The pump of the session that delivered the completing event or the refusal; <see langword="null"/> when neither
+    /// arrived.
+    /// </summary>
     public AsyncEventPump? Pump { get; set; }
 
-    /// <summary>The completing event's ordinal in <see cref="Pump"/>; 0 when none arrived.</summary>
+    /// <summary>
+    /// The completing event's ordinal in <see cref="Pump"/>, or the last event's before a refusal; 0 when there is none.
+    /// </summary>
     public long CompleteOrdinal { get; set; }
 
     /// <summary>
     /// Waits until <see cref="Pump"/> has dispatched or dropped every event numbered up to <see cref="CompleteOrdinal"/>,
-    /// for at most <paramref name="bound"/> on <paramref name="clock"/>. An empty mark (the sequence did not complete) is
-    /// <see cref="DispatchBarrierOutcome.Reached"/> at once: there is nothing to wait for.
+    /// for at most <paramref name="bound"/> on <paramref name="clock"/>. An empty mark (the sequence did not end on its own,
+    /// or it was refused before any event) is <see cref="DispatchBarrierOutcome.Reached"/> at once: there is nothing to
+    /// wait for.
     /// </summary>
     public ValueTask<DispatchBarrierOutcome> WaitDispatchedThroughAsync(
         TimeSpan bound, TimeProvider clock, CancellationToken cancellationToken = default) =>

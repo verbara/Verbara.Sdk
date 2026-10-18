@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Verbara.Sdk.Ami.Tests.Connection;
 using Verbara.Sdk.Live.Bridges;
 using Verbara.Sdk.Live.Tests.Queues;
 
@@ -16,6 +17,8 @@ public sealed class BridgeSnapshotReconciliationTests
 {
     private static readonly string[] HeldUids = ["1.1"];
     private static readonly string[] ListedUids = ["2.1"];
+    private static readonly string[] LateIds = ["late"];
+    private static readonly string[] LateMembers = ["1.1"];
 
     private readonly BridgeManager _sut = new(NullLogger.Instance);
 
@@ -23,6 +26,48 @@ public sealed class BridgeSnapshotReconciliationTests
 
     private static Dictionary<string, IReadOnlyCollection<string>> Members(params (string Bridge, string[] Uids)[] members) =>
         members.ToDictionary(m => m.Bridge, m => (IReadOnlyCollection<string>)m.Uids);
+
+    [Fact]
+    public void OnBridgeCreated_ShouldAnnounceOnceWithoutCountingAgain_WhenAListingAdmittedTheBridgeBeforeItsBridgeCreate()
+    {
+        // The listing admitted the bridge silently while its BridgeCreate still waited in the pump (or Asterisk wrote that
+        // BridgeCreate after BridgeListComplete); the live event is then dispatched.
+        using var counters = new LiveCounters();
+        var logger = new SignalingLogger<BridgeManager>();
+        var sut = new BridgeManager(logger);
+        var created = new List<string>();
+        sut.BridgeCreated += b => created.Add(b.BridgeUniqueid);
+        using (var window = sut.OpenSnapshotWindow())
+            sut.ReconcileWithSnapshot(window, [Listed("late")], Members(("late", ["1.1"])), removeOmitted: false);
+        var createdBySnapshot = created.Count;
+
+        sut.OnBridgeCreated("late", "basic", "simple_bridge", null, null);
+        sut.OnBridgeCreated("late", "basic", "simple_bridge", null, null);
+
+        new
+        {
+            CreatedBySnapshot = createdBySnapshot,
+            Created = created,
+            sut.BridgeCount,
+            sut.ActiveBridgeCount,
+            counters.BridgesCreated,
+            Members = sut.GetById("late")?.Channels.Keys.ToArray(),
+            DuplicateWarnings = logger.Entries.Count(e => e.Line.Contains("Duplicate BridgeCreate", StringComparison.Ordinal)),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                CreatedBySnapshot = 0,
+                Created = LateIds,
+                BridgeCount = 1,
+                ActiveBridgeCount = 1,
+                BridgesCreated = 1L,
+                Members = LateMembers,
+                DuplicateWarnings = 1,
+            },
+            "the listing's admission is silent and counted once; the BridgeCreate observed afterwards is the bridge's "
+            + "creation, announced once with BridgeCreated as a live join is for a room or a queue, and not counted again; "
+            + "only a second BridgeCreate for the same bridge is a duplicate");
+    }
 
     [Fact]
     public void ReconcileWithSnapshot_ShouldKeepABridgeCreatedAfterTheRequest_WhenTheSnapshotOmitsIt()
