@@ -98,6 +98,11 @@ public sealed class AmiConnectionOptions
     public bool EnableHeartbeat { get; set; } = true;
 
     /// <summary>Interval between heartbeat pings. Default: 30 seconds.</summary>
+    /// <remarks>
+    /// On Asterisk before 20.21.0, 22.11.0 and 23.5.0 the server can hold an event until the client next writes, and a
+    /// heartbeat is such a write: on a session that sends nothing else, a lower interval bounds how long such an event
+    /// waits. See the Asterisk version compatibility guide.
+    /// </remarks>
     public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>Maximum time to wait for a heartbeat response before considering the connection dead. Default: 10 seconds.</summary>

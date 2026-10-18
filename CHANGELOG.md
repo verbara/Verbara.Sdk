@@ -117,6 +117,16 @@ argument and `MeetMeManager.OnConferenceEnded`. `UserNum` stays 0 for ConfBridge
 still not set. Before/after code is in
 [the migration guide](docs/guides/conference-participants-migration.md).
 
+### Fixed: the guides say which AMI classes the SDK's user needs, and that an older Asterisk can hold an event (#447)
+
+`docs/guides/troubleshooting.md` taught `write = all`. It now lists the read and write classes each SDK feature
+needs, measured on Asterisk 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, and says that no AMI account is read-only: 21
+actions have no class, and eight of them change the server's state. A user without `reporting` gets each conference
+listing of a reload refused, and Asterisk raises a `RequestNotAllowed` security event for each. The compatibility
+guide and the XML docs of `AmiConnectionOptions.HeartbeatInterval` say that Asterisk before 20.21.0, 22.11.0 and
+23.5.0 can hold an event for a session until that session next writes; the heartbeat releases it, so on a quiet
+session the delay is at most `HeartbeatInterval` (30 s by default). No behaviour or default changes.
+
 ### Changed — BREAKING: the obsolete AMI event types, `LegacyEventAdapter` and `DeepgramVoices.Helios` are removed (#432)
 
 Twenty-six AMI event types that had been marked `[Obsolete]` are removed from `Verbara.Sdk.Ami`: `MeetMeEndEvent`,
