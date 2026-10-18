@@ -117,7 +117,7 @@ argument and `MeetMeManager.OnConferenceEnded`. `UserNum` stays 0 for ConfBridge
 still not set. Before/after code is in
 [the migration guide](docs/guides/conference-participants-migration.md).
 
-### Fixed: the guides say which AMI classes the SDK's user needs, and that an older Asterisk can hold an event (#NNN)
+### Fixed: the guides say which AMI classes the SDK's user needs, and that an older Asterisk can hold an event (#447)
 
 `docs/guides/troubleshooting.md` taught `write = all`. It now lists the read and write classes each SDK feature
 needs, measured on Asterisk 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, and says that no AMI account is read-only: 21
