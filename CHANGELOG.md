@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added: each queue can set its own wrap-up length (#NNN)
+### Added: each queue can set its own wrap-up length (#449)
 
 A host whose queues do not share one wrap-up length registers an `IWrapUpDurationProvider` (one singleton in the
 service container; a host that builds `CallSessionManager` itself passes it to the new constructor). The session
@@ -190,7 +190,7 @@ above 4,294,967,294 ms (about 49.7 days), and `Timeout.InfiniteTimeSpan`. There 
 for the state: the agent is `Idle` at once, where before it stayed `WrapUp` until its next call. A
 `WrapUpDuration` longer than `CompletedRetention` can deliver the event after the call is released.
 
-**Changed (#NNN):** an `AgentComplete` that names a queue now opens the member's wrap-up even when the SDK did not see
+**Changed (#449):** an `AgentComplete` that names a queue now opens the member's wrap-up even when the SDK did not see
 the caller join that queue (for example, a call answered while the AMI connection was down), so such a call's
 `CallWrapUpEvent` can precede its `CallEndedEvent`, and a member not known by name now gets a wrap-up for it at all;
 the call's end opens one only when no such `AgentComplete` was reported. `CallWrapUpEvent.QueueName` is the queue the
