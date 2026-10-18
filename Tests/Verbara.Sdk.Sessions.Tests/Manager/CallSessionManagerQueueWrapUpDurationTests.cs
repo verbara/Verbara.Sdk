@@ -233,6 +233,40 @@ public sealed class CallSessionManagerQueueWrapUpDurationTests
     }
 
     [Fact]
+    public async Task AgentComplete_ShouldAskForAndReportTheQueueTheCallLastJoined_WhenTheFramesQueueHeaderIsEmpty_Synthetic()
+    {
+        var clock = new FakeTimeProvider();
+        var provider = new RecordingProvider((_, _, queue) => queue == Queue ? TimeSpan.FromSeconds(12) : null);
+        await using var rig = await WrapUpRig.StartAsync(clock, Options(), provider, logger: null);
+        rig.Deliver(QueueCallConnected(Queue, "c1", "m1", Member));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        var completedAt = clock.GetUtcNow();
+        rig.Deliver(
+            BridgeLeave(Bridge("c1"), "m1"),
+            Hangup("m1"),
+            AgentCompleteWithQueueHeader("c1", "m1", Member, queueHeader: ""),
+            BridgeLeave(Bridge("c1"), "c1"),
+            Hangup("c1"));
+        var sessionId = rig.Session("c1").SessionId;
+        clock.Advance(TimeSpan.FromMinutes(5));
+
+        new { Asks = provider.Asks, WrapUps = rig.WrapUps.ToArray() }.Should().BeEquivalentTo(
+            new
+            {
+                Asks = new[] { (ServerId, Queue) },
+                WrapUps = new[]
+                {
+                    new CallWrapUpEvent(sessionId, ServerId, completedAt + TimeSpan.FromSeconds(12), null, Queue,
+                        TimeSpan.FromSeconds(12)),
+                },
+            },
+            options => options.WithStrictOrdering(),
+            "an AgentComplete whose Queue header is present but empty names no queue: the provider is asked for, and "
+            + "the CallWrapUpEvent carries, the queue the call last joined, never an empty name. "
+            + Describe(rig, provider));
+    }
+
+    [Fact]
     public async Task AgentComplete_ShouldAskForTheQueueItNames_WhenTheManagerNeverSawTheCallerJoinAQueue_Synthetic()
     {
         var clock = new FakeTimeProvider();
@@ -346,6 +380,37 @@ public sealed class CallSessionManagerQueueWrapUpDurationTests
             "an agent known by name whose caller's join the manager missed gets exactly one wrap-up for that leg: its "
             + "AgentComplete naming q opens it, 5 s before the call's CallEndedEvent (" + endedAt.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)
             + "), and the call's end opens none. " + Describe(rig, provider: null));
+    }
+
+    [Fact]
+    public async Task AgentComplete_ShouldOpenNoSecondWrapUpNorAskTheProvider_WhenTheManagerNeverSawTheCallerJoinAndTheCallEndedBeforeIt_Synthetic()
+    {
+        var clock = new FakeTimeProvider();
+        var provider = new RecordingProvider((_, _, _) => TimeSpan.FromSeconds(20));
+        await using var rig = await WrapUpRig.StartAsync(clock, Options(), provider, logger: null);
+        rig.Deliver(AgentLogin("agent-1", Member, "login-1"));
+        // Synthetic: app_queue's connect names the agent and q, but the caller's QueueCallerJoin was never seen; the
+        // call's end reaches the manager before the member's AgentComplete, which is then found by its Linkedid only.
+        rig.Deliver(MissedJoinConnected("c1", "m1", Member, agent: "agent-1"));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        var hangup = MemberHangsUp(Queue, "c1", "m1", Member, agent: "agent-1");
+        var endedAt = clock.GetUtcNow();
+        rig.Deliver(hangup[0], hangup[1], hangup[3], hangup[4]);
+        var sessionId = rig.Session("c1").SessionId;
+        clock.Advance(TimeSpan.FromSeconds(1));
+        rig.Deliver(hangup[2]);
+        clock.Advance(TimeSpan.FromMinutes(5));
+
+        new { Asks = provider.Asks, WrapUps = rig.WrapUps.ToArray() }.Should().BeEquivalentTo(
+            new
+            {
+                Asks = Array.Empty<(string, string)>(),
+                WrapUps = new[] { new CallWrapUpEvent(sessionId, ServerId, endedAt + WrapUp, "agent-1", null, WrapUp) },
+            },
+            options => options.WithStrictOrdering(),
+            "the call's end opened the agent's only wrap-up for that leg (WrapUpDuration, no provider asked, the call's "
+            + "queue, which the missed join left empty) and took the leg off the call; an AgentComplete for an ended call does nothing: no second wrap-up under the member's "
+            + "key, and no provider call. " + Describe(rig, provider));
     }
 
     [Fact]
@@ -877,6 +942,20 @@ public sealed class CallSessionManagerQueueWrapUpDurationTests
             DestUniqueId = frame.DestUniqueId, DestChannel = frame.DestChannel, DestLinkedId = frame.DestLinkedId,
             RawFields = fields,
         };
+    }
+
+    /// <summary>
+    /// Synthetic: the member's <c>AgentComplete</c> for <paramref name="caller"/> with its <c>Queue</c> header set to
+    /// <paramref name="queueHeader"/>, a value none of the 66 recorded frames has.
+    /// </summary>
+    private static AgentCompleteEvent AgentCompleteWithQueueHeader(string caller, string memberLeg, string member,
+        string queueHeader)
+    {
+        var frame = AgentComplete(queueHeader, caller, CallerChannel(caller), caller, member, memberLeg,
+            MemberChannel(member, memberLeg), 60);
+        return frame.RawFields!["Queue"] == queueHeader
+            ? frame
+            : throw new InvalidOperationException("premise: the frame carries the Queue header it was given");
     }
 
     private static string? KindOf(LogEntry entry) =>
