@@ -82,6 +82,15 @@ as before.
 Raised once, after the change, when a participant's `Muted` or `Talking` changes. A repeated value, a join and an
 event for a participant that is not held raise nothing.
 
+### Fixed: a server releases its instruments when its ARI client throws on disposal (#441)
+
+`VerbaraServer.DisposeAsync` disposed the ARI client set through `SetAriClient` before the server's own meter, with
+nothing around it, so an ARI client that threw on disposal left the meter undisposed and its eight instruments
+published for every listener, including when the pool removed the server. The subscription, the ARI client and the
+meter are now each released in their own attempt, in that order. A single failure is rethrown unchanged; several are
+thrown together as one `AggregateException`, in release order. A `MeterListener` whose completion callback throws is
+one of the failures that can surface there.
+
 ### Fixed — BREAKING: a conference counts every caller (#433)
 
 `VerbaraServer.MeetMe` keyed each ConfBridge participant by user number, and `ConfbridgeJoin` carries none, so
@@ -134,6 +143,16 @@ subscriber. These failures no longer appear as `[AMI_EVENT] Observer threw on <E
 `ami.events.observer_faults`. A subscriber subscribed directly stays subscribed; one composed through an operator
 (`Where`, `Select`, `OfType`, …) is still ended by that operator on its first failure, so subscribe directly and filter
 inside the handler. What a subscriber throws on another thread is not caught. The public API is unchanged.
+
+### Fixed — BREAKING: an attended transfer Asterisk refuses ends `Failed` (#440)
+
+`AttendedTransferActivity` discarded the answer to its `Atxfer` action, so a transfer Asterisk refused with
+`Response: Error` (for example `Channel specified does not exist`, or `No attended transfer feature code found` on a
+server whose `features.conf` sets no `atxfer` code) ended `Completed`. It now ends `Failed`, and `StartAsync` throws
+`ActivityFailedException` carrying Asterisk's message. `Completed` still means only that Asterisk accepted and queued
+the transfer, not that it finished; the outcome arrives as an `AttendedTransferEvent`. Code that awaited
+`StartAsync` and branched on `Status` now gets an exception for a refusal; the
+[activity ending guide](docs/guides/activity-ending-migration.md) shows the catch.
 
 ### Fixed: `SendFlashAction` reaches Asterisk (#430)
 

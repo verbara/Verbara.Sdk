@@ -1,6 +1,9 @@
 namespace Verbara.Sdk.FunctionalTests.Layer5_Integration.Bridge;
 
 using System.Collections.Concurrent;
+using Verbara.Sdk.Activities;
+using Verbara.Sdk.Activities.Activities;
+using Verbara.Sdk.Activities.Models;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Ami.Events.Base;
@@ -393,6 +396,49 @@ public sealed class TransferTests : FunctionalTestBase
             var consultation = await WaitForAsync<NewChannelEvent>(events, sentAt,
                 e => e.Channel?.StartsWith("Local/161@test-functional-", StringComparison.Ordinal) == true, TimeSpan.FromSeconds(5));
             consultation.Should().NotBeNull("the Atxfer must dial the consultation call to ext 161 within 5 s");
+        }
+        finally
+        {
+            await HangUpAsync(connection, caller.Channel, callee.Channel);
+        }
+    }
+
+    /// <summary>
+    /// <see cref="AttendedTransferActivity"/> on a party of a two-party bridge ends
+    /// <see cref="ActivityStatus.Completed"/>: Asterisk accepts the Atxfer, and the consultation call is dialled.
+    /// </summary>
+    [Fact]
+    public async Task AttendedTransferActivity_ShouldEndCompleted_WhenAsteriskAcceptsTheAtxfer()
+    {
+        await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
+        {
+            opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
+            opts.AutoReconnect = false;
+        });
+        await connection.ConnectAsync();
+
+        var events = new ConcurrentQueue<ManagerEvent>();
+        using var subscription = connection.Subscribe(new QueueingObserver(events));
+
+        var callId = NewCallId("atxfer-activity");
+        var (caller, callee) = await BridgeTwoPartiesAsync(connection, events, callId, "atxfer-activity-01");
+
+        try
+        {
+            var sentAt = events.Count;
+            await using var activity = new AttendedTransferActivity(connection)
+            {
+                Channel = caller.Channel!,
+                Destination = new DialPlanExtension("test-functional", "161"),
+            };
+
+            var starting = () => activity.StartAsync().AsTask();
+
+            await starting.Should().NotThrowAsync("Asterisk accepts an Atxfer of a party of a bridge with the transfer features on");
+            activity.Status.Should().Be(ActivityStatus.Completed);
+            var consultation = await WaitForAsync<NewChannelEvent>(events, sentAt,
+                e => e.Channel?.StartsWith("Local/161@test-functional-", StringComparison.Ordinal) == true, TimeSpan.FromSeconds(5));
+            consultation.Should().NotBeNull("the accepted Atxfer must dial the consultation call to ext 161 within 5 s");
         }
         finally
         {
