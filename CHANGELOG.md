@@ -63,7 +63,7 @@ opened and one closed stream.
 `audio.buffer.underruns` describes a write pump the SDK does not have: audio goes out when the caller writes it,
 so nothing ever recorded it. The field is now `[Obsolete]` with diagnostic id `VSDK0003`. A consumer that builds
 with `TreatWarningsAsErrors` and reads the field by symbol gets `error VSDK0003`, and can silence exactly this
-with `<NoWarn>VSDK0003</NoWarn>`. Nothing is removed: the instrument is still published on the meter, so an
+with `<NoWarn>$(NoWarn);VSDK0003</NoWarn>`. Nothing is removed: the instrument is still published on the meter, so an
 exporter that subscribes by meter name is unaffected, and a binary built against an earlier release that reads the field still runs (checked against 2.6.0).
 
 ### Added: an `audio.transport` tag on every audio meter measurement (#435)
@@ -113,8 +113,8 @@ the join's `Uniqueid` as data. Two public members change shape: `MeetMeRoom.User
 `ConcurrentDictionary<string, MeetMeUser>` keyed by channel, and `MeetMeManager.OnUserLeft` takes
 `(string roomNumber, string channel)`. Code that names either must be recompiled; a binary built against 2.8.0
 fails with `MissingMethodException` when it calls one. Added: `MeetMeManager.OnUserJoined` with a `uniqueId`
-argument and `MeetMeManager.OnConferenceEnded`. `UserNum` stays 0 for ConfBridge, and `Muted`/`Talking` are
-still not set. Before/after code is in
+argument and `MeetMeManager.OnConferenceEnded`. `UserNum` stays 0 for ConfBridge (`Muted` and `Talking` are set since #434).
+Before/after code is in
 [the migration guide](docs/guides/conference-participants-migration.md).
 
 ### Changed — BREAKING: the obsolete AMI event types, `LegacyEventAdapter` and `DeepgramVoices.Helios` are removed (#432)
@@ -473,7 +473,7 @@ stop ended (a hangup frame, the token not cancelled) is still `completed`, and o
 `failed`. The cancellation is still not rethrown, so code that awaits `HandleSessionAsync` sees no change. Labelled
 breaking because a published number changes meaning; no public API signature changes.
 
-**Migration guide:** [`docs/guides/voice-session-ending-migration.md`](docs/guides/voice-session-ending-migration.md#cancelled-sessions-tagged-latency-and-the-servers-stop-290)
+**Migration guide:** [`docs/guides/voice-session-ending-migration.md`](docs/guides/voice-session-ending-migration.md#cancelled-sessions-tagged-latency-the-servers-stop-and-the-realtime-health-entry-290)
 
 ### Changed: the latency sample of a cancelled turn carries `voiceai.ending` (#415)
 
