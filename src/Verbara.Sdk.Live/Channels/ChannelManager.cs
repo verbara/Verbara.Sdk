@@ -782,7 +782,10 @@ public sealed record ExtensionHistoryEntry(string Context, string Extension, int
 /// One channel as a completed state reload reported it, buffered for
 /// <see cref="ChannelManager.ReconcileWithSnapshot"/>. Its members mirror
 /// <see cref="ChannelManager.OnNewChannel"/>'s parameters, so admitting a channel out of a snapshot
-/// is the same operation a live <c>NewChannel</c> event performs.
+/// is the same operation a live <c>NewChannel</c> event performs. The one exception is <c>BridgeId</c>, the
+/// <c>BridgeID</c> header: the bridge the channel is in, equal to the bridge listing's <c>BridgeUniqueid</c>, or
+/// <see langword="null"/> when the header is absent or empty. The bridge reconciliation reads it; the channel table
+/// does not.
 /// </summary>
 internal sealed record ChannelSnapshotEntry(
     string UniqueId,
@@ -793,4 +796,5 @@ internal sealed record ChannelSnapshotEntry(
     string? Context = null,
     string? Extension = null,
     int Priority = 1,
-    string? LinkedId = null);
+    string? LinkedId = null,
+    string? BridgeId = null);

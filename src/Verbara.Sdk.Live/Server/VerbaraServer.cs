@@ -58,6 +58,18 @@ internal static partial class VerbaraServerLog
     public static partial void ChannelsReconciled(ILogger logger, int channels, bool statusRefused);
 
     [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[LIVE] {Action} refused: {Message}; the conference rooms were not reconciled, so they keep what they held. The AMI user needs 'reporting' in write for a load to restore the conference rooms")]
+    public static partial void ConferenceListingRefused(ILogger logger, string action, string message);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "[LIVE] {Action} refused again in this AMI session: {Message}; the conference rooms were not reconciled")]
+    public static partial void ConferenceListingRefusedAgain(ILogger logger, string action, string message);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "[LIVE] {Action} answered with an error: {Message}; the table it lists was not reconciled from it")]
+    public static partial void ListingNotApplied(ILogger logger, string action, string message);
+
+    [LoggerMessage(Level = LogLevel.Warning,
         Message = "[LIVE] Initial state load interrupted: its AMI session ended and the connection is {State}, so the start returns and the reload that follows the reconnect loads the state ({Reason})")]
     public static partial void InitialLoadInterrupted(ILogger logger, AmiConnectionState state, string reason);
 
@@ -192,6 +204,10 @@ public sealed class VerbaraServer : IVerbaraServer
     // a reconnect sets it back to 0, so the first refusal of every session is a Warning and the ones after it are Debug.
     private int _statusRefusalWarned;
 
+    // 1 once a load has logged a refused conference listing at Warning in the current AMI session; the reload after a
+    // reconnect sets it back to 0, so the first refusal of every session is a Warning and the ones after it are Debug.
+    private int _conferenceRefusalWarned;
+
     /// <summary>
     /// The server's event-loss epoch now (see <see cref="EventLossEpoch"/>). Read inside the event observer, it is the
     /// epoch of the event being delivered: over an <see cref="AmiConnection"/>, its dropped count is the one its session
@@ -314,6 +330,7 @@ public sealed class VerbaraServer : IVerbaraServer
 
         // A new AMI session: the channel reconciliation's first refusal on it is a Warning again.
         Volatile.Write(ref _statusRefusalWarned, 0);
+        Volatile.Write(ref _conferenceRefusalWarned, 0);
         LoadConnectionStates? states = null;
         try
         {
@@ -327,10 +344,9 @@ public sealed class VerbaraServer : IVerbaraServer
             // instead, which announces the difference on the event consumers already subscribe to.
             // The queue table is not cleared either: the load's completed QueueStatus reconciles it,
             // keeping each caller still waiting with its join time, and counting left each one gone.
-            // The managers below still clear and reload.
+            // Nor are the bridge and conference tables: the load's completed bridge and conference
+            // listings reconcile them. The agents table still clears and reloads.
             Agents.Clear();
-            MeetMe.Clear();
-            Bridges.Clear();
 
             // Re-subscribe observer (the connection is new after reconnect)
             _subscription?.Dispose();
@@ -439,7 +455,7 @@ public sealed class VerbaraServer : IVerbaraServer
         try
         {
             reconciled = await ReconcileChannelTableAsync(
-                session, states, activity, ChannelReader.Reconciliation, cancellationToken);
+                session, states, activity, ChannelReader.Reconciliation, cancellationToken) is not null;
         }
         catch (AmiNotConnectedException) when (states.AtStop is null && states.BeganOnASession)
         {
@@ -466,10 +482,10 @@ public sealed class VerbaraServer : IVerbaraServer
 
     /// <summary>
     /// The channel half shared by a load and <see cref="ReconcileChannelsAsync"/>: open the read window, read the
-    /// <c>Status</c> snapshot inside it and reconcile the table against it. Returns <see langword="false"/> when Asterisk
-    /// refused the <c>Status</c>, which reconciles nothing.
+    /// <c>Status</c> snapshot inside it and reconcile the table against it. Returns the completed snapshot, or
+    /// <see langword="null"/> when Asterisk refused the <c>Status</c>, which reconciles nothing.
     /// </summary>
-    private async ValueTask<bool> ReconcileChannelTableAsync(LoadSession? session, LoadConnectionStates states,
+    private async ValueTask<List<ChannelSnapshotEntry>?> ReconcileChannelTableAsync(LoadSession? session, LoadConnectionStates states,
         Activity? activity, ChannelReader reader, CancellationToken cancellationToken)
     {
         // Buffer first, then reconcile: a snapshot that throws, is cancelled or never completes must leave every held
@@ -483,10 +499,10 @@ public sealed class VerbaraServer : IVerbaraServer
         using var window = Channels.OpenReadWindow();
         var channelSnapshot = await ReadChannelSnapshotAsync(session, states, activity, reader, cancellationToken);
         if (channelSnapshot is null)
-            return false;
+            return null;
 
         Channels.ReconcileWithSnapshot(channelSnapshot, window);
-        return true;
+        return channelSnapshot;
     }
 
     /// <summary>
@@ -508,7 +524,10 @@ public sealed class VerbaraServer : IVerbaraServer
         }
     }
 
-    /// <summary>The steps of <see cref="LoadAsync"/>: the channels, then the queues, then the agents.</summary>
+    /// <summary>
+    /// The steps of <see cref="LoadAsync"/>: the channels, then — only after a completed <c>Status</c> — the bridges and
+    /// the conference rooms, then the queues, then the agents.
+    /// </summary>
     private async ValueTask ReadStateAsync(LoadConnectionStates states, CancellationToken cancellationToken)
     {
         using var activity = LiveActivitySource.StartStateLoad(_connection.AsteriskVersion ?? "unknown");
@@ -520,9 +539,23 @@ public sealed class VerbaraServer : IVerbaraServer
         var request = "Status";
         try
         {
-            // The channels first, then the queues and the agents. A Status Asterisk refused leaves the table as it is
-            // and the load goes on to the queues and the agents.
-            await ReconcileChannelTableAsync(session, states, activity, ChannelReader.Load, cancellationToken);
+            // The channels first, then the bridges and rooms, the queues and the agents. A Status Asterisk refused
+            // leaves the channel table as it is, and the bridge and conference tables too, unasked: a bridge table
+            // reconciled over stale channels is worse than none. The load goes on to the queues and the agents.
+            // The bridge window opens before Status, because the bridges' membership comes from Status's BridgeID.
+            using (var bridgeWindow = Bridges.OpenSnapshotWindow())
+            {
+                var channelSnapshot = await ReconcileChannelTableAsync(
+                    session, states, activity, ChannelReader.Load, cancellationToken);
+                if (channelSnapshot is not null)
+                {
+                    request = "BridgeList";
+                    await LoadBridgesAsync(session, states, bridgeWindow, channelSnapshot, cancellationToken);
+
+                    request = "ConfbridgeListRooms";
+                    await LoadConferencesAsync(session, states, name => request = name, cancellationToken);
+                }
+            }
 
             request = "QueueStatus";
             await LoadQueuesAsync(session, states, cancellationToken);
@@ -584,6 +617,171 @@ public sealed class VerbaraServer : IVerbaraServer
         // other than an empty queue. A session that ended under it threw above.
         if (!cancellationToken.IsCancellationRequested && !asked.Refused)
             Queues.CompleteSnapshot(window);
+    }
+
+    /// <summary>
+    /// Reads Asterisk's bridge listing (<c>BridgeList</c>) to completion and reconciles the bridge table against it, each
+    /// bridge's channels taken from the completed channel snapshot's <c>BridgeID</c>. A listing that did not complete,
+    /// or that Asterisk answered with an error, changes nothing; over a connection that cannot tell, only the
+    /// non-destructive half applies.
+    /// </summary>
+    private async ValueTask LoadBridgesAsync(LoadSession? session, LoadConnectionStates states,
+        BridgeSnapshotWindow window, List<ChannelSnapshotEntry> channelSnapshot, CancellationToken cancellationToken)
+    {
+        var listing = await ReadListingAsync(new BridgeListAction(), "BridgeList", session, states, cancellationToken);
+        if (listing.Rejection is { } rejection)
+        {
+            VerbaraServerLog.ListingNotApplied(_logger, "BridgeList", rejection);
+            return;
+        }
+
+        var bridges = new List<BridgeSnapshotEntry>();
+        foreach (var evt in listing.Events)
+        {
+            if (evt is BridgeListItemEvent item && !string.IsNullOrEmpty(item.BridgeUniqueid))
+            {
+                bridges.Add(new BridgeSnapshotEntry(item.BridgeUniqueid, item.BridgeType, item.BridgeTechnology,
+                    item.BridgeCreator, item.BridgeName));
+            }
+        }
+
+        var members = new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.Ordinal);
+        foreach (var group in channelSnapshot
+            .Where(static c => c.BridgeId is not null && c.UniqueId.Length > 0)
+            .GroupBy(static c => c.BridgeId!, StringComparer.Ordinal))
+        {
+            members[group.Key] = group.Select(static c => c.UniqueId).ToHashSet(StringComparer.Ordinal);
+        }
+
+        Bridges.ReconcileWithSnapshot(window, bridges, members, removeOmitted: listing.Complete);
+    }
+
+    /// <summary>
+    /// Reads Asterisk's conference listings — <c>ConfbridgeListRooms</c>, then one <c>ConfbridgeList</c> per room it
+    /// reports — and reconciles the conference table against them. <c>No active conferences.</c> is a complete, empty
+    /// listing; <c>Permission denied</c> is a refusal, which changes nothing and is logged at <c>Warning</c> once per AMI
+    /// session and at <c>Debug</c> after that; any other error, or a listing that did not complete, changes nothing for
+    /// what it lists.
+    /// </summary>
+    private async ValueTask LoadConferencesAsync(LoadSession? session, LoadConnectionStates states,
+        Action<string> sending, CancellationToken cancellationToken)
+    {
+        using var window = MeetMe.OpenSnapshotWindow();
+        var roomListing = await ReadListingAsync(
+            new ConfbridgeListRoomsAction(), "ConfbridgeListRooms", session, states, cancellationToken);
+        if (!TryReadConferenceListing("ConfbridgeListRooms", roomListing, out var roomsComplete))
+            return;
+
+        var rooms = new List<string>();
+        foreach (var evt in roomListing.Events)
+        {
+            if (evt is ConfbridgeListRoomsEvent room && !string.IsNullOrEmpty(room.Conference)
+                && !rooms.Contains(room.Conference, StringComparer.Ordinal))
+            {
+                rooms.Add(room.Conference);
+            }
+        }
+
+        var participants = new Dictionary<string, IReadOnlyList<ConferenceSnapshotParticipant>>(StringComparer.Ordinal);
+        var allComplete = roomsComplete;
+        foreach (var room in rooms)
+        {
+            sending("ConfbridgeList");
+            var listing = await ReadListingAsync(
+                new ConfbridgeListAction { Conference = room }, "ConfbridgeList", session, states, cancellationToken);
+            if (!TryReadConferenceListing("ConfbridgeList", listing, out var complete))
+                continue;
+
+            allComplete &= complete;
+            participants[room] = listing.Events
+                .OfType<ConfbridgeListEvent>()
+                .Where(row => !string.IsNullOrEmpty(row.Channel)
+                    && (row.Conference is null || string.Equals(row.Conference, room, StringComparison.Ordinal)))
+                .Select(static row => new ConferenceSnapshotParticipant(
+                    row.Channel!, row.Uniqueid ?? row.UniqueId, AmiBoolean.Parse(row.Muted), AmiBoolean.Parse(row.Talking)))
+                .ToList();
+        }
+
+        MeetMe.ReconcileWithSnapshot(window, rooms, participants, removeOmitted: allComplete);
+    }
+
+    /// <summary>
+    /// Whether a conference listing can be read: <see langword="true"/> for one that completed (<paramref name="complete"/>
+    /// set), for <c>No active conferences.</c> (complete and empty), and for one over a connection that cannot tell
+    /// (<paramref name="complete"/> clear). <see langword="false"/> for a refusal, logged once per AMI session at
+    /// <c>Warning</c>, and for any other error.
+    /// </summary>
+    private bool TryReadConferenceListing(string action, Listing listing, out bool complete)
+    {
+        complete = listing.Complete;
+        if (listing.Rejection is not { } rejection)
+            return true;
+
+        if (string.Equals(rejection.Trim(), NoActiveConferences, StringComparison.OrdinalIgnoreCase))
+        {
+            complete = true;
+            return true;
+        }
+
+        if (string.Equals(rejection.Trim(), PermissionDenied, StringComparison.OrdinalIgnoreCase))
+        {
+            if (Interlocked.Exchange(ref _conferenceRefusalWarned, 1) == 0)
+                VerbaraServerLog.ConferenceListingRefused(_logger, action, rejection);
+            else
+                VerbaraServerLog.ConferenceListingRefusedAgain(_logger, action, rejection);
+            return false;
+        }
+
+        VerbaraServerLog.ListingNotApplied(_logger, action, rejection.Length == 0 ? "(Asterisk sent no message)" : rejection);
+        return false;
+    }
+
+    /// <summary>
+    /// The message with which Asterisk answers a conference listing when no conference is up: <c>Response: Error</c>,
+    /// not an empty list. Measured for <c>ConfbridgeListRooms</c> and <c>ConfbridgeList</c> on 22.10.1, 23.4.1 and
+    /// 22.12, 23.6 and 24.0 rc2.
+    /// </summary>
+    internal const string NoActiveConferences = "No active conferences.";
+
+    /// <summary>
+    /// The message with which Asterisk refuses an action the AMI user's write classes do not allow; the conference
+    /// listings need <c>reporting</c>.
+    /// </summary>
+    internal const string PermissionDenied = "Permission denied";
+
+    /// <summary>One listing a load read, and how it ended.</summary>
+    /// <param name="Events">Every event the listing delivered.</param>
+    /// <param name="Complete">Whether Asterisk answered it to the end; never set over a connection that cannot tell.</param>
+    /// <param name="Rejection">Asterisk's message when it answered with an error, or <see langword="null"/>.</param>
+    private sealed record Listing(List<ManagerEvent> Events, bool Complete, string? Rejection);
+
+    /// <summary>
+    /// Sends one listing request and reads it to the end. A cancelled read throws; a read whose AMI session ended throws
+    /// as the other steps of a load do. Over a connection that does not report how an action ended, the listing is read
+    /// as the events it delivered, neither complete nor refused.
+    /// </summary>
+    private async ValueTask<Listing> ReadListingAsync(ManagerAction action, string actionName, LoadSession? session,
+        LoadConnectionStates states, CancellationToken cancellationToken)
+    {
+        var outcome = session is not null || _connection.ReportsEventActionOutcome ? new EventActionOutcome() : null;
+        var source = session is not null
+            ? session.Connection.SendEventGeneratingActionAsync(action, outcome, cancellationToken)
+            : outcome is not null
+                ? _connection.SendEventGeneratingActionAsync(action, outcome, cancellationToken)
+                : _connection.SendEventGeneratingActionAsync(action, cancellationToken);
+
+        var events = new List<ManagerEvent>();
+        await foreach (var evt in source)
+            events.Add(evt);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (outcome is { Reported: true, SessionEnded: true })
+            throw states.Stop($"the AMI session ended while the live state load was reading {actionName}");
+
+        if (outcome is { Reported: true, Rejection: { } rejection })
+            return new Listing(events, Complete: false, rejection);
+
+        return new Listing(events, Complete: outcome is { Reported: true }, Rejection: null);
     }
 
     /// <summary>How a request asked through <see cref="AskWhileAsteriskStartsAsync"/> ended, read once it has.</summary>
@@ -678,7 +876,11 @@ public sealed class VerbaraServer : IVerbaraServer
                 // 20.20.1, 22.9.0 and 23.4.1, so no mapping is needed: pass it.
                 // An absent or empty header still degrades to linkedId = uniqueId downstream, which
                 // is exactly today's behaviour for an uncorrelated channel.
-                LinkedId: se.LinkedId));
+                LinkedId: se.LinkedId,
+                // The bridge the channel is in, which the bridge reconciliation reads as the bridge's membership.
+                // Measured equal to BridgeList's BridgeUniqueid for every bridged channel on 22.12, 23.6 and 24.0 rc2;
+                // an absent or empty header is a channel in no bridge.
+                BridgeId: rawFields?.GetValueOrDefault("BridgeID") is { Length: > 0 } bridgeId ? bridgeId : null));
         }
 
         // An enumeration that honoured the token by stopping quietly rather than by throwing would

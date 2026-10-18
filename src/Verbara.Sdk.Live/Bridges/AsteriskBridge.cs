@@ -37,4 +37,11 @@ public sealed class AsteriskBridge : LiveObjectBase
 
     /// <summary>When the bridge was destroyed, or <c>null</c> if still active.</summary>
     public DateTimeOffset? DestroyedAt { get; set; }
+
+    // When the manager inserted the bridge, on its change ordinal: a snapshot requested before it cannot list it.
+    internal long InsertMark { get; set; }
+
+    // When each channel in Channels entered, on the manager's change ordinal: a snapshot requested before a channel
+    // entered cannot list it in the bridge. Guarded by SyncRoot.
+    internal Dictionary<string, long> EnterMarks { get; } = new(StringComparer.Ordinal);
 }

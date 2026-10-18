@@ -26,6 +26,14 @@ internal static partial class MeetMeManagerLog
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFERENCE] Event not applied, no readable talking status: room={RoomNumber} channel={Channel}")]
     public static partial void TalkingStatusUnreadable(ILogger logger, string? roomNumber, string? channel);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[CONFERENCE] User removed, the completed conference listing no longer reports it: room={RoomNumber} channel={Channel}")]
+    public static partial void UserRemovedBySnapshot(ILogger logger, string roomNumber, string channel);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "[CONFERENCE] Rooms reconciled: rooms_listed={RoomsListed} admitted={Admitted} removed={Removed} newer_than_snapshot={NewerThanSnapshot} left_during_read={LeftDuringRead} removes_omitted={RemovesOmitted}")]
+    public static partial void Reconciled(ILogger logger, int roomsListed, int admitted, int removed, int newerThanSnapshot,
+        int leftDuringRead, bool removesOmitted);
 }
 
 /// <summary>
@@ -44,7 +52,27 @@ public sealed class MeetMeManager
     private readonly ConcurrentDictionary<string, MeetMeRoom> _rooms = new();
     private readonly ILogger _logger;
 
+    // The change ordinal: every join and every departure takes the next value, so a snapshot window can tell what
+    // changed after its request was sent.
+    private long _changes;
+
+    // The snapshot windows open now (their marks), and the participants that left after the oldest one's request was
+    // sent: a listing read in such a window may still report them, and must not bring them back.
+    private readonly Lock _windowGate = new();
+    private readonly List<long> _openMarks = [];
+    private readonly Dictionary<(string Room, string Channel), long> _leftDuringRead = [];
+
+    /// <summary>
+    /// Raised when a participant joins. Not raised for a participant a reload only read from Asterisk's conference
+    /// listing.
+    /// </summary>
     public event Action<MeetMeRoom, MeetMeUser>? UserJoined;
+
+    /// <summary>
+    /// Raised once for each participant that leaves: on its leave, for each participant still held when its room ends,
+    /// and for each held participant a reload's completed conference listing no longer reports, whether its room is
+    /// still listed or not.
+    /// </summary>
     public event Action<MeetMeRoom, MeetMeUser>? UserLeft;
 
     /// <summary>
@@ -114,6 +142,7 @@ public sealed class MeetMeManager
             UniqueId = uniqueId,
             State = MeetMeUserState.Joined,
             Muted = muted,
+            JoinMark = Interlocked.Increment(ref _changes),
         };
         room.Users[channel] = user;
         MeetMeManagerLog.UserJoined(_logger, roomNumber, channel, userNum);
@@ -136,6 +165,7 @@ public sealed class MeetMeManager
             return;
         }
 
+        RecordLeave(roomNumber, channel);
         if (_rooms.TryGetValue(roomNumber, out var room) && room.Users.TryRemove(channel, out var user))
         {
             user.State = MeetMeUserState.Left;
@@ -236,6 +266,7 @@ public sealed class MeetMeManager
 
         foreach (var channel in room.Users.Keys)
         {
+            RecordLeave(roomNumber, channel);
             if (!room.Users.TryRemove(channel, out var user))
             {
                 // A leave already removed this participant and raised its UserLeft.
@@ -250,7 +281,221 @@ public sealed class MeetMeManager
         _rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(roomNumber, room));
     }
 
-    public void Clear() => _rooms.Clear();
+    /// <summary>
+    /// Opens the window a load reads Asterisk's conference listing in. The caller opens it <c>before</c> it sends the
+    /// room listing, keeps it open until <see cref="ReconcileWithSnapshot"/> has returned, and disposes it on every way
+    /// out. A participant that joined after it opened is newer than the listing and is not removed by it; one that left
+    /// after it opened is not brought back by it.
+    /// </summary>
+    internal ConferenceSnapshotWindow OpenSnapshotWindow()
+    {
+        lock (_windowGate)
+        {
+            var mark = Interlocked.Read(ref _changes);
+            _openMarks.Add(mark);
+            return new ConferenceSnapshotWindow(this, mark);
+        }
+    }
+
+    internal void CloseSnapshotWindow(ConferenceSnapshotWindow window)
+    {
+        lock (_windowGate)
+        {
+            _openMarks.Remove(window.Mark);
+            if (_openMarks.Count == 0)
+            {
+                _leftDuringRead.Clear();
+                return;
+            }
+
+            var oldest = _openMarks.Min();
+            foreach (var key in _leftDuringRead.Where(d => d.Value <= oldest).Select(static d => d.Key).ToList())
+                _leftDuringRead.Remove(key);
+        }
+    }
+
+    /// <summary>
+    /// Reconciles the conference table against a completed room listing read in <paramref name="window"/>, and the
+    /// participant listings that completed for the rooms it reported.
+    /// </summary>
+    /// <remarks>
+    /// <list type="bullet">
+    /// <item><description>A listed participant the room does not hold is admitted silently (no
+    /// <see cref="UserJoined"/>), keyed by its channel, with its unique id and the muted and talking values its row
+    /// carries (an unreadable value reads <see langword="false"/>); its room is created if it is not held.</description></item>
+    /// <item><description>A listed participant already held keeps its entry; its muted or talking value is updated
+    /// only when the row's value is readable, raising <see cref="UserStateChanged"/> when it changed.</description></item>
+    /// <item><description>When <paramref name="removeOmitted"/> is set, a held participant is removed, and
+    /// <see cref="UserLeft"/> raised for it once, when its room is not listed, or when its room's participant listing
+    /// completed without it. A room left with no participant is removed. A listed room whose participant listing did
+    /// not complete keeps every participant.</description></item>
+    /// <item><description>A participant that joined after the window's request is not removed, and one that left
+    /// after it is not brought back.</description></item>
+    /// </list>
+    /// The participants are only ever made from the participant listing's rows, never from a bridge's channels.
+    /// </remarks>
+    /// <param name="window">The window opened before the room listing was sent, still open.</param>
+    /// <param name="listedRooms">The rooms the completed room listing reported; empty for <c>No active conferences.</c>.</param>
+    /// <param name="participants">
+    /// The rows of each room whose participant listing completed, by room. A listed room absent from it is left alone.
+    /// </param>
+    /// <param name="removeOmitted">
+    /// Whether the listing is evidence of absence: <see langword="false"/> applies only the admissions, for an answer
+    /// whose completion cannot be told.
+    /// </param>
+    /// <exception cref="ObjectDisposedException"><paramref name="window"/> is already closed.</exception>
+    internal void ReconcileWithSnapshot(ConferenceSnapshotWindow window, IReadOnlyCollection<string> listedRooms,
+        IReadOnlyDictionary<string, IReadOnlyList<ConferenceSnapshotParticipant>> participants, bool removeOmitted)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        ObjectDisposedException.ThrowIf(window.IsClosed, window);
+
+        var rooms = new HashSet<string>(listedRooms, StringComparer.Ordinal);
+        var removed = 0;
+        var newer = 0;
+        if (removeOmitted)
+        {
+            foreach (var room in _rooms.Values)
+            {
+                IReadOnlyList<ConferenceSnapshotParticipant>? rows = null;
+                if (rooms.Contains(room.RoomNumber) && !participants.TryGetValue(room.RoomNumber, out rows))
+                    continue;
+
+                var keep = rows is null
+                    ? null
+                    : new HashSet<string>(rows.Select(static r => r.Channel), StringComparer.Ordinal);
+                foreach (var held in room.Users.Values)
+                {
+                    if (keep?.Contains(held.Channel) == true)
+                        continue;
+
+                    if (held.JoinMark > window.Mark)
+                    {
+                        newer++;
+                        continue;
+                    }
+
+                    RecordLeave(room.RoomNumber, held.Channel);
+                    if (!room.Users.TryRemove(new KeyValuePair<string, MeetMeUser>(held.Channel, held)))
+                        continue;
+
+                    held.State = MeetMeUserState.Left;
+                    MeetMeManagerLog.UserRemovedBySnapshot(_logger, room.RoomNumber, held.Channel);
+                    removed++;
+                    UserLeft?.Invoke(room, held);
+                }
+
+                if (room.Users.IsEmpty)
+                    _rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(room.RoomNumber, room));
+            }
+        }
+
+        var admitted = 0;
+        var leftDuringRead = 0;
+        foreach (var (roomNumber, rows) in participants)
+        {
+            if (!rooms.Contains(roomNumber))
+                continue;
+
+            foreach (var row in rows)
+            {
+                if (string.IsNullOrEmpty(row.Channel))
+                    continue;
+
+                MeetMeRoom? room;
+                MeetMeUser? held;
+                lock (_windowGate)
+                {
+                    if (_leftDuringRead.TryGetValue((roomNumber, row.Channel), out var stamp) && stamp > window.Mark)
+                    {
+                        leftDuringRead++;
+                        continue;
+                    }
+
+                    room = _rooms.GetOrAdd(roomNumber, static rn => new MeetMeRoom { RoomNumber = rn });
+                    var user = new MeetMeUser
+                    {
+                        UserNum = 0,
+                        Channel = row.Channel,
+                        UniqueId = row.UniqueId,
+                        State = MeetMeUserState.Joined,
+                        Muted = row.Muted ?? false,
+                        Talking = row.Talking ?? false,
+                        JoinMark = Interlocked.Increment(ref _changes),
+                    };
+                    held = room.Users.TryAdd(row.Channel, user) ? null : room.Users.GetValueOrDefault(row.Channel);
+                    if (held is null)
+                        admitted++;
+                }
+
+                if (held is null)
+                    continue;
+
+                if (row.Muted is { } muted)
+                    OnUserMuted(roomNumber, row.Channel, muted);
+                if (row.Talking is { } talking)
+                    OnUserTalking(roomNumber, row.Channel, talking);
+            }
+        }
+
+        MeetMeManagerLog.Reconciled(_logger, rooms.Count, admitted, removed, newer, leftDuringRead, removeOmitted);
+    }
+
+    // Records a participant's departure for the open windows.
+    private void RecordLeave(string roomNumber, string channel)
+    {
+        lock (_windowGate)
+        {
+            if (_openMarks.Count > 0)
+                _leftDuringRead[(roomNumber, channel)] = Interlocked.Increment(ref _changes);
+        }
+    }
+
+    /// <summary>
+    /// Empties the conference table without raising anything. A reload no longer calls it: it reconciles the table
+    /// against Asterisk's conference listing instead.
+    /// </summary>
+    public void Clear()
+    {
+        _rooms.Clear();
+        lock (_windowGate)
+            _leftDuringRead.Clear();
+    }
+}
+
+/// <summary>A participant as Asterisk's participant listing (<c>ConfbridgeList</c>) reports it.</summary>
+/// <param name="Channel">The participant's channel name, its key.</param>
+/// <param name="UniqueId">The row's <c>Uniqueid</c>.</param>
+/// <param name="Muted">The row's <c>Muted</c>, or <see langword="null"/> when unreadable.</param>
+/// <param name="Talking">The row's <c>Talking</c>, or <see langword="null"/> when unreadable.</param>
+internal sealed record ConferenceSnapshotParticipant(string Channel, string? UniqueId, bool? Muted, bool? Talking);
+
+/// <summary>
+/// The span of one load's conference listing: opened by <see cref="MeetMeManager.OpenSnapshotWindow"/> before the room
+/// listing is sent, handed to <see cref="MeetMeManager.ReconcileWithSnapshot"/>, and disposed once that has returned or
+/// the read ended without it.
+/// </summary>
+internal sealed class ConferenceSnapshotWindow : IDisposable
+{
+    private readonly MeetMeManager _owner;
+    private int _closed;
+
+    internal ConferenceSnapshotWindow(MeetMeManager owner, long mark)
+    {
+        _owner = owner;
+        Mark = mark;
+    }
+
+    /// <summary>The manager's change ordinal when the window opened, before the room listing was sent.</summary>
+    internal long Mark { get; }
+
+    internal bool IsClosed => Volatile.Read(ref _closed) != 0;
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _closed, 1) == 0)
+            _owner.CloseSnapshotWindow(this);
+    }
 }
 
 /// <summary>Represents a ConfBridge (or legacy MeetMe) conference room.</summary>
@@ -313,4 +558,7 @@ public sealed class MeetMeUser
     /// <see langword="false"/>.
     /// </remarks>
     public bool Talking { get; set; }
+
+    // When the manager took this participant in, on its change ordinal: a listing requested before it cannot report it.
+    internal long JoinMark { get; init; }
 }

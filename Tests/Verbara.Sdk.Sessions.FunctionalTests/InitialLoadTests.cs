@@ -221,9 +221,14 @@ public sealed class InitialLoadTests : IAsyncLifetime
         }
 
         actions.Should().Equal(
-            [nameof(StatusAction), nameof(QueueStatusAction), nameof(AgentsAction)],
-            "the load sends the three snapshot actions in this order; a load that skipped one "
-            + "would leave a manager empty while this test still saw its channels");
+            [
+                nameof(StatusAction), nameof(BridgeListAction), nameof(ConfbridgeListRoomsAction),
+                nameof(QueueStatusAction), nameof(AgentsAction),
+            ],
+            "the load sends its snapshot actions in this order: the channels, then, after a completed Status, the "
+            + "bridges and the conference rooms (no room is listed, so no participant listing follows), then the "
+            + "queues and the agents; a load that skipped one would leave a manager empty while this test still saw "
+            + "its channels");
     }
 
     [Fact]

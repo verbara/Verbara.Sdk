@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk;
+using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Live;
 using Verbara.Sdk.Live.Server;
@@ -449,12 +450,10 @@ public sealed class VerbaraServerExtendedTests : IAsyncLifetime
             Name = "Agent Three",
             Status = "AGENT_LOGGEDOFF"
         };
-        var callCount = 0;
         _connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
-            .Returns(_ =>
+            .Returns(callInfo =>
             {
-                callCount++;
-                if (callCount == 3) return ToAsyncEnumerable(agentEvent);
+                if (callInfo.Arg<ManagerAction>() is AgentsAction) return ToAsyncEnumerable(agentEvent);
                 return EmptyAsyncEnumerable();
             });
 
@@ -480,12 +479,10 @@ public sealed class VerbaraServerExtendedTests : IAsyncLifetime
         {
             Queue = "support", Channel = "PJSIP/5551234-001", CallerIDNum = "5551234", Position = 1
         };
-        var callCount = 0;
         _connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
-            .Returns(_ =>
+            .Returns(callInfo =>
             {
-                callCount++;
-                if (callCount == 2)
+                if (callInfo.Arg<ManagerAction>() is QueueStatusAction)
                     return ToAsyncEnumerable(queueParams, queueMember, queueEntry);
                 return EmptyAsyncEnumerable();
             });
