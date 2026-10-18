@@ -30,7 +30,9 @@ using Microsoft.Extensions.Logging;
 /// about 5.4 million on Asterisk 23, and 7 in about 3.9 million on Asterisk 22, were still undelivered 500 ms after
 /// Asterisk answered Success, and each arrived within 2 ms of the next Ping. So the action's response is asserted (a
 /// refusal fails on Asterisk's own message), and each event wait sends a Ping every <see cref="NudgeInterval"/> until
-/// the event arrives; a green run that sees its event within that interval sends none.
+/// the event arrives; a green run that sees its event within that interval sends none. Asterisk 22.11.0 and 23.5.0
+/// replaced that wake-up with a per-session alert pipe, which closes the gap; the pinned 22.10.1 and 23.4.1 images
+/// still have it.
 /// </para>
 /// </remarks>
 [Collection("Functional")]
