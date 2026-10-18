@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -69,14 +70,23 @@ internal sealed class WrapUpRig : IAsyncDisposable
     /// Starts one server per id in <paramref name="serverIds"/> and attaches the manager, built on
     /// <paramref name="clock"/> through its internal constructor, to each under that id.
     /// </summary>
-    public static async Task<WrapUpRig> StartAsync(TimeProvider clock, SessionOptions? options = null,
-        params string[] serverIds)
+    public static Task<WrapUpRig> StartAsync(TimeProvider clock, SessionOptions? options = null,
+        params string[] serverIds) =>
+        StartAsync(clock, options, wrapUpDurations: null, logger: null, serverIds);
+
+    /// <summary>
+    /// As <see cref="StartAsync(TimeProvider, SessionOptions?, string[])"/>, with the manager also given
+    /// <paramref name="wrapUpDurations"/> (none when <see langword="null"/>) and writing to <paramref name="logger"/>
+    /// (a null logger when <see langword="null"/>).
+    /// </summary>
+    public static async Task<WrapUpRig> StartAsync(TimeProvider clock, SessionOptions? options,
+        IWrapUpDurationProvider? wrapUpDurations, ILogger<CallSessionManager>? logger, params string[] serverIds)
     {
         if (serverIds.Length == 0)
             serverIds = [WrapUpFrames.ServerId];
 
         var manager = new CallSessionManager(Options.Create(options ?? new SessionOptions()),
-            NullLogger<CallSessionManager>.Instance, new InMemorySessionStore(), clock);
+            logger ?? NullLogger<CallSessionManager>.Instance, new InMemorySessionStore(), clock, wrapUpDurations);
         var servers = new Dictionary<string, (VerbaraServer, IObserver<ManagerEvent>)>(StringComparer.Ordinal);
         try
         {
