@@ -75,6 +75,41 @@ public sealed class ReloadEndingWrapUpTests
             + string.Join(", ", rig.Events.Select(e => $"{e.GetType().Name}({e.SessionId})")) + "]");
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Reload_ShouldNotAskTheWrapUpDurationProvider_WhenItEndsAnAgentsCallWithNoAgentCompleteObserved(bool queued)
+    {
+        var clock = new ManualClock(Start);
+        var provider = new RecordingWrapUpDurationProvider();
+        await using var rig = await QueueCallRig.StartAsync(clock, wrapUpDurations: provider);
+        rig.Deliver([QueueFrames.AgentLogin(Agent, Member, "login-1")]);
+        rig.Deliver(AnsweredCall(queued));
+
+        clock.Advance(TimeSpan.FromMinutes(3));
+        await rig.ReconnectAsync(status: [], queueStatus: []);
+        clock.Advance(TimeSpan.FromHours(1));
+
+        new { Asks = provider.Asks.ToArray(), WrapUps = rig.Events.OfType<CallWrapUpEvent>().Count() }
+            .Should().BeEquivalentTo(
+                new { Asks = Array.Empty<string>(), WrapUps = 0 },
+                $"Guard: a reload that ends the agent's {(queued ? "queue " : "")}call, with no AgentComplete "
+                + "observed, opens no wrap-up and never asks the wrap-up duration provider. Measured events: ["
+                + string.Join(", ", rig.Events.Select(e => $"{e.GetType().Name}({e.SessionId})")) + "]");
+    }
+
+    /// <summary>A wrap-up duration provider that answers nothing and records each server and queue it is asked about.</summary>
+    private sealed class RecordingWrapUpDurationProvider : IWrapUpDurationProvider
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<string> Asks { get; } = new();
+
+        public TimeSpan? GetWrapUpDuration(string serverId, string queueName)
+        {
+            Asks.Enqueue(serverId + "/" + queueName);
+            return null;
+        }
+    }
+
     /// <summary>
     /// The agent's answered call: the caller's channel and the agent's leg, connected by an <c>AgentConnect</c> that
     /// names the agent, both legs up and bridged. With <paramref name="queued"/>, the caller first joins a queue.

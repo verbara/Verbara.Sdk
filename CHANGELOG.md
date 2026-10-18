@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: each queue can set its own wrap-up length (#449)
+
+A host whose queues do not share one wrap-up length registers an `IWrapUpDurationProvider` (one singleton in the
+service container; a host that builds `CallSessionManager` itself passes it to the new constructor). The session
+manager asks it, with the id the server was attached under and the queue named by the member's `AgentComplete`, each
+time that `AgentComplete` opens a wrap-up, and runs the wrap-up for the length it returns.
+`SessionOptions.WrapUpDuration` stays the fallback, for a `null` answer, and the value of a wrap-up opened by the
+call's end, which never asks the provider. An answer it cannot use (negative, above 4,294,967,294 ms, or an
+exception) falls back to `WrapUpDuration` with a Warning; an answer above `CompletedRetention` is used and reported at
+Warning; a provider that takes over a second to answer is reported, and a wrap-up never reports more than the
+duration that applied to it. Each Warning is logged once per server, queue and kind. The provider runs on the AMI
+event thread and must answer from memory. A host that registers no provider sees no change beyond the lines added
+under the `CallWrapUpEvent` entry.
+
 ### Added: one migration guide for 2.9.0 (#446)
 
 [`docs/guides/migration-2.9.0.md`](docs/guides/migration-2.9.0.md) has one section per breaking entry of 2.9.0,
@@ -175,6 +189,13 @@ above 4,294,967,294 ms (about 49.7 days), and `Timeout.InfiniteTimeSpan`. There 
 **Migration:** zero is the nearest equivalent of the old behaviour for the counters (no wrap-up time is added), not
 for the state: the agent is `Idle` at once, where before it stayed `WrapUp` until its next call. A
 `WrapUpDuration` longer than `CompletedRetention` can deliver the event after the call is released.
+
+**Changed (#449):** an `AgentComplete` that names a queue now opens the member's wrap-up even when the SDK did not see
+the caller join that queue (for example, a call answered while the AMI connection was down), so such a call's
+`CallWrapUpEvent` can precede its `CallEndedEvent`, and a member not known by name now gets a wrap-up for it at all;
+the call's end opens one only when no such `AgentComplete` was reported. `CallWrapUpEvent.QueueName` is the queue the
+`AgentComplete` names, else the call's, so a transferred call's wrap-up is booked to the queue whose member finished
+it.
 
 ### Changed: a subscriber of the session events that throws no longer silences the others (#431)
 

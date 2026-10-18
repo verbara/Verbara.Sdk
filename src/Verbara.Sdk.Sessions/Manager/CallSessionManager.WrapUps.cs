@@ -8,8 +8,9 @@ namespace Verbara.Sdk.Sessions.Manager;
 /// <summary>
 /// One leg of a call that an agent or a queue member took, counted as connected for that agent's or member's
 /// wrap-up until its end is handled. <paramref name="Key"/> is the wrap-up key the leg counts under;
-/// <paramref name="OpensAtCallEnd"/> is set for a call outside any queue, whose leg ends, and whose wrap-up opens,
-/// when the call ends; a queue leg ends at the member's <c>AgentComplete</c>.
+/// <paramref name="OpensAtCallEnd"/> is set for a leg the agent's connect counted on a call the manager saw join no
+/// queue, whose wrap-up opens when the call ends unless the member's <c>AgentComplete</c> naming a queue ends the leg
+/// first; a queue leg ends at the member's <c>AgentComplete</c>.
 /// </summary>
 internal sealed record WrapUpLeg(string ServerId, string? Interface, string Key, string? AgentId, bool OpensAtCallEnd);
 
@@ -43,6 +44,27 @@ public sealed partial class CallSessionManager
 
     private bool _wrapUpsDisposed;
 
+    /// <summary>
+    /// How long a wrap-up duration provider may take to answer before it is reported as slow. Fixed, not an option: it
+    /// runs on its server's single event consumer, and the event-dispatch histogram already carries the aggregate.
+    /// </summary>
+    private static readonly TimeSpan WrapUpDurationProviderSlowBound = TimeSpan.FromSeconds(1);
+
+    /// <summary>How many (server, queue, kind) cases <see cref="_warnedWrapUpDurations"/> records. Fixed, not an option.</summary>
+    private const int WrapUpDurationWarnSetCapacity = 1024;
+
+    /// <summary>
+    /// The (server, queue, kind) cases of a wrap-up duration provider's misbehaviour already reported at Warning; later
+    /// ones log at Debug. Never cleared: the Warning is once per case for the manager's life. Its queue is read off
+    /// the wire, so it is capped at <see cref="WrapUpDurationWarnSetCapacity"/> entries: past it, new cases are not
+    /// recorded and log at Debug, and one Warning says so.
+    /// </summary>
+    private readonly ConcurrentDictionary<(string ServerId, string Queue, WrapUpDurationAnomaly Kind), byte>
+        _warnedWrapUpDurations = new();
+
+    private int _warnedWrapUpDurationCount;
+    private int _wrapUpDurationWarnSetFullReported;
+
     [LoggerMessage(EventId = 5, EventName = nameof(LogWrapUpOpened), Level = LogLevel.Debug,
         Message = "Wrap-up opened for {WrapUpKey} after session {SessionId}; it closes in {Duration} or at the next "
             + "connect")]
@@ -51,6 +73,37 @@ public sealed partial class CallSessionManager
     [LoggerMessage(EventId = 6, EventName = nameof(LogWrapUpClosed), Level = LogLevel.Debug,
         Message = "Wrap-up closed for {WrapUpKey} after session {SessionId}, {Duration} measured")]
     private partial void LogWrapUpClosed(string wrapUpKey, string sessionId, TimeSpan duration);
+
+    [LoggerMessage(EventId = 7, EventName = nameof(LogWrapUpDurationRejected),
+        Message = "The wrap-up duration provider answered {Duration} for queue {Queue} on server {ServerId}, which is "
+            + "negative or longer than a timer accepts (4294967294 ms); that wrap-up uses SessionOptions.WrapUpDuration. "
+            + "Reported at Warning once per server, queue and kind, at Debug after")]
+    private partial void LogWrapUpDurationRejected(LogLevel level, string serverId, string queue, TimeSpan duration);
+
+    [LoggerMessage(EventId = 8, EventName = nameof(LogWrapUpDurationProviderFailed),
+        Message = "The wrap-up duration provider threw for queue {Queue} on server {ServerId}; that wrap-up uses "
+            + "SessionOptions.WrapUpDuration. Reported at Warning once per server, queue and kind, at Debug after")]
+    private partial void LogWrapUpDurationProviderFailed(LogLevel level, Exception exception, string serverId,
+        string queue);
+
+    [LoggerMessage(EventId = 9, EventName = nameof(LogWrapUpDurationProviderSlow),
+        Message = "The wrap-up duration provider took {ElapsedMs} ms to answer for queue {Queue} on server {ServerId}. "
+            + "It runs on that server's event stream, which waits for it: it must answer from memory, with no I/O. "
+            + "Reported at Warning once per server, queue and kind, at Debug after")]
+    private partial void LogWrapUpDurationProviderSlow(LogLevel level, string serverId, string queue, double elapsedMs);
+
+    [LoggerMessage(EventId = 10, EventName = nameof(LogWrapUpDurationExceedsRetention),
+        Message = "The wrap-up duration provider answered {Duration} for queue {Queue} on server {ServerId}, longer than "
+            + "SessionOptions.CompletedRetention ({Retention}); it is used, but a subscriber that looks the session up "
+            + "by id when the wrap-up's event arrives may no longer find it. Reported at Warning once per server, queue "
+            + "and kind, at Debug after")]
+    private partial void LogWrapUpDurationExceedsRetention(LogLevel level, string serverId, string queue,
+        TimeSpan duration, TimeSpan retention);
+
+    [LoggerMessage(EventId = 11, EventName = nameof(LogWrapUpDurationWarnSetFull), Level = LogLevel.Warning,
+        Message = "The record of wrap-up duration provider cases already reported holds {Capacity} entries and is full; "
+            + "new cases are logged at Debug from now on")]
+    private partial void LogWrapUpDurationWarnSetFull(int capacity);
 
     /// <summary>The wrap-up key of an agent known by name: global, since a name names one person on every server.</summary>
     private static string AgentWrapUpKey(string agentId) => "agent\n" + agentId;
@@ -98,10 +151,19 @@ public sealed partial class CallSessionManager
 
     /// <summary>
     /// The member's <c>AgentComplete</c> (app_queue's report that the member left the caller): the member's leg ends
-    /// here, and, when that leaves the member no other connected leg, its wrap-up opens. Only a queue call is acted on;
-    /// a call outside any queue opens its agent's wrap-up when it ends (<see cref="EndConnectedLegsAtCallEnd"/>). The
-    /// call is found by the caller's own channel, which app_queue reports before the caller hangs up, and by the
-    /// <c>Linkedid</c> otherwise. The key is the member this frame names, never the member the call recorded first.
+    /// here, and, when that leaves the member no other connected leg, its wrap-up opens. It is acted on whether or not
+    /// the manager saw the caller join a queue: the queue is the one the frame names, else the one the call last
+    /// joined, and with neither nothing is done here (a call outside any queue opens its agent's wrap-up when it ends,
+    /// <see cref="EndConnectedLegsAtCallEnd"/>). The call is found by the caller's own channel, which app_queue reports
+    /// before the caller hangs up, and by the <c>Linkedid</c> otherwise. The leg is the one counted for this member
+    /// interface on <paramref name="serverId"/>, the server that delivered the frame, whichever connect counted it, so
+    /// the call's end finds nothing left of it; the key is the member this frame names, never the member the call
+    /// recorded first.
+    /// <para>
+    /// With an <see cref="IWrapUpDurationProvider"/>, the open runs in two steps under the call's lock with the
+    /// provider asked between them, holding none of the manager's locks: the first step ends the leg and reads the
+    /// open instant, so a slow provider cannot move it; the second takes the open decision with the resolved length.
+    /// </para>
     /// </summary>
     private void OnQueueCallerCompleted(QueueCallerCompletion completion, string serverId)
     {
@@ -116,47 +178,83 @@ public sealed partial class CallSessionManager
         if (session is null)
             return;
 
+        PendingWrapUp pending;
         lock (session.SyncRoot)
         {
-            if (session.QueueName is null || HasEnded(session))
+            var queue = string.IsNullOrEmpty(completion.Queue) ? session.QueueName : completion.Queue;
+            if (queue is null || HasEnded(session))
                 return;
 
+            // The member's leg on this server: a queue leg first, else the leg an agent's connect counted on a call
+            // the manager saw join no queue (a missed join), which this report ends instead of the call's end.
             var legs = session.ConnectedAgentLegs;
-            var index = legs?.FindIndex(l => !l.OpensAtCallEnd
-                && string.Equals(l.ServerId, serverId, StringComparison.Ordinal)
-                && string.Equals(l.Interface, memberInterface, StringComparison.Ordinal)) ?? -1;
+            var index = FindMemberLeg(legs, serverId, memberInterface, opensAtCallEnd: false);
+            if (index < 0)
+                index = FindMemberLeg(legs, serverId, memberInterface, opensAtCallEnd: true);
 
             string key;
             string? agentId;
-            int stillConnected;
             if (index >= 0)
             {
                 var leg = legs![index];
                 legs.RemoveAt(index);
                 key = leg.Key;
                 agentId = leg.AgentId;
-                stillConnected = UncountConnectedLeg(key);
+                UncountConnectedLeg(key);
             }
             else
             {
                 // A leg whose connect the manager did not see: it still ends here, and counts nothing.
                 key = MemberWrapUpKey(serverId, memberInterface);
                 agentId = null;
-                stillConnected = _connectedAgentLegs.GetValueOrDefault(key);
             }
 
-            if (stillConnected == 0)
-                OpenWrapUp(key, session.SessionId, session.ServerId, agentId, session.QueueName);
+            pending = new PendingWrapUp(key, session.SessionId, session.ServerId, agentId, queue,
+                _timeProvider.GetUtcNow());
+
+            if (_wrapUpDurations is null)
+            {
+                OpenWrapUpIfFree(pending, ConfiguredWrapUpDuration());
+                return;
+            }
+        }
+
+        var duration = ResolveWrapUpDuration(_wrapUpDurations, serverId, pending.QueueName);
+
+        lock (session.SyncRoot)
+            OpenWrapUpIfFree(pending, duration);
+    }
+
+    private static int FindMemberLeg(List<WrapUpLeg>? legs, string serverId, string memberInterface,
+        bool opensAtCallEnd) =>
+        legs?.FindIndex(l => l.OpensAtCallEnd == opensAtCallEnd
+            && string.Equals(l.ServerId, serverId, StringComparison.Ordinal)
+            && string.Equals(l.Interface, memberInterface, StringComparison.Ordinal)) ?? -1;
+
+    /// <summary>
+    /// Opens <paramref name="pending"/>'s wrap-up when its key has no connected leg left: with app_queue's
+    /// <c>ringinuse</c> a member can finish one call while another is up, and a connect handled while the provider was
+    /// answering counts too. Called under the call's lock.
+    /// </summary>
+    private void OpenWrapUpIfFree(PendingWrapUp pending, TimeSpan duration)
+    {
+        if (_connectedAgentLegs.GetValueOrDefault(pending.Key) == 0)
+        {
+            OpenWrapUp(pending.Key, pending.SessionId, pending.ServerId, pending.AgentId, pending.QueueName,
+                pending.OpenedAt, duration);
         }
     }
 
     /// <summary>
-    /// The call's ending: every leg still counted as connected ends with it. A leg of a call outside any queue opens
-    /// its agent's wrap-up here, after the call's <see cref="CallEndedEvent"/>, when it leaves the agent no other
-    /// connected leg. A queue leg opened its member's wrap-up at that member's <c>AgentComplete</c>, which app_queue
-    /// reports before the caller hangs up, so one still counted here opens nothing. Nothing opens for an ending a
-    /// state reload reconciled: the SDK did not observe it, so no wrap-up it could measure began. Called under the
-    /// session's lock, once per call.
+    /// The call's ending: every leg still counted as connected ends with it. A leg the agent's connect counted for a
+    /// call the manager saw join no queue opens its agent's wrap-up here, after the call's
+    /// <see cref="CallEndedEvent"/>, when it leaves the agent no other connected leg, and only when no
+    /// <c>AgentComplete</c> naming a queue was reported for it: that report ends the leg and takes it off the call
+    /// (<see cref="OnQueueCallerCompleted"/>), so it is not here. Such a wrap-up runs
+    /// <see cref="SessionOptions.WrapUpDuration"/> and carries the call's queue; no wrap-up duration provider is asked
+    /// for it. A queue leg still counted here opens nothing. Nothing opens for an ending a state reload reconciled:
+    /// the SDK did not observe it, so no wrap-up it could measure began. Called under the session's lock, once per
+    /// call.
     /// </summary>
     private void EndConnectedLegsAtCallEnd(CallSession session)
     {
@@ -171,30 +269,40 @@ public sealed partial class CallSessionManager
         {
             var stillConnected = UncountConnectedLeg(leg.Key);
             if (leg.OpensAtCallEnd && !endedByReload && stillConnected == 0)
-                OpenWrapUp(leg.Key, session.SessionId, session.ServerId, leg.AgentId, session.QueueName);
+                OpenWrapUp(leg.Key, session.SessionId, session.ServerId, leg.AgentId, session.QueueName,
+                    _timeProvider.GetUtcNow(), ConfiguredWrapUpDuration());
         }
     }
 
     /// <summary>
-    /// Opens the wrap-up of <paramref name="key"/> now. A wrap-up already open under the key is closed first, with the
-    /// time it measured: the same agent's or member's next leg has ended. A duration of zero closes the new wrap-up in
-    /// the same instant, with no timer.
+    /// <see cref="SessionOptions.WrapUpDuration"/> as a timer accepts it. Start-up validation rejects a duration above
+    /// the largest due time the system timer accepts; one that got past it (options built by hand) is clamped, so a
+    /// timer is never refused on a call's path.
     /// </summary>
-    private void OpenWrapUp(string key, string sessionId, string serverId, string? agentId, string? queueName)
+    private TimeSpan ConfiguredWrapUpDuration()
+    {
+        var duration = _options.WrapUpDuration;
+        if (duration > WrapUpDurationRangeAttribute.Max)
+            return WrapUpDurationRangeAttribute.Max;
+        return duration < TimeSpan.Zero ? TimeSpan.Zero : duration;
+    }
+
+    /// <summary>
+    /// Opens the wrap-up of <paramref name="key"/>, which began at <paramref name="openedAt"/> and lasts
+    /// <paramref name="duration"/>, a length between zero and the largest due time the system timer accepts. A
+    /// wrap-up already open under the key is closed first, with the time it measured: the same agent's or member's
+    /// next leg has ended. Its timer is due what is left of <paramref name="duration"/> now; a duration of zero, or
+    /// one already over, closes the new wrap-up in the same instant, with no timer.
+    /// </summary>
+    private void OpenWrapUp(string key, string sessionId, string serverId, string? agentId, string? queueName,
+        DateTimeOffset openedAt, TimeSpan duration)
     {
         var now = _timeProvider.GetUtcNow();
-        var duration = _options.WrapUpDuration;
-        // Start-up validation rejects a duration above the largest due time the system timer accepts; one that got
-        // past it (options built by hand) is clamped, so a timer is never refused on a call's path.
-        if (duration > WrapUpDurationRangeAttribute.Max)
-            duration = WrapUpDurationRangeAttribute.Max;
-        else if (duration < TimeSpan.Zero)
-            duration = TimeSpan.Zero;
-
-        var entry = new WrapUpEntry(key, sessionId, serverId, agentId, queueName, now, duration);
+        var entry = new WrapUpEntry(key, sessionId, serverId, agentId, queueName, openedAt, duration);
         LogWrapUpOpened(key, sessionId, duration);
 
-        if (duration == TimeSpan.Zero)
+        var left = duration - (now - openedAt);
+        if (left <= TimeSpan.Zero)
         {
             if (_openWrapUps.TryRemove(key, out var replaced))
                 CloseWrapUp(replaced, now);
@@ -210,7 +318,7 @@ public sealed partial class CallSessionManager
 
         _wrapUpTimers[entry] = 0;
         entry.Timer = _timeProvider.CreateTimer(
-            state => OnWrapUpElapsed((WrapUpEntry)state!), entry, duration, Timeout.InfiniteTimeSpan);
+            state => OnWrapUpElapsed((WrapUpEntry)state!), entry, left, Timeout.InfiniteTimeSpan);
     }
 
     /// <summary>
@@ -298,6 +406,104 @@ public sealed partial class CallSessionManager
         _wrapUpRaise.Enter();
         _wrapUpRaise.Exit();
     }
+
+    /// <summary>
+    /// The length of the wrap-up an <c>AgentComplete</c> delivered by <paramref name="serverId"/> for
+    /// <paramref name="queue"/> opens: the provider's answer when it is one a timer accepts, and
+    /// <see cref="SessionOptions.WrapUpDuration"/> when it answers <see langword="null"/>, an unusable value or throws.
+    /// Asked exactly once, holding none of the manager's locks, and timed on the manager's clock. Nothing it throws
+    /// leaves here but <see cref="OutOfMemoryException"/>.
+    /// </summary>
+    private TimeSpan ResolveWrapUpDuration(IWrapUpDurationProvider provider, string serverId, string queue)
+    {
+        var started = _timeProvider.GetTimestamp();
+        TimeSpan? answer = null;
+        Exception? failure = null;
+        try
+        {
+            answer = provider.GetWrapUpDuration(serverId, queue);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            failure = ex;
+        }
+
+        var elapsed = _timeProvider.GetElapsedTime(started);
+        var duration = ConfiguredWrapUpDuration();
+        if (failure is not null)
+        {
+            var level = WrapUpDurationLogLevel(serverId, queue, WrapUpDurationAnomaly.Failed);
+            LogWrapUpDurationProviderFailed(level, failure, serverId, queue);
+        }
+        else if (answer is { } value)
+        {
+            if (value < TimeSpan.Zero || value > WrapUpDurationRangeAttribute.Max)
+            {
+                var level = WrapUpDurationLogLevel(serverId, queue, WrapUpDurationAnomaly.Rejected);
+                LogWrapUpDurationRejected(level, serverId, queue, value);
+            }
+            else
+            {
+                duration = value;
+                if (value > _options.CompletedRetention)
+                {
+                    var level = WrapUpDurationLogLevel(serverId, queue, WrapUpDurationAnomaly.ExceedsRetention);
+                    LogWrapUpDurationExceedsRetention(level, serverId, queue, value, _options.CompletedRetention);
+                }
+            }
+        }
+
+        if (elapsed > WrapUpDurationProviderSlowBound)
+        {
+            var level = WrapUpDurationLogLevel(serverId, queue, WrapUpDurationAnomaly.Slow);
+            var elapsedMs = elapsed.TotalMilliseconds;
+            LogWrapUpDurationProviderSlow(level, serverId, queue, elapsedMs);
+        }
+
+        return duration;
+    }
+
+    /// <summary>
+    /// Warning the first time a (server, queue, kind) case is reported, Debug after. A case the full record cannot
+    /// take logs at Debug, and the first one says, once per manager, that the record is full.
+    /// </summary>
+    private LogLevel WrapUpDurationLogLevel(string serverId, string queue, WrapUpDurationAnomaly kind)
+    {
+        var key = (serverId, queue, kind);
+        if (_warnedWrapUpDurations.ContainsKey(key))
+            return LogLevel.Debug;
+
+        if (Interlocked.Increment(ref _warnedWrapUpDurationCount) > WrapUpDurationWarnSetCapacity)
+        {
+            Interlocked.Decrement(ref _warnedWrapUpDurationCount);
+            if (Interlocked.Exchange(ref _wrapUpDurationWarnSetFullReported, 1) == 0)
+                LogWrapUpDurationWarnSetFull(WrapUpDurationWarnSetCapacity);
+            return LogLevel.Debug;
+        }
+
+        if (_warnedWrapUpDurations.TryAdd(key, 0))
+            return LogLevel.Warning;
+
+        // Another thread recorded this case first and logged it at Warning.
+        Interlocked.Decrement(ref _warnedWrapUpDurationCount);
+        return LogLevel.Debug;
+    }
+
+    /// <summary>What a wrap-up duration provider did that the manager reports.</summary>
+    private enum WrapUpDurationAnomaly
+    {
+        Rejected,
+        Failed,
+        Slow,
+        ExceedsRetention,
+    }
+
+    /// <summary>
+    /// A wrap-up an <c>AgentComplete</c> is about to open: its key, the strings its event carries, and the instant it
+    /// opens, read before any wrap-up duration provider is asked.
+    /// </summary>
+    private sealed record PendingWrapUp(string Key, string SessionId, string ServerId, string? AgentId,
+        string QueueName, DateTimeOffset OpenedAt);
 
     /// <summary>
     /// One open wrap-up. It holds the strings its event carries, the instant it opened, its duration and its timer,

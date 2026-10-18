@@ -256,9 +256,10 @@ public enum AgentState { Unknown, LoggedOff, Available, OnCall, Paused }
 
 /// <summary>
 /// One <c>AgentComplete</c> as <see cref="AgentManager.QueueCallerCompleted"/> delivers it: the caller's channel
-/// (<c>Uniqueid</c>), the call's <c>Linkedid</c>, the member's <c>Interface</c> and the talk time app_queue
-/// reports in whole seconds. Asterisk spells the header <c>Linkedid</c>; AMI field names match without regard to
-/// case.
+/// (<c>Uniqueid</c>), the call's <c>Linkedid</c>, the member's <c>Interface</c>, the talk time app_queue
+/// reports in whole seconds, and the frame's <c>Queue</c> header — the queue whose member finished, which can differ
+/// from the last queue the caller joined; <see langword="null"/> when the frame carries none. Asterisk spells the
+/// header <c>Linkedid</c>; AMI field names match without regard to case.
 /// </summary>
 internal readonly record struct QueueCallerCompletion(
-    string? CallerUniqueId, string? LinkedId, string? MemberInterface, long TalkTimeSeconds);
+    string? CallerUniqueId, string? LinkedId, string? MemberInterface, long TalkTimeSeconds, string? Queue);
