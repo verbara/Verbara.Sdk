@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using Verbara.Sdk;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Ami;
@@ -992,15 +993,65 @@ public sealed class VerbaraServer : IVerbaraServer
         return new OriginateResult { Success = false, Message = "No OriginateResponse received" };
     }
 
+    /// <summary>
+    /// Stops listening to the AMI connection and releases what the server holds. The connection itself is not
+    /// disposed: it stays its owner's.
+    /// </summary>
+    /// <remarks>
+    /// Releases, in this order and each in its own attempt, the server's subscription to the AMI connection, the ARI
+    /// client attached with <see cref="SetAriClient"/>, and the instruments the server published for its live state.
+    /// A release that throws does not stop the ones after it. Once all of them have run, a failure is thrown to the
+    /// caller.
+    /// </remarks>
+    /// <exception cref="Exception">
+    /// One release threw: its own exception, unchanged. Only foreign code throws here, such as a consumer's ARI client,
+    /// the subscription of a consumer's AMI connection, or a <see cref="MeterListener"/> whose completion callback
+    /// throws when the instruments are released.
+    /// </exception>
+    /// <exception cref="AggregateException">
+    /// More than one release threw: their exceptions, in release order.
+    /// </exception>
     public async ValueTask DisposeAsync()
     {
         _connection.Reconnected -= OnReconnected;
         if (_connection is AmiConnection amiConnection)
             amiConnection.Lost -= OnConnectionLost;
-        _subscription?.Dispose();
-        if (_ariClient is not null)
-            await _ariClient.DisposeAsync();
-        _instanceMeter.Dispose();
+
+        List<Exception>? failures = null;
+        try
+        {
+            _subscription?.Dispose();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            (failures ??= []).Add(ex);
+        }
+
+        try
+        {
+            if (_ariClient is not null)
+                await _ariClient.DisposeAsync();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            (failures ??= []).Add(ex);
+        }
+
+        // Last, so the gauges stop once nothing feeds the state they read. A listener's completion callback runs
+        // inside this call, so it throws when that callback does.
+        try
+        {
+            _instanceMeter.Dispose();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            (failures ??= []).Add(ex);
+        }
+
+        if (failures is [var single])
+            ExceptionDispatchInfo.Capture(single).Throw();
+        if (failures is not null)
+            throw new AggregateException(failures);
     }
 
     private void OnConnectionLost(Exception? cause)

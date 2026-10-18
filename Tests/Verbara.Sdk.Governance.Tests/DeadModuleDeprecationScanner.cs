@@ -47,7 +47,7 @@ internal static class DeadModuleDeprecationScanner
 
     private static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Latest);
 
-    /// <summary>The ruled set: 44 types and one member.</summary>
+    /// <summary>The ruled set: 49 types and one member.</summary>
     public static IReadOnlyList<MarkedSymbol> RuledSet { get; } = BuildRuledSet();
 
     public static DeadModuleDeprecationReport Scan(string repoRoot, IReadOnlyList<MarkedSymbol> ruledSet)
@@ -372,6 +372,7 @@ internal static class DeadModuleDeprecationScanner
         [
             "AgentCallbackLoginEvent", "AgentCallbackLogoffEvent", "QueueMemberPausedEvent", "MusicOnHoldEvent",
             "FaxReceivedEvent", "DtmfEvent", "TransferEvent", "ChannelReloadEvent", "ChannelUpdateEvent", "JabberEventEvent",
+            "AgiExecEvent", "AsyncAgiEvent", "SendFaxStatusEvent", "BridgeExecEvent", "ModuleLoadReportEvent",
         ];
 
         return
