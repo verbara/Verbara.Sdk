@@ -5,8 +5,8 @@
 # EXITS NON-ZERO so the gate job goes red and every heavy job runs (§3.2 fail-closed).
 #
 # Sdk carve-out (first case block): Tests/Verbara.Sdk.DocSnippets.Tests Roslyn-compiles every
-# ```csharp block out of eight Markdown files, INSIDE the "Unit Tests" job — the very job this gate
-# can skip. Those eight are therefore NOT docs-only: editing them must keep their only guard running.
+# ```csharp block out of nine Markdown files, INSIDE the "Unit Tests" job — the very job this gate
+# can skip. Those nine are therefore NOT docs-only: editing them must keep their only guard running.
 # The list is pinned as a superset of DocSnippetCompilationTests.cs `sources` by
 # scripts/tests/test_classify_docs_only.sh — do not edit one without the other.
 # Nested src/*/README.md are NOT compiled by that test and stay allowlisted.
@@ -22,7 +22,7 @@ mapfile -t files <<< "$raw"
 for f in "${files[@]}"; do
   case "$f" in
     # BEGIN docsnippets-carveout (must stay a superset of DocSnippetCompilationTests.cs `sources`)
-    README.md|docs/README-technical.md|docs/guides/asterisk-version-compatibility.md|docs/guides/conference-participants-migration.md|docs/guides/high-load-tuning.md|docs/guides/obsolete-ami-events-removal-migration.md|docs/guides/session-store-backends.md|docs/guides/troubleshooting.md)
+    README.md|docs/README-technical.md|docs/guides/asterisk-version-compatibility.md|docs/guides/conference-participants-migration.md|docs/guides/high-load-tuning.md|docs/guides/migration-2.9.0.md|docs/guides/obsolete-ami-events-removal-migration.md|docs/guides/session-store-backends.md|docs/guides/troubleshooting.md)
     # END docsnippets-carveout
       echo "docs_only=false"; exit 0 ;;
   esac
