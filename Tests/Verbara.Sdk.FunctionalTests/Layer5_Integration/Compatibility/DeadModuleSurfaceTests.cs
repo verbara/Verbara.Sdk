@@ -11,7 +11,7 @@ using AmiConnection = Verbara.Sdk.Ami.Connection.AmiConnection;
 /// <summary>
 /// The AMI surface of dead Asterisk modules, against the pinned image. The SDK marks obsolete the actions of
 /// chan_sip, res_monitor, app_meetme, the Zaptel names, chan_agent's <c>AgentCallbackLogin</c>,
-/// app_setcdruserfield and Skype for Asterisk, and the events whose wire name Asterisk 12 renamed or removed. This
+/// app_setcdruserfield and Skype for Asterisk, and the events whose wire name Asterisk 10 or 12 renamed or removed. This
 /// guard pins the premise of each mark on the image the lane runs: none of the marked names is registered or listed,
 /// and every replacement whose module the image loads is. A re-pinned image that brings a marked name back fails
 /// here, naming it, so the item is re-ruled before the image is pinned.
@@ -60,6 +60,7 @@ public sealed class DeadModuleSurfaceTests : FunctionalTestBase
     [
         "QueueMemberPaused", "AgentCallbackLogin", "AgentCallbackLogoff", "ChannelReload", "Transfer", "MusicOnHold",
         "FaxReceived", "DTMF", "ChannelUpdate", "JabberEvent",
+        "AGIExec", "AsyncAGI", "SendFAXStatus", "BridgeExec", "ModuleLoadReport",
     ];
 
     /// <summary>The live event names that replace them.</summary>
@@ -67,6 +68,8 @@ public sealed class DeadModuleSurfaceTests : FunctionalTestBase
     [
         "QueueMemberPause", "MusicOnHoldStart", "MusicOnHoldStop", "ReceiveFAX", "DTMFBegin", "DTMFEnd",
         "BlindTransfer", "AttendedTransfer", "AgentLogin", "AgentLogoff",
+        "AGIExecStart", "AGIExecEnd", "AsyncAGIStart", "AsyncAGIExec", "AsyncAGIEnd", "FAXStatus",
+        "BridgeCreate", "BridgeEnter", "BridgeLeave",
     ];
 
     /// <summary>The header fields of a <c>ListCommands</c> response that are not action names.</summary>

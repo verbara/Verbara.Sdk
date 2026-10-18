@@ -2,6 +2,7 @@ namespace Verbara.Sdk.FunctionalTests.Layer5_Integration.Concurrency;
 
 using System.Collections.Concurrent;
 using Verbara.Sdk.Ami.Actions;
+using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.FunctionalTests.Infrastructure.Fixtures;
 using Verbara.Sdk.FunctionalTests.Infrastructure.Helpers;
 using FluentAssertions;
@@ -155,35 +156,37 @@ public sealed class ConcurrentEventTests : FunctionalTestBase
         var observer = new CollectingObserver();
         using var subscription = connection.Subscribe(observer);
 
-        // Originate a single call and verify events for it are causally ordered
+        // Originate a single call and verify its events arrive in causal order. The originate names the channel,
+        // so only this call's events are read; ext 101 answers it, and the channel itself runs Wait(2) and hangs up.
+        var callId = $"concurrent-order-{Guid.NewGuid():N}";
         await connection.SendActionAsync(new OriginateAction
         {
-            Channel = "Local/s@default",
+            Channel = "Local/101@test-functional",
             Application = "Wait",
             Data = "2",
-            IsAsync = true
+            IsAsync = true,
+            ChannelId = callId
         });
 
-        // Wait for full lifecycle
-        await Task.Delay(TimeSpan.FromSeconds(5));
+        // Wait for the channel's Hangup, its last lifecycle event.
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (!observer.Events.Any(e => e is HangupEvent && e.UniqueId == callId) && DateTime.UtcNow < deadline)
+            await Task.Delay(TimeSpan.FromMilliseconds(100)); // fence-allow: GUARD-TIMEOUT — polls for the observed Hangup; a green run leaves as soon as it arrives
 
-        // Find events for a specific channel by UniqueId
-        var channelEvents = observer.Events
-            .Where(e => e.UniqueId is not null)
-            .GroupBy(e => e.UniqueId)
-            .Where(g => g.Count() >= 2)
+        // The channel's lifecycle events, in the order the observer received them.
+        var lifecycle = observer.Events
+            .Where(e => e.UniqueId == callId && e is NewChannelEvent or NewStateEvent or HangupEvent)
+            .Select(e => e.GetType().Name)
             .ToList();
 
-        if (channelEvents.Count > 0)
-        {
-            // For any channel, events should arrive in order they were added
-            // Verify by checking arrival indices are monotonically increasing
-            foreach (var group in channelEvents)
-            {
-                group.Select(e => observer.Events.IndexOf(e)).ToList().Should().BeInAscendingOrder(
-                    "events for the same channel must maintain causal order");
-            }
-        }
+        lifecycle.Should().Contain(nameof(HangupEvent),
+            "the originated channel runs Wait(2) and hangs up, so its Hangup must arrive within 15 s");
+        lifecycle.Should().HaveCountGreaterThanOrEqualTo(2, "a channel's lifecycle holds at least its Newchannel and its Hangup");
+        lifecycle[0].Should().Be(nameof(NewChannelEvent),
+            "a channel's Newchannel must arrive before any other of its lifecycle events; received order: {0}", string.Join(" → ", lifecycle));
+        lifecycle[^1].Should().Be(nameof(HangupEvent),
+            "a channel's Hangup must arrive after every other of its lifecycle events; received order: {0}", string.Join(" → ", lifecycle));
+        lifecycle.Count(n => n == nameof(HangupEvent)).Should().Be(1, "a channel hangs up once");
     }
 
     [Fact]

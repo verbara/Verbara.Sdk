@@ -242,7 +242,7 @@ A value outside these ranges fails the host's start with an `OptionsValidationEx
 | `SessionOptions.DialingTimeout` | 60s | The age a held call must reach before the sweep asks about it; it never ends a call by itself |
 | `SessionOptions.SlaThreshold` | 20s | Align with your contact-center SLA |
 | `SessionOptions.QueueMetricsWindow` | 30min | Rolling window for `QueueSessionTracker` — reduce if per-queue RAM matters |
-| `SessionOptions.WrapUpDuration` | 30s | Not a lever: nothing in the SDK reads it, and the SDK raises no `CallWrapUpEvent`. An agent that `IAgentSessionTracker` moves to wrap-up when its call ends stays there until its next call connects, whatever this is set to |
+| `SessionOptions.WrapUpDuration` | 30s | Set it to the queues' Asterisk `wrapuptime`: the SDK cannot read that value, and one duration applies to every queue. A wrap-up opens at a queue member's `AgentComplete` (for a call outside any queue that an agent known by name took, at the call's end) and closes when this duration passes or the same agent's next call connects, raising one `CallWrapUpEvent` each; one timer is held per open wrap-up. Accepted: `00:00:00` to `49.17:02:47.294` (4,294,967,294 ms); zero closes each wrap-up at once (wrap-up off), and a negative value, `Timeout.InfiniteTimeSpan` included, fails the host's start. A value above `CompletedRetention` may reach a subscriber after the call has been released |
 | `AmiConnectionOptions.EventPumpCapacity` | 20,000 | Size to absorb 10s of peak event rate |
 
 ```csharp
