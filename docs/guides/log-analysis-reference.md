@@ -51,7 +51,7 @@
 | `[POOL] Server dispose failed` or `[POOL] AMI connection dispose failed` | Bug: a server's ARI client or an AMI connection threw while the pool released it (exception attached); the pool still released everything else, and the call it came from (`DisposeAsync`, `RemoveServerAsync`, or a failed `AddServerAsync`, which rethrows its start's exception) never throws this one | P1 |
 | `[LIVE] Status refused` | Config: the AMI user may not run `Status` (needs `system`, `call` or `reporting` in `write`); no channel was reconciled | — |
 | `[LIVE] ConfbridgeListRooms refused` (or `ConfbridgeList`) | Config: the AMI user may not list conferences (needs `reporting` in `write`); the conference rooms were not restored and keep what they held | — |
-| `[LIVE] <List> barrier ran out after 10 s` | Bug or load: an event handler held the events received before a listing for 10 s; the reload removed and ended nothing, and runs one full reload once the handlers catch up. Keep handlers short | P1 |
+| `[LIVE] <List> barrier ran out after 10 s` | Bug or load: an event handler held the events received before a listing for 10 s; the listing removed and ended nothing. A load then schedules one full reload, which runs once the handlers catch up; a channel reconciliation from the periodic sweep schedules none and waits for the sweep's next run. Keep handlers short | P1 |
 | `[QUEUE] Caller left` without Exception | Expected: caller hung up | Ignore |
 | `[AGENT] Logoff` without Exception | Expected: agent disconnected | Ignore |
 | `[CALL_FLOW] Completed` without Exception | Expected: call ended | Ignore |
