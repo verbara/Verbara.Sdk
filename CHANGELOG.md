@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: one migration guide for 2.9.0 (#446)
+
+[`docs/guides/migration-2.9.0.md`](docs/guides/migration-2.9.0.md) has one section per breaking entry of 2.9.0,
+ordered by package, each saying what changed, who it reaches and what to do, with code where a change is needed and
+a link to the longer guide where one exists. Its C# snippets are compiled by the documentation snippet tests.
+
 ### Added: an AMI capture on a new Asterisk build is one command (#445)
 
 `scripts/capture-ami-recording.py` starts one throwaway Asterisk from an image pinned by digest, drives a fixed
@@ -14,7 +20,7 @@ was given. The reduction keeps whole frames byte-exact, fills UUIDs and addresse
 one that still holds the run's manager secret, or one the recording redaction check rejects; the same tap always
 reduces to the same bytes. Its tests run in the always-run `Coverage Script Tests` job. No package changes.
 
-### Changed — BREAKING: types of dead Asterisk modules are deprecated with `VSDK0005` (#436, #NNN)
+### Changed — BREAKING: types of dead Asterisk modules are deprecated with `VSDK0005` (#436, #439)
 
 Forty-nine types and one member are now `[Obsolete]` with diagnostic id `VSDK0005`, as a warning, never an error.
 Each reaches only an Asterisk module that is gone or deprecated upstream, a module its publisher discontinued, or a
@@ -63,7 +69,7 @@ opened and one closed stream.
 `audio.buffer.underruns` describes a write pump the SDK does not have: audio goes out when the caller writes it,
 so nothing ever recorded it. The field is now `[Obsolete]` with diagnostic id `VSDK0003`. A consumer that builds
 with `TreatWarningsAsErrors` and reads the field by symbol gets `error VSDK0003`, and can silence exactly this
-with `<NoWarn>VSDK0003</NoWarn>`. Nothing is removed: the instrument is still published on the meter, so an
+with `<NoWarn>$(NoWarn);VSDK0003</NoWarn>`. Nothing is removed: the instrument is still published on the meter, so an
 exporter that subscribes by meter name is unaffected, and a binary built against an earlier release that reads the field still runs (checked against 2.6.0).
 
 ### Added: an `audio.transport` tag on every audio meter measurement (#435)
@@ -113,9 +119,19 @@ the join's `Uniqueid` as data. Two public members change shape: `MeetMeRoom.User
 `ConcurrentDictionary<string, MeetMeUser>` keyed by channel, and `MeetMeManager.OnUserLeft` takes
 `(string roomNumber, string channel)`. Code that names either must be recompiled; a binary built against 2.8.0
 fails with `MissingMethodException` when it calls one. Added: `MeetMeManager.OnUserJoined` with a `uniqueId`
-argument and `MeetMeManager.OnConferenceEnded`. `UserNum` stays 0 for ConfBridge, and `Muted`/`Talking` are
-still not set. Before/after code is in
+argument and `MeetMeManager.OnConferenceEnded`. `UserNum` stays 0 for ConfBridge (`Muted` and `Talking` are set since #434).
+Before/after code is in
 [the migration guide](docs/guides/conference-participants-migration.md).
+
+### Fixed: the guides say which AMI classes the SDK's user needs, and that an older Asterisk can hold an event (#447)
+
+`docs/guides/troubleshooting.md` taught `write = all`. It now lists the read and write classes each SDK feature
+needs, measured on Asterisk 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, and says that no AMI account is read-only: 21
+actions have no class, and eight of them change the server's state. A user without `reporting` gets each conference
+listing of a reload refused, and Asterisk raises a `RequestNotAllowed` security event for each. The compatibility
+guide and the XML docs of `AmiConnectionOptions.HeartbeatInterval` say that Asterisk before 20.21.0, 22.11.0 and
+23.5.0 can hold an event for a session until that session next writes; the heartbeat releases it, so on a quiet
+session the delay is at most `HeartbeatInterval` (30 s by default). No behaviour or default changes.
 
 ### Changed — BREAKING: the obsolete AMI event types, `LegacyEventAdapter` and `DeepgramVoices.Helios` are removed (#432)
 
@@ -473,7 +489,7 @@ stop ended (a hangup frame, the token not cancelled) is still `completed`, and o
 `failed`. The cancellation is still not rethrown, so code that awaits `HandleSessionAsync` sees no change. Labelled
 breaking because a published number changes meaning; no public API signature changes.
 
-**Migration guide:** [`docs/guides/voice-session-ending-migration.md`](docs/guides/voice-session-ending-migration.md#cancelled-sessions-tagged-latency-and-the-servers-stop-290)
+**Migration guide:** [`docs/guides/voice-session-ending-migration.md`](docs/guides/voice-session-ending-migration.md#cancelled-sessions-tagged-latency-the-servers-stop-and-the-realtime-health-entry-290)
 
 ### Changed: the latency sample of a cancelled turn carries `voiceai.ending` (#415)
 

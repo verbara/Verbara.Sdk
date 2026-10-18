@@ -16,12 +16,12 @@
    bindaddr = 0.0.0.0
    ```
 3. Verify firewall allows port 5038
-4. Check AMI user has correct permissions:
+4. Check AMI user has correct permissions. `read = all` and `write = all` work, but grant only what the SDK uses: see [AMI: the classes the SDK's user needs](#ami-the-classes-the-sdks-user-needs).
    ```ini
-   [admin]
+   [verbara]
    secret = your_password
-   read = all
-   write = all
+   read = system,call,agent
+   write = agent,reporting,originate
    ```
 5. Increase `ConnectionTimeout` if network is slow:
    ```json
@@ -36,6 +36,27 @@
 1. Verify username/password match `manager.conf`
 2. Check `deny`/`permit` ACL in the AMI user section
 3. Reload manager config: `asterisk -rx "manager reload"`. A reload does not end the session of an AMI user deleted from `manager.conf`: an application logged in as that user stays connected until its session ends, and is refused only when it logs in again.
+
+### AMI: the classes the SDK's user needs
+
+Asterisk checks each action against the `write` line of the AMI user and sends each event only to users whose `read` line holds its class. The actions the SDK sends on its own, with the classes Asterisk 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2 register them under (`manager show command <Action>`; the three agree):
+
+| Action | Sent by | `write` needs one of |
+|--------|---------|----------------------|
+| `CoreSettings` | the connection, after login, to read the Asterisk version (if refused, it tries the CLI `core show version` through `Command`, which needs `command`, and then records the version as unknown) | `system`, `reporting` |
+| `Status` | the live state's load and the reconciliation sweep | `system`, `call`, `reporting` |
+| `QueueStatus` | the live state's load | none |
+| `Agents` | the live state's load | `agent` |
+| `Ping` | the heartbeat | none |
+| `Originate` | `VerbaraServer.OriginateAsync` | `originate` |
+| `Atxfer` | `AttendedTransferActivity` | `call` |
+| `ConfbridgeListRooms`, `ConfbridgeList` | your code, if it lists conferences | `reporting` |
+
+So `write = agent,reporting,originate` covers them, plus `call` if you run the attended-transfer activity; drop `originate` if you never originate through the SDK, and add the class of any other action your own code sends. For `read`, see [Missing events](#missing-events): `system`, `call` and `agent`, plus `dialplan` for the queue time-out count.
+
+A refused action is answered `Response: Error` / `Message: Permission denied`, and Asterisk also raises a `RequestNotAllowed` security event to every AMI session whose `read` includes `security`. A user without `reporting` that lists conferences is refused on every listing, whether a room exists or not, so give the SDK's user `reporting`, or expect one such security event for each refused listing.
+
+**No AMI account is read-only.** Asterisk 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2 register 21 actions with no class at all, so any user that has logged in can run them, whatever its `write` line says, even an empty one. Most only read or manage the session (`Login`, `Ping`, `QueueStatus`, `BridgeList`, …), but eight change the server's state: `BridgeKick`, `BridgeDestroy`, `BridgeTechnologySuspend`, `BridgeTechnologyUnsuspend`, `QueueWithdrawCaller`, `QueueChangePriorityCaller`, `QueueReset` and `QueueReload`. They cannot be restricted by class: limit who can log in (`deny`/`permit`, the secret) instead of relying on `write` to make an account harmless.
 
 ### ARI: WebSocket connection failed
 
