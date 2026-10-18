@@ -116,9 +116,10 @@ public sealed class ReleaseOnArrivalTests
 
         new { Before = before, After = after }.Should().BeEquivalentTo(
             new { Before = expected, After = expected },
-            "nothing runs on a timer: with no call arriving or ending, the ended calls past retention stay "
-            + "held however much time passes — nothing is released, nothing grows, and the manager asks its "
-            + $"clock for no timer. Measured: {rig.Describe()}");
+            "release runs on no timer: with no call arriving or ending, the ended calls past retention stay "
+            + "held however much time passes — nothing is released, nothing grows, and on these calls, which no "
+            + "agent or queue member took (so no wrap-up opens), the manager asks its clock for no timer. "
+            + $"Measured: {rig.Describe()}");
     }
 
     [Fact]

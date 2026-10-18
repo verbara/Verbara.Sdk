@@ -1,6 +1,9 @@
 namespace Verbara.Sdk.FunctionalTests.Layer5_Integration.Bridge;
 
 using System.Collections.Concurrent;
+using Verbara.Sdk.Activities;
+using Verbara.Sdk.Activities.Activities;
+using Verbara.Sdk.Activities.Models;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Ami.Events.Base;
@@ -401,6 +404,49 @@ public sealed class TransferTests : FunctionalTestBase
     }
 
     /// <summary>
+    /// <see cref="AttendedTransferActivity"/> on a party of a two-party bridge ends
+    /// <see cref="ActivityStatus.Completed"/>: Asterisk accepts the Atxfer, and the consultation call is dialled.
+    /// </summary>
+    [Fact]
+    public async Task AttendedTransferActivity_ShouldEndCompleted_WhenAsteriskAcceptsTheAtxfer()
+    {
+        await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
+        {
+            opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
+            opts.AutoReconnect = false;
+        });
+        await connection.ConnectAsync();
+
+        var events = new ConcurrentQueue<ManagerEvent>();
+        using var subscription = connection.Subscribe(new QueueingObserver(events));
+
+        var callId = NewCallId("atxfer-activity");
+        var (caller, callee) = await BridgeTwoPartiesAsync(connection, events, callId, "atxfer-activity-01");
+
+        try
+        {
+            var sentAt = events.Count;
+            await using var activity = new AttendedTransferActivity(connection)
+            {
+                Channel = caller.Channel!,
+                Destination = new DialPlanExtension("test-functional", "161"),
+            };
+
+            var starting = () => activity.StartAsync().AsTask();
+
+            await starting.Should().NotThrowAsync("Asterisk accepts an Atxfer of a party of a bridge with the transfer features on");
+            activity.Status.Should().Be(ActivityStatus.Completed);
+            var consultation = await WaitForAsync<NewChannelEvent>(events, sentAt,
+                e => e.Channel?.StartsWith("Local/161@test-functional-", StringComparison.Ordinal) == true, TimeSpan.FromSeconds(5));
+            consultation.Should().NotBeNull("the accepted Atxfer must dial the consultation call to ext 161 within 5 s");
+        }
+        finally
+        {
+            await HangUpAsync(connection, caller.Channel, callee.Channel);
+        }
+    }
+
+    /// <summary>
     /// A completed attended transfer fires an AttendedTransferEvent: the transferer hangs up while it talks to the
     /// target, and Asterisk connects the transferee to the target.
     /// </summary>
@@ -609,18 +655,21 @@ public sealed class TransferTests : FunctionalTestBase
             var callerLeavesOrig = IndexOf<BridgeLeaveEvent>(e => e.UniqueId == callId && e.BridgeUniqueid == origBridge);
             var callerEntersSecond = IndexOf<BridgeEnterEvent>(e => e.UniqueId == callId && e.BridgeUniqueid == secondBridge);
             var callerLeavesSecond = IndexOf<BridgeLeaveEvent>(e => e.UniqueId == callId && e.BridgeUniqueid == secondBridge);
+            var targetLeavesSecond = IndexOf<BridgeLeaveEvent>(e => e.UniqueId == targetUniqueId && e.BridgeUniqueid == secondBridge);
             var targetEntersOrig = LastIndexOf<BridgeEnterEvent>(e => e.UniqueId == targetUniqueId && e.BridgeUniqueid == origBridge);
             var transfer = IndexOf<AttendedTransferEvent>(e => e.OrigTransfererUniqueid == callId);
             var secondDestroyed = IndexOf<BridgeDestroyEvent>(e => e.BridgeUniqueid == secondBridge);
 
-            new[] { secondCreated, targetEntersSecond, callerLeavesOrig, callerEntersSecond, callerLeavesSecond, targetEntersOrig, transfer, secondDestroyed }
+            new[] { secondCreated, targetEntersSecond, callerLeavesOrig, callerEntersSecond, callerLeavesSecond, targetLeavesSecond, targetEntersOrig, transfer, secondDestroyed }
                 .Should().NotContain(-1, "every step of the transfer must have been received; order: {0}", Order());
 
             secondCreated.Should().BeLessThan(targetEntersSecond, "the consultation bridge is created before the target enters it; order: {0}", Order());
             callerLeavesOrig.Should().BeLessThan(callerEntersSecond, "the transferer leaves the original bridge before it enters the consultation bridge; order: {0}", Order());
             targetEntersSecond.Should().BeLessThan(callerLeavesSecond, "the target is in the consultation bridge before the transferer hangs up; order: {0}", Order());
             callerEntersSecond.Should().BeLessThan(callerLeavesSecond, "the transferer enters the consultation bridge before it leaves it; order: {0}", Order());
-            callerLeavesSecond.Should().BeLessThan(targetEntersOrig, "the target moves into the original bridge once the transferer hung up; order: {0}", Order());
+            // The transferer's hangup ends the consultation; Asterisk then removes the transferer and moves the target, in
+            // either order (a merge queue run on 23 reported the target's move first), so only the target's own move is ordered.
+            targetLeavesSecond.Should().BeLessThan(targetEntersOrig, "a channel leaves the consultation bridge before it joins the original one; order: {0}", Order());
             targetEntersOrig.Should().BeLessThan(transfer, "the AttendedTransfer event reports a transfer whose parties are already joined; order: {0}", Order());
             callerLeavesSecond.Should().BeLessThan(secondDestroyed, "the consultation bridge is destroyed after the transferer left it; order: {0}", Order());
             evt.TransfereeUniqueid.Should().Be(callee.UniqueId, "the party the transferer was talking to is the one transferred");

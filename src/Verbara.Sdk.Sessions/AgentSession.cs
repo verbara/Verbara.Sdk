@@ -26,15 +26,36 @@ public sealed class AgentSession
         ? (TotalTalkTime + TotalHoldTime + TotalWrapUpTime) / CallsHandled
         : TimeSpan.Zero;
 
-    public TimeSpan IdleTime => State == AgentSessionState.Idle && LastCallEndedAt.HasValue
-        ? DateTimeOffset.UtcNow - LastCallEndedAt.Value
+    // Idle time counts from the instant the agent became Idle (the end of its wrap-up, not of its call), on the clock
+    // of the tracker that created the session.
+    public TimeSpan IdleTime => State == AgentSessionState.Idle && StateChangedAt.HasValue
+        ? _timeProvider.GetUtcNow() - StateChangedAt.Value
         : TimeSpan.Zero;
+
+    /// <summary>
+    /// The session of <see cref="CurrentCall"/> whose wrap-up the session manager closed while the agent was still
+    /// on it, or <see langword="null"/>: the call's ending then takes the agent to Idle, not into a wrap-up. Read and
+    /// written under <see cref="SyncRoot"/>.
+    /// </summary>
+    internal string? WrapUpClosedForSessionId { get; set; }
 
     internal readonly Lock SyncRoot = new();
 
+    private readonly TimeProvider _timeProvider;
+
     public AgentSession(string agentId)
+        : this(agentId, TimeProvider.System)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a session on <paramref name="timeProvider"/>, the clock of the tracker that creates it:
+    /// <see cref="TrackedSince"/> and <see cref="IdleTime"/> are read from it.
+    /// </summary>
+    internal AgentSession(string agentId, TimeProvider timeProvider)
     {
         AgentId = agentId;
-        TrackedSince = DateTimeOffset.UtcNow;
+        _timeProvider = timeProvider;
+        TrackedSince = timeProvider.GetUtcNow();
     }
 }

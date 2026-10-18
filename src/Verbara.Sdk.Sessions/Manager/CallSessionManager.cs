@@ -68,9 +68,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// test fixes a visit's length exactly. The start is the instant the manager handles the join or,
     /// for a caller a reload's queue snapshot reports waiting, that instant minus the wait Asterisk
     /// reports for it: a duration Asterisk measured, subtracted from this clock, so no two clocks are
-    /// compared. Nothing else reads it: the session's own timestamps
-    /// (<see cref="CallSession.CreatedAt"/>, <see cref="CallSession.ConnectedAt"/>) and its audit
-    /// trail still come from the wall clock.
+    /// compared. It is also the clock of an agent's wrap-up: a wrap-up opens and closes on its instants,
+    /// stamps <see cref="CallWrapUpEvent"/> with it, and runs one one-shot timer from it per open wrap-up,
+    /// created and disposed by this manager (release itself schedules nothing). Nothing else reads it:
+    /// the session's own timestamps (<see cref="CallSession.CreatedAt"/>,
+    /// <see cref="CallSession.ConnectedAt"/>) and its audit trail still come from the wall clock.
     /// </summary>
     internal CallSessionManager(
         IOptions<SessionOptions> options,
@@ -233,8 +235,12 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         Action<string, string> onAbandonReported = OnQueueCallerAbandonReported;
         Action<string, string, string> onQueueStatus = OnCallerQueueStatus;
         Action<QueueSnapshotCompletion> onSnapshotCompleted = completion => OnQueueSnapshotCompleted(completion, serverId);
-        Action<string, string?, string?> onAgentConnected = OnAgentConnected;
-        Action<string?, string?, string?> onQueueCallerConnected = OnQueueCallerConnected;
+        Action<string, string?, string?> onAgentConnected =
+            (agentId, linkedId, interface_) => OnAgentConnected(agentId, linkedId, interface_, serverId);
+        Action<string?, string?, string?> onQueueCallerConnected =
+            (callerUniqueId, memberName, memberInterface) =>
+                OnQueueCallerConnected(callerUniqueId, memberName, memberInterface, serverId);
+        Action<QueueCallerCompletion> onQueueCallerCompleted = completion => OnQueueCallerCompleted(completion, serverId);
 
         server.Channels.ChannelAdded += onAdded;
         server.Channels.ChannelRemoved += onRemoved;
@@ -253,11 +259,13 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         server.Queues.QueueSnapshotCompleted += onSnapshotCompleted;
         server.Agents.AgentConnected += onAgentConnected;
         server.Agents.QueueCallerConnected += onQueueCallerConnected;
+        server.Agents.QueueCallerCompleted += onQueueCallerCompleted;
 
         _serverSubs[serverId] = new ServerSubscriptions(server,
             onAdded, onRemoved, onStateChanged, onDialBegin, onDialEnd,
             onHeld, onUnheld, onBridgeEntered, onBridgeDestroyed, onTransfer, onCallerJoined,
-            onCallerLeft, onAbandonReported, onQueueStatus, onSnapshotCompleted, onAgentConnected, onQueueCallerConnected);
+            onCallerLeft, onAbandonReported, onQueueStatus, onSnapshotCompleted, onAgentConnected, onQueueCallerConnected,
+            onQueueCallerCompleted);
     }
 
     public void DetachFromServer(string serverId)
@@ -1144,6 +1152,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         _events.OnNext(new CallEndedEvent(session.SessionId, session.ServerId,
             DateTimeOffset.UtcNow, session.HangupCause, session.Duration, session.TalkTime));
 
+        // After the ending, so a wrap-up it opens is never reported before it.
+        EndConnectedLegsAtCallEnd(session);
+
         _ = PersistAsync(session);
         EvictStaleCompleted();
     }
@@ -1268,22 +1279,26 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         return true;
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         foreach (var serverId in _serverSubs.Keys.ToArray())
             DetachFromServer(serverId);
+
+        // Before the stream completes: a wrap-up's timer raises from a pool thread, and a raise on a
+        // completed, disposed stream would throw there. Open wrap-ups are dropped unreported.
+        await StopWrapUpsAsync().ConfigureAwait(false);
+
         _events.OnCompleted();
         _events.Dispose();
 
         // Withdraws the gauges. Their callbacks hold this manager, and a meter stays published until it
         // is disposed, so an undisposed one would keep every call the manager held reachable.
         _residencyMeter.Dispose();
-        return ValueTask.CompletedTask;
     }
 
     // --- Agent event handlers ---
 
-    private void OnAgentConnected(string agentId, string? linkedId, string? interface_)
+    private void OnAgentConnected(string agentId, string? linkedId, string? interface_, string serverId)
     {
         if (linkedId is null || !_byLinkedId.TryGetValue(linkedId, out var session))
             return;
@@ -1303,6 +1318,14 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             {
                 session.ConnectedAt ??= DateTimeOffset.UtcNow;
             }
+
+            // The agent's open wrap-up ends at its next connect, before that call is announced. A call
+            // outside any queue counts the agent's leg here and ends it with the call; a queue call's leg
+            // is counted by app_queue's connect report, which follows (OnQueueCallerConnected).
+            var wrapUpKey = AgentWrapUpKey(agentId);
+            CloseWrapUpAtConnect(wrapUpKey);
+            if (session.QueueName is null)
+                CountConnectedLeg(session, new WrapUpLeg(serverId, interface_, wrapUpKey, agentId, OpensAtCallEnd: true));
 
             // A queued call is announced once per visit, and a known agent's connect arrives before
             // app_queue's own report of it (OnQueueCallerConnected), so this is the announcement that
@@ -1326,7 +1349,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// by a known agent's connect or by a bridge.
     /// </para>
     /// </summary>
-    private void OnQueueCallerConnected(string? callerUniqueId, string? memberName, string? memberInterface)
+    private void OnQueueCallerConnected(string? callerUniqueId, string? memberName, string? memberInterface,
+        string serverId)
     {
         if (callerUniqueId is null || !_byChannelId.TryGetValue(callerUniqueId, out var session))
             return;
@@ -1348,6 +1372,23 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
             if (session.TryTransition(CallSessionState.Connected))
                 session.ConnectedAt ??= DateTimeOffset.UtcNow;
+
+            // The member's wrap-up is keyed on the member this report names: the agent known by name when
+            // that agent's connect has just recorded this interface, otherwise the interface on this server.
+            // Its open wrap-up ends here, before the call is announced, and the leg counts as connected
+            // until the member's AgentComplete.
+            if (memberInterface is not null)
+            {
+                var agentId = session.AgentId is not null
+                    && string.Equals(session.AgentInterface, memberInterface, StringComparison.Ordinal)
+                        ? session.AgentId
+                        : null;
+                var wrapUpKey = agentId is not null
+                    ? AgentWrapUpKey(agentId)
+                    : MemberWrapUpKey(serverId, memberInterface);
+                CloseWrapUpAtConnect(wrapUpKey);
+                CountConnectedLeg(session, new WrapUpLeg(serverId, memberInterface, wrapUpKey, agentId, OpensAtCallEnd: false));
+            }
 
             PublishConnected(session, session.AgentId);
         }
@@ -1425,7 +1466,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         Action<string, string, string> onQueueStatus,
         Action<QueueSnapshotCompletion> onSnapshotCompleted,
         Action<string, string?, string?> onAgentConnected,
-        Action<string?, string?, string?> onQueueCallerConnected)
+        Action<string?, string?, string?> onQueueCallerConnected,
+        Action<QueueCallerCompletion> onQueueCallerCompleted)
     {
         public void Detach()
         {
@@ -1446,6 +1488,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             server.Queues.QueueSnapshotCompleted -= onSnapshotCompleted;
             server.Agents.AgentConnected -= onAgentConnected;
             server.Agents.QueueCallerConnected -= onQueueCallerConnected;
+            server.Agents.QueueCallerCompleted -= onQueueCallerCompleted;
         }
     }
 }
