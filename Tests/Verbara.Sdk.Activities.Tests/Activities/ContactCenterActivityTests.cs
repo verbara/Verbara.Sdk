@@ -3,6 +3,7 @@ using Verbara.Sdk.Activities.Activities;
 using Verbara.Sdk.Activities.Models;
 using Verbara.Sdk.Ami.Actions;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using NSubstitute;
 
 namespace Verbara.Sdk.Activities.Tests.Activities;
@@ -56,6 +57,73 @@ public class ContactCenterActivityTests
         await _ami.Received(1).SendActionAsync(
             Arg.Is<AtxferAction>(a => a!.Priority == 3),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AttendedTransferActivity_ShouldEndFailedAndThrow_WhenAsteriskRefusesTheAtxfer()
+    {
+        // The text Asterisk 22 and 23 answer to an Atxfer on a channel that does not exist.
+        RespondToAtxfer(new ManagerResponse { Response = "Error", Message = "Channel specified does not exist" });
+        var activity = new AttendedTransferActivity(_ami)
+        {
+            Channel = "PJSIP/nobody-00000000",
+            Destination = new DialPlanExtension("internal", "2001"),
+        };
+        var statuses = new List<ActivityStatus>();
+        using var subscription = activity.StatusChanges.Subscribe(statuses.Add);
+
+        var starting = () => activity.StartAsync().AsTask();
+
+        using var scope = new AssertionScope();
+        (await starting.Should().ThrowAsync<ActivityFailedException>(
+                "a transfer Asterisk refused did not happen"))
+            .WithMessage("*Channel specified does not exist*");
+        activity.Status.Should().Be(ActivityStatus.Failed);
+        statuses.Should().Equal(
+            ActivityStatus.Pending, ActivityStatus.Starting, ActivityStatus.InProgress, ActivityStatus.Failed);
+    }
+
+    [Fact]
+    public async Task AttendedTransferActivity_ShouldEndFailedAndThrow_WhenTheRefusalCarriesNoMessage()
+    {
+        RespondToAtxfer(new ManagerResponse { Response = "error", Message = null });
+        var activity = new AttendedTransferActivity(_ami)
+        {
+            Channel = "PJSIP/alice-00001",
+            Destination = new DialPlanExtension("internal", "2001"),
+        };
+
+        var starting = () => activity.StartAsync().AsTask();
+
+        using var scope = new AssertionScope();
+        (await starting.Should().ThrowAsync<ActivityFailedException>(
+                "a refusal without a message is still a refusal"))
+            .WithMessage("*Atxfer*Response: Error*");
+        activity.Status.Should().Be(ActivityStatus.Failed);
+    }
+
+    [Fact]
+    public async Task AttendedTransferActivity_ShouldEndCompleted_WhenAsteriskAcceptsTheAtxfer()
+    {
+        RespondToAtxfer(new ManagerResponse { Response = "Success", Message = "Atxfer successfully queued" });
+        var activity = new AttendedTransferActivity(_ami)
+        {
+            Channel = "PJSIP/alice-00001",
+            Destination = new DialPlanExtension("internal", "2001"),
+        };
+
+        var starting = () => activity.StartAsync().AsTask();
+
+        await starting.Should().NotThrowAsync("Asterisk accepted and queued the transfer");
+        activity.Status.Should().Be(ActivityStatus.Completed);
+    }
+
+    private void RespondToAtxfer(ManagerResponse response)
+    {
+#pragma warning disable CA2012 // NSubstitute setup: the ValueTask is returned to the activity, which awaits it once.
+        _ami.SendActionAsync(Arg.Any<AtxferAction>(), Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<ManagerResponse>(response));
+#pragma warning restore CA2012
     }
 
     // ----- ChanSpyActivity -----
