@@ -1341,7 +1341,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             }
 
             // The agent's open wrap-up ends at its next connect, before that call is announced. A call
-            // outside any queue counts the agent's leg here and ends it with the call; a queue call's leg
+            // the manager saw join no queue counts the agent's leg here and ends it with the call, unless
+            // the agent's AgentComplete naming a queue ends it first (a missed join); a queue call's leg
             // is counted by app_queue's connect report, which follows (OnQueueCallerConnected).
             var wrapUpKey = AgentWrapUpKey(agentId);
             CloseWrapUpAtConnect(wrapUpKey);
