@@ -684,6 +684,51 @@ public sealed class CallSessionManagerQueueWrapUpDurationTests
     }
 
     [Fact]
+    public async Task AgentComplete_ShouldCloseAtTheDueInstantWithTheAnswer_WhenTheProviderTakesLongerThanItsOwnAnswer()
+    {
+        var clock = new FakeTimeProvider();
+        var logger = new RecordingLogger();
+        var provider = new RecordingProvider((_, _, _) =>
+        {
+            clock.Advance(TimeSpan.FromSeconds(2));
+            return TimeSpan.FromSeconds(1);
+        });
+        await using var rig = await WrapUpRig.StartAsync(clock, Options(), provider, logger);
+        rig.Deliver(QueueCallConnected(Queue, "c1", "m1", Member));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        var completedAt = clock.GetUtcNow();
+        var timersBefore = clock.TimersCreated.Count;
+        rig.Deliver(MemberHangsUp(Queue, "c1", "m1", Member));
+        var sessionId = rig.Session("c1").SessionId;
+        var atComplete = rig.WrapUps.ToArray();
+        var timersAfter = clock.TimersCreated.Count;
+        clock.Advance(TimeSpan.FromMinutes(5));
+
+        new
+        {
+            AtComplete = atComplete,
+            After = rig.WrapUps.Count,
+            NewTimers = timersAfter - timersBefore,
+            Slow = logger.Entries.Where(e => KindOf(e) == Slow).Select(e => e.Level).ToArray(),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                AtComplete = new[]
+                {
+                    new CallWrapUpEvent(sessionId, ServerId, completedAt + TimeSpan.FromSeconds(1), null, Queue,
+                        TimeSpan.FromSeconds(1)),
+                },
+                After = 1,
+                NewTimers = 0,
+                Slow = new[] { LogLevel.Warning },
+            },
+            "a provider that takes 2 s to answer 1 s answers after its own due instant: the wrap-up closes while the "
+            + "AgentComplete is handled, with no timer, stamped at the due instant (open + 1 s) and measuring the "
+            + "answer, 1 s, not the 2 s that passed; one Warning reports the slow provider. "
+            + Describe(rig, provider, logger));
+    }
+
+    [Fact]
     public async Task AgentComplete_ShouldWarnNamingTheServerAndQueue_WhenTheProviderTakesTwoSecondsToAnswer()
     {
         var clock = new FakeTimeProvider();
