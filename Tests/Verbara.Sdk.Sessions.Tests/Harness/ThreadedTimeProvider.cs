@@ -135,7 +135,7 @@ internal sealed class ThreadedTimeProvider : TimeProvider
 
                 timer.Fire();
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 _faults.Enqueue(ex);
             }

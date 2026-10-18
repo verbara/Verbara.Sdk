@@ -306,7 +306,7 @@ public sealed class AgentSessionTrackerTests : IDisposable
             {
                 AtEnd = (AgentSessionState?)AgentSessionState.WrapUp,
                 State = (AgentSessionState?)AgentSessionState.Idle,
-                TotalWrapUpTime = (TimeSpan?)TrackedWrapUp,
+                TotalWrapUpTime = TrackedWrapUp,
                 CurrentCall = default(CallSession),
             },
             "the agent enters wrap-up when its call ends and leaves it for Idle when the manager's 30 s pass, with "
@@ -412,7 +412,7 @@ public sealed class AgentSessionTrackerTests : IDisposable
                 ConnectedNext = true,
                 State = (AgentSessionState?)AgentSessionState.OnCall,
                 CurrentCall = next,
-                TotalWrapUpTime = (TimeSpan?)TrackedWrapUp,
+                TotalWrapUpTime = TrackedWrapUp,
             },
             "a wrap-up event for the agent's earlier call that reaches the tracker after its next call connected "
             + "adds its 30 s and leaves the agent on the new call. " + Describe(rig));
@@ -444,7 +444,7 @@ public sealed class AgentSessionTrackerTests : IDisposable
             {
                 State = (AgentSessionState?)AgentSessionState.Idle,
                 CurrentCall = default(CallSession),
-                TotalWrapUpTime = (TimeSpan?)TimeSpan.Zero,
+                TotalWrapUpTime = TimeSpan.Zero,
                 CallsHandled = (int?)1,
             },
             "a wrap-up duration of zero closes the agent's wrap-up at its AgentComplete, before the caller's hangup "
@@ -472,7 +472,7 @@ public sealed class AgentSessionTrackerTests : IDisposable
             {
                 State = (AgentSessionState?)AgentSessionState.Idle,
                 CurrentCall = default(CallSession),
-                TotalWrapUpTime = (TimeSpan?)TrackedWrapUp,
+                TotalWrapUpTime = TrackedWrapUp,
                 CallsHandled = (int?)1,
             },
             "the agent's blind transfer opens its wrap-up while the caller stays up in an IVR; the wrap-up's 30 s pass "
@@ -512,14 +512,14 @@ public sealed class AgentSessionTrackerTests : IDisposable
                 {
                     State = (AgentSessionState?)AgentSessionState.Idle,
                     CurrentCall = default(CallSession),
-                    TotalWrapUpTime = (TimeSpan?)TrackedWrapUp,
+                    TotalWrapUpTime = TrackedWrapUp,
                     CallsHandled = (int?)1,
                 },
                 Second = new
                 {
                     State = (AgentSessionState?)AgentSessionState.Idle,
                     CurrentCall = default(CallSession),
-                    TotalWrapUpTime = (TimeSpan?)TrackedWrapUp,
+                    TotalWrapUpTime = TrackedWrapUp,
                     CallsHandled = (int?)1,
                 },
             },

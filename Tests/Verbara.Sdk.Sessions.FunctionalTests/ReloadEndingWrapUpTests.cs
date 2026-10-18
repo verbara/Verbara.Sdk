@@ -65,7 +65,7 @@ public sealed class ReloadEndingWrapUpTests
                 Ended = new[] { call.SessionId },
                 WrapUps = 0,
                 State = (AgentSessionState?)AgentSessionState.Idle,
-                TotalWrapUpTime = (TimeSpan?)TimeSpan.Zero,
+                TotalWrapUpTime = TimeSpan.Zero,
                 CallsHandled = (int?)1,
             },
             $"a reload that finds the agent's {(queued ? "queue " : "")}call gone ends it with "

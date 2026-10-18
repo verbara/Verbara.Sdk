@@ -292,10 +292,11 @@ public sealed partial class CallSessionManager
             _wrapUpTimers.TryRemove(entry, out _);
         }
 
-        // A close raised from an AMI thread that checked the flag before it was set finishes before this returns.
-        lock (_wrapUpRaise)
-        {
-        }
+        // A fence, taken only after the timers' disposal has been awaited, so it never blocks this thread on a
+        // subscriber a timer's close is still running: a close raised from an AMI thread that checked the flag before
+        // it was set finishes before this returns.
+        _wrapUpRaise.Enter();
+        _wrapUpRaise.Exit();
     }
 
     /// <summary>
