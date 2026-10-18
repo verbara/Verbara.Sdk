@@ -113,10 +113,31 @@ internal static class AmiCaptureReplay
     /// Optional. A frame for which it returns <see langword="true"/> is read but not delivered, as if Asterisk
     /// had never sent it; a marker frame still names the scenario that follows it.
     /// </param>
+    /// <param name="clock">
+    /// Optional. The manager's clock seam; with none, the manager is built with its public constructor, on the
+    /// system clock, as before. The replay does not move it: the caller does, in <paramref name="afterLastFrame"/>.
+    /// </param>
+    /// <param name="afterLastFrame">
+    /// Optional, and only with <paramref name="clock"/>. Called with the clock once the last frame is delivered and
+    /// before the manager is disposed, so a caller that moves the clock there sees what fires, recorded on the
+    /// replayed calls like every other domain event.
+    /// </param>
+    /// <param name="wrapUpDurations">
+    /// Optional, and only with <paramref name="clock"/>. The wrap-up duration provider the manager is built with.
+    /// </param>
     public static async Task<CaptureReplay> ReplayAsync(
-        string fixture, SessionOptions? options = null, Func<ManagerEvent, bool>? drop = null)
+        string fixture, SessionOptions? options = null, Func<ManagerEvent, bool>? drop = null,
+        ManualClock? clock = null, Action<ManualClock>? afterLastFrame = null,
+        IWrapUpDurationProvider? wrapUpDurations = null)
     {
-        await using var rig = await ReplayRig.StartAsync(options ?? new SessionOptions());
+        if (afterLastFrame is not null && clock is null)
+            throw new ArgumentException("Moving the clock after the last frame needs the clock.", nameof(afterLastFrame));
+        if (wrapUpDurations is not null && clock is null)
+            throw new ArgumentException("A wrap-up duration provider needs the clock.", nameof(wrapUpDurations));
+
+        await using var rig = clock is null
+            ? await ReplayRig.StartAsync(options ?? new SessionOptions())
+            : await ReplayRig.StartAsync(options ?? new SessionOptions(), clock, wrapUpDurations);
         var manager = rig.Manager;
 
         var scenario = BeforeFirstMarker;
@@ -159,6 +180,9 @@ internal static class AmiCaptureReplay
                 swallowed.Add(new SwallowedObserverException(scenario, evt.EventType ?? "", thrown));
         }
 
+        if (clock is not null)
+            afterLastFrame?.Invoke(clock);
+
         return new CaptureReplay(fixture, calls, swallowed);
     }
 
@@ -173,17 +197,39 @@ internal static class AmiCaptureReplay
     /// Optional. The replay keeps it current while each frame is delivered, so a caller can attribute a
     /// measurement taken inside the delivery to the shape of the frame being dispatched.
     /// </param>
-    public static Task<QueueShapeReplay> ReplayQueueShapesAsync(string fixture, QueueShapeDispatch? dispatch = null) =>
-        ReplayQueueShapesFromFileAsync(FixturePath(fixture), dispatch);
+    /// <param name="clock">
+    /// Optional. The manager's clock seam; with none, the manager is built with its public constructor, on the
+    /// system clock. The replay does not move it: the caller does, in <paramref name="afterLastFrame"/>.
+    /// </param>
+    /// <param name="afterLastFrame">
+    /// Optional, and only with <paramref name="clock"/>. Called with the clock once the last frame is delivered and
+    /// before the manager is disposed, so what it makes fire is scored like every other domain event.
+    /// </param>
+    /// <param name="wrapUpDurations">
+    /// Optional, and only with <paramref name="clock"/>. The wrap-up duration provider the manager is built with.
+    /// </param>
+    public static Task<QueueShapeReplay> ReplayQueueShapesAsync(string fixture, QueueShapeDispatch? dispatch = null,
+        ManualClock? clock = null, Action<ManualClock>? afterLastFrame = null,
+        IWrapUpDurationProvider? wrapUpDurations = null) =>
+        ReplayQueueShapesFromFileAsync(FixturePath(fixture), dispatch, clock, afterLastFrame, wrapUpDurations);
 
     /// <summary>
     /// <see cref="ReplayQueueShapesAsync"/> over any file with the same shapes, such as a capture kept
     /// outside the suite's <c>Recordings/</c> folder, to compare it with the fixture reduced from it.
     /// </summary>
-    public static async Task<QueueShapeReplay> ReplayQueueShapesFromFileAsync(string path, QueueShapeDispatch? dispatch = null)
+    public static async Task<QueueShapeReplay> ReplayQueueShapesFromFileAsync(string path, QueueShapeDispatch? dispatch = null,
+        ManualClock? clock = null, Action<ManualClock>? afterLastFrame = null,
+        IWrapUpDurationProvider? wrapUpDurations = null)
     {
+        if (afterLastFrame is not null && clock is null)
+            throw new ArgumentException("Moving the clock after the last frame needs the clock.", nameof(afterLastFrame));
+        if (wrapUpDurations is not null && clock is null)
+            throw new ArgumentException("A wrap-up duration provider needs the clock.", nameof(wrapUpDurations));
+
         var options = new SessionOptions();
-        await using var rig = await ReplayRig.StartAsync(options);
+        await using var rig = clock is null
+            ? await ReplayRig.StartAsync(options)
+            : await ReplayRig.StartAsync(options, clock, wrapUpDurations);
         var manager = rig.Manager;
         using var tracker = new QueueSessionTracker(manager, Options.Create(options));
 
@@ -191,11 +237,25 @@ internal static class AmiCaptureReplay
         var shapeBySessionId = new Dictionary<string, QueueShape>(StringComparer.Ordinal);
         var trackerSeen = new Dictionary<string, QueueCounters>(StringComparer.Ordinal);
         var unattributed = new QueueCounters(0, 0, 0, 0);
+        var unattributedWrapUps = 0;
 
         // Subscribed after the tracker, so the tracker has handled each domain event by the time it
         // arrives here, and the change read from the tracker is that event's change.
         using var scoring = manager.Events.Subscribe(evt =>
         {
+            // The queue tracker does not handle a wrap-up, so it moves no queue count. The change pending
+            // when it arrives belongs to the event that follows: a member's next connect closes the wrap-up
+            // of the member's previous call just before that call's CallConnectedEvent, and the caller's
+            // leave the tracker learned before it, with no event of its own, is the connected call's.
+            if (evt is CallWrapUpEvent wrapUp)
+            {
+                if (shapeBySessionId.TryGetValue(wrapUp.SessionId, out var wrapUpShape))
+                    scores[wrapUpShape.Id].RecordWrapUp(wrapUp);
+                else
+                    unattributedWrapUps++;
+                return;
+            }
+
             if (evt is CallStartedEvent started
                 && QueueShapes.Of(started.CallerIdNum, FirstChannel(manager.GetById(started.SessionId))) is { } startedShape
                 && shapeBySessionId.TryAdd(started.SessionId, startedShape)
@@ -240,6 +300,8 @@ internal static class AmiCaptureReplay
                 }
                 else if (string.Equals(evt.EventType, "QueueCallerAbandon", StringComparison.OrdinalIgnoreCase))
                     scores[callerShape.Id].AsteriskAbandons++;
+                else if (string.Equals(evt.EventType, "AgentComplete", StringComparison.OrdinalIgnoreCase))
+                    scores[callerShape.Id].AsteriskCompletes++;
             }
 
             dispatch?.Begin(frameShape?.Id, evt.EventType);
@@ -254,7 +316,13 @@ internal static class AmiCaptureReplay
             }
         }
 
-        return new QueueShapeReplay(Path.GetFileName(path), [.. QueueShapes.All.Select(s => scores[s.Id])], unattributed, swallowed);
+        if (clock is not null)
+            afterLastFrame?.Invoke(clock);
+
+        return new QueueShapeReplay(Path.GetFileName(path), [.. QueueShapes.All.Select(s => scores[s.Id])], unattributed, swallowed)
+        {
+            UnattributedWrapUps = unattributedWrapUps,
+        };
     }
 
     /// <summary>
@@ -341,18 +409,32 @@ internal static class AmiCaptureReplay
     /// (<see cref="ReloadableConnection"/>). An exception the observer throws is caught and recorded, as the
     /// dispatcher does.
     /// </remarks>
+    /// <param name="afterLastFrame">
+    /// Optional. Called with <paramref name="clock"/> once the call's last frame is delivered and before the
+    /// manager is disposed, so a caller that moves the clock there sees what fires before the result is read.
+    /// </param>
+    /// <param name="unseenEnding">
+    /// Optional, and only with no <paramref name="reloadWith"/>. Every live frame of the call from where it starts
+    /// to the call's last frame is withheld, and once the last frame is reached the replay reloads with an empty
+    /// <c>Status</c> and <c>QueueStatus</c>: the PBX between two calls of these captures, every channel of the call
+    /// gone. The reload, not a frame, ends the call. It runs before <paramref name="afterLastFrame"/>.
+    /// </param>
     public static async Task<QueueReloadReplay> ReplayQueueReloadAsync(string fixture, string callerNumber,
-        CapturedSnapshot? reloadWith, Outage? outage, ManualClock clock)
+        CapturedSnapshot? reloadWith, Outage? outage, ManualClock clock, Action<ManualClock>? afterLastFrame = null,
+        Outage? unseenEnding = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
         if (outage is not null && reloadWith is null)
             throw new ArgumentException("An outage ends at a reload; give the snapshot to reload with.", nameof(outage));
+        if (unseenEnding is not null && reloadWith is not null)
+            throw new ArgumentException("An unseen ending reloads after the last frame; it takes no snapshot.", nameof(unseenEnding));
 
         var frames = await ReadCaptureAsync(fixture);
         var call = CallWindow.Find(fixture, frames, callerNumber);
 
         var markerIndex = reloadWith is null ? -1 : call.MarkerOf(reloadWith);
         var withheldFrom = outage is null ? -1 : call.OutageStart(outage);
+        var endingWithheldFrom = unseenEnding is null ? -1 : call.OutageStart(unseenEnding);
         if (outage is not null && withheldFrom > markerIndex)
             throw new ArgumentException($"{fixture}: the outage starts after the snapshot it ends at.", nameof(outage));
 
@@ -375,6 +457,8 @@ internal static class AmiCaptureReplay
             var sessions = new List<CallSession>();
             var queued = new List<CallQueuedEvent>();
             var connected = new List<CallConnectedEvent>();
+            var wrapUps = new List<CallWrapUpEvent>();
+            var asteriskCompletes = 0;
             using var recording = manager.Events.Subscribe(evt =>
             {
                 switch (evt)
@@ -387,6 +471,9 @@ internal static class AmiCaptureReplay
                         break;
                     case CallConnectedEvent c:
                         connected.Add(c);
+                        break;
+                    case CallWrapUpEvent w:
+                        wrapUps.Add(w);
                         break;
                 }
             });
@@ -411,6 +498,15 @@ internal static class AmiCaptureReplay
                     continue;
                 if (withheldFrom >= 0 && i >= withheldFrom && i < markerIndex)
                     continue;
+                if (endingWithheldFrom >= 0 && i >= endingWithheldFrom)
+                    continue;
+
+                // app_queue's AgentComplete for the caller carries the caller's Uniqueid: one per answered member leg.
+                if (string.Equals(frame.EventType, "AgentComplete", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(frame.RawFields?.GetValueOrDefault("Uniqueid"), call.CallerUniqueId, StringComparison.Ordinal))
+                {
+                    asteriskCompletes++;
+                }
 
                 clock.MoveTo(InstantOf(frame));
                 dispatch.Begin(callerNumber, frame.EventType);
@@ -436,6 +532,14 @@ internal static class AmiCaptureReplay
                     swallowed.Add(new SwallowedObserverException(callerNumber, frame.EventType ?? "", thrown));
             }
 
+            if (endingWithheldFrom >= 0)
+            {
+                reloadInstant = clock.GetUtcNow();
+                await connection.ReloadAsync([], []);
+            }
+
+            afterLastFrame?.Invoke(clock);
+
             var counts = tracker.ActiveQueues.ToDictionary(
                 q => q.QueueName,
                 q => new QueueCounters(q.CallsOffered, q.CallsAnswered, q.CallsAbandoned, q.CallsWaiting),
@@ -446,7 +550,11 @@ internal static class AmiCaptureReplay
 
             return new QueueReloadReplay(fixture, callerNumber, counts, recordedWait, queued, connected,
                 [.. samples.All.Where(s => s.Shape == callerNumber).Select(s => s.Milliseconds)],
-                sessions, reloadInstant, entry, call.CallerQueueFrames(withheldFrom, markerIndex), swallowed);
+                sessions, reloadInstant, entry, call.CallerQueueFrames(withheldFrom, markerIndex), swallowed)
+            {
+                WrapUps = wrapUps,
+                DeliveredAsteriskCompletes = asteriskCompletes,
+            };
         }
         finally
         {
@@ -755,7 +863,22 @@ internal static class AmiCaptureReplay
 
         public CallSessionManager Manager { get; }
 
-        public static async Task<ReplayRig> StartAsync(SessionOptions options)
+        /// <summary>Starts a rig whose manager is built with its public constructor, on the system clock.</summary>
+        public static Task<ReplayRig> StartAsync(SessionOptions options) => StartOnAsync(options, clock: null);
+
+        /// <summary>
+        /// Starts a rig whose manager runs on <paramref name="clock"/>, through its internal constructor, with
+        /// <paramref name="wrapUpDurations"/> when one is given.
+        /// </summary>
+        public static Task<ReplayRig> StartAsync(SessionOptions options, TimeProvider clock,
+            IWrapUpDurationProvider? wrapUpDurations = null)
+        {
+            ArgumentNullException.ThrowIfNull(clock);
+            return StartOnAsync(options, clock, wrapUpDurations);
+        }
+
+        private static async Task<ReplayRig> StartOnAsync(SessionOptions options, TimeProvider? clock,
+            IWrapUpDurationProvider? wrapUpDurations = null)
         {
             var connection = Substitute.For<IAmiConnection>();
             connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
@@ -765,10 +888,17 @@ internal static class AmiCaptureReplay
                 .Returns(Substitute.For<IDisposable>());
 
             var server = new VerbaraServer(connection, NullLogger<VerbaraServer>.Instance);
-            var manager = new CallSessionManager(
-                Options.Create(options),
-                NullLogger<CallSessionManager>.Instance,
-                new InMemorySessionStore());
+            var manager = clock is null
+                ? new CallSessionManager(
+                    Options.Create(options),
+                    NullLogger<CallSessionManager>.Instance,
+                    new InMemorySessionStore())
+                : new CallSessionManager(
+                    Options.Create(options),
+                    NullLogger<CallSessionManager>.Instance,
+                    new InMemorySessionStore(),
+                    clock,
+                    wrapUpDurations);
             try
             {
                 manager.AttachToServer(server, "replay");
@@ -972,6 +1102,7 @@ internal sealed class QueueShapeScore(QueueShape shape)
     private readonly List<string?> _agentInterfacesAtConnected = [];
     private readonly List<string?> _asteriskConnectInterfaces = [];
     private readonly List<CallSession> _sessions = [];
+    private readonly List<CallWrapUpEvent> _wrapUps = [];
     private QueueCounters _tracker;
 
     public QueueShape Shape { get; } = shape;
@@ -981,6 +1112,15 @@ internal sealed class QueueShapeScore(QueueShape shape)
 
     /// <summary>app_queue's <c>QueueCallerAbandon</c> frames on the shape's caller channel.</summary>
     public int AsteriskAbandons { get; internal set; }
+
+    /// <summary>
+    /// app_queue's <c>AgentComplete</c> frames on the shape's caller channel: one per answered member leg, whose
+    /// <c>Uniqueid</c> is the caller's.
+    /// </summary>
+    public int AsteriskCompletes { get; internal set; }
+
+    /// <summary>The <see cref="CallWrapUpEvent"/>s the manager published for the shape's calls, in order.</summary>
+    public IReadOnlyList<CallWrapUpEvent> WrapUps => _wrapUps;
 
     /// <summary>
     /// The <c>Interface</c> header of each of app_queue's <c>AgentConnect</c> frames on the shape's caller channel,
@@ -1043,6 +1183,8 @@ internal sealed class QueueShapeScore(QueueShape shape)
 
     internal void RecordSession(CallSession session) => _sessions.Add(session);
 
+    internal void RecordWrapUp(CallWrapUpEvent evt) => _wrapUps.Add(evt);
+
     internal void RecordTrackerChange(QueueCounters change) => _tracker += change;
 
     public override string ToString()
@@ -1068,6 +1210,9 @@ internal sealed class QueueShapeReplay(
 
     /// <summary>Tracker changes made on the events of a call that belongs to no shape.</summary>
     public QueueCounters Unattributed { get; } = unattributed;
+
+    /// <summary>The <see cref="CallWrapUpEvent"/>s published for a call that belongs to no shape.</summary>
+    public int UnattributedWrapUps { get; init; }
 
     /// <summary>
     /// Every exception the server's observer threw, in delivery order. Its scenario is the shape id of
@@ -1215,6 +1360,12 @@ internal sealed class QueueReloadReplay(
 
     /// <summary>The <see cref="CallConnectedEvent"/>s the manager published, in order.</summary>
     public IReadOnlyList<CallConnectedEvent> Connected { get; } = connected;
+
+    /// <summary>The <see cref="CallWrapUpEvent"/>s the manager published, in order, up to the manager's disposal.</summary>
+    public IReadOnlyList<CallWrapUpEvent> WrapUps { get; init; } = [];
+
+    /// <summary>The caller's <c>AgentComplete</c> frames the replay delivered: one per answered member leg it saw end.</summary>
+    public int DeliveredAsteriskCompletes { get; init; }
 
     /// <summary>The <c>sessions.wait_time</c> samples recorded while the call's frames were delivered, in milliseconds.</summary>
     public IReadOnlyList<double> SamplesMs { get; } = samples;

@@ -51,6 +51,16 @@ public sealed class AgentManager
     /// </summary>
     internal event Action<string?, string?, string?>? QueueCallerConnected;
 
+    /// <summary>
+    /// Raised for every <c>AgentComplete</c>: app_queue reports that a member left the caller it connected,
+    /// because the member hung up, the caller did, or the member transferred the caller away. It is raised in
+    /// the same instant as the member leaves, while the caller's own channel is still up (a blind transfer to
+    /// another context included), so it marks where the member's after-call work starts. Like
+    /// <see cref="QueueCallerConnected"/> it fires whether or not the member is an agent this manager knows by
+    /// name, and it carries the caller's <c>Uniqueid</c> to key the call by.
+    /// </summary>
+    internal event Action<QueueCallerCompletion>? QueueCallerCompleted;
+
     public AgentManager(ILogger logger) => _logger = logger;
 
     public IEnumerable<AsteriskAgent> Agents => _agents.Values;
@@ -124,6 +134,13 @@ public sealed class AgentManager
     /// </summary>
     internal void OnQueueCallerConnected(string? callerUniqueId, string? memberName, string? memberInterface) =>
         QueueCallerConnected?.Invoke(callerUniqueId, memberName, memberInterface);
+
+    /// <summary>
+    /// Raise <see cref="QueueCallerCompleted"/> for an <c>AgentComplete</c>. The server calls it after
+    /// <see cref="OnAgentComplete"/>, so a known agent's state handlers run first, as they always did.
+    /// </summary>
+    internal void OnQueueCallerCompleted(QueueCallerCompletion completion) =>
+        QueueCallerCompleted?.Invoke(completion);
 
     /// <summary>Handle AgentComplete event (agent finished a queue call).</summary>
     public void OnAgentComplete(string agentId, long talkTimeSecs = 0, long holdTimeSecs = 0)
@@ -236,3 +253,13 @@ public sealed class AsteriskAgent : LiveObjectBase
 
 /// <summary>Agent state.</summary>
 public enum AgentState { Unknown, LoggedOff, Available, OnCall, Paused }
+
+/// <summary>
+/// One <c>AgentComplete</c> as <see cref="AgentManager.QueueCallerCompleted"/> delivers it: the caller's channel
+/// (<c>Uniqueid</c>), the call's <c>Linkedid</c>, the member's <c>Interface</c>, the talk time app_queue
+/// reports in whole seconds, and the frame's <c>Queue</c> header — the queue whose member finished, which can differ
+/// from the last queue the caller joined; <see langword="null"/> when the frame carries none. Asterisk spells the
+/// header <c>Linkedid</c>; AMI field names match without regard to case.
+/// </summary>
+internal readonly record struct QueueCallerCompletion(
+    string? CallerUniqueId, string? LinkedId, string? MemberInterface, long TalkTimeSeconds, string? Queue);

@@ -4,11 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed — BREAKING: types of dead Asterisk modules are deprecated with `VSDK0005` (#436)
+### Added: each queue can set its own wrap-up length (#449)
 
-Forty-four types and one member are now `[Obsolete]` with diagnostic id `VSDK0005`, as a warning, never an error.
+A host whose queues do not share one wrap-up length registers an `IWrapUpDurationProvider` (one singleton in the
+service container; a host that builds `CallSessionManager` itself passes it to the new constructor). The session
+manager asks it, with the id the server was attached under and the queue named by the member's `AgentComplete`, each
+time that `AgentComplete` opens a wrap-up, and runs the wrap-up for the length it returns.
+`SessionOptions.WrapUpDuration` stays the fallback, for a `null` answer, and the value of a wrap-up opened by the
+call's end, which never asks the provider. An answer it cannot use (negative, above 4,294,967,294 ms, or an
+exception) falls back to `WrapUpDuration` with a Warning; an answer above `CompletedRetention` is used and reported at
+Warning; a provider that takes over a second to answer is reported, and a wrap-up never reports more than the
+duration that applied to it. Each Warning is logged once per server, queue and kind. The provider runs on the AMI
+event thread and must answer from memory. A host that registers no provider sees no change beyond the lines added
+under the `CallWrapUpEvent` entry.
+
+### Added: one migration guide for 2.9.0 (#446)
+
+[`docs/guides/migration-2.9.0.md`](docs/guides/migration-2.9.0.md) has one section per breaking entry of 2.9.0,
+ordered by package, each saying what changed, who it reaches and what to do, with code where a change is needed and
+a link to the longer guide where one exists. Its C# snippets are compiled by the documentation snippet tests.
+
+### Added: an AMI capture on a new Asterisk build is one command (#445)
+
+`scripts/capture-ami-recording.py` starts one throwaway Asterisk from an image pinned by digest, drives a fixed
+workload through a raw TCP tap, and writes a reduced recording under `Recordings/` with a provenance sidecar. The
+recording names its build in its own bytes (a first `UserEvent: CaptureProvenance` with `asterisk -V` and the image
+reference), and markers attribute every frame to its step. The driver refuses an image whose id is not the digest it
+was given. The reduction keeps whole frames byte-exact, fills UUIDs and addresses, and refuses a file over 256 KiB,
+one that still holds the run's manager secret, or one the recording redaction check rejects; the same tap always
+reduces to the same bytes. Its tests run in the always-run `Coverage Script Tests` job. No package changes.
+
+### Changed — BREAKING: types of dead Asterisk modules are deprecated with `VSDK0005` (#436, #439)
+
+Forty-nine types and one member are now `[Obsolete]` with diagnostic id `VSDK0005`, as a warning, never an error.
 Each reaches only an Asterisk module that is gone or deprecated upstream, a module its publisher discontinued, or a
-wire name Asterisk renamed or removed in version 12:
+wire name Asterisk renamed or removed in version 10 or 12:
 
 - **chan_sip** (removed in Asterisk 21): `SipPeersAction`, `SipShowPeerAction`, `SipShowRegistryAction`,
   `SipNotifyAction`, `SipShowPeerResponse`, `ChannelReloadEvent`.
@@ -22,8 +52,9 @@ wire name Asterisk renamed or removed in version 12:
 - **Zaptel action names** (renamed `DAHDI*` in Asterisk 1.6): the seven `Zap*` actions.
 - **chan_agent and app_setcdruserfield**: `AgentCallbackLoginAction`, `AgentCallbackLoginEvent`,
   `AgentCallbackLogoffEvent`, `SetCdrUserFieldAction`.
-- **Event names Asterisk 12 renamed or removed**: `QueueMemberPausedEvent`, `MusicOnHoldEvent`, `FaxReceivedEvent`,
-  `DtmfEvent`, `TransferEvent`, `ChannelUpdateEvent`, `JabberEventEvent`.
+- **Event names Asterisk 10 or 12 renamed or removed**: `QueueMemberPausedEvent`, `MusicOnHoldEvent`,
+  `FaxReceivedEvent`, `DtmfEvent`, `TransferEvent`, `ChannelUpdateEvent`, `JabberEventEvent`, `AgiExecEvent`,
+  `AsyncAgiEvent`, `SendFaxStatusEvent`, `BridgeExecEvent`, `ModuleLoadReportEvent`.
 
 Nothing changes at run time: every marked action is still sent, every marked response and event is still parsed,
 and each wire name maps to the same type as in 2.8.0. Only the compiler output changes. A consumer that builds with
@@ -52,7 +83,7 @@ opened and one closed stream.
 `audio.buffer.underruns` describes a write pump the SDK does not have: audio goes out when the caller writes it,
 so nothing ever recorded it. The field is now `[Obsolete]` with diagnostic id `VSDK0003`. A consumer that builds
 with `TreatWarningsAsErrors` and reads the field by symbol gets `error VSDK0003`, and can silence exactly this
-with `<NoWarn>VSDK0003</NoWarn>`. Nothing is removed: the instrument is still published on the meter, so an
+with `<NoWarn>$(NoWarn);VSDK0003</NoWarn>`. Nothing is removed: the instrument is still published on the meter, so an
 exporter that subscribes by meter name is unaffected, and a binary built against an earlier release that reads the field still runs (checked against 2.6.0).
 
 ### Added: an `audio.transport` tag on every audio meter measurement (#435)
@@ -81,6 +112,15 @@ as before.
 Raised once, after the change, when a participant's `Muted` or `Talking` changes. A repeated value, a join and an
 event for a participant that is not held raise nothing.
 
+### Fixed: a server releases its instruments when its ARI client throws on disposal (#441)
+
+`VerbaraServer.DisposeAsync` disposed the ARI client set through `SetAriClient` before the server's own meter, with
+nothing around it, so an ARI client that threw on disposal left the meter undisposed and its eight instruments
+published for every listener, including when the pool removed the server. The subscription, the ARI client and the
+meter are now each released in their own attempt, in that order. A single failure is rethrown unchanged; several are
+thrown together as one `AggregateException`, in release order. A `MeterListener` whose completion callback throws is
+one of the failures that can surface there.
+
 ### Fixed — BREAKING: a conference counts every caller (#433)
 
 `VerbaraServer.MeetMe` keyed each ConfBridge participant by user number, and `ConfbridgeJoin` carries none, so
@@ -93,9 +133,19 @@ the join's `Uniqueid` as data. Two public members change shape: `MeetMeRoom.User
 `ConcurrentDictionary<string, MeetMeUser>` keyed by channel, and `MeetMeManager.OnUserLeft` takes
 `(string roomNumber, string channel)`. Code that names either must be recompiled; a binary built against 2.8.0
 fails with `MissingMethodException` when it calls one. Added: `MeetMeManager.OnUserJoined` with a `uniqueId`
-argument and `MeetMeManager.OnConferenceEnded`. `UserNum` stays 0 for ConfBridge, and `Muted`/`Talking` are
-still not set. Before/after code is in
+argument and `MeetMeManager.OnConferenceEnded`. `UserNum` stays 0 for ConfBridge (`Muted` and `Talking` are set since #434).
+Before/after code is in
 [the migration guide](docs/guides/conference-participants-migration.md).
+
+### Fixed: the guides say which AMI classes the SDK's user needs, and that an older Asterisk can hold an event (#447)
+
+`docs/guides/troubleshooting.md` taught `write = all`. It now lists the read and write classes each SDK feature
+needs, measured on Asterisk 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, and says that no AMI account is read-only: 21
+actions have no class, and eight of them change the server's state. A user without `reporting` gets each conference
+listing of a reload refused, and Asterisk raises a `RequestNotAllowed` security event for each. The compatibility
+guide and the XML docs of `AmiConnectionOptions.HeartbeatInterval` say that Asterisk before 20.21.0, 22.11.0 and
+23.5.0 can hold an event for a session until that session next writes; the heartbeat releases it, so on a quiet
+session the delay is at most `HeartbeatInterval` (30 s by default). No behaviour or default changes.
 
 ### Changed — BREAKING: the obsolete AMI event types, `LegacyEventAdapter` and `DeepgramVoices.Helios` are removed (#432)
 
@@ -120,6 +170,33 @@ and a recipe for an Asterisk that still sends one of these events are in
 so `PeerEntryEvent` stays and loses its `[Obsolete]` mark. A `#pragma warning disable CS0618` kept around it can be
 removed.
 
+### Changed — BREAKING: `CallWrapUpEvent` is raised, and `SessionOptions.WrapUpDuration` is applied (#443)
+
+Since 1.7.0 nothing raised `CallWrapUpEvent`, so an agent's wrap-up was never opened, timed or closed. The session
+manager now raises one `CallWrapUpEvent` per agent leg. A queue call's wrap-up opens at the member's `AgentComplete`,
+which Asterisk sends before the caller hangs up, also after a blind transfer. A named agent's call outside any queue
+opens it when the call ends. It closes when `WrapUpDuration` passes, at the agent's next connect, or when its next
+leg ends, and the event carries the time measured. `AgentSessionTracker` leaves `WrapUp` when the wrap-up closes, so
+`TotalWrapUpTime`, `AvgHandleTime` and `IdleTime` (now counted from the end of the wrap-up) change accordingly. A
+call whose ending only a reconnect's reload saw opens no wrap-up and leaves the agent `Idle`. When one call visits
+two named agents, the call now ends for both of them (before, the second stayed `OnCall`), and each counts the call
+and adds the call's whole talk and hold time, because the ending carries no per-agent time. Set `WrapUpDuration` to
+the queue's `wrapuptime`: the SDK cannot read that value from Asterisk. Zero closes the wrap-up at once.
+
+**Newly rejected at start** (`OptionsValidationException` naming `WrapUpDuration`): a negative duration, a duration
+above 4,294,967,294 ms (about 49.7 days), and `Timeout.InfiniteTimeSpan`. There is no "never ends".
+
+**Migration:** zero is the nearest equivalent of the old behaviour for the counters (no wrap-up time is added), not
+for the state: the agent is `Idle` at once, where before it stayed `WrapUp` until its next call. A
+`WrapUpDuration` longer than `CompletedRetention` can deliver the event after the call is released.
+
+**Changed (#449):** an `AgentComplete` that names a queue now opens the member's wrap-up even when the SDK did not see
+the caller join that queue (for example, a call answered while the AMI connection was down), so such a call's
+`CallWrapUpEvent` can precede its `CallEndedEvent`, and a member not known by name now gets a wrap-up for it at all;
+the call's end opens one only when no such `AgentComplete` was reported. `CallWrapUpEvent.QueueName` is the queue the
+`AgentComplete` names, else the call's, so a transferred call's wrap-up is booked to the queue whose member finished
+it.
+
 ### Changed: a subscriber of the session events that throws no longer silences the others (#431)
 
 An exception thrown by a subscriber of `ICallSessionManager.Events` or `IAgentSessionTracker.StateChanges` used to
@@ -133,6 +210,16 @@ subscriber. These failures no longer appear as `[AMI_EVENT] Observer threw on <E
 `ami.events.observer_faults`. A subscriber subscribed directly stays subscribed; one composed through an operator
 (`Where`, `Select`, `OfType`, …) is still ended by that operator on its first failure, so subscribe directly and filter
 inside the handler. What a subscriber throws on another thread is not caught. The public API is unchanged.
+
+### Fixed — BREAKING: an attended transfer Asterisk refuses ends `Failed` (#440)
+
+`AttendedTransferActivity` discarded the answer to its `Atxfer` action, so a transfer Asterisk refused with
+`Response: Error` (for example `Channel specified does not exist`, or `No attended transfer feature code found` on a
+server whose `features.conf` sets no `atxfer` code) ended `Completed`. It now ends `Failed`, and `StartAsync` throws
+`ActivityFailedException` carrying Asterisk's message. `Completed` still means only that Asterisk accepted and queued
+the transfer, not that it finished; the outcome arrives as an `AttendedTransferEvent`. Code that awaited
+`StartAsync` and branched on `Status` now gets an exception for a refusal; the
+[activity ending guide](docs/guides/activity-ending-migration.md) shows the catch.
 
 ### Fixed: `SendFlashAction` reaches Asterisk (#430)
 
@@ -157,8 +244,8 @@ reads `null`, as the numeric members already did; no supported Asterisk sends on
 member `null`. Members whose wire is already `0`/`1` or `true`/`false` (queue member `Paused` and `Ringinuse`,
 `MailboxStatusResponse.Waiting`, the PJSIP endpoint booleans, `ShutdownEvent.Restart`) read as before. On an
 Asterisk 20 built with chan_sip, the 5 Y/N members of `SipShowPeerResponse` and 4 `PeerEntryEvent` members
-(`ForceRport`, `VideoSupport`, `TextSupport`, `Acl`) also change reading. `PeerEntryEvent` is still marked obsolete
-in this release until the obsolete-member removal lands; its `Dynamic` and `Trunk` readings are fixed regardless. A
+(`ForceRport`, `VideoSupport`, `TextSupport`, `Acl`) also change reading. `PeerEntryEvent` is not obsolete
+(see its entry above); its `Dynamic` and `Trunk` readings are fixed. A
 consumer that branched on `false` for one of these members now takes the other branch.
 
 ### Added: `AmiBoolean.Parse` reads a yes/no value the way Asterisk writes it (#424)
@@ -423,7 +510,7 @@ stop ended (a hangup frame, the token not cancelled) is still `completed`, and o
 `failed`. The cancellation is still not rethrown, so code that awaits `HandleSessionAsync` sees no change. Labelled
 breaking because a published number changes meaning; no public API signature changes.
 
-**Migration guide:** [`docs/guides/voice-session-ending-migration.md`](docs/guides/voice-session-ending-migration.md#cancelled-sessions-tagged-latency-and-the-servers-stop-290)
+**Migration guide:** [`docs/guides/voice-session-ending-migration.md`](docs/guides/voice-session-ending-migration.md#cancelled-sessions-tagged-latency-the-servers-stop-and-the-realtime-health-entry-290)
 
 ### Changed: the latency sample of a cancelled turn carries `voiceai.ending` (#415)
 

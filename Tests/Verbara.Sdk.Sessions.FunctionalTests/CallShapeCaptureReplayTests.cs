@@ -127,7 +127,9 @@ public sealed class CallShapeCaptureReplayTests
     [MemberData(nameof(CallShapeCaptures))]
     public async Task QueuedDialedAndUnansweredCalls_ShouldKeepTheirFlowAndTheirEvents_WhenACallShapeCaptureIsReplayed(string fixture)
     {
-        var replay = await AmiCaptureReplay.ReplayAsync(fixture);
+        // On a clock the replay never moves, so no wrap-up closes on its own while the frames play, however fast
+        // or slow the machine: S6's closes only at S10's connect, which is what the S6 row below pins.
+        var replay = await AmiCaptureReplay.ReplayAsync(fixture, clock: new ManualClock(DateTimeOffset.UtcNow));
         using var scope = new AssertionScope();
         scope.AddReportable("replay", replay.Describe());
 
@@ -245,6 +247,9 @@ public sealed class CallShapeCaptureReplayTests
     /// <summary>
     /// The kinds of domain event each scenario published on <c>9866b2ef</c>, identical on the three captures.
     /// The calls answered with no dial or queue keep theirs too: nothing is published at their answer.
+    /// S6 now ends with the wrap-up of its member, <c>Local/600@n5-agents/n</c>: S6's <c>AgentComplete</c>
+    /// opens it and S10's connect of the same member closes it, after S6's <see cref="CallEndedEvent"/>. S10's own
+    /// wrap-up opens at its <c>AgentComplete</c> and is still open when the replay ends, so S10 keeps four kinds.
     /// </summary>
     private static readonly (string Scenario, string[] Kinds)[] DomainEventKindsToday =
     [
@@ -254,7 +259,7 @@ public sealed class CallShapeCaptureReplayTests
         ("S4", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
         ("S5", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
         ("S8", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
-        ("S6", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallConnectedEvent), nameof(CallEndedEvent)]),
+        ("S6", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallConnectedEvent), nameof(CallEndedEvent), nameof(CallWrapUpEvent)]),
         ("S7", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallEndedEvent)]),
         ("S9", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
         ("S10", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallConnectedEvent), nameof(CallEndedEvent)]),

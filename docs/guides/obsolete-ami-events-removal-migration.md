@@ -18,7 +18,7 @@ can reach:
 longer `[Obsolete]`.
 A `#pragma warning disable CS0618` you kept around it can go.
 
-2.9.0 also **deprecates**, without removing, 44 types and one member that only a dead Asterisk module
+2.9.0 also **deprecates**, without removing, 49 types and one member that only a dead Asterisk module
 or a renamed wire name can reach. They compile with the `VSDK0005` warning and are removed in 2.10.0;
 see [VSDK0005](#vsdk0005).
 
@@ -195,9 +195,9 @@ built against an earlier version keeps working; only the next compile fails, wit
 
 Deprecated in 2.9.0, removed in 2.10.0.
 
-These 44 types and one member stay in 2.9.0, marked `[Obsolete]` with the diagnostic id `VSDK0005`.
+These 49 types and one member stay in 2.9.0, marked `[Obsolete]` with the diagnostic id `VSDK0005`.
 Each one reaches only an Asterisk module that is gone or deprecated upstream, a module whose publisher
-discontinued it, or a wire name Asterisk renamed or removed in version 12. Naming one in your code
+discontinued it, or a wire name Asterisk renamed or removed in version 10 or 12. Naming one in your code
 reports the `VSDK0005` **warning**, never an error; the warning's message says what to use instead.
 
 **Nothing changes at run time.** Every marked action still serializes and is sent as before, every
@@ -307,10 +307,10 @@ is not loaded in the pinned images, so none of these replacements is measured.
 | `AgentCallbackLogoffEvent` | `AgentCallbackLogoff`: not sent since Asterisk 11 | `AgentLogoffEvent` |
 | `SetCdrUserFieldAction` | `SetCDRUserField`: app_setcdruserfield, removed in Asterisk 1.6 | `SetVarAction` with `CDR(userfield)` |
 
-### Event names Asterisk 12 renamed or removed
+### Event names Asterisk 10 and 12 renamed or removed
 
-The modules behind these events are alive; Asterisk 12 sends the event under another name, or no
-longer sends it. A handler written against the old type never fires on a supported Asterisk.
+The modules behind these events are alive; since Asterisk 10 or 12 they send the event under another
+name, or no longer send it. A handler written against the old type never fires on a supported Asterisk.
 
 | Symbol | Module or wire-name status | Use instead |
 |---|---|---|
@@ -321,6 +321,11 @@ longer sends it. A handler written against the old type never fires on a support
 | `TransferEvent` | `Transfer`: replaced by `BlindTransfer` and `AttendedTransfer` in Asterisk 12 | `BlindTransferEvent`, `AttendedTransferEvent` |
 | `ChannelUpdateEvent` | `ChannelUpdate`: removed in Asterisk 12 | none |
 | `JabberEventEvent` | `JabberEvent`: removed in Asterisk 12 | none |
+| `AgiExecEvent` | `AGIExec`: split into `AGIExecStart` and `AGIExecEnd` in Asterisk 12 | `AgiExecStartEvent`, `AgiExecEndEvent` |
+| `AsyncAgiEvent` | `AsyncAGI`: split into `AsyncAGIStart`, `AsyncAGIExec` and `AsyncAGIEnd` in Asterisk 12 | `AsyncAgiStartEvent`, `AsyncAgiExecEvent`, `AsyncAgiEndEvent` |
+| `SendFaxStatusEvent` | `SendFAXStatus`: consolidated into `FAXStatus` in Asterisk 10 | `FaxStatusEvent` |
+| `BridgeExecEvent` | `BridgeExec`: removed in Asterisk 12; `BridgeCreate`, `BridgeEnter` and `BridgeLeave` carry what it reported | `BridgeCreateEvent`, `BridgeEnterEvent`, `BridgeLeaveEvent` |
+| `ModuleLoadReportEvent` | `ModuleLoadReport`: removed in Asterisk 12 | none |
 
 `QueueMemberPausedEvent` and `QueueMemberPauseEvent` are two types: the live `QueueMemberPause` still
 parses as `QueueMemberPauseEvent`, which is not deprecated.

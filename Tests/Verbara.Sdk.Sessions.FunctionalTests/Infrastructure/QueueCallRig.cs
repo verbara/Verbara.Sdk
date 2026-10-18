@@ -66,13 +66,18 @@ internal sealed class QueueCallRig : IAsyncDisposable
     /// Optional. The manager's session store; a fresh <see cref="InMemorySessionStore"/> when omitted. A test that
     /// reads what the manager saved passes a <see cref="RecordingSessionStore"/>.
     /// </param>
-    public static async Task<QueueCallRig> StartAsync(TimeProvider? clock = null, SessionStoreBase? store = null)
+    /// <param name="wrapUpDurations">
+    /// Optional. The wrap-up duration provider the manager is given through its internal constructor; none when
+    /// omitted.
+    /// </param>
+    public static async Task<QueueCallRig> StartAsync(TimeProvider? clock = null, SessionStoreBase? store = null,
+        IWrapUpDurationProvider? wrapUpDurations = null)
     {
         var connection = new ReloadableConnection();
         var options = Options.Create(new SessionOptions());
         var server = new VerbaraServer(connection.Connection, connection.ServerLogger);
         var manager = new CallSessionManager(options, NullLogger<CallSessionManager>.Instance, store ?? new InMemorySessionStore(),
-            clock ?? TimeProvider.System);
+            clock ?? TimeProvider.System, wrapUpDurations);
         var tracker = new QueueSessionTracker(manager, options);
         try
         {

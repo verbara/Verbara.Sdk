@@ -200,6 +200,14 @@ public sealed class CallSession
     /// <inheritdoc cref="QueueVisitCallerUniqueId"/>
     internal string? QueueVisitCallerChannel { get; set; }
 
+    /// <summary>
+    /// The legs of this call that an agent or a queue member took and that the manager still counts as connected
+    /// for that agent's or member's wrap-up, or <see langword="null"/> when there are none. A leg leaves the list
+    /// when its end is handled: the member's <c>AgentComplete</c>, or the call's ending. Read and written only under
+    /// <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal List<Manager.WrapUpLeg>? ConnectedAgentLegs { get; set; }
+
     // State transitions (internal — only CallSessionManager drives transitions)
     internal bool TryTransition(CallSessionState newState)
     {

@@ -137,7 +137,7 @@ What this means for code you may have written:
   registration. With `AddAudioSocketServer` called first, as the package READMEs show, the broker stops first and
   ends every call with a hangup frame. Before 2.9.0 a server stopped first, or concurrently
   (`HostOptions.ServicesStopConcurrently`), closed the sessions without a frame; from 2.9.0 its own stop ends each
-  live session with one hangup frame too ([below](#cancelled-sessions-tagged-latency-and-the-servers-stop-290)). `AddOpenAiRealtimeBridge` still
+  live session with one hangup frame too ([below](#cancelled-sessions-tagged-latency-the-servers-stop-and-the-realtime-health-entry-290)). `AddOpenAiRealtimeBridge` still
   requires the server to be registered first.
 
 The broker is not restartable, as before. A `StartAsync` after a stop subscribes nothing. A `StartAsync` after
@@ -225,7 +225,7 @@ old tts.syntheses.completed = tts.syntheses.completed
 ```
 
 `stt.transcriptions.completed` and every `failed` counter keep their meaning. The latency histograms,
-`tts.syntheses.silent` and `SynthesisEndedEvent` are unchanged here (2.9.0 tags cancelled turns' latency: [below](#cancelled-sessions-tagged-latency-and-the-servers-stop-290)).
+`tts.syntheses.silent` and `SynthesisEndedEvent` are unchanged here (2.9.0 tags cancelled turns' latency: [below](#cancelled-sessions-tagged-latency-the-servers-stop-and-the-realtime-health-entry-290)).
 
 ## The Realtime bridge
 
