@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Reflection;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -20,8 +19,7 @@ namespace Verbara.Sdk.Live.Tests.Server;
 /// The frame is copied from a capture taken on Asterisk 22.9.0 (<c>queue-shapes-asterisk-22.9.0.raw</c> in the
 /// session functional tests' recordings): every header, in Asterisk's order, as the connection hands it over in
 /// <see cref="ManagerEvent.RawFields"/>. The frame with no <c>Queue</c> line is synthetic; none of the recorded
-/// <c>AgentComplete</c> frames lacks it. The queue is read by its member name, <c>Queue</c>, so the case compiles
-/// before the member exists and fails on its assertion.
+/// <c>AgentComplete</c> frames lacks it.
 /// </remarks>
 [SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
 public sealed class VerbaraServerQueueCallerCompletedTests : IAsyncLifetime
@@ -122,17 +120,12 @@ public sealed class VerbaraServerQueueCallerCompletedTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// The completion as the case compares it. The queue is read through its member, <c>Queue</c>; a completion
-    /// with no such member reads as <c>(no Queue member)</c>.
+    /// The completion as the case compares it; a completion with no queue reads as <c>(null)</c>.
     /// </summary>
-    private static string Describe(QueueCallerCompletion completion)
-    {
-        var member = typeof(QueueCallerCompletion).GetProperty("Queue", BindingFlags.Instance | BindingFlags.Public);
-        var queue = member is null ? "(no Queue member)" : (string?)member.GetValue(completion) ?? "(null)";
-        return string.Create(CultureInfo.InvariantCulture,
+    private static string Describe(QueueCallerCompletion completion) =>
+        string.Create(CultureInfo.InvariantCulture,
             $"caller={completion.CallerUniqueId} linkedid={completion.LinkedId} member={completion.MemberInterface} "
-            + $"talk={completion.TalkTimeSeconds} queue={queue}");
-    }
+            + $"talk={completion.TalkTimeSeconds} queue={completion.Queue ?? "(null)"}");
 
     /// <summary>
     /// The typed <see cref="AgentCompleteEvent"/> the connection would hand over for <paramref name="text"/>: every
