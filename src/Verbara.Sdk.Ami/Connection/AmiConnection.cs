@@ -199,8 +199,9 @@ public sealed class AmiConnection : IAmiConnection
         public AmiEventLossMark LossMark { get; } = lossMark;
     }
 
-    // True when the current execution context runs inside a dispatch that has not returned yet.
-    private bool InDispatch => _dispatchFrame.Value is { Finished: false };
+    // True when the current execution context runs inside a dispatch that has not returned yet. Also read by
+    // Verbara.Sdk.Live: a reconciliation called from inside a dispatch cannot wait for the pump that is running it.
+    internal bool InDispatch => _dispatchFrame.Value is { Finished: false };
 
     // Completed when the caller ends the connection from inside its own event dispatch. That dispatch is the
     // pump's consumer, and the reconnect loop's release may be waiting on it, so from then on no ending waits on
@@ -1184,12 +1185,28 @@ public sealed class AmiConnection : IAmiConnection
             cancellationToken);
 
     /// <summary>
+    /// <see cref="SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome, CancellationToken)"/> that also
+    /// writes to <paramref name="mark"/> where the sequence ended in the session's event stream: the pump that numbered
+    /// its completing event (a list's <c>…Complete</c>, or an originate's <c>OriginateResponse</c>) and that event's
+    /// ordinal. The mark is written once the sequence has ended on its own, before the enumeration ends; a refused action,
+    /// or one whose session ended first, leaves it empty. Called by Verbara.Sdk.Live's load, which waits on the mark for
+    /// the pump to dispatch every event received before the list completed.
+    /// </summary>
+    internal IAsyncEnumerable<ManagerEvent> SendEventGeneratingActionAsync(
+        ManagerAction action, EventActionOutcome? outcome, ListSnapshotMark mark,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(mark);
+        return SendEventGeneratingCoreAsync(action, outcome, _options.DefaultEventTimeout, cancellationToken, mark);
+    }
+
+    /// <summary>
     /// Sends <paramref name="action"/> and yields the events its sequence carries, the wait bounded by
     /// <paramref name="eventTimeout"/> (<see cref="TimeSpan.Zero"/> or less: no bound).
     /// </summary>
     private async IAsyncEnumerable<ManagerEvent> SendEventGeneratingCoreAsync(
         ManagerAction action, EventActionOutcome? outcome, TimeSpan eventTimeout,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken, ListSnapshotMark? mark = null)
     {
         EnsureConnected();
 
@@ -1230,6 +1247,12 @@ public sealed class AmiConnection : IAmiConnection
                 outcome.Rejection = collector.Rejection;
                 outcome.SessionEnded = collector.SessionEnded;
                 outcome.Reported = true;
+            }
+
+            if (mark is not null && collector.CompletePump is { } completePump)
+            {
+                mark.Pump = completePump;
+                mark.CompleteOrdinal = collector.CompleteOrdinal;
             }
 
             activity?.SetTag("ami.event_count", eventCount);
@@ -1417,6 +1440,12 @@ public sealed class AmiConnection : IAmiConnection
                     // Use source-generated deserializer for typed events
                     var evt = GeneratedEventDeserializer.Deserialize(msg);
 
+                    // The ordinal this event carries in the session's pump, of which this loop is the one writer. It is
+                    // read before a collector is told that its action completed, so that the action's caller can wait
+                    // for the pump to dispatch every event received up to the completing one.
+                    var pump = _eventPump;
+                    var ordinal = pump?.NextOrdinal ?? 0;
+
                     // Check if this event belongs to an event-generating action
                     var actionId = msg.ActionId;
                     if (actionId is not null && _pendingEventActions.TryGetValue(actionId, out var collector))
@@ -1425,6 +1454,7 @@ public sealed class AmiConnection : IAmiConnection
                         if (eventName.EndsWith("Complete", StringComparison.OrdinalIgnoreCase))
                         {
                             // A list's "…Complete" event marks its end and is not part of it.
+                            collector.RecordCompleteOrdinal(pump, ordinal);
                             collector.Complete();
                             _pendingEventActions.TryRemove(actionId, out _);
                         }
@@ -1433,6 +1463,7 @@ public sealed class AmiConnection : IAmiConnection
                             // An async Originate gets exactly one OriginateResponse, and it is the sequence's payload:
                             // yield it, then end, rather than leave the caller to wait for DefaultEventTimeout.
                             collector.Add(evt);
+                            collector.RecordCompleteOrdinal(pump, ordinal);
                             collector.Complete();
                             _pendingEventActions.TryRemove(actionId, out _);
                         }
@@ -1442,7 +1473,7 @@ public sealed class AmiConnection : IAmiConnection
                         }
                     }
 
-                    _eventPump?.TryEnqueue(evt);
+                    pump?.TryEnqueue(evt);
                 }
             }
         }
@@ -2279,6 +2310,25 @@ internal sealed class ResponseEventCollector
     // 1 once the collector has ended, whichever way came first.
     private int _ended;
 
+    /// <summary>The pump that numbered the event that completed the action; <see langword="null"/> until then.</summary>
+    public AsyncEventPump? CompletePump { get; private set; }
+
+    /// <summary>The ordinal of the event that completed the action, in <see cref="CompletePump"/>; 0 until then.</summary>
+    public long CompleteOrdinal { get; private set; }
+
+    /// <summary>
+    /// Records the completing event's pump and ordinal. Written by the reader loop before <see cref="Complete"/>, so a
+    /// reader that sees the collector end sees them; ignored once the collector has ended another way.
+    /// </summary>
+    public void RecordCompleteOrdinal(AsyncEventPump? pump, long ordinal)
+    {
+        if (Volatile.Read(ref _ended) != 0)
+            return;
+
+        CompletePump = pump;
+        CompleteOrdinal = ordinal;
+    }
+
     /// <summary>The refusal's <c>Message</c> (empty when it had none), or <see langword="null"/> when not refused.</summary>
     public string? Rejection { get; private set; }
 
@@ -2319,4 +2369,30 @@ internal sealed class ResponseEventCollector
 
     public IAsyncEnumerable<ManagerEvent> ReadAllAsync(CancellationToken ct = default) =>
         _channel.Reader.ReadAllAsync(ct);
+}
+
+/// <summary>
+/// Where an action's sequence ended in its session's event stream: the pump that numbered the completing event (a list's
+/// <c>…Complete</c>, or an originate's <c>OriginateResponse</c>) and that event's ordinal. Filled by
+/// <see cref="AmiConnection"/> once the sequence has ended on its own; read by Verbara.Sdk.Live to wait for the pump to
+/// dispatch every event received before the list completed.
+/// </summary>
+internal sealed class ListSnapshotMark
+{
+    /// <summary>The pump of the session that delivered the completing event; <see langword="null"/> when none arrived.</summary>
+    public AsyncEventPump? Pump { get; set; }
+
+    /// <summary>The completing event's ordinal in <see cref="Pump"/>; 0 when none arrived.</summary>
+    public long CompleteOrdinal { get; set; }
+
+    /// <summary>
+    /// Waits until <see cref="Pump"/> has dispatched or dropped every event numbered up to <see cref="CompleteOrdinal"/>,
+    /// for at most <paramref name="bound"/> on <paramref name="clock"/>. An empty mark (the sequence did not complete) is
+    /// <see cref="DispatchBarrierOutcome.Reached"/> at once: there is nothing to wait for.
+    /// </summary>
+    public ValueTask<DispatchBarrierOutcome> WaitDispatchedThroughAsync(
+        TimeSpan bound, TimeProvider clock, CancellationToken cancellationToken = default) =>
+        Pump is { } pump && CompleteOrdinal > 0
+            ? pump.WaitDispatchedThroughAsync(CompleteOrdinal, bound, clock, cancellationToken)
+            : ValueTask.FromResult(DispatchBarrierOutcome.Reached);
 }
