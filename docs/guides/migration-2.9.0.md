@@ -1,16 +1,15 @@
 # Upgrading from 2.8.0 to 2.9.0
 
-Required by the release cadence: a minor that carries a breaking change ships a migration guide. This is the
-one guide for 2.9.0. It has one section per breaking entry of the release, says who each one reaches and what to
-do, and links to the longer guide where one exists. The [CHANGELOG](../../CHANGELOG.md) has the full entry for each.
+This is the one migration guide for 2.9.0. It has one section per breaking entry of the release, says who each
+one reaches and what to do, and links to the longer guide where one exists. The [CHANGELOG](../../CHANGELOG.md) has the full entry for each.
 
 ## Before you start: move every package at once
 
 Every `Verbara.Sdk.*` package moves to 2.9.0 together. Do not mix versions: `Verbara.Sdk.Live` 2.8.0 names two
 of the AMI event types 2.9.0 removes, so loaded next to `Verbara.Sdk.Ami` 2.9.0 it cannot resolve them. The same
 holds for a library you build on top of the SDK: upgrade it and the application that uses it to 2.9.0 in one step,
-and recompile both. A binary built against 2.8.0 that names a removed or reshaped member fails at run time
-(`TypeLoadException` or `MissingMethodException`), not at start-up.
+and recompile both. A binary built against 2.8.0 that names a removed type fails with `TypeLoadException` when it
+loads that type, and one that calls a reshaped member fails with `MissingMethodException` when it calls it.
 
 ## How to read this guide
 
@@ -24,7 +23,7 @@ says:
   one exists.
 
 Two entries only add warnings (`VSDK0005` and `VSDK0003`). They break nothing unless you build with
-`TreatWarningsAsErrors`. Two stop compiling where you use them. The other eight change no signature, but change
+`TreatWarningsAsErrors`. Two stop compiling where you use them. The other eight change no existing signature, but change
 behaviour a program can branch on, a published metric, or a health status; one of them also refuses some
 configuration values at start-up.
 
@@ -182,8 +181,9 @@ visits two named agents, the call now ends for both, and each counts the call's 
 
 - A host whose `WrapUpDuration` is negative, `Timeout.InfiniteTimeSpan`, or above 4,294,967,294 ms (about 49.7
   days): it no longer starts. The host's start throws `OptionsValidationException` naming `WrapUpDuration`.
-- Dashboards and reports over agent state and the agent counters above: agents now spend `WrapUpDuration` in
-  `WrapUp` after each call, then go `Idle`, where before they stayed in `WrapUp` until their next call.
+- Dashboards and reports over agent state and the agent counters above: after each call an agent now stays in
+  `WrapUp` until the wrap-up closes (at most `WrapUpDuration`), then goes `Idle`, where before it stayed in
+  `WrapUp` until its next call.
 - Subscribers of `ICallSessionManager.Events` that ignored `CallWrapUpEvent` because it never came.
 
 **What to do.** Set `WrapUpDuration` to the queue's `wrapuptime`; the SDK cannot read that value from Asterisk,
@@ -296,7 +296,8 @@ against an earlier release that reads the field still runs.
 **Who is affected.** Code that names the field and builds with `TreatWarningsAsErrors`: it gets
 `error VSDK0003`. An exporter that subscribes by meter name is not affected.
 
-**What to do.** Stop reading the field; it is always zero. Until then, silence this deprecation alone:
+**What to do.** Stop using the field; nothing records the instrument, so it never carries a measurement. Until
+then, silence this deprecation alone:
 
 ```xml
 <PropertyGroup>
@@ -398,6 +399,9 @@ None of these breaks a build or a public contract. Each is in the CHANGELOG.
 - **Audio meter series gain a tag.** Every `Verbara.Sdk.Ari.Audio` measurement carries `audio.transport`
   (`audiosocket` or `websocket`), and the sessions now record the meter's instruments. A dashboard that matches
   `audio.transport.failures` or `audio.connections.refused` by an exact label set must add the tag.
+- **The latency sample of a cancelled speech turn carries `voiceai.ending`.** `stt.transcription.latency_ms` and
+  `tts.synthesis.latency_ms` keep every sample; a query that keeps tags apart shows up to four more series per
+  histogram. Keep the samples without the tag to read the turns that were not cut short.
 - **`SendFlashAction` reaches Asterisk.** It now sends `Action: SendFlash`, so a hook flash you sent is really sent.
 - **A cancelled WebSocket recognizer or synthesizer always throws `OperationCanceledException`**, also when the
   cancel lands after the vendor finished.
