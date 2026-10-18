@@ -34,16 +34,20 @@ public sealed record SessionMergedEvent(string SessionId, string ServerId, DateT
 /// <summary>
 /// Reports one agent's after-call wrap-up, raised once, when it closes, on
 /// <see cref="Manager.ICallSessionManager.Events"/>, whether or not anything tracks agents. A wrap-up opens when a
-/// queue member's <c>AgentComplete</c> is reported for the call, or, for a call outside any queue that an agent
-/// known by name took, when the call ends (never before its <see cref="CallEndedEvent"/>); it closes when
-/// <see cref="Manager.SessionOptions.WrapUpDuration"/> passes, when the same agent or member is connected to its
-/// next call (raised before that call's <see cref="CallConnectedEvent"/>), or when another of its legs ends. None is
+/// queue member's <c>AgentComplete</c> naming a queue is reported for the call, even when the session manager did
+/// not see the caller join that queue, or, for a call outside any queue that an agent known by name took and no
+/// such <c>AgentComplete</c> reported, when the call ends (never before its <see cref="CallEndedEvent"/>); it
+/// closes when its duration passes (the one a registered <see cref="Manager.IWrapUpDurationProvider"/> gives that
+/// server and queue, else <see cref="Manager.SessionOptions.WrapUpDuration"/>), when the same agent or member is
+/// connected to its next call (raised before that call's <see cref="CallConnectedEvent"/>), or when another of its legs ends. None is
 /// raised for a call no agent or member took, for an end a state reload reconciled, or after the session manager
 /// is disposed.
 /// <para>
-/// <c>SessionId</c>, <c>ServerId</c> and <c>QueueName</c> are the call's; <c>AgentId</c> is the agent known for the
-/// member, null when only a member interface is known; <c>WrapUpDuration</c> is the time from the wrap-up's opening
-/// to its close, never more than the configured duration; <c>Timestamp</c> is the close instant.
+/// <c>SessionId</c> and <c>ServerId</c> are the call's; <c>QueueName</c> is the queue the member's
+/// <c>AgentComplete</c> names, else the call's, so a call transferred from one queue into another books the wrap-up
+/// to the queue whose member finished it; <c>AgentId</c> is the agent known for the member, null when only a member
+/// interface is known; <c>WrapUpDuration</c> is the time from the wrap-up's opening to its close, never more than
+/// the duration that applied to it; <c>Timestamp</c> is the close instant.
 /// </para>
 /// </summary>
 public sealed record CallWrapUpEvent(
