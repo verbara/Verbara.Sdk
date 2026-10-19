@@ -803,6 +803,23 @@ public sealed class VerbaraServer : IVerbaraServer
         }
     }
 
+    /// <summary>Owns a queue read window until the load closes it or hands it to its deferred reports.</summary>
+    private struct QueueSnapshotOwner(QueueSnapshotWindow window) : IDisposable
+    {
+        private QueueSnapshotWindow? _window = window;
+
+        public readonly QueueSnapshotWindow Window => _window!;
+
+        public void TransferTo(Barriers barriers, ListSnapshotMark mark,
+            List<(string Queue, AsteriskQueueEntry Entry)> reports)
+        {
+            barriers.QueueReports = new DeferredQueueReports(Window, mark, reports);
+            _window = null;
+        }
+
+        public readonly void Dispose() => _window?.Dispose();
+    }
+
     /// <summary>
     /// The steps of <see cref="LoadAsync"/>: the channels, then — only after a completed <c>Status</c> — the bridges and
     /// the conference rooms, then the queues, then the agents.
@@ -871,9 +888,9 @@ public sealed class VerbaraServer : IVerbaraServer
     private async ValueTask LoadQueuesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
         Barriers barriers, CancellationToken cancellationToken)
     {
-        QueueSnapshotWindow? window = Queues.OpenSnapshotWindow();
-        try
+        using (var owner = new QueueSnapshotOwner(Queues.OpenSnapshotWindow()))
         {
+            var window = owner.Window;
             var rows = new List<QueueRow>();
             var asked = new AskOutcome();
             var mark = session is not null ? new ListSnapshotMark() : null;
@@ -928,14 +945,7 @@ public sealed class VerbaraServer : IVerbaraServer
             if (full)
                 Queues.CompleteSnapshot(window);
             else
-            {
-                barriers.QueueReports = new DeferredQueueReports(window, mark!, reports);
-                window = null; // The deferred reports now own the read window.
-            }
-        }
-        finally
-        {
-            window?.Dispose();
+                owner.TransferTo(barriers, mark!, reports);
         }
     }
 
