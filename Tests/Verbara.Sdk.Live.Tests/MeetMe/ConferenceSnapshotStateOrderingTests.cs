@@ -159,8 +159,8 @@ public sealed class ConferenceSnapshotStateOrderingTests : IDisposable
         roomExistedBeforeAdmission.Should().Be(roomHeld, "a state report alone creates no room");
         announcedBeforeAdmission.Should().Be(0);
         Observe(admitted).Should().Be(new Observed(ChannelA,
-            Muted: field == "Muted" ? liveValue : true,
-            Talking: field == "Talking" ? liveValue : true),
+            Muted: field != "Muted" || liveValue,
+            Talking: field != "Talking" || liveValue),
             "admission uses the newer absent-key report for its field and the row for the untouched other field");
         admitted.UniqueId.Should().Be($"uid-{ChannelA}");
         _joined.Should().BeEmpty("a snapshot admission is silent even when it merges a live field");
@@ -467,7 +467,7 @@ public sealed class ConferenceSnapshotStateOrderingTests : IDisposable
     [Fact]
     public void ReconcileWithSnapshot_ShouldRejectAClosedWindowAndAllowAFreshRead_WhenTheReadIsDisposedTwice()
     {
-        var closed = OpenWindow();
+        using var closed = OpenWindow();
         _sut.OnUserMuted(Room, ChannelA, true);
         _sut.OnUserTalking(Room, ChannelA, true);
         closed.Dispose();

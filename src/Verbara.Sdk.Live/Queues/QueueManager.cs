@@ -267,9 +267,14 @@ public sealed class QueueManager
         {
             foreach (var window in _windows)
                 window.OnLiveMemberStatus(queueName, iface, (QueueMemberState)status);
-            if (_queues.TryGetValue(queueName, out var queue))
-                SetMemberStatusLocked(queue, iface, (QueueMemberState)status);
+            SetMemberStatusLocked(queueName, iface, (QueueMemberState)status);
         }
+    }
+
+    private void SetMemberStatusLocked(string queueName, string iface, QueueMemberState status)
+    {
+        if (_queues.TryGetValue(queueName, out var queue))
+            SetMemberStatusLocked(queue, iface, status);
     }
 
     private void SetMemberStatusLocked(AsteriskQueue queue, string iface, QueueMemberState status)
@@ -708,10 +713,7 @@ public sealed class QueueManager
             if (!_queuesByMember.TryGetValue(device, out var queueNames))
                 return;
             foreach (var queueName in queueNames.Keys)
-            {
-                if (_queues.TryGetValue(queueName, out var queue))
-                    SetMemberStatusLocked(queue, device, memberState);
-            }
+                SetMemberStatusLocked(queueName, device, memberState);
         }
     }
 
@@ -1057,16 +1059,19 @@ internal sealed class QueueSnapshotWindow : IDisposable
         if (_closed || live is { Removed: true })
             return null;
         var added = live?.Added;
+        var livePause = live?.Pause;
+        var liveStatus = live?.Status;
+        var lifeOrder = live?.LifeOrder ?? 0;
         var member = new AsteriskQueueMember
         {
             Interface = iface, MemberName = added is not null ? added.MemberName : name, Penalty = added?.Penalty ?? penalty,
-            Paused = live?.Pause?.Paused ?? added?.Paused ?? paused,
-            PausedReason = live?.Pause is { } pause ? pause.Reason : added?.PausedReason,
-            Status = live?.Status?.State ?? added?.Status ?? (QueueMemberState)status,
+            Paused = livePause?.Paused ?? added?.Paused ?? paused,
+            PausedReason = livePause is { } pause ? pause.Reason : added?.PausedReason,
+            Status = liveStatus?.State ?? added?.Status ?? (QueueMemberState)status,
         };
         // Device and per-queue reports share one order, but never transfer fields across a later live add/remove.
         if (_deviceChanges.TryGetValue(iface, out var device)
-            && device.Order > (live?.LifeOrder ?? 0) && device.Order > (live?.Status?.Order ?? 0))
+            && device.Order > lifeOrder && device.Order > (liveStatus?.Order ?? 0))
             member.Status = device.State;
         return member;
     }

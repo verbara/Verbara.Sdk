@@ -234,13 +234,7 @@ public sealed class MeetMeManager
         {
             // Presence in a window is the mark: even an idempotent or absent-key report is newer than that window.
             foreach (var window in _openWindows)
-            {
-                var state = GetWindowParticipant(window, roomNumber, channel);
-                if (isMuted)
-                    state.Muted = value;
-                else
-                    state.Talking = value;
-            }
+                window.RecordField(roomNumber, channel, value, isMuted);
 
             if (!_rooms.TryGetValue(roomNumber, out var room))
             {
@@ -516,19 +510,6 @@ public sealed class MeetMeManager
             window.Participants[(roomNumber, channel)] = new ConferenceWindowParticipant { Left = true };
     }
 
-    private static ConferenceWindowParticipant GetWindowParticipant(ConferenceSnapshotWindow window,
-        string roomNumber, string channel)
-    {
-        var key = (roomNumber, channel);
-        if (!window.Participants.TryGetValue(key, out var state))
-        {
-            state = new ConferenceWindowParticipant();
-            window.Participants.Add(key, state);
-        }
-
-        return state;
-    }
-
     /// <summary>
     /// Empties the conference table without raising anything. A reload no longer calls it: it reconciles the table
     /// against Asterisk's conference listing instead.
@@ -580,6 +561,22 @@ internal sealed class ConferenceSnapshotWindow : IDisposable
     // Accessed only under the owner's window gate; closed windows release both collections.
     internal Dictionary<(string Room, string Channel), ConferenceWindowParticipant> Participants { get; } = [];
     internal HashSet<string> EndedRooms { get; } = new(StringComparer.Ordinal);
+
+    // Caller holds the owner's window gate. Reuse the retained lifetime, including any leave tombstone.
+    internal void RecordField(string roomNumber, string channel, bool value, bool isMuted)
+    {
+        var key = (roomNumber, channel);
+        if (!Participants.TryGetValue(key, out var state))
+        {
+            state = new ConferenceWindowParticipant();
+            Participants.Add(key, state);
+        }
+
+        if (isMuted)
+            state.Muted = value;
+        else
+            state.Talking = value;
+    }
 
     internal void MarkClosed() => Volatile.Write(ref _closed, 1);
 

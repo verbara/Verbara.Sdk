@@ -207,11 +207,9 @@ public sealed class QueueSnapshotAdmissionLifetimeTests
         }
 
         using var scope = new AssertionScope();
-        measurementFailure.Should().BeNull("the rejected answer must reach its pre-disposal observation");
+        Assert.Null(measurementFailure);
         cleanupFailure.Should().BeNull("fixture failures must propagate independently of the rejected answer");
-        answer.Should().NotBeNull();
-        if (answer is null)
-            return;
+        Assert.NotNull(answer);
 
         answer.Reports.Should().Be(0, "an answer that was not accepted to its end has no admission notifications");
         answer.Queued.Should().Be(0);

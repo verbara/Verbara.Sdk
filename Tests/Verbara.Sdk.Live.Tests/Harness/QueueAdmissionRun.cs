@@ -229,20 +229,22 @@ internal sealed class QueueAdmissionRun : IAsyncDisposable
         _statusAnswer.TrySetResult();
         _firstGate.Release();
         _secondGate.Release();
-        try
+        using (_secondGate)
+        using (_firstGate)
         {
-            await Run.DisposeAsync();
-            await Run.Server.ScheduledReload.WaitAsync(Run.Bound);
-        }
-        finally
-        {
-            foreach (var subscription in _subscriptions)
-                subscription.Dispose();
-            Tracker.Dispose();
-            await Manager.DisposeAsync();
-            Counters?.Dispose();
-            _firstGate.Dispose();
-            _secondGate.Dispose();
+            try
+            {
+                await Run.DisposeAsync();
+                await Run.Server.ScheduledReload.WaitAsync(Run.Bound);
+            }
+            finally
+            {
+                foreach (var subscription in _subscriptions)
+                    subscription.Dispose();
+                Tracker.Dispose();
+                await Manager.DisposeAsync();
+                Counters?.Dispose();
+            }
         }
         // This assertion intentionally propagates cleanup failures to xunit.
         new { First = First.Fault?.Message, Peer = Peer.Fault?.Message }.Should().BeEquivalentTo(

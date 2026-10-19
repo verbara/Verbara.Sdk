@@ -757,24 +757,25 @@ public sealed class VerbaraServer : IVerbaraServer
         var ending = lifetime.Token;
         try
         {
-            // Queue reports always wait their own completion, even when Status exhausted this load's bound first.
-            FenceWaitObserved?.Invoke("deferred", mark.CompleteOrdinal);
-            var outcome = await mark.WaitDispatchedThroughAsync(
-                Timeout.InfiniteTimeSpan, BarrierClock ?? TimeProvider, ending);
-            if (outcome != DispatchBarrierOutcome.Reached || ending.IsCancellationRequested
-                || barriers.Session is { IsCurrent: false })
-                return;
-
-            if (reports is not null)
+            using (reports)
             {
-                foreach (var (queue, entry) in reports.Entries)
+                // Queue reports always wait their own completion, even when Status exhausted this load's bound first.
+                FenceWaitObserved?.Invoke("deferred", mark.CompleteOrdinal);
+                var outcome = await mark.WaitDispatchedThroughAsync(
+                    Timeout.InfiniteTimeSpan, BarrierClock ?? TimeProvider, ending);
+                if (outcome != DispatchBarrierOutcome.Reached || ending.IsCancellationRequested
+                    || barriers.Session is { IsCurrent: false })
+                    return;
+
+                if (reports is not null)
                 {
-                    if (ending.IsCancellationRequested || barriers.Session is { IsCurrent: false })
-                        return;
-                    Queues.NotifySnapshotEntry(reports.Window, queue, entry);
+                    foreach (var (queue, entry) in reports.Entries)
+                    {
+                        if (ending.IsCancellationRequested || barriers.Session is { IsCurrent: false })
+                            return;
+                        Queues.NotifySnapshotEntry(reports.Window, queue, entry);
+                    }
                 }
-                reports.Dispose();
-                reports = null;
             }
             if (reload && !ending.IsCancellationRequested && barriers.Session is not { IsCurrent: false })
                 await LoadAsync(new LoadConnectionStates(_connection), ending, scheduledAfterDeferral: true);
@@ -786,10 +787,6 @@ public sealed class VerbaraServer : IVerbaraServer
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             VerbaraServerLog.DeferredReloadFailed(_logger, ex);
-        }
-        finally
-        {
-            reports?.Dispose();
         }
     }
 
