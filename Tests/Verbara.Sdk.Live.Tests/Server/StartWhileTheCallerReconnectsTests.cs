@@ -24,8 +24,8 @@ namespace Verbara.Sdk.Live.Tests.Server;
 /// </para>
 /// <para>
 /// One clock, no timer: a real <see cref="AmiConnection"/> over <see cref="Run"/>. The first peer leaves its
-/// <c>QueueStatus</c> list open after the queue's member, and the test holds the load inside the server's
-/// <c>MemberAdded</c>, which the load raises while it reads that list. With the load held there, the test ends the
+/// <c>QueueStatus</c> list open after the queue's member, and the test holds the load inside the null-default
+/// <c>QueueRowBuffered</c> observation, before the next read. No public snapshot event is raised while collecting. With the load held there, the test ends the
 /// session, waits for <c>Disconnected</c>, and calls <c>ConnectAsync</c> as the caller; the second peer answers that
 /// connect only when the test releases it. Then the load goes on, finds its session ended, and reads the state.
 /// </para>
@@ -99,7 +99,7 @@ public sealed class StartWhileTheCallerReconnectsTests
             var disconnected = StateSignal(run.Connection, c => c.Current == AmiConnectionState.Disconnected);
             var callerConnecting = StateSignal(run.Connection,
                 c => c.Current == AmiConnectionState.Connecting && c.ByCaller);
-            run.Server.Queues.MemberAdded += (_, _) => hold.Block();
+            run.Server.QueueRowBuffered = hold.Block;
 
             var start = run.Server.StartAsync();
             await hold.Held.WaitAsync(Run.Bound);
@@ -152,7 +152,7 @@ public sealed class StartWhileTheCallerReconnectsTests
                 c => c.Current == AmiConnectionState.Connecting && !c.ByCaller);
             var loopConnectedSignal = StateSignal(run.Connection,
                 c => c.Current == AmiConnectionState.Connected && !c.ByCaller);
-            run.Server.Queues.MemberAdded += (_, _) => hold.Block();
+            run.Server.QueueRowBuffered = hold.Block;
 
             var start = run.Server.StartAsync();
             await hold.Held.WaitAsync(Run.Bound);

@@ -724,7 +724,11 @@ public sealed class AmiConnection : IAmiConnection
 
             // The pump observes the caller's ending from its creation, before Start: once _lifetime is cancelled it
             // delivers nothing after the event in progress.
-            var pump = new AsyncEventPump(_options.EventPumpCapacity) { StopToken = _lifetime.Token };
+            var pump = new AsyncEventPump(_options.EventPumpCapacity)
+            {
+                StopToken = _lifetime.Token,
+                SessionEndedToken = sessionToken,
+            };
             pump.OnEventDropped = evt =>
             {
                 AmiMetrics.EventsDropped.Add(1, BufferFullReason);
@@ -2427,6 +2431,12 @@ internal sealed class ListSnapshotMark
     /// The completing event's ordinal in <see cref="Pump"/>, or the last event's before a refusal; 0 when there is none.
     /// </summary>
     public long CompleteOrdinal { get; set; }
+
+    /// <summary>
+    /// Cancelled when the session that produced this mark is released, independently of its pump's drainage.
+    /// The pump retains the token value, so an owner starting after cleanup never accesses a disposed source.
+    /// </summary>
+    public CancellationToken SessionEndedToken => Pump?.SessionEndedToken ?? default;
 
     /// <summary>
     /// Waits until <see cref="Pump"/> has dispatched or dropped every event numbered up to <see cref="CompleteOrdinal"/>,

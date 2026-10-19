@@ -9,6 +9,7 @@ using Verbara.Sdk.Ami.Tests.Connection;
 using Verbara.Sdk.Live.Queues;
 using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Live.Tests.Harness;
+using Xunit.Abstractions;
 
 namespace Verbara.Sdk.Live.Tests.Queues;
 
@@ -16,12 +17,13 @@ namespace Verbara.Sdk.Live.Tests.Queues;
 /// Live's queue counters follow the queue table's transitions across a reconnect's reload: a caller already held and
 /// listed again is a replacement and counts nothing; a caller the completed snapshot no longer lists, or whose queue it
 /// no longer lists, or whose queue is removed, counts <c>left</c> with no wait sample; and an event the pump still
-/// holds when <c>QueueStatusComplete</c> arrives is applied once, before the snapshot completes. So
-/// <c>joined − left</c> equals the callers held, summed over the process.
+/// holds at the earlier <c>Status</c> fence is applied before the queue snapshot is requested. So
+/// <c>joined − left</c> equals the callers held, summed over the process, for SDK-managed transitions. Consumer
+/// <c>Clear()</c> and direct edits of exposed collections remain outside that guarantee.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The first five tests drive the reload through a substitute connection, raising <c>Reconnected</c> as many times as
+/// The substitute-connection tests drive the reload by raising <c>Reconnected</c> as many times as
 /// they reload and waiting on the server's <c>[LIVE] State loaded</c> line for each; the live joins reach the server
 /// through its own event observer, as the connection delivers them, built with the headers Asterisk sends
 /// (<see cref="AsteriskFrames"/>). The last two need the connection's real pump, so they run a real
@@ -33,7 +35,7 @@ namespace Verbara.Sdk.Live.Tests.Queues;
 /// </para>
 /// </remarks>
 [Collection(LiveCountersGroup.Name)]
-public sealed class QueueCountersAcrossReloadsTests
+public sealed class QueueCountersAcrossReloadsTests(ITestOutputHelper output)
 {
     private const string Queue = BootingAsterisk.QueueName;
     private const string StateLoaded = "[LIVE] State loaded";
@@ -64,6 +66,57 @@ public sealed class QueueCountersAcrossReloadsTests
                 + $"callers held, not the reloads. Measured: {counters}");
             rig.Server.Queues.GetByName(Queue)!.EntryCount.Should().Be(held);
         }
+    }
+
+    [Fact]
+    public async Task Reload_ShouldCountTheSameCallersAsNewAdmissionsWithoutLeaves_WhenAConsumerClearsTheManager()
+    {
+        const int held = 3;
+        await using var rig = new SubstituteRig();
+        await rig.StartAsync();
+        using var counters = new LiveCounters();
+        for (var i = 0; i < held; i++)
+            rig.LiveJoin(Uid(i), Chan(i), position: i + 1);
+
+        output.WriteLine($"Before consumer Clear: {counters} held={rig.Server.Queues.GetByName(Queue)!.EntryCount}");
+        new { counters.Joined, counters.Left, counters.WaitSamples, Held = rig.Server.Queues.GetByName(Queue)!.EntryCount }
+            .Should().BeEquivalentTo(new { Joined = (long)held, Left = 0L, WaitSamples = 0L, Held = held });
+
+        rig.Server.Queues.Clear();
+
+        var heldAfterClear = rig.Server.Queues.GetByName(Queue)?.EntryCount ?? 0;
+        output.WriteLine($"After consumer Clear: {counters} held={heldAfterClear}");
+        new { counters.Joined, counters.Left, counters.WaitSamples, Held = heldAfterClear }
+            .Should().BeEquivalentTo(new { Joined = (long)held, Left = 0L, WaitSamples = 0L, Held = 0 },
+                "consumer Clear preserves its uncounted removal behaviour and is outside the managed-transition invariant");
+
+        rig.QueueStatus = [SubstituteRig.Params(), .. Enumerable.Range(0, held).Select(i => SubstituteRig.Entry(Uid(i), Chan(i), i + 1, wait: 5))];
+        await rig.ReloadAsync();
+
+        output.WriteLine($"After reload of the same callers: {counters} held={rig.Server.Queues.GetByName(Queue)!.EntryCount}");
+        new { counters.Joined, counters.Left, counters.WaitSamples, Held = rig.Server.Queues.GetByName(Queue)!.EntryCount }
+            .Should().BeEquivalentTo(new { Joined = 2L * held, Left = 0L, WaitSamples = 0L, Held = held },
+                "the reload admits the cleared callers again; it does not reset counters or retroactively count consumer removals");
+    }
+
+    [Fact]
+    public void Entries_ShouldRemoveACallerWithoutCountingALeave_WhenAConsumerMutatesThePublicCollection()
+    {
+        var queues = new QueueManager(NullLogger.Instance);
+        using var counters = new LiveCounters();
+        queues.OnCallerJoined(Queue, Chan(0), "5552101", 1);
+        var queue = queues.GetByName(Queue)!;
+
+        output.WriteLine($"Before direct entry removal: {counters} held={queue.EntryCount}");
+        new { counters.Joined, counters.Left, counters.WaitSamples, Held = queue.EntryCount }
+            .Should().BeEquivalentTo(new { Joined = 1L, Left = 0L, WaitSamples = 0L, Held = 1 });
+
+        var removed = queue.Entries.TryRemove(Chan(0), out _);
+
+        output.WriteLine($"After direct entry removal: removed={removed} {counters} held={queue.EntryCount}");
+        new { Removed = removed, counters.Joined, counters.Left, counters.WaitSamples, Held = queue.EntryCount }
+            .Should().BeEquivalentTo(new { Removed = true, Joined = 1L, Left = 0L, WaitSamples = 0L, Held = 0 },
+                "direct mutation of the exposed entry collection bypasses managed removals and has no counter guarantee");
     }
 
     [Fact]
@@ -159,7 +212,7 @@ public sealed class QueueCountersAcrossReloadsTests
     }
 
     [Fact]
-    public async Task Reload_ShouldCountAQueuedLeaveOnceWithItsWaitSample_WhenItWaitsInThePumpAsQueueStatusCompletes()
+    public async Task Reload_ShouldCountTheLeaveOnceWithItsWaitSample_WhenItWaitsBehindTheStatusBarrierBeforeQueueStatusIsAsked()
     {
         var first = new BootingAsterisk { BootedAtLogin = true };
         var statusAnswer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -199,12 +252,13 @@ public sealed class QueueCountersAcrossReloadsTests
             PeerFault = second.Fault?.Message,
         }.Should().BeEquivalentTo(
             new { Left = 1L, WaitSamples = 1L, Held = 0, GateTimedOut = false, PeerFault = default(string) },
-            "the leave waited in the pump while QueueStatusComplete reached the load; it is applied before the snapshot "
-            + $"completes, so it is counted once, with its wait sample. Measured: {counters}");
+            "the leave is released at the earlier Status barrier, before QueueStatus is asked; it counts one leave "
+            + "with its wait sample. This pin does not isolate the QueueStatus fence. "
+            + $"Measured: {counters}");
     }
 
     [Fact]
-    public async Task Reload_ShouldCountAQueuedJoinOnce_WhenItWaitsInThePumpAsQueueStatusCompletes()
+    public async Task Reload_ShouldCountTheSameCallerOnce_WhenItsJoinWaitsBehindTheStatusBarrierBeforeQueueStatusIsAsked()
     {
         var first = new BootingAsterisk { BootedAtLogin = true };
         var statusAnswer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -244,8 +298,9 @@ public sealed class QueueCountersAcrossReloadsTests
             PeerFault = second.Fault?.Message,
         }.Should().BeEquivalentTo(
             new { Joined = 1L, Held = 1, GateTimedOut = false, PeerFault = default(string) },
-            "one caller joined once: the live join that waited in the pump is applied before the snapshot completes, and "
-            + $"the snapshot's entry for the same caller is then a replacement. Measured: {counters}");
+            "Live counts one held caller when its queued join is released at the earlier Status barrier and "
+            + "QueueStatus later lists it again. This counter pin does not exercise a join still held at the "
+            + $"QueueStatus admission fence or its Sessions notifications. Measured: {counters}");
     }
 
     /// <summary>

@@ -28,7 +28,7 @@ public sealed class BridgeManagerTests
     }
 
     [Fact]
-    public void OnChannelEntered_ShouldUpdateReverseIndex()
+    public void OnChannelEntered_ShouldUpdateReverseIndex_WhenNoOtherTransitionInterleaves()
     {
         _sut.OnBridgeCreated("bridge-1", "basic", null, null, null);
         _sut.OnChannelEntered("bridge-1", "chan-001");
@@ -38,7 +38,7 @@ public sealed class BridgeManagerTests
     }
 
     [Fact]
-    public void OnChannelLeft_ShouldRemoveFromBridgeAndReverseIndex()
+    public void OnChannelLeft_ShouldRemoveFromBridgeAndReverseIndex_WhenTheChannelHasNoNewerOwner()
     {
         _sut.OnBridgeCreated("bridge-1", "basic", null, null, null);
         _sut.OnChannelEntered("bridge-1", "chan-001");
@@ -50,7 +50,7 @@ public sealed class BridgeManagerTests
     }
 
     [Fact]
-    public void OnBridgeDestroyed_ShouldMarkDestroyedAndCleanReverseIndex()
+    public void OnBridgeDestroyed_ShouldMarkDestroyedAndCleanReverseIndex_WhenTheChannelsHaveNoNewerOwner()
     {
         _sut.OnBridgeCreated("bridge-1", "basic", null, null, null);
         _sut.OnChannelEntered("bridge-1", "chan-001");

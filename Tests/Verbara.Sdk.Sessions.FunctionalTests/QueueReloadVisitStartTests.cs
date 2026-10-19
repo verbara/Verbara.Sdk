@@ -19,6 +19,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// <c>Timestamp</c> and the reload answered with the snapshot Asterisk returned. Their waits are exact
 /// differences of Asterisk's own instants, and are checked against Asterisk's own <c>HoldTime</c>.
 /// </para>
+/// <para>These timestamps are pinned with synchronous delivery over a substitute connection; the tests do not
+/// establish queue snapshot ordering against held AMI dispatch.</para>
 /// <para>
 /// The typed cases are shaped as Asterisk 22.9.0 answered <c>Status</c> and <c>QueueStatus</c> for a caller
 /// waiting in a queue, with the manager's clock moved by the test between deliveries. None of these tests

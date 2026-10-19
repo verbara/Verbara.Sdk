@@ -16,6 +16,7 @@ namespace Verbara.Sdk.Live.Tests.Queues;
 /// else Live does with the entry is the same for both: the table, <c>live.queue.calls.joined</c>,
 /// <see cref="AsteriskQueueEntry.JoinedAt"/> and <see cref="QueueManager.CallerJoined"/>.
 /// </summary>
+/// <remarks>Metadata and counter pins over a substitute connection; they do not exercise a held AMI dispatch fence.</remarks>
 [Collection(LiveCountersGroup.Name)]
 [SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
 public sealed class QueueSnapshotEntryTests : IAsyncLifetime

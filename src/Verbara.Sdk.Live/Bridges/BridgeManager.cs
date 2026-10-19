@@ -50,13 +50,13 @@ public sealed class BridgeManager
     private int _active;
 
     // The change ordinal: every insertion, channel entry, destruction and channel leave takes the next value, so a
-    // snapshot window can tell what changed after its request was sent. Read and advanced under _windowGate for a
-    // departure; with Interlocked elsewhere.
+    // snapshot window can tell what changed after its request was sent. All manager writers hold _windowGate.
     private long _changes;
 
     // The snapshot windows open now (their marks), and the departures recorded for them: a bridge destroyed, or a
     // channel that left a bridge, after the oldest open window's request was sent. A snapshot read in such a window
-    // may still list what departed, and must not bring it back. Lock order: a bridge's SyncRoot, then _windowGate.
+    // may still list what departed, and must not bring it back. Lock order: _windowGate, then a bridge's SyncRoot,
+    // then _destroyedOrderLock. No callback is followed by a pending membership or index publication.
     private readonly Lock _windowGate = new();
     private readonly List<long> _openMarks = [];
     private readonly Dictionary<string, long> _destroyedDuringRead = new(StringComparer.Ordinal);
@@ -70,6 +70,9 @@ public sealed class BridgeManager
     // The clock that stamps a bridge's destruction. Settable by tests (via InternalsVisibleTo) to drive the retention
     // on a manual clock.
     internal TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
+    // An inert test seam at the state changes whose subsequent publication must respect live reentry.
+    internal Action<BridgeTransitionPoint, AsteriskBridge>? TransitionObserver { get; set; }
 
     /// <summary>
     /// Fires when a new bridge is created. Not raised for a bridge a reload only read from Asterisk's bridge listing; when
@@ -127,72 +130,85 @@ public sealed class BridgeManager
     /// <summary>Called when Asterisk fires a BridgeCreate event.</summary>
     public void OnBridgeCreated(string bridgeId, string? type, string? technology, string? creator, string? name)
     {
-        var bridge = new AsteriskBridge
+        AsteriskBridge? announced = null;
+        var observedSnapshotCreation = false;
+        lock (_windowGate)
         {
-            BridgeUniqueid = bridgeId,
-            BridgeType = type,
-            Technology = technology,
-            Creator = creator,
-            Name = name,
-            InsertMark = Interlocked.Increment(ref _changes),
-        };
+            if (!_bridges.TryGetValue(bridgeId, out var held))
+            {
+                var bridge = new AsteriskBridge
+                {
+                    BridgeUniqueid = bridgeId,
+                    BridgeType = type,
+                    Technology = technology,
+                    Creator = creator,
+                    Name = name,
+                    InsertMark = Interlocked.Increment(ref _changes),
+                };
+                _bridges[bridgeId] = bridge;
+                CountInsertion();
+                announced = bridge;
+            }
+            else if (held.TryClaimObservedCreate())
+            {
+                // The listing already counted the insertion; this is its first observed creation.
+                observedSnapshotCreation = true;
+                announced = held;
+            }
+        }
 
-        if (_bridges.TryAdd(bridgeId, bridge))
-        {
-            CountInsertion();
-            BridgeCreated?.Invoke(bridge);
-        }
-        else if (_bridges.TryGetValue(bridgeId, out var admitted) && admitted.TryClaimObservedCreate())
-        {
-            // A listing admitted the bridge silently while this BridgeCreate waited in the pump, or before Asterisk wrote
-            // it: this is the bridge's creation, observed. Announced once; counted already, at its admission.
+        if (observedSnapshotCreation)
             BridgeManagerLog.SnapshotBridgeCreateObserved(_logger, bridgeId);
-            BridgeCreated?.Invoke(admitted);
-        }
+        if (announced is not null)
+            BridgeCreated?.Invoke(announced);
         else
-        {
             BridgeManagerLog.DuplicateBridgeCreate(_logger, bridgeId);
-        }
     }
 
     /// <summary>Called when Asterisk fires a BridgeEnter event.</summary>
     public void OnChannelEntered(string bridgeId, string uniqueId)
     {
-        if (!_bridges.TryGetValue(bridgeId, out var bridge))
+        AsteriskBridge? bridge;
+        lock (_windowGate)
         {
-            BridgeManagerLog.UnknownBridgeEnter(_logger, bridgeId);
-            return;
+            if (!_bridges.TryGetValue(bridgeId, out bridge) || bridge.DestroyedAt is not null)
+            {
+                BridgeManagerLog.UnknownBridgeEnter(_logger, bridgeId);
+                return;
+            }
+            lock (bridge.SyncRoot)
+            {
+                bridge.Channels.TryAdd(uniqueId, 0);
+                bridge.EnterMarks[uniqueId] = Interlocked.Increment(ref _changes);
+                _bridgeByChannel[uniqueId] = bridge;
+            }
         }
 
-        lock (bridge.SyncRoot)
-        {
-            bridge.Channels.TryAdd(uniqueId, 0);
-            bridge.EnterMarks[uniqueId] = Interlocked.Increment(ref _changes);
-        }
-
-        _bridgeByChannel[uniqueId] = bridge;
+        TransitionObserver?.Invoke(BridgeTransitionPoint.LiveMembershipApplied, bridge);
         ChannelEntered?.Invoke(bridge, uniqueId);
     }
 
     /// <summary>Called when Asterisk fires a BridgeLeave event.</summary>
     public void OnChannelLeft(string bridgeId, string uniqueId)
     {
-        if (!_bridges.TryGetValue(bridgeId, out var bridge))
+        AsteriskBridge? bridge;
+        lock (_windowGate)
         {
             // Recorded all the same: a snapshot read now may list the channel in a bridge it admits.
-            RecordLeave(bridgeId, uniqueId);
-            BridgeManagerLog.UnknownBridgeLeave(_logger, bridgeId);
-            return;
+            RecordLeaveLocked(bridgeId, uniqueId);
+            if (!_bridges.TryGetValue(bridgeId, out bridge))
+            {
+                BridgeManagerLog.UnknownBridgeLeave(_logger, bridgeId);
+                return;
+            }
+            lock (bridge.SyncRoot)
+            {
+                bridge.Channels.TryRemove(uniqueId, out _);
+                bridge.EnterMarks.Remove(uniqueId);
+                _bridgeByChannel.TryRemove(new KeyValuePair<string, AsteriskBridge>(uniqueId, bridge));
+            }
         }
 
-        lock (bridge.SyncRoot)
-        {
-            RecordLeave(bridgeId, uniqueId);
-            bridge.Channels.TryRemove(uniqueId, out _);
-            bridge.EnterMarks.Remove(uniqueId);
-        }
-
-        _bridgeByChannel.TryRemove(uniqueId, out _);
         ChannelLeft?.Invoke(bridge, uniqueId);
     }
 
@@ -206,6 +222,8 @@ public sealed class BridgeManager
             // either finds it held here (and the destruction below applies to it) or finds this record and skips it.
             RecordDestroyLocked(bridgeId);
             _bridges.TryGetValue(bridgeId, out bridge);
+            if (bridge is not null && !DestroyLocked(bridgeId, bridge))
+                bridge = null;
         }
 
         if (bridge is null)
@@ -214,46 +232,48 @@ public sealed class BridgeManager
             return;
         }
 
-        Destroy(bridgeId, bridge);
+        AnnounceDestruction(bridge);
     }
 
     // Marks a held bridge destroyed: on Asterisk's BridgeDestroy, and for a bridge a completed listing omits. The first
     // destruction counts it destroyed and queues it for release; a repeated one, inside the retention, neither counts
     // nor queues again. BridgeDestroyed is raised each time, as Asterisk's event is.
-    private void Destroy(string bridgeId, AsteriskBridge bridge)
+    // The caller holds _windowGate. Publish lifetime, index removals, counts and retention together.
+    private bool DestroyLocked(string bridgeId, AsteriskBridge bridge)
     {
-        DateTimeOffset destroyedAt;
-        bool first;
         lock (bridge.SyncRoot)
         {
-            first = bridge.DestroyedAt is null;
-            destroyedAt = TimeProvider.GetUtcNow();
+            if (!_bridges.TryGetValue(bridgeId, out var current) || !ReferenceEquals(current, bridge))
+                return false;
+
+            var first = bridge.DestroyedAt is null;
+            var destroyedAt = TimeProvider.GetUtcNow();
             bridge.DestroyedAt = destroyedAt;
             foreach (var channelId in bridge.Channels.Keys)
-                _bridgeByChannel.TryRemove(channelId, out _);
-        }
+                _bridgeByChannel.TryRemove(new KeyValuePair<string, AsteriskBridge>(channelId, bridge));
 
-        if (first)
-        {
-            Interlocked.Decrement(ref _active);
-            LiveMetrics.BridgesDestroyed.Add(1);
+            if (first)
+            {
+                Interlocked.Decrement(ref _active);
+                LiveMetrics.BridgesDestroyed.Add(1);
+                // Queue before a subscriber can clear/recreate the manager. Throwing subscribers cannot pin it.
+                lock (_destroyedOrderLock)
+                    _destroyedOrder.Enqueue((bridgeId, bridge, destroyedAt));
+            }
         }
+        return true;
+    }
 
+    private void AnnounceDestruction(AsteriskBridge bridge)
+    {
         try
         {
             BridgeDestroyed?.Invoke(bridge);
         }
         finally
         {
-            // In a finally: the event pump swallows a subscriber's exception, and a throwing subscriber must not keep
-            // the bridge held.
-            if (first)
-            {
-                lock (_destroyedOrderLock)
-                    _destroyedOrder.Enqueue((bridgeId, bridge, destroyedAt));
-            }
-
-            ReleaseExpired();
+            lock (_windowGate)
+                ReleaseExpired();
         }
     }
 
@@ -371,16 +391,27 @@ public sealed class BridgeManager
         {
             foreach (var held in _bridges.Values.Where(b => b.DestroyedAt is null && !listedIds.Contains(b.BridgeUniqueid)))
             {
-                if (held.InsertMark > window.Mark)
+                var destroyed = false;
+                lock (_windowGate)
                 {
-                    newer++;
-                    continue;
+                    ObjectDisposedException.ThrowIf(window.IsClosed, window);
+                    if (!_bridges.TryGetValue(held.BridgeUniqueid, out var current)
+                        || !ReferenceEquals(current, held) || held.DestroyedAt is not null)
+                        continue;
+                    if (held.InsertMark > window.Mark)
+                    {
+                        newer++;
+                        continue;
+                    }
+                    RecordDestroyLocked(held.BridgeUniqueid);
+                    destroyed = DestroyLocked(held.BridgeUniqueid, held);
                 }
 
-                lock (_windowGate)
-                    RecordDestroyLocked(held.BridgeUniqueid);
-                Destroy(held.BridgeUniqueid, held);
-                removed++;
+                if (destroyed)
+                {
+                    removed++;
+                    AnnounceDestruction(held);
+                }
             }
         }
 
@@ -392,6 +423,7 @@ public sealed class BridgeManager
             bool inserted;
             lock (_windowGate)
             {
+                ObjectDisposedException.ThrowIf(window.IsClosed, window);
                 if (_destroyedDuringRead.TryGetValue(entry.Id, out var stamp) && stamp > window.Mark)
                 {
                     destroyedDuringRead++;
@@ -417,6 +449,12 @@ public sealed class BridgeManager
                     inserted = _bridges.TryAdd(entry.Id, bridge);
                     if (!inserted)
                         bridge = _bridges.GetValueOrDefault(entry.Id);
+                    else
+                    {
+                        // A destroy must never see the new lifetime before its insertion has been counted.
+                        CountInsertion();
+                        admitted++;
+                    }
                 }
             }
 
@@ -428,10 +466,7 @@ public sealed class BridgeManager
                 continue;
 
             if (inserted)
-            {
-                CountInsertion();
-                admitted++;
-            }
+                TransitionObserver?.Invoke(BridgeTransitionPoint.SnapshotAdmitted, bridge);
 
             ReconcileMembers(bridge, members.GetValueOrDefault(entry.Id) ?? [], window, removeOmitted);
         }
@@ -444,52 +479,65 @@ public sealed class BridgeManager
         BridgeSnapshotWindow window, bool removeOmitted)
     {
         var listed = listedMembers as IReadOnlySet<string> ?? new HashSet<string>(listedMembers, StringComparer.Ordinal);
-        List<string> taken = [];
-        List<string> added = [];
-        lock (bridge.SyncRoot)
-        {
-            if (bridge.DestroyedAt is not null)
-                return;
-
-            lock (_windowGate)
-            {
-                // Neither held already nor seen leaving after this listing's read opened.
-                foreach (var uniqueId in listed.Where(id => !bridge.Channels.ContainsKey(id)
-                             && !(_leftDuringRead.TryGetValue((bridge.BridgeUniqueid, id), out var stamp) && stamp > window.Mark)))
-                {
-                    bridge.Channels.TryAdd(uniqueId, 0);
-                    bridge.EnterMarks[uniqueId] = Interlocked.Increment(ref _changes);
-                    added.Add(uniqueId);
-                }
-            }
-
-            if (removeOmitted)
-            {
-                // Not listed, and not entered after this listing's read opened.
-                foreach (var uniqueId in bridge.Channels.Keys.Where(id => !listed.Contains(id)
-                             && !(bridge.EnterMarks.TryGetValue(id, out var entered) && entered > window.Mark)))
-                {
-                    bridge.Channels.TryRemove(uniqueId, out _);
-                    bridge.EnterMarks.Remove(uniqueId);
-                    taken.Add(uniqueId);
-                }
-            }
-        }
-
-        foreach (var uniqueId in added)
-            _bridgeByChannel[uniqueId] = bridge;
-        foreach (var uniqueId in taken)
-            _bridgeByChannel.TryRemove(new KeyValuePair<string, AsteriskBridge>(uniqueId, bridge));
-    }
-
-    // Records a channel's leave for the open windows. Takes _windowGate; the caller may hold the bridge's SyncRoot.
-    private void RecordLeave(string bridgeId, string uniqueId)
-    {
         lock (_windowGate)
         {
-            if (_openMarks.Count > 0)
-                _leftDuringRead[(bridgeId, uniqueId)] = Interlocked.Increment(ref _changes);
+            ObjectDisposedException.ThrowIf(window.IsClosed, window);
+            if (!_bridges.TryGetValue(bridge.BridgeUniqueid, out var current)
+                || !ReferenceEquals(current, bridge) || bridge.DestroyedAt is not null)
+                return;
+
+            lock (bridge.SyncRoot)
+            {
+                foreach (var uniqueId in listed)
+                {
+                    if (HasNewerOwnerLocked(uniqueId, bridge, window))
+                    {
+                        // A move's BridgeEnter can arrive before BridgeLeave for this old membership.
+                        bridge.Channels.TryRemove(uniqueId, out _);
+                        bridge.EnterMarks.Remove(uniqueId);
+                        _bridgeByChannel.TryRemove(new KeyValuePair<string, AsteriskBridge>(uniqueId, bridge));
+                        continue;
+                    }
+                    if (_leftDuringRead.TryGetValue((bridge.BridgeUniqueid, uniqueId), out var stamp)
+                        && stamp > window.Mark && !bridge.Channels.ContainsKey(uniqueId))
+                        continue;
+
+                    if (bridge.Channels.TryAdd(uniqueId, 0))
+                        bridge.EnterMarks[uniqueId] = Interlocked.Increment(ref _changes);
+                    // A held member can still need its lookup repaired after an older live move. Preserve its mark.
+                    _bridgeByChannel[uniqueId] = bridge;
+                }
+
+                if (removeOmitted)
+                {
+                    // Not listed, and not entered after this listing's read opened.
+                    foreach (var uniqueId in bridge.Channels.Keys.Where(id => !listed.Contains(id)
+                                 && !(bridge.EnterMarks.TryGetValue(id, out var entered) && entered > window.Mark)))
+                    {
+                        bridge.Channels.TryRemove(uniqueId, out _);
+                        bridge.EnterMarks.Remove(uniqueId);
+                        _bridgeByChannel.TryRemove(new KeyValuePair<string, AsteriskBridge>(uniqueId, bridge));
+                    }
+                }
+            }
         }
+
+        TransitionObserver?.Invoke(BridgeTransitionPoint.SnapshotMembershipApplied, bridge);
+    }
+
+    // All EnterMarks writers hold _windowGate, including for a different bridge. No second bridge lock is needed
+    // to inspect the owner under that gate, and no cross-bridge lock acquisition can invert the order.
+    private bool HasNewerOwnerLocked(string uniqueId, AsteriskBridge bridge, BridgeSnapshotWindow window) =>
+        _bridgeByChannel.TryGetValue(uniqueId, out var owner) && !ReferenceEquals(owner, bridge)
+        && owner.DestroyedAt is null
+        && _bridges.TryGetValue(owner.BridgeUniqueid, out var current) && ReferenceEquals(current, owner)
+        && owner.EnterMarks.TryGetValue(uniqueId, out var entered) && entered > window.Mark;
+
+    // Records a channel's leave for the open windows. The caller holds _windowGate.
+    private void RecordLeaveLocked(string bridgeId, string uniqueId)
+    {
+        if (_openMarks.Count > 0)
+            _leftDuringRead[(bridgeId, uniqueId)] = Interlocked.Increment(ref _changes);
     }
 
     // Records a bridge's destruction for the open windows. The caller holds _windowGate.
@@ -505,19 +553,25 @@ public sealed class BridgeManager
     /// </summary>
     public void Clear()
     {
-        _bridges.Clear();
-        _bridgeByChannel.Clear();
-        lock (_destroyedOrderLock)
-            _destroyedOrder.Clear();
         lock (_windowGate)
         {
+            _bridges.Clear();
+            _bridgeByChannel.Clear();
+            lock (_destroyedOrderLock)
+                _destroyedOrder.Clear();
             _destroyedDuringRead.Clear();
             _leftDuringRead.Clear();
+            Interlocked.Exchange(ref _insertedSinceClear, 0);
+            Interlocked.Exchange(ref _active, 0);
         }
-
-        Interlocked.Exchange(ref _insertedSinceClear, 0);
-        Interlocked.Exchange(ref _active, 0);
     }
+}
+
+internal enum BridgeTransitionPoint
+{
+    SnapshotAdmitted,
+    SnapshotMembershipApplied,
+    LiveMembershipApplied,
 }
 
 /// <summary>A bridge as Asterisk's bridge listing (<c>BridgeListItem</c>) reports it.</summary>

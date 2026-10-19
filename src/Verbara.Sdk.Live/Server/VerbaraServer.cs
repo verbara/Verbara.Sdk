@@ -231,6 +231,14 @@ public sealed class VerbaraServer : IVerbaraServer
     // The last full reload a load whose barrier ran out scheduled; it never throws. Read by tests (via
     // InternalsVisibleTo) to tell when it has ended.
     internal Task ScheduledReload { get; private set; } = Task.CompletedTask;
+    private readonly Lock _deferredLoadsGate = new();
+    private readonly HashSet<Task> _deferredLoads = [];
+
+    /// <summary>Observes the actual list/deferred fence selected immediately before its wait; null in production.</summary>
+    internal Action<string, long>? FenceWaitObserved { get; set; }
+
+    /// <summary>Null in production; observes collection of a queue row without publishing a queue event.</summary>
+    internal Action? QueueRowBuffered { get; set; }
 
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
@@ -586,6 +594,9 @@ public sealed class VerbaraServer : IVerbaraServer
 
         /// <summary>The list whose wait ran out first, or <see langword="null"/>.</summary>
         public ListSnapshotMark? DeferredOn { get; set; }
+
+        public LoadSession? Session { get; set; }
+        public DeferredQueueReports? QueueReports { get; set; }
     }
 
     /// <summary>
@@ -617,6 +628,7 @@ public sealed class VerbaraServer : IVerbaraServer
         }
 
         var clock = BarrierClock ?? TimeProvider;
+        FenceWaitObserved?.Invoke(list, mark.CompleteOrdinal);
         var started = clock.GetTimestamp();
         DispatchBarrierOutcome outcome;
 
@@ -689,47 +701,108 @@ public sealed class VerbaraServer : IVerbaraServer
         bool scheduledAfterDeferral = false)
     {
         var barriers = new Barriers();
+        var transferred = false;
         Interlocked.Increment(ref _loadsInFlight);
         try
         {
             await ReadStateAsync(states, barriers, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            transferred = true;
         }
         finally
         {
             Interlocked.Decrement(ref _loadsInFlight);
+            // Agents is still part of the active load. A stop there cannot leave an owner for the queue batch.
+            if (!transferred)
+                barriers.QueueReports?.Dispose();
         }
 
-        if (barriers.DeferredOn is { } deferredOn && !scheduledAfterDeferral)
+        if (barriers.DeferredOn is null)
+            return;
+        if (scheduledAfterDeferral)
         {
+            // The existing observed owner also owns this load's pending reports; only another full reload is suppressed.
+            await RunDeferredReloadAsync(barriers, reload: false);
+            return;
+        }
+
+        lock (_deferredLoadsGate)
+        {
+            if (_disposing.IsCancellationRequested)
+            {
+                barriers.QueueReports?.Dispose();
+                return;
+            }
             VerbaraServerLog.DeferredReloadScheduled(_logger);
-            ScheduledReload = Task.Run(() => RunDeferredReloadAsync(deferredOn), CancellationToken.None);
+            var owner = Task.Run(() => RunDeferredReloadAsync(barriers, reload: true), CancellationToken.None);
+            _deferredLoads.Add(owner);
+            ScheduledReload = owner;
+            _ = owner.ContinueWith(completed =>
+            {
+                lock (_deferredLoadsGate)
+                    _deferredLoads.Remove(completed);
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
     }
 
-    /// <summary>
-    /// The full reload a load whose barrier ran out scheduled: it waits, with no bound, until the pump has dispatched
-    /// through <paramref name="deferredOn"/>, then loads. It does not run when the pump stops first (the session ended)
-    /// or the server is disposed. Its failure is logged, never thrown.
-    /// </summary>
-    private async Task RunDeferredReloadAsync(ListSnapshotMark deferredOn)
+    /// <summary>One load's retained queue reports and its optional single full reload, under session/disposal lifetime.</summary>
+    private async Task RunDeferredReloadAsync(Barriers barriers, bool reload)
     {
-        var disposing = _disposing.Token;
+        var reports = barriers.QueueReports;
+        barriers.QueueReports = null;
+        // The mark owns the exact session token, not whatever session the connection may expose later. Its cleanup
+        // cancels before waiting for the old pump's handlers; also use it for the scheduled load's active reads/waits.
+        var mark = reports?.Mark ?? barriers.DeferredOn!;
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(_disposing.Token, mark.SessionEndedToken);
+        var ending = lifetime.Token;
         try
         {
-            var outcome = await deferredOn.WaitDispatchedThroughAsync(
-                Timeout.InfiniteTimeSpan, BarrierClock ?? TimeProvider, disposing);
-            if (outcome != DispatchBarrierOutcome.Reached || disposing.IsCancellationRequested)
+            // Queue reports always wait their own completion, even when Status exhausted this load's bound first.
+            FenceWaitObserved?.Invoke("deferred", mark.CompleteOrdinal);
+            var outcome = await mark.WaitDispatchedThroughAsync(
+                Timeout.InfiniteTimeSpan, BarrierClock ?? TimeProvider, ending);
+            if (outcome != DispatchBarrierOutcome.Reached || ending.IsCancellationRequested
+                || barriers.Session is { IsCurrent: false })
                 return;
 
-            await LoadAsync(new LoadConnectionStates(_connection), disposing, scheduledAfterDeferral: true);
+            if (reports is not null)
+            {
+                foreach (var (queue, entry) in reports.Entries)
+                {
+                    if (ending.IsCancellationRequested || barriers.Session is { IsCurrent: false })
+                        return;
+                    Queues.NotifySnapshotEntry(reports.Window, queue, entry);
+                }
+                reports.Dispose();
+                reports = null;
+            }
+            if (reload && !ending.IsCancellationRequested && barriers.Session is not { IsCurrent: false })
+                await LoadAsync(new LoadConnectionStates(_connection), ending, scheduledAfterDeferral: true);
         }
-        catch (OperationCanceledException) when (disposing.IsCancellationRequested)
+        catch (OperationCanceledException) when (ending.IsCancellationRequested)
         {
-            // The server was disposed: nothing is reloaded into it.
+            // Session cleanup or server disposal cancels both pending reports and the reload.
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             VerbaraServerLog.DeferredReloadFailed(_logger, ex);
+        }
+        finally
+        {
+            reports?.Dispose();
+        }
+    }
+
+    private sealed class DeferredQueueReports(QueueSnapshotWindow window, ListSnapshotMark mark,
+        List<(string Queue, AsteriskQueueEntry Entry)> entries) : IDisposable
+    {
+        public QueueSnapshotWindow Window { get; } = window;
+        public ListSnapshotMark Mark { get; } = mark;
+        public List<(string Queue, AsteriskQueueEntry Entry)> Entries { get; } = entries;
+        public void Dispose()
+        {
+            Entries.Clear();
+            Window.Dispose();
         }
     }
 
@@ -744,6 +817,7 @@ public sealed class VerbaraServer : IVerbaraServer
 
         // Bound once, here: every decision this load takes about a starting Asterisk is about the session it began on.
         var session = _connection is AmiConnection ami ? new LoadSession(ami, TimeProvider) : null;
+        barriers.Session = session;
 
         // The request being sent, for the one ending the connection reports itself: a send it refuses.
         var request = "Status";
@@ -788,54 +862,85 @@ public sealed class VerbaraServer : IVerbaraServer
         LiveActivitySource.SetStateLoadResult(activity, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
     }
 
+    // Copied scalars only: AMI event objects and their RawFields never outlive collection of a row.
+    private abstract record QueueRow;
+    private sealed record QueueParamsRow(string Queue, int Max, string? Strategy, int Calls, int HoldTime,
+        int TalkTime, int Completed, int Abandoned) : QueueRow;
+    private sealed record QueueMemberRow(string Queue, string Interface, string? Name, int Penalty, bool Paused,
+        int Status) : QueueRow;
+    private sealed record QueueEntryRow(string Queue, string Channel, string? UniqueId, string? CallerId,
+        int Position, long? Wait, DateTimeOffset ReadAt, EventLossEpoch LossEpoch) : QueueRow;
+
     private async ValueTask LoadQueuesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
         Barriers barriers, CancellationToken cancellationToken)
     {
-        // Populate queues from QueueStatusAction. The window opens before the request is sent: a leave Asterisk reports
-        // after that moment is newer than the snapshot, which then does not bring that caller back, and a join after it
-        // is one the snapshot cannot list.
-        using var window = Queues.OpenSnapshotWindow();
-        var asked = new AskOutcome();
-        var mark = session is not null ? new ListSnapshotMark() : null;
-        await foreach (var evt in AskWhileAsteriskStartsAsync(
-            "QueueStatus", static () => new QueueStatusAction(), session, states, cancellationToken, asked, mark))
+        var window = Queues.OpenSnapshotWindow();
+        var transferred = false;
+        try
         {
-            switch (evt)
+            var rows = new List<QueueRow>();
+            var asked = new AskOutcome();
+            var mark = session is not null ? new ListSnapshotMark() : null;
+            await foreach (var evt in AskWhileAsteriskStartsAsync(
+                "QueueStatus", static () => new QueueStatusAction(), session, states, cancellationToken, asked, mark,
+                onAttempt: rows.Clear))
             {
-                case QueueParamsEvent qp:
-                    Queues.OnSnapshotQueueParams(window,
-                        qp.Queue ?? "", qp.Max ?? 0, qp.Strategy,
-                        qp.Calls ?? 0, qp.HoldTime ?? 0, qp.TalkTime ?? 0,
-                        qp.Completed ?? 0, qp.Abandoned ?? 0);
-                    break;
-                case QueueMemberEvent qm:
-                    Queues.OnSnapshotMember(window,
-                        qm.Queue ?? "", qm.Location ?? qm.Interface ?? "", qm.MemberName,
-                        qm.Penalty ?? 0, qm.Paused ?? false, qm.Status ?? 0);
-                    break;
-                case QueueEntryEvent qe:
-                    // The entry is marked as a snapshot's, and carries the Wait Asterisk reported, so
-                    // the session manager can tell a caller it already holds from a new one and date
-                    // the visit from when Asterisk says the caller joined. The caller number is read from CallerIDNum,
-                    // the header Asterisk sends and the live join reads; a CallerID header only fills it when absent.
-                    Queues.OnSnapshotEntry(window,
-                        qe.Queue ?? "", qe.Channel ?? "", qe.Uniqueid, qe.CallerIDNum ?? qe.CallerId, qe.Position ?? 0,
-                        reportedWaitSeconds: qe.Wait, lossEpoch: ReadEventLossEpoch());
-                    break;
+                switch (evt)
+                {
+                    case QueueParamsEvent qp:
+                        rows.Add(new QueueParamsRow(qp.Queue ?? "", qp.Max ?? 0, qp.Strategy, qp.Calls ?? 0,
+                            qp.HoldTime ?? 0, qp.TalkTime ?? 0, qp.Completed ?? 0, qp.Abandoned ?? 0));
+                        break;
+                    case QueueMemberEvent qm:
+                        rows.Add(new QueueMemberRow(qm.Queue ?? "", qm.Location ?? qm.Interface ?? "", qm.MemberName,
+                            qm.Penalty ?? 0, qm.Paused ?? false, qm.Status ?? 0));
+                        break;
+                    case QueueEntryEvent qe:
+                        rows.Add(new QueueEntryRow(qe.Queue ?? "", qe.Channel ?? "", qe.Uniqueid,
+                            qe.CallerIDNum ?? qe.CallerId, qe.Position ?? 0, qe.Wait, TimeProvider.GetUtcNow(),
+                            ReadEventLossEpoch()));
+                        break;
+                }
+                QueueRowBuffered?.Invoke();
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            if (asked.Refused)
+                return;
+            var full = await AwaitBarrierAsync(session, mark, "QueueStatus", states, ChannelReader.Load.Name, activity,
+                barriers, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            var reports = new List<(string Queue, AsteriskQueueEntry Entry)>();
+            foreach (var row in rows)
+            {
+                switch (row)
+                {
+                    case QueueParamsRow qp:
+                        Queues.OnSnapshotQueueParams(window, qp.Queue, qp.Max, qp.Strategy, qp.Calls,
+                            qp.HoldTime, qp.TalkTime, qp.Completed, qp.Abandoned);
+                        break;
+                    case QueueMemberRow qm:
+                        Queues.OnSnapshotMember(window, qm.Queue, qm.Interface, qm.Name, qm.Penalty, qm.Paused, qm.Status);
+                        break;
+                    case QueueEntryRow qe:
+                        var report = Queues.AdmitSnapshotEntry(window, qe.Queue, qe.Channel, qe.UniqueId, qe.CallerId,
+                            qe.Position, qe.Wait, qe.LossEpoch, qe.ReadAt, announce: full);
+                        if (!full && report is not null)
+                            reports.Add((qe.Queue, report));
+                        break;
+                }
+            }
+            if (full)
+                Queues.CompleteSnapshot(window);
+            else
+            {
+                barriers.QueueReports = new DeferredQueueReports(window, mark!, reports);
+                transferred = true;
             }
         }
-
-        // Only a snapshot Asterisk answered to the end is evidence of who is waiting: one the token cut short, or one
-        // refused (the queue module not loaded, or still loading when the budget ran out), lists no one for a reason
-        // other than an empty queue. A session that ended under it threw above.
-        // Before the snapshot removes anyone, the pump dispatches every join and leave received before
-        // QueueStatusComplete. When that wait runs out, only the non-destructive half applies: the entries were admitted
-        // above, and no held entry, member or queue is removed.
-        if (!cancellationToken.IsCancellationRequested && !asked.Refused
-            && await AwaitBarrierAsync(session, mark, "QueueStatus", states, ChannelReader.Load.Name, activity, barriers,
-                cancellationToken))
+        finally
         {
-            Queues.CompleteSnapshot(window);
+            if (!transferred)
+                window.Dispose();
         }
     }
 
@@ -1243,13 +1348,15 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <param name="cancellationToken">Cancels the request and any wait between two asks.</param>
     /// <param name="asked">Optional. Told, once the request has ended, whether Asterisk's last answer was a refusal.</param>
     /// <param name="mark">Optional. Receives where the answer's list completed in the session's event stream.</param>
+    /// <param name="onAttempt">Optional. Clears attempt-local buffered rows before each send.</param>
     private async IAsyncEnumerable<ManagerEvent> AskWhileAsteriskStartsAsync(
         string actionName, Func<ManagerAction> newAction, LoadSession? session, LoadConnectionStates states,
         [EnumeratorCancellation] CancellationToken cancellationToken, AskOutcome? asked = null,
-        ListSnapshotMark? mark = null)
+        ListSnapshotMark? mark = null, Action? onAttempt = null)
     {
         if (session is null)
         {
+            onAttempt?.Invoke();
             await foreach (var evt in _connection.SendEventGeneratingActionAsync(newAction(), cancellationToken))
                 yield return evt;
 
@@ -1263,6 +1370,7 @@ public sealed class VerbaraServer : IVerbaraServer
             // the module at the moment it was asked, and taking that refusal as final would drop a module still loading.
             var reportedBeforeAsk = session.FullyBooted.IsCompletedSuccessfully;
 
+            onAttempt?.Invoke();
             var outcome = new EventActionOutcome();
             var events = mark is not null
                 ? session.Connection.SendEventGeneratingActionAsync(newAction(), outcome, mark, cancellationToken)
@@ -1321,6 +1429,10 @@ public sealed class VerbaraServer : IVerbaraServer
         /// report made on another session says nothing about the requests this load makes on its own.
         /// </summary>
         public Task FullyBooted { get; } = connection.FullyBooted;
+
+        // ConnectAsync renews this task on every attempt. A reached old pump is not proof its session still exists.
+        public bool IsCurrent => Connection.State == AmiConnectionState.Connected
+            && ReferenceEquals(FullyBooted, Connection.FullyBooted);
 
         /// <summary>
         /// Whether the load's budget is spent. The first call starts it, at the load's first refusal from a starting
@@ -1486,6 +1598,10 @@ public sealed class VerbaraServer : IVerbaraServer
     public async ValueTask DisposeAsync()
     {
         await _disposing.CancelAsync();
+        Task[] deferred;
+        lock (_deferredLoadsGate)
+            deferred = [.. _deferredLoads];
+        await Task.WhenAll(deferred);
         _connection.Reconnected -= OnReconnected;
         if (_connection is AmiConnection amiConnection)
             amiConnection.Lost -= OnConnectionLost;

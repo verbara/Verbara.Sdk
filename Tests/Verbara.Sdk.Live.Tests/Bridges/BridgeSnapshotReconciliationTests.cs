@@ -115,6 +115,8 @@ public sealed class BridgeSnapshotReconciliationTests
         _sut.GetById("unseen").Should().BeNull("its destruction after the request is recorded even for a bridge never held");
     }
 
+    // This pins read-window marks only: all live changes finish before replay starts. Publication interleavings
+    // are exercised separately in BridgeSnapshotPublicationOrderingTests.
     [Fact]
     public void ReconcileWithSnapshot_ShouldKeepAChannelThatEnteredAfterTheRequestAndNotReAddOneThatLeft_WhenTheSnapshotSaysOtherwise()
     {

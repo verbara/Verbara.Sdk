@@ -165,7 +165,14 @@ against the answers:
   once, whether its room is still listed or not. `No active conferences.` empties the table, with
   one `UserLeft` per participant it held.
 - A participant held and still listed is kept; `UserStateChanged` is raised if the listing shows a
-  different muted or talking state.
+  different muted or talking state and no newer live report of that field arrived during the
+  listing's read, including its dispatch wait. Mute and talking are checked separately; a repeated
+  live report still protects its field, while the other field can refresh.
+
+A live state report for a participant not yet held creates no participant or event. If it arrives
+during a listing's read, a later admission from that listing uses the newer reported value silently.
+A leave or conference end invalidates the old participant rows. A later live join retains its new
+state and does not allow an older listing to restore participants from the ended room.
 
 The listings need `reporting` in the AMI user's `write` line. Without it Asterisk refuses them
 (`Permission denied`), the table keeps what it held, and the load logs the refusal at Warning once
@@ -195,7 +202,8 @@ From this release `MeetMeUser.Muted` and `MeetMeUser.Talking` are set; before, b
   the real state.
 - `Talking` follows `ConfbridgeTalking`. Asterisk sends it only for a user profile with
   `talk_detection_events=yes`; without it `Talking` stays `false`.
-- A mute, unmute or talking event for a participant the table does not hold changes nothing.
+- A mute, unmute or talking event for a participant the table does not hold creates no participant
+  and raises no event; a listing being read can retain that report for its later admission.
 - `MeetMeManager.UserStateChanged` is raised once when a participant's `Muted` or `Talking` changes;
   not for an event that leaves the value as it was, and not on the join.
 

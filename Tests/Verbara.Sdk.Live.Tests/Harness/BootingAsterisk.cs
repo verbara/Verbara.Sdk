@@ -232,6 +232,20 @@ internal sealed class BootingAsterisk
     /// </summary>
     public bool QueueStatusStopsAfterMember { get; set; }
 
+    /// <summary>Whether the listing includes its queue params; false permits a genuinely empty retry answer.</summary>
+    public bool QueueParamsIncluded { get; set; } = true;
+
+    /// <summary>Runs after the queue rows are written and before their completion, to order unsolicited events on the wire.</summary>
+    public Func<Task>? BeforeQueueStatusComplete { get; set; }
+
+    /// <summary>A final refusal after partial queue rows, instead of a successful completion.</summary>
+    public string? QueueStatusRefusalAfterRows { get; set; }
+
+    /// <summary>The member values to report on the next queue answer, independently of an older answer already written.</summary>
+    public bool QueueMemberIncluded { get; set; } = true;
+    public bool QueueMemberPaused { get; set; }
+    public int QueueMemberStatus { get; set; } = 1;
+
     /// <summary>
     /// When set, the peer answers <c>Status</c> — with its list, its refusal or its close — only once this task has
     /// completed, so a test can act while the connection's read of it is open. The peer counts the ask before it waits,
@@ -672,17 +686,24 @@ internal sealed class BootingAsterisk
         var entries = QueueEntries;
         await socket.RespondAsync("Success", id,
             [new("EventList", "start"), new("Message", "Queue status will follow")]);
-        await socket.WriteEventAsync("QueueParams",
+        if (QueueParamsIncluded)
+            await socket.WriteEventAsync("QueueParams",
         [
             new("ActionID", id), new("Queue", QueueName), new("Max", "0"), new("Strategy", QueueStrategy),
             new("Calls", "0"), new("Holdtime", "0"), new("TalkTime", "0"), new("Completed", "0"),
             new("Abandoned", "0"),
         ]);
-        await socket.WriteEventAsync("QueueMember",
-        [
-            new("ActionID", id), new("Queue", QueueName), new("Name", "Agent One"), new("Location", MemberLocation),
-            new("StateInterface", "Custom:ag1"), new("Penalty", "0"), new("Status", "1"), new("Paused", "0"),
-        ]);
+        var memberCount = QueueMemberIncluded ? 1 : 0;
+        if (QueueMemberIncluded)
+        {
+            await socket.WriteEventAsync("QueueMember",
+            [
+                new("ActionID", id), new("Queue", QueueName), new("Name", "Agent One"), new("Location", MemberLocation),
+                new("StateInterface", "Custom:ag1"), new("Penalty", "0"),
+                new("Status", QueueMemberStatus.ToString(CultureInfo.InvariantCulture)),
+                new("Paused", QueueMemberPaused ? "1" : "0"),
+            ]);
+        }
         if (QueueStatusStopsAfterMember)
             return;
 
@@ -698,10 +719,19 @@ internal sealed class BootingAsterisk
             ]);
         }
 
+        if (BeforeQueueStatusComplete is { } beforeComplete)
+            await beforeComplete();
+
+        if (QueueStatusRefusalAfterRows is { } refusal)
+        {
+            await socket.RespondAsync("Error", id, [new("Message", refusal)]);
+            return;
+        }
+
         await socket.WriteEventAsync("QueueStatusComplete",
         [
             new("ActionID", id), new("EventList", "Complete"),
-            new("ListItems", (2 + entries.Count).ToString(CultureInfo.InvariantCulture)),
+            new("ListItems", ((QueueParamsIncluded ? 1 : 0) + memberCount + entries.Count).ToString(CultureInfo.InvariantCulture)),
         ]);
     }
 

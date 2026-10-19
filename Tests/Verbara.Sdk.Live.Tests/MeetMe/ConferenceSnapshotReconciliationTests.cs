@@ -8,7 +8,7 @@ namespace Verbara.Sdk.Live.Tests.MeetMe;
 /// The conference table's reconciliation against a load's listings holds to the read window: a participant that joined
 /// after the room listing was requested is not removed, one that left after it is not brought back, a room whose
 /// participant listing did not complete is left alone, an answer whose completion cannot be told only admits, and a
-/// participant already held keeps its entry, refreshed only from a readable value.
+/// participant already held keeps its entry, refreshed only from a readable value when no live state report intervenes.
 /// </summary>
 public sealed class ConferenceSnapshotReconciliationTests
 {

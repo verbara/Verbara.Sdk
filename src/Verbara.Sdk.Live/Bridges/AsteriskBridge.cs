@@ -59,6 +59,7 @@ public sealed class AsteriskBridge : LiveObjectBase
     }
 
     // When each channel in Channels entered, on the manager's change ordinal: a snapshot requested before a channel
-    // entered cannot list it in the bridge. Guarded by SyncRoot.
+    // entered cannot list it in the bridge. Writers hold the manager's window gate then SyncRoot; the manager may
+    // inspect another bridge's marks under that shared gate without acquiring a second bridge lock.
     internal Dictionary<string, long> EnterMarks { get; } = new(StringComparer.Ordinal);
 }

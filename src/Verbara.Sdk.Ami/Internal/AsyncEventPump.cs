@@ -78,6 +78,13 @@ public sealed class AsyncEventPump : IAsyncDisposable
     internal CancellationToken StopToken { get; init; }
 
     /// <summary>
+    /// The producing AMI session's token, captured when its pump is created. Session cleanup cancels it before
+    /// awaiting the consumer, so work retained for that session can stop while an event handler still holds dispatch.
+    /// It does not stop this pump's ordinary drainage; only <see cref="StopToken"/> does that.
+    /// </summary>
+    internal CancellationToken SessionEndedToken { get; init; }
+
+    /// <summary>
     /// Number of buffered events the release found undelivered — left in the buffer when the consumer
     /// stopped, including any written after it stopped — counted by <see cref="DisposeAsync"/> or
     /// <see cref="DrainAndDisposeAsync"/> once the consumer has returned. Never counted in

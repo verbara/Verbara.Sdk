@@ -833,8 +833,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 return;
 
             // Every other join opens a new visit, not announced and not left yet, which starts when
-            // Asterisk says the caller joined: for a caller a queue snapshot reports waiting, now minus the
-            // wait it reports, and otherwise now. The one start stamps both the visit and CallQueuedEvent,
+            // Asterisk says the caller joined: for a snapshot caller, its captured read instant minus the
+            // reported wait (falling back to now when no instant is carried), and otherwise now. The one start stamps both the visit and CallQueuedEvent,
             // so the queue's metrics and the histogram measure the visit from the same moment.
             visitStartedAt = reportedJoin ?? now;
             session.QueueName = queueName;
@@ -1063,8 +1063,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         && (reportedJoin is not { } join || join - heldStart <= SameVisitWaitTolerance);
 
     /// <summary>
-    /// When the caller joined the queue by Asterisk's own account, for a queue entry the manager handles at
-    /// <paramref name="now"/>: <paramref name="now"/> minus the wait a queue snapshot reports for the caller
+    /// When the caller joined the queue by Asterisk's own account: its captured snapshot read instant, or
+    /// <paramref name="now"/> for callers without one, minus the wait a queue snapshot reports for the caller
     /// (<c>QueueEntry</c>'s <c>Wait</c>, which Asterisk counts in whole seconds, so within about a second of
     /// the true join).
     /// <para>
@@ -1074,11 +1074,14 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// cannot have measured either, and which would otherwise fail the whole reload on this one entry.
     /// </para>
     /// </summary>
-    private static DateTimeOffset? ReportedJoin(DateTimeOffset now, AsteriskQueueEntry entry) =>
-        entry is { FromSnapshot: true, ReportedWaitSeconds: long waitSeconds and >= 0 }
-        && waitSeconds <= now.UtcTicks / TimeSpan.TicksPerSecond
-            ? now - TimeSpan.FromSeconds(waitSeconds)
-            : null;
+    private static DateTimeOffset? ReportedJoin(DateTimeOffset now, AsteriskQueueEntry entry)
+    {
+        var reportedAt = entry.SnapshotReadAt ?? now;
+        return entry is { FromSnapshot: true, ReportedWaitSeconds: long waitSeconds and >= 0 }
+            && waitSeconds <= reportedAt.UtcTicks / TimeSpan.TicksPerSecond
+                ? reportedAt - TimeSpan.FromSeconds(waitSeconds)
+                : null;
+    }
 
     /// <summary>
     /// Publishes <see cref="CallConnectedEvent"/> for <paramref name="session"/> and, for a call that

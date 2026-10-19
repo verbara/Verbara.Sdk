@@ -16,7 +16,7 @@ namespace Verbara.Sdk.Live.Tests.Harness;
 /// forgets to release cannot stall the lane.
 /// </para>
 /// </remarks>
-internal sealed class DispatchGate : IObserver<ManagerEvent>, IDisposable
+internal sealed class DispatchGate(string eventName = DispatchGate.Name) : IObserver<ManagerEvent>, IDisposable
 {
     /// <summary>The <c>UserEvent</c> header of the event that blocks the dispatch.</summary>
     public const string Name = "held-dispatch";
@@ -34,15 +34,15 @@ internal sealed class DispatchGate : IObserver<ManagerEvent>, IDisposable
     public bool TimedOut { get; private set; }
 
     /// <summary>The frame the peer writes to block the dispatch.</summary>
-    public static KeyValuePair<string, string>[] Frame() =>
-        [new("Privilege", "user,all"), new("UserEvent", Name)];
+    public static KeyValuePair<string, string>[] Frame(string eventName = Name) =>
+        [new("Privilege", "user,all"), new("UserEvent", eventName)];
 
     /// <summary>Lets the dispatch go on.</summary>
     public void Release() => _released.Set();
 
     public void OnNext(ManagerEvent value)
     {
-        if (value is not UserEventEvent { UserEvent: Name })
+        if (value is not UserEventEvent trigger || trigger.UserEvent != eventName)
             return;
 
         _held.TrySetResult();
