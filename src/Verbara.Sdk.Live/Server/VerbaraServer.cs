@@ -871,8 +871,7 @@ public sealed class VerbaraServer : IVerbaraServer
     private async ValueTask LoadQueuesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
         Barriers barriers, CancellationToken cancellationToken)
     {
-        var window = Queues.OpenSnapshotWindow();
-        var transferred = false;
+        QueueSnapshotWindow? window = Queues.OpenSnapshotWindow();
         try
         {
             var rows = new List<QueueRow>();
@@ -931,13 +930,12 @@ public sealed class VerbaraServer : IVerbaraServer
             else
             {
                 barriers.QueueReports = new DeferredQueueReports(window, mark!, reports);
-                transferred = true;
+                window = null; // The deferred reports now own the read window.
             }
         }
         finally
         {
-            if (!transferred)
-                window.Dispose();
+            window?.Dispose();
         }
     }
 

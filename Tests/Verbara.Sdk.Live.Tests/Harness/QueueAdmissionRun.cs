@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Reactive.Disposables;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -29,7 +30,7 @@ internal sealed class QueueAdmissionRun : IAsyncDisposable
     private readonly TaskCompletionSource _statusAnswer = NewSignal();
     private readonly DispatchGate _firstGate = new();
     private readonly DispatchGate _secondGate = new(SecondGateName);
-    private readonly List<IDisposable> _subscriptions = [];
+    private readonly CompositeDisposable _subscriptions = new();
     private readonly ConcurrentQueue<AsteriskQueueEntry> _reports = new();
     private readonly ConcurrentQueue<CallQueuedEvent> _queued = new();
     private readonly TaskCompletionSource _channelDelivered = NewSignal();
@@ -234,13 +235,14 @@ internal sealed class QueueAdmissionRun : IAsyncDisposable
         {
             try
             {
-                await Run.DisposeAsync();
-                await Run.Server.ScheduledReload.WaitAsync(Run.Bound);
+                using (_subscriptions)
+                {
+                    await Run.DisposeAsync();
+                    await Run.Server.ScheduledReload.WaitAsync(Run.Bound);
+                }
             }
             finally
             {
-                foreach (var subscription in _subscriptions)
-                    subscription.Dispose();
                 Tracker.Dispose();
                 await Manager.DisposeAsync();
                 Counters?.Dispose();
