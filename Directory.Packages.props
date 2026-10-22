@@ -47,9 +47,9 @@
   <!-- Runtime dependencies -->
   <ItemGroup>
     <!-- Test-only: in-process ASP.NET Core HTTP pipeline (no port binding) for webhook integration tests. -->
-    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.13" />
     <!-- Test-only: real JwtBearer authentication in the SSE push stream tests (tokens minted per test host). -->
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.13" />
     <!-- System.IO.Pipelines is included in net10.0, no NuGet needed -->
     <PackageVersion Include="System.Reactive" Version="7.0.0" />
   </ItemGroup>
@@ -66,7 +66,7 @@
 
   <!-- NATS (Verbara.Sdk.Push.Nats bridge) -->
   <ItemGroup>
-    <PackageVersion Include="NATS.Client.Core" Version="3.3.0" />
+    <PackageVersion Include="NATS.Client.Core" Version="3.3.1" />
   </ItemGroup>
 
   <!-- ONNX Runtime (Verbara.Sdk.VoiceAi.TurnDetection) -->
@@ -91,7 +91,7 @@
 
   <!-- SourceLink — debuggable NuGet packages -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.402" />
   </ItemGroup>
 
   <!-- Analyzers — Layer 1: API Protection -->
