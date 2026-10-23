@@ -73,13 +73,10 @@ internal sealed class LiveEventOutbox
                 return;
 
             var any = false;
-            foreach (var entry in _entries)
+            foreach (var entry in _entries.Where(e => e is { Claimed: false, Owner: null } && e.Thread == thread))
             {
-                if (entry is { Claimed: false, Owner: null } && entry.Thread == thread)
-                {
-                    entry.Owner = frame;
-                    any = true;
-                }
+                entry.Owner = frame;
+                any = true;
             }
 
             if (!any)
@@ -111,12 +108,8 @@ internal sealed class LiveEventOutbox
 
                 if (unowned is not null)
                 {
-                    foreach (var entry in unowned)
-                    {
-                        var unownedFailure = Raise(entry);
-                        if (unownedFailure is not null)
-                            _reportUnownedFailure(unownedFailure);
-                    }
+                    foreach (var unownedFailure in unowned.Select(Raise).OfType<Exception>())
+                        _reportUnownedFailure(unownedFailure);
                 }
 
                 var own = Raise(next);
@@ -131,11 +124,8 @@ internal sealed class LiveEventOutbox
                 frame.Active = false;
                 // Only when a raise was abandoned by an exception that is not a handler's: what is left goes back to
                 // this thread, so its next call raises it.
-                foreach (var entry in _entries)
-                {
-                    if (entry is { Claimed: false } && ReferenceEquals(entry.Owner, frame))
-                        entry.Owner = null;
-                }
+                foreach (var entry in _entries.Where(e => e is { Claimed: false } && ReferenceEquals(e.Owner, frame)))
+                    entry.Owner = null;
             }
 
             _current.Value = outer;

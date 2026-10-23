@@ -85,9 +85,8 @@ public sealed class LiveEventOrderAcrossThreadsTests
             {
                 _queues.OnCallerLeaveReported("u1", Queue, "PJSIP/caller-1", Epoch);
             }
-#pragma warning disable CA1031 // Reported by the assertion below.
-            catch (Exception ex)
-#pragma warning restore CA1031
+            // Reported by the assertion below.
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 reportFailure = ex;
             }

@@ -230,9 +230,8 @@ internal sealed class HandlerOffloadProbe
             {
                 call();
             }
-#pragma warning disable CA1031 // Reported by the assertion below, on the test thread.
-            catch (Exception ex)
-#pragma warning restore CA1031
+            // Reported by the assertion below, on the test thread.
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 _failure = ex;
             }
