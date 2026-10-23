@@ -5,6 +5,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Verbara.Sdk.Pro.Cluster" />
     <InternalsVisibleTo Include="Verbara.Sdk.Sessions.Tests" />
+    <!-- The real AMI queue-reload tests observe the session tracker and use its manual clock. -->
+    <InternalsVisibleTo Include="Verbara.Sdk.Live.Tests" />
     <InternalsVisibleTo Include="Verbara.Sdk.Sessions.FunctionalTests" />
     <InternalsVisibleTo Include="Verbara.Sdk.Hosting" />
     <InternalsVisibleTo Include="Verbara.Sdk.Hosting.Tests" />

@@ -445,7 +445,7 @@ internal static class AmiCaptureReplay
 
         var options = new SessionOptions();
         var connection = new ReloadableConnection();
-        var server = new VerbaraServer(connection.Connection, NullLogger<VerbaraServer>.Instance);
+        var server = new VerbaraServer(connection.Connection, NullLogger<VerbaraServer>.Instance) { TimeProvider = clock };
         var manager = new CallSessionManager(Options.Create(options), NullLogger<CallSessionManager>.Instance,
             new InMemorySessionStore(), clock);
         try
@@ -887,7 +887,7 @@ internal static class AmiCaptureReplay
             connection.Subscribe(Arg.Do<IObserver<ManagerEvent>>(o => observer = o))
                 .Returns(Substitute.For<IDisposable>());
 
-            var server = new VerbaraServer(connection, NullLogger<VerbaraServer>.Instance);
+            var server = new VerbaraServer(connection, NullLogger<VerbaraServer>.Instance) { TimeProvider = clock ?? TimeProvider.System };
             var manager = clock is null
                 ? new CallSessionManager(
                     Options.Create(options),

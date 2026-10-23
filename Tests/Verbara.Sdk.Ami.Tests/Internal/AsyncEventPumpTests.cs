@@ -405,6 +405,58 @@ public class AsyncEventPumpTests
     }
 
     [Fact]
+    public async Task WaitDispatchedThroughAsync_ShouldPassADropWithNoSuccessorOnlyOnceTheEarlierEventsAreDispatched_WhenTheBufferOverflowsBehindAHeldHandler()
+    {
+        // Capacity 1: e1 ("held") is in its handler, e2 fills the buffer, e3 is dropped, and nothing follows e3.
+        await using var pump = new AsyncEventPump(capacity: 1);
+        var held = new HeldFirstDispatch(pump);
+        await held.Entered.WaitAsync(Bound);
+        pump.TryEnqueue(CreateEvent("e2")).Should().BeTrue("the one-slot buffer is empty while e1 is in its handler");
+        pump.TryEnqueue(CreateEvent("e3")).Should().BeFalse("the buffer is full");
+
+        var lastReceived = pump.LastReceived;
+        var throughWhileHeld = pump.DispatchedThrough;
+        var barrier = pump.WaitDispatchedThroughAsync(3, Bound, TimeProvider.System).AsTask();
+        var completedWhileHeld = barrier.IsCompleted;
+
+        held.Release();
+        var outcome = await barrier.WaitAsync(Bound * 2);
+
+        using (new FluentAssertions.Execution.AssertionScope())
+        {
+            lastReceived.Should().Be(3, "e1, e2 and e3 were each numbered as they were handed over, the drop included");
+            throughWhileHeld.Should().Be(0, "a drop never advances past an event still buffered or in its handler");
+            completedWhileHeld.Should().BeFalse("e1 is still in its handler and e2 is still buffered");
+            outcome.Should().Be(DispatchBarrierOutcome.Reached,
+                "once e2 is dispatched with the buffer empty, the consumer passes the drop that no event follows");
+            pump.DispatchedThrough.Should().Be(3);
+            held.Received.Should().Equal("held", "e2");
+        }
+    }
+
+    [Fact]
+    public async Task WaitDispatchedThroughAsync_ShouldEndAsEnded_WhenAPumpThatNeverStartedIsReleased()
+    {
+        // Never started: no consumer will ever run, so only the release can end a wait for an ordinal not yet reached.
+        var pump = new AsyncEventPump();
+        pump.TryEnqueue(CreateEvent("e1")).Should().BeTrue();
+        var barrier = pump.WaitDispatchedThroughAsync(1, Timeout.InfiniteTimeSpan, TimeProvider.System).AsTask();
+        var completedBeforeRelease = barrier.IsCompleted;
+
+        await pump.DisposeAsync();
+        var outcome = await barrier.WaitAsync(Bound);
+
+        using (new FluentAssertions.Execution.AssertionScope())
+        {
+            completedBeforeRelease.Should().BeFalse("e1 was never dispatched and the pump has not been released");
+            outcome.Should().Be(DispatchBarrierOutcome.Ended,
+                "a pump released without ever starting will dispatch nothing, so its waiters end instead of hanging");
+            (await pump.WaitDispatchedThroughAsync(1, Timeout.InfiniteTimeSpan, TimeProvider.System))
+                .Should().Be(DispatchBarrierOutcome.Ended, "a wait that begins after the release ends at once");
+        }
+    }
+
+    [Fact]
     public async Task DisposeAsync_ShouldNotThrow_WhenNotStarted()
     {
         var pump = new AsyncEventPump(5);

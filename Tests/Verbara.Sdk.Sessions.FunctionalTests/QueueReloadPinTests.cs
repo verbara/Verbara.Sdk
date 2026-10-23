@@ -17,6 +17,7 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// (<c>Recordings/asterisk-ami/queue-reload-*</c>), with the manager's clock set from each frame's own
 /// <c>Timestamp</c>; the typed ones move the manager's clock between deliveries. None of these tests asserts a
 /// terminal state or an audit trail.
+/// These are synchronous visit-identity/accounting pins over a substitute connection, not held-dispatch ordering tests.
 /// </remarks>
 [Collection(WaitTimeHistogramGroup.Name)]
 public sealed class QueueReloadPinTests(ITestOutputHelper output)

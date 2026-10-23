@@ -58,7 +58,7 @@ internal sealed class QueueCallRig : IAsyncDisposable
     /// attaches a manager and a tracker to it.
     /// </summary>
     /// <param name="clock">
-    /// Optional. The manager's clock seam, the internal constructor's <see cref="TimeProvider"/>; the
+    /// Optional. The shared Live/Sessions clock seam, the internal constructor's <see cref="TimeProvider"/>; the
     /// system clock when omitted, as in production. A test that moves it between deliveries fixes how
     /// much time the manager sees pass between two frames.
     /// </param>
@@ -75,7 +75,7 @@ internal sealed class QueueCallRig : IAsyncDisposable
     {
         var connection = new ReloadableConnection();
         var options = Options.Create(new SessionOptions());
-        var server = new VerbaraServer(connection.Connection, connection.ServerLogger);
+        var server = new VerbaraServer(connection.Connection, connection.ServerLogger) { TimeProvider = clock ?? TimeProvider.System };
         var manager = new CallSessionManager(options, NullLogger<CallSessionManager>.Instance, store ?? new InMemorySessionStore(),
             clock ?? TimeProvider.System, wrapUpDurations);
         var tracker = new QueueSessionTracker(manager, options);

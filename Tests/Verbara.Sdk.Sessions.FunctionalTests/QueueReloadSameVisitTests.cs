@@ -18,6 +18,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// <c>Timestamp</c>; the typed ones move the manager's clock between deliveries. None of these tests asserts a
 /// terminal state or an audit trail.
 /// </para>
+/// <para>The replay and typed paths deliver synchronously over a substitute connection. These visit-identity pins
+/// do not establish ordering against a live join still waiting in an AMI dispatch pump.</para>
 /// <para>
 /// Two tests pin the accepted residual and are named after it: a caller that left and re-joined the same queue
 /// while the SDK was disconnected, and whose snapshot cannot show it (no <c>Wait</c>, or a re-join within 2 s of

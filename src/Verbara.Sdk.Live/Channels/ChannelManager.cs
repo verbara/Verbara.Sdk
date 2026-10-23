@@ -517,12 +517,16 @@ public sealed class ChannelManager
     /// There is deliberately no overload without one: a caller that cannot say when its snapshot
     /// was taken cannot be allowed to end calls with it.
     /// </param>
+    /// <param name="removeAbsent">
+    /// <see langword="false"/> applies only the non-destructive half, for a snapshot whose wait for the event pump ran
+    /// out: what it lists and the table lacks is admitted, and nothing is removed.
+    /// </param>
     /// <exception cref="ObjectDisposedException">
     /// <paramref name="window"/> is already closed: the departures it recorded may be gone, so its
     /// snapshot can no longer be told from a stale one.
     /// </exception>
     internal void ReconcileWithSnapshot(
-        IReadOnlyCollection<ChannelSnapshotEntry> snapshot, SnapshotReadWindow window)
+        IReadOnlyCollection<ChannelSnapshotEntry> snapshot, SnapshotReadWindow window, bool removeAbsent = true)
     {
         ObjectDisposedException.ThrowIf(window.IsClosed, window);
         var admittedThrough = window.Mark;
@@ -539,7 +543,7 @@ public sealed class ChannelManager
         // ConcurrentDictionary.Values hands back a snapshot, so removing inside the loop is safe.
         var removed = 0;
         var newerThanSnapshot = 0;
-        foreach (var held in _channelsByUniqueId.Values.Where(channel => !present.Contains(channel.UniqueId)))
+        foreach (var held in _channelsByUniqueId.Values.Where(channel => removeAbsent && !present.Contains(channel.UniqueId)))
         {
             // The snapshot was requested before this channel was admitted, so it could not have
             // reported it and its silence is not evidence. Removing it here would end a call that
@@ -782,7 +786,10 @@ public sealed record ExtensionHistoryEntry(string Context, string Extension, int
 /// One channel as a completed state reload reported it, buffered for
 /// <see cref="ChannelManager.ReconcileWithSnapshot"/>. Its members mirror
 /// <see cref="ChannelManager.OnNewChannel"/>'s parameters, so admitting a channel out of a snapshot
-/// is the same operation a live <c>NewChannel</c> event performs.
+/// is the same operation a live <c>NewChannel</c> event performs. The one exception is <c>BridgeId</c>, the
+/// <c>BridgeID</c> header: the bridge the channel is in, equal to the bridge listing's <c>BridgeUniqueid</c>, or
+/// <see langword="null"/> when the header is absent or empty. The bridge reconciliation reads it; the channel table
+/// does not.
 /// </summary>
 internal sealed record ChannelSnapshotEntry(
     string UniqueId,
@@ -793,4 +800,5 @@ internal sealed record ChannelSnapshotEntry(
     string? Context = null,
     string? Extension = null,
     int Priority = 1,
-    string? LinkedId = null);
+    string? LinkedId = null,
+    string? BridgeId = null);

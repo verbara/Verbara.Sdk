@@ -1,5 +1,6 @@
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Connection;
+using Verbara.Sdk.Enums;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -44,7 +45,20 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// <item><description><c>EventActionOutcome.SessionEnded</c>, a <see cref="bool"/>;</description></item>
 /// <item><description>
 /// <c>AmiConnection.Lost</c>, an event of <see cref="Action{T}"/> of a nullable <see cref="Exception"/>, which Live
-/// subscribes to and unsubscribes from.
+/// subscribes to and unsubscribes from;
+/// </description></item>
+/// <item><description><c>AmiConnection.InDispatch</c>, a <see cref="bool"/>;</description></item>
+/// <item><description>
+/// <c>AmiConnection.StateAndWriter</c>, a tuple of <see cref="AmiConnectionState"/> and <see cref="bool"/>;
+/// </description></item>
+/// <item><description>
+/// <c>AmiConnection.SendEventGeneratingActionAsync(ManagerAction, EventActionOutcome?, ListSnapshotMark, CancellationToken)</c>,
+/// an <see cref="IAsyncEnumerable{T}"/> of <see cref="ManagerEvent"/>;
+/// </description></item>
+/// <item><description>
+/// <c>new ListSnapshotMark()</c>, its <c>CompleteOrdinal</c> (a <see cref="long"/>), and its
+/// <c>WaitDispatchedThroughAsync(TimeSpan, TimeProvider, CancellationToken)</c>, a <see cref="ValueTask{T}"/> of
+/// <c>DispatchBarrierOutcome</c>, whose members <c>Reached</c> and <c>TimedOut</c> Live reads.
 /// </description></item>
 /// </list>
 /// </remarks>
@@ -85,6 +99,26 @@ public sealed class AmiInternalsUsedByLiveTests
         connection.Lost += onLost;
         connection.Lost -= onLost;
 
+        // AmiConnection.InDispatch and AmiConnection.StateAndWriter: their getters, by their exact types.
+        var inDispatch = connection.InDispatch;
+        Exactly<bool>(ref inDispatch);
+        var stateAndWriter = connection.StateAndWriter;
+        Exactly<(AmiConnectionState State, bool WrittenByCaller)>(ref stateAndWriter);
+
+        // new ListSnapshotMark(), its CompleteOrdinal and its wait, and the overload that fills it; bound only.
+        var mark = new ListSnapshotMark();
+        var completeOrdinal = mark.CompleteOrdinal;
+        Exactly<long>(ref completeOrdinal);
+        Func<TimeSpan, TimeProvider, CancellationToken, ValueTask<Verbara.Sdk.Ami.Internal.DispatchBarrierOutcome>> wait =
+            mark.WaitDispatchedThroughAsync;
+        Func<ManagerAction, EventActionOutcome?, ListSnapshotMark, CancellationToken, IAsyncEnumerable<ManagerEvent>> sendMarked =
+            connection.SendEventGeneratingActionAsync;
+        var outcomes = new[]
+        {
+            Verbara.Sdk.Ami.Internal.DispatchBarrierOutcome.Reached,
+            Verbara.Sdk.Ami.Internal.DispatchBarrierOutcome.TimedOut,
+        };
+
         // new EventActionOutcome(), and the overload by its exact parameter list and return type.
         var outcome = new EventActionOutcome();
         Func<ManagerAction, EventActionOutcome, CancellationToken, IAsyncEnumerable<ManagerEvent>> send =
@@ -115,6 +149,12 @@ public sealed class AmiInternalsUsedByLiveTests
             send.Should().NotBeNull("the overload binds to the delegate Live's call site needs");
             sendWithin.Should().NotBeNull("the overload binds to the delegate OriginateAsync's call site needs");
             onLost.Should().NotBeNull("the event takes the handler type Live's call site declares");
+            wait.Should().NotBeNull("the mark's wait binds to the delegate Live's call site needs");
+            sendMarked.Should().NotBeNull("the overload binds to the delegate Live's load needs");
+            outcomes.Should().HaveCount(2, "Live reads both outcomes by name");
+            inDispatch.Should().BeFalse("the test does not run inside a dispatch");
+            stateAndWriter.Should().Be((AmiConnectionState.Connected, true), "the caller's own ConnectAsync connected it");
+            completeOrdinal.Should().Be(0L, "a new mark describes no list yet");
             fullyBooted.IsCompleted.Should().BeFalse("the peer never reported FullyBooted on this session");
             received.Should().BeEmpty("the peer's list was empty");
             rejection.Should().BeNull("Asterisk refused nothing");

@@ -4,6 +4,91 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: a start cut short while your own `ConnectAsync` reconnects throws (#457)
+
+Over an `AmiConnection`, a `VerbaraServer.StartAsync` whose load stops on a `Connecting` or `Connected` state that
+your own `ConnectAsync` wrote now throws `AmiNotConnectedException`. It used to return as if a reconnect would reload
+Live, but a connect you make yourself raises no `Reconnected`, so nothing reloaded and the tables kept what they held
+at the loss. Call `RequestInitialStateAsync` once your `ConnectAsync` has returned. A start cut short while the
+connection's own reconnect loop runs still returns, logs a Warning, and is reloaded by that reconnect.
+
+### Fixed — BREAKING: Live's queue counters count each visit once across reconnects, and each managed removal as left (#457)
+
+A reload reconciles Live's queue table against `QueueStatus` instead of clearing it and adding every caller again.
+`live.queue.calls.joined` used to count a caller who was still waiting once more on every reconnect; a held caller
+now keeps its `JoinedAt` and reported wait and is not counted again. A repeated live join for a caller already held
+keeps the stored entry and is not counted either; its `CallerJoined` carries the reported entry. A newly listed
+caller is dated at the instant its row was read, so buffering the answer adds no delay to `JoinedAt` or to the
+session visit's start. `live.queue.calls.left` now also counts the callers the SDK removes without a reported leave:
+a caller a completed reload no longer lists, the callers of a queue the listing no longer reports or that
+`RemoveQueue` removes, a caller whose channel a reconciliation removed, and a caller displaced by a join of another
+call under the same channel name. Those removals record no `live.queue.wait_time` sample. For the transitions the SDK
+makes, `live.queue.calls.joined − live.queue.calls.left` equals the callers held, per process and summed over every
+`VerbaraServer` (the instruments carry no server tag); `QueueManager.Clear()` and direct edits of the exposed
+collections are outside that, and `Clear()` still removes without counting. Labelled breaking because both published
+numbers change meaning: after a reconnect a dashboard of `joined` reads lower and one of `left` higher than before.
+For the callers waiting now, read `AsteriskQueue.Entries`.
+
+### Changed — BREAKING: `BridgeCount` counts the bridges inserted since the start (#457)
+
+`BridgeManager.BridgeCount` counted the bridges created since the last `Clear()`, and a reconnect cleared the table.
+It now counts every bridge inserted since the manager was created or last cleared, whether by a live `BridgeCreate`
+or by a listing; a reconnect no longer resets it. `live.bridges.created` advances for each insertion, the initial
+load's included, and `live.bridges.destroyed` for an observed or reconciled removal; a bridge already held advances
+neither. A live `BridgeCreate` for a bridge first admitted from a listing raises `BridgeCreated` once without
+counting it again. `ActiveBridgeCount` counts the bridges held now, conference and holding bridges included.
+
+### Changed — BREAKING: a reload announces on `CallerLeft` and `UserLeft` the callers and participants it finds gone (#457)
+
+A caller removed from Live's queue table by a completed reload or a channel reconciliation, or displaced by a join of
+another call under its channel name, raises `QueueManager.CallerLeft` once. A conference participant absent from a
+completed conference listing raises `MeetMeManager.UserLeft` once, whether its room is still listed or not, as an
+observed room end already did. Before, a reconnect cleared both tables without either event, and code that reset its
+own state on reconnect kept it consistent that way; now the participants and callers that survive the outage are kept
+and no `UserJoined` or `CallerJoined` is raised for them again, so code that resets on reconnect loses them. Track the
+leaves instead. A handler cannot tell one of these leaves from a reported one. `RemoveQueue` counts its callers as
+left but raises no `CallerLeft`.
+
+### Fixed: a reload no longer ends a call whose hangup the SDK had already received (#457)
+
+Over an `AmiConnection`, every completed listing a load uses — channels (`Status`), bridges (`BridgeList`),
+conference rooms (`ConfbridgeListRooms` and `ConfbridgeList`, an answer of `No active conferences.` included) and
+queues (`QueueStatus`) — now waits until the events received before it completed have reached the event handlers.
+The sweep's `VerbaraServer.ReconcileChannelsAsync` waits too. A queued `Hangup` ends its call with Asterisk's cause,
+where a snapshot used to end it first with `cause` = `reload` and no `HangupCause`. The wait is bounded at 10 s per
+load: past it, the load admits what the listings add, removes and ends nothing, logs `[LIVE] <List> barrier ran out
+after 10 s` at Warning, tags its activity `live.reconcile.deferred`, and runs one full reload once the handlers have
+caught up (the sweep schedules none). A reconciliation started from inside an event handler does not wait. Another
+`IAmiConnection` has no dispatch order to wait on and keeps the old behaviour. A `Hangup` that Asterisk writes after
+it answered `Status` without that channel can still follow a `reload` ending: the marker means no hangup was seen
+before the call ended. Queue snapshot joins reach Sessions after the live joins received before them, so a caller
+gets one visit, one offer and no false abandon. `RequestInitialStateAsync`, `StartAsync` and `ReconcileChannelsAsync`
+throw `OperationCanceledException` when the server is disposed during that wait.
+
+### Fixed: a reconnect restores the bridges and conference rooms Asterisk still holds (#457)
+
+A reconnect cleared the bridge and conference tables and loaded neither again. After a completed `Status`, a load now
+asks `BridgeList` and reconciles the bridge table, taking each channel's membership from the `BridgeID` that `Status`
+reports, then asks `ConfbridgeListRooms` and one `ConfbridgeList` per room and reconciles the conference table.
+Entries admitted from a listing raise no `BridgeCreated`, `ChannelEntered` or `UserJoined`, and membership a listing
+corrects on a held bridge raises no `ChannelEntered` or `ChannelLeft`. A listing that proves a bridge gone raises
+`BridgeDestroyed`. A listed participant whose muted or talking state differs raises `UserStateChanged`; an older row
+never reverses a newer live report. A refused or interrupted listing leaves what is held in place; when `Status` is
+refused, bridges and rooms are neither asked nor changed. The conference listings need `reporting` in the AMI user's
+`write`: a refusal keeps the held rooms, is logged once per AMI session at Warning, and makes Asterisk raise one
+`RequestNotAllowed` security event per refused listing. The agents table is still cleared and loaded again.
+
+### Changed: Live's queue and conference events are raised outside the managers' locks, one at a time in change order (#457)
+
+`QueueManager` and `MeetMeManager` raise their events with none of their locks held, so a handler may call into the
+manager, on its own thread or by waiting for another thread that does. Each manager raises its events one at a time
+in the order of the changes, and a call raises its own events before it returns. A call a handler makes into the same
+manager is reported after the handler and the event's other subscribers return, no longer nested inside it. An event
+waits up to one second for the earlier ones of its manager; a handler that runs longer lets the events of other
+threads go alongside it. A handler that throws no longer keeps the events queued behind it from being raised; the first
+exception is rethrown from the call that made the change. A handler must not block on another event of the same manager caused by
+its own calls. The full rules are in the troubleshooting guide.
+
 ### Added: each queue can set its own wrap-up length (#449)
 
 A host whose queues do not share one wrap-up length registers an `IWrapUpDurationProvider` (one singleton in the
@@ -102,8 +187,9 @@ always `false`, so code that branched on `false` now takes the other branch for 
 The values are read with the same yes/no reader as the rest of the AMI layer (`Yes`, `1`, `on`, `true` and their
 opposites); a `ConfbridgeTalking` whose status cannot be read leaves `Talking` as it was. `Muted` is the
 participant's mute request, not whether it is audible. `Talking` needs `talk_detection_events=yes` in the ConfBridge
-user profile. A whole-room mute from the keypad sends no event, so it is not reflected. A reconnect still clears the
-conference table and does not reload it. `QueueMemberPause` now sets a live queue member's paused state from
+user profile. A whole-room mute from the keypad sends no event, so it is not reflected. A reconnect's reload
+restores the conference table from `ConfbridgeList`, with each participant's `Muted` and `Talking` (#457).
+`QueueMemberPause` now sets a live queue member's paused state from
 the typed `Paused` member, like the other queue member events; Asterisk sends `Paused: 1`/`0`, which reads the same
 as before.
 

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk;
+using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Live.Server;
 using FluentAssertions;
@@ -67,12 +68,10 @@ public sealed class VerbaraServerTests : IAsyncLifetime
             Channel = "PJSIP/2000-001",
             State = "Up"
         };
-        var callCount = 0;
         _connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
-                callCount++;
-                if (callCount == 1) // StatusAction
+                if (callInfo.Arg<ManagerAction>() is StatusAction)
                     return ToAsyncEnumerable(statusEvent);
                 return EmptyAsyncEnumerable();
             });
@@ -222,12 +221,10 @@ public sealed class VerbaraServerTests : IAsyncLifetime
             Max = 10,
             Strategy = "ringall"
         };
-        var callCount = 0;
         _connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
-                callCount++;
-                if (callCount == 2) // QueueStatusAction
+                if (callInfo.Arg<ManagerAction>() is QueueStatusAction)
                     return ToAsyncEnumerable(queueParams);
                 return EmptyAsyncEnumerable();
             });
@@ -245,12 +242,10 @@ public sealed class VerbaraServerTests : IAsyncLifetime
             Agent = "2001",
             Status = "AGENT_IDLE"
         };
-        var callCount = 0;
         _connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
-                callCount++;
-                if (callCount == 3) // AgentsAction
+                if (callInfo.Arg<ManagerAction>() is AgentsAction)
                     return ToAsyncEnumerable(agentEvent);
                 return EmptyAsyncEnumerable();
             });
@@ -275,17 +270,12 @@ public sealed class VerbaraServerTests : IAsyncLifetime
             Max = 5,
             Strategy = "ringall"
         };
-        var callCount = 0;
         _connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
-            .Returns(callInfo =>
+            .Returns(callInfo => callInfo.Arg<ManagerAction>() switch
             {
-                callCount++;
-                return callCount switch
-                {
-                    1 => ToAsyncEnumerable(statusEvent),  // StatusAction
-                    2 => ToAsyncEnumerable(queueParams),   // QueueStatusAction
-                    _ => EmptyAsyncEnumerable()            // AgentsAction → empty
-                };
+                StatusAction => ToAsyncEnumerable(statusEvent),
+                QueueStatusAction => ToAsyncEnumerable(queueParams),
+                _ => EmptyAsyncEnumerable(), // AgentsAction → empty
             });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));

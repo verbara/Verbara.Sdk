@@ -38,7 +38,7 @@ internal sealed class Run : IAsyncDisposable
     private Task _firstServed = Task.CompletedTask;
 
     private Run(BootingAsterisk firstPeer, BootingAsterisk? secondPeer, bool autoReconnect, TimeSpan reconnectInitialDelay,
-        TimeSpan eventTimeout)
+        TimeSpan eventTimeout, TimeProvider? barrierClock)
     {
         FirstPeer = firstPeer;
         SecondPeer = secondPeer;
@@ -61,7 +61,8 @@ internal sealed class Run : IAsyncDisposable
             _sockets,
             ConnectionLog);
         // The load's interval and budget run on the manual clock.
-        Server = new VerbaraServer(Connection, ServerLog) { TimeProvider = Clock };
+        // A list reconciliation's wait for the event pump runs on Clock too, unless the test gives it a clock of its own.
+        Server = new VerbaraServer(Connection, ServerLog) { TimeProvider = Clock, BarrierClock = barrierClock };
         Connection.Reconnected += () => _reconnected.TrySetResult();
     }
 
@@ -96,11 +97,17 @@ internal sealed class Run : IAsyncDisposable
     /// Connects over <paramref name="firstPeer"/>, without starting the server. The reconnect's socket, when there is
     /// one, is served by <paramref name="secondPeer"/> once the test calls <see cref="ReleaseSecondPeer"/>.
     /// </summary>
+    /// <param name="barrierClock">
+    /// The clock the server's wait for the event pump is bounded on; <see langword="null"/>, the default, is
+    /// <see cref="Clock"/>. A test that counts every timer on <see cref="Clock"/> as one of the load's waits for a starting
+    /// Asterisk gives it another.
+    /// </param>
     public static async Task<Run> ConnectAsync(BootingAsterisk firstPeer, BootingAsterisk? secondPeer = null,
-        bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null, TimeSpan? eventTimeout = null)
+        bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null, TimeSpan? eventTimeout = null,
+        TimeProvider? barrierClock = null)
     {
         var run = new Run(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay ?? TimeSpan.FromMilliseconds(1),
-            eventTimeout ?? TimeSpan.Zero);
+            eventTimeout ?? TimeSpan.Zero, barrierClock);
         run._peers = run.ServePeersAsync(run._peerCts.Token);
         try
         {
@@ -121,9 +128,10 @@ internal sealed class Run : IAsyncDisposable
     /// <see cref="ConnectAsync"/> and calls <see cref="StartServerAsync"/> itself.
     /// </summary>
     public static async Task<Run> StartAsync(BootingAsterisk firstPeer, BootingAsterisk? secondPeer = null,
-        bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null)
+        bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null, TimeProvider? barrierClock = null)
     {
-        var run = await ConnectAsync(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay);
+        var run = await ConnectAsync(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay,
+            barrierClock: barrierClock);
         try
         {
             await run.StartServerAsync();

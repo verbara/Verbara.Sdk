@@ -457,7 +457,7 @@ public sealed class MeetMeManagerTests
     [InlineData(Room, ChannelB, "mute")]
     [InlineData("300", ChannelA, "talking")]
     [InlineData(Room, ChannelB, "talking")]
-    public void OnUserMutedOrOnUserTalking_ShouldChangeNothing_WhenRoomOrParticipantIsNotHeld(string roomNumber, string channel, string eventName)
+    public void OnUserMutedOrOnUserTalking_ShouldCreateNothingOrNotify_WhenRoomOrParticipantIsNotHeldWithoutAnOpenRead(string roomNumber, string channel, string eventName)
     {
         var logger = new CapturingLogger();
         var sut = new MeetMeManager(logger);

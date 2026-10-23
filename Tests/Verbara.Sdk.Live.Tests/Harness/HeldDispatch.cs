@@ -1,0 +1,181 @@
+using Verbara.Sdk.Ami.Events;
+
+namespace Verbara.Sdk.Live.Tests.Harness;
+
+/// <summary>
+/// A handler that holds the AMI connection's dispatch: subscribed on the connection, it blocks inside its
+/// <c>OnNext</c> when it receives the peer's <c>UserEvent</c> named <see cref="Name"/>, until the test calls
+/// <see cref="Release"/>. Every event the connection receives after that one waits in its pump, behind it, while the
+/// reader loop goes on reading the socket and hands each list action's events straight to its collector.
+/// </summary>
+/// <remarks>
+/// <para>
+/// One clock: the hold starts on an event the peer writes, and ends on the test's <see cref="Release"/>, never on a
+/// timer. <see cref="Held"/> completes once the dispatch is blocked, so whatever the peer writes after it is queued.
+/// The block itself is bounded by <see cref="HoldBound"/>, a hang bound a healthy run never reaches, so a test that
+/// forgets to release cannot stall the lane.
+/// </para>
+/// </remarks>
+internal sealed class DispatchGate(string eventName = DispatchGate.Name) : IObserver<ManagerEvent>, IDisposable
+{
+    /// <summary>The <c>UserEvent</c> header of the event that blocks the dispatch.</summary>
+    public const string Name = "held-dispatch";
+
+    /// <summary>The longest the dispatch is held when the test never releases it: a hang bound.</summary>
+    public static readonly TimeSpan HoldBound = TimeSpan.FromSeconds(30);
+
+    private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly ManualResetEventSlim _released = new(initialState: false);
+
+    /// <summary>Completes once the dispatch is blocked inside this handler.</summary>
+    public Task Held => _held.Task;
+
+    /// <summary>Whether the hold ran out on <see cref="HoldBound"/> instead of being released.</summary>
+    public bool TimedOut { get; private set; }
+
+    /// <summary>The frame the peer writes to block the dispatch.</summary>
+    public static KeyValuePair<string, string>[] Frame(string eventName = Name) =>
+        [new("Privilege", "user,all"), new("UserEvent", eventName)];
+
+    /// <summary>Lets the dispatch go on.</summary>
+    public void Release() => _released.Set();
+
+    public void OnNext(ManagerEvent value)
+    {
+        if (value is not UserEventEvent trigger || trigger.UserEvent != eventName)
+            return;
+
+        _held.TrySetResult();
+        TimedOut = !_released.Wait(HoldBound);
+    }
+
+    public void OnError(Exception error)
+    {
+        // The connection never faults its observers in these tests; nothing to do.
+    }
+
+    public void OnCompleted()
+    {
+        // Completed when the connection is disposed; nothing to do.
+    }
+
+    public void Dispose()
+    {
+        _released.Set();
+        _released.Dispose();
+    }
+}
+
+/// <summary>
+/// The frames a <see cref="BootingAsterisk"/> writes for a call's events, with the headers Asterisk 22.9.0 sent for each
+/// (the queue-reload recording of <c>Verbara.Sdk.Sessions.FunctionalTests</c>), less the ones no reader here reads.
+/// </summary>
+internal static class AsteriskFrames
+{
+    public static KeyValuePair<string, string>[] Newchannel(string uniqueId, string channel, string linkedId,
+        int channelState = 6) =>
+    [
+        new("Privilege", "call,all"), new("Channel", channel),
+        new("ChannelState", channelState.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        new("ChannelStateDesc", channelState == 6 ? "Up" : "Ring"), new("CallerIDNum", "5552101"),
+        new("CallerIDName", "QRA"), new("Context", "from-pstn"), new("Exten", "4021"), new("Priority", "1"),
+        new("Uniqueid", uniqueId), new("Linkedid", linkedId),
+    ];
+
+    public static KeyValuePair<string, string>[] Hangup(string uniqueId, string channel, string linkedId,
+        int cause = 16, string causeText = "Normal Clearing") =>
+    [
+        new("Privilege", "call,all"), new("Channel", channel), new("ChannelState", "6"),
+        new("ChannelStateDesc", "Up"), new("CallerIDNum", "5552101"), new("CallerIDName", "QRA"),
+        new("Context", "from-pstn"), new("Exten", "4021"), new("Priority", "1"), new("Uniqueid", uniqueId),
+        new("Linkedid", linkedId), new("Cause", cause.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        new("Cause-txt", causeText),
+    ];
+
+    /// <summary>
+    /// <c>BridgeCreate</c>, with the headers Asterisk 22.12, 23.6 and 24.0 rc2 sent (the bridges-and-conference recordings
+    /// captured on 2026-10-18): <c>basic</c>/<c>simple_bridge</c> for a two-party bridge, <c>base</c>/<c>softmix</c>
+    /// for a ConfBridge room's bridge.
+    /// </summary>
+    public static KeyValuePair<string, string>[] BridgeCreate(string bridgeId, string type = "basic",
+        string technology = "simple_bridge", string creator = "<unknown>", string name = "<unknown>") =>
+    [
+        new("Privilege", "call,all"), new("BridgeUniqueid", bridgeId), new("BridgeType", type),
+        new("BridgeTechnology", technology), new("BridgeCreator", creator), new("BridgeName", name),
+        new("BridgeNumChannels", "0"), new("BridgeVideoSourceMode", "none"),
+    ];
+
+    /// <summary>
+    /// <c>BridgeDestroy</c>, with the headers Asterisk 24.0 rc2 sent for one (the conference-listings recording captured on
+    /// 2026-10-18).
+    /// </summary>
+    public static KeyValuePair<string, string>[] BridgeDestroy(string bridgeId, string type = "basic",
+        string technology = "simple_bridge", string creator = "<unknown>", string name = "<unknown>") =>
+    [
+        new("Privilege", "call,all"), new("BridgeUniqueid", bridgeId), new("BridgeType", type),
+        new("BridgeTechnology", technology), new("BridgeCreator", creator), new("BridgeName", name),
+        new("BridgeNumChannels", "0"), new("BridgeVideoSourceMode", "none"),
+    ];
+
+    /// <summary><c>BridgeEnter</c> for a channel entering <paramref name="bridgeId"/>, as in the same captures.</summary>
+    public static KeyValuePair<string, string>[] BridgeEnter(string bridgeId, int numChannels, string uniqueId,
+        string channel, string linkedId, string type = "basic", string technology = "simple_bridge") =>
+    [
+        new("Privilege", "call,all"), new("BridgeUniqueid", bridgeId), new("BridgeType", type),
+        new("BridgeTechnology", technology), new("BridgeCreator", "<unknown>"), new("BridgeName", "<unknown>"),
+        new("BridgeNumChannels", numChannels.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        new("BridgeVideoSourceMode", "none"), new("Channel", channel), new("ChannelState", "6"),
+        new("ChannelStateDesc", "Up"), new("CallerIDNum", "7001"), new("CallerIDName", "Capture"),
+        new("Context", "capture"), new("Exten", "conf"), new("Priority", "1"), new("Uniqueid", uniqueId),
+        new("Linkedid", linkedId),
+    ];
+
+    /// <summary><c>ConfbridgeJoin</c> for a participant joining <paramref name="conference"/>, as in the same captures.</summary>
+    public static KeyValuePair<string, string>[] ConfbridgeJoin(string conference, string bridgeId, int numChannels,
+        string uniqueId, string channel, string linkedId) =>
+    [
+        new("Privilege", "call,all"), new("Conference", conference), new("BridgeUniqueid", bridgeId),
+        new("BridgeType", "base"), new("BridgeTechnology", "softmix"), new("BridgeCreator", "ConfBridge"),
+        new("BridgeName", conference),
+        new("BridgeNumChannels", numChannels.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        new("BridgeVideoSourceMode", "none"), new("Channel", channel), new("ChannelState", "6"),
+        new("ChannelStateDesc", "Up"), new("CallerIDNum", "7002"), new("CallerIDName", "Capture"),
+        new("Context", "capture"), new("Exten", "conf"), new("Priority", "3"), new("Uniqueid", uniqueId),
+        new("Linkedid", linkedId), new("Admin", "No"), new("Muted", "No"),
+    ];
+
+    /// <summary>
+    /// <c>ConfbridgeLeave</c> for a participant leaving <paramref name="conference"/>, with the headers Asterisk 24.0 rc2
+    /// sent for one (the conference-listings recording captured on 2026-10-18).
+    /// </summary>
+    public static KeyValuePair<string, string>[] ConfbridgeLeave(string conference, string bridgeId, int numChannels,
+        string uniqueId, string channel, string linkedId) =>
+    [
+        new("Privilege", "call,all"), new("Conference", conference), new("BridgeUniqueid", bridgeId),
+        new("BridgeType", "base"), new("BridgeTechnology", "softmix"), new("BridgeCreator", "ConfBridge"),
+        new("BridgeName", conference),
+        new("BridgeNumChannels", numChannels.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        new("BridgeVideoSourceMode", "none"), new("Channel", channel), new("ChannelState", "6"),
+        new("ChannelStateDesc", "Up"), new("CallerIDNum", "7002"), new("CallerIDName", "Capture"),
+        new("ConnectedLineNum", "7002"), new("ConnectedLineName", "Capture"), new("Language", "en"),
+        new("AccountCode", ""), new("Context", "capture"), new("Exten", "conf"), new("Priority", "3"),
+        new("Uniqueid", uniqueId), new("Linkedid", linkedId), new("Admin", "No"),
+    ];
+
+    public static KeyValuePair<string, string>[] QueueCallerJoin(string uniqueId, string channel, string queue,
+        int position, int count) => QueueCaller(uniqueId, channel, queue, position, count);
+
+    public static KeyValuePair<string, string>[] QueueCallerLeave(string uniqueId, string channel, string queue,
+        int position, int count) => QueueCaller(uniqueId, channel, queue, position, count);
+
+    private static KeyValuePair<string, string>[] QueueCaller(string uniqueId, string channel, string queue,
+        int position, int count) =>
+    [
+        new("Privilege", "agent,all"), new("Channel", channel), new("ChannelState", "4"),
+        new("ChannelStateDesc", "Ring"), new("CallerIDNum", "5552101"), new("CallerIDName", "QRA"),
+        new("Context", "from-pstn"), new("Exten", "4021"), new("Priority", "1"), new("Uniqueid", uniqueId),
+        new("Linkedid", uniqueId), new("Queue", queue),
+        new("Position", position.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        new("Count", count.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+    ];
+}

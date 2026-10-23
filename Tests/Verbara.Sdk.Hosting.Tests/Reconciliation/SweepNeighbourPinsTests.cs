@@ -73,7 +73,11 @@ public sealed class SweepNeighbourPinsTests : IAsyncLifetime
         var keptBefore = SweepRig.Look(kept);
         var atStart = _rig.ActionsSent();
         atStart.Should().BeEquivalentTo(
-            new Dictionary<string, int> { ["StatusAction"] = 1, ["QueueStatusAction"] = 1, ["AgentsAction"] = 1 },
+            new Dictionary<string, int>
+            {
+                ["StatusAction"] = 1, ["BridgeListAction"] = 1, ["ConfbridgeListRoomsAction"] = 1,
+                ["QueueStatusAction"] = 1, ["AgentsAction"] = 1,
+            },
             "premise: the start loaded once and ended nothing");
         _rig.AsteriskLists("kept");
 
