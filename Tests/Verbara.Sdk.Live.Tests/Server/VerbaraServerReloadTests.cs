@@ -436,8 +436,12 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
             {
                 UniqueId = "1700000000.7",
                 Channel = "PJSIP/trunk-0007",
+                // The negative control writes the two obsolete members on purpose: they stand for a
+                // value no version sends, and the assertions below show the reload never reads them.
+#pragma warning disable VSDK0002
                 State = nameof(ChannelState.Up),
                 CallerId = "9999999",
+#pragma warning restore VSDK0002
                 RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["ChannelState"] = "4",           // AST_STATE_RING

@@ -89,7 +89,7 @@ try
         if (evt is StatusEvent se)
         {
             channelCount++;
-            Console.WriteLine($"  Channel: {se.Channel} State: {se.State} CallerID: {se.CallerId}");
+            Console.WriteLine($"  Channel: {se.Channel} State: {se.ChannelStateDesc} CallerID: {se.CallerIdNum}");
         }
     }
     Console.WriteLine($"Total active channels: {channelCount}");

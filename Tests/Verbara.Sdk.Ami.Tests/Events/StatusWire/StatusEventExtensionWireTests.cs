@@ -46,12 +46,15 @@ public sealed class StatusEventExtensionWireTests
         using var scope = new AssertionScope();
         foreach (var frame in frames)
         {
+            // These six are obsolete because no version fills them; reading them is the point here.
+#pragma warning disable VSDK0002
             frame.State.Should().BeNull();
             frame.CallerId.Should().BeNull();
             frame.Account.Should().BeNull();
             frame.BridgedChannel.Should().BeNull();
             frame.Link.Should().BeNull();
             frame.BridgedUniqueId.Should().BeNull();
+#pragma warning restore VSDK0002
             frame.RawFields.Should().NotBeNull();
             frame.RawFields!.Keys.Should().NotContain(
                 key => NeverSentHeaders.Contains(key, StringComparer.OrdinalIgnoreCase),

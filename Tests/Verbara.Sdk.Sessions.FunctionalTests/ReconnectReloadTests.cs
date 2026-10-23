@@ -151,7 +151,6 @@ public sealed class ReconnectReloadTests : IAsyncLifetime
     {
         UniqueId = uniqueId,
         Channel = channel,
-        State = nameof(ChannelState.Up),
         LinkedId = linkedId,
     };
 
