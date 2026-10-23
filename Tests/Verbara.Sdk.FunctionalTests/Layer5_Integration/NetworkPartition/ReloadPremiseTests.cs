@@ -81,6 +81,58 @@ public sealed class ReloadPremiseTests : FunctionalTestBase
         }
     }
 
+    // The typed StatusEvent member and the wire header it reads. Each typed member must equal the raw
+    // header on every leg a real Asterisk reports, so a binding regression shows up against the live
+    // server, not only against the recorded frames.
+    private static readonly (string Member, Func<StatusEvent, string?> Typed, string Header)[] TypedToWire =
+    [
+        ("ChannelState", leg => leg.ChannelState, "ChannelState"),
+        ("ChannelStateDesc", leg => leg.ChannelStateDesc, "ChannelStateDesc"),
+        ("CallerIdNum", leg => leg.CallerIdNum, "CallerIDNum"),
+        ("CallerIdName", leg => leg.CallerIdName, "CallerIDName"),
+        ("Extension", leg => leg.Extension, "Exten"),
+    ];
+
+    [Fact]
+    public async Task Status_ShouldBindEachTypedMemberToTheHeaderAsteriskSends_WhenOneBridgedCallIsUp()
+    {
+        await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
+        {
+            opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
+            opts.AutoReconnect = false;
+        });
+        await connection.ConnectAsync();
+
+        try
+        {
+            await OriginateBridgedCallAsync(connection);
+            var legs = await WaitForStatusLegsAsync(connection, atLeast: 2);
+
+            legs.Should().HaveCountGreaterThanOrEqualTo(2,
+                "the originate builds a call with at least two legs");
+
+            foreach (var leg in legs)
+            {
+                leg.RawFields.Should().NotBeNull("a Status frame read off the wire keeps its headers");
+                foreach (var (member, typed, header) in TypedToWire)
+                {
+                    leg.RawFields!.Should().ContainKey(header,
+                        "every supported Asterisk version sends {0} on each Status leg, so the comparison "
+                        + "below is between two values, never between two nulls", header);
+                    typed(leg).Should().Be(leg.RawFields![header],
+                        "StatusEvent.{0} reads the {1} header on leg {2}", member, header, leg.Channel);
+                }
+            }
+
+            legs.Should().Contain(leg => !string.IsNullOrEmpty(leg.ChannelStateDesc),
+                "a call that is up reports a state, so an all-empty column would be a deaf comparison");
+        }
+        finally
+        {
+            await BestEffort.SendAsync(connection, new CommandAction { Command = HangupEverything });
+        }
+    }
+
     [Fact]
     public async Task Reconnect_ShouldNotReplayTheMissedHangups_WhenTheCallEndedDuringTheOutage()
     {
