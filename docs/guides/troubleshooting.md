@@ -159,6 +159,18 @@ static IDisposable SubscribeArchiver(IAmiConnection connection) =>
 
 The ending still waits for the handler to return: the token asks it to stop, it does not abandon it. A handler that ends with `OperationCanceledException` once your ending has cancelled its token is not a fault (one Debug line, `[AMI_EVENT] Event handler stopped on the caller's ending`); any other failure is logged and counted as an `OnEvent` handler's is. Token handlers and `OnEvent` handlers are called in the order they subscribed. An `IAmiConnection` of your own that does not forward the overload (a wrapper that forwards only the other members) still delivers every event to the handler, through its `OnEvent`, but with a token that is never cancelled; forward `Subscribe(Func<ManagerEvent, CancellationToken, ValueTask>)` to the inner connection to pass the token on.
 
+### What a Live event handler may do
+
+The events of `QueueManager` (`QueueUpdated`, `MemberAdded`, `MemberRemoved`, `MemberStatusChanged`, `CallerJoined`, `CallerLeft`), `MeetMeManager` (`UserJoined`, `UserLeft`, `UserStateChanged`) and `BridgeManager` are raised with none of the manager's locks held, also when a reload's reconciliation raises them.
+
+- **A handler may call into the manager**, on its own thread or by waiting for another thread that does: a live event method, a reload's reconciliation, `Clear`, `RemoveQueue`. None of these waits for the handler.
+- **`QueueManager` and `MeetMeManager` each raise their events one at a time, in the order of the changes they report.** A call made while another thread is raising that manager's events returns without raising its own: the raising thread raises them once its current handler returns. A call a handler makes is therefore reported after that handler returns, and after the other subscribers of the event being raised, never nested inside it. A subscriber never sees a leave before the join it ends, or a member removed before it was added.
+- **A handler must not wait for another event of the same `QueueManager` or `MeetMeManager` to be raised** (for example, a `CallerJoined` handler blocking until its `CallerLeft` handler has run): that event is raised only after the waiting handler returns, so the wait never ends. Hand such work off instead of blocking on it.
+- **The objects an event carries are the live ones.** A handler reads them as they are when it runs, which can be newer than the change that raised the event: after a reload refreshes both fields of a participant, both `UserStateChanged` notifications read both new values.
+- **A handler that throws** does not stop the others: the remaining notifications are raised, and the first exception is rethrown from the manager call that raised them, which, while another thread was raising, can be a later call than the one that made the change.
+
+Keep handlers short all the same: every later event of a `QueueManager` or `MeetMeManager` waits for the handler running.
+
 ### Every originate times out after 5 s
 
 **Symptoms:** `VerbaraServer.OriginateAsync` throws `OperationCanceledException` after `DefaultEventTimeout` (5 s by default), even though the call was placed; `SendEventGeneratingActionAsync` with an `OriginateAction` never yields its `OriginateResponse`.
