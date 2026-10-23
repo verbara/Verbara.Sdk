@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: `StatusEvent` carries the state and caller Asterisk sends, and six members it never sends warn `VSDK0002` (#NNN)
+
+`StatusEvent` gains `ChannelState`, `ChannelStateDesc`, `CallerIdNum` and `CallerIdName`, bound to the
+`ChannelState`, `ChannelStateDesc`, `CallerIDNum` and `CallerIDName` headers that every supported Asterisk sends on a
+`Status` frame. Six members name headers no supported version sends there (0 of 24 captured frames, Asterisk 18.26.4,
+20.20.1, 22.9.0 and 23.4.1), so they were always null: `State`, `CallerId`, `Account`, `BridgedChannel`, `Link` and
+`BridgedUniqueId` are now `[Obsolete]` with diagnostic id `VSDK0002`, a warning whose message names the replacement
+(`ChannelStateDesc`/`ChannelState`, `CallerIdNum`/`CallerIdName`, `AccountCode`, and `BridgeId` for the last three).
+Nothing is removed, no removal release is promised, and a binary built against an earlier release keeps running: the
+six read null as they always did. `Extension` now reads the `Exten` header, so it carries the channel's extension
+instead of null (an empty `Exten` reads `""`); the binding lives in `Verbara.Sdk.Ami`, so a program compiled against
+an earlier release gets it too. Labelled breaking because a build with `TreatWarningsAsErrors` that reads one of the
+six fails with `error VSDK0002`; read the replacement, or add `VSDK0002` to `NoWarn` to silence this deprecation alone.
+[`asterisk-version-compatibility.md`](docs/guides/asterisk-version-compatibility.md#statusevent-members-no-supported-version-sends)
+lists them, and the migration guide has the section.
+
+### Fixed: a load carries each channel's extension and dialplan priority (#NNN)
+
+The initial state load and every reconnect reload of `VerbaraServer` admitted each channel with `Extension` null and
+`Priority` 1, because they read the always-null typed `Extension` and never read `Priority`. They now read the `Exten`
+and `Priority` headers `Status` reports; an empty `Exten` stays empty, and an absent or unreadable priority is 1, as a
+live admission does. A channel the table already holds keeps the position it was admitted with.
+
 ### Fixed — BREAKING: a start cut short while your own `ConnectAsync` reconnects throws (#457)
 
 Over an `AmiConnection`, a `VerbaraServer.StartAsync` whose load stops on a `Connecting` or `Connected` state that

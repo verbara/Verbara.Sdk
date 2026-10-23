@@ -22,7 +22,7 @@ says:
 - **What to do**: the code change, or the exact warning suppression, and a link to the guide for the change when
   one exists.
 
-Two entries only add warnings (`VSDK0005` and `VSDK0003`). They break nothing unless you build with
+Three entries only add warnings (`VSDK0005`, `VSDK0003` and `VSDK0002`). They break nothing unless you build with
 `TreatWarningsAsErrors`. Two stop compiling where you use them. The other twelve change no existing signature, but
 change behaviour a program can branch on, a published metric, or a health status; one of them also refuses some
 configuration values at start-up.
@@ -32,6 +32,7 @@ configuration values at start-up.
 | `Verbara.Sdk.Ami` (and `VoiceAi.Tts`) | [Obsolete AMI event types, `LegacyEventAdapter` and `DeepgramVoices.Helios` removed](#obsolete-ami-event-types-are-removed) | does not compile |
 | `Verbara.Sdk.Ami`, `Agi`, `Activities` | [Types of dead Asterisk modules deprecated with `VSDK0005`](#types-of-dead-asterisk-modules-warn-vsdk0005) | warning |
 | `Verbara.Sdk.Ami` | [A yes from Asterisk reads true](#a-yes-from-asterisk-reads-true) | behaviour |
+| `Verbara.Sdk.Ami` | [Six `StatusEvent` members no Asterisk sends warn `VSDK0002`](#six-statusevent-members-no-asterisk-sends-warn-vsdk0002) | warning |
 | `Verbara.Sdk.Live` | [A conference counts every caller](#a-conference-counts-every-caller) | does not compile |
 | `Verbara.Sdk.Live` | [A conference participant shows whether it is muted and talking](#a-conference-participant-shows-muted-and-talking) | behaviour |
 | `Verbara.Sdk.Live` | [A start cut short by your own connect throws](#a-start-cut-short-by-your-own-connect-throws) | behaviour |
@@ -126,6 +127,30 @@ static void Show(ConfbridgeListEvent participant)
 ```
 
 No separate guide.
+
+### Six `StatusEvent` members no Asterisk sends warn `VSDK0002`
+
+**What changed.** `StatusEvent.State`, `CallerId`, `Account`, `BridgedChannel`, `Link` and `BridgedUniqueId` name
+headers that no supported Asterisk version sends on a `Status` frame, so they were always null. They are now
+`[Obsolete]` with diagnostic id `VSDK0002`, a warning. Four members carry the values Asterisk does send:
+`ChannelState`, `ChannelStateDesc`, `CallerIdNum` and `CallerIdName`. `Extension` now reads the `Exten` header, so it
+carries the channel's extension instead of null (an empty `Exten` reads `""`), also in a program compiled against
+an earlier release. Nothing is removed, and a binary built against an earlier release keeps running.
+
+**Who is affected.** Code that reads one of the six members and builds with `TreatWarningsAsErrors`: it gets
+`error VSDK0002`. Code that relied on `StatusEvent.Extension` being null.
+
+**What to do.** Read the replacement the warning names: `ChannelStateDesc` or `ChannelState` for `State`,
+`CallerIdNum` or `CallerIdName` for `CallerId`, `AccountCode` for `Account`, and `BridgeId` for `BridgedChannel`,
+`Link` and `BridgedUniqueId`. Until then, silence this deprecation alone:
+
+```xml
+<PropertyGroup>
+  <NoWarn>$(NoWarn);VSDK0002</NoWarn>
+</PropertyGroup>
+```
+
+Guide: [`StatusEvent` members no supported version sends](asterisk-version-compatibility.md#statusevent-members-no-supported-version-sends).
 
 ## Live
 
@@ -453,6 +478,9 @@ Guide: [Webhooks receive events without a topic path](push-stream-and-webhook-op
 
 None of these breaks a build or a public contract. Each is in the CHANGELOG.
 
+- **Live channels carry their extension and dialplan priority after a load.** The start's load and every reload
+  read the `Exten` and `Priority` that `Status` reports, where `Extension` was null and `Priority` 1 before; a
+  channel already held keeps the position it was admitted with.
 - **A reload waits for the events already received.** Over an `AmiConnection`, a load's listings wait until the
   events received before them reach the handlers, so a call whose `Hangup` was queued ends with its own cause, and
   fewer calls end with `cause` = `reload`. When the handlers hold the events longer than 10 s, the load logs
