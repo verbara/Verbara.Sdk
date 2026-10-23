@@ -23,8 +23,8 @@ says:
   one exists.
 
 Two entries only add warnings (`VSDK0005` and `VSDK0003`). They break nothing unless you build with
-`TreatWarningsAsErrors`. Two stop compiling where you use them. The other eight change no existing signature, but change
-behaviour a program can branch on, a published metric, or a health status; one of them also refuses some
+`TreatWarningsAsErrors`. Two stop compiling where you use them. The other twelve change no existing signature, but
+change behaviour a program can branch on, a published metric, or a health status; one of them also refuses some
 configuration values at start-up.
 
 | Package | Change | Kind |
@@ -34,6 +34,10 @@ configuration values at start-up.
 | `Verbara.Sdk.Ami` | [A yes from Asterisk reads true](#a-yes-from-asterisk-reads-true) | behaviour |
 | `Verbara.Sdk.Live` | [A conference counts every caller](#a-conference-counts-every-caller) | does not compile |
 | `Verbara.Sdk.Live` | [A conference participant shows whether it is muted and talking](#a-conference-participant-shows-muted-and-talking) | behaviour |
+| `Verbara.Sdk.Live` | [A start cut short by your own connect throws](#a-start-cut-short-by-your-own-connect-throws) | behaviour |
+| `Verbara.Sdk.Live` | [Live's queue counters across a reconnect](#lives-counters-across-a-reconnect) | metric meaning |
+| `Verbara.Sdk.Live` | [`BridgeCount` counts the bridges inserted since the start](#lives-counters-across-a-reconnect) | metric meaning |
+| `Verbara.Sdk.Live` | [A reload announces the callers and participants it finds gone](#a-reload-announces-the-callers-and-participants-it-finds-gone) | behaviour |
 | `Verbara.Sdk.Sessions` | [`CallWrapUpEvent` is raised and `WrapUpDuration` is applied](#an-agents-wrap-up-is-opened-timed-and-closed) | behaviour, start-up validation |
 | `Verbara.Sdk.Activities` | [An activity ends `Cancelled` only when someone asked it to stop](#an-activity-ends-cancelled-only-when-asked-to-stop) | behaviour |
 | `Verbara.Sdk.Activities` | [An attended transfer Asterisk refuses ends `Failed`](#a-refused-attended-transfer-ends-failed) | behaviour |
@@ -166,6 +170,64 @@ muted or talking participant. Code that read the ConfBridge mute and talking eve
 read the participant, or subscribe to `UserStateChanged`, instead.
 
 Guide: [Muted and Talking follow Asterisk](conference-participants-migration.md#muted-and-talking-follow-asterisk).
+
+### A start cut short by your own connect throws
+
+**What changed.** A `VerbaraServer.StartAsync` whose load stops because your own `ConnectAsync` set the connection
+to `Connecting` or `Connected` now throws `AmiNotConnectedException`. It used to return as if a reconnect would
+reload Live, but a connect you make yourself raises no `Reconnected`, so nothing reloaded.
+
+**Who is affected.** Hosts that run with `AutoReconnect` off and reconnect the `AmiConnection` themselves, and that
+can start the server while that connect is under way. A start interrupted while the connection's own reconnect loop
+runs still returns and logs a Warning.
+
+**What to do.** Start the server after your `ConnectAsync` has returned. After every connect you make yourself, call
+`RequestInitialStateAsync`: it is the only thing that reloads Live in that setup, at start-up and after a loss.
+
+Guide: [With a `VerbaraServer` on the connection, reload it yourself](ami-connection-state-and-health-migration.md#connecting-again-after-a-loss).
+
+### Live's counters across a reconnect
+
+**What changed.** A reload reconciles Live's tables instead of clearing them, so three published numbers change
+meaning:
+
+- `live.queue.calls.joined` no longer counts a caller who is still waiting again on each reconnect, nor a repeated
+  join for a caller already held.
+- `live.queue.calls.left` also counts the callers the SDK removes without a reported leave (a caller a reload no
+  longer lists, the callers of a removed queue, a caller whose channel a reconciliation removed). Those removals
+  record no `live.queue.wait_time` sample.
+- `BridgeManager.BridgeCount` and `live.bridges.created` count every bridge inserted since the start, listings
+  included; a reconnect no longer resets `BridgeCount`.
+
+For the transitions the SDK makes, `joined − left` now equals the callers held, per process and summed over every
+`VerbaraServer`.
+
+**Who is affected.** Dashboards and alerts on `live.queue.calls.joined`, `live.queue.calls.left` or
+`live.bridges.created`, and code that reads `BridgeCount`. After a reconnect, `joined` reads lower and `left` higher
+than in 2.8.0, and `BridgeCount` no longer drops to zero. There is no formula that turns the new numbers into the old
+ones: the old ones depended on how many reconnects happened.
+
+**What to do.** Read `AsteriskQueue.Entries` for the callers waiting now, and `ActiveBridgeCount` for the bridges
+held now. Re-baseline any alert threshold set on the old counts across the upgrade.
+
+Guide: [Counters and tables across a reconnect](troubleshooting.md#counters-and-tables-across-a-reconnect).
+
+### A reload announces the callers and participants it finds gone
+
+**What changed.** A reconnect no longer empties the queue and conference tables. The reload keeps what Asterisk
+still lists, without raising `CallerJoined` or `UserJoined` again, and raises `QueueManager.CallerLeft` or
+`MeetMeManager.UserLeft` once for each caller or participant it finds gone. Before, the tables were cleared with no
+event at all.
+
+**Who is affected.** Code that resets its own per-caller or per-participant state when the connection comes back,
+as 2.8.0 needed. That reset now throws away the callers and participants that survived the outage, and nothing
+raises their joins again.
+
+**What to do.** Stop resetting on reconnect and follow `CallerJoined`/`CallerLeft` and `UserJoined`/`UserLeft`
+instead: the leaves now cover what ended during the outage. A handler cannot tell a leave the reload found from one
+Asterisk reported. `RemoveQueue` still raises no `CallerLeft`.
+
+Guide: [Reconnect](conference-participants-migration.md#reconnect).
 
 ## Sessions
 
@@ -390,6 +452,19 @@ Guide: [Webhooks receive events without a topic path](push-stream-and-webhook-op
 ## Behaviour you may notice but need not change
 
 None of these breaks a build or a public contract. Each is in the CHANGELOG.
+
+- **A reload waits for the events already received.** Over an `AmiConnection`, a load's listings wait until the
+  events received before them reach the handlers, so a call whose `Hangup` was queued ends with its own cause, and
+  fewer calls end with `cause` = `reload`. When the handlers hold the events longer than 10 s, the load logs
+  `[LIVE] <List> barrier ran out after 10 s` at Warning, tags its activity `live.reconcile.deferred`, and reloads
+  once they catch up.
+- **A load also asks for bridges and conference rooms.** It sends `BridgeList`, `ConfbridgeListRooms` and one
+  `ConfbridgeList` per room. The conference listings need `reporting` in the AMI user's `write`; without it the
+  refusal is logged at Warning once per AMI session and Asterisk raises a `RequestNotAllowed` security event.
+- **Queue and conference events are raised outside the managers' locks, in the order of the changes.** A handler
+  may call into the manager; a call it makes is reported after it returns, not nested inside it. A handler must not
+  block on another event of the same manager caused by its own calls. See
+  [What a Live event handler may do](troubleshooting.md#what-a-live-event-handler-may-do).
 
 - **A stop is a stop, not a cancelled token.** Cancelling the token passed to the start of the ARI AudioSocket or
   WebSocket audio server, the ARI outbound listener, the FastAGI server, or to `PipelineSocketConnection.ConnectAsync`
