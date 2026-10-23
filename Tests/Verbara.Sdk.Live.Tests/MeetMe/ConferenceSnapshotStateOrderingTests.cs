@@ -424,23 +424,30 @@ public sealed class ConferenceSnapshotStateOrderingTests : IDisposable
     }
 
     [Fact]
-    public void ReconcileWithSnapshot_ShouldStopApplyingTheRead_WhenAStateSubscriberClosesItsWindow()
+    public void ReconcileWithSnapshot_ShouldApplyTheWholeReadBeforeAStateSubscriberClosesItsWindow_WhenTheSubscriberClosesIt()
     {
         _sut.OnUserJoined(Room, 0, ChannelA, "a");
         var held = Participant();
         var window = OpenWindow();
-        _sut.UserStateChanged += (_, _) => window.Dispose();
+        var openWhenRaised = new List<bool>();
+        _sut.UserStateChanged += (_, _) =>
+        {
+            openWhenRaised.Add(!window.IsClosed);
+            window.Dispose();
+        };
         ClearObserved();
 
         Apply(window, Row(ChannelA, true, true), Row(ChannelB, true, true));
 
         using var scope = new AssertionScope();
-        window.IsClosed.Should().BeTrue("the callback closes the actual active read under the manager gate");
+        window.IsClosed.Should().BeTrue("the callback closes the actual read once the reconciliation released the gate");
         _sut.ActiveSnapshotWindowCount.Should().Be(0);
-        Observe(held).Should().Be(new Observed(ChannelA, true, false),
-            "the already-emitted mute transition remains, but no later field from the closed read is applied");
-        _sut.GetRoom(Room)!.Users.Should().NotContainKey(ChannelB);
-        _changed.Should().Equal([new Observed(ChannelA, true, false)]);
+        Observe(held).Should().Be(new Observed(ChannelA, true, true),
+            "the reconciliation is one critical section: no handler runs inside it");
+        _sut.GetRoom(Room)!.Users.Should().ContainKey(ChannelB);
+        openWhenRaised.Should().Equal([true, false], "the first notification is raised after the whole read was applied");
+        _changed.Should().Equal([new Observed(ChannelA, true, true), new Observed(ChannelA, true, true)],
+            "one notification per changed field, each reading the participant as it is when raised");
     }
 
     [Fact]
@@ -458,10 +465,13 @@ public sealed class ConferenceSnapshotStateOrderingTests : IDisposable
         using var scope = new AssertionScope();
         replacement.Should().NotBeSameAs(old);
         replacement.UniqueId.Should().Be("new");
-        Observe(replacement).Should().Be(new Observed(ChannelA, false, false));
-        old.Talking.Should().BeFalse("a later snapshot field cannot write even the detached old participant");
-        _changed.Should().Equal([new Observed(ChannelA, true, false)]);
-        _joined.Should().Equal([replacement]);
+        Observe(replacement).Should().Be(new Observed(ChannelA, false, false),
+            "no snapshot field reaches the participant a subscriber's rejoin installed");
+        Observe(old).Should().Be(new Observed(ChannelA, true, true),
+            "both fields were applied to the participant held during the reconciliation, before any handler ran");
+        _changed.Should().Equal([new Observed(ChannelA, true, true), new Observed(ChannelA, true, true)]);
+        _joined.Should().HaveCount(2, "each changed field's notification runs the subscriber's rejoin once");
+        _joined[^1].Should().BeSameAs(replacement);
     }
 
     [Fact]

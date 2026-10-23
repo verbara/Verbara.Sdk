@@ -66,6 +66,17 @@ public sealed class QueueManager
     // Numbers every join, live or from a snapshot, in the order this manager handled them.
     private long _joinOrdinal;
 
+    // Every event this manager raises, posted under the lock that orders its transition and raised after every
+    // manager lock is released, so a handler may wait for another thread that calls into this manager.
+    private readonly LiveEventOutbox _events = new();
+
+    // Raises what the outbox holds, unless this thread still holds the window gate: the outermost frame raises then.
+    private void RaisePending()
+    {
+        if (!_windowsLock.IsHeldByCurrentThread)
+            _events.Drain();
+    }
+
     public event Action<AsteriskQueue>? QueueUpdated;
     public event Action<string, AsteriskQueueMember>? MemberAdded;
     public event Action<string, AsteriskQueueMember>? MemberRemoved;
@@ -102,7 +113,8 @@ public sealed class QueueManager
     /// Raised when a load's <c>QueueStatus</c> completed: Asterisk answered it to the end, it was not refused and it
     /// was not cut short. Carries who the snapshot listed and the order point of its request, so that a reader can tell
     /// a caller the snapshot did not list from one that joined after it was asked for. A snapshot that did not complete
-    /// raises nothing. Raised while the snapshot's window is still open, before the load reads the agents.
+    /// raises nothing. Posted while the snapshot's window is still open, before the load reads the agents, and raised in
+    /// that order among this manager's other events.
     /// </summary>
     internal event Action<QueueSnapshotCompletion>? QueueSnapshotCompleted;
 
@@ -145,9 +157,10 @@ public sealed class QueueManager
             queue.TalkTime = talkTime;
             queue.Completed = completed;
             queue.Abandoned = abandoned;
+            _events.Post(() => QueueUpdated?.Invoke(queue));
         }
         QueueManagerLog.Params(_logger, queueName, strategy, calls, completed, abandoned);
-        QueueUpdated?.Invoke(queue);
+        RaisePending();
     }
 
     /// <summary>Handle QueueMemberAdded event.</summary>
@@ -163,6 +176,7 @@ public sealed class QueueManager
                 Status = (QueueMemberState)status,
             });
         }
+        RaisePending();
     }
 
     /// <summary>Apply the queue params from a completed snapshot and list its queue.</summary>
@@ -175,6 +189,7 @@ public sealed class QueueManager
             window.ListQueue(queueName);
             OnQueueParams(queueName, max, strategy, calls, holdTime, talkTime, completed, abandoned);
         }
+        RaisePending();
     }
 
     /// <summary>Merge a listed member with the live lifecycle and fields observed in its read window.</summary>
@@ -191,9 +206,11 @@ public sealed class QueueManager
             if (member is not null)
                 AddMemberLocked(queueName, member);
         }
+        RaisePending();
     }
 
-    // Caller holds the shared window gate. The table and reverse index commit together before any callback.
+    // Caller holds the shared window gate. The table and reverse index commit together; the notification is posted in
+    // the same transition and raised after the caller releases the gate.
     private void AddMemberLocked(string queueName, AsteriskQueueMember member)
     {
         while (true)
@@ -207,10 +224,10 @@ public sealed class QueueManager
                 _queuesByMember.GetOrAdd(member.Interface,
                     static _ => new(StringComparer.OrdinalIgnoreCase)).TryAdd(queue.Name, 0);
                 QueueManagerLog.MemberAdded(_logger, queueName, member.Interface, member.Penalty);
-                // Logging/subscribers may reenter. Announce only the lifetime installed by this transition;
-                // the multicast event itself retains its ordinary .NET delivery semantics.
+                // Logging may reenter. Announce only the lifetime installed by this transition; a later removal posts
+                // its own notification after this one.
                 if (IsCurrentMemberLocked(queue, member))
-                    MemberAdded?.Invoke(queueName, member);
+                    _events.Post(() => MemberAdded?.Invoke(queueName, member));
                 return;
             }
         }
@@ -223,20 +240,27 @@ public sealed class QueueManager
     /// <summary>Handle QueueMemberRemoved event.</summary>
     public void OnMemberRemoved(string queueName, string iface)
     {
-        lock (_windowsLock)
+        try
         {
-            foreach (var window in _windows)
-                window.OnLiveMemberRemoved(queueName, iface);
-            if (!_queues.TryGetValue(queueName, out var queue))
-                return;
-            lock (queue.SyncRoot)
+            lock (_windowsLock)
             {
-                if (queue.RemovedFromTable || !queue.Members.TryRemove(iface, out var member))
+                foreach (var window in _windows)
+                    window.OnLiveMemberRemoved(queueName, iface);
+                if (!_queues.TryGetValue(queueName, out var queue))
                     return;
-                _queuesByMember.GetValueOrDefault(iface)?.TryRemove(queue.Name, out _);
-                QueueManagerLog.MemberRemoved(_logger, queueName, iface);
-                MemberRemoved?.Invoke(queueName, member);
+                lock (queue.SyncRoot)
+                {
+                    if (queue.RemovedFromTable || !queue.Members.TryRemove(iface, out var member))
+                        return;
+                    _queuesByMember.GetValueOrDefault(iface)?.TryRemove(queue.Name, out _);
+                    QueueManagerLog.MemberRemoved(_logger, queueName, iface);
+                    _events.Post(() => MemberRemoved?.Invoke(queueName, member));
+                }
             }
+        }
+        finally
+        {
+            RaisePending();
         }
     }
 
@@ -269,6 +293,7 @@ public sealed class QueueManager
                 window.OnLiveMemberStatus(queueName, iface, (QueueMemberState)status);
             SetMemberStatusLocked(queueName, iface, (QueueMemberState)status);
         }
+        RaisePending();
     }
 
     private void SetMemberStatusLocked(string queueName, string iface, QueueMemberState status)
@@ -286,7 +311,10 @@ public sealed class QueueManager
             member.Status = status;
             QueueManagerLog.MemberStatus(_logger, queue.Name, iface, (int)status);
             if (IsCurrentMemberLocked(queue, member))
-                MemberStatusChanged?.Invoke(queue.Name, member);
+            {
+                var queueName = queue.Name;
+                _events.Post(() => MemberStatusChanged?.Invoke(queueName, member));
+            }
         }
     }
 
@@ -335,27 +363,39 @@ public sealed class QueueManager
         DateTimeOffset? readAt, bool announce)
     {
         ArgumentNullException.ThrowIfNull(window);
-        lock (window.Gate)
+        try
         {
-            if (window.LeftAfterRequestLocked(uniqueId, channel))
+            lock (window.Gate)
             {
-                QueueManagerLog.SnapshotEntryAfterLeave(_logger, queueName, channel);
-                return null;
+                if (window.LeftAfterRequestLocked(uniqueId, channel))
+                {
+                    QueueManagerLog.SnapshotEntryAfterLeave(_logger, queueName, channel);
+                    return null;
+                }
+                window.ListLocked(queueName, uniqueId, channel);
+                return Join(queueName, channel, callerId, position, fromSnapshot: true, reportedWaitSeconds, uniqueId,
+                    lossEpoch, readAt, window.OrderPoint, announce);
             }
-            window.ListLocked(queueName, uniqueId, channel);
-            return Join(queueName, channel, callerId, position, fromSnapshot: true, reportedWaitSeconds, uniqueId,
-                lossEpoch, readAt, window.OrderPoint, announce);
+        }
+        finally
+        {
+            RaisePending();
         }
     }
 
     /// <summary>Deliver the report half only, after its own fence; never replay table transitions or counters.</summary>
+    /// <remarks>
+    /// The decision is taken under the window gate, where every reported leave is recorded, and the notification is
+    /// posted there too: a leave recorded after it is posted after it, so it reaches handlers after this join.
+    /// </remarks>
     internal void NotifySnapshotEntry(QueueSnapshotWindow window, string queueName, AsteriskQueueEntry reported)
     {
         lock (window.Gate)
         {
             if (!window.LeftAfterRequestLocked(reported.UniqueId, reported.Channel))
-                CallerJoined?.Invoke(queueName, reported);
+                _events.Post(() => CallerJoined?.Invoke(queueName, reported));
         }
+        RaisePending();
     }
 
     /// <summary>
@@ -403,8 +443,10 @@ public sealed class QueueManager
         {
             foreach (var queue in _queues.Values)
                 ApplySnapshot(queue, window.TableView());
-            QueueSnapshotCompleted?.Invoke(window.Complete());
+            var completion = window.Complete();
+            _events.Post(() => QueueSnapshotCompleted?.Invoke(completion));
         }
+        RaisePending();
     }
 
     private void ApplySnapshot(AsteriskQueue queue, QueueSnapshotTableView view)
@@ -484,7 +526,7 @@ public sealed class QueueManager
         LiveMetrics.QueueCallsLeft.Add(1);
         QueueManagerLog.CallerRemovedUnobserved(_logger, queueName, entry.Channel, reason);
         if (announce)
-            CallerLeft?.Invoke(queueName, entry);
+            _events.Post(() => CallerLeft?.Invoke(queueName, entry));
     }
 
     /// <summary>
@@ -507,14 +549,14 @@ public sealed class QueueManager
                     if (onChannel && queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
                         (gone ??= []).Add(entry);
                 }
+
+                // Posted under the queue's lock, so a later join of the same caller is announced after this leave.
+                foreach (var entry in gone ?? [])
+                    LeftUnobserved(queue.Name, entry, "channel-reconciled", announce: true);
             }
-
-            if (gone is null)
-                continue;
-
-            foreach (var entry in gone)
-                LeftUnobserved(queue.Name, entry, "channel-reconciled", announce: true);
         }
+
+        RaisePending();
     }
 
     /// <summary>
@@ -530,6 +572,21 @@ public sealed class QueueManager
     private AsteriskQueueEntry Join(string queueName, string channel, string? callerId, int position,
         bool fromSnapshot, long? reportedWaitSeconds, string? uniqueId, EventLossEpoch? lossEpoch,
         DateTimeOffset? readAt = null, long? snapshotOrderPoint = null, bool announce = true)
+    {
+        try
+        {
+            return JoinUnderGate(queueName, channel, callerId, position, fromSnapshot, reportedWaitSeconds, uniqueId,
+                lossEpoch, readAt, snapshotOrderPoint, announce);
+        }
+        finally
+        {
+            RaisePending();
+        }
+    }
+
+    private AsteriskQueueEntry JoinUnderGate(string queueName, string channel, string? callerId, int position,
+        bool fromSnapshot, long? reportedWaitSeconds, string? uniqueId, EventLossEpoch? lossEpoch,
+        DateTimeOffset? readAt, long? snapshotOrderPoint, bool announce)
     {
         lock (_windowsLock)
         {
@@ -568,18 +625,20 @@ public sealed class QueueManager
                         continue;
 
                     inserted = JoinLocked(queue, reported, channel, position, fromSnapshot, snapshotOrderPoint, out displaced);
+
+                    // Posted under the queue's lock, where OnCallerLeft removes a caller: this join's notifications
+                    // (the displaced caller's leave first) reach handlers before that caller's leave.
+                    if (displaced is not null)
+                        LeftUnobserved(queueName, displaced, "displaced", announce: true);
+                    if (announce)
+                        _events.Post(() => CallerJoined?.Invoke(queueName, reported));
                     break;
                 }
             }
 
-            if (displaced is not null)
-                LeftUnobserved(queueName, displaced, "displaced", announce: true);
-
             if (inserted)
                 LiveMetrics.QueueCallsJoined.Add(1);
             QueueManagerLog.CallerJoined(_logger, queueName, channel, position);
-            if (announce)
-                CallerJoined?.Invoke(queueName, reported);
             return reported;
         }
     }
@@ -651,6 +710,11 @@ public sealed class QueueManager
         lock (queue.SyncRoot)
         {
             removed = queue.Entries.TryRemove(channel, out entry);
+            if (removed && entry is not null)
+            {
+                var left = entry;
+                _events.Post(() => CallerLeft?.Invoke(queueName, left));
+            }
         }
 
         if (removed && entry is not null)
@@ -659,8 +723,9 @@ public sealed class QueueManager
             var waitMs = (DateTimeOffset.UtcNow - entry.JoinedAt).TotalMilliseconds + ReportedWaitMilliseconds(entry);
             LiveMetrics.QueueWaitTimeMs.Record(waitMs);
             QueueManagerLog.CallerLeft(_logger, queueName, channel);
-            CallerLeft?.Invoke(queueName, entry);
         }
+
+        RaisePending();
     }
 
     /// <summary>
@@ -687,19 +752,32 @@ public sealed class QueueManager
     /// </summary>
     internal void OnCallerLeaveReported(string uniqueId, string queueName, string channel, EventLossEpoch lossEpoch)
     {
-        foreach (var window in Volatile.Read(ref _windows))
-            window.OnLeave(uniqueId, channel);
+        // Recorded and posted under the window gate, where a deferred snapshot join is decided and posted: a join
+        // admitted before this leave reaches handlers before it.
+        lock (_windowsLock)
+        {
+            foreach (var window in _windows)
+                window.OnLeave(uniqueId, channel);
 
-        CallerLeaveReported?.Invoke(new QueueCallerLeaveReport(uniqueId, queueName, channel, lossEpoch));
+            var report = new QueueCallerLeaveReport(uniqueId, queueName, channel, lossEpoch);
+            _events.Post(() => CallerLeaveReported?.Invoke(report));
+        }
+        RaisePending();
     }
 
     /// <summary>Handle a <c>QueueCallerAbandon</c>: raises <see cref="CallerAbandonReported"/>.</summary>
-    internal void OnCallerAbandonReported(string uniqueId, string queueName) =>
-        CallerAbandonReported?.Invoke(uniqueId, queueName);
+    internal void OnCallerAbandonReported(string uniqueId, string queueName)
+    {
+        _events.Post(() => CallerAbandonReported?.Invoke(uniqueId, queueName));
+        RaisePending();
+    }
 
     /// <summary>Handle a <c>VarSet</c> of <c>QUEUESTATUS</c> on a channel: raises <see cref="CallerQueueStatus"/>.</summary>
-    internal void OnCallerQueueStatus(string uniqueId, string channel, string status) =>
-        CallerQueueStatus?.Invoke(uniqueId, channel, status);
+    internal void OnCallerQueueStatus(string uniqueId, string channel, string status)
+    {
+        _events.Post(() => CallerQueueStatus?.Invoke(uniqueId, channel, status));
+        RaisePending();
+    }
 
     /// <summary>Handle DeviceStateChange event. Updates member status in all queues where the device is registered.</summary>
     public void OnDeviceStateChanged(string device, string state)
@@ -710,11 +788,13 @@ public sealed class QueueManager
             // Retained by exact interface even before a listing has admitted that member or its queue.
             foreach (var window in _windows)
                 window.OnLiveDeviceStatus(device, memberState);
-            if (!_queuesByMember.TryGetValue(device, out var queueNames))
-                return;
-            foreach (var queueName in queueNames.Keys)
-                SetMemberStatusLocked(queueName, device, memberState);
+            if (_queuesByMember.TryGetValue(device, out var queueNames))
+            {
+                foreach (var queueName in queueNames.Keys)
+                    SetMemberStatusLocked(queueName, device, memberState);
+            }
         }
+        RaisePending();
     }
 
     private static QueueMemberState MapDeviceState(string state) => state.ToUpperInvariant() switch

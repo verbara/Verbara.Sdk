@@ -57,6 +57,16 @@ public sealed class MeetMeManager
     private readonly Lock _windowGate = new();
     private readonly HashSet<ConferenceSnapshotWindow> _openWindows = [];
 
+    // Every event this manager raises, posted under the room lock of its transition and raised once _windowGate is
+    // released, so a handler may wait for another thread that calls into this manager.
+    private readonly LiveEventOutbox _events = new();
+
+    private void RaisePending()
+    {
+        if (!_windowGate.IsHeldByCurrentThread)
+            _events.Drain();
+    }
+
     internal int ActiveSnapshotWindowCount
     {
         get
@@ -159,9 +169,10 @@ public sealed class MeetMeManager
             {
                 room.Users[channel] = user;
                 MeetMeManagerLog.UserJoined(_logger, roomNumber, channel, userNum);
-                UserJoined?.Invoke(room, user);
+                _events.Post(() => UserJoined?.Invoke(room, user));
             }
         }
+        RaisePending();
     }
 
     /// <summary>
@@ -180,22 +191,29 @@ public sealed class MeetMeManager
             return;
         }
 
-        lock (_windowGate)
+        try
         {
-            RecordLeave(roomNumber, channel);
-            if (!_rooms.TryGetValue(roomNumber, out var room))
-                return;
-
-            lock (room.SyncRoot)
+            lock (_windowGate)
             {
-                if (!room.Users.TryRemove(channel, out var user))
+                RecordLeave(roomNumber, channel);
+                if (!_rooms.TryGetValue(roomNumber, out var room))
                     return;
 
-                user.State = MeetMeUserState.Left;
-                RemoveIfEmpty(room);
-                MeetMeManagerLog.UserLeft(_logger, roomNumber, user.Channel, user.UserNum);
-                UserLeft?.Invoke(room, user);
+                lock (room.SyncRoot)
+                {
+                    if (!room.Users.TryRemove(channel, out var user))
+                        return;
+
+                    user.State = MeetMeUserState.Left;
+                    RemoveIfEmpty(room);
+                    MeetMeManagerLog.UserLeft(_logger, roomNumber, user.Channel, user.UserNum);
+                    _events.Post(() => UserLeft?.Invoke(room, user));
+                }
             }
+        }
+        finally
+        {
+            RaisePending();
         }
     }
 
@@ -230,33 +248,41 @@ public sealed class MeetMeManager
             return;
         }
 
-        lock (_windowGate)
+        try
         {
-            // Presence in a window is the mark: even an idempotent or absent-key report is newer than that window.
-            foreach (var window in _openWindows)
-                window.RecordField(roomNumber, channel, value, isMuted);
-
-            if (!_rooms.TryGetValue(roomNumber, out var room))
+            lock (_windowGate)
             {
-                MeetMeManagerLog.ParticipantNotHeld(_logger, eventName, roomNumber, channel);
-                return;
-            }
+                // Presence in a window is the mark: even an idempotent or absent-key report is newer than that window.
+                foreach (var window in _openWindows)
+                    window.RecordField(roomNumber, channel, value, isMuted);
 
-            lock (room.SyncRoot)
-            {
-                if (!room.Users.TryGetValue(channel, out var user))
+                if (!_rooms.TryGetValue(roomNumber, out var room))
                 {
                     MeetMeManagerLog.ParticipantNotHeld(_logger, eventName, roomNumber, channel);
                     return;
                 }
 
-                ApplyField(room, user, value, isMuted);
+                lock (room.SyncRoot)
+                {
+                    if (!room.Users.TryGetValue(channel, out var user))
+                    {
+                        MeetMeManagerLog.ParticipantNotHeld(_logger, eventName, roomNumber, channel);
+                        return;
+                    }
+
+                    ApplyField(room, user, value, isMuted);
+                }
             }
+        }
+        finally
+        {
+            RaisePending();
         }
     }
 
     // Caller holds _windowGate and room.SyncRoot. Snapshot writes use this origin-neutral path: they are not live
-    // reports against other windows. Keep one notification per field that actually changed, with normal multicast.
+    // reports against other windows. Posts one notification per field that actually changed, in the order of the
+    // changes; the caller raises them once it has released the gate.
     private void ApplyField(MeetMeRoom room, MeetMeUser user, bool value, bool isMuted)
     {
         var changed = (isMuted ? user.Muted : user.Talking) != value;
@@ -272,7 +298,7 @@ public sealed class MeetMeManager
         }
 
         if (changed)
-            UserStateChanged?.Invoke(room, user);
+            _events.Post(() => UserStateChanged?.Invoke(room, user));
     }
 
     /// <summary>
@@ -290,6 +316,18 @@ public sealed class MeetMeManager
             return;
         }
 
+        try
+        {
+            EndConference(roomNumber);
+        }
+        finally
+        {
+            RaisePending();
+        }
+    }
+
+    private void EndConference(string roomNumber)
+    {
         lock (_windowGate)
         {
             foreach (var window in _openWindows)
@@ -312,11 +350,11 @@ public sealed class MeetMeManager
                 if (_rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(roomNumber, room)))
                     room.RemovedFromTable = true;
 
-                // Finish the old lifetime before callbacks can create a replacement room.
+                // The old lifetime is finished before any handler runs, so a handler's join creates a replacement room.
                 foreach (var user in departed)
                 {
                     MeetMeManagerLog.UserLeft(_logger, roomNumber, user.Channel, user.UserNum);
-                    UserLeft?.Invoke(room, user);
+                    _events.Post(() => UserLeft?.Invoke(room, user));
                 }
             }
         }
@@ -397,6 +435,21 @@ public sealed class MeetMeManager
         IReadOnlyDictionary<string, IReadOnlyList<ConferenceSnapshotParticipant>> participants, bool removeOmitted)
     {
         ArgumentNullException.ThrowIfNull(window);
+        try
+        {
+            ReconcileUnderGate(window, listedRooms, participants, removeOmitted);
+        }
+        finally
+        {
+            RaisePending();
+        }
+    }
+
+    // The whole reconciliation is one critical section under _windowGate; its UserLeft and UserStateChanged
+    // notifications are raised after it, in the order of its changes.
+    private void ReconcileUnderGate(ConferenceSnapshotWindow window, IReadOnlyCollection<string> listedRooms,
+        IReadOnlyDictionary<string, IReadOnlyList<ConferenceSnapshotParticipant>> participants, bool removeOmitted)
+    {
         lock (_windowGate)
         {
             ObjectDisposedException.ThrowIf(window.IsClosed, window);
@@ -434,7 +487,7 @@ public sealed class MeetMeManager
                             RemoveIfEmpty(room);
                             MeetMeManagerLog.UserRemovedBySnapshot(_logger, room.RoomNumber, held.Channel);
                             removed++;
-                            UserLeft?.Invoke(room, held);
+                            _events.Post(() => UserLeft?.Invoke(room, held));
                         }
                     }
                 }
@@ -481,8 +534,8 @@ public sealed class MeetMeManager
 
                         if (row.Muted is { } muted && CanRefreshField(window, room, held, isMuted: true))
                             ApplyField(room, held, muted, isMuted: true);
-                        // The mute callback may reenter with talking, leave/rejoin, end the room or close this window.
-                        // Recheck identity, lifetime and this field immediately before its write under the same locks.
+                        // No handler runs inside the reconciliation; the recheck keeps each field's write conditional on
+                        // identity, lifetime and its own live mark under the same locks.
                         if (row.Talking is { } talking && CanRefreshField(window, room, held, isMuted: false))
                             ApplyField(room, held, talking, isMuted: false);
                     }

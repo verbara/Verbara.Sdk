@@ -444,8 +444,8 @@ public sealed class QueueSnapshotMemberOrderingTests : IDisposable
         {
             Observe(Member()!).Should().Be(Observe(replacement));
             _added.Should().Equal([Observe(initial), Observe(replacement)]);
-            laterSubscriber.Should().Equal([Observe(replacement), Observe(initial)],
-                "normal multicast delivery resumes the original valid event after nested replacement delivery");
+            laterSubscriber.Should().Equal([Observe(initial), Observe(replacement)],
+                "a listener's own calls are announced after the event it handles reaches every subscriber, in transition order");
             _sut.GetQueuesForMember(Interface).Should().Equal(Queue);
         }
         else
