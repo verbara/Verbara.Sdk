@@ -33,6 +33,9 @@ internal static partial class MeetMeManagerLog
         Message = "[CONFERENCE] Rooms reconciled: rooms_listed={RoomsListed} admitted={Admitted} removed={Removed} newer_than_snapshot={NewerThanSnapshot} left_during_read={LeftDuringRead} removes_omitted={RemovesOmitted}")]
     public static partial void Reconciled(ILogger logger, int roomsListed, int admitted, int removed, int newerThanSnapshot,
         int leftDuringRead, bool removesOmitted);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFERENCE] Event handler failed for a change whose call did not raise it")]
+    public static partial void UnownedHandlerFailed(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -59,7 +62,7 @@ public sealed class MeetMeManager
 
     // Every event this manager raises, posted under the room lock of its transition and raised once _windowGate is
     // released, so a handler may wait for another thread that calls into this manager.
-    private readonly LiveEventOutbox _events = new();
+    private readonly LiveEventOutbox _events;
 
     private void RaisePending()
     {
@@ -98,7 +101,11 @@ public sealed class MeetMeManager
     /// </summary>
     public event Action<MeetMeRoom, MeetMeUser>? UserStateChanged;
 
-    public MeetMeManager(ILogger logger) => _logger = logger;
+    public MeetMeManager(ILogger logger)
+    {
+        _logger = logger;
+        _events = new LiveEventOutbox(ex => MeetMeManagerLog.UnownedHandlerFailed(logger, ex), LiveEventOutbox.DefaultTurnWait);
+    }
 
     public IReadOnlyCollection<MeetMeRoom> Rooms => _rooms.Values.ToList().AsReadOnly();
 

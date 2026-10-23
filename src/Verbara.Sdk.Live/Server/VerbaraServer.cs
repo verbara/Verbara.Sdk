@@ -1771,16 +1771,24 @@ public sealed class VerbaraServer : IVerbaraServer
                     break;
 
                 // agent class. The table's leave (CallerLeft, raised only for a caller the table holds), then Asterisk's
-                // own report, raised whatever the table holds.
+                // own report, raised whatever the table holds: also when a CallerLeft handler throws, since the open
+                // reload windows and the session layer count on every report.
                 case QueueCallerLeaveEvent qcl:
-                    server.Queues.OnCallerLeft(
-                        qcl.RawFields?.GetValueOrDefault("Queue") ?? "",
-                        qcl.RawFields?.GetValueOrDefault("Channel") ?? "");
-                    server.Queues.OnCallerLeaveReported(
-                        qcl.UniqueId ?? "",
-                        qcl.RawFields?.GetValueOrDefault("Queue") ?? "",
-                        qcl.RawFields?.GetValueOrDefault("Channel") ?? "",
-                        server.ReadEventLossEpoch());
+                    try
+                    {
+                        server.Queues.OnCallerLeft(
+                            qcl.RawFields?.GetValueOrDefault("Queue") ?? "",
+                            qcl.RawFields?.GetValueOrDefault("Channel") ?? "");
+                    }
+                    finally
+                    {
+                        server.Queues.OnCallerLeaveReported(
+                            qcl.UniqueId ?? "",
+                            qcl.RawFields?.GetValueOrDefault("Queue") ?? "",
+                            qcl.RawFields?.GetValueOrDefault("Channel") ?? "",
+                            server.ReadEventLossEpoch());
+                    }
+
                     break;
 
                 // agent class. app_queue counted the caller's visit abandoned; sent just before its leave.

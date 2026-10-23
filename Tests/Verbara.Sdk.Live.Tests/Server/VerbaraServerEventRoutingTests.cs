@@ -849,6 +849,23 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task EventObserver_ShouldStillReportTheLeave_WhenACallerLeftHandlerThrows()
+    {
+        await StartAndGetObserverAsync();
+        _observer!.OnNext(VisitJoin());
+        _sut.Queues.CallerLeft += (_, _) => throw new InvalidOperationException("caller-left-handler");
+        var reported = new List<string>();
+        _sut.Queues.CallerLeaveReported += report => reported.Add(report.UniqueId);
+
+        var leave = () => _observer!.OnNext(VisitLeave());
+
+        using var scope = new AssertionScope();
+        leave.Should().Throw<InvalidOperationException>().WithMessage("caller-left-handler");
+        reported.Should().Equal([VisitCaller],
+            "Asterisk's leave is recorded for the open reload windows and the session layer whatever a CallerLeft handler does");
+    }
+
+    [Fact]
     public async Task QueueSnapshot_ShouldNotBringBackACaller_WhoseLeaveWasProcessedAfterTheSnapshotWasAskedFor()
     {
         AnswerQueueStatus(beforeTheAnswer: () => _observer!.OnNext(VisitLeave()), VisitParams(), VisitEntry());

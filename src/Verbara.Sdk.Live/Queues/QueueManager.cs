@@ -39,6 +39,9 @@ internal static partial class QueueManagerLog
 
     [LoggerMessage(Level = LogLevel.Information, Message = "[QUEUE] Member removed, the completed queue snapshot no longer lists it: queue={QueueName} interface={Interface}")]
     public static partial void MemberRemovedBySnapshot(ILogger logger, string queueName, string @interface);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[QUEUE] Event handler failed for a change whose call did not raise it")]
+    public static partial void UnownedHandlerFailed(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -68,7 +71,7 @@ public sealed class QueueManager
 
     // Every event this manager raises, posted under the lock that orders its transition and raised after every
     // manager lock is released, so a handler may wait for another thread that calls into this manager.
-    private readonly LiveEventOutbox _events = new();
+    private readonly LiveEventOutbox _events;
 
     // Raises what the outbox holds, unless this thread still holds the window gate: the outermost frame raises then.
     private void RaisePending()
@@ -118,7 +121,11 @@ public sealed class QueueManager
     /// </summary>
     internal event Action<QueueSnapshotCompletion>? QueueSnapshotCompleted;
 
-    public QueueManager(ILogger logger) => _logger = logger;
+    public QueueManager(ILogger logger)
+    {
+        _logger = logger;
+        _events = new LiveEventOutbox(ex => QueueManagerLog.UnownedHandlerFailed(logger, ex), LiveEventOutbox.DefaultTurnWait);
+    }
 
     public IEnumerable<AsteriskQueue> Queues => _queues.Values;
 
