@@ -520,6 +520,121 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
             + $"cast into a ChannelState that names nothing. Measured: {Describe()}");
     }
 
+    // --- the dialplan position: Exten and Priority (design D5) ----------------------------------
+    //
+    // Every supported version sends the dialplan position as Exten and Priority on a Status frame
+    // (24/24 captured frames on 18.26.4, 20.20.1, 22.9.0 and 23.4.1). The reload reads both from
+    // RawFields, the way it reads the state and the caller, and the rule matches live admission:
+    // an empty Exten stays empty, and a priority that is absent or not a number is 1.
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldAdmitTheExtenHeader_WhenTheTypedExtensionContradictsIt()
+    {
+        // The typed member is set to a value the wire contradicts, so a reload that read it would
+        // admit 999. The reload reads one route, RawFields, for every field it takes from the frame.
+        _statusReply =
+        [
+            new StatusEvent
+            {
+                UniqueId = "1700000000.7",
+                Channel = "PJSIP/trunk-0007",
+                Extension = "999",
+                RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["ChannelState"] = "6",
+                    ["Exten"] = "800",
+                    ["Priority"] = "2",
+                },
+            }
+        ];
+
+        await _sut.RequestInitialStateAsync();
+
+        var admitted = _sut.Channels.GetByUniqueId("1700000000.7");
+        admitted.Should().NotBeNull($"Measured: {Describe()}");
+        admitted!.Extension.Should().Be("800",
+            "the reload reads the Exten header from RawFields, never the typed member");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldAdmitPriorityOne_WhenTheSnapshotCarriesNoPriorityHeader()
+    {
+        _statusReply =
+        [
+            new StatusEvent
+            {
+                UniqueId = "1700000000.7",
+                Channel = "PJSIP/trunk-0007",
+                RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["ChannelState"] = "6",
+                    ["Exten"] = "800",
+                },
+            }
+        ];
+
+        await _sut.RequestInitialStateAsync();
+
+        var admitted = _sut.Channels.GetByUniqueId("1700000000.7");
+        admitted.Should().NotBeNull($"Measured: {Describe()}");
+        admitted!.Priority.Should().Be(1,
+            "an absent priority is 1, as a live NewChannel without one is admitted");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldAdmitPriorityOne_WhenThePriorityHeaderIsNotANumber()
+    {
+        _statusReply =
+        [
+            new StatusEvent
+            {
+                UniqueId = "1700000000.7",
+                Channel = "PJSIP/trunk-0007",
+                RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["ChannelState"] = "6",
+                    ["Exten"] = "800",
+                    ["Priority"] = "abc",
+                },
+            }
+        ];
+
+        await _sut.RequestInitialStateAsync();
+
+        var admitted = _sut.Channels.GetByUniqueId("1700000000.7");
+        admitted.Should().NotBeNull(
+            $"a priority that does not parse is no reason to refuse the channel. Measured: {Describe()}");
+        admitted!.Priority.Should().Be(1, "a priority that is not a number is read as 1");
+        admitted.Extension.Should().Be("800", "the rest of the frame is still read");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldAdmitAnEmptyExtension_WhenTheExtenHeaderIsEmpty()
+    {
+        // The dialled ;1 leg of a Local channel: every captured version sends "Exten: " with no value.
+        _statusReply =
+        [
+            new StatusEvent
+            {
+                UniqueId = "1700000000.7",
+                Channel = "Local/100@from-internal-00000000;1",
+                RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["ChannelState"] = "6",
+                    ["Exten"] = "",
+                    ["Priority"] = "1",
+                },
+            }
+        ];
+
+        await _sut.RequestInitialStateAsync();
+
+        var admitted = _sut.Channels.GetByUniqueId("1700000000.7");
+        admitted.Should().NotBeNull($"Measured: {Describe()}");
+        admitted!.Extension.Should().Be("",
+            "an empty Exten passes through as empty, as a live NewChannel's does; it is not turned into null");
+    }
+
     /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
     private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
 
