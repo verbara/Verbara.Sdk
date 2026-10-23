@@ -36,7 +36,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _queues.OnMemberAdded(Queue, "PJSIP/agent-1", "Agent 1", 0, false, 1);
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a MemberAdded handler waiting on a member removal must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a MemberAdded handler waiting on a member removal must not deadlock");
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _queues.OnMemberAdded(Queue, "PJSIP/agent-1", "Agent 1", 0, false, 1);
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a MemberAdded handler waiting on a caller leave must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a MemberAdded handler waiting on a caller leave must not deadlock");
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _queues.OnMemberRemoved(Queue, "PJSIP/agent-1");
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a MemberRemoved handler waiting on a member add must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a MemberRemoved handler waiting on a member add must not deadlock");
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _queues.OnMemberStatusChanged(Queue, "PJSIP/agent-1", 2);
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a MemberStatusChanged handler waiting on a pause must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a MemberStatusChanged handler waiting on a pause must not deadlock");
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _queues.OnDeviceStateChanged("PJSIP/agent-1", "INUSE");
 
-        _probe.ShouldHaveFinishedInsideTheHandler(
+        _probe.FinishedInsideTheHandler().Should().BeTrue(
             "a MemberStatusChanged handler raised by a device state waiting on a pause must not deadlock");
     }
 
@@ -98,7 +98,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _queues.OnCallerJoined(Queue, "PJSIP/caller-1", "100", 1);
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a CallerJoined handler waiting on another join must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a CallerJoined handler waiting on another join must not deadlock");
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _queues.OnCallerJoined(Queue, "PJSIP/caller-1", "100", 1);
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a CallerJoined handler waiting on that caller's leave must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a CallerJoined handler waiting on that caller's leave must not deadlock");
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _queues.OnCallerLeft(Queue, "PJSIP/caller-1");
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a CallerLeft handler waiting on a join must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a CallerLeft handler waiting on a join must not deadlock");
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _rooms.OnUserJoined(Room, 0, "PJSIP/a-1");
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a UserJoined handler waiting on another participant's leave must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a UserJoined handler waiting on another participant's leave must not deadlock");
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _rooms.OnUserLeft(Room, "PJSIP/a-1");
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a UserLeft handler waiting on a join must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a UserLeft handler waiting on a join must not deadlock");
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _rooms.OnUserMuted(Room, "PJSIP/a-1", true);
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a UserStateChanged handler waiting on a leave must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a UserStateChanged handler waiting on a leave must not deadlock");
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _rooms.OnConferenceEnded(Room);
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a UserLeft handler raised by a room's end waiting on Clear must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a UserLeft handler raised by a room's end waiting on Clear must not deadlock");
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _bridges.OnChannelEntered("br-1", "ch-1");
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a ChannelEntered handler waiting on a leave must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a ChannelEntered handler waiting on a leave must not deadlock");
     }
 
     [Fact]
@@ -197,7 +197,7 @@ public sealed class LiveEventHandlerOffloadTests
 
         _bridges.OnBridgeDestroyed("br-1");
 
-        _probe.ShouldHaveFinishedInsideTheHandler("a BridgeDestroyed handler waiting on a creation must not deadlock");
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a BridgeDestroyed handler waiting on a creation must not deadlock");
     }
 }
 
@@ -249,11 +249,15 @@ internal sealed class HandlerOffloadProbe
         _finishedInsideHandler = _finished.Task.Wait(HandlerWait);
     }
 
-    internal void ShouldHaveFinishedInsideTheHandler(string because)
+    /// <summary>
+    /// Whether the offloaded call finished while the handler waited for it, once the preconditions hold: the event was
+    /// raised and offloaded, the call finished after the raise returned at the latest, and it did not throw.
+    /// </summary>
+    internal bool FinishedInsideTheHandler()
     {
         _finishedInsideHandler.Should().NotBeNull("the event under test must have been raised and offloaded");
         _finished.Task.Wait(Drain).Should().BeTrue("the offloaded call must finish once the raise has returned");
         _failure.Should().BeNull("the offloaded call must not throw");
-        _finishedInsideHandler.Should().BeTrue(because);
+        return _finishedInsideHandler == true;
     }
 }

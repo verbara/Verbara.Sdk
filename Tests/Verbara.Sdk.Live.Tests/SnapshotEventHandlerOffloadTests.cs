@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Verbara.Sdk.Live.Bridges;
 using Verbara.Sdk.Live.MeetMe;
@@ -33,7 +34,7 @@ public sealed class SnapshotEventHandlerOffloadTests
 
         _queues.CompleteSnapshot(window);
 
-        _probe.ShouldHaveFinishedInsideTheHandler(
+        _probe.FinishedInsideTheHandler().Should().BeTrue(
             "a CallerLeft handler for a caller the snapshot omits, waiting on a member add, must not deadlock");
     }
 
@@ -51,7 +52,7 @@ public sealed class SnapshotEventHandlerOffloadTests
 
         _queues.NotifySnapshotEntry(window, Queue, reported);
 
-        _probe.ShouldHaveFinishedInsideTheHandler(
+        _probe.FinishedInsideTheHandler().Should().BeTrue(
             "a deferred snapshot CallerJoined handler waiting on a live join must not deadlock");
     }
 
@@ -68,7 +69,7 @@ public sealed class SnapshotEventHandlerOffloadTests
 
         _queues.OnSnapshotMember(window, Queue, "PJSIP/agent-1", "Agent 1", 0, false, 1);
 
-        _probe.ShouldHaveFinishedInsideTheHandler(
+        _probe.FinishedInsideTheHandler().Should().BeTrue(
             "a MemberAdded handler for a listed member, waiting on a live removal, must not deadlock");
     }
 
@@ -82,7 +83,7 @@ public sealed class SnapshotEventHandlerOffloadTests
         _rooms.ReconcileWithSnapshot(window, [Room],
             new Dictionary<string, IReadOnlyList<ConferenceSnapshotParticipant>> { [Room] = [] }, removeOmitted: true);
 
-        _probe.ShouldHaveFinishedInsideTheHandler(
+        _probe.FinishedInsideTheHandler().Should().BeTrue(
             "a UserLeft handler for a participant the listing omits, waiting on a join, must not deadlock");
     }
 
@@ -100,7 +101,7 @@ public sealed class SnapshotEventHandlerOffloadTests
                 [Room] = [new("PJSIP/a-1", "a", true, false), new("PJSIP/b-1", "b", false, false)],
             }, removeOmitted: true);
 
-        _probe.ShouldHaveFinishedInsideTheHandler(
+        _probe.FinishedInsideTheHandler().Should().BeTrue(
             "a UserStateChanged handler for a refreshed field, waiting on a live talking report, must not deadlock");
     }
 
@@ -115,7 +116,7 @@ public sealed class SnapshotEventHandlerOffloadTests
         _bridges.ReconcileWithSnapshot(window, [], new Dictionary<string, IReadOnlyCollection<string>>(),
             removeOmitted: true);
 
-        _probe.ShouldHaveFinishedInsideTheHandler(
+        _probe.FinishedInsideTheHandler().Should().BeTrue(
             "a BridgeDestroyed handler for a bridge the listing omits, waiting on a creation, must not deadlock");
     }
 }
