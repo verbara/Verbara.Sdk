@@ -520,7 +520,7 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
             + $"cast into a ChannelState that names nothing. Measured: {Describe()}");
     }
 
-    // --- the dialplan position: Exten and Priority (design D5) ----------------------------------
+    // --- the dialplan position: Exten and Priority ---------------------------------------------
     //
     // Every supported version sends the dialplan position as Exten and Priority on a Status frame
     // (24/24 captured frames on 18.26.4, 20.20.1, 22.9.0 and 23.4.1). The reload reads both from
@@ -633,6 +633,36 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
         admitted.Should().NotBeNull($"Measured: {Describe()}");
         admitted!.Extension.Should().Be("",
             "an empty Exten passes through as empty, as a live NewChannel's does; it is not turned into null");
+    }
+
+    [Fact]
+    public async Task Reconnect_ShouldKeepTheHeldChannelsPosition_WhenTheSnapshotListsItAtAnotherExtenAndPriority()
+    {
+        // A channel the table already holds keeps what it was admitted with: the reload admits only
+        // channels it does not hold, so a later Exten and Priority on the frame do not overwrite it.
+        await _sut.StartAsync();
+        _sut.Channels.OnNewChannel(HeldUid, HeldName, ChannelState.Up, exten: "100", priority: 1,
+            linkedId: "linked-1");
+
+        await WhenTheConnectionReconnects(new StatusEvent
+        {
+            UniqueId = HeldUid,
+            Channel = HeldName,
+            RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["ChannelState"] = "6",
+                ["ChannelStateDesc"] = "Up",
+                ["Exten"] = "200",
+                ["Priority"] = "3",
+            },
+        });
+
+        var held = _sut.Channels.GetByUniqueId(HeldUid);
+        held.Should().NotBeNull($"Measured: {Describe()}");
+        held!.Extension.Should().Be("100",
+            "a channel the table already holds keeps its position; the reload does not overwrite it");
+        held.Priority.Should().Be(1,
+            "a channel the table already holds keeps the priority it was admitted with");
     }
 
     /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
