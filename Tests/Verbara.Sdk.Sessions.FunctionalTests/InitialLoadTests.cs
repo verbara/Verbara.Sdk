@@ -144,13 +144,16 @@ public sealed class InitialLoadTests : IAsyncLifetime
             rawFields["CallerIDNum"] = callerId;
         if (context is not null)
             rawFields["Context"] = context;
+        // The extension as every supported version sends it: the Exten header. No version sends a header
+        // named Extension, so the typed member is left unset, as the wire leaves it.
+        if (extension is not null)
+            rawFields["Exten"] = extension;
 
         return new StatusEvent
         {
             UniqueId = uniqueId,
             Channel = channel,
             LinkedId = linkedId,
-            Extension = extension,
             RawFields = rawFields,
         };
     }

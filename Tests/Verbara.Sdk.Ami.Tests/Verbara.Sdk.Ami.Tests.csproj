@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.Ari\Verbara.Sdk.Ari.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.TestInfrastructure.Wire\Verbara.Sdk.TestInfrastructure.Wire.csproj" />
   </ItemGroup>
 
   <ItemGroup>

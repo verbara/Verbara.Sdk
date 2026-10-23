@@ -197,6 +197,35 @@ public sealed class ReconnectReloadTests : IAsyncLifetime
                 "the surviving call keeps its identity, or every downstream record keyed on it is orphaned");
     }
 
+    [Fact]
+    public async Task Reconnect_ShouldOpenTheSessionAtTheDialplanExtension_WhenALegTheSdkNeverSawIsReloaded()
+    {
+        await GivenAStartedServer();
+
+        // One leg that started during the outage, built the way every supported version sends it: the state as
+        // ChannelState / ChannelStateDesc and the dialplan position as Exten / Priority. No version sends a header
+        // named State or Extension, so neither typed member is set.
+        await WhenTheConnectionReconnects(new StatusEvent
+        {
+            UniqueId = "unseen-001",
+            Channel = "PJSIP/trunk-009",
+            LinkedId = "unseen-001",
+            RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["ChannelState"] = "6",
+                ["ChannelStateDesc"] = "Up",
+                ["Context"] = "from-trunk",
+                ["Exten"] = "800",
+                ["Priority"] = "2",
+            },
+        });
+
+        _sessions.ActiveSessions.Should().ContainSingle(
+            $"the reload admitted one call the SDK never saw. Measured: {Describe()}")
+            .Which.Extension.Should().Be("800",
+                "the session a reload opens carries the extension the snapshot reported as Exten");
+    }
+
     /// <summary>Bound on the class cleanup, so a hang there fails the test instead of stalling the lane.</summary>
     private static readonly TimeSpan CleanupBound = TimeSpan.FromSeconds(30);
 

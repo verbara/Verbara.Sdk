@@ -6,6 +6,7 @@ using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Channels;
 using Verbara.Sdk.Live.Server;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 
@@ -291,7 +292,8 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
             {
                 UniqueId = "1700000000.7",
                 Channel = "PJSIP/trunk-0007",
-                Extension = "800",
+                // The dialplan position as every supported version sends it: Exten and Priority, never a
+                // header named Extension (measured on 18.26.4, 20.20.1, 22.9.0 and 23.4.1).
                 RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["ChannelState"] = "4",           // AST_STATE_RING
@@ -299,6 +301,8 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
                     ["CallerIDNum"] = "5551234",
                     ["CallerIDName"] = "Ada Lovelace",
                     ["Context"] = "from-trunk",
+                    ["Exten"] = "800",
+                    ["Priority"] = "2",
                 },
             }
         ];
@@ -315,7 +319,12 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
             "Context reaches the table only through RawFields, and CallSessionManager infers a "
             + "call's direction from it — a buffer narrower than OnNewChannel's parameters would "
             + "drop it silently and flip every loaded call's direction");
-        admitted.Extension.Should().Be("800");
+        using (new AssertionScope())
+        {
+            admitted.Extension.Should().Be("800", "the snapshot sends the extension as the Exten header");
+            admitted.Priority.Should().Be(2, "the snapshot sends the dialplan priority as the Priority header");
+        }
+
         _sut.Channels.GetByName("PJSIP/trunk-0007").Should().BeSameAs(admitted,
             "the name index is the second half of the table");
     }

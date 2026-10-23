@@ -18,3 +18,7 @@
 # .../Recordings/large/, is LFS-tracked. Last so it wins over the `binary` rules
 # above and keeps the canonical LFS attribute set.
 **/Recordings/large/** filter=lfs diff=lfs merge=lfs -text
+
+# Captured AMI Status replies (the StatusEvent wire fixture). CRLF is the AMI framing, so the bytes
+# must never be line-ending converted or textually diffed.
+Tests/Verbara.Sdk.TestInfrastructure.Wire/AmiStatus/*.raw binary
