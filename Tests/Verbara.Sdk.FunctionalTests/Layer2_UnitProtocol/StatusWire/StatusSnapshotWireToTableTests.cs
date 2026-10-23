@@ -52,8 +52,9 @@ public sealed class StatusSnapshotWireToTableTests
         using var scope = new AssertionScope();
         foreach (var frame in frames)
         {
+            server.Channels.ActiveChannels.Should().Contain(c => c.UniqueId == frame.UniqueId,
+                $"{frame.Channel} is in the snapshot");
             var channel = server.Channels.GetByUniqueId(frame.UniqueId!);
-            channel.Should().NotBeNull($"{frame.Channel} is in the snapshot");
             if (channel is null)
                 continue;
 
