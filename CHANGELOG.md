@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — BREAKING: `StatusEvent` carries the state and caller Asterisk sends, and six members it never sends warn `VSDK0002` (#NNN)
+### Fixed — BREAKING: `StatusEvent` carries the state and caller Asterisk sends, and six members it never sends warn `VSDK0002` (#460)
 
 `StatusEvent` gains `ChannelState`, `ChannelStateDesc`, `CallerIdNum` and `CallerIdName`, bound to the
 `ChannelState`, `ChannelStateDesc`, `CallerIDNum` and `CallerIDName` headers that every supported Asterisk sends on a
@@ -20,7 +20,7 @@ six fails with `error VSDK0002`; read the replacement, or add `VSDK0002` to `NoW
 [`asterisk-version-compatibility.md`](docs/guides/asterisk-version-compatibility.md#statusevent-members-no-supported-version-sends)
 lists them, and the migration guide has the section.
 
-### Fixed: a load carries each channel's extension and dialplan priority (#NNN)
+### Fixed: a load carries each channel's extension and dialplan priority (#460)
 
 The initial state load and every reconnect reload of `VerbaraServer` admitted each channel with `Extension` null and
 `Priority` 1, because they read the always-null typed `Extension` and never read `Priority`. They now read the `Exten`
