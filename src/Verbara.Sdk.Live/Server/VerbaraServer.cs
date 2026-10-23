@@ -1201,10 +1201,11 @@ public sealed class VerbaraServer : IVerbaraServer
             if (evt is not StatusEvent se)
                 continue;
 
-            // Every field below that Asterisk really sends is read from RawFields. StatusEvent's
-            // own State and CallerId properties are read by nothing here on purpose: no supported
-            // version populates them, so the parse that used to consume them could only ever
-            // produce ChannelState.Unknown and a null caller id.
+            // Every field below that Asterisk really sends is read from RawFields, on purpose: one route for
+            // every header. StatusEvent's State, CallerId, Account, BridgedChannel, Link and BridgedUniqueId
+            // are [Obsolete] (VSDK0002) because no supported version sends a header by those names, and the
+            // typed ChannelState, CallerIdNum and Extension are not read here either: they carry the same
+            // headers, but a StatusEvent built by hand can set them to something its RawFields contradict.
             var rawFields = se.RawFields;
             snapshot.Add(new ChannelSnapshotEntry(
                 se.UniqueId ?? "",
@@ -1218,7 +1219,11 @@ public sealed class VerbaraServer : IVerbaraServer
                 // Context reaches the manager only through RawFields — StatusEvent has no typed
                 // property for it — and CallSessionManager infers a call's direction from it.
                 Context: rawFields?.GetValueOrDefault("Context"),
-                Extension: se.Extension,
+                // The dialplan position as every supported version sends it: Exten and Priority, never a header
+                // named Extension. The rule matches live admission (NewChannel's Exten and Priority ?? 1): an empty
+                // Exten stays empty, and an absent or unparsable priority is 1.
+                Extension: rawFields?.GetValueOrDefault("Exten"),
+                Priority: ReadPriority(rawFields),
                 // The correlation Asterisk already put on the wire. Dropping it is what turned one
                 // call into several: a channel admitted with no LinkedId falls back to its own
                 // UniqueId in CallSessionManager, so the two legs of a call that started during the
@@ -1289,6 +1294,18 @@ public sealed class VerbaraServer : IVerbaraServer
                 ? (ChannelState)value
                 : ChannelState.Unknown;
     }
+
+    /// <summary>
+    /// Read a <c>Status</c> frame's dialplan priority from its <c>Priority</c> header, as an invariant integer.
+    /// An absent header, or one that is not an integer, gives 1, which is what live admission uses for a
+    /// <c>NewChannel</c> that carries no priority.
+    /// </summary>
+    private static int ReadPriority(IReadOnlyDictionary<string, string>? rawFields) =>
+        rawFields is not null
+        && rawFields.TryGetValue("Priority", out var text)
+        && int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var priority)
+            ? priority
+            : 1;
 
     private async ValueTask PopulateAgentsAsync(
         LoadSession? session, LoadConnectionStates states, CancellationToken cancellationToken)

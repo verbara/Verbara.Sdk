@@ -66,7 +66,6 @@ public sealed class VerbaraServerTests : IAsyncLifetime
         {
             UniqueId = "123.1",
             Channel = "PJSIP/2000-001",
-            State = "Up"
         };
         _connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
@@ -262,7 +261,6 @@ public sealed class VerbaraServerTests : IAsyncLifetime
         {
             UniqueId = "500.1",
             Channel = "PJSIP/5000-001",
-            State = "Up"
         };
         var queueParams = new Verbara.Sdk.Ami.Events.QueueParamsEvent
         {

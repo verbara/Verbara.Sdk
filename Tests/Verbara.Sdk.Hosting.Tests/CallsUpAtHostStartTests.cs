@@ -475,7 +475,6 @@ public sealed class CallsUpAtHostStartTests
                     UniqueId = uniqueId,
                     Channel = name,
                     LinkedId = linkedId,
-                    Extension = "up",
                     RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
                     {
                         ["ChannelState"] = "6",       // AST_STATE_UP

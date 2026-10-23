@@ -24,4 +24,9 @@
     which is the failure this project is here to make impossible.
   -->
 
+  <ItemGroup>
+    <!-- The captured AMI Status replies AmiStatusWireCapture serves, byte for byte (see that type). -->
+    <EmbeddedResource Include="AmiStatus\*.raw" LogicalName="AmiStatus/%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

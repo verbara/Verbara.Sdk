@@ -1,0 +1,215 @@
+Response: Success
+ActionID: d5-status
+EventList: start
+Message: Channel status will follow
+
+Event: Status
+Privilege: Call
+Channel: Local/100@d5probe-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5557777
+CallerIDName: D5 Probe
+ConnectedLineNum: 5557777
+ConnectedLineName: D5 Probe
+Language: en
+AccountCode: 
+Context: d5probe
+Exten: 100
+Priority: 2
+Uniqueid: 1790478477.1
+Linkedid: 1790478477.0
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 5557777
+EffectiveConnectedLineName: D5 Probe
+TimeToHangup: 0
+BridgeID: 
+Application: Wait
+Data: 120
+Nativeformats: (slin)
+Readformat: slin
+Readtrans: 
+Writeformat: slin
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 4
+ActionID: d5-status
+
+Event: Status
+Privilege: Call
+Channel: Local/100@d5probe-00000000;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5557777
+CallerIDName: D5 Probe
+ConnectedLineNum: 5557777
+ConnectedLineName: D5 Probe
+Language: en
+AccountCode: 
+Context: d5probe
+Exten: 100
+Priority: 1
+Uniqueid: 1790478477.0
+Linkedid: 1790478477.0
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 5557777
+EffectiveConnectedLineName: D5 Probe
+TimeToHangup: 0
+BridgeID: 99476c71-bc54-4adb-90e2-61527d34e8b5
+Application: Dial
+Data: Local/100@d5probe/n,120
+Nativeformats: (slin)
+Readformat: slin
+Readtrans: 
+Writeformat: slin
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 4
+ActionID: d5-status
+
+Event: Status
+Privilege: Call
+Channel: Local/100@d5probe-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 100
+CallerIDName: D5 Probe
+ConnectedLineNum: 5557777
+ConnectedLineName: D5 Probe
+Language: en
+AccountCode: 
+Context: d5probe
+Exten: 
+Priority: 1
+Uniqueid: 1790478477.4
+Linkedid: 1790478477.0
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 5557777
+EffectiveConnectedLineName: D5 Probe
+TimeToHangup: 0
+BridgeID: 99476c71-bc54-4adb-90e2-61527d34e8b5
+Application: AppDial
+Data: (Outgoing Line)
+Nativeformats: (slin)
+Readformat: slin
+Readtrans: 
+Writeformat: slin
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 4
+ActionID: d5-status
+
+Event: Status
+Privilege: Call
+Channel: Local/100@d5probe-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 5557777
+CallerIDName: D5 Probe
+ConnectedLineNum: 100
+ConnectedLineName: D5 Probe
+Language: en
+AccountCode: 
+Context: d5probe
+Exten: 100
+Priority: 2
+Uniqueid: 1790478477.5
+Linkedid: 1790478477.0
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 100
+EffectiveConnectedLineName: D5 Probe
+TimeToHangup: 0
+BridgeID: 
+Application: Wait
+Data: 120
+Nativeformats: (slin)
+Readformat: slin
+Readtrans: 
+Writeformat: slin
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 4
+ActionID: d5-status
+
+Event: Status
+Privilege: Call
+Channel: Local/200@d5probe-00000001;1
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 5558888
+CallerIDName: D5 Ringing
+ConnectedLineNum: 5558888
+ConnectedLineName: D5 Ringing
+Language: en
+AccountCode: 
+Context: d5probe
+Exten: 200
+Priority: 1
+Uniqueid: 1790478477.2
+Linkedid: 1790478477.2
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 5558888
+EffectiveConnectedLineName: D5 Ringing
+TimeToHangup: 0
+BridgeID: 
+Application: AppDial2
+Data: (Outgoing Line)
+Nativeformats: (slin)
+Readformat: slin
+Readtrans: 
+Writeformat: slin
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 4
+ActionID: d5-status
+
+Event: Status
+Privilege: Call
+Channel: Local/200@d5probe-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 5558888
+CallerIDName: D5 Ringing
+ConnectedLineNum: 5558888
+ConnectedLineName: D5 Ringing
+Language: en
+AccountCode: 
+Context: d5probe
+Exten: 200
+Priority: 2
+Uniqueid: 1790478477.3
+Linkedid: 1790478477.2
+Type: Local
+DNID: 
+EffectiveConnectedLineNum: 5558888
+EffectiveConnectedLineName: D5 Ringing
+TimeToHangup: 0
+BridgeID: 
+Application: Wait
+Data: 120
+Nativeformats: (slin)
+Readformat: slin
+Readtrans: 
+Writeformat: slin
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 4
+ActionID: d5-status
+
+Event: StatusComplete
+ActionID: d5-status
+EventList: Complete
+ListItems: 6
+Items: 6
+

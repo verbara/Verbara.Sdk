@@ -28,5 +28,6 @@
     <ProjectReference Include="..\..\src\Verbara.Sdk.Sessions\Verbara.Sdk.Sessions.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.VoiceAi.AudioSocket\Verbara.Sdk.VoiceAi.AudioSocket.csproj" />
     <ProjectReference Include="..\Verbara.Sdk.TestInfrastructure\Verbara.Sdk.TestInfrastructure.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.TestInfrastructure.Wire\Verbara.Sdk.TestInfrastructure.Wire.csproj" />
   </ItemGroup>
 </Project>

@@ -47,6 +47,51 @@ On Asterisk before 20.21.0, 22.11.0 and 23.5.0, the manager can hold an event on
 
 Measured on 23.4.1 and 22.10.1: 5 of about 5.4 million events and 7 of about 3.9 million were held; each arrived about a millisecond after the client's next action, and none was lost. With the SDK, the next write on a session that sends nothing else is the heartbeat `Ping`, so such an event waits at most `AmiConnectionOptions.HeartbeatInterval` (30 seconds by default, with `EnableHeartbeat` on, the default). On these versions, lower the interval if a quiet session must see every event sooner, or upgrade Asterisk.
 
+## `StatusEvent` members no supported version sends
+
+The `Status` reply was measured on Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1: six legs per version, 24 frames in all. Six `StatusEvent` members name a header that none of those frames carries, so on every supported version they are always null. Since 2.9.0 they are `[Obsolete]` under the diagnostic id `VSDK0002`, and each message names where the value is:
+
+| Member | Always null because no frame carries | Read instead |
+|--------|--------------------------------------|--------------|
+| `State` | a `State` header | `ChannelStateDesc` (text, for example `Up`) or `ChannelState` (numeric, for example `6`) |
+| `CallerId` | a `CallerID` header | `CallerIdNum` (number) or `CallerIdName` (name) |
+| `Account` | an `Account` header | `AccountCode` |
+| `BridgedChannel` | a `BridgedChannel` header | `BridgeId`: a `Status` frame names the bridge, never the peer channel |
+| `Link` | a `Link` header | `BridgeId` |
+| `BridgedUniqueId` | a `BridgedUniqueId` header | `BridgeId` |
+
+`ChannelState`, `ChannelStateDesc`, `CallerIdNum` and `CallerIdName` are new in 2.9.0. They are `string?`, as on every other channel event, and bind the `ChannelState`, `ChannelStateDesc`, `CallerIDNum` and `CallerIDName` headers.
+
+```csharp
+using Verbara.Sdk.Ami.Connection;
+using Verbara.Sdk.Ami.Events;
+
+static async Task PrintChannelsAsync(AmiConnection connection)
+{
+    await foreach (var evt in connection.SendEventGeneratingActionAsync(new StatusAction()))
+    {
+        if (evt is StatusEvent status)
+        {
+            Console.WriteLine($"{status.Channel} {status.ChannelStateDesc} {status.CallerIdNum} {status.Extension}");
+        }
+    }
+}
+```
+
+**`VSDK0002`.** A project that reads one of the six members gets warning `VSDK0002`, and with `TreatWarningsAsErrors` its build fails. Move the read to the member in the table, or suppress this one obsoletion without muting any other:
+
+```xml
+<PropertyGroup>
+  <NoWarn>$(NoWarn);VSDK0002</NoWarn>
+</PropertyGroup>
+```
+
+**The six members stay.** They still compile and still bind; nothing is removed, and no release is scheduled to remove them. A program compiled against an earlier release keeps running against 2.9.0 without recompiling, and reads null from them, as it always did.
+
+**`Extension` reads `Exten`.** Every measured version sends the dialplan extension under the header `Exten`, never `Extension`, so before 2.9.0 `StatusEvent.Extension` was always null. It now reads `Exten`, also for a program compiled against an earlier release, because the binding lives in `Verbara.Sdk.Ami`. A leg whose `Exten` is empty, such as the dialled leg of a `Dial()` that is running `AppDial`, reads `""`, not null.
+
+The `Context`, `Priority`, `ConnectedLineNum` and `ConnectedLineName` headers have no typed member; read them from `RawFields`.
+
 ## ARI Event Coverage by Version
 
 ### Events Available Since Asterisk 12+

@@ -357,7 +357,7 @@ internal static class QueueFrames
 
         return new()
         {
-            EventType = "Status", UniqueId = uniqueId, Channel = channel, LinkedId = linkedId, Extension = exten,
+            EventType = "Status", UniqueId = uniqueId, Channel = channel, LinkedId = linkedId,
             Application = application, Data = data, RawFields = fields,
         };
     }

@@ -196,3 +196,11 @@ Verbara.Sdk.Ami.Connection.EventActionOutcome.SessionEnded.get -> bool (forwarde
 Verbara.Sdk.Ami.Connection.AmiConnection.Subscribe(System.Func<Verbara.Sdk.ManagerEvent!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! handler) -> System.IDisposable!
 Verbara.Sdk.Ami.AmiBoolean
 static Verbara.Sdk.Ami.AmiBoolean.Parse(string? value) -> bool?
+Verbara.Sdk.Ami.Events.StatusEvent.CallerIdName.get -> string?
+Verbara.Sdk.Ami.Events.StatusEvent.CallerIdName.set -> void
+Verbara.Sdk.Ami.Events.StatusEvent.CallerIdNum.get -> string?
+Verbara.Sdk.Ami.Events.StatusEvent.CallerIdNum.set -> void
+Verbara.Sdk.Ami.Events.StatusEvent.ChannelState.get -> string?
+Verbara.Sdk.Ami.Events.StatusEvent.ChannelState.set -> void
+Verbara.Sdk.Ami.Events.StatusEvent.ChannelStateDesc.get -> string?
+Verbara.Sdk.Ami.Events.StatusEvent.ChannelStateDesc.set -> void
