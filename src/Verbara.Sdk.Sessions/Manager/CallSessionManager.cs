@@ -886,6 +886,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         var uniqueId = entry.UniqueId ?? server.Channels.GetByName(entry.Channel)?.UniqueId;
         if (uniqueId is null || !_byChannelId.TryGetValue(uniqueId, out var session)) return;
 
+        Step(HandlerStep.QueueJoinFound, serverId, uniqueId);
+
         lock (session.SyncRoot)
         {
             if (!IsHeld(session))
@@ -1429,6 +1431,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     {
         if (linkedId is null || !_byLinkedId.TryGetValue(linkedId, out var session))
             return;
+
+        Step(HandlerStep.AgentConnectFound, serverId, linkedId);
 
         lock (session.SyncRoot)
         {

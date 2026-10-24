@@ -43,6 +43,18 @@ internal enum HandlerStep
     /// written its other entries; the id is the session's id and the server id the session's own.
     /// </summary>
     RegistrationHeldById,
+
+    /// <summary>
+    /// An agent's connect found its call by the <c>linkedid</c> it carried, before the call's lock is taken; the id is
+    /// that <c>linkedid</c>.
+    /// </summary>
+    AgentConnectFound,
+
+    /// <summary>
+    /// A queue join found its call by the caller's channel id, before the call's lock is taken; the id is that channel
+    /// id.
+    /// </summary>
+    QueueJoinFound,
 }
 
 public sealed partial class CallSessionManager
@@ -52,7 +64,8 @@ public sealed partial class CallSessionManager
     /// id being released) and the leg's channel id (for <see cref="HandlerStep.AgentCompleteFound"/> the caller's
     /// channel id, else the <c>linkedid</c> the completion carried; for <see cref="HandlerStep.ReleaseWalkStarted"/>
     /// the empty string; for <see cref="HandlerStep.ReleaseForgotById"/> the released call's session id; for
-    /// <see cref="HandlerStep.RegistrationHeldById"/> the registered session's id, under its own server id), on the
+    /// <see cref="HandlerStep.RegistrationHeldById"/> the registered session's id, under its own server id; for
+    /// <see cref="HandlerStep.AgentConnectFound"/> the <c>linkedid</c> the connect carried), on the
     /// thread running that step. Null in production: one null check per point, nothing else. What it throws
     /// propagates out of the handler as any exception there would.
     /// </summary>
