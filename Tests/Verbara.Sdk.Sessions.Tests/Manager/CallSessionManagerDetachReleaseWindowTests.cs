@@ -81,7 +81,7 @@ public sealed class CallSessionManagerDetachReleaseWindowTests
 
         var held = rig.Manager.GetByLinkedId(ReleaseRig.LinkedIdOf("ar"));
         new { arrivalDone, HeldUnderA = held?.ServerId, Active = rig.Manager.ActiveSessions.Count(s => s.ServerId == "a") }
-            .Should().BeEquivalentTo(new { arrivalDone = true, HeldUnderA = (string?)"a", Active = 1 },
+            .Should().BeEquivalentTo(new { arrivalDone = true, HeldUnderA = "a", Active = 1 },
                 "the arrival completes after the detach and its call stays held under the detached id. "
                 + rig.Describe());
     }
@@ -182,7 +182,7 @@ public sealed class CallSessionManagerDetachReleaseWindowTests
             new
             {
                 returnedWhileParked = false, returned = true, Released = true, ByLinkedId = true,
-                LastNotification = (string?)nameof(CallReleasedEvent),
+                LastNotification = nameof(CallReleasedEvent),
             },
             "the release waits for the arrival already running; the call it opened within the limit is released "
             + "with the others, its linkedid forgotten, its release the last notification. " + rig.Describe());

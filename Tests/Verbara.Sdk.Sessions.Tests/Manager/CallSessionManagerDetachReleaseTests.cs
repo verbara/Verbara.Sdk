@@ -141,7 +141,7 @@ public sealed class CallSessionManagerDetachReleaseTests
         {
             rig.Manager.DetachFromServer(serverId, (DetachedCalls)calls);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             thrown = ex;
         }
@@ -233,9 +233,9 @@ public sealed class CallSessionManagerDetachReleaseTests
             {
                 Released = new[] { call.SessionId },
                 State = CallSessionState.Connected,
-                CompletedAt = (DateTimeOffset?)null,
-                HangupCause = (HangupCause?)null,
-                Provenance = (string?)null,
+                CompletedAt = default(DateTimeOffset?),
+                HangupCause = default(HangupCause?),
+                Provenance = default(string?),
                 Ended = 0,
                 Measured = 0L,
             },
@@ -616,8 +616,8 @@ public sealed class CallSessionManagerDetachReleaseTests
             .Should().BeEquivalentTo(
                 new
                 {
-                    Premise = new { State = AgentSessionState.OnCall, CallsHandled = 2, Current = (string?)"h3" },
-                    After = new { State = AgentSessionState.OnCall, CallsHandled = 2, Current = (string?)null },
+                    Premise = new { State = AgentSessionState.OnCall, CallsHandled = 2, Current = "h3" },
+                    After = new { State = AgentSessionState.OnCall, CallsHandled = 2, Current = default(string?) },
                     Changes = 0,
                 },
                 "an agent on a released call has no current call afterwards, is still on call, still counts 2 calls "

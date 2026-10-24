@@ -238,8 +238,7 @@ internal sealed class ReleaseRig : IAsyncDisposable
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        var ownAssertionFailed = t_assertionFailed;
-        t_assertionFailed = false;
+        var ownAssertionFailed = TakeAssertionFailed();
         var leftovers = Manager.ReleaseLeftovers(_released);
         _subscription.Dispose();
         await Manager.DisposeAsync();
@@ -259,6 +258,14 @@ internal sealed class ReleaseRig : IAsyncDisposable
     /// </summary>
     [ThreadStatic]
     private static bool t_assertionFailed;
+
+    /// <summary>Reads <see cref="t_assertionFailed"/> for this thread and clears it.</summary>
+    private static bool TakeAssertionFailed()
+    {
+        var failed = t_assertionFailed;
+        t_assertionFailed = false;
+        return failed;
+    }
 
     static ReleaseRig() =>
         AppDomain.CurrentDomain.FirstChanceException += (_, args) =>

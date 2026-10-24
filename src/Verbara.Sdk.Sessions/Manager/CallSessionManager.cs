@@ -187,14 +187,14 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// </summary>
     private void Publish(SessionDomainEvent notification)
     {
-        t_notificationDepth++;
+        EnterEngineWork();
         try
         {
             _events.OnNext(notification);
         }
         finally
         {
-            t_notificationDepth--;
+            LeaveEngineWork();
         }
     }
 

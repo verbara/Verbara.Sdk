@@ -551,7 +551,7 @@ public sealed class AgentSessionTrackerTests : IDisposable
 
         // A manager that no longer finds the call by its id when the notification arrives: the session id alone
         // names the agents to clear.
-        _manager.GetById("sess-1").Returns((CallSession?)null);
+        _manager.GetById("sess-1").Returns(default(CallSession?));
         _events.OnNext(new CallReleasedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow, "linked-sess-1", null));
 
         var agent = _sut.GetByAgentId("agent-1")!;
@@ -559,8 +559,8 @@ public sealed class AgentSessionTrackerTests : IDisposable
             .Should().BeEquivalentTo(new
             {
                 State = AgentSessionState.OnCall,
-                CurrentCall = (CallSession?)null,
-                CurrentQueueName = (string?)null,
+                CurrentCall = default(CallSession?),
+                CurrentQueueName = default(string?),
                 CallsHandled = 0,
                 TotalTalkTime = TimeSpan.Zero,
                 Changes = 0,

@@ -30,6 +30,12 @@ public sealed partial class CallSessionManager
     [ThreadStatic]
     private static int t_notificationDepth;
 
+    /// <summary>Counts the calling thread into the engine's work (see <see cref="t_notificationDepth"/>).</summary>
+    private static void EnterEngineWork() => t_notificationDepth++;
+
+    /// <summary>Counts the calling thread back out of the engine's work.</summary>
+    private static void LeaveEngineWork() => t_notificationDepth--;
+
     private static InvalidOperationException ReleaseRefused(string serverId) => new(
         $"Server '{serverId}' cannot be released from inside a notification of the session engine: the release would "
         + "wait for the thread that is delivering it. Handle this exception inside the subscriber, and ask for the "

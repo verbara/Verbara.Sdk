@@ -94,10 +94,10 @@ public sealed partial class CallSessionManager
     private List<CallSession> ReleaseCallsOf(string serverId, int handlersInFlight)
     {
         var selected = new List<CallSession>();
-        foreach (var held in _sessions)
+        foreach (var held in _sessions.Where(
+            held => string.Equals(held.Value.ServerId, serverId, StringComparison.Ordinal) && !HasEnded(held.Value)))
         {
-            if (string.Equals(held.Value.ServerId, serverId, StringComparison.Ordinal) && !HasEnded(held.Value))
-                selected.Add(held.Value);
+            selected.Add(held.Value);
         }
 
         // Oldest first, so the order a caller sees does not depend on the dictionary's.
@@ -169,10 +169,10 @@ public sealed partial class CallSessionManager
     /// </summary>
     private void ForgetEverywhere(CallSession call)
     {
-        foreach (var bridge in _bridgeToSession)
+        foreach (var bridge in _bridgeToSession.Where(
+            bridge => string.Equals(bridge.Value, call.SessionId, StringComparison.Ordinal)))
         {
-            if (string.Equals(bridge.Value, call.SessionId, StringComparison.Ordinal))
-                _bridgeToSession.TryRemove(bridge);
+            _bridgeToSession.TryRemove(bridge);
         }
 
         _sessions.TryRemove(new KeyValuePair<string, CallSession>(call.SessionId, call));
@@ -213,47 +213,30 @@ public sealed partial class CallSessionManager
                 leftovers.Add($"released call {call.SessionId} still lists {legs.Count} connected leg(s)");
         }
 
-        foreach (var entry in _byLinkedId)
-        {
-            if (calls.Contains(entry.Value))
-                leftovers.Add($"linkedid {entry.Key} still names released call {entry.Value.SessionId}");
-        }
+        leftovers.AddRange(_byLinkedId
+            .Where(entry => calls.Contains(entry.Value))
+            .Select(entry => $"linkedid {entry.Key} still names released call {entry.Value.SessionId}"));
 
-        foreach (var entry in _byChannelId)
-        {
-            if (calls.Contains(entry.Value))
-                leftovers.Add($"channel id {entry.Key} still names released call {entry.Value.SessionId}");
-        }
+        leftovers.AddRange(_byChannelId
+            .Where(entry => calls.Contains(entry.Value))
+            .Select(entry => $"channel id {entry.Key} still names released call {entry.Value.SessionId}"));
 
-        foreach (var entry in _bridgeToSession)
-        {
-            if (sessionIds.Contains(entry.Value) && !_sessions.ContainsKey(entry.Value))
-                leftovers.Add($"bridge {entry.Key} still names released session id {entry.Value}, which no call holds");
-        }
+        leftovers.AddRange(_bridgeToSession
+            .Where(entry => sessionIds.Contains(entry.Value) && !_sessions.ContainsKey(entry.Value))
+            .Select(entry => $"bridge {entry.Key} still names released session id {entry.Value}, which no call holds"));
 
         var recorded = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var held in _sessions)
-        {
-            if (held.Value.ConnectedAgentLegs is not { } legs)
-                continue;
-            foreach (var leg in legs)
-                recorded[leg.Key] = recorded.GetValueOrDefault(leg.Key) + 1;
-        }
+        foreach (var leg in _sessions.SelectMany(held => held.Value.ConnectedAgentLegs ?? []))
+            recorded[leg.Key] = recorded.GetValueOrDefault(leg.Key) + 1;
 
-        foreach (var count in _connectedAgentLegs)
-        {
-            if (recorded.GetValueOrDefault(count.Key) != count.Value)
-            {
-                leftovers.Add($"wrap-up key {count.Key.Replace('\n', '/')} counts {count.Value} connected leg(s), the "
-                    + $"calls held record {recorded.GetValueOrDefault(count.Key)}");
-            }
-        }
+        leftovers.AddRange(_connectedAgentLegs
+            .Where(count => recorded.GetValueOrDefault(count.Key) != count.Value)
+            .Select(count => $"wrap-up key {count.Key.Replace('\n', '/')} counts {count.Value} connected leg(s), the "
+                + $"calls held record {recorded.GetValueOrDefault(count.Key)}"));
 
-        foreach (var legs in recorded)
-        {
-            if (!_connectedAgentLegs.ContainsKey(legs.Key))
-                leftovers.Add($"wrap-up key {legs.Key.Replace('\n', '/')} counts nothing, the calls held record {legs.Value}");
-        }
+        leftovers.AddRange(recorded
+            .Where(legs => !_connectedAgentLegs.ContainsKey(legs.Key))
+            .Select(legs => $"wrap-up key {legs.Key.Replace('\n', '/')} counts nothing, the calls held record {legs.Value}"));
 
         return leftovers;
     }

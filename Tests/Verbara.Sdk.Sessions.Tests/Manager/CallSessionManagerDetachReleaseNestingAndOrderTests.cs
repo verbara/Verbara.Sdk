@@ -46,7 +46,7 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
                 {
                     innerResult = rig.Manager.DetachFromServer(nested, DetachedCalls.Release);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     inner = ex;
                 }
@@ -72,7 +72,7 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
             new
             {
                 returned = true,
-                Inner = (string?)nameof(InvalidOperationException),
+                Inner = nameof(InvalidOperationException),
                 InnerNamesTheId = true,
                 InnerReturned = false,
                 PerCall = OneEach,
@@ -103,7 +103,7 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
                     rig.Manager.AttachToServer(fresh.Server, "srv-a");
                     attached = true;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     attachFault = ex;
                 }
@@ -123,7 +123,7 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
         }.Should().BeEquivalentTo(
             new
             {
-                returned = true, Fault = (string?)nameof(InvalidOperationException), NamesA = true, attached = false,
+                returned = true, Fault = nameof(InvalidOperationException), NamesA = true, attached = false,
                 Released = new[] { c1.SessionId },
             },
             "an attach of a requested from inside the call-released notification of a's release in progress would "
@@ -204,7 +204,7 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
             Waiting = queues.GetByQueueName("q1")?.CallsWaiting ?? 0,
             ByCaller = rig.Manager.GetByChannelId(caller) is null,
         }.Should().BeEquivalentTo(
-            new { returned = true, Last = (string?)nameof(CallReleasedEvent), QueuedAfterRelease = false, Waiting = 0, ByCaller = true },
+            new { returned = true, Last = nameof(CallReleasedEvent), QueuedAfterRelease = false, Waiting = 0, ByCaller = true },
             "b's queue join for a's call, parked after it wrote the visit and let go as a's release starts walking, "
             + "cannot announce the call after its release: the release is the last notification, the queue counts no "
             + "caller waiting, and the caller's channel finds nothing. " + rig.Describe());
@@ -380,7 +380,7 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
         {
             released = rig.Release("a");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             escaped = ex;
         }
@@ -404,7 +404,7 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
         }.Should().BeEquivalentTo(
             new
             {
-                Escaped = (string?)null,
+                Escaped = default(string?),
                 Released = new[] { c1.SessionId, c2.SessionId },
                 Warnings = 1,
                 Faults = 1L,
@@ -500,7 +500,7 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
             {
                 rig.Manager.DetachFromServer("srv-a", DetachedCalls.Release);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 refusal = ex;
             }
@@ -517,7 +517,7 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
         {
             rig.HangUpCall("srv-a", "r1");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             atTheRoute = ex;
         }
@@ -544,8 +544,8 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
         }.Should().BeEquivalentTo(
             new
             {
-                AtTheRoute = (string?)null,
-                Refusal = (string?)nameof(InvalidOperationException),
+                AtTheRoute = default(string?),
+                Refusal = nameof(InvalidOperationException),
                 RefusalNamesA = true,
                 Warnings = letsItEscape ? 1 : 0,
                 Faults = letsItEscape ? 1L : 0L,
