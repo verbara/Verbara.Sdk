@@ -357,6 +357,44 @@ public sealed class CallSessionManagerDetachReleaseTests
             + "answers nothing, rather than the newer call. " + rig.Describe());
     }
 
+    /// <summary>
+    /// The post-condition every <see cref="ReleaseRig"/> checks at its disposal, shown red: handed a call the manager
+    /// still holds, it names that call's session id, <c>linkedid</c> and channel ids and its connected leg; with the
+    /// call's leg list taken away it names the wrap-up key whose count no held call records any more.
+    /// </summary>
+    [Fact]
+    public async Task ReleaseLeftovers_ShouldNameEveryEntryAndLegCount_WhenTheCallsItIsGivenAreStillKept()
+    {
+        await using var rig = await ReleaseRig.StartAsync(new FakeTimeProvider(), new SessionOptions { WrapUpDuration = WrapUp },
+            serverIds: ["a"]);
+        rig["a"].Deliver(AgentLogin("agent-1", "PJSIP/agent1", "login-1"));
+        rig["a"].Deliver(NamedAgentCallConnected("pc", "pcm", "PJSIP/agent1", "agent-1"));
+        var call = rig.Manager.GetByLinkedId("pc")!;
+
+        var held = rig.Manager.ReleaseLeftovers([call]);
+        var legs = call.ConnectedAgentLegs;
+        call.ConnectedAgentLegs = null;
+        var miscounted = rig.Manager.ReleaseLeftovers([]);
+        call.ConnectedAgentLegs = legs;
+
+        new
+        {
+            Held = held.Count(l => l.Contains(call.SessionId, StringComparison.Ordinal)),
+            ById = held.Any(l => l.StartsWith("session id ", StringComparison.Ordinal)),
+            ByLinkedId = held.Any(l => l.StartsWith("linkedid pc ", StringComparison.Ordinal)),
+            ByChannel = held.Count(l => l.StartsWith("channel id ", StringComparison.Ordinal)),
+            Legs = held.Any(l => l.Contains("1 connected leg(s)", StringComparison.Ordinal)),
+            Miscounted = miscounted.Count(l => l.StartsWith("wrap-up key agent/agent-1 counts 1", StringComparison.Ordinal)),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Held = 3 + call.Participants.Count, ById = true, ByLinkedId = true, ByChannel = call.Participants.Count,
+                Legs = true, Miscounted = 1,
+            },
+            "the helper names every entry and the connected leg of a call it is told was released but is still kept, "
+            + $"and a count no held call records: [{string.Join(" | ", held.Concat(miscounted))}]. " + rig.Describe());
+    }
+
     // --- Each released call SHALL be reported once to the caller and to every subscriber ---------------------------
 
     [Fact]

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
+using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -40,6 +41,7 @@ internal sealed class ReleaseRig : IAsyncDisposable
     private readonly ConcurrentDictionary<string, RigServer> _current = new(StringComparer.Ordinal);
     private readonly ConcurrentQueue<RigServer> _all = new();
     private readonly ConcurrentQueue<Recorded> _events = new();
+    private readonly ConcurrentQueue<CallSession> _released = new();
     private readonly IDisposable _subscription;
     private long _sequence;
 
@@ -127,9 +129,17 @@ internal sealed class ReleaseRig : IAsyncDisposable
     /// <summary>Records <paramref name="server"/> as the instance now attached under its id.</summary>
     public void Current(RigServer server) => _current[server.Id] = server;
 
-    /// <summary>Detaches <paramref name="serverId"/> naming "release".</summary>
-    public IReadOnlyList<CallSession> Release(string serverId) =>
-        Manager.DetachFromServer(serverId, DetachedCalls.Release);
+    /// <summary>
+    /// Detaches <paramref name="serverId"/> naming "release", and records the calls returned for the post-condition
+    /// the rig checks when it is disposed.
+    /// </summary>
+    public IReadOnlyList<CallSession> Release(string serverId)
+    {
+        var released = Manager.DetachFromServer(serverId, DetachedCalls.Release);
+        foreach (var call in released)
+            _released.Enqueue(call);
+        return released;
+    }
 
     /// <summary>
     /// A connected two-leg call on <paramref name="serverId"/>: legs <c>{id}-a</c> (caller) and <c>{id}-b</c>, linkedid
@@ -217,13 +227,45 @@ internal sealed class ReleaseRig : IAsyncDisposable
         + "]; log: [" + string.Join(" | ", Log.Entries.Where(e => e.Level >= LogLevel.Information)
             .Select(e => $"{e.Level} {e.Message}")) + "]";
 
+    /// <summary>
+    /// Disposes the manager and the servers, then checks the post-condition of every release made through
+    /// <see cref="Release"/>: no index entry names a released call, and no connected-leg count still includes a
+    /// released call's legs (<see cref="CallSessionManager.ReleaseLeftovers"/>). Read before the manager is disposed,
+    /// once the test has stopped driving it; checked after the clean-up, so a breach never leaks the servers. A
+    /// breach fails the test even when its own assertions passed. When the test's own assertion has just failed on
+    /// this thread — the disposal then runs while that failure unwinds, and a throw here would replace its message —
+    /// the breach is not thrown; the test is red already.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
+        var ownAssertionFailed = t_assertionFailed;
+        t_assertionFailed = false;
+        var leftovers = Manager.ReleaseLeftovers(_released);
         _subscription.Dispose();
         await Manager.DisposeAsync();
         while (_all.TryDequeue(out var server))
             await server.Server.DisposeAsync();
+
+        if (!ownAssertionFailed)
+        {
+            leftovers.Should().BeEmpty("a release leaves no index entry naming a released call and no connected-leg "
+                + "count including its legs. " + Describe());
+        }
     }
+
+    /// <summary>
+    /// Whether an assertion failed on this thread since the last disposal read it. An <c>await using</c> disposes on
+    /// the thread that threw, synchronously, before the failure leaves the test.
+    /// </summary>
+    [ThreadStatic]
+    private static bool t_assertionFailed;
+
+    static ReleaseRig() =>
+        AppDomain.CurrentDomain.FirstChanceException += (_, args) =>
+        {
+            if (args.Exception is Xunit.Sdk.XunitException)
+                t_assertionFailed = true;
+        };
 
     /// <summary>One notification and the sequence number the recorder gave it.</summary>
     internal sealed record Recorded(long Sequence, SessionDomainEvent Event, int ThreadId);

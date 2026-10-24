@@ -68,6 +68,7 @@ public sealed class PoolSweepReleaseTests : IAsyncLifetime
             },
             "a server removed with its calls released under the tick ends nothing; the released call is not asked "
             + $"about, not ended and not counted by the next tick. Measured: {_rig.Describe()}");
+        ShouldLeaveNothingOf(released);
     }
 
     /// <summary>The Release twin of <c>PoolSweep_ShouldLeaveAndCountASessionWhoseServerIsNotInThePool_WhenItsCallLostItsHangup</c>.</summary>
@@ -94,6 +95,7 @@ public sealed class PoolSweepReleaseTests : IAsyncLifetime
             new { Released = new[] { call.SessionId }, Look = before, StatusRequests = 0, Serverless = (int?)0 },
             "a released session of a server the pool does not hold is neither verified nor ended nor counted. "
             + $"Measured: {_rig.Describe()}");
+        ShouldLeaveNothingOf(released);
     }
 
     [Fact]
@@ -119,6 +121,7 @@ public sealed class PoolSweepReleaseTests : IAsyncLifetime
             new { tick = true, Released = 3, Serverless = (int?)0, Asked = 0, Ended = 0 },
             "a server removed with its 3 calls released leaves the next sweep nothing to count and nothing to send, "
             + $"and none of the calls ended. Measured: {_rig.Describe()}");
+        ShouldLeaveNothingOf(released);
     }
 
     /// <summary>Pin (green on the stub by construction): a server removed with "keep" keeps today's count.</summary>
@@ -161,5 +164,14 @@ public sealed class PoolSweepReleaseTests : IAsyncLifetime
             new { countedWhileKept = (int?)3, Released = 3, tick = true, Serverless = (int?)0 },
             "calls kept on detach are counted by the sweep; once the host releases them the next sweep counts 0. "
             + $"Measured: {_rig.Describe()}");
+        ShouldLeaveNothingOf(released);
     }
+
+    /// <summary>
+    /// The release's post-condition, checked after every release test: no index entry names a released call and no
+    /// connected-leg count still includes its legs.
+    /// </summary>
+    private void ShouldLeaveNothingOf(IReadOnlyList<CallSession> released) =>
+        _rig.Manager.ReleaseLeftovers(released).Should().BeEmpty(
+            $"a release leaves no index entry naming a released call and no connected-leg count including its legs. Measured: {_rig.Describe()}");
 }

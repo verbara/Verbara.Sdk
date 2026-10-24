@@ -295,20 +295,6 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             subs.Detach();
     }
 
-    /// <summary>
-    /// Detaches <paramref name="serverId"/> and, with <see cref="DetachedCalls.Release"/>, releases the calls this
-    /// manager holds for it; returns the calls released.
-    /// </summary>
-    public IReadOnlyList<CallSession> DetachFromServer(string serverId, DetachedCalls calls)
-    {
-        // Phase A stub: detaches as the one-argument detach and releases nothing. The step a release reaches after
-        // its drain is called here so a test parked on it reaches its own assertions.
-        DetachFromServer(serverId);
-        if (calls == DetachedCalls.Release)
-            Step(HandlerStep.ReleaseWalkStarted, serverId, string.Empty);
-        return [];
-    }
-
     // --- Event Handlers ---
 
     /// <summary>
