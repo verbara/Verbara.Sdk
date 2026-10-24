@@ -73,7 +73,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
     /// <summary>
     /// A token whose cancellation stops delivery between events: once it is cancelled, the event whose
     /// handler is running completes and no further buffered event is dispatched. Set it before
-    /// <see cref="Start"/>; the consumer reads it directly, so nothing is registered on it.
+    /// <see cref="Start(Func{ManagerEvent, ValueTask})"/>; the consumer reads it directly, so nothing is registered on it.
     /// </summary>
     internal CancellationToken StopToken { get; init; }
 
@@ -108,6 +108,46 @@ public sealed class AsyncEventPump : IAsyncDisposable
     public void Start(Func<ManagerEvent, ValueTask> handler)
     {
         _consumerTask = Task.Run(() => ConsumeAsync(handler));
+    }
+
+    /// <summary>
+    /// Starts the pump so that it dispatches nothing before <paramref name="gate"/> completes (however it completes). The
+    /// consumer task exists at once: it awaits the gate and then consumes, so a release of this pump awaits the gate and
+    /// the drain instead of discarding the buffer, and one pump started behind another's release never dispatches while
+    /// the other still does. The buffer accepts events from the start.
+    /// </summary>
+    /// <remarks>
+    /// The consumer never resumes on the thread that completes the gate: it continues on the thread pool. Whoever else
+    /// continues on the gate — the reconnect loop, which raises <c>Reconnected</c> once the previous delivery is over —
+    /// does not wait behind this pump's first dispatches.
+    /// </remarks>
+    internal void Start(Func<ManagerEvent, ValueTask> handler, Task gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+        if (gate.IsCompleted)
+        {
+            Start(handler);
+            return;
+        }
+
+        _consumerTask = Task.Run(async () =>
+        {
+            // DisposeAsync cancels _cts: a pump released without a drain stops waiting for its gate. _cts is disposed only
+            // after this task has returned.
+            await gate.WaitAsync(_cts.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+            // The await above resumes inline on the thread that completed the gate. Leave it before the first dispatch, so
+            // the other continuations of the gate run without waiting for this pump's buffer.
+            await Task.Yield();
+
+            if (_cts.IsCancellationRequested)
+            {
+                EndWaiters();
+                return;
+            }
+
+            await ConsumeAsync(handler).ConfigureAwait(false);
+        });
     }
 
     private async Task ConsumeAsync(Func<ManagerEvent, ValueTask> handler)

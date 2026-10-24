@@ -85,6 +85,16 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI] Reconnected not delivered: the caller has ended the connection")]
     public static partial void ReconnectedDroppedAfterEnding(ILogger logger);
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI] Reconnected not delivered: session {Session} is no longer current")]
+    public static partial void ReconnectedNotCurrent(ILogger logger, long session);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "[AMI] Logged in again while the lost session's events are still being delivered: pending={Pending}; the new session's events follow them")]
+    public static partial void RedialedDuringDelivery(ILogger logger, int pending);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI] The lost session's delivery ended {ElapsedMs} ms after the new login")]
+    public static partial void LostDeliveryEnded(ILogger logger, double elapsedMs);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] OnEvent handler threw on {EventType}")]
     public static partial void HandlerFault(ILogger logger, string? eventType, Exception exception);
 
@@ -212,8 +222,16 @@ public sealed class AmiConnection : IAmiConnection
     // either, and the pump dispatches no further event. Never reset: a caller's ending is final.
     private readonly TaskCompletionSource _endedFromDispatch = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    // The release of the last event pump a cleanup detached: complete once that pump's consumer has returned.
+    // The release of the last event pump a cleanup detached: complete once that pump's consumer has returned. The next
+    // session's pump starts behind it (its gate), so releases chain and one consumer dispatches at a time.
     private Task _pumpReleased = Task.CompletedTask;
+
+    // Every pump a cleanup detached whose release has not finished yet: what the pending gauge adds to the current pump.
+    private readonly ConcurrentDictionary<AsyncEventPump, byte> _releasingPumps = new();
+
+    // The session the reconnect loop logged in whose Reconnected handlers have not returned yet; 0 for none. Written
+    // under _endingLock by StartSession and by the Reconnected delivery.
+    private long _reconnectPendingFor;
 
     // Whether Asterisk has reported FullyBooted on the current session. Every connect attempt replaces it before it
     // logs in, so a report made on an earlier session never counts for this one. Unless the report came first, it is
@@ -273,6 +291,15 @@ public sealed class AmiConnection : IAmiConnection
     /// </para>
     /// </remarks>
     internal Task FullyBooted => _fullyBooted.Task;
+
+    /// <summary>
+    /// Whether a session the reconnect loop logged in is still waiting for its <see cref="Reconnected"/> handlers to return:
+    /// true from that login — while the lost session's buffered events may still be delivered — until the handlers of that
+    /// session's <see cref="Reconnected"/> have returned; false after a caller's connect, which raises none. A
+    /// <see cref="Reconnected"/> that reaches delivery for a session no longer current clears nothing. Read by
+    /// Verbara.Sdk.Live.
+    /// </summary>
+    internal bool ReconnectPending => Volatile.Read(ref _reconnectPendingFor) != 0;
 
     /// <summary>
     /// What this connection may have lost before the event being delivered, for a reader that compares two such marks
@@ -531,7 +558,7 @@ public sealed class AmiConnection : IAmiConnection
 
         ForgetLostConnectionEnding();
 
-        await ConnectCoreAsync(byLoop: false, cancellationToken);
+        _ = await ConnectCoreAsync(byLoop: false, cancellationToken);
     }
 
     /// <summary>
@@ -604,7 +631,7 @@ public sealed class AmiConnection : IAmiConnection
     /// <see cref="OperationCanceledException"/>.
     /// </param>
     /// <param name="cancellationToken">The caller's token, or the lifetime token for the reconnect loop.</param>
-    private async ValueTask ConnectCoreAsync(bool byLoop, CancellationToken cancellationToken)
+    private async ValueTask<long> ConnectCoreAsync(bool byLoop, CancellationToken cancellationToken)
     {
         SetConnectState(AmiConnectionState.Connecting, byLoop);
 
@@ -622,6 +649,7 @@ public sealed class AmiConnection : IAmiConnection
         // from then on the reader loop's ending does.
         var fullyBooted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _fullyBooted = fullyBooted;
+        long session;
         // A heartbeat failure belongs to the session it ended; this attempt's session starts without one.
         _heartbeatFailure = null;
         try
@@ -679,7 +707,7 @@ public sealed class AmiConnection : IAmiConnection
                 await DetectVersionAsync(reader, writer, connectToken, cancellationToken);
             }
 
-            StartSession(byLoop, fullyBooted, socket, sessionToken);
+            session = StartSession(byLoop, fullyBooted, socket, sessionToken);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -701,13 +729,14 @@ public sealed class AmiConnection : IAmiConnection
         if (!_gaugesRegistered)
         {
             AmiMetrics.Meter.CreateObservableGauge("ami.event_pump.pending",
-                () => _eventPump?.PendingCount ?? 0, description: "Events pending in the event pump buffer");
+                PendingInEveryBuffer, description: "Events pending in the event pump buffer");
             AmiMetrics.Meter.CreateObservableGauge("ami.pending_actions",
                 () => _pendingActions.Count, description: "Actions awaiting response");
             _gaugesRegistered = true;
         }
 
         AmiConnectionLog.Connected(_logger, _options.Hostname, _options.Port, AsteriskVersion);
+        return session;
     }
 
     /// <summary>
@@ -715,11 +744,18 @@ public sealed class AmiConnection : IAmiConnection
     /// all under <c>_endingLock</c>, unless an ending has been recorded: then nothing starts, and the attempt yields with
     /// an <see cref="OperationCanceledException"/>. An ending recorded afterwards finds every part of the session in place.
     /// </summary>
-    private void StartSession(bool byLoop, TaskCompletionSource fullyBooted, ISocketConnection socket, CancellationToken sessionToken)
+    private long StartSession(bool byLoop, TaskCompletionSource fullyBooted, ISocketConnection socket, CancellationToken sessionToken)
     {
         lock (_endingLock)
         {
             ThrowIfEndingRecordedLocked(byLoop);
+            var ordinal = Interlocked.Increment(ref _sessionOrdinal);
+
+            // A redialled session is pending from this login until its Reconnected handlers return; a caller's connect
+            // raises no Reconnected, so nothing is pending after it. Written before Connected: a reader that sees
+            // Connected without the lock (the sweep reads State, then the pending reconnect) never sees the redialled
+            // session as connected and not pending.
+            Volatile.Write(ref _reconnectPendingFor, byLoop ? ordinal : 0);
             SetStateLocked(AmiConnectionState.Connected, cause: null, byCaller: !byLoop);
 
             // The pump observes the caller's ending from its creation, before Start: once _lifetime is cancelled it
@@ -736,14 +772,21 @@ public sealed class AmiConnection : IAmiConnection
                 AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
             };
             _eventPump = pump;
-            var ordinal = Interlocked.Increment(ref _sessionOrdinal);
-            pump.Start(evt => DispatchEventAsync(evt, new AmiEventLossMark(ordinal, pump.DroppedBeforeCurrentEvent)));
+
+            // The pump buffers from now on but dispatches only once the previous session's pump has been released (its
+            // buffer delivered, or cut by the caller's ending): one consumer at a time, the lost session's events first.
+            pump.Start(evt => DispatchEventAsync(evt, new AmiEventLossMark(ordinal, pump.DroppedBeforeCurrentEvent)), _pumpReleased);
             _readerLoop = Task.Run(() => ReaderLoopAsync(fullyBooted, sessionToken), CancellationToken.None);
 
             if (_options.EnableHeartbeat && _options.HeartbeatInterval > TimeSpan.Zero)
                 _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(socket, sessionToken), CancellationToken.None);
+
+            return ordinal;
         }
     }
+
+    /// <summary>The events pending in the current pump and in every detached pump still being released.</summary>
+    private int PendingInEveryBuffer() => (Volatile.Read(ref _eventPump)?.PendingCount ?? 0) + PendingInReleasingPumps();
 
     /// <summary>
     /// Releases what a failed attempt owns, and for a caller's attempt writes <see cref="AmiConnectionState.Disconnected"/>
@@ -1693,8 +1736,11 @@ public sealed class AmiConnection : IAmiConnection
 
             try
             {
-                await CleanupAsync();
-                await ConnectCoreAsync(byLoop: true, lifetime);
+                // The lost session's pump is released here but not awaited: the connect below logs in while its buffer is
+                // still being delivered, and the new session's pump starts behind that release.
+                await CleanupAsync(awaitPump: false);
+                var lostDelivery = _pumpReleased;
+                var session = await ConnectCoreAsync(byLoop: true, lifetime);
                 if (EndingRecorded())
                 {
                     // The caller ended the connection as the attempt logged in. That ending releases what the
@@ -1702,7 +1748,23 @@ public sealed class AmiConnection : IAmiConnection
                     return;
                 }
 
-                OnReconnected();
+                // No event of the lost session is delivered after Reconnected: it is queued once that delivery is over.
+                // An ending from inside a dispatch is not waited for, as everywhere else.
+                if (!lostDelivery.IsCompleted)
+                {
+                    if (_logger.IsEnabled(LogLevel.Information))
+                    {
+                        var pending = PendingInReleasingPumps();
+                        AmiConnectionLog.RedialedDuringDelivery(_logger, pending);
+                    }
+
+                    var started = _timeProvider.GetTimestamp();
+                    await Task.WhenAny(lostDelivery, _endedFromDispatch.Task);
+                    var elapsedMs = _timeProvider.GetElapsedTime(started).TotalMilliseconds;
+                    AmiConnectionLog.LostDeliveryEnded(_logger, elapsedMs);
+                }
+
+                OnReconnected(session);
                 return; // Success
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -1723,37 +1785,63 @@ public sealed class AmiConnection : IAmiConnection
     /// handler by handler, so one that throws does not keep the handlers after it (the live server's reload among
     /// them) from hearing the reconnect.
     /// </summary>
-    private void OnReconnected()
+    private void OnReconnected(long session)
     {
-        if (Reconnected is null)
-            return;
-
+        // Queued even with no handler: its delivery is what ends the session's pending reconnect.
         Notify(nameof(Reconnected), () =>
         {
+            // Decided at delivery, not at queueing: a session lost while this notification waited is no longer current,
+            // and the newer session's own loop reports its Reconnected.
+            bool closedByCaller;
+            bool current;
+            lock (_endingLock)
+            {
+                closedByCaller = _closedByCaller;
+                current = Volatile.Read(ref _sessionOrdinal) == session && _state == AmiConnectionState.Connected;
+            }
+
             // Read at delivery time: the caller's ending, recorded while this notification waited behind a slow
             // handler, ends the connection for good, and an ending raises no Reconnected.
-            if (_closedByCaller)
+            if (closedByCaller)
             {
                 AmiConnectionLog.ReconnectedDroppedAfterEnding(_logger);
                 return;
             }
 
-            // Read at delivery time: a handler removed while this notification waited is not called.
-            var handlers = Reconnected;
-            if (handlers is null)
-                return;
-
-            foreach (var handler in handlers.GetInvocationList())
+            if (!current)
             {
-                try
+                AmiConnectionLog.ReconnectedNotCurrent(_logger, session);
+                return;
+            }
+
+            try
+            {
+                // Read at delivery time: a handler removed while this notification waited is not called.
+                var handlers = Reconnected;
+                if (handlers is null)
+                    return;
+
+                foreach (var handler in handlers.GetInvocationList())
                 {
-                    ((Action)handler).Invoke();
+                    try
+                    {
+                        ((Action)handler).Invoke();
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        // A subscriber's failure is its own: logged, and the handlers after it still run. Running out of
+                        // memory is the process's failure, not the subscriber's, so it is not swallowed here.
+                        AmiConnectionLog.ReconnectHandlerError(_logger, ex);
+                    }
                 }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
+            }
+            finally
+            {
+                // Only this session's delivery ends its pending reconnect; a newer session's is left as it is.
+                lock (_endingLock)
                 {
-                    // A subscriber's failure is its own: logged, and the handlers after it still run. Running out of
-                    // memory is the process's failure, not the subscriber's, so it is not swallowed here.
-                    AmiConnectionLog.ReconnectHandlerError(_logger, ex);
+                    if (Volatile.Read(ref _reconnectPendingFor) == session)
+                        Volatile.Write(ref _reconnectPendingFor, 0);
                 }
             }
         });
@@ -2126,10 +2214,16 @@ public sealed class AmiConnection : IAmiConnection
     /// </remarks>
     /// <param name="byEnding">
     /// <see langword="true"/> for the connection's ending, which stops waiting for the pump once the caller has
-    /// ended the connection from inside a dispatch (<see cref="_endedFromDispatch"/>). The reconnect loop's
-    /// release waits for the pump until its consumer returns, so no two consumers ever dispatch at once.
+    /// ended the connection from inside a dispatch (<see cref="_endedFromDispatch"/>). Every pump starts behind the
+    /// release of the one before it, so no two consumers ever dispatch at once, and the newest release completes only
+    /// after every earlier one.
     /// </param>
-    private async ValueTask CleanupAsync(bool byEnding = false)
+    /// <param name="awaitPump">
+    /// <see langword="false"/> for the reconnect loop: the detached pump is released but not awaited, so the loop logs in
+    /// again while its buffer is delivered; the next session's pump starts behind that release, so two consumers still
+    /// never dispatch at once.
+    /// </param>
+    private async ValueTask CleanupAsync(bool byEnding = false, bool awaitPump = true)
     {
         Task pumpReleased;
         await _cleanupLock.WaitAsync();
@@ -2196,6 +2290,7 @@ public sealed class AmiConnection : IAmiConnection
             // has ended the connection (the pump's StopToken); the release is awaited below, outside the lock.
             if (_eventPump is not null)
             {
+                _ = _releasingPumps.TryAdd(_eventPump, 0);
                 _pumpReleased = ReleasePumpAsync(_eventPump);
                 _eventPump = null;
             }
@@ -2209,8 +2304,18 @@ public sealed class AmiConnection : IAmiConnection
 
         if (byEnding)
             await Task.WhenAny(pumpReleased, _endedFromDispatch.Task);
-        else
+        else if (awaitPump)
             await pumpReleased;
+    }
+
+    /// <summary>The events still buffered in the pumps being released.</summary>
+    private int PendingInReleasingPumps()
+    {
+        var pending = 0;
+        foreach (var releasing in _releasingPumps.Keys)
+            pending += releasing.PendingCount;
+
+        return pending;
     }
 
     /// <summary>
@@ -2227,7 +2332,14 @@ public sealed class AmiConnection : IAmiConnection
     /// </remarks>
     private async Task ReleasePumpAsync(AsyncEventPump pump)
     {
-        await pump.DrainAndDisposeAsync();
+        try
+        {
+            await pump.DrainAndDisposeAsync();
+        }
+        finally
+        {
+            _releasingPumps.TryRemove(pump, out _);
+        }
 
         var discarded = pump.DroppedOnDispose;
         if (discarded > 0 && _lifetime.IsCancellationRequested)
@@ -2254,8 +2366,9 @@ public sealed class AmiConnection : IAmiConnection
     /// <para>
     /// The call waits for the event whose handler is running, if any, and delivers none of the events still buffered,
     /// including when it lands while a lost connection is delivering its buffer or waiting to reconnect. They are
-    /// counted on <c>ami.events.dropped</c> with <c>reason=caller_ending</c> and logged once at Warning,
-    /// <c>[AMI_EVENT] Discarded on caller ending</c>, with the count.
+    /// counted on <c>ami.events.dropped</c> with <c>reason=caller_ending</c> and logged at Warning,
+    /// <c>[AMI_EVENT] Discarded on caller ending</c>, with the count, once per released buffer: twice when the call lands
+    /// while a reconnected session's events wait behind the delivery of the lost session's.
     /// </para>
     /// <para>
     /// The one exception is a call made from inside the connection's own event dispatch, while that dispatch is

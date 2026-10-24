@@ -142,6 +142,82 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
             + $"verified or why not, and how many of its candidates ended. Measured: {rig.Describe()}");
     }
 
+    // ── A reconnect of the server is pending: logged in again, its Reconnected not yet handled ──────────
+
+    [Fact]
+    public async Task Sweep_ShouldSkipAsReconnectPendingAndSendNoStatus_WhenTheServerIsLoggedInAgainButHasNotHandledReconnected()
+    {
+        await using var rig = await ReconnectingSweepRig.StartAsync(sessions: 2);
+        rig.HoldFirstLoss();
+        var sweep = rig.BuildSweep();
+
+        rig.Peers[0].CloseSession();
+        await rig.LoggedIn(2).WaitAsync(SweepRig.Bound);
+        var tags = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+
+        new { Verification = tags["verification"], Status = rig.Peers[1].Asked("Status") }.Should().BeEquivalentTo(
+            new { Verification = "skipped:reconnect-pending", Status = 0 },
+            "a verification sent while the redialled session waits for its Reconnected to be handled is wasted: the " +
+            "reconnect's reload covers the same channels, so the sweep skips and sends nothing");
+    }
+
+    [Fact]
+    public async Task Sweep_ShouldVerify_WhenTheServerHasHandledTheReconnect()
+    {
+        await using var rig = await ReconnectingSweepRig.StartAsync(sessions: 2);
+        rig.HoldFirstLoss();
+        var sweep = rig.BuildSweep();
+
+        rig.Peers[0].CloseSession();
+        await rig.LoggedIn(2).WaitAsync(SweepRig.Bound);
+        rig.ReleaseLoss();
+        await rig.ServerLog.Logged("[LIVE] State loaded", 2).WaitAsync(SweepRig.Bound);
+        var tags = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+
+        new { Verification = tags["verification"], Status = rig.Peers[1].Asked("Status") }.Should().BeEquivalentTo(
+            new { Verification = "run", Status = 2 },
+            "once the server has handled Reconnected and reloaded, the sweep verifies again: the reload's Status and its own");
+    }
+
+    [Fact]
+    public async Task Sweep_ShouldSkipAsReconnectPendingUntilTheSurvivingSessionsReconnectedIsHandled_WhenASecondLossLandsWhileTheFirstIsQueued()
+    {
+        await using var rig = await ReconnectingSweepRig.StartAsync(sessions: 3);
+        rig.HoldFirstLoss();
+        var sweep = rig.BuildSweep();
+
+        rig.Peers[0].CloseSession();
+        await rig.LoggedIn(2).WaitAsync(SweepRig.Bound);
+        rig.Peers[1].CloseSession();
+        await rig.LoggedIn(3).WaitAsync(SweepRig.Bound);
+        var pending = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+
+        new { Verification = pending["verification"], Status = rig.Peers[2].Asked("Status") }.Should().BeEquivalentTo(
+            new { Verification = "skipped:reconnect-pending", Status = 0 },
+            "the third session's Reconnected waits behind the first loss's handler: a reconnect is pending from its login");
+
+        rig.ReleaseLoss();
+        await rig.ServerLog.Logged("[LIVE] State loaded", 2).WaitAsync(SweepRig.Bound);
+        var after = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+        after["verification"].Should().Be("run", "once the third session's Reconnected handlers have returned the sweep verifies");
+    }
+
+    [Fact]
+    public async Task Sweep_ShouldVerify_WhenTheCallerReconnectedAfterALossWithoutAutoReconnect()
+    {
+        await using var rig = await ReconnectingSweepRig.StartAsync(sessions: 2, autoReconnect: false);
+        var sweep = rig.BuildSweep();
+
+        rig.Peers[0].CloseSession();
+        await rig.ConnectionLog.Logged("[AMI] Disconnected").WaitAsync(SweepRig.Bound);
+        await rig.Connection.ConnectAsync().AsTask().WaitAsync(SweepRig.Bound);
+        var tags = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+
+        new { Verification = tags["verification"], Status = rig.Peers[1].Asked("Status") }.Should().BeEquivalentTo(
+            new { Verification = "run", Status = 1 },
+            "a caller's connect raises no Reconnected, so no reconnect is pending: the sweep verifies");
+    }
+
     /// <summary>The tags of the one <c>session reconciliation</c> span <paramref name="sweep"/> opens.</summary>
     private static async Task<Dictionary<string, object?>> SweepTagsAsync(Func<Task> sweep)
     {

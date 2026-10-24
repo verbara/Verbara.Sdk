@@ -37,7 +37,7 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// </para>
 /// </remarks>
 [Collection(AmiEventsDroppedMetricGroup.Name)]
-public sealed class AmiConnectionBufferedEventsTests
+public sealed partial class AmiConnectionBufferedEventsTests
 {
     /// <summary>A hang bound. Every wait ends on its signal long before it; only a defect reaches it.</summary>
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);
@@ -121,8 +121,9 @@ public sealed class AmiConnectionBufferedEventsTests
 
     /// <summary>
     /// The peer closes with N events buffered behind the held first dispatch. The reconnect loop's release, before
-    /// its first attempt, disposes the lost socket and waits for the pump; the gate then opens and the loss's drain
-    /// delivers the buffered events until the k-th, which is held on a second gate. The caller disposes there.
+    /// its first attempt, disposes the lost socket; the gate then opens and the loss's drain delivers the buffered
+    /// events until the k-th, which is held on a second gate, while the loop dials again (its peer never answers the
+    /// login). The caller disposes there.
     /// </summary>
     [Fact]
     public async Task DisposeAsync_ShouldCutTheLossDrain_WhenTheCallerEndsTheConnectionWhileAReconnectingLossDelivers()
@@ -140,11 +141,15 @@ public sealed class AmiConnectionBufferedEventsTests
         dispatches.First.Open();
         (await CompletesWithinBoundAsync(dispatches.Kth.Entered)).Should().BeTrue(
             $"the loss's drain delivers the buffered events up to the {HeldBufferedEvent}th, whose dispatch is held");
+        var redial = await ResultWithinBoundAsync(factory.NextAsync(peerCts.Token).AsTask());
+        redial.Should().NotBeNull("the reconnect loop dials again while the loss's drain is still delivering");
 
+        var createdBeforeEnding = factory.Created.Count;
         var asked = dispatches.Count;
         var end = connection.DisposeAsync().AsTask();
         dispatches.Kth.Open();
         var ended = await CompletesWithinBoundAsync(end);
+        var redialReleased = await CompletesWithinBoundAsync(redial!.Disposed);
 
         using (new AssertionScope())
         {
@@ -152,7 +157,9 @@ public sealed class AmiConnectionBufferedEventsTests
             (dispatches.Count - asked).Should().Be(0,
                 $"the caller's DisposeAsync cuts the loss's drain: none of the {Buffered - HeldBufferedEvent} events " +
                 $"after the {HeldBufferedEvent}th is delivered");
-            factory.Created.Should().HaveCount(1, "the reconnect loop dials no socket once the caller has ended the connection");
+            factory.Created.Should().HaveCount(createdBeforeEnding,
+                "the reconnect loop dials no socket once the caller has ended the connection");
+            redialReleased.Should().BeTrue("the caller's ending releases the socket the reconnect loop dialled");
             connection.State.Should().Be(AmiConnectionState.Disconnected);
         }
     }
@@ -359,28 +366,46 @@ public sealed class AmiConnectionBufferedEventsTests
     // ── Pins, green before and after: a loss alone delivers the whole buffer, and #335's in-dispatch ending ──
 
     [Fact]
-    public async Task ReconnectLoop_ShouldDeliverEveryBufferedEventInOrder_WhenThePeerClosesWithAutoReconnect()
+    public async Task ReconnectLoop_ShouldDeliverEveryBufferedEventInOrder_BeforeAnyEventOfTheRedialledSession_WhenThePeerClosesWithAutoReconnect()
     {
+        const int redialled = 3;
         using var peerCts = new CancellationTokenSource(Bound * 2);
-        // Only the first socket accepts its connect, so the test reads the loop's first dial and nothing logs in.
-        var factory = new PipedSocketFactory { ConnectsAccepted = 1 };
+        var factory = new PipedSocketFactory();
         var logger = new CapturingLogger<AmiConnection>();
         var connection = Create(factory, autoReconnect: true, logger, backoff: TimeSpan.FromMilliseconds(1));
         var dispatches = new Dispatches(connection);
+        var lastDelivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.OnEvent += evt =>
+        {
+            if (evt is PeerStatusEvent { Peer: "NEW/2" })
+                lastDelivered.TrySetResult();
+            return ValueTask.CompletedTask;
+        };
         var socket = await ConnectAsync(connection, factory, peerCts);
         await BufferBehindTheHeldDispatchAsync(connection, socket, dispatches, Buffered, peerCts);
+        var relogin = Task.Run(async () =>
+        {
+            var peer = await factory.NextAsync(peerCts.Token);
+            await peer.CompleteLoginAsync(peerCts.Token);
+            return peer;
+        }, peerCts.Token);
 
         socket.CloseFromPeer();
         dispatches.First.Open();
-        var redial = await ResultWithinBoundAsync(factory.NextAsync(peerCts.Token).AsTask());
-        var deliveredBeforeRedial = dispatches.BufferedPeers();
+        var second = await ResultWithinBoundAsync(relogin);
+        second.Should().NotBeNull("the reconnect loop dials and logs in again");
+        for (var i = 0; i < redialled; i++)
+            (await second!.WriteEventAsync("PeerStatus", [new("Peer", "NEW/" + i.ToString(CultureInfo.InvariantCulture))])).Should().BeTrue();
+
+        var last = await CompletesWithinBoundAsync(lastDelivered.Task);
+        var delivered = dispatches.BufferedPeers();
         (await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask())).Should().BeTrue();
 
         using (new AssertionScope())
         {
-            redial.Should().NotBeNull("the reconnect loop dials once the loss's drain is over");
-            deliveredBeforeRedial.Should().Equal(ExpectedPeers(Buffered),
-                $"a loss delivers all {Buffered} buffered events, in order, before the reconnect loop dials");
+            last.Should().BeTrue("the redialled session's last event is delivered");
+            delivered.Should().Equal([.. ExpectedPeers(Buffered), "NEW/0", "NEW/1", "NEW/2"],
+                $"a loss delivers all {Buffered} buffered events, in order, before any event of the redialled session");
             logger.Entries.Where(e => e.Format == DiscardedFormat).Should().BeEmpty("a loss discards nothing");
         }
     }
