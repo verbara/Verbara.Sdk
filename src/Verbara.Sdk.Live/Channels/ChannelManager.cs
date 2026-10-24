@@ -31,6 +31,9 @@ internal static partial class ChannelManagerLog
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "[CHANNEL] Reconciled: snapshot={SnapshotCount} added={Added} removed={Removed} newer_than_snapshot={NewerThanSnapshot} departed_during_read={DepartedDuringRead}")]
     public static partial void Reconciled(ILogger logger, int snapshotCount, int added, int removed, int newerThanSnapshot, int departedDuringRead);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CHANNEL] Event handler failed for a change whose call did not raise it")]
+    public static partial void UnownedHandlerFailed(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -43,6 +46,9 @@ public sealed class ChannelManager
     private readonly ConcurrentDictionary<string, AsteriskChannel> _channelsByUniqueId = new();
     private readonly ConcurrentDictionary<string, AsteriskChannel> _channelsByName = new();
     private readonly ILogger _logger;
+
+    // Post under the channel lock that orders the transition; drain after every manager lock is released.
+    private readonly LiveEventOutbox _events;
 
     /// <summary>
     /// Orders admissions and departures on one scale. Every admission takes the next value, and so
@@ -60,7 +66,7 @@ public sealed class ChannelManager
     /// found no window open is ordered before any window opened after it, and no admission can
     /// slip between another route's check and its insert.
     /// <para>
-    /// Lock order: no subscriber is ever invoked under it, and no thread ever waits on a channel's
+    /// Lock order: no subscriber is ever invoked under any channel-table lock, and no thread ever waits on a channel's
     /// <c>SyncRoot</c> while holding it. An admitting thread takes the new channel's
     /// <c>SyncRoot</c> first and this lock inside it; a removing thread releases this lock before
     /// it takes the removed channel's <c>SyncRoot</c>.
@@ -84,7 +90,11 @@ public sealed class ChannelManager
     public event Action<AsteriskChannel>? ChannelRemoved;
     public event Action<AsteriskChannel>? ChannelStateChanged;
 
-    public ChannelManager(ILogger logger) => _logger = logger;
+    public ChannelManager(ILogger logger)
+    {
+        _logger = logger;
+        _events = new LiveEventOutbox(ex => ChannelManagerLog.UnownedHandlerFailed(_logger, ex), LiveEventOutbox.DefaultTurnWait);
+    }
 
     public IEnumerable<AsteriskChannel> ActiveChannels => _channelsByUniqueId.Values;
 
@@ -199,14 +209,17 @@ public sealed class ChannelManager
     public void OnNewChannel(string uniqueId, string channelName, ChannelState state,
         string? callerIdNum = null, string? callerIdName = null,
         string? context = null, string? exten = null, int priority = 1,
-        string? linkedId = null) =>
+        string? linkedId = null)
+    {
         Admit(new ChannelSnapshotEntry(uniqueId, channelName, state, callerIdNum, callerIdName,
             context, exten, priority, linkedId), window: null);
+        _events.Drain();
+    }
 
     /// <summary>What one attempt to admit a channel did.</summary>
     private enum Admission
     {
-        /// <summary>The channel entered the table and <see cref="ChannelAdded"/> was raised for it.</summary>
+        /// <summary>The channel entered the table and <see cref="ChannelAdded"/> was queued for it.</summary>
         Admitted,
 
         /// <summary>The table already held the <c>UniqueId</c>; nothing changed and nothing was raised.</summary>
@@ -233,21 +246,17 @@ public sealed class ChannelManager
     /// under the same lock — rather than on a red rate.
     /// </para>
     /// <para>
-    /// The announcement cannot be overtaken by the channel's removal. The admitting thread takes
+    /// Posting order puts the announcement before the channel's later events. The admitting thread takes
     /// the new channel's <c>SyncRoot</c> — an object no other thread can see yet, so taking it never
-    /// blocks — before the manager lock, and keeps it until <see cref="ChannelAdded"/> has returned.
-    /// A <c>Hangup</c> of that channel on another thread removes it from the table under the
-    /// manager lock, releases that lock, and then waits on the channel's <c>SyncRoot</c> before it
-    /// sets the cause and raises <see cref="ChannelRemoved"/>, so <see cref="ChannelRemoved"/> always
-    /// follows <see cref="ChannelAdded"/>. The cost: a <see cref="ChannelAdded"/> subscriber that
-    /// blocks also delays that channel's removal on the thread that observed it.
+    /// blocks — before the manager lock, publishes the channel, and posts <see cref="ChannelAdded"/>
+    /// before releasing <c>SyncRoot</c>. Every later transition posts under that same channel lock,
+    /// so its notification follows the admission in the outbox. The caller drains after releasing
+    /// both locks; delivery waits for earlier notifications only up to the outbox's bounded turn wait.
     /// </para>
     /// <para>
-    /// A <see cref="ChannelAdded"/> subscriber may call back into this manager — hang up another
-    /// channel, for instance — because nothing it can reach waits on a <c>SyncRoot</c> under the
-    /// manager lock. What it must not do is make two threads each hold one freshly admitted
-    /// channel's <c>SyncRoot</c> while hanging up the other's: a subscriber that, on two threads at
-    /// once, hangs up the channel the other thread is admitting would wait on each other forever.
+    /// A subscriber runs with no channel-table lock held and may call back into this manager,
+    /// including by waiting for another thread. Notifications caused from inside a handler are
+    /// delivered after that handler and the notification's other subscribers return, never nested.
     /// </para>
     /// </summary>
     private Admission Admit(ChannelSnapshotEntry entry, SnapshotReadWindow? window)
@@ -263,7 +272,8 @@ public sealed class ChannelManager
             Extension = entry.Extension,
             Priority = entry.Priority,
             LinkedId = entry.LinkedId,
-            AdmittedFromSnapshot = window is not null
+            AdmittedFromSnapshot = window is not null,
+            AdmittedState = entry.State
         };
 
         lock (channel.SyncRoot)
@@ -285,7 +295,7 @@ public sealed class ChannelManager
 
             LiveMetrics.ChannelsCreated.Add(1);
             ChannelManagerLog.NewChannel(_logger, entry.UniqueId, entry.Name, entry.State);
-            ChannelAdded?.Invoke(channel);
+            _events.Post(() => ChannelAdded?.Invoke(channel));
         }
 
         return Admission.Admitted;
@@ -305,10 +315,11 @@ public sealed class ChannelManager
                     channel.Name = channelName;
                     _channelsByName[channelName] = channel;
                 }
+                _events.Post(() => ChannelStateChanged?.Invoke(channel));
             }
             ChannelManagerLog.StateChanged(_logger, uniqueId, newState);
-            ChannelStateChanged?.Invoke(channel);
         }
+        _events.Drain();
     }
 
     /// <summary>
@@ -332,17 +343,17 @@ public sealed class ChannelManager
             _channelsByName.TryRemove(channel.Name, out _);
         }
 
-        // Taken after the manager lock is released: when the channel is still being admitted on
-        // another thread, this waits until its ChannelAdded has returned, so the removal is never
-        // announced before the admission.
+        // Taken after the manager lock is released. Admission posted under this same channel lock,
+        // so this removal follows it in the outbox without holding a lock while subscribers run.
         lock (channel.SyncRoot)
         {
             channel.HangupCause = cause;
             channel.State = ChannelState.Down;
+            _events.Post(() => ChannelRemoved?.Invoke(channel));
         }
         LiveMetrics.ChannelsDestroyed.Add(1);
         ChannelManagerLog.Hangup(_logger, uniqueId, cause);
-        ChannelRemoved?.Invoke(channel);
+        _events.Drain();
     }
 
     /// <summary>Handle a Rename event.</summary>
@@ -394,8 +405,9 @@ public sealed class ChannelManager
         lock (channel.SyncRoot)
         {
             channel.DialedChannel = destChannel;
+            _events.Post(() => ChannelDialBegin?.Invoke(channel));
         }
-        ChannelDialBegin?.Invoke(channel);
+        _events.Drain();
     }
 
     public void OnDialEnd(string uniqueId, string? dialStatus)
@@ -404,8 +416,9 @@ public sealed class ChannelManager
         lock (channel.SyncRoot)
         {
             channel.DialStatus = dialStatus;
+            _events.Post(() => ChannelDialEnd?.Invoke(channel));
         }
-        ChannelDialEnd?.Invoke(channel);
+        _events.Drain();
     }
 
     public void OnHold(string uniqueId, string? musicClass)
@@ -415,8 +428,9 @@ public sealed class ChannelManager
         {
             channel.IsOnHold = true;
             channel.HoldMusicClass = musicClass;
+            _events.Post(() => ChannelHeld?.Invoke(channel));
         }
-        ChannelHeld?.Invoke(channel);
+        _events.Drain();
     }
 
     public void OnUnhold(string uniqueId)
@@ -426,8 +440,9 @@ public sealed class ChannelManager
         {
             channel.IsOnHold = false;
             channel.HoldMusicClass = null;
+            _events.Post(() => ChannelUnheld?.Invoke(channel));
         }
-        ChannelUnheld?.Invoke(channel);
+        _events.Drain();
     }
 
     /// <summary>Get channels filtered by state (lazy, zero-alloc).</summary>
@@ -557,6 +572,7 @@ public sealed class ChannelManager
 
             if (RemoveByReload(held))
                 removed++;
+            _events.Drain();
         }
 
         // Each entry is checked and admitted in one step, after every earlier entry has been
@@ -582,6 +598,7 @@ public sealed class ChannelManager
                 case Admission.AlreadyHeld:
                     break;
             }
+            _events.Drain();
         }
 
         ChannelManagerLog.Reconciled(_logger, snapshot.Count, added, removed, newerThanSnapshot, departedDuringRead);
@@ -613,6 +630,7 @@ public sealed class ChannelManager
             name = gone.Name;
             gone.MarkRemovedByReload();
             gone.State = ChannelState.Down;
+            _events.Post(() => ChannelRemoved?.Invoke(gone));
         }
 
         // Drop the name index only while it still points at this instance, so a reused or renamed
@@ -621,7 +639,6 @@ public sealed class ChannelManager
 
         LiveMetrics.ChannelsDestroyed.Add(1);
         ChannelManagerLog.RemovedByReload(_logger, gone.UniqueId, name);
-        ChannelRemoved?.Invoke(gone);
         return true;
     }
 
@@ -746,7 +763,7 @@ public sealed class AsteriskChannel : LiveObjectBase
     /// <para>
     /// It is the counterpart of <see cref="RemovedByReload"/> at the other end of the channel's
     /// life, and it carries the same kind of knowledge: the SDK did <b>not</b> observe this call
-    /// start, so <see cref="State"/> is the only account of it that will ever arrive and no
+    /// start, so <see cref="AdmittedState"/> is the only account of its initial state that will ever arrive and no
     /// <c>NewState</c> announcing it is coming. A subscriber opening a record for the channel reads
     /// this as positive evidence that the history behind that state was never seen, instead of
     /// inferring it from a missing event, so a call the reload reports as live is not described as
@@ -758,6 +775,13 @@ public sealed class AsteriskChannel : LiveObjectBase
     /// </para>
     /// </summary>
     internal bool AdmittedFromSnapshot { get; init; }
+
+    /// <summary>
+    /// The state reported at admission, captured before the channel is visible. Unlike the live
+    /// <see cref="State"/>, it cannot be changed by an earlier event subscriber before the session
+    /// consumer classifies a channel admitted from a snapshot.
+    /// </summary>
+    internal ChannelState AdmittedState { get; init; }
 
     /// <summary>
     /// Marks this channel as removed by a state reload. One-way and idempotent: a removal is
