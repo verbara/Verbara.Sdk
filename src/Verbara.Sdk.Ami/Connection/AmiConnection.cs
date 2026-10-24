@@ -749,6 +749,13 @@ public sealed class AmiConnection : IAmiConnection
         lock (_endingLock)
         {
             ThrowIfEndingRecordedLocked(byLoop);
+            var ordinal = Interlocked.Increment(ref _sessionOrdinal);
+
+            // A redialled session is pending from this login until its Reconnected handlers return; a caller's connect
+            // raises no Reconnected, so nothing is pending after it. Written before Connected: a reader that sees
+            // Connected without the lock (the sweep reads State, then the pending reconnect) never sees the redialled
+            // session as connected and not pending.
+            Volatile.Write(ref _reconnectPendingFor, byLoop ? ordinal : 0);
             SetStateLocked(AmiConnectionState.Connected, cause: null, byCaller: !byLoop);
 
             // The pump observes the caller's ending from its creation, before Start: once _lifetime is cancelled it
@@ -765,11 +772,6 @@ public sealed class AmiConnection : IAmiConnection
                 AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
             };
             _eventPump = pump;
-            var ordinal = Interlocked.Increment(ref _sessionOrdinal);
-
-            // A redialled session is pending from this login until its Reconnected handlers return; a caller's connect
-            // raises no Reconnected, so nothing is pending after it.
-            Volatile.Write(ref _reconnectPendingFor, byLoop ? ordinal : 0);
 
             // The pump buffers from now on but dispatches only once the previous session's pump has been released (its
             // buffer delivered, or cut by the caller's ending): one consumer at a time, the lost session's events first.

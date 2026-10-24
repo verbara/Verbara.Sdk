@@ -110,6 +110,102 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
         }
     }
 
+    /// <summary>
+    /// The second session's <c>Reconnected</c> handler holds the queue while that session is lost and the third session
+    /// logs in. When the held handler returns, its delivery clears nothing: the third session's handler still finds a
+    /// reconnect pending, the third session's own, which is cleared once that handler has returned.
+    /// </summary>
+    /// <remarks>
+    /// The third session's pending reconnect is known to be written by its <c>[AMI] Connected</c> line, logged after the
+    /// session started. The queue delivers one notification at a time, so the second session's delivery has ended, its
+    /// clearing included, before the third session's handler reads the pending reconnect.
+    /// </remarks>
+    [Fact]
+    public async Task Reconnected_ShouldLeaveTheNewerSessionsReconnectPending_WhenTheHandlerOfALostSessionReturnsAfterTheNextLogin()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 3);
+        var sockets = new PipedSocketFactory();
+        var logins = Channel.CreateUnbounded<PipedSocket>();
+        var serving = ServeAndSignalEveryLoginAsync(sockets, logins.Writer, peerCts.Token);
+        var thirdConnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var connected = 0;
+        var logger = new TailReadingLogger(line =>
+        {
+            if (line.StartsWith("[AMI] Connected", StringComparison.Ordinal) && Interlocked.Increment(ref connected) == 3)
+                thirdConnected.TrySetResult();
+        });
+        var connection = new AmiConnection(Options.Create(new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = true,
+            ReconnectInitialDelay = TimeSpan.FromMilliseconds(20),
+            ReconnectMaxDelay = TimeSpan.FromMilliseconds(20),
+        }), sockets, logger);
+        using var gate = new ManualResetEventSlim(false);
+        var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thirdEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sessions = new List<long>();
+        connection.Reconnected += () =>
+        {
+            var session = connection.EventLossMark.Session;
+            lock (sessions)
+                sessions.Add(session);
+
+            if (session == 2)
+            {
+                secondEntered.TrySetResult();
+                gate.Wait(Bound * 3);
+            }
+            else
+            {
+                thirdEntered.TrySetResult(connection.ReconnectPending);
+            }
+        };
+
+        try
+        {
+            await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+            await logins.Reader.ReadAsync(peerCts.Token).AsTask().WaitAsync(Bound);
+
+            sockets.Created[0].CloseFromPeer();
+            await logins.Reader.ReadAsync(peerCts.Token).AsTask().WaitAsync(Bound);
+            await secondEntered.Task.WaitAsync(Bound);
+
+            sockets.Created[1].CloseFromPeer();
+            await logins.Reader.ReadAsync(peerCts.Token).AsTask().WaitAsync(Bound);
+            await thirdConnected.Task.WaitAsync(Bound);
+            var pendingAtThirdLogin = connection.ReconnectPending;
+
+            gate.Set();
+            var pendingInThirdHandler = await thirdEntered.Task.WaitAsync(Bound);
+            await connection.PendingNotifications.WaitAsync(Bound);
+            var pendingAfter = connection.ReconnectPending;
+            List<long> delivered;
+            lock (sessions)
+                delivered = [.. sessions];
+
+            using (new AssertionScope())
+            {
+                delivered.Should().Equal([2L, 3L], "the second session's handler ran while it was current, then the third's");
+                pendingAtThirdLogin.Should().BeTrue("a reconnect is pending from the third session's login");
+                pendingInThirdHandler.Should().BeTrue(
+                    "the second session's delivery, ending after the third login, leaves the third session's pending " +
+                    "reconnect as it is");
+                pendingAfter.Should().BeFalse("it is cleared once the third session's Reconnected handlers have returned");
+            }
+        }
+        finally
+        {
+            gate.Set();
+            await connection.DisposeAsync().AsTask().WaitAsync(Bound);
+            await peerCts.CancelAsync();
+            await serving;
+        }
+    }
+
     /// <summary>Logs in every socket the connection creates, writes each to <paramref name="logins"/>, and answers its Pings.</summary>
     private static async Task ServeAndSignalEveryLoginAsync(PipedSocketFactory sockets, ChannelWriter<PipedSocket> logins,
         CancellationToken ct)

@@ -107,6 +107,17 @@ public sealed partial class AmiConnectionBufferedEventsTests
         second.Should().NotBeNull(
             "the reconnect loop logs in again while the lost session's Hangup is still buffered behind the held dispatch");
 
+        // The hold opens only after the reconnect loop has logged that it logged in during the delivery (its connect has
+        // returned; the loop writes that line on its own thread just before it waits), one event of the redialled session
+        // is buffered behind a Ping answered on it, and every notification queued so far has been delivered. A loop that
+        // queued Reconnected without waiting for the lost delivery queues it right after that line, with nothing to wait
+        // for, so its handler runs first and disposes the subscription the Hangup was buffered for. No signal marks the
+        // point where such a loop has queued it without a seam in the loop, so the Ping's round trip is a margin, not a
+        // fence: in a process where that path is still cold the early Reconnected can land after the Hangup.
+        (await CompletesWithinBoundAsync(run.Logger.Logged("[AMI] Logged in again while the lost session's events"))).Should()
+            .BeTrue("the reconnect loop logs that it logged in while the lost session's events are still being delivered");
+        await run.BufferAsync(second!, "NEW", 1);
+        await run.Connection.PendingNotifications.WaitAsync(Bound);
         run.Recorder.Open(HeldPeer);
         var reconnected = await CompletesWithinBoundAsync(resubscribedOnReconnect.Task);
         replacement?.Dispose();
