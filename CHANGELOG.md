@@ -157,7 +157,7 @@ threads go alongside it. A handler that throws no longer keeps the events queued
 exception is rethrown from the call that made the change. A handler must not block on another event of the same manager caused by
 its own calls. The full rules are in the troubleshooting guide.
 
-### Added: a server removed for good can let go of its calls without ending them (#NNN)
+### Added: a server removed for good can let go of its calls without ending them (#464)
 
 `CallSessionManager` and `ICallSessionManager` gain `DetachFromServer(serverId, DetachedCalls calls)`.
 `DetachedCalls.Keep` does what `DetachFromServer(serverId)` does: it unsubscribes the server and keeps its calls, which
@@ -195,7 +195,7 @@ wait. Apart from the change below, nothing changes for a caller that does not pa
 section "A server that leaves for good" has the details, and the multi-server checklist of the call-session ending
 migration guide says when to keep the calls and when to release them.
 
-### Changed: `CallStartedEvent` and `CallQueuedEvent` are raised under the call's lock (#NNN)
+### Changed: `CallStartedEvent` and `CallQueuedEvent` are raised under the call's lock (#464)
 
 Like the session manager's other notifications of a call (a wrap-up's close aside), `CallStartedEvent` and
 `CallQueuedEvent` are now raised with the call's lock held, after a check that the manager still holds the call, so
