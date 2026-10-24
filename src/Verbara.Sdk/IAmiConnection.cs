@@ -213,6 +213,12 @@ public interface IAmiConnection : IAsyncDisposable
     /// handler told of the loss that caused the reconnect has returned before the first <c>Reconnected</c> handler of
     /// the same outage runs. Handlers run one at a time; one that throws is logged, and the handlers after it still
     /// receive the event. A slow handler delays the handlers queued behind it, so keep handlers short.
+    /// <para>
+    /// The AMI connection logs in again while the lost session's buffered events are still being delivered; the
+    /// reconnected session's events follow them, and <c>Reconnected</c> is raised once the lost session's last event has
+    /// been delivered. It is delivered only for a session that is still the current one at delivery: a reconnected session
+    /// lost again before then raises none, and the session that replaces it raises its own.
+    /// </para>
     /// </remarks>
     event Action? Reconnected;
 

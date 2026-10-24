@@ -102,6 +102,10 @@ internal sealed partial class ServerSweep
         if (connection.State != AmiConnectionState.Connected)
             return "not-connected";
 
+        // Logged in again, but the lost session's events may still be in delivery and the reload has not run yet.
+        if (server.IsReconnectPending)
+            return "reconnect-pending";
+
         return server.IsLoadInFlight ? "load-in-flight" : null;
     }
 

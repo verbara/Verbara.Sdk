@@ -4,7 +4,7 @@ using FluentAssertions;
 
 namespace Verbara.Sdk.Ami.Tests.Internal;
 
-public class AsyncEventPumpTests
+public partial class AsyncEventPumpTests
 {
     private static ManagerEvent CreateEvent(string type = "Test") =>
         new() { EventType = type };
