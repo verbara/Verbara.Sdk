@@ -9,10 +9,11 @@ using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Xunit.Abstractions;
 
 namespace Verbara.Sdk.Ari.Tests.Client;
 
-public sealed class AriClientClosingTests
+public sealed class AriClientClosingTests(ITestOutputHelper output)
 {
     private static readonly TimeSpan Limit = TimeSpan.FromSeconds(10);
     private static readonly FieldInfo SocketField = typeof(AriClient).GetField("_webSocket", BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -126,6 +127,10 @@ public sealed class AriClientClosingTests
             // For reconnect-off, the socket remains retained today; the loop has ended but sends no
             // answer. Its completion is the causal failure signal, not a peer receive timeout.
             if (autoReconnect) await first.Ended.WaitAsync(Limit);
+            output.WriteLine($"autoReconnect={autoReconnect}; clientCloseFrames={first.CloseCount}; " +
+                $"closeOrder={first.CloseOrder}; secondDialOrder={peer.SecondDialOrder}; " +
+                $"dials={peer.Dials}; peerReadEnded={first.Ended.IsCompleted}; " +
+                $"currentSocketState={((ClientWebSocket)SocketField.GetValue(sut)!).State}");
             using (new AssertionScope())
             {
                 first.CloseCount.Should().Be(1, "an Asterisk-initiated close is answered before release/redial");

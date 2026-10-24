@@ -335,7 +335,16 @@ public sealed class AriClient : IAriClient
                 while (!result.EndOfMessage);
 
                 if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    if (_webSocket is { State: WebSocketState.CloseReceived } socket)
+                    {
+                        // Finish a peer-first handshake before reconnect can release this socket or dial again.
+                        // The connection's cancellation does not cancel the answer; the existing close bound does.
+                        using var closeBound = new CancellationTokenSource(CloseTimeout, TimeProvider);
+                        await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Closing", closeBound.Token);
+                    }
                     break;
+                }
 
                 if (result.MessageType == WebSocketMessageType.Text && bufferWriter.WrittenCount > 0)
                 {
