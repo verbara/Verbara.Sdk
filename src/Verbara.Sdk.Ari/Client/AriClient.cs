@@ -617,6 +617,8 @@ public sealed class AriClient : IAriClient
         if (_eventLoop is not null)
             await _eventLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
+        SetState(AriConnectionState.Disconnected);
+
         // A buffer DisconnectAsync did not release: the client was reconnecting, or lost with nothing reconnecting it.
         if (Interlocked.Exchange(ref _pump, null) is { } pump)
         {
