@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -102,6 +104,98 @@ public sealed class CallSessionManagerReloadSubscriberTests
             },
             "the reload removes the three channels the snapshot no longer lists and ends their calls, and admits the "
             + "two it lists and opens a call for each, whatever a subscriber of the endings throws");
+    }
+
+    [Fact]
+    public async Task ReconcileWithSnapshot_ShouldKeepAnAnsweredCallsReportedState_WhenAnEarlierAdmissionSubscriberOffloadsItsNormalHangup()
+    {
+        const string UniqueId = "snapshot-answered";
+        const string LinkedId = "snapshot-call";
+        var connection = Substitute.For<IAmiConnection>();
+        connection.AsteriskVersion.Returns("22.9.0");
+        await using var server = new VerbaraServer(connection, NullLogger<VerbaraServer>.Instance);
+        var store = new RecordingStateStore();
+        await using var manager = new CallSessionManager(
+            Options.Create(new SessionOptions()), NullLogger<CallSessionManager>.Instance, store);
+        var probe = new HandlerOffloadProbe();
+        AsteriskChannel? admitted = null;
+        AsteriskChannel? heldBeforeHangup = null;
+        AsteriskChannel? removed = null;
+        Thread? hangupWorker = null;
+        var hangupReturned = false;
+        var hangupReturnedBeforeSessions = false;
+        ChannelState? stateBeforeSessions = null;
+        CallSessionState? initialSessionState = null;
+        CallSessionState? endingSessionState = null;
+        var endings = new List<CallEndedEvent>();
+
+        // This subscriber must precede Sessions: its worker mutates the public live object first.
+        server.Channels.ChannelAdded += channel =>
+        {
+            admitted = channel;
+            heldBeforeHangup = server.Channels.GetByUniqueId(UniqueId);
+            probe.Offload(() =>
+            {
+                hangupWorker = Thread.CurrentThread;
+                server.Channels.OnHangup(UniqueId, HangupCause.NormalClearing);
+                Volatile.Write(ref hangupReturned, true);
+            });
+            hangupReturnedBeforeSessions = Volatile.Read(ref hangupReturned);
+            stateBeforeSessions = channel.State;
+        };
+        manager.AttachToServer(server, ServerId);
+        server.Channels.ChannelRemoved += channel => removed = channel;
+        using var events = manager.Events.Subscribe(e =>
+        {
+            if (e is CallStartedEvent)
+                initialSessionState = manager.GetByLinkedId(LinkedId)?.State;
+            if (e is CallEndedEvent ended)
+            {
+                endings.Add(ended);
+                endingSessionState = manager.GetByLinkedId(LinkedId)?.State;
+            }
+        });
+
+        var finishedInsideHandler = false;
+        var workerJoined = false;
+        try
+        {
+            using var window = server.Channels.OpenReadWindow();
+            server.Channels.ReconcileWithSnapshot(
+                [new(UniqueId, "PJSIP/snapshot-answered", ChannelState.Up, LinkedId: LinkedId)], window);
+            // The probe records its two-second handler wait; assertions run after worker cleanup.
+            finishedInsideHandler = probe.FinishedInsideTheHandler();
+        }
+        finally
+        {
+            workerJoined = hangupWorker is not null && hangupWorker.Join(HandlerOffloadProbe.Drain);
+        }
+
+        var session = manager.GetByLinkedId(LinkedId);
+        using var scope = new AssertionScope();
+        finishedInsideHandler.Should().BeTrue("the hangup must finish while the first admission subscriber waits");
+        workerJoined.Should().BeTrue("the offloaded physical worker must be reaped");
+        hangupReturnedBeforeSessions.Should().BeTrue();
+        stateBeforeSessions.Should().Be(ChannelState.Down, "the earlier subscriber must expose the live-object race");
+        admitted.Should().NotBeNull();
+        heldBeforeHangup.Should().BeSameAs(admitted);
+        removed.Should().BeSameAs(admitted, "public events keep the table's same live channel instance");
+        admitted?.State.Should().Be(ChannelState.Down);
+        server.Channels.GetByUniqueId(UniqueId).Should().BeNull();
+        initialSessionState.Should().Be(CallSessionState.Connected, "the snapshot reported an answered call");
+        endingSessionState.Should().Be(CallSessionState.Completed);
+        (session is not null).Should().BeTrue("the answered snapshot call must retain its completed session");
+        if (session is not null)
+        {
+            session.State.Should().Be(CallSessionState.Completed);
+            session.Metadata.Should().Contain("origin", "reload");
+            session.Events.Should().ContainSingle(e => e.Type == CallSessionEventType.Connected && e.Detail == "reload");
+            session.ConnectedAt.Should().BeNull("a reload never observed when the call answered");
+            endings.Should().ContainSingle().Which.SessionId.Should().Be(session.SessionId);
+            store.Saves.Where(saved => saved.SessionId == session.SessionId).Select(saved => saved.State)
+                .Should().Equal(CallSessionState.Connected, CallSessionState.Completed);
+        }
+        endings.Should().ContainSingle().Which.Cause.Should().Be(HangupCause.NormalClearing);
     }
 
     /// <summary>Which subscriber throws on every call notification of the test.</summary>
@@ -232,6 +326,21 @@ public sealed class CallSessionManagerReloadSubscriberTests
         {
             // Completed when the manager is disposed; nothing to do.
         }
+    }
+
+    /// <summary>Copies each saved state immediately, rather than retaining a mutable session reference.</summary>
+    private sealed class RecordingStateStore : SessionStoreBase
+    {
+        public ConcurrentQueue<(string SessionId, CallSessionState State)> Saves { get; } = new();
+
+        public override ValueTask SaveAsync(CallSession session, CancellationToken ct)
+        {
+            Saves.Enqueue((session.SessionId, session.State));
+            return ValueTask.CompletedTask;
+        }
+
+        public override ValueTask<CallSession?> GetAsync(string sessionId, CancellationToken ct) =>
+            ValueTask.FromResult<CallSession?>(null);
     }
 
     /// <summary>A store that saves nothing; the tests read the manager and the channel table.</summary>

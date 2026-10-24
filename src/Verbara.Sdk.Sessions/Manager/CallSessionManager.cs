@@ -403,7 +403,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         // and the only one that will ever arrive: no NewState announcing it is coming, because it
         // already happened. Opening such a call in Created would report a live conversation as one
         // that has not started.
-        var reportedState = channel.AdmittedFromSnapshot ? ReportedSessionState(channel.State) : null;
+        var reportedState = channel.AdmittedFromSnapshot ? ReportedSessionState(channel.AdmittedState) : null;
         if (channel.AdmittedFromSnapshot)
         {
             // Marked whatever state was reported, including the one the snapshot could not
