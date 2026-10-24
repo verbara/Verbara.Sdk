@@ -254,6 +254,15 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </summary>
     internal bool IsLoadInFlight => Volatile.Read(ref _loadsInFlight) > 0;
 
+    /// <summary>
+    /// Whether this server's connection has logged in again after a loss and the handlers of that session's
+    /// <c>Reconnected</c> — this server's reload among them — have not returned yet: the lost session's buffered events
+    /// may still be in delivery, and the reload has not started. Read by a caller that would rather not reconcile the
+    /// channels before the reload; nothing waits on it. Always <see langword="false"/> on a connection other than the
+    /// SDK's own.
+    /// </summary>
+    internal bool IsReconnectPending => _connection is AmiConnection ami && ami.ReconnectPending;
+
     // 1 once ReconcileChannelsAsync has logged a refused Status at Warning in the current AMI session; the reload after
     // a reconnect sets it back to 0, so the first refusal of every session is a Warning and the ones after it are Debug.
     private int _statusRefusalWarned;

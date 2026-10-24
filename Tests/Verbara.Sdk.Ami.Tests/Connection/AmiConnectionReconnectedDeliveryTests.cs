@@ -15,7 +15,7 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// A real <see cref="AmiConnection"/> over the in-memory <see cref="PipedSocket"/> harness; every socket's peer logs in
 /// and answers Pings. Every wait is bounded by <see cref="Bound"/> and ends on the signal it asserts.
 /// </remarks>
-public sealed class AmiConnectionReconnectedDeliveryTests
+public sealed partial class AmiConnectionReconnectedDeliveryTests
 {
     /// <summary>A hang bound. Every wait ends on its signal long before it; only a defect reaches it.</summary>
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);

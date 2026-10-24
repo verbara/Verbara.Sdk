@@ -220,10 +220,10 @@ public sealed class AmiConnectionEndingTests
     /// The handler holds its dispatch while the peer closes the socket, so the reconnect loop starts during the
     /// dispatch, and the handler ends the connection once the loop waits in one of two places, each fixed by
     /// construction (<see cref="LoopWaitingAsync"/>). With a 1 ms backoff the gate opens when the loop's own
-    /// release, before its first attempt, has disposed the lost socket: that release then waits for this very
-    /// dispatch. With a 1 s backoff it opens on the loop's <c>[AMI] Reconnecting</c> line, while the loop waits
-    /// out its delay. Either way the loop cannot dial before the dispatch returns, and the handler ends the
-    /// connection first, so the only socket is the first one.
+    /// release, before its first attempt, has disposed the lost socket; the loop then dials while the dispatch is
+    /// still held (every dial is refused), and keeps dialling until the handler's ending stops it. With a 1 s backoff
+    /// it opens on the loop's <c>[AMI] Reconnecting</c> line, while the loop waits out its delay, so the handler ends
+    /// the connection before any dial. Either way no socket is created once the handler's ending has returned.
     /// </summary>
     [Theory]
     [InlineData(1)]
@@ -238,11 +238,13 @@ public sealed class AmiConnectionEndingTests
         var connection = Create(factory, autoReconnect: true, logger, backoff);
         var dispatch = new HeldDispatch();
         var ended = new TaskCompletionSource<EndingSeen>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var createdWhenEnded = 0;
         connection.OnEvent += async _ =>
         {
             dispatch.Enter();
             await dispatch.Gate;
             await connection.DisconnectAsync();
+            Volatile.Write(ref createdWhenEnded, factory.Created.Count);
             ended.TrySetResult(Seen(connection, factory));
         };
         var first = await ConnectAsync(connection, factory, peerCts);
@@ -264,8 +266,10 @@ public sealed class AmiConnectionEndingTests
                 "without waiting for the dispatch it runs in or for the loop, whose release may be waiting for that dispatch");
             dialled.Should().BeNull(
                 $"the handler's DisconnectAsync stops the reconnect loop, so it dials no more in {DialWindow(backoff).TotalMilliseconds} ms");
-            factory.Created.Should().HaveCount(1,
-                "the loop cannot dial before the dispatch returns, and the handler ended the connection before it returned");
+            factory.Created.Should().HaveCount(Volatile.Read(ref createdWhenEnded),
+                "the loop creates no socket once the handler's ending has returned");
+            if (backoff >= TimeSpan.FromSeconds(1))
+                Volatile.Read(ref createdWhenEnded).Should().Be(1, "the handler ended the connection during the loop's delay, before any dial");
             connection.State.Should().Be(AmiConnectionState.Disconnected, "nothing the loop does afterwards overrides the handler's ending");
         }
     }
@@ -278,10 +282,10 @@ public sealed class AmiConnectionEndingTests
     /// </summary>
     /// <remarks>
     /// The gate opens on the loop's <c>[AMI] Reconnecting</c> line for both backoffs, which the connection writes
-    /// before and after the fix alike. The regression test's 1 ms placement, the lost socket's disposal, comes
-    /// before the loop waits for the dispatch only once the release disposes the socket ahead of the event pump.
-    /// Where the loop waits when the gate opens does not change what is observed here: it cannot dial before
-    /// the dispatch returns, and once it has returned the loop dials inside the window.
+    /// before and after the fix alike. With a 1 ms backoff the loop already dials while the dispatch is held, since
+    /// a loss's redial does not wait for the delivery of the lost session's events; with a 1 s backoff it waits out its
+    /// delay. Either way, with nothing ending the connection, the loop dials inside the window after the dispatch
+    /// returns.
     /// </remarks>
     [Theory]
     [InlineData(1)]
@@ -350,11 +354,11 @@ public sealed class AmiConnectionEndingTests
     }
 
     /// <summary>
-    /// The reconnect loop's release before its first attempt disposes the lost socket, and then waits for the
-    /// dispatch the handler holds; the lost socket's disposal is the signal that it got there. The caller's
-    /// <c>DisconnectAsync</c> is then recorded, and it waits for the loop. The handler then awaits
-    /// <c>DisposeAsync</c>, which joins that ending: the ending must stop waiting for the loop, which is waiting
-    /// for the dispatch that is waiting on the ending.
+    /// The reconnect loop's release before its first attempt disposes the lost socket while the handler holds its
+    /// dispatch; the lost socket's disposal is the signal that it got there. The caller's <c>DisconnectAsync</c> is
+    /// then recorded, and it waits for the loop and for the release of the lost session's pump, which waits for the
+    /// held dispatch. The handler then awaits <c>DisposeAsync</c>, which joins that ending: the ending must stop
+    /// waiting for the dispatch that is waiting on it.
     /// </summary>
     [Fact]
     public async Task OnEventHandler_ShouldCompleteItsDisposeAsync_WhenADisconnectIsWaitingForTheReconnectLoop()
@@ -385,6 +389,7 @@ public sealed class AmiConnectionEndingTests
         dispatch.Open();
         var seen = await ResultWithinBoundAsync(ended.Task);
         var disconnected = await CompletesWithinBoundAsync(disconnect);
+        var createdWhenEnded = factory.Created.Count;
         var dialled = await factory.NextWithinAsync(DialWindow(backoff));
 
         using (new AssertionScope())
@@ -396,7 +401,7 @@ public sealed class AmiConnectionEndingTests
             disconnected.Should().BeTrue("the caller's DisconnectAsync returns");
             dialled.Should().BeNull(
                 $"the caller's ending stops the reconnect loop, so it dials no more in {DialWindow(backoff).TotalMilliseconds} ms");
-            factory.Created.Should().HaveCount(1, "the loop dials no socket once the caller's ending is recorded");
+            factory.Created.Should().HaveCount(createdWhenEnded, "the loop creates no socket once the caller's ending has returned");
             connection.State.Should().Be(AmiConnectionState.Disconnected);
         }
     }
@@ -462,7 +467,7 @@ public sealed class AmiConnectionEndingTests
     /// <summary>
     /// Completes once the reconnect loop that the peer's close of <paramref name="lost"/> starts waits where the
     /// test needs it. With a backoff under a second: in its release before its first attempt, once that release
-    /// has disposed the lost socket, which it does before it waits for the event pump. Otherwise: in its backoff
+    /// has disposed the lost socket (it releases the event pump last, and does not wait for it). Otherwise: in its backoff
     /// delay, once it has written <c>[AMI] Reconnecting</c>, right before that delay.
     /// </summary>
     private static Task LoopWaitingAsync(PipedSocket lost, SignalingLogger<AmiConnection> logger, TimeSpan backoff)
@@ -478,7 +483,7 @@ public sealed class AmiConnectionEndingTests
     private static string WhereTheLoopWaits(TimeSpan backoff) =>
         backoff >= TimeSpan.FromSeconds(1)
             ? "the peer's close starts the reconnect loop, which waits out its backoff delay while the dispatch is in progress"
-            : "the loop's release disposes the lost socket before it waits for the dispatch: the socket first, the event pump last";
+            : "the loop's release disposes the lost socket while the dispatch is held: the socket first, the event pump last";
 
     /// <summary>
     /// Connects; the handler holds the first event's dispatch while a second event is buffered behind it, then

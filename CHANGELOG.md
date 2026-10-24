@@ -27,6 +27,37 @@ The initial state load and every reconnect reload of `VerbaraServer` admitted ea
 and `Priority` headers `Status` reports; an empty `Exten` stays empty, and an absent or unreadable priority is 1, as a
 live admission does. A channel the table already holds keeps the position it was admitted with.
 
+### Changed — BREAKING: a lost AMI connection logs in again while its buffered events are still being delivered (#463)
+
+With `AutoReconnect` on, the reconnect loop no longer waits for the lost session's buffered events to be delivered
+before it redials. It logs in again after the backoff, whatever your handlers cost, and reads the new session's
+events into a buffer of their own. Up to 2.8.x the redial came buffer × handler time after the loss (20 events at
+250 ms: about 5.3 s), and nothing read what Asterisk sent in the meantime. Nothing is discarded and the order is
+kept: every event of the lost session is delivered first, then the new session's, one at a time. If that delivery
+fills the new buffer, what it refuses is counted `reason=buffer_full`, like any full buffer. Labelled breaking for
+what a handler sees while the lost session's events are still being delivered:
+
+- `State` already reads `Connected` (and `StateChanged` has reported it), and an action sent from a handler of one of
+  those events goes out on the new session, where it used to fail as not connected.
+- `Reconnected` still comes after the lost session's last event, and only for a session that is still the current
+  one when it is delivered. A redialled session lost again before then reports no `Reconnected`; it is logged at
+  Debug, `[AMI] Reconnected not delivered: session <n> is no longer current`, and the session that replaces it
+  reports one. `ConnectionLost` is still raised once per outage, before it, so two losses close together report one
+  `Reconnected`.
+- The 2.7.0 wording "delivered, in order, before the redial or `Disconnected`" is withdrawn. They are delivered before
+  `Reconnected` or `Disconnected`.
+- Your ending during that delivery stops every buffer after the event in progress, and each released buffer reports
+  its own remainder: two `[AMI_EVENT] Discarded on caller ending` Warnings and two `reason=caller_ending`
+  measurements on `ami.events.dropped`, whose counts add up to the undelivered events.
+- `ami.event_pump.pending` sums every buffer still being delivered, so it can read above `EventPumpCapacity` during
+  the overlap. One Information line marks a login that lands before the delivery is over, and one Debug line its end.
+- The Hosting reconciliation sweep skips a verification while a reconnect of the server is pending (the redialled
+  session has not finished handling `Reconnected`), reported as `verification=skipped:reconnect-pending`. The reload
+  after the reconnect covers it.
+
+A loss without `AutoReconnect` and your own `ConnectAsync` are unchanged. No public type or member changed; the
+`IAmiConnection.Reconnected` documentation says when it is raised. The migration guide has the section.
+
 ### Fixed — BREAKING: a start cut short while your own `ConnectAsync` reconnects throws (#457)
 
 Over an `AmiConnection`, a `VerbaraServer.StartAsync` whose load stops on a `Connecting` or `Connected` state that

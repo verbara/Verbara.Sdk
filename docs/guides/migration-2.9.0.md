@@ -23,7 +23,7 @@ says:
   one exists.
 
 Three entries only add warnings (`VSDK0005`, `VSDK0003` and `VSDK0002`). They break nothing unless you build with
-`TreatWarningsAsErrors`. Two stop compiling where you use them. The other twelve change no existing signature, but
+`TreatWarningsAsErrors`. Two stop compiling where you use them. The other thirteen change no existing signature, but
 change behaviour a program can branch on, a published metric, or a health status; one of them also refuses some
 configuration values at start-up.
 
@@ -33,6 +33,7 @@ configuration values at start-up.
 | `Verbara.Sdk.Ami`, `Agi`, `Activities` | [Types of dead Asterisk modules deprecated with `VSDK0005`](#types-of-dead-asterisk-modules-warn-vsdk0005) | warning |
 | `Verbara.Sdk.Ami` | [A yes from Asterisk reads true](#a-yes-from-asterisk-reads-true) | behaviour |
 | `Verbara.Sdk.Ami` | [Six `StatusEvent` members no Asterisk sends warn `VSDK0002`](#six-statusevent-members-no-asterisk-sends-warn-vsdk0002) | warning |
+| `Verbara.Sdk.Ami` | [A lost connection logs in again while its events are delivered](#a-lost-connection-logs-in-again-while-its-events-are-delivered) | behaviour |
 | `Verbara.Sdk.Live` | [A conference counts every caller](#a-conference-counts-every-caller) | does not compile |
 | `Verbara.Sdk.Live` | [A conference participant shows whether it is muted and talking](#a-conference-participant-shows-muted-and-talking) | behaviour |
 | `Verbara.Sdk.Live` | [A start cut short by your own connect throws](#a-start-cut-short-by-your-own-connect-throws) | behaviour |
@@ -151,6 +152,28 @@ an earlier release. Nothing is removed, and a binary built against an earlier re
 ```
 
 Guide: [`StatusEvent` members no supported version sends](asterisk-version-compatibility.md#statusevent-members-no-supported-version-sends).
+
+### A lost connection logs in again while its events are delivered
+
+**What changed.** With `AutoReconnect` on, a lost connection redials after the backoff instead of waiting until its
+buffered events reach your handlers. The lost session's events are still delivered first and in order, then the new
+session's; `Reconnected` still comes after the last of them, and only for a session that is still current.
+
+**Who is affected.** Handlers that run while the lost session's events are still being delivered:
+- `State` already reads `Connected`, and an action they send goes out on the new session instead of failing as not
+  connected.
+- An ending of yours during that delivery logs two `[AMI_EVENT] Discarded on caller ending` Warnings and records two
+  `reason=caller_ending` measurements, one per buffer.
+- `ami.event_pump.pending` can read above `EventPumpCapacity` while both buffers are held.
+- The Hosting sweep reports `verification=skipped:reconnect-pending` until the reconnect is handled.
+
+**What to do.** Nothing, unless a handler reads the connection's state to tell where it is. A handler that takes
+`State != Connected` as "these are the lost session's events" uses `Reconnected` as the boundary instead. A handler
+that sends an action from an event and counted on the send failing after a loss now sends it: check the action is
+still wanted for an event from before the loss. An alert that expects one `reason=caller_ending` measurement per
+ending sums them.
+
+Guide: [2.9.0: a lost connection logs in again while its events are still being delivered](ami-caller-ending-buffered-events-migration.md#290-a-lost-connection-logs-in-again-while-its-events-are-still-being-delivered).
 
 ## Live
 
