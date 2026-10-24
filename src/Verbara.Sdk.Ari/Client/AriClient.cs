@@ -327,6 +327,7 @@ public sealed class AriClient : IAriClient
                 // Read potentially fragmented message segments into the buffer writer
                 do
                 {
+                    ct.ThrowIfCancellationRequested();
                     var memory = bufferWriter.GetMemory(4096);
                     result = await _webSocket.ReceiveAsync(memory, ct);
                     bufferWriter.Advance(result.Count);
@@ -357,6 +358,10 @@ public sealed class AriClient : IAriClient
             // socket that failed. Swallowing it is what lets control fall through to the auto-reconnect check
             // below, which re-reads the same `ct`: a cancelled loop leaves the method without dialling.
             /* Best effort — the client is disconnecting */
+        }
+        catch (WebSocketException) when (ct.IsCancellationRequested)
+        {
+            // A requested stop can abort a pending receive before it reports the cancellation.
         }
         catch (WebSocketException ex)
         {
