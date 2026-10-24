@@ -92,6 +92,7 @@ public sealed class AriClientStateTests
             using var late = await server.AcceptTcpClientAsync(window.Token);
         };
         await redial.Should().ThrowAsync<OperationCanceledException>("a disposed client must not reconnect");
+        sut.State.Should().Be(AriConnectionState.Disconnected, "disposal ended the reconnect backoff");
     }
 
     [Fact]
@@ -857,6 +858,7 @@ public sealed class AriClientStateTests
         using (new AssertionScope())
         {
             sut.EventLoop!.IsCompleted.Should().BeTrue("disposal returns once the reconnect loop has ended");
+            sut.State.Should().Be(AriConnectionState.Disconnected, "disposal ended the reconnect dial");
             peer.ReconnectDials.Should().Be(1, "a disposed client dials no more");
             logger.Entries
                 .Where(e => e.Exception is WebSocketException { InnerException: TimeoutException })
