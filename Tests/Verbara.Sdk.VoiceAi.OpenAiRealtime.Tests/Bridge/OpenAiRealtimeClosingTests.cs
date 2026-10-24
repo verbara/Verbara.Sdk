@@ -88,7 +88,14 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
             using (new AssertionScope())
             {
                 transport.Entered.Task.IsCompletedSuccessfully.Should().BeTrue("the input audio entered Stream.WriteAsync, below ManagedWebSocket");
+                inputStop.Task.IsCompletedSuccessfully.Should().BeTrue("vendor shutdown must stop caller reads");
+                disposedAtInputStop.Should().BeFalse("stopping input reads must preserve the held transport write");
+                stateAtInputStop.Should().Be(WebSocketState.CloseReceived, "vendor shutdown must not abort the shared socket before its answer");
+                transport.Cancelled.Task.IsCompleted.Should().BeFalse("the held stream write must not be cancelled by vendor shutdown");
                 fake.ClientCloseReceived.IsCompletedSuccessfully.Should().BeTrue("vendor-driven input shutdown preserves TCP through the answering close");
+                if (fake.ClientCloseReceived.IsCompletedSuccessfully)
+                    (await fake.ClientCloseReceived).Should().Be(WebSocketCloseStatus.NormalClosure);
+                metrics.Get("openai_realtime.sessions.cancelled").Should().Be(0);
                 if (code == 1000) fault.Should().BeNull();
                 else fault.Should().BeOfType<SpeechProviderFailureException>().Which.Code.Should().Be("3000");
                 metrics.Get("openai_realtime.sessions.completed").Should().Be(code == 1000 ? 1 : 0);

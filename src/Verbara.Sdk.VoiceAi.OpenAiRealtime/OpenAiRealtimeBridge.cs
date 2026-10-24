@@ -204,7 +204,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             // running out.
             silence = new EndOfInputSilenceBound(CloseAnswerBound, TimeProvider, ct);
             InputReadStarting?.Invoke(inputCts.Token);
-            input = InputLoop(session, ws, wsWriteLock, upsampler, inputCts.Token);
+            input = InputLoop(session, ws, wsWriteLock, upsampler, inputCts.Token, ct);
             output = OutputLoop(session, ws, wsWriteLock, downsampler, silence, vendorAudio, ct);
             var first = await Task.WhenAny(input, output).ConfigureAwait(false);
 
@@ -314,7 +314,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             await wsWriteLock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
             try
             {
-                if (ws.State == WebSocketState.Open)
+                if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
                     await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
             }
             catch { /* ignore close errors */ }
@@ -413,7 +413,8 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         ClientWebSocket ws,
         SemaphoreSlim wsWriteLock,
         PolyphaseResampler? upsampler,
-        CancellationToken ct)
+        CancellationToken ct,
+        CancellationToken sendToken)
     {
         await foreach (var frame in session.ReadAudioAsync(ct).ConfigureAwait(false))
         {
@@ -442,7 +443,10 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             var bytes = JsonSerializer.SerializeToUtf8Bytes(req, RealtimeJsonContext.Default.InputAudioBufferAppendRequest);
 
             await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
-            try { await ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
+            // Vendor-driven cancellation stops caller reads and write-lock waits, but must not
+            // abort a send already inside its transport write. Only the host may cancel that
+            // send; the terminal answering close waits for this same lock before socket release.
+            try { await ws.SendAsync(bytes, WebSocketMessageType.Text, true, sendToken).ConfigureAwait(false); }
             finally { wsWriteLock.Release(); }
             RealtimeMetrics.MessagesSent.Add(1);
         }
