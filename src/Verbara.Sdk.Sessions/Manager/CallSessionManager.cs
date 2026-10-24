@@ -177,6 +177,14 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// <inheritdoc />
     public IObservable<SessionDomainEvent> Events => _guardedEvents;
 
+    /// <summary>
+    /// Raises <paramref name="notification"/> on <see cref="Events"/>. Every notification of the manager goes through
+    /// here, so whatever must hold around every raise is written once. The internal queue-visit signals of
+    /// <see cref="IQueueVisitSource"/> are not notifications of <see cref="Events"/> and do not come through here; if
+    /// that interface ever becomes public, they must.
+    /// </summary>
+    private void Publish(SessionDomainEvent notification) => _events.OnNext(notification);
+
     [LoggerMessage(EventId = 3, EventName = nameof(LogSubscriberFault), Level = LogLevel.Warning,
         Message = "A subscriber of the session events threw on {EventType} for session {SessionId}; the other "
             + "subscribers and the session engine went on")]
@@ -485,7 +493,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         _byChannelId[channel.UniqueId] = session;
         SessionMetrics.SessionsCreated.Add(1);
 
-        _events.OnNext(new CallStartedEvent(session.SessionId, serverId,
+        Publish(new CallStartedEvent(session.SessionId, serverId,
             DateTimeOffset.UtcNow, direction, channel.CallerIdNum));
 
         _ = PersistAsync(session);
@@ -746,7 +754,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 session.StartHold();
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Hold, channel.Name, null, channel.HoldMusicClass));
-                _events.OnNext(new CallHeldEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow));
+                Publish(new CallHeldEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow));
                 _ = PersistAsync(session);
             }
         }
@@ -763,7 +771,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 session.EndHold();
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Unhold, channel.Name, null, null));
-                _events.OnNext(new CallResumedEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow));
+                Publish(new CallResumedEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow));
                 _ = PersistAsync(session);
             }
         }
@@ -812,7 +820,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             {
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Transfer, null, info.TargetChannel, info.TransferType));
-                _events.OnNext(new CallTransferredEvent(session.SessionId, session.ServerId,
+                Publish(new CallTransferredEvent(session.SessionId, session.ServerId,
                     DateTimeOffset.UtcNow, info.TransferType, info.TargetChannel));
                 _ = PersistAsync(session);
             }
@@ -863,7 +871,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         Step(HandlerStep.QueueVisitWritten, serverId, uniqueId);
 
-        _events.OnNext(new CallQueuedEvent(session.SessionId, session.ServerId,
+        Publish(new CallQueuedEvent(session.SessionId, session.ServerId,
             visitStartedAt, queueName, entry.Position));
         _ = PersistAsync(session);
     }
@@ -1127,7 +1135,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         var connectedAt = _timeProvider.GetUtcNow();
         var waitSinceCreated = session.WaitTime ?? TimeSpan.Zero;
-        _events.OnNext(new CallConnectedEvent(session.SessionId, session.ServerId,
+        Publish(new CallConnectedEvent(session.SessionId, session.ServerId,
             connectedAt, agentId, session.QueueName, waitSinceCreated));
 
         if (!queued)
@@ -1185,7 +1193,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 break;
         }
 
-        _events.OnNext(new CallEndedEvent(session.SessionId, session.ServerId,
+        Publish(new CallEndedEvent(session.SessionId, session.ServerId,
             DateTimeOffset.UtcNow, session.HangupCause, session.Duration, session.TalkTime));
 
         // After the ending, so a wrap-up it opens is never reported before it.

@@ -68,6 +68,21 @@ public sealed record AgentSessionStateChanged(
 /// <summary>
 /// Reports that the session engine let go of a call of a server detached with
 /// <see cref="Manager.DetachedCalls.Release"/>, without ending it.
+/// <para>
+/// Raised once per released call, while the call's lock is held and before the call leaves the engine's lookups, so
+/// a subscriber handling it synchronously still finds the call by <c>SessionId</c>; once the notification has been
+/// delivered the call leaves every lookup under that same lock. It is not an ending: no
+/// <see cref="CallEndedEvent"/> is raised for the call and nothing is counted as completed or failed. A subscriber
+/// that runs it on another thread should rely on the values it carries, not on a lookup.
+/// </para>
+/// <para>
+/// <c>SessionId</c>, <c>ServerId</c>, <c>LinkedId</c> and <c>TenantId</c> are the call's; <c>Timestamp</c> is the
+/// instant of the release.
+/// </para>
+/// <para>
+/// It is not a permanent end of the session id: a call registered later under the same session id, as a cluster's
+/// reconstruction may register one when the server returns, is a new call with its own notifications.
+/// </para>
 /// </summary>
 public sealed record CallReleasedEvent(
     string SessionId, string ServerId, DateTimeOffset Timestamp,

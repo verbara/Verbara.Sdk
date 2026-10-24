@@ -39,6 +39,14 @@ public static class SessionMetrics
         Meter.CreateCounter<long>("sessions.events.subscriber_faults", "faults",
             "Subscriber failures (a subscriber's handler threw); delivery goes on");
 
+    /// <summary>
+    /// Calls released on detach: one per call a detach with <c>DetachedCalls.Release</c> let go of without ending
+    /// it, tagged <c>server.id</c> with the detached server's id.
+    /// </summary>
+    internal static readonly Counter<long> ReleasedOnDetach =
+        Meter.CreateCounter<long>("sessions.released_on_detach", "sessions",
+            "Calls released on detach (let go of without an ending)");
+
     public static readonly Histogram<double> WaitTimeMs =
         Meter.CreateHistogram<double>("sessions.wait_time", "ms", "Queue wait time");
     public static readonly Histogram<double> TalkTimeMs =

@@ -372,7 +372,7 @@ public sealed partial class CallSessionManager
                 return;
 
             LogWrapUpClosed(entry.Key, entry.SessionId, measured);
-            _events.OnNext(new CallWrapUpEvent(entry.SessionId, entry.ServerId, closedAt, entry.AgentId,
+            Publish(new CallWrapUpEvent(entry.SessionId, entry.ServerId, closedAt, entry.AgentId,
                 entry.QueueName, measured));
         }
     }

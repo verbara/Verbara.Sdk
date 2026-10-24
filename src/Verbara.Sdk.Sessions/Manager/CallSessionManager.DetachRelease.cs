@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Logging;
+using Verbara.Sdk.Sessions.Diagnostics;
+
 namespace Verbara.Sdk.Sessions.Manager;
 
 public sealed partial class CallSessionManager
@@ -30,16 +33,40 @@ public sealed partial class CallSessionManager
             return [];
 
         Step(HandlerStep.ReleaseWalkStarted, serverId, string.Empty);
-        return ReleaseCallsOf(serverId);
+        // No handler of the attachment is counted yet: the attachment's gate and its drain come before the walk.
+        return ReleaseCallsOf(serverId, handlersInFlight: 0);
     }
 
     /// <summary>
-    /// The release walk: selects every call held under <paramref name="serverId"/> that has not ended, then lets go of
-    /// each under its own lock, after checking again that the manager still holds that very object and that it has
-    /// not ended since the selection — a call ended or replaced in between is left alone. Returns the calls let go of,
-    /// in the order they were let go of.
+    /// How long the release walk waits for one call's lock before it skips that call: a handler holding the lock
+    /// past it (a subscriber it called is blocked) must not hold the detach without bound. Every call the walk selects
+    /// may spend up to this wait, whether its lock is then obtained or not.
     /// </summary>
-    private List<CallSession> ReleaseCallsOf(string serverId)
+    internal static readonly TimeSpan WalkLockBound = TimeSpan.FromSeconds(1);
+
+    [LoggerMessage(EventId = 12, EventName = nameof(LogCallsReleasedOnDetach), Level = LogLevel.Information,
+        Message = "Detached server {ServerId} with its calls released: {ReleasedCount} call(s) in progress let go of "
+            + "without an ending")]
+    private partial void LogCallsReleasedOnDetach(string serverId, int releasedCount);
+
+    // The skipped session ids are one string, never a count: the entry carries one number, the handlers in flight.
+    [LoggerMessage(EventId = 13, EventName = nameof(LogReleaseLimitExpired), Level = LogLevel.Error,
+        Message = "Releasing the calls of server {ServerId} ran past its limits: {HandlersInFlight} handler(s) of it "
+            + "still in flight, and calls skipped because a handler held their lock past the limit, still held under "
+            + "that server id until a later release of it: [{SkippedSessionIds}]")]
+    private partial void LogReleaseLimitExpired(string serverId, int handlersInFlight, string skippedSessionIds);
+
+    /// <summary>
+    /// The release walk: selects every call held under <paramref name="serverId"/> that has not ended, oldest first,
+    /// then lets go of each under its own lock, taken within <see cref="WalkLockBound"/>, after checking again that
+    /// the manager still holds that very object and that it has not ended since the selection — a call ended or
+    /// replaced in between is left alone, and a call whose lock is not obtained in time is skipped: it stays held,
+    /// is not notified and is not returned. Each call let go of is announced with one <see cref="CallReleasedEvent"/>
+    /// while it is still found, then leaves every lookup under the same lock hold. Returns the calls let go of, in
+    /// the order they were announced. <paramref name="handlersInFlight"/> is how many handlers of the attachment were
+    /// still running when the walk began; with a skipped call, it makes the release's one Error entry.
+    /// </summary>
+    private List<CallSession> ReleaseCallsOf(string serverId, int handlersInFlight)
     {
         var selected = new List<CallSession>();
         foreach (var held in _sessions)
@@ -56,18 +83,45 @@ public sealed partial class CallSessionManager
         });
 
         var released = new List<CallSession>(selected.Count);
+        List<string>? skipped = null;
+        var serverTag = new KeyValuePair<string, object?>("server.id", serverId);
         foreach (var call in selected)
         {
-            lock (call.SyncRoot)
+            if (!call.SyncRoot.TryEnter(WalkLockBound))
+            {
+                (skipped ??= []).Add(call.SessionId);
+                continue;
+            }
+
+            try
             {
                 if (!IsHeld(call) || HasEnded(call))
                     continue;
 
-                ForgetEverywhere(call);
+                // A subscriber's exception never reaches here: the guarded stream reports it and goes on. The finally
+                // is for an exception of the SDK's own — an announced call always leaves every lookup.
+                try
+                {
+                    Publish(new CallReleasedEvent(call.SessionId, call.ServerId, DateTimeOffset.UtcNow,
+                        call.LinkedId, call.TenantId));
+                }
+                finally
+                {
+                    ForgetEverywhere(call);
+                }
+
                 released.Add(call);
+                SessionMetrics.ReleasedOnDetach.Add(1, serverTag);
+            }
+            finally
+            {
+                call.SyncRoot.Exit();
             }
         }
 
+        if (skipped is not null || handlersInFlight > 0)
+            LogReleaseLimitExpired(serverId, handlersInFlight, skipped is null ? string.Empty : string.Join(", ", skipped));
+        LogCallsReleasedOnDetach(serverId, released.Count);
         return released;
     }
 
