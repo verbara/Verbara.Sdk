@@ -86,6 +86,13 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     // (via InternalsVisibleTo); a private value, not an option, for the close bound's reason.
     internal TimeSpan ConnectTimeout { get; set; } = WebSocketConnectBound.Default;
 
+    // Test transport injection: the default uses the same bounded dial as every production session.
+    // The supplying test owns any custom invoker and transport wrapper.
+    internal Action<CancellationToken>? InputReadStarting { get; set; }
+
+    internal Func<ClientWebSocket, Uri, TimeSpan, TimeProvider, CancellationToken, Task> ConnectTransport { get; set; } =
+        WebSocketConnectBound.ConnectAsync;
+
     // Settable by tests (via InternalsVisibleTo); null in production. Awaited when the caller has hung up
     // and the session is about to take its write lock to send its close to the vendor, before it waits
     // for that lock: a test cancels the session there, the one instant at which a host's cancellation
@@ -178,7 +185,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         try
         {
             var uri = new Uri($"{BaseUri}?model={Uri.EscapeDataString(_options.Model)}");
-            await WebSocketConnectBound.ConnectAsync(ws, uri, ConnectTimeout, TimeProvider, ct).ConfigureAwait(false);
+            await ConnectTransport(ws, uri, ConnectTimeout, TimeProvider, ct).ConfigureAwait(false);
             RealtimeLog.WebSocketConnected(_logger, channelId);
 
             // Send session.update (voice, instructions, VAD, tools)
@@ -196,6 +203,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             // cancellation still ends the session as it always did, and is never taken for the bound
             // running out.
             silence = new EndOfInputSilenceBound(CloseAnswerBound, TimeProvider, ct);
+            InputReadStarting?.Invoke(inputCts.Token);
             input = InputLoop(session, ws, wsWriteLock, upsampler, inputCts.Token);
             output = OutputLoop(session, ws, wsWriteLock, downsampler, silence, vendorAudio, ct);
             var first = await Task.WhenAny(input, output).ConfigureAwait(false);

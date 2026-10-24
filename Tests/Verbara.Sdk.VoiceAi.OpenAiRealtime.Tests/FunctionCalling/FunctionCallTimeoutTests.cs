@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.VoiceAi.AudioSocket;
@@ -166,8 +167,8 @@ public sealed partial class FunctionCallTimeoutTests
     [InlineData("throw")]
     public async Task HandleSessionAsync_ShouldSendNothingMoreAndObserveIt_WhenAnAbandonedFunctionEndsLate(string ending)
     {
-        var unobserved = 0;
-        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e) => Interlocked.Increment(ref unobserved);
+        var unobserved = new ConcurrentQueue<Exception>();
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e) => unobserved.Enqueue(e.Exception);
         TaskScheduler.UnobservedTaskException += OnUnobserved;
         try
         {
@@ -196,7 +197,7 @@ public sealed partial class FunctionCallTimeoutTests
             GC.WaitForPendingFinalizers();
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
 
-            Volatile.Read(ref unobserved).Should().Be(0, "the abandoned call's ending is observed by the bridge");
+            unobserved.Should().BeEmpty( "the abandoned call's ending is observed by the bridge");
         }
         finally
         {
@@ -350,8 +351,8 @@ public sealed partial class FunctionCallTimeoutTests
     [Fact]
     public async Task HandleSessionAsync_ShouldReturnWithoutWaitingForTheHandler_WhenTheHostCancelsDuringAHeldCall()
     {
-        var unobserved = 0;
-        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e) => Interlocked.Increment(ref unobserved);
+        var unobserved = new ConcurrentQueue<Exception>();
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e) => unobserved.Enqueue(e.Exception);
         TaskScheduler.UnobservedTaskException += OnUnobserved;
         using var function = ScriptedFunction.ThrowsWhenReleased();
         try
@@ -379,7 +380,7 @@ public sealed partial class FunctionCallTimeoutTests
             GC.WaitForPendingFinalizers();
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
 
-            Volatile.Read(ref unobserved).Should().Be(0, "the handler's late fault is observed by the bridge");
+            unobserved.Should().BeEmpty( "the handler's late fault is observed by the bridge");
         }
         finally
         {
