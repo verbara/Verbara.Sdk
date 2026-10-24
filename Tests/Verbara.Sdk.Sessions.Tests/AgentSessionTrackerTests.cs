@@ -538,6 +538,63 @@ public sealed class AgentSessionTrackerTests : IDisposable
             ? $"CallWrapUpEvent({w.SessionId}, {w.AgentId ?? "null"}, {w.WrapUpDuration})"
             : $"{e.GetType().Name}({e.SessionId})")) + "]";
 
+    // --- A released call: the reference goes, the state and the counts stay ---
+
+    [Fact]
+    public void OnCallReleased_ShouldDropTheCurrentCallAndItsQueueAndKeepTheState_WhenTheManagerNoLongerFindsTheCall()
+    {
+        var session = CreateCallSession("sess-1");
+        _manager.GetById("sess-1").Returns(session);
+        _events.OnNext(new CallConnectedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow, "agent-1", "queue-1", TimeSpan.Zero));
+        var changes = new List<AgentSessionStateChanged>();
+        using var sub = _sut.StateChanges.Subscribe(new StateChangeObserver(changes));
+
+        // A manager that no longer finds the call by its id when the notification arrives: the session id alone
+        // names the agents to clear.
+        _manager.GetById("sess-1").Returns((CallSession?)null);
+        _events.OnNext(new CallReleasedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow, "linked-sess-1", null));
+
+        var agent = _sut.GetByAgentId("agent-1")!;
+        new { agent.State, agent.CurrentCall, agent.CurrentQueueName, agent.CallsHandled, agent.TotalTalkTime, Changes = changes.Count }
+            .Should().BeEquivalentTo(new
+            {
+                State = AgentSessionState.OnCall,
+                CurrentCall = (CallSession?)null,
+                CurrentQueueName = (string?)null,
+                CallsHandled = 0,
+                TotalTalkTime = TimeSpan.Zero,
+                Changes = 0,
+            }, "a released call is not an ending: the agent drops it and counts nothing");
+    }
+
+    [Fact]
+    public void OnCallReleased_ShouldLeaveAnAgentInWrapUpOnAnEarlierCallOfTheSameId_WhenALaterCallUnderThatIdIsReleased()
+    {
+        var ended = CreateCallSession("sess-1");
+        _manager.GetById("sess-1").Returns(ended);
+        _events.OnNext(new CallConnectedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow, "agent-1", "queue-1", TimeSpan.Zero));
+        _events.OnNext(new CallEndedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow, HangupCause.NormalClearing,
+            TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(20)));
+        var agent = _sut.GetByAgentId("agent-1")!;
+        var premise = new { agent.State, OnTheEndedCall = ReferenceEquals(agent.CurrentCall, ended) };
+
+        // A later call registered under the same session id (a reconstruction) is the one released.
+        _manager.GetById("sess-1").Returns(CreateCallSession("sess-1"));
+        _events.OnNext(new CallReleasedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow, "linked-sess-1", null));
+        var afterTheRelease = new { agent.State, OnTheEndedCall = ReferenceEquals(agent.CurrentCall, ended) };
+        _events.OnNext(new CallWrapUpEvent("sess-1", "srv-1", DateTimeOffset.UtcNow, "agent-1", "queue-1", TimeSpan.FromSeconds(10)));
+
+        new { Premise = premise, AfterTheRelease = afterTheRelease, AfterTheWrapUp = agent.State }
+            .Should().BeEquivalentTo(new
+            {
+                Premise = new { State = AgentSessionState.WrapUp, OnTheEndedCall = true },
+                AfterTheRelease = new { State = AgentSessionState.WrapUp, OnTheEndedCall = true },
+                AfterTheWrapUp = AgentSessionState.Idle,
+            },
+            "the release of another call object under the same session id leaves the agent's wrap-up reference, so "
+            + "that wrap-up's close still moves it to Idle");
+    }
+
     private static CallSession CreateCallSession(string sessionId) =>
         new(sessionId, $"linked-{sessionId}", "srv-1", CallDirection.Inbound);
 
