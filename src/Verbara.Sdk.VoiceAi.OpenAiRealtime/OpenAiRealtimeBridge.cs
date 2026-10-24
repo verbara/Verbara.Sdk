@@ -450,6 +450,12 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             // abort a send already inside its transport write. Only the host may cancel that
             // send; the terminal answering close waits for this same lock before socket release.
             try { await ws.SendAsync(bytes, WebSocketMessageType.Text, true, sendToken).ConfigureAwait(false); }
+            catch (WebSocketException ex) when (sendToken.IsCancellationRequested)
+            {
+                // A host-cancelled read may abort the socket under this send. Preserve that
+                // requested ending even when the send reports the socket's state instead.
+                throw new OperationCanceledException("The host cancelled the input audio send.", ex, sendToken);
+            }
             finally { wsWriteLock.Release(); }
             RealtimeMetrics.MessagesSent.Add(1);
         }

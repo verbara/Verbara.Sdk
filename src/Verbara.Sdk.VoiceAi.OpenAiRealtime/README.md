@@ -68,7 +68,8 @@ Every session the bridge starts is counted in exactly one of `openai_realtime.se
 `.cancelled`. A session is `cancelled` only when the token handed to the bridge was cancelled (the host, a stop that
 is no longer graceful, the broker's disposal), and its `openai_realtime.session.duration_ms` sample carries
 `voiceai.ending` = `session-cancelled`. A normal vendor close, or an unanswered close after the caller's
-hangup, is `completed`; a vendor failure close is `failed`, including after a hangup.
+hangup, is `completed`; a vendor failure close is `failed`, including after a hangup. A host cancellation that
+aborts an input audio send is still `cancelled`, even when the socket reports a state error.
 
 Register `AddAudioSocketServer` before `AddOpenAiRealtimeBridge` (the prerequisite above), so the
 broker stops before the server and every call ends with a hangup frame.
