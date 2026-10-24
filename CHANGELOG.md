@@ -101,7 +101,7 @@ refused, bridges and rooms are neither asked nor changed. The conference listing
 `write`: a refusal keeps the held rooms, is logged once per AMI session at Warning, and makes Asterisk raise one
 `RequestNotAllowed` security event per refused listing. The agents table is still cleared and loaded again.
 
-### Changed: Live's channel events are raised outside the channel table's locks, in change order (#NNN)
+### Changed: Live's channel events are raised outside the channel table's locks, in change order (#462)
 
 `ChannelManager` raises `ChannelAdded`, `ChannelRemoved`, `ChannelStateChanged`, `ChannelDialBegin`, `ChannelDialEnd`,
 `ChannelHeld` and `ChannelUnheld` with none of its locks held, also when a reload's reconciliation raises them, under
