@@ -493,6 +493,9 @@ None of these breaks a build or a public contract. Each is in the CHANGELOG.
   may call into the manager; a call it makes is reported after it returns, not nested inside it. A handler must not
   block on another event of the same manager caused by its own calls. See
   [What a Live event handler may do](troubleshooting.md#what-a-live-event-handler-may-do).
+- **Channel events follow the same rules.** `ChannelManager` raises its seven events outside its locks too: a call a
+  handler makes into the channel table is reported after the handler returns, and a handler reads the live channel,
+  which can already be newer than the change the event reports.
 
 - **A stop is a stop, not a cancelled token.** Cancelling the token passed to the start of the ARI AudioSocket or
   WebSocket audio server, the ARI outbound listener, the FastAGI server, or to `PipelineSocketConnection.ConnectAsync`

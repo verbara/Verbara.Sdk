@@ -9,9 +9,9 @@ namespace Verbara.Sdk.Live.Tests.Channels;
 /// <summary>
 /// The lock order of the channel table, pinned on two threads: a reload thread inside
 /// <see cref="ChannelManager.ChannelAdded"/> for a channel it is admitting hangs up another channel,
-/// while the AMI thread hangs up the channel being admitted. The admitting thread holds the new
-/// channel's lock across its announcement; the hangup of that channel must wait for it outside the
-/// table's lock, so the subscriber's own hangup still gets through. Each step is released by a
+/// while the AMI thread hangs up the channel being admitted. Both hangups must get through without
+/// announcing the admitted channel's removal before its admission. The two channels' removals may
+/// race; neither the starting signal nor removal from an index fixes their posting order. Each step is released by a
 /// <see cref="TaskCompletionSource"/> and every round is joined under a bound, so a deadlock fails
 /// as a timeout rather than hanging the run.
 /// </summary>
@@ -96,7 +96,10 @@ public sealed class ChannelManagerLockOrderTests(ITestOutputHelper output)
                 seen = [.. order];
             }
 
-            var consistent = seen is ["added " + Admitted, "removed " + Held, "removed " + Admitted]
+            var consistent = seen.Length == 3
+                && seen[0] == "added " + Admitted
+                && seen.Count(item => item == "removed " + Admitted) == 1
+                && seen.Count(item => item == "removed " + Held) == 1
                 && manager.ChannelCount == 0
                 && manager.GetByName(AdmittedName) is null
                 && manager.GetByName(HeldName) is null;
@@ -112,8 +115,8 @@ public sealed class ChannelManagerLockOrderTests(ITestOutputHelper output)
             + "taken the admitted channel out of the table when the subscriber hung up the other one");
 
         redRounds.Should().Be(0,
-            "the subscriber's hangup of another channel never waits on the channel being admitted, the admitted "
-            + "channel's removal is announced only after its admission returned, and the held channel that hung up "
+            "the subscriber's hangup and the AMI hangup both get through, the admitted channel's removal is "
+            + "announced after its admission, each removal is announced once, and the held channel that hung up "
             + $"during the read is not admitted again ({Rounds} rounds); first red round: {firstRed}");
     }
 }
