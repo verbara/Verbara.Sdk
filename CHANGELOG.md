@@ -27,7 +27,7 @@ The initial state load and every reconnect reload of `VerbaraServer` admitted ea
 and `Priority` headers `Status` reports; an empty `Exten` stays empty, and an absent or unreadable priority is 1, as a
 live admission does. A channel the table already holds keeps the position it was admitted with.
 
-### Changed — BREAKING: a lost AMI connection logs in again while its buffered events are still being delivered (#NNN)
+### Changed — BREAKING: a lost AMI connection logs in again while its buffered events are still being delivered (#463)
 
 With `AutoReconnect` on, the reconnect loop no longer waits for the lost session's buffered events to be delivered
 before it redials. It logs in again after the backoff, whatever your handlers cost, and reads the new session's
