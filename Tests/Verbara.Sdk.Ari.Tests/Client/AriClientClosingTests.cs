@@ -155,10 +155,52 @@ public sealed class AriClientClosingTests(ITestOutputHelper output)
             await sut.ConnectAsync();
             await (await peer.NextAsync()).CloseAsync();
             await sut.EventLoop!.WaitAsync(Limit);
+            output.WriteLine($"eventLoopCompleted={sut.EventLoop.IsCompleted}; state={sut.State}; dials={peer.Dials}");
             sut.State.Should().Be(AriConnectionState.Disconnected, "the peer close ended the events loop without caller cleanup");
             peer.Dials.Should().Be(1);
         }
         finally { await sut.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task EventsLoop_ShouldLeaveStateDisconnected_WhenPeerCloseAnswerFails()
+    {
+        await using var peer = new ClosingPeer();
+        var log = new ClosingLogger<AriClient>();
+        var sut = Create(peer.Port, log);
+        var answerStarted = false;
+        try
+        {
+            await sut.ConnectAsync();
+            var socket = (ClientWebSocket)SocketField.GetValue(sut)!;
+            sut.TimeProvider = new CloseAnswerTimeProvider(() =>
+            {
+                answerStarted = true;
+                socket.Abort();
+            });
+            await (await peer.NextAsync()).CloseAsync();
+            var fault = await Record.ExceptionAsync(() => sut.EventLoop!.WaitAsync(Limit));
+            output.WriteLine($"answerStarted={answerStarted}; eventLoopCompleted={sut.EventLoop!.IsCompleted}; " +
+                $"state={sut.State}; dials={peer.Dials}; socketState={socket.State}; answerFailure={fault?.GetType().Name}");
+            using (new AssertionScope())
+            {
+                answerStarted.Should().BeTrue("the close bound is armed before the answering send");
+                fault.Should().BeOfType<ObjectDisposedException>("the answering send failed on the injected aborted transport");
+                sut.State.Should().Be(AriConnectionState.Disconnected, "the peer close ended the loop even though its answer failed");
+                peer.Dials.Should().Be(1);
+            }
+        }
+        finally { await sut.DisposeAsync(); }
+    }
+
+    // Reuses the client's existing clock seam to fail the send after CloseReceived was recognized.
+    private sealed class CloseAnswerTimeProvider(Action beforeAnswer) : TimeProvider
+    {
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            beforeAnswer();
+            return System.CreateTimer(callback, state, dueTime, period);
+        }
     }
 
     [Fact]

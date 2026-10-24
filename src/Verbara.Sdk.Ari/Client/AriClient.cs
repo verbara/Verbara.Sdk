@@ -336,12 +336,23 @@ public sealed class AriClient : IAriClient
 
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    if (_webSocket is { State: WebSocketState.CloseReceived } socket)
+                    try
                     {
-                        // Finish a peer-first handshake before reconnect can release this socket or dial again.
-                        // The connection's cancellation does not cancel the answer; the existing close bound does.
-                        using var closeBound = new CancellationTokenSource(CloseTimeout, TimeProvider);
-                        await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Closing", closeBound.Token);
+                        if (_webSocket is { State: WebSocketState.CloseReceived } socket)
+                        {
+                            // Finish a peer-first handshake before reconnect can release this socket or dial again.
+                            // The connection's cancellation does not cancel the answer; the existing close bound does.
+                            using var closeBound = new CancellationTokenSource(CloseTimeout, TimeProvider);
+                            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Closing", closeBound.Token);
+                        }
+                    }
+                    finally
+                    {
+                        if (!_options.AutoReconnect && !ct.IsCancellationRequested)
+                        {
+                            // A peer ending is terminal even if its answer fails; requested endings publish their own state.
+                            Interlocked.CompareExchange(ref _state, (int)AriConnectionState.Disconnected, (int)AriConnectionState.Connected);
+                        }
                     }
                     break;
                 }
