@@ -265,6 +265,11 @@ no public API is added or removed, but those calls now end.
 4. **The AMI user of every server needs `Status`**: `system`, `call` or `reporting` in its `write` line (`write = all`
    includes them). A server whose user may not run it logs `[LIVE] Status refused: …` at Warning once per AMI session,
    and its lost hangups stay open, as on a single server.
+5. **Detach a server removed for good with `DetachedCalls.Release`** (since 2.9.0):
+   `DetachFromServer(id, DetachedCalls.Release)`. The one-argument detach keeps its calls held and counted as
+   `serverless` on every tick; see [a server that leaves the pool](#a-server-that-leaves-the-pool). Keep the
+   one-argument detach where another instance takes the server over. Call the release from your own code, never
+   from inside a subscriber of `Events`, and keep `CallReleasedEvent` subscribers from blocking.
 
 ### Switching the pool sweep off
 
@@ -321,10 +326,21 @@ its lost hangups: every lost hangup ended once, no call Asterisk still had was e
 
 ### A server that leaves the pool
 
-The sessions of a server that was detached and removed, or that came back as a new instance under the same id, stay
-held: the sweep neither verifies nor ends them, and counts them as `serverless` on every tick. The SDK cannot tell
-whether such a call is over. `DetachFromServer` is the same call when a cluster hands a node over to another instance,
-which restores those calls from a shared store and goes on following them, and when an operator removes a node; ending
-the sessions on detach would raise false `CallEndedEvent`s and write a false ending into a store another instance is
-reading, and ending them by their age would let the clock decide an ending, which the sweep never does. No public member
-ends a session by hand.
+With the one-argument `DetachFromServer`, or `DetachFromServer(id, DetachedCalls.Keep)`, the sessions of a server that
+was detached and removed, or that came back as a new instance under the same id, stay held: the sweep neither verifies
+nor ends them, and counts them as `serverless` on every tick. The SDK cannot tell whether such a call is over.
+`DetachFromServer` is the same call when a cluster hands a node over to another instance, which restores those calls
+from a shared store and goes on following them, and when an operator removes a node; ending the sessions on detach
+would raise false `CallEndedEvent`s and write a false ending into a store another instance is reading, and ending them
+by their age would let the clock decide an ending, which the sweep never does. No public member ends a session by hand.
+
+Since 2.9.0 the caller that knows the server is gone for good can say so:
+`DetachFromServer(id, DetachedCalls.Release)` lets go of that server's calls in progress **without ending them**. Each one leaves every
+lookup, `ActiveSessions` and the default store; no `CallEndedEvent` is raised and nothing is counted as completed or
+failed. The detach returns the released calls, raises one `CallReleasedEvent` per call (with its `LinkedId` and
+`TenantId`) and counts each on `sessions.released_on_detach`, so the sweep no longer counts them as `serverless`.
+The release waits a few seconds at most for the server's handlers already running and at most a second per call's
+lock, and is refused with `InvalidOperationException` from inside a notification. The
+[Sessions README](../../src/Verbara.Sdk.Sessions/README.md#a-server-that-leaves-for-good) has the details: what the
+queue and agent trackers do with a released call, the wrap-up that may close after it, and what a returning server
+id starts from.

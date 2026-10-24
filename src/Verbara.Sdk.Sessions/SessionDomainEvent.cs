@@ -4,6 +4,10 @@ namespace Verbara.Sdk.Sessions;
 
 public abstract record SessionDomainEvent(string SessionId, string ServerId, DateTimeOffset Timestamp);
 
+/// <summary>
+/// Reports a new call, raised once while the session engine holds the call's lock, after the call is found by its
+/// session id and <c>linkedid</c>.
+/// </summary>
 public sealed record CallStartedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     CallDirection Direction, string? CallerIdNum) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
@@ -25,6 +29,9 @@ public sealed record CallEndedEvent(string SessionId, string ServerId, DateTimeO
 public sealed record CallFailedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string Reason) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
+/// <summary>
+/// Reports that the call's caller joined a queue, raised while the session engine holds the call's lock.
+/// </summary>
 public sealed record CallQueuedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string QueueName, int? Position) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
@@ -63,4 +70,28 @@ public sealed record CallRingNoAnswerEvent(
 public sealed record AgentSessionStateChanged(
     string SessionId, string ServerId, DateTimeOffset Timestamp,
     string AgentId, AgentSessionState PreviousState, AgentSessionState NewState)
+    : SessionDomainEvent(SessionId, ServerId, Timestamp);
+
+/// <summary>
+/// Reports that the session engine let go of a call of a server detached with
+/// <see cref="Manager.DetachedCalls.Release"/>, without ending it.
+/// <para>
+/// Raised once per released call, while the call's lock is held and before the call leaves the engine's lookups, so
+/// a subscriber handling it synchronously still finds the call by <c>SessionId</c>; once the notification has been
+/// delivered the call leaves every lookup under that same lock. It is not an ending: no
+/// <see cref="CallEndedEvent"/> is raised for the call and nothing is counted as completed or failed. A subscriber
+/// that runs it on another thread should rely on the values it carries, not on a lookup.
+/// </para>
+/// <para>
+/// <c>SessionId</c>, <c>ServerId</c>, <c>LinkedId</c> and <c>TenantId</c> are the call's; <c>Timestamp</c> is the
+/// instant of the release.
+/// </para>
+/// <para>
+/// It is not a permanent end of the session id: a call registered later under the same session id, as a cluster's
+/// reconstruction may register one when the server returns, is a new call with its own notifications.
+/// </para>
+/// </summary>
+public sealed record CallReleasedEvent(
+    string SessionId, string ServerId, DateTimeOffset Timestamp,
+    string LinkedId, string? TenantId)
     : SessionDomainEvent(SessionId, ServerId, Timestamp);

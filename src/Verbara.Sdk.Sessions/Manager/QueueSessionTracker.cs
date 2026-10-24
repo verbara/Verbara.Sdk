@@ -27,6 +27,8 @@ namespace Verbara.Sdk.Sessions.Manager;
 /// the visit's start, and does not end the wait again.</item>
 /// <item>A visit still open at the call's next join or at its end (its leave was never received) closes abandoned
 /// there.</item>
+/// <item>A call released with its server (<see cref="CallReleasedEvent"/>) is not an ending: its visit closes counted
+/// neither answered nor abandoned, a visit still open stops counting as waiting, and the offered count is unchanged.</item>
 /// </list>
 /// Over any other <see cref="ICallSessionManager"/> no visit signal arrives: a visit closes only at its connect, at the
 /// call's next join or at its end, abandoned unless connected, and <see cref="QueueSession.CallsTimedOut"/> stays 0.
@@ -167,6 +169,22 @@ internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
             Count(visit.QueueName, abandoned: 1);
     }
 
+    private void HandleCallReleased(CallReleasedEvent evt)
+    {
+        // A released call is not an ending: the SDK observed neither an answer nor an abandon, so its visit goes
+        // counting neither. A visit still open stops counting as waiting; an abandon left pending after a leave is
+        // dropped, not counted. The entry goes too, so a call later registered under the same session id finds no
+        // visit of the released call open, and a late visit signal for it names nothing.
+        Visit? visit;
+        lock (_waitingLock)
+        {
+            _visits.Remove(evt.SessionId, out visit);
+        }
+
+        if (visit is { State: VisitState.Open })
+            Count(visit.QueueName, waiting: -1);
+    }
+
     /// <summary>The call's current visit, when it is the one <paramref name="signal"/> names. Under <see cref="_waitingLock"/>.</summary>
     private Visit? Named(QueueVisitSignal signal) =>
         _visits.TryGetValue(signal.SessionId, out var visit)
@@ -295,6 +313,9 @@ internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
                     break;
                 case CallEndedEvent ended:
                     tracker.HandleCallEnded(ended);
+                    break;
+                case CallReleasedEvent released:
+                    tracker.HandleCallReleased(released);
                     break;
             }
         }

@@ -13,3 +13,23 @@ static Verbara.Sdk.Sessions.Extensions.VerbaraSessionsBuilderExtensions.UseInMem
 Verbara.Sdk.Sessions.Manager.CallSessionManager.CallSessionManager(Microsoft.Extensions.Options.IOptions<Verbara.Sdk.Sessions.Manager.SessionOptions!>! options, Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.Sessions.Manager.CallSessionManager!>! logger, Verbara.Sdk.Sessions.Extensions.SessionStoreBase! store, Verbara.Sdk.Sessions.Manager.IWrapUpDurationProvider! wrapUpDurations) -> void
 Verbara.Sdk.Sessions.Manager.IWrapUpDurationProvider
 Verbara.Sdk.Sessions.Manager.IWrapUpDurationProvider.GetWrapUpDuration(string! serverId, string! queueName) -> System.TimeSpan?
+Verbara.Sdk.Sessions.Manager.DetachedCalls
+Verbara.Sdk.Sessions.Manager.DetachedCalls.Keep = 0 -> Verbara.Sdk.Sessions.Manager.DetachedCalls
+Verbara.Sdk.Sessions.Manager.DetachedCalls.Release = 1 -> Verbara.Sdk.Sessions.Manager.DetachedCalls
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.DetachFromServer(string! serverId, Verbara.Sdk.Sessions.Manager.DetachedCalls calls) -> System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Sessions.CallSession!>!
+Verbara.Sdk.Sessions.Manager.CallSessionManager.DetachFromServer(string! serverId, Verbara.Sdk.Sessions.Manager.DetachedCalls calls) -> System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Sessions.CallSession!>!
+Verbara.Sdk.Sessions.CallReleasedEvent
+Verbara.Sdk.Sessions.CallReleasedEvent.CallReleasedEvent(string! SessionId, string! ServerId, System.DateTimeOffset Timestamp, string! LinkedId, string? TenantId) -> void
+Verbara.Sdk.Sessions.CallReleasedEvent.LinkedId.get -> string!
+Verbara.Sdk.Sessions.CallReleasedEvent.LinkedId.init -> void
+Verbara.Sdk.Sessions.CallReleasedEvent.TenantId.get -> string?
+Verbara.Sdk.Sessions.CallReleasedEvent.TenantId.init -> void
+Verbara.Sdk.Sessions.CallReleasedEvent.Deconstruct(out string! SessionId, out string! ServerId, out System.DateTimeOffset Timestamp, out string! LinkedId, out string? TenantId) -> void
+Verbara.Sdk.Sessions.CallReleasedEvent.Equals(Verbara.Sdk.Sessions.CallReleasedEvent? other) -> bool
+override Verbara.Sdk.Sessions.CallReleasedEvent.<Clone>$() -> Verbara.Sdk.Sessions.CallReleasedEvent!
+override Verbara.Sdk.Sessions.CallReleasedEvent.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.CallReleasedEvent.GetHashCode() -> int
+override Verbara.Sdk.Sessions.CallReleasedEvent.ToString() -> string!
+override sealed Verbara.Sdk.Sessions.CallReleasedEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
+static Verbara.Sdk.Sessions.CallReleasedEvent.operator !=(Verbara.Sdk.Sessions.CallReleasedEvent? left, Verbara.Sdk.Sessions.CallReleasedEvent? right) -> bool
+static Verbara.Sdk.Sessions.CallReleasedEvent.operator ==(Verbara.Sdk.Sessions.CallReleasedEvent? left, Verbara.Sdk.Sessions.CallReleasedEvent? right) -> bool

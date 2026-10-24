@@ -519,6 +519,9 @@ None of these breaks a build or a public contract. Each is in the CHANGELOG.
 - **Channel events follow the same rules.** `ChannelManager` raises its seven events outside its locks too: a call a
   handler makes into the channel table is reported after the handler returns, and a handler reads the live channel,
   which can already be newer than the change the event reports.
+- **`CallStartedEvent` and `CallQueuedEvent` are raised under the call's lock**, like the other notifications of a
+  call. A handler of either runs with that lock held, so it must not wait for another thread that works on the same
+  call. A host that removes a server for good can now detach it with `DetachedCalls.Release`; see the Sessions README.
 
 - **A stop is a stop, not a cancelled token.** Cancelling the token passed to the start of the ARI AudioSocket or
   WebSocket audio server, the ARI outbound listener, the FastAGI server, or to `PipelineSocketConnection.ConnectAsync`

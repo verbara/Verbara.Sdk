@@ -22,7 +22,7 @@ namespace Verbara.Sdk.Sessions.Manager;
 /// <para>
 /// An answer longer than <see cref="SessionOptions.CompletedRetention"/> is used, but a subscriber that looks the
 /// session up by id when its <see cref="CallWrapUpEvent"/> arrives may no longer find it. Do not call
-/// <see cref="CallSessionManager.DetachFromServer"/> from this method.
+/// <see cref="CallSessionManager.DetachFromServer(string)"/> from this method.
 /// </para>
 /// </remarks>
 public interface IWrapUpDurationProvider

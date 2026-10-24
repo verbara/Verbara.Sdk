@@ -7,9 +7,9 @@ Session Engine for the Verbara.Sdk ecosystem. Provides call session correlation,
 - **CallSession** - Models the full lifecycle of a call: Created, Dialing, Ringing, Queued, Connected, OnHold, Transferring, Conference, Completed, Failed (`TimedOut` is kept for sessions stored by earlier versions; since 2.7.0 no call ends in it)
 - **CallSessionManager** - Automatic session creation and correlation by LinkedId, with 4-tier O(1) indexing
 - **Reconciliation sweep** - Registered by `AddVerbaraSessions`: when a held call is older than `DialingTimeout`, it checks the held calls against Asterisk's channel snapshot and ends, as a reload ends it, a call whose channels Asterisk no longer reports. It never ends a call for its age. See [the migration guide](../../docs/guides/call-session-ending-migration.md#the-reconciliation-sweep-and-long-answered-calls)
-- **Domain Events** - Observable stream of CallStarted, CallConnected, CallQueued, CallHeld, CallEnded, CallFailed events
+- **Domain Events** - Observable stream of CallStarted, CallConnected, CallQueued, CallHeld, CallEnded, CallReleased and the other notifications of a call
 - **Extension Points** - Abstract base classes for custom routing (CallRouterBase), agent selection (AgentSelectorBase), and persistence (SessionStoreBase)
-- **SessionMetrics** - System.Diagnostics.Metrics counters for sessions created, completed and failed (`sessions.timed_out` and `sessions.orphaned` are still published, and no longer incremented since 2.7.0)
+- **SessionMetrics** - System.Diagnostics.Metrics counters for sessions created, completed and failed, and for calls released on detach (`sessions.released_on_detach`); `sessions.timed_out` and `sessions.orphaned` are still published, and no longer incremented since 2.7.0
 - **Resident-count gauges** - `sessions.active` (calls in progress) and `sessions.retained` (ended calls still held), published by each `CallSessionManager` under the `Verbara.Sdk.Sessions` meter name and withdrawn when it is disposed
 
 ## Quick Start
@@ -29,8 +29,11 @@ sessionManager.Events.Subscribe(evt => Console.WriteLine(evt));
 ## Domain Events
 
 `ICallSessionManager.Events` delivers each notification to every subscriber in turn, on the thread that raised it — the
-thread delivering the server's event, a reload, a sweep or the disposal — and, for some kinds, while the engine holds
-that call's lock. A subscriber that blocks holds them up; keep handlers short and hand long work off.
+thread delivering the server's event, a reload, a sweep, a release or the disposal. **Every notification of a call —
+its start, queueing, connection, hold, resumption, transfer, ending and release — is raised while the engine holds that
+call's lock**, after checking that it still holds the call; since 2.9.0 that includes `CallStartedEvent` and
+`CallQueuedEvent`, which were raised outside it before. A `CallWrapUpEvent` is not: it is the agent's after-call time,
+raised when the wrap-up closes. A subscriber that blocks holds them up; keep handlers short and hand long work off.
 
 **A subscriber that throws fails alone.** Its exception is caught at that subscriber, logged once at `Warning` with the
 exception and counted on `sessions.events.subscriber_faults` (meter `Verbara.Sdk.Sessions`):
@@ -59,6 +62,80 @@ its ending never saved, and a reload stopped part way.
 agent's lock. Its failures log at `Warning` under the tracker's own category, EventId 5 (`A subscriber of the agent
 state changes threw on the change of agent {AgentId} from {PreviousState} to {NewState}; …`) and EventId 6 (its
 completion or error), and count on the same `sessions.events.subscriber_faults`.
+
+## A server that leaves for good
+
+`DetachFromServer(serverId)` unsubscribes the server and keeps every call the engine holds for it: those calls stay
+held, are listed in `ActiveSessions`, and are counted as `serverless` by a multi-server host's sweep on every tick.
+That is right when another instance takes the server over, and it is still what
+`DetachFromServer(serverId, DetachedCalls.Keep)` does. When the server is gone for good, detach it with
+`DetachedCalls.Release`:
+
+```csharp
+IReadOnlyList<CallSession> released = sessionManager.DetachFromServer("node-3", DetachedCalls.Release);
+```
+
+The release lets go of every call held under that id that has not ended, without ending it. Each call leaves every
+lookup (by session id, `linkedid`, channel id and bridge id), `ActiveSessions`, `sessions.active` and the default store.
+Its state, legs, timestamps and metadata stay as they were, and no `CallEndedEvent`, completion, failure or duration is
+recorded for it. Calls of that server that already ended are left to their retention. The release also works for an
+id that is not attached, so a host that detached with `Keep` can release later. A second release of the same id
+releases nothing. A null or empty id throws `ArgumentException`, and an undefined `DetachedCalls` value throws
+`ArgumentOutOfRangeException`. `ICallSessionManager`'s default implementation of the overload releases nothing: an
+implementation that does not override it only detaches.
+
+**How you learn what was released:**
+
+- **The return value**: the released calls, in the order their notifications were raised.
+- **`CallReleasedEvent`** on `Events`, once per released call, carrying `SessionId`, `ServerId`, `LinkedId`,
+  `TenantId` and the release instant as `Timestamp`. It is raised under the call's lock while `GetById` still finds the
+  call, and the call leaves every lookup under that same lock, so it is the last notification for that call object. A
+  subscriber that hands the work to another thread should rely on the values the event carries, not on a lookup. It is
+  not a permanent end of the session id: a call registered later under the same session id, as a cluster's
+  reconstruction may register one, is a new call.
+- **`sessions.released_on_detach`** (meter `Verbara.Sdk.Sessions`), +1 per released call, tagged `server.id`, and one
+  Information log line per release naming the server and the count (EventId 12).
+
+A subscriber of `CallReleasedEvent` that throws fails alone, as described above: the other subscribers still receive
+it, the call still leaves every lookup, the rest are still released, and the detach returns normally.
+
+**One exception to "last notification".** A wrap-up already open when its call is released keeps running and closes
+as it would have, by its timer or by the agent's next connection. Its one `CallWrapUpEvent` carries the released
+session id and may follow `CallReleasedEvent`.
+
+**What the release waits for, and its two limits.** The release first closes the server's attachment to every event
+not yet handled, then waits for that attachment's handlers already running, at most a few seconds. So a hangup or an
+arrival already being handled takes effect first: a call it ended is ended, not released, and a call it opened is
+released with the others. The release then waits at most a second for each call's lock. A call whose lock a handler
+still holds past that is skipped: it stays held under the server id, is not notified or returned, and is released
+by a later release of the id. Either limit expiring writes one Error entry (EventId 13) naming the server, the
+handlers still in flight and the session ids skipped. The wait covers only the attachment the release itself
+closes: for an id detached earlier with `Keep`, a handler of that attachment still running may finish just after the
+release notification. An attach, or a second release, of the same id asked for while a release runs waits for it to
+finish.
+
+**A call-released subscriber must not block.** The two limits bound the engine's own waits, not your subscribers.
+`CallReleasedEvent` subscribers run on the releasing thread with the call's lock held, so one that blocks holds the
+release, and every attach or release of that id waiting for it, until it returns. No Error entry is written for it.
+Hand slow work to another thread.
+
+**Not from inside a notification.** A release asked for from inside any notification of the engine (a
+`CallReleasedEvent` included), and an attach that would have to wait for a release in progress of its id, throws
+`InvalidOperationException` naming the server id, and detaches and releases nothing: it would wait for the very
+thread that is delivering the notification. Handle that exception inside the subscriber and ask from another thread.
+One the subscriber lets escape is reported like any subscriber failure, and the delivery continues.
+
+**What the trackers do.** `IQueueSessionTracker` closes the released call's queue visit: a caller still waiting
+stops counting in `CallsWaiting`, and the visit is counted neither answered nor abandoned. `IAgentSessionTracker`
+drops the released call from an agent whose `CurrentCall` it was, and keeps the agent's state, counting nothing. Such
+an agent can read `OnCall` with no current call until another event of that agent reaches this process, which, for a
+server this process no longer watches, may never happen.
+
+**If the server id comes back.** Nothing of the earlier attachment is held, so a reconciliation of the calls it left
+finds none: a call whose hangup fell while the server was away is never ended in this process. A call still up on
+the returning server is held again only through the paths that open a call: a new leg, a reload or an admission (each
+a new session), or a reconstructed call the host registers, which is accepted again under a new session id or under
+the released one.
 
 ## Queue metrics
 

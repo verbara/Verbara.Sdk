@@ -157,6 +157,54 @@ threads go alongside it. A handler that throws no longer keeps the events queued
 exception is rethrown from the call that made the change. A handler must not block on another event of the same manager caused by
 its own calls. The full rules are in the troubleshooting guide.
 
+### Added: a server removed for good can let go of its calls without ending them (#464)
+
+`CallSessionManager` and `ICallSessionManager` gain `DetachFromServer(serverId, DetachedCalls calls)`.
+`DetachedCalls.Keep` does what `DetachFromServer(serverId)` does: it unsubscribes the server and keeps its calls, which
+stay in `ActiveSessions`, keep `sessions.active` up and are counted `serverless` by a multi-server host's sweep on every
+tick. `DetachedCalls.Release` detaches and then lets go of every call held under that id that has not ended, without
+ending it: its state, legs and timestamps stay as they were, and no `CallEndedEvent`, completion, failure or duration
+is recorded. Each released call leaves every lookup (session id, `linkedid`, channel id, bridge id), `ActiveSessions`,
+`sessions.active` and the default in-memory store, and the overload returns the released calls. Calls that already
+ended are left to their retention, and a Redis or Postgres store keeps a released call's row as it keeps any other.
+The release also works on an id that is no longer attached, so a host that detached with `Keep` can release later. The
+interface member has a default implementation that detaches and releases nothing, so an existing implementation keeps
+compiling and behaving as before.
+
+Each released call raises one `CallReleasedEvent` (`SessionId`, `ServerId`, `Timestamp`, `LinkedId`, `TenantId`) under
+the call's lock while `GetById` still finds it. It is the last notification for that call object, except for a
+wrap-up already open at the release, whose one `CallWrapUpEvent` may follow it. It is not an ending and does not retire
+the session id: a reconstruction may later register a new call under it. `sessions.released_on_detach` (meter
+`Verbara.Sdk.Sessions`, tagged `server.id`) counts the released calls, and each release logs one Information entry
+naming the server and the count. `IQueueSessionTracker` closes a released caller's visit: the caller no longer counts in
+`CallsWaiting` and is counted neither answered nor abandoned. `IAgentSessionTracker` drops the released call from the
+agent whose current call it was and keeps the agent's state, counting nothing, so such an agent can read `OnCall` with
+no current call. The released call's connected agent legs leave the wrap-up bookkeeping without opening a wrap-up, so
+the agent's next call opens one as before.
+
+The release first closes the server's attachment and waits at most 5 s for that attachment's handlers already running,
+so a hangup being handled ends its call and an arrival being handled opens a call that is released with the others. It
+then waits at most 1 s for each call's lock. A call it cannot lock is skipped: the call stays held, is not notified or
+returned, and a later release of the id takes it. Either limit expiring logs one Error entry naming the server, the
+handlers still in flight and the skipped session ids. The limits bound only the engine's own waits: `CallReleasedEvent`
+subscribers run on the releasing thread with the call's lock held, so a subscriber that blocks holds the release.
+An attach or a second release of the same id waits for a release in progress. A release requested from inside any of
+the session engine's notifications, and an attach that would have to wait for one, throws `InvalidOperationException`
+and changes nothing: handle it in the subscriber and ask from another thread. `Keep` and the one-argument detach never
+wait. Apart from the change below, nothing changes for a caller that does not pass `Release`. The Sessions README
+section "A server that leaves for good" has the details, and the multi-server checklist of the call-session ending
+migration guide says when to keep the calls and when to release them.
+
+### Changed: `CallStartedEvent` and `CallQueuedEvent` are raised under the call's lock (#464)
+
+Like the session manager's other notifications of a call (a wrap-up's close aside), `CallStartedEvent` and
+`CallQueuedEvent` are now raised with the call's lock held, after a check that the manager still holds the call, so
+`CallReleasedEvent` is the last notification of a released call. A handler of either now runs with that lock held and
+must not wait for another thread that works on the same call. Every index write for a call now happens under its lock
+after the same check, so a hangup, queue join or late leg handled for a call the manager no longer holds records
+nothing on it. `RegisterReconstructedSession` now refuses a session id another call holds, whatever its `linkedid`;
+before, a new `linkedid` was accepted.
+
 ### Added: each queue can set its own wrap-up length (#449)
 
 A host whose queues do not share one wrap-up length registers an `IWrapUpDurationProvider` (one singleton in the

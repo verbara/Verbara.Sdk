@@ -235,7 +235,12 @@ public static class ServiceCollectionExtensions
     /// <remarks>
     /// <para>
     /// Servers are not attached for you: attach each one with <see cref="CallSessionManager.AttachToServer"/> under
-    /// the id it has in the pool, and detach it with <see cref="CallSessionManager.DetachFromServer"/>.
+    /// the id it has in the pool, and detach it with <see cref="CallSessionManager.DetachFromServer(string)"/>, or with
+    /// <see cref="CallSessionManager.DetachFromServer(string, DetachedCalls)"/> to choose what happens to its calls.
+    /// The one-argument detach keeps them held, which is right when another instance takes the server over; for a
+    /// server removed for good, <see cref="DetachedCalls.Release"/> lets go of its calls in progress without ending
+    /// them and reports each with a <see cref="CallReleasedEvent"/>, so the sweep no longer counts them as
+    /// <c>serverless</c>.
     /// </para>
     /// <para>
     /// The sweep is a hosted service. On each <see cref="SessionOptions.ReconciliationInterval"/> tick (default 30

@@ -32,14 +32,24 @@ internal sealed class PoolSweepHost : IAsyncDisposable
     private readonly MultiServerFixture _lab;
     private readonly ConcurrentDictionary<string, CallSession> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, int> _endings = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, int> _released = new(StringComparer.Ordinal);
+    private readonly SweepTickProvider _ticks;
     private readonly IDisposable _subscription;
     private readonly SemaphoreSlim _changed = new(0, int.MaxValue);
 
     private PoolSweepHost(MultiServerFixture lab, bool sweepOn)
     {
         _lab = lab;
+        _ticks = new SweepTickProvider(() => _changed.Release());
         _host = new HostBuilder()
-            .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Warning))
+            .ConfigureLogging(logging =>
+            {
+                // Everything at Warning, as before, save the sweep's own category at Debug: its one line per tick
+                // carries the serverless count (read through SweepTickProvider, which keeps nothing else).
+                logging.SetMinimumLevel(LogLevel.Warning);
+                logging.AddFilter(SweepTickProvider.Category, LogLevel.Debug);
+                logging.AddProvider(_ticks);
+            })
             .ConfigureServices(services =>
             {
                 services.AddVerbaraMultiServer();
@@ -95,12 +105,28 @@ internal sealed class PoolSweepHost : IAsyncDisposable
         return verbaraServer;
     }
 
-    /// <summary>Detaches the session engine from <paramref name="id"/> and removes it from the pool, as a cluster does.</summary>
-    public async Task RemoveAsync(string id)
+    /// <summary>
+    /// Detaches the session engine from <paramref name="id"/>, keeping or releasing its calls as <paramref name="calls"/>
+    /// says, and removes it from the pool, as a cluster does.
+    /// </summary>
+    public async Task RemoveAsync(string id, DetachedCalls calls = DetachedCalls.Keep)
     {
-        Manager.DetachFromServer(id);
+        Manager.DetachFromServer(id, calls);
         await Pool.RemoveServerAsync(id);
     }
+
+    /// <summary>The calls the engine holds in progress for <paramref name="serverId"/>: the engine's view, not this host's.</summary>
+    public int HeldBy(string serverId) =>
+        Manager.ActiveSessions.Count(s => string.Equals(s.ServerId, serverId, StringComparison.Ordinal));
+
+    /// <summary>How many <see cref="CallReleasedEvent"/>s were published for calls of <paramref name="serverId"/>.</summary>
+    public int ReleasedOf(string serverId) => _released.GetValueOrDefault(serverId);
+
+    /// <summary>How many ticks of the pool sweep have completed (one Debug line each).</summary>
+    public int Ticks => _ticks.Ticks;
+
+    /// <summary>The serverless count of the last completed tick, or <see langword="null"/> before the first.</summary>
+    public int? LastServerless => _ticks.LastServerless;
 
     /// <summary>Originates <paramref name="count"/> calls to <paramref name="target"/> (<c>exten@context</c>) over <paramref name="server"/>'s connection.</summary>
     public static async Task OriginateAsync(VerbaraServer server, string target, int count)
@@ -183,6 +209,8 @@ internal sealed class PoolSweepHost : IAsyncDisposable
 
     /// <summary>A short account of the sessions per server, for failure messages.</summary>
     public string Describe() =>
+        $"held a/b: {HeldBy("a")}/{HeldBy("b")}; released a: {ReleasedOf("a")}; ticks: {Ticks}; serverless: "
+        + $"{LastServerless?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"}; " +
         string.Join("; ", _sessions.Values.GroupBy(s => s.ServerId, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => $"{g.Key}: " + string.Join(" ", g.Select(s =>
                 $"{s.State}/{s.Metadata.GetValueOrDefault("cause") ?? "-"}/{s.HangupCause?.ToString() ?? "-"}/x{EndingsOf(s)}"))));
@@ -218,6 +246,8 @@ internal sealed class PoolSweepHost : IAsyncDisposable
                 owner._sessions.TryAdd(session.SessionId, session);
             else if (value is CallEndedEvent)
                 owner._endings.AddOrUpdate(value.SessionId, 1, (_, n) => n + 1);
+            else if (value is CallReleasedEvent)
+                owner._released.AddOrUpdate(value.ServerId, 1, (_, n) => n + 1);
 
             owner._changed.Release();
         }
@@ -230,6 +260,73 @@ internal sealed class PoolSweepHost : IAsyncDisposable
         public void OnCompleted()
         {
             // Completed when the manager is disposed.
+        }
+    }
+}
+
+/// <summary>
+/// Reads the pool sweep's one Debug line per tick (<c>servers=… serverless=…</c>): counts the ticks and keeps the last
+/// serverless count. Every other entry is ignored. Calls <c>written</c> after each tick, so a waiter re-reads.
+/// </summary>
+internal sealed class SweepTickProvider(Action written) : ILoggerProvider
+{
+    /// <summary>The sweep's logger category.</summary>
+    public const string Category = "Verbara.Sdk.Hosting.PoolReconciliationService";
+
+    private readonly Action _written = written;
+
+    private int _ticks;
+    private int _lastServerless = -1;
+
+    public int Ticks => Volatile.Read(ref _ticks);
+
+    public int? LastServerless => Volatile.Read(ref _lastServerless) is var v and >= 0 ? v : null;
+
+    public ILogger CreateLogger(string categoryName) =>
+        string.Equals(categoryName, Category, StringComparison.Ordinal) ? new TickLogger(this) : NullTickLogger.Instance;
+
+    public void Dispose()
+    {
+        // Nothing to release.
+    }
+
+    private sealed class TickLogger(SweepTickProvider owner) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (state is not IEnumerable<KeyValuePair<string, object?>> pairs)
+                return;
+
+            foreach (var pair in pairs)
+            {
+                if (pair.Key == "Serverless" && pair.Value is int serverless)
+                {
+                    Volatile.Write(ref owner._lastServerless, serverless);
+                    Interlocked.Increment(ref owner._ticks);
+                    owner._written();
+                    return;
+                }
+            }
+        }
+    }
+
+    private sealed class NullTickLogger : ILogger
+    {
+        public static readonly NullTickLogger Instance = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => false;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            // Not the sweep's category: nothing to read.
         }
     }
 }

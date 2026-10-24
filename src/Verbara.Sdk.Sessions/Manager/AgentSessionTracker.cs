@@ -148,6 +148,31 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
         }
     }
 
+    private void OnCallReleased(CallReleasedEvent evt)
+    {
+        // A released call is not an ending: the SDK saw neither its end nor its wrap-up, so the agent keeps its state
+        // (on call included) and counts no handled call, talk time or hold time. Only the reference goes, so the agent
+        // no longer points at a call the manager has let go of. The notification is raised while the call can still be
+        // looked up, so the released object itself names the agents to clear; a call later registered under the same
+        // session id is another object, and an agent already on it is left alone.
+        var released = _manager.GetById(evt.SessionId);
+        foreach (var agent in FindAgentsBySessionId(evt.SessionId))
+        {
+            lock (agent.SyncRoot)
+            {
+                var call = agent.CurrentCall;
+                if (call is null
+                    || !string.Equals(call.SessionId, evt.SessionId, StringComparison.Ordinal)
+                    || (released is not null && !ReferenceEquals(call, released)))
+                    continue;
+
+                agent.CurrentCall = null;
+                agent.CurrentQueueName = null;
+                agent.WrapUpClosedForSessionId = null;
+            }
+        }
+    }
+
     // The session manager's ending-provenance marker: the key and the one value it writes when a completed reload
     // proved a call gone without observing its end. The reload tests pin both literals on both sides.
     private const string EndingProvenanceKey = "cause";
@@ -226,6 +251,9 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
                     break;
                 case CallWrapUpEvent wrapUp:
                     tracker.OnWrapUp(wrapUp);
+                    break;
+                case CallReleasedEvent released:
+                    tracker.OnCallReleased(released);
                     break;
             }
         }

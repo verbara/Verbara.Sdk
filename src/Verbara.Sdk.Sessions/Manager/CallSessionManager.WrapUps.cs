@@ -178,9 +178,16 @@ public sealed partial class CallSessionManager
         if (session is null)
             return;
 
+        Step(HandlerStep.AgentCompleteFound, serverId, completion.CallerUniqueId ?? completion.LinkedId ?? string.Empty);
+
         PendingWrapUp pending;
         lock (session.SyncRoot)
         {
+            // A call let go of since it was looked up gave its legs back when it was released: nothing to end, and no
+            // wrap-up opens for it.
+            if (!IsHeld(session))
+                return;
+
             var queue = string.IsNullOrEmpty(completion.Queue) ? session.QueueName : completion.Queue;
             if (queue is null || HasEnded(session))
                 return;
@@ -221,8 +228,12 @@ public sealed partial class CallSessionManager
 
         var duration = ResolveWrapUpDuration(_wrapUpDurations, serverId, pending.QueueName);
 
+        // Checked again: the call may have been released while the provider was asked.
         lock (session.SyncRoot)
-            OpenWrapUpIfFree(pending, duration);
+        {
+            if (IsHeld(session))
+                OpenWrapUpIfFree(pending, duration);
+        }
     }
 
     private static int FindMemberLeg(List<WrapUpLeg>? legs, string serverId, string memberInterface,
@@ -370,7 +381,7 @@ public sealed partial class CallSessionManager
                 return;
 
             LogWrapUpClosed(entry.Key, entry.SessionId, measured);
-            _events.OnNext(new CallWrapUpEvent(entry.SessionId, entry.ServerId, closedAt, entry.AgentId,
+            Publish(new CallWrapUpEvent(entry.SessionId, entry.ServerId, closedAt, entry.AgentId,
                 entry.QueueName, measured));
         }
     }

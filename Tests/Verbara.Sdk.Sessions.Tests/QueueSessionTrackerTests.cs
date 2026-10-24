@@ -496,6 +496,59 @@ public sealed class QueueSessionTrackerVisitSourceTests : IDisposable
         VisitCount().Should().Be(0, "a call that ended keeps no visit in the tracker");
     }
 
+    // --- A call released with its server: not an ending, counted neither answered nor abandoned ---
+
+    [Fact]
+    public void Release_ShouldDropThePendingAbandon_WhenTheCallIsReleasedAfterALeaveAfterWhichEventsMayHaveBeenLost()
+    {
+        Queued(T0);
+        _manager.Left(Signal(T0, eventsMayHaveBeenLost: true));
+        var atTheLeave = Tally();
+
+        Released();
+        var visitsAfterTheRelease = VisitCount();
+        Ended();
+
+        using var scope = new AssertionScope();
+        atTheLeave.Should().Be((1, 0, 0, 0, 0), "premise: the leave ended the wait and left the abandon pending");
+        visitsAfterTheRelease.Should().Be(0, "the release takes the visit out of the tracker");
+        Tally().Should().Be((1, 0, 0, 0, 0),
+            "the SDK observed neither an answer nor an abandon for a released call, so the pending abandon is dropped "
+            + "and a later ending under the same session id finds nothing to close");
+    }
+
+    [Fact]
+    public void Release_ShouldLeaveTheCounts_WhenTheReleasedCallsVisitWasAnswered()
+    {
+        Queued(T0);
+        _manager.Left(Signal(T0));
+        _manager.Events.OnNext(new CallConnectedEvent(Session, "server-1", T0.AddSeconds(9), "agent-1", Queue, TimeSpan.FromSeconds(9)));
+        var atTheConnect = Tally();
+
+        Released();
+
+        using var scope = new AssertionScope();
+        atTheConnect.Should().Be((1, 1, 0, 0, 0), "premise: the visit was answered");
+        Tally().Should().Be((1, 1, 0, 0, 0), "a release after the answer neither undoes it nor counts anything");
+        VisitCount().Should().Be(0, "the release takes the answered visit's entry out too");
+    }
+
+    [Fact]
+    public void Release_ShouldCountNothing_WhenAVisitSignalForTheReleasedVisitArrivesAfterIt()
+    {
+        Queued(T0);
+
+        Released();
+        var atTheRelease = Tally();
+        _manager.AbandonReported(Signal(T0));
+        _manager.TimedOut(Signal(T0));
+        _manager.Left(Signal(T0, abandonReported: true));
+
+        using var scope = new AssertionScope();
+        atTheRelease.Should().Be((1, 0, 0, 0, 0), "the released caller no longer waits, and nothing else is counted");
+        Tally().Should().Be((1, 0, 0, 0, 0), "a late signal names no visit the tracker still holds");
+    }
+
     [Fact]
     public void Dispose_ShouldUnsubscribeFromTheVisitSignals()
     {
@@ -512,6 +565,8 @@ public sealed class QueueSessionTrackerVisitSourceTests : IDisposable
 
     private void Ended() => _manager.Events.OnNext(new CallEndedEvent(Session, "server-1", T0.AddMinutes(1),
         HangupCause.NormalClearing, TimeSpan.FromMinutes(1), null));
+
+    private void Released() => _manager.Events.OnNext(new CallReleasedEvent(Session, "server-1", T0.AddMinutes(1), Session, null));
 
     private static QueueVisitSignal Signal(DateTimeOffset visit, bool abandonReported = false, bool eventsMayHaveBeenLost = false) =>
         new(Session, Queue, visit, abandonReported, eventsMayHaveBeenLost);

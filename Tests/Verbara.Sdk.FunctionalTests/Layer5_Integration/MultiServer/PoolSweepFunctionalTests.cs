@@ -1,5 +1,6 @@
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Manager;
 using Verbara.Sdk.TestInfrastructure.Stacks;
 using FluentAssertions;
 using Xunit.Abstractions;
@@ -164,16 +165,70 @@ public sealed class PoolSweepFunctionalTests(MultiServerTestFixture fixture, ITe
         var laterTick = await host.WaitUntilAsync(
             () => host.SessionsOf("b").Count == 2 * Calls && host.SessionsOf("b").All(host.EndedAsAReload), Bound);
         await guard.WaitAllLegsEndedAsync();
+        var ticks = host.Ticks;
+        var nextTick = await host.WaitUntilAsync(() => host.Ticks > ticks, Bound);
         output.WriteLine(host.Describe());
 
         new
         {
-            addedEnded, laterTick,
+            addedEnded, laterTick, nextTick,
             RemovedHeld = host.SessionsOf("a").Count(s => !PoolSweepHost.HasEnded(s)),
+            Held = host.HeldBy("a"),
+            Released = host.ReleasedOf("a"),
+            EndedForThem = host.SessionsOf("a").Sum(host.EndingsOf),
+            Serverless = host.LastServerless,
         }.Should().BeEquivalentTo(
-            new { addedEnded = true, laterTick = true, RemovedHeld = Calls },
+            new
+            {
+                addedEnded = true, laterTick = true, nextTick = true, RemovedHeld = Calls, Held = Calls, Released = 0,
+                EndedForThem = 0, Serverless = (int?)Calls,
+            },
             "a server added to the running host is verified by the next tick; the sessions of a server removed from the "
-            + "pool are left held, never verified nor ended. " + host.Describe());
+            + "pool are left held, never verified nor ended, and every tick counts them. " + host.Describe());
+    }
+
+    [Fact]
+    public async Task PoolSweep_ShouldReleaseTheHeldSessionsOfAServerRemovedHot_WhenTheDetachReleasesItsCalls()
+    {
+        await using var guard = await LegsGuard.StartAsync(fixture);
+        await using var host = await PoolSweepHost.StartAsync(_lab);
+        var a = await host.JoinAsync("a", 'A', MultiServerAmiUsers.NoHangup);
+        var b = await host.AddHotAsync("b", 'B', MultiServerAmiUsers.NoHangup);
+
+        await PoolSweepHost.OriginateAsync(b, ShortOnB, Calls);
+        var addedEnded = await host.WaitUntilAsync(
+            () => host.SessionsOf("b").Count == Calls && host.SessionsOf("b").All(host.EndedAsAReload), Bound);
+
+        await PoolSweepHost.OriginateAsync(a, ShortOnA, Calls);
+        (await host.WaitUntilAsync(() => host.SessionsOf("a").Count == Calls, Bound))
+            .Should().BeTrue($"A's calls are open before A is removed. {host.Describe()}");
+        await host.RemoveAsync("a", DetachedCalls.Release);
+        await guard.WaitLegsEndedAsync('A', ShortOnA, 2 * Calls);
+
+        // The same fence as the keep cell: a tick after A's calls passed the dialing timeout, then one more read.
+        await PoolSweepHost.OriginateAsync(b, ShortOnB, Calls);
+        var laterTick = await host.WaitUntilAsync(
+            () => host.SessionsOf("b").Count == 2 * Calls && host.SessionsOf("b").All(host.EndedAsAReload), Bound);
+        await guard.WaitAllLegsEndedAsync();
+        var ticks = host.Ticks;
+        var nextTick = await host.WaitUntilAsync(() => host.Ticks > ticks, Bound);
+        output.WriteLine(host.Describe());
+
+        new
+        {
+            addedEnded, laterTick, nextTick,
+            Held = host.HeldBy("a"),
+            Released = host.ReleasedOf("a"),
+            EndedForThem = host.SessionsOf("a").Sum(host.EndingsOf),
+            Serverless = host.LastServerless,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                addedEnded = true, laterTick = true, nextTick = true, Held = 0, Released = Calls, EndedForThem = 0,
+                Serverless = (int?)0,
+            },
+            "a server removed from the pool with its calls released leaves nothing held: its calls are released, "
+            + "none ended, and the next tick counts nothing serverless. " + host.Describe());
     }
 
     [Fact]
