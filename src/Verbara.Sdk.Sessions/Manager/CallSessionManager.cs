@@ -455,48 +455,74 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         while (true)
         {
-            if (_byLinkedId.TryGetValue(linkedId, out var existing))
+            var found = _byLinkedId.TryGetValue(linkedId, out var existing);
+            if (found)
             {
                 Step(HandlerStep.JoinFound, serverId, channel.UniqueId);
 
-                if (!collisionReported && !string.Equals(existing.ServerId, serverId, StringComparison.Ordinal))
+                if (!collisionReported && !string.Equals(existing!.ServerId, serverId, StringComparison.Ordinal))
                 {
                     ReportCrossServerCollision(serverId, existing.ServerId, LinkedIdKind, linkedId);
                     collisionReported = true;
                 }
 
-                if (TryJoin(existing, channel))
+                // Outside the new session's lock, so no thread ever holds two calls' locks.
+                if (TryJoin(existing!, channel))
                     return;
-
-                // The call this leg's linkedid names has ended: the leg opens its own call in its place,
-                // provided the index still names that ended call.
-                _sessions[session.SessionId] = session;
-                Step(HandlerStep.ArrivalHeldById, serverId, channel.UniqueId);
-                if (_byLinkedId.TryUpdate(linkedId, session, existing))
-                    break;
-            }
-            else
-            {
-                _sessions[session.SessionId] = session;
-                Step(HandlerStep.ArrivalHeldById, serverId, channel.UniqueId);
-                if (_byLinkedId.TryAdd(linkedId, session))
-                    break;
             }
 
-            // Another arrival published a call for this linkedid first, or the release walk let go of
-            // the ended one. This session was never announced, counted or saved; withdraw it and look again.
-            _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
+            // No live call to join (the one this leg's linkedid names has ended, or is no longer held): the leg
+            // opens its own call, in place of the ended one provided the index still names it.
+            if (TryPublishArrival(session, linkedId, found ? existing : null, serverId, channel.UniqueId))
+                break;
         }
 
         Step(HandlerStep.ArrivalPublished, serverId, channel.UniqueId);
 
-        _byChannelId[channel.UniqueId] = session;
-        SessionMetrics.SessionsCreated.Add(1);
+        // Under the session's lock, after checking it is still held: a release that let go of it since it was
+        // published took it out of every lookup and announced it released, so it is neither indexed by its channel
+        // nor announced started after that.
+        lock (session.SyncRoot)
+        {
+            if (!IsHeld(session))
+                return;
 
-        Publish(new CallStartedEvent(session.SessionId, serverId,
-            DateTimeOffset.UtcNow, direction, channel.CallerIdNum));
+            _byChannelId[channel.UniqueId] = session;
+            SessionMetrics.SessionsCreated.Add(1);
+
+            Publish(new CallStartedEvent(session.SessionId, serverId,
+                DateTimeOffset.UtcNow, direction, channel.CallerIdNum));
+        }
 
         _ = PersistAsync(session);
+    }
+
+    /// <summary>
+    /// One attempt to publish an arriving leg's new <paramref name="session"/>: by session id, then by
+    /// <paramref name="linkedId"/> — replacing <paramref name="existing"/>, the ended call the index named, or added
+    /// when the index named none. An attempt another arrival won is withdrawn before it returns false. The whole
+    /// attempt runs in one hold of the session's lock: the session-id write is what makes it held, so a release
+    /// that selects it in between waits for the lock and finds it published by both ids, or withdrawn.
+    /// </summary>
+    private bool TryPublishArrival(CallSession session, string linkedId, CallSession? existing, string serverId,
+        string uniqueId)
+    {
+        lock (session.SyncRoot)
+        {
+            _sessions[session.SessionId] = session;
+            Step(HandlerStep.ArrivalHeldById, serverId, uniqueId);
+
+            var published = existing is not null
+                ? _byLinkedId.TryUpdate(linkedId, session, existing)
+                : _byLinkedId.TryAdd(linkedId, session);
+            if (published)
+                return true;
+
+            // Another arrival published a call for this linkedid first, or the release walk let go of the ended
+            // one. This session was never announced, counted or saved; withdraw it and look again.
+            _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
+            return false;
+        }
     }
 
     private const string ChannelIdKind = "channel id";
@@ -536,14 +562,15 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     private partial void LogCrossServerCollisionAgain(string serverId, string idKind, string id, string otherServerId);
 
     /// <summary>
-    /// Adds <paramref name="channel"/> to <paramref name="call"/> unless the call has ended, and answers
-    /// whether the leg now belongs to it. A leg already present in the call is not added again.
+    /// Adds <paramref name="channel"/> to <paramref name="call"/> unless the call has ended or this manager no longer
+    /// holds it, and answers whether the leg now belongs to it. A leg already present in the call is not added again.
+    /// The leg is indexed under the call's lock, so a call let go of meanwhile is never indexed again.
     /// </summary>
     private bool TryJoin(CallSession call, AsteriskChannel channel)
     {
         lock (call.SyncRoot)
         {
-            if (HasEnded(call))
+            if (!IsHeld(call) || HasEnded(call))
                 return false;
 
             if (call.Participants.Any(p => p.UniqueId == channel.UniqueId && !p.LeftAt.HasValue))
@@ -562,9 +589,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             });
             call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.ParticipantJoined, channel.Name, null, role.ToString()));
+            _byChannelId[channel.UniqueId] = call;
         }
 
-        _byChannelId[channel.UniqueId] = call;
         _ = PersistAsync(call);
         return true;
     }
@@ -614,82 +641,88 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
-            // The leg still present: a leg with this id that already left keeps its own departure.
-            var participant = session.Participants.FirstOrDefault(
-                p => p.UniqueId == channel.UniqueId && !p.LeftAt.HasValue);
-            if (participant is not null)
+            // A call let go of since its channel was looked up is no longer this manager's: a late departure
+            // records nothing on it, ends nothing and announces nothing.
+            if (IsHeld(session))
             {
-                participant.LeftAt = DateTimeOffset.UtcNow;
-                participant.HangupCause = observedCause;
-            }
-
-            session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
-                CallSessionEventType.ParticipantLeft, channel.Name, null,
-                byReload ? EndingProvenanceReload : observedCause.ToString()));
-
-            // Check if all participants have left
-            if (session.Participants.All(p => p.LeftAt.HasValue))
-            {
-                session.HangupCause = observedCause;
-
-                if (byReload)
+                // The leg still present: a leg with this id that already left keeps its own departure.
+                var participant = session.Participants.FirstOrDefault(
+                    p => p.UniqueId == channel.UniqueId && !p.LeftAt.HasValue);
+                if (participant is not null)
                 {
-                    // Marked on the session, which is what a consumer can reach from the SessionId
-                    // on CallEndedEvent. The event record itself gains no field: CallEndedEvent is
-                    // a positional record, so adding one would move the public API this change
-                    // claims it does not touch.
-                    session.SetMetadata(EndingProvenanceKey, EndingProvenanceReload);
+                    participant.LeftAt = DateTimeOffset.UtcNow;
+                    participant.HangupCause = observedCause;
+                }
 
-                    // No cause exists, so the outcome follows from what the session already was: a
-                    // call that was up really took place and is over; one that never connected
-                    // never became a call. A call is up when it connected, and also when the SDK
-                    // observed its answer while it was still in its initial state, with no dial or
-                    // queue reaching it (an IVR, an originate answered with no dial onward): that one
-                    // ends completed from its observed answer. Transferring is deliberately absent —
-                    // it has no valid transition to Completed — and falls to the Failed arm below.
-                    if (!session.TryCompleteAnsweredInInitialState())
+                session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
+                    CallSessionEventType.ParticipantLeft, channel.Name, null,
+                    byReload ? EndingProvenanceReload : observedCause.ToString()));
+
+                // Check if all participants have left
+                if (session.Participants.All(p => p.LeftAt.HasValue))
+                {
+                    session.HangupCause = observedCause;
+
+                    if (byReload)
                     {
-                        var reloadTarget = session.State is CallSessionState.Connected
-                            or CallSessionState.OnHold or CallSessionState.Conference
+                        // Marked on the session, which is what a consumer can reach from the SessionId
+                        // on CallEndedEvent. The event record itself gains no field: CallEndedEvent is
+                        // a positional record, so adding one would move the public API this change
+                        // claims it does not touch.
+                        session.SetMetadata(EndingProvenanceKey, EndingProvenanceReload);
+
+                        // No cause exists, so the outcome follows from what the session already was: a
+                        // call that was up really took place and is over; one that never connected
+                        // never became a call. A call is up when it connected, and also when the SDK
+                        // observed its answer while it was still in its initial state, with no dial or
+                        // queue reaching it (an IVR, an originate answered with no dial onward): that one
+                        // ends completed from its observed answer. Transferring is deliberately absent —
+                        // it has no valid transition to Completed — and falls to the Failed arm below.
+                        if (!session.TryCompleteAnsweredInInitialState())
+                        {
+                            var reloadTarget = session.State is CallSessionState.Connected
+                                or CallSessionState.OnHold or CallSessionState.Conference
+                                ? CallSessionState.Completed
+                                : CallSessionState.Failed;
+
+                            if (!session.TryTransition(reloadTarget))
+                                session.TryTransition(CallSessionState.Failed);
+                        }
+
+                        LogEndedByReload(session.SessionId, session.LinkedId, session.State);
+                    }
+                    else
+                    {
+                        var targetState = channel.HangupCause == HangupCause.NormalClearing
                             ? CallSessionState.Completed
                             : CallSessionState.Failed;
 
-                        if (!session.TryTransition(reloadTarget))
+                        // Try the natural progression if needed. A call still in its initial state ends
+                        // failed, unless the SDK observed its answer and it hung up normally: then the
+                        // dialplan answered it, no dial or queue reached it, and it is a completed call.
+                        if (session.State == CallSessionState.Created)
+                        {
+                            if (targetState != CallSessionState.Completed
+                                || !session.TryCompleteAnsweredInInitialState())
+                                session.TryTransition(CallSessionState.Failed);
+                        }
+                        else if (!session.TryTransition(targetState))
+                        {
                             session.TryTransition(CallSessionState.Failed);
+                        }
                     }
 
-                    LogEndedByReload(session.SessionId, session.LinkedId, session.State);
+                    OnSessionCompleted(session);
                 }
                 else
                 {
-                    var targetState = channel.HangupCause == HangupCause.NormalClearing
-                        ? CallSessionState.Completed
-                        : CallSessionState.Failed;
-
-                    // Try the natural progression if needed. A call still in its initial state ends
-                    // failed, unless the SDK observed its answer and it hung up normally: then the
-                    // dialplan answered it, no dial or queue reached it, and it is a completed call.
-                    if (session.State == CallSessionState.Created)
-                    {
-                        if (targetState != CallSessionState.Completed
-                            || !session.TryCompleteAnsweredInInitialState())
-                            session.TryTransition(CallSessionState.Failed);
-                    }
-                    else if (!session.TryTransition(targetState))
-                    {
-                        session.TryTransition(CallSessionState.Failed);
-                    }
+                    _ = PersistAsync(session);
                 }
-
-                OnSessionCompleted(session);
-            }
-            else
-            {
-                _ = PersistAsync(session);
             }
         }
 
-        _byChannelId.TryRemove(channel.UniqueId, out _);
+        // By object: an entry naming another call, which holds the channel id since, keeps it.
+        _byChannelId.TryRemove(new KeyValuePair<string, CallSession>(channel.UniqueId, session));
     }
 
     [LoggerMessage(Level = LogLevel.Information,
@@ -703,6 +736,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             var changed = false;
             switch (channel.State)
             {
@@ -749,6 +785,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             if (session.TryTransition(CallSessionState.OnHold))
             {
                 session.StartHold();
@@ -766,6 +805,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             if (session.TryTransition(CallSessionState.Connected))
             {
                 session.EndHold();
@@ -783,6 +825,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             session.BridgeId = bridge.BridgeUniqueid;
             _bridgeToSession[bridge.BridgeUniqueid] = session.SessionId;
 
@@ -816,6 +861,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             if (session.TryTransition(CallSessionState.Transferring))
             {
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
@@ -838,9 +886,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         var uniqueId = entry.UniqueId ?? server.Channels.GetByName(entry.Channel)?.UniqueId;
         if (uniqueId is null || !_byChannelId.TryGetValue(uniqueId, out var session)) return;
 
-        DateTimeOffset visitStartedAt;
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             var now = _timeProvider.GetUtcNow();
             var reportedJoin = ReportedJoin(now, entry);
 
@@ -854,7 +904,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             // Asterisk says the caller joined: for a snapshot caller, its captured read instant minus the
             // reported wait (falling back to now when no instant is carried), and otherwise now. The one start stamps both the visit and CallQueuedEvent,
             // so the queue's metrics and the histogram measure the visit from the same moment.
-            visitStartedAt = reportedJoin ?? now;
+            var visitStartedAt = reportedJoin ?? now;
             session.QueueName = queueName;
             session.QueueVisitAnnounced = false;
             session.QueueVisitLeft = false;
@@ -867,12 +917,15 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             session.TryTransition(CallSessionState.Queued);
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.QueueJoined, entry.Channel, null, queueName));
+
+            Step(HandlerStep.QueueVisitWritten, serverId, uniqueId);
+
+            // Under the lock, so a release of the call either precedes this whole join, which then finds the call
+            // no longer held, or follows its announcement: the release is the call's last notification.
+            Publish(new CallQueuedEvent(session.SessionId, session.ServerId,
+                visitStartedAt, queueName, entry.Position));
         }
 
-        Step(HandlerStep.QueueVisitWritten, serverId, uniqueId);
-
-        Publish(new CallQueuedEvent(session.SessionId, session.ServerId,
-            visitStartedAt, queueName, entry.Position));
         _ = PersistAsync(session);
     }
 
@@ -934,6 +987,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             if (!string.Equals(session.QueueName, report.Queue, StringComparison.OrdinalIgnoreCase)
                 || session.QueueVisitLeft)
             {
@@ -961,6 +1017,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             if (CurrentVisit(session, queueName) is not { } visit
                 || session.QueueVisitAnnounced
                 || session.QueueVisitAbandonReported)
@@ -987,6 +1046,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             if (CurrentVisit(session, queueName: null) is not { } visit || session.QueueVisitAnnounced)
                 return;
 
@@ -1008,7 +1070,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         {
             lock (session.SyncRoot)
             {
-                if (session.ServerId != serverId
+                if (!IsHeld(session)
+                    || session.ServerId != serverId
                     || HasEnded(session)
                     || CurrentVisit(session, queueName: null) is not { } visit
                     || session.QueueVisitLeft
@@ -1206,6 +1269,13 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// <summary>
     /// Whether this manager still holds <paramref name="session"/> itself — not merely a session with
     /// the same id.
+    /// <para>
+    /// Every handler that found a call through a lookup checks it again first thing under the call's lock, and
+    /// changes, indexes and announces nothing when it is no longer held. A release lets go of a call under that same
+    /// lock, announcing it and taking it out of every lookup in one hold, so a handler that takes the lock afterwards
+    /// finds it no longer held, and an entry a handler wrote before is removed by the release: no index entry names a
+    /// call let go of, and no notification of it follows its release.
+    /// </para>
     /// </summary>
     private bool IsHeld(CallSession session) =>
         _sessions.TryGetValue(session.SessionId, out var held) && ReferenceEquals(held, session);
@@ -1302,21 +1372,34 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     public bool RegisterReconstructedSession(CallSession session)
     {
-        // Held by id before it is published by linkedid, as a session opened by an arriving leg is, so
-        // a leg that finds it by linkedid never indexes or saves a session the manager does not hold.
-        var added = _sessions.TryAdd(session.SessionId, session);
-        if (!_byLinkedId.TryAdd(session.LinkedId, session))
+        // Every index write runs in one hold of the session's lock, taken before the first: the session-id write
+        // makes it held, so a release that selects it meanwhile waits for the lock and then finds it indexed
+        // everywhere, or withdrawn. Held by id before it is published by linkedid, as a session opened by an
+        // arriving leg is, so a leg that finds it by linkedid never indexes or saves a session the manager does not
+        // hold.
+        lock (session.SyncRoot)
         {
-            if (added)
-                _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
-            return false;
+            var added = _sessions.TryAdd(session.SessionId, session);
+            Step(HandlerStep.RegistrationHeldById, session.ServerId, session.SessionId);
+
+            // A session id another call holds refuses the registration whatever its linkedid: that call's bridge
+            // entries name the same id, and a release of it removes them by that id.
+            if (!IsHeld(session))
+                return false;
+
+            if (!_byLinkedId.TryAdd(session.LinkedId, session))
+            {
+                if (added)
+                    _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
+                return false;
+            }
+
+            foreach (var participant in session.Participants)
+                _byChannelId.TryAdd(participant.UniqueId, session);
+
+            if (session.BridgeId is not null)
+                _bridgeToSession.TryAdd(session.BridgeId, session.SessionId);
         }
-
-        foreach (var participant in session.Participants)
-            _byChannelId.TryAdd(participant.UniqueId, session);
-
-        if (session.BridgeId is not null)
-            _bridgeToSession.TryAdd(session.BridgeId, session.SessionId);
 
         _ = PersistAsync(session);
 
@@ -1349,6 +1432,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             session.AgentId = agentId;
             session.AgentInterface = interface_;
             session.AddEvent(new CallSessionEvent(
@@ -1402,6 +1488,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             if (session.QueueName is null)
                 return;
 
@@ -1449,6 +1538,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             if (session.TryTransition(CallSessionState.Dialing))
             {
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
@@ -1464,6 +1556,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
+            if (!IsHeld(session))
+                return;
+
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.Connected, channel.Name, null, $"dial:{channel.DialStatus}"));
 
@@ -1486,7 +1581,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         {
             lock (session.SyncRoot)
             {
-                if (session.BridgeId == bridge.BridgeUniqueid)
+                if (IsHeld(session) && session.BridgeId == bridge.BridgeUniqueid)
                     session.BridgeId = null;
             }
         }

@@ -358,6 +358,76 @@ public sealed class CallSessionManagerDetachReleaseTests
     }
 
     /// <summary>
+    /// A registration and a release of the same server racing: the registration is parked right after it wrote the
+    /// call by its session id, past the release's limits. The release cannot take a half-registered call: it skips it
+    /// (its one Error entry names the server and the call), the registration then completes, and a later release takes
+    /// the call whole. No entry names the released call afterwards (checked again when the rig is disposed). Red with
+    /// the registration's writes outside the call's lock: the release lets go of the call between its session-id write
+    /// and its other writes, which then index a call no longer held.
+    /// </summary>
+    [Fact]
+    public async Task DetachFromServer_ShouldLeaveNoEntryNamingTheReleasedCall_WhenItRacesARegistrationOfTheServer()
+    {
+        await using var rig = await ReleaseRig.StartAsync("a");
+        var reconstructed = new CallSession(Guid.NewGuid().ToString("N"), "rr-L", "a", CallDirection.Inbound)
+        {
+            BridgeId = "rr-bridge",
+        };
+        reconstructed.AddParticipant(new SessionParticipant
+        {
+            UniqueId = "rr-a", Channel = CallerChannel("rr"), Technology = "PJSIP", Role = ParticipantRole.Caller,
+            JoinedAt = DateTimeOffset.UtcNow,
+        });
+        using var parker = StepParker.Install(rig.Manager, HandlerStep.RegistrationHeldById, "a", reconstructed.SessionId);
+        var registration = ReleaseRig.OnThread(() => rig.Manager.RegisterReconstructedSession(reconstructed));
+        parker.WaitUntilParked(ReleaseRig.Bound);
+
+        var release = ReleaseRig.OnThread(() => rig.Release("a"));
+        var returned = ReleaseRig.Returns(release);
+        var first = new
+        {
+            returned,
+            Released = ReleaseRig.ResultOf(release)?.Select(c => c.SessionId).ToArray(),
+            Errors = CallSessionManagerDetachReleaseWindowTests.ErrorsNaming(rig, "a", inFlight: 0,
+                skipped: reconstructed.SessionId),
+        };
+        parker.LetGo();
+        var registrationDone = ReleaseRig.Returns(registration);
+        var afterLetGo = new
+        {
+            registrationDone,
+            Accepted = ReleaseRig.ResultOf(registration),
+            ById = ReferenceEquals(rig.Manager.GetById(reconstructed.SessionId), reconstructed),
+            ByLinkedId = ReferenceEquals(rig.Manager.GetByLinkedId("rr-L"), reconstructed),
+            ByChannel = ReferenceEquals(rig.Manager.GetByChannelId("rr-a"), reconstructed),
+            ByBridge = ReferenceEquals(rig.Manager.GetByBridgeId("rr-bridge"), reconstructed),
+        };
+
+        var again = rig.Release("a");
+
+        new
+        {
+            First = first,
+            AfterLetGo = afterLetGo,
+            Again = again.Select(c => c.SessionId).ToArray(),
+            Leftovers = rig.Manager.ReleaseLeftovers(again),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                First = new { returned = true, Released = Array.Empty<string>(), Errors = 1 },
+                AfterLetGo = new
+                {
+                    registrationDone = true, Accepted = true, ById = true, ByLinkedId = true, ByChannel = true,
+                    ByBridge = true,
+                },
+                Again = new[] { reconstructed.SessionId },
+                Leftovers = Array.Empty<string>(),
+            },
+            "a release racing a registration skips the half-registered call, which the registration then indexes "
+            + "everywhere, and a later release takes it whole: no entry names the released call. " + rig.Describe());
+    }
+
+    /// <summary>
     /// The post-condition every <see cref="ReleaseRig"/> checks at its disposal, shown red: handed a call the manager
     /// still holds, it names that call's session id, <c>linkedid</c> and channel ids and its connected leg; with the
     /// call's leg list taken away it names the wrap-up key whose count no held call records any more.

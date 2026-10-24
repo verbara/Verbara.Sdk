@@ -17,7 +17,7 @@ internal enum HandlerStep
     /// <summary>An arriving leg found a call by its <c>linkedid</c>, before the join takes that call's lock.</summary>
     JoinFound,
 
-    /// <summary>A queue join wrote the call's visit, after the call's lock is released and before the queued raise.</summary>
+    /// <summary>A queue join wrote the call's visit, under the call's lock and before the queued raise.</summary>
     QueueVisitWritten,
 
     /// <summary>An arriving leg's new call is published by id and <c>linkedid</c>, before the channel-id write and the start raise.</summary>
@@ -37,6 +37,12 @@ internal enum HandlerStep
     /// its remaining removals; the id is the call's session id.
     /// </summary>
     ReleaseForgotById,
+
+    /// <summary>
+    /// A reconstructed session's registration, under the session's lock, wrote it by session id and has not yet
+    /// written its other entries; the id is the session's id and the server id the session's own.
+    /// </summary>
+    RegistrationHeldById,
 }
 
 public sealed partial class CallSessionManager
@@ -45,7 +51,8 @@ public sealed partial class CallSessionManager
     /// A test seam: when set, called with the step, the server id the handler was attached under (for a release, the
     /// id being released) and the leg's channel id (for <see cref="HandlerStep.AgentCompleteFound"/> the caller's
     /// channel id, else the <c>linkedid</c> the completion carried; for <see cref="HandlerStep.ReleaseWalkStarted"/>
-    /// the empty string; for <see cref="HandlerStep.ReleaseForgotById"/> the released call's session id), on the
+    /// the empty string; for <see cref="HandlerStep.ReleaseForgotById"/> the released call's session id; for
+    /// <see cref="HandlerStep.RegistrationHeldById"/> the registered session's id, under its own server id), on the
     /// thread running that step. Null in production: one null check per point, nothing else. What it throws
     /// propagates out of the handler as any exception there would.
     /// </summary>
