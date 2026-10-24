@@ -18,23 +18,48 @@ public sealed partial class CallSessionManager
     /// stay as they were, and no ending is raised or measured for it. Calls of the server that have already ended are
     /// left to their retention period. It also works for an id that is not attached, and a second release of the same
     /// id releases nothing.</para>
+    /// <para>Before it lets go of anything, a release closes the attachment to every handler not yet started and waits
+    /// for the ones already running, for at most a few seconds, then waits at most a second for each call's lock; what
+    /// is still running past those limits is named in one Error entry, and a call whose lock was not obtained stays
+    /// held until a later release of the id. An attach or a second release of the same id asked for meanwhile waits
+    /// for this one to finish. The limits do not bound the call-released subscribers, which run on this thread under
+    /// the call's lock (see <see cref="DetachedCalls.Release"/>).</para>
     /// </remarks>
     /// <exception cref="ArgumentException"><paramref name="serverId"/> is null or empty.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="calls"/> is neither value of
     /// <see cref="DetachedCalls"/>.</exception>
+    /// <exception cref="InvalidOperationException"><see cref="DetachedCalls.Release"/> was asked for from inside a
+    /// notification of <see cref="Events"/>; nothing was detached or released. Handle it inside the subscriber, and ask
+    /// for the release from another thread.</exception>
     public IReadOnlyList<CallSession> DetachFromServer(string serverId, DetachedCalls calls)
     {
         ArgumentException.ThrowIfNullOrEmpty(serverId);
         if (calls is not (DetachedCalls.Keep or DetachedCalls.Release))
             throw new ArgumentOutOfRangeException(nameof(calls), calls, "Neither DetachedCalls.Keep nor DetachedCalls.Release.");
 
-        DetachFromServer(serverId);
         if (calls == DetachedCalls.Keep)
+        {
+            DetachFromServer(serverId);
             return [];
+        }
 
-        Step(HandlerStep.ReleaseWalkStarted, serverId, string.Empty);
-        // No handler of the attachment is counted yet: the attachment's gate and its drain come before the walk.
-        return ReleaseCallsOf(serverId, handlersInFlight: 0);
+        // From inside a handler or a notification, the drain or a call's lock would wait for this very thread.
+        if (t_notificationDepth > 0)
+            throw ReleaseRefused(serverId);
+
+        var (closed, mark) = BeginRelease(serverId);
+        try
+        {
+            // Only the attachment this release closed is waited for; an id not attached waits for nothing.
+            var handlersInFlight = closed?.Gate.Drain(DrainBound) ?? 0;
+            Step(HandlerStep.ReleaseWalkStarted, serverId, string.Empty);
+            return ReleaseCallsOf(serverId, handlersInFlight);
+        }
+        finally
+        {
+            // Even when the walk throws, so an attach or a second release of the id never waits for a walk that died.
+            EndRelease(serverId, mark);
+        }
     }
 
     /// <summary>

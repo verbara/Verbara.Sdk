@@ -182,8 +182,21 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// here, so whatever must hold around every raise is written once. The internal queue-visit signals of
     /// <see cref="IQueueVisitSource"/> are not notifications of <see cref="Events"/> and do not come through here; if
     /// that interface ever becomes public, they must.
+    /// <para>Every raise counts as inside the engine's work on the raising thread, so a subscriber that asks for a
+    /// release, or for an attach that would wait for one, is refused instead of waiting for its own thread.</para>
     /// </summary>
-    private void Publish(SessionDomainEvent notification) => _events.OnNext(notification);
+    private void Publish(SessionDomainEvent notification)
+    {
+        t_notificationDepth++;
+        try
+        {
+            _events.OnNext(notification);
+        }
+        finally
+        {
+            t_notificationDepth--;
+        }
+    }
 
     [LoggerMessage(EventId = 3, EventName = nameof(LogSubscriberFault), Level = LogLevel.Warning,
         Message = "A subscriber of the session events threw on {EventType} for session {SessionId}; the other "
@@ -248,59 +261,46 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     public void AttachToServer(VerbaraServer server, string serverId)
     {
-        // Create typed delegates so we can -= unsubscribe later
-        Action<AsteriskChannel> onAdded = ch => OnChannelAdded(ch, serverId);
-        Action<AsteriskChannel> onRemoved = ch => OnChannelRemoved(ch, serverId);
-        Action<AsteriskChannel> onStateChanged = OnChannelStateChanged;
-        Action<AsteriskChannel> onDialBegin = OnChannelDialBegin;
-        Action<AsteriskChannel> onDialEnd = OnChannelDialEnd;
-        Action<AsteriskChannel> onHeld = OnChannelHeld;
-        Action<AsteriskChannel> onUnheld = OnChannelUnheld;
-        Action<AsteriskBridge, string> onBridgeEntered = OnBridgeChannelEntered;
-        Action<AsteriskBridge> onBridgeDestroyed = OnBridgeDestroyed;
-        Action<BridgeTransferInfo> onTransfer = OnTransfer;
-        Action<string, AsteriskQueueEntry> onCallerJoined = (queueName, entry) => OnQueueCallerJoined(queueName, entry, server, serverId);
-        Action<QueueCallerLeaveReport> onCallerLeft = OnQueueCallerLeft;
-        Action<string, string> onAbandonReported = OnQueueCallerAbandonReported;
-        Action<string, string, string> onQueueStatus = OnCallerQueueStatus;
-        Action<QueueSnapshotCompletion> onSnapshotCompleted = completion => OnQueueSnapshotCompleted(completion, serverId);
-        Action<string, string?, string?> onAgentConnected =
-            (agentId, linkedId, interface_) => OnAgentConnected(agentId, linkedId, interface_, serverId);
-        Action<string?, string?, string?> onQueueCallerConnected =
+        // Every handler runs through this attachment's gate, which only a release closes; the typed delegates are kept
+        // so they can be unsubscribed later.
+        var gate = new AttachmentGate();
+        var onAdded = Gated<AsteriskChannel>(gate, ch => OnChannelAdded(ch, serverId));
+        var onRemoved = Gated<AsteriskChannel>(gate, ch => OnChannelRemoved(ch, serverId));
+        var onStateChanged = Gated<AsteriskChannel>(gate, OnChannelStateChanged);
+        var onDialBegin = Gated<AsteriskChannel>(gate, OnChannelDialBegin);
+        var onDialEnd = Gated<AsteriskChannel>(gate, OnChannelDialEnd);
+        var onHeld = Gated<AsteriskChannel>(gate, OnChannelHeld);
+        var onUnheld = Gated<AsteriskChannel>(gate, OnChannelUnheld);
+        var onBridgeEntered = Gated<AsteriskBridge, string>(gate, OnBridgeChannelEntered);
+        var onBridgeDestroyed = Gated<AsteriskBridge>(gate, OnBridgeDestroyed);
+        var onTransfer = Gated<BridgeTransferInfo>(gate, OnTransfer);
+        var onCallerJoined = Gated<string, AsteriskQueueEntry>(gate,
+            (queueName, entry) => OnQueueCallerJoined(queueName, entry, server, serverId));
+        var onCallerLeft = Gated<QueueCallerLeaveReport>(gate, OnQueueCallerLeft);
+        var onAbandonReported = Gated<string, string>(gate, OnQueueCallerAbandonReported);
+        var onQueueStatus = Gated<string, string, string>(gate, OnCallerQueueStatus);
+        var onSnapshotCompleted = Gated<QueueSnapshotCompletion>(gate, completion => OnQueueSnapshotCompleted(completion, serverId));
+        var onAgentConnected = Gated<string, string?, string?>(gate,
+            (agentId, linkedId, interface_) => OnAgentConnected(agentId, linkedId, interface_, serverId));
+        var onQueueCallerConnected = Gated<string?, string?, string?>(gate,
             (callerUniqueId, memberName, memberInterface) =>
-                OnQueueCallerConnected(callerUniqueId, memberName, memberInterface, serverId);
-        Action<QueueCallerCompletion> onQueueCallerCompleted = completion => OnQueueCallerCompleted(completion, serverId);
+                OnQueueCallerConnected(callerUniqueId, memberName, memberInterface, serverId));
+        var onQueueCallerCompleted = Gated<QueueCallerCompletion>(gate, completion => OnQueueCallerCompleted(completion, serverId));
 
-        server.Channels.ChannelAdded += onAdded;
-        server.Channels.ChannelRemoved += onRemoved;
-        server.Channels.ChannelStateChanged += onStateChanged;
-        server.Channels.ChannelDialBegin += onDialBegin;
-        server.Channels.ChannelDialEnd += onDialEnd;
-        server.Channels.ChannelHeld += onHeld;
-        server.Channels.ChannelUnheld += onUnheld;
-        server.Bridges.ChannelEntered += onBridgeEntered;
-        server.Bridges.BridgeDestroyed += onBridgeDestroyed;
-        server.Bridges.TransferOccurred += onTransfer;
-        server.Queues.CallerJoined += onCallerJoined;
-        server.Queues.CallerLeaveReported += onCallerLeft;
-        server.Queues.CallerAbandonReported += onAbandonReported;
-        server.Queues.CallerQueueStatus += onQueueStatus;
-        server.Queues.QueueSnapshotCompleted += onSnapshotCompleted;
-        server.Agents.AgentConnected += onAgentConnected;
-        server.Agents.QueueCallerConnected += onQueueCallerConnected;
-        server.Agents.QueueCallerCompleted += onQueueCallerCompleted;
-
-        _serverSubs[serverId] = new ServerSubscriptions(server,
+        Subscribe(serverId, new ServerSubscriptions(gate, server,
             onAdded, onRemoved, onStateChanged, onDialBegin, onDialEnd,
             onHeld, onUnheld, onBridgeEntered, onBridgeDestroyed, onTransfer, onCallerJoined,
             onCallerLeft, onAbandonReported, onQueueStatus, onSnapshotCompleted, onAgentConnected, onQueueCallerConnected,
-            onQueueCallerCompleted);
+            onQueueCallerCompleted));
     }
 
     public void DetachFromServer(string serverId)
     {
-        if (_serverSubs.TryRemove(serverId, out var subs))
-            subs.Detach();
+        lock (_attachLock)
+        {
+            if (_serverSubs.TryRemove(serverId, out var subs))
+                subs.Detach();
+        }
     }
 
     // --- Event Handlers ---
@@ -1492,8 +1492,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         }
     }
 
-    // Subscription management: stores typed delegates for proper -= unsubscribe
+    // Subscription management: stores the typed, gated delegates for proper += subscribe and -= unsubscribe
     private sealed class ServerSubscriptions(
+        AttachmentGate gate,
         VerbaraServer server,
         Action<AsteriskChannel> onAdded,
         Action<AsteriskChannel> onRemoved,
@@ -1514,6 +1515,31 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         Action<string?, string?, string?> onQueueCallerConnected,
         Action<QueueCallerCompletion> onQueueCallerCompleted)
     {
+        /// <summary>The gate every handler of this attachment runs through.</summary>
+        public AttachmentGate Gate { get; } = gate;
+
+        public void Attach()
+        {
+            server.Channels.ChannelAdded += onAdded;
+            server.Channels.ChannelRemoved += onRemoved;
+            server.Channels.ChannelStateChanged += onStateChanged;
+            server.Channels.ChannelDialBegin += onDialBegin;
+            server.Channels.ChannelDialEnd += onDialEnd;
+            server.Channels.ChannelHeld += onHeld;
+            server.Channels.ChannelUnheld += onUnheld;
+            server.Bridges.ChannelEntered += onBridgeEntered;
+            server.Bridges.BridgeDestroyed += onBridgeDestroyed;
+            server.Bridges.TransferOccurred += onTransfer;
+            server.Queues.CallerJoined += onCallerJoined;
+            server.Queues.CallerLeaveReported += onCallerLeft;
+            server.Queues.CallerAbandonReported += onAbandonReported;
+            server.Queues.CallerQueueStatus += onQueueStatus;
+            server.Queues.QueueSnapshotCompleted += onSnapshotCompleted;
+            server.Agents.AgentConnected += onAgentConnected;
+            server.Agents.QueueCallerConnected += onQueueCallerConnected;
+            server.Agents.QueueCallerCompleted += onQueueCallerCompleted;
+        }
+
         public void Detach()
         {
             server.Channels.ChannelAdded -= onAdded;
