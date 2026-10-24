@@ -295,13 +295,12 @@ public sealed class OpenAiRealtimeBridgeTests
 
     /// <summary>
     /// The caller hanging up while the assistant is speaking — the commonest ending there is, and
-    /// the one the bridge used to mistake for a crash: the write to a torn-down session threw
-    /// <see cref="ObjectDisposedException"/> straight out of <c>OutputLoop</c>, faulting the session
-    /// and incrementing <c>sessions.failed</c> for a perfectly ordinary hangup (ADR-0053).
+    /// the bridge must keep reading after its write to a torn-down session throws
+    /// <see cref="ObjectDisposedException"/>, then complete on the vendor's normal answering close.
     /// </summary>
     /// <remarks>
     /// The ordering is authored, not hoped for. The fake sends nothing of its own and holds the
-    /// socket open, so the single delta this test injects is guaranteed to arrive after the session
+    /// socket open until asked to answer, so the delta this test injects arrives after the session
     /// is gone — <c>OnHangup</c> having fired is the proof, not a delay. <c>EventsToSend</c> could
     /// not express this: its burst leaves the instant <c>session.update</c> lands, which is before
     /// anything has ended.
@@ -310,12 +309,14 @@ public sealed class OpenAiRealtimeBridgeTests
     public async Task HandleSessionAsync_ShouldEndAsCompleted_WhenTheCallerHangsUpWhileTheAssistantIsSpeaking()
     {
         // Arrange
-        await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        await using var fakeOpenAi = new RealtimeFakeServer { AnswerClientCloseOnRequest = true };
         fakeOpenAi.Start();
 
         var (session, audioServer, client) = await CreateAudioSessionAsync();
         await using var bridge = CreateBridge(fakeOpenAi);
         using var metrics = new MeterCapture(MeterName);
+        using var readPastAudio = new RealtimeEventCollector(bridge.Events,
+            events => events.OfType<RealtimeSpeechStartedEvent>().Any());
 
         var tornDown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         session.OnHangup += () => tornDown.TrySetResult();
@@ -328,6 +329,11 @@ public sealed class OpenAiRealtimeBridgeTests
         await tornDown.Task.WaitAsync(SignalTimeout);       // the transport is demonstrably gone…
 
         await fakeOpenAi.SendEventAsync(AssistantAudioDeltaEvent);   // …and only then does it speak
+        await fakeOpenAi.SendEventAsync(LoopsRunningMarkerEvent);
+        await readPastAudio.Satisfied.WaitAsync(SignalTimeout);
+        sessionTask.IsCompleted.Should().BeFalse("the vendor has not answered the close yet");
+        await fakeOpenAi.ClientCloseReceived.WaitAsync(SignalTimeout);
+        await fakeOpenAi.AnswerClientCloseAsync(WebSocketCloseStatus.NormalClosure, "after trailing audio");
 
         // Assert
         await sessionTask.WaitAsync(SignalTimeout);

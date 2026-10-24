@@ -162,6 +162,10 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
                 else fault.Should().BeOfType<SpeechProviderFailureException>().Which.Code.Should().Be("4000");
                 metrics.Get("openai_realtime.sessions.completed").Should().Be(code == 1000 ? 1 : 0);
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(code == 1000 ? 0 : 1);
+                var rejection = bridge.Rejections.Read();
+                rejection.ConsecutiveRejections.Should().Be(code == 1000 ? 0 : 1,
+                    "audio the departed caller never received cannot make a vendor rejection served");
+                rejection.LastRejection.Should().Be(code == 1000 ? null : 4000);
             }
         }
         finally

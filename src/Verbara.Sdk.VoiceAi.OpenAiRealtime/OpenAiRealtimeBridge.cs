@@ -23,6 +23,9 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime;
 /// <remarks>
 /// This class is a singleton. Each call to <see cref="HandleSessionAsync"/> creates fully isolated
 /// per-session state (WebSocket, write lock, resamplers) as local variables — no shared mutable state.
+/// After the caller leaves, vendor audio is dropped while the bridge continues reading until the
+/// vendor's close or the existing 10-second close-answer bound. The vendor's close code still
+/// classifies the session, including when writing vendor audio to the caller failed with <see cref="IOException"/>.
 /// </remarks>
 public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 {
@@ -466,6 +469,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         var channelId = session.ChannelId;
         var buf = new byte[1024 * 64];
         DateTimeOffset responseStartTime = default;
+        var callerAudioEnded = false;
 
         while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
@@ -535,6 +539,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
                 case RealtimeProtocol.ResponseAudioDelta:
                 {
+                    if (callerAudioEnded) break;
                     var audioEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioDeltaEvent);
                     if (audioEvt is null) break;
                     var pcm16Bytes = Convert.FromBase64String(audioEvt.Delta);
@@ -550,12 +555,13 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     {
                         pcm = pcm16Bytes.AsMemory();
                     }
-                    // The caller hanging up while the assistant is speaking is the commonest ending
-                    // of all. Left unhandled it reaches this method's caller as a fault and is
-                    // counted as SessionsFailed — the same misclassification the read side was
-                    // fixed for, two hundred lines away (ADR-0053).
+                    // A caller that left no longer accepts audio. Stop these writes, but keep reading
+                    // the vendor's close: its code classifies the session. The input loop's existing
+                    // hangup path sends our close and bounds the answer, including after a transport
+                    // write failure ends the AudioSocket session.
                     try { await session.WriteAudioAsync(pcm, ct).ConfigureAwait(false); }
-                    catch (ObjectDisposedException) { return false; }
+                    catch (ObjectDisposedException) { callerAudioEnded = true; break; }
+                    catch (IOException) { callerAudioEnded = true; break; }
                     vendorAudio.MarkDelivered();
                     break;
                 }
