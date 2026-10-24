@@ -672,6 +672,103 @@ public sealed class CallSessionManagerDetachReleaseTests
             + rig.Describe());
     }
 
+    // --- A server id that returns after a release SHALL start with no call left of it ------------------------
+
+    /// <summary>
+    /// A call still up when its server returns is registered again by the host, under a new session id when it is
+    /// built from channels, or under the released call's session id when a persisted one is reused: nothing left of
+    /// the released call refuses it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RegisterReconstructedSession_ShouldAcceptTheCallAgain_WhenItsServerReturnsAfterARelease(
+        bool reusesTheSessionId)
+    {
+        await using var rig = await ReleaseRig.StartAsync("n1");
+        var released = rig.ConnectedCall("n1", "c");
+        var linkedId = ReleaseRig.LinkedIdOf("c");
+
+        var returned = rig.Release("n1");
+        await rig.AttachAsync("n1");
+        var sessionId = reusesTheSessionId ? released.SessionId : $"{released.SessionId}-rebuilt";
+        var reconstructed = new CallSession(sessionId, linkedId, "n1", CallDirection.Inbound);
+        var accepted = rig.Manager.RegisterReconstructedSession(reconstructed);
+
+        new
+        {
+            Returned = returned.Select(c => c.SessionId).ToArray(),
+            Accepted = accepted,
+            ById = ReferenceEquals(rig.Manager.GetById(sessionId), reconstructed),
+            ByLinkedId = ReferenceEquals(rig.Manager.GetByLinkedId(linkedId), reconstructed),
+            HeldOfN1 = rig.Manager.ActiveSessions.Where(s => s.ServerId == "n1").Select(s => s.SessionId).ToArray(),
+            Ended = rig.Events.Select(e => e.Event).OfType<CallEndedEvent>().Count(),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Returned = new[] { released.SessionId },
+                Accepted = true,
+                ById = true,
+                ByLinkedId = true,
+                HeldOfN1 = new[] { sessionId },
+                Ended = 0,
+            },
+            "the released call's linkedid and session id are no longer held, so a reconstruction of the call under "
+            + (reusesTheSessionId ? "the released session id" : "a new session id")
+            + " is accepted and both lookups return it. " + rig.Describe());
+    }
+
+    /// <summary>
+    /// Three calls released with their server hang up while it is away; when the same id is attached again with a
+    /// complete channel table that no longer has them, nothing ends them and nothing of them is held — even when a
+    /// late hangup of one of their legs reaches the returning instance.
+    /// </summary>
+    [Fact]
+    public async Task DetachFromServer_ShouldRaiseNoEndingForTheReleasedCalls_WhenTheyHangUpWhileTheServerIsAway()
+    {
+        await using var rig = await ReleaseRig.StartAsync("n1");
+        var away = rig["n1"];
+        string[] ids = ["w1", "w2", "w3"];
+        var calls = ids.Select(id => rig.ConnectedCall("n1", id)).ToArray();
+
+        var returned = rig.Release("n1");
+        foreach (var id in ids)
+        {
+            away.Server.Channels.OnHangup(ReleaseRig.CalleeLeg(id), HangupCause.NormalClearing);
+            away.Server.Channels.OnHangup(ReleaseRig.CallerLeg(id), HangupCause.NormalClearing);
+        }
+
+        var sequenceBeforeReturn = rig.Sequence;
+        var returning = await rig.AttachAsync("n1");
+        returning.Deliver(Hangup(ReleaseRig.CallerLeg("w1")), Hangup(ReleaseRig.CalleeLeg("w1")));
+        var sessionIds = calls.Select(c => c.SessionId).ToHashSet(StringComparer.Ordinal);
+
+        new
+        {
+            Returned = returned.Select(c => c.SessionId).OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+            Ended = rig.Events.Count(e => e.Event is CallEndedEvent && sessionIds.Contains(e.Event.SessionId)),
+            AfterReturn = rig.Events.Count(e => e.Sequence > sequenceBeforeReturn),
+            HeldOfN1 = rig.Manager.ActiveSessions.Count(s => s.ServerId == "n1"),
+            ByLinkedId = ids.Count(id => rig.Manager.GetByLinkedId(ReleaseRig.LinkedIdOf(id)) is not null),
+            ByChannel = ids.Count(id => rig.Manager.GetByChannelId(ReleaseRig.CallerLeg(id)) is not null
+                || rig.Manager.GetByChannelId(ReleaseRig.CalleeLeg(id)) is not null),
+            States = calls.Select(c => c.State).Distinct().ToArray(),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Returned = sessionIds.OrderBy(id => id, StringComparer.Ordinal).ToArray(),
+                Ended = 0,
+                AfterReturn = 0,
+                HeldOfN1 = 0,
+                ByLinkedId = 0,
+                ByChannel = 0,
+                States = new[] { CallSessionState.Connected },
+            },
+            "a call released with its server is never ended in this process: its hangups while the server is away, and "
+            + "a late one reaching the returning instance, raise no call-ended notification, and the returning id holds "
+            + "no call for them. " + rig.Describe());
+    }
+
     /// <summary>The <c>sessions.active</c> gauge of <paramref name="manager"/>, read now.</summary>
     internal static long ActiveGauge(CallSessionManager manager)
     {
