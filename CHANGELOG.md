@@ -101,6 +101,20 @@ refused, bridges and rooms are neither asked nor changed. The conference listing
 `write`: a refusal keeps the held rooms, is logged once per AMI session at Warning, and makes Asterisk raise one
 `RequestNotAllowed` security event per refused listing. The agents table is still cleared and loaded again.
 
+### Changed: Live's channel events are raised outside the channel table's locks, in change order (#NNN)
+
+`ChannelManager` raises `ChannelAdded`, `ChannelRemoved`, `ChannelStateChanged`, `ChannelDialBegin`, `ChannelDialEnd`,
+`ChannelHeld` and `ChannelUnheld` with none of its locks held, also when a reload's reconciliation raises them, under
+the rules the queue and conference events already follow. A handler may call into the manager, on its own thread or
+by waiting for another thread that does, where such a wait could deadlock before. A call a handler makes is reported
+after the handler and the event's other subscribers return, no longer nested inside it. Each channel's admission is
+reported before its later changes and its removal. An event waits up to one second for the earlier ones; a handler
+that runs longer lets the events of other threads go alongside it. A handler that throws no longer keeps the
+notifications queued behind it from being raised. The event arguments are still the live channel objects, so a
+handler can read a newer value than the change it reports, such as `State == Down` for a channel another thread has
+hung up; a reload's session for an answered channel still starts `Connected`. No public signature changes. The full
+rules, including when a notification is raised on another call's thread, are in the troubleshooting guide.
+
 ### Changed: Live's queue and conference events are raised outside the managers' locks, one at a time in change order (#457)
 
 `QueueManager` and `MeetMeManager` raise their events with none of their locks held, so a handler may call into the
