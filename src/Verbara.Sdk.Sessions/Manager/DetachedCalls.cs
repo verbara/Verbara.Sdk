@@ -28,7 +28,12 @@ public enum DetachedCalls
     /// engine — and an attach that would have to wait for a release in progress — throws
     /// <see cref="System.InvalidOperationException"/> naming the server id, and detaches and releases nothing: it would
     /// wait for the thread delivering the notification. Handle that exception inside the subscriber, and ask from
-    /// another thread.</para>
+    /// another thread. One the subscriber lets escape is reported like any subscriber failure, and the notification
+    /// still reaches the later subscribers.</para>
+    /// <para><b>A wrap-up already open keeps running.</b> A wrap-up opened for the call before its release closes as it
+    /// would have without the release, by its duration or by the agent's next connection; its one
+    /// <see cref="CallWrapUpEvent"/> carries the released session id and may follow the
+    /// <see cref="CallReleasedEvent"/>.</para>
     /// <para><b>What is not seen again.</b> An agent whose current call is released keeps its state, on a call
     /// included, with no current call, until another event of that agent reaches this process — which, for a server it
     /// no longer watches, may never happen. A released call whose hangup falls while its server is away is never ended

@@ -4,6 +4,10 @@ namespace Verbara.Sdk.Sessions;
 
 public abstract record SessionDomainEvent(string SessionId, string ServerId, DateTimeOffset Timestamp);
 
+/// <summary>
+/// Reports a new call, raised once while the session engine holds the call's lock, after the call is found by its
+/// session id and <c>linkedid</c>.
+/// </summary>
 public sealed record CallStartedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     CallDirection Direction, string? CallerIdNum) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
@@ -25,6 +29,9 @@ public sealed record CallEndedEvent(string SessionId, string ServerId, DateTimeO
 public sealed record CallFailedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string Reason) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
+/// <summary>
+/// Reports that the call's caller joined a queue, raised while the session engine holds the call's lock.
+/// </summary>
 public sealed record CallQueuedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string QueueName, int? Position) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
