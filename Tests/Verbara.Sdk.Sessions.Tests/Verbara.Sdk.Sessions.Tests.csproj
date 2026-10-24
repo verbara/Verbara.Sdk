@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="..\Shared\Sessions\StepParker.cs" Link="Shared\Sessions\StepParker.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Verbara.Sdk.Sessions\Verbara.Sdk.Sessions.csproj" />
     <ProjectReference Include="..\..\src\Verbara.Sdk.Live\Verbara.Sdk.Live.csproj" />
   </ItemGroup>

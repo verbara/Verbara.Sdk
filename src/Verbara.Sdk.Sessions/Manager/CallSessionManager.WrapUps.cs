@@ -178,6 +178,8 @@ public sealed partial class CallSessionManager
         if (session is null)
             return;
 
+        Step(HandlerStep.AgentCompleteFound, serverId, completion.CallerUniqueId ?? completion.LinkedId ?? string.Empty);
+
         PendingWrapUp pending;
         lock (session.SyncRoot)
         {

@@ -64,3 +64,12 @@ public sealed record AgentSessionStateChanged(
     string SessionId, string ServerId, DateTimeOffset Timestamp,
     string AgentId, AgentSessionState PreviousState, AgentSessionState NewState)
     : SessionDomainEvent(SessionId, ServerId, Timestamp);
+
+/// <summary>
+/// Reports that the session engine let go of a call of a server detached with
+/// <see cref="Manager.DetachedCalls.Release"/>, without ending it.
+/// </summary>
+public sealed record CallReleasedEvent(
+    string SessionId, string ServerId, DateTimeOffset Timestamp,
+    string LinkedId, string? TenantId)
+    : SessionDomainEvent(SessionId, ServerId, Timestamp);

@@ -40,6 +40,20 @@ public interface ICallSessionManager : IAsyncDisposable
     void DetachFromServer(string serverId);
 
     /// <summary>
+    /// Detaches <paramref name="serverId"/> and, with <see cref="DetachedCalls.Release"/>, releases the calls the
+    /// engine holds for it; returns the calls released.
+    /// </summary>
+    /// <remarks>
+    /// The default implementation calls <see cref="DetachFromServer(string)"/>, releases nothing and returns no call:
+    /// an implementation that does not override this member releases nothing.
+    /// </remarks>
+    IReadOnlyList<CallSession> DetachFromServer(string serverId, DetachedCalls calls)
+    {
+        DetachFromServer(serverId);
+        return [];
+    }
+
+    /// <summary>
     /// Registers a session reconstructed during cluster failover.
     /// Adds to all indices without firing creation events.
     /// Skips if a session with the same LinkedId already exists.

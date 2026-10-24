@@ -5,6 +5,9 @@
     <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\Sessions\StepParker.cs" Link="Shared\Sessions\StepParker.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Verbara.Sdk.Hosting\Verbara.Sdk.Hosting.csproj" />
   </ItemGroup>
   <ItemGroup>

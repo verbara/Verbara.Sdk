@@ -242,7 +242,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     {
         // Create typed delegates so we can -= unsubscribe later
         Action<AsteriskChannel> onAdded = ch => OnChannelAdded(ch, serverId);
-        Action<AsteriskChannel> onRemoved = OnChannelRemoved;
+        Action<AsteriskChannel> onRemoved = ch => OnChannelRemoved(ch, serverId);
         Action<AsteriskChannel> onStateChanged = OnChannelStateChanged;
         Action<AsteriskChannel> onDialBegin = OnChannelDialBegin;
         Action<AsteriskChannel> onDialEnd = OnChannelDialEnd;
@@ -251,7 +251,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         Action<AsteriskBridge, string> onBridgeEntered = OnBridgeChannelEntered;
         Action<AsteriskBridge> onBridgeDestroyed = OnBridgeDestroyed;
         Action<BridgeTransferInfo> onTransfer = OnTransfer;
-        Action<string, AsteriskQueueEntry> onCallerJoined = (queueName, entry) => OnQueueCallerJoined(queueName, entry, server);
+        Action<string, AsteriskQueueEntry> onCallerJoined = (queueName, entry) => OnQueueCallerJoined(queueName, entry, server, serverId);
         Action<QueueCallerLeaveReport> onCallerLeft = OnQueueCallerLeft;
         Action<string, string> onAbandonReported = OnQueueCallerAbandonReported;
         Action<string, string, string> onQueueStatus = OnCallerQueueStatus;
@@ -293,6 +293,20 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     {
         if (_serverSubs.TryRemove(serverId, out var subs))
             subs.Detach();
+    }
+
+    /// <summary>
+    /// Detaches <paramref name="serverId"/> and, with <see cref="DetachedCalls.Release"/>, releases the calls this
+    /// manager holds for it; returns the calls released.
+    /// </summary>
+    public IReadOnlyList<CallSession> DetachFromServer(string serverId, DetachedCalls calls)
+    {
+        // Phase A stub: detaches as the one-argument detach and releases nothing. The step a release reaches after
+        // its drain is called here so a test parked on it reaches its own assertions.
+        DetachFromServer(serverId);
+        if (calls == DetachedCalls.Release)
+            Step(HandlerStep.ReleaseWalkStarted, serverId, string.Empty);
+        return [];
     }
 
     // --- Event Handlers ---
@@ -443,10 +457,14 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 channel.Name, null, OriginReload));
         }
 
+        Step(HandlerStep.ArrivalBuilt, serverId, channel.UniqueId);
+
         while (true)
         {
             if (_byLinkedId.TryGetValue(linkedId, out var existing))
             {
+                Step(HandlerStep.JoinFound, serverId, channel.UniqueId);
+
                 if (!collisionReported && !string.Equals(existing.ServerId, serverId, StringComparison.Ordinal))
                 {
                     ReportCrossServerCollision(serverId, existing.ServerId, LinkedIdKind, linkedId);
@@ -459,12 +477,14 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 // The call this leg's linkedid names has ended: the leg opens its own call in its place,
                 // provided the index still names that ended call.
                 _sessions[session.SessionId] = session;
+                Step(HandlerStep.ArrivalHeldById, serverId, channel.UniqueId);
                 if (_byLinkedId.TryUpdate(linkedId, session, existing))
                     break;
             }
             else
             {
                 _sessions[session.SessionId] = session;
+                Step(HandlerStep.ArrivalHeldById, serverId, channel.UniqueId);
                 if (_byLinkedId.TryAdd(linkedId, session))
                     break;
             }
@@ -473,6 +493,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             // the ended one. This session was never announced, counted or saved; withdraw it and look again.
             _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
         }
+
+        Step(HandlerStep.ArrivalPublished, serverId, channel.UniqueId);
 
         _byChannelId[channel.UniqueId] = session;
         SessionMetrics.SessionsCreated.Add(1);
@@ -583,9 +605,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// (<c>ADR-0062</c>, design D3).
     /// </para>
     /// </summary>
-    private void OnChannelRemoved(AsteriskChannel channel)
+    private void OnChannelRemoved(AsteriskChannel channel, string serverId)
     {
         if (!_byChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+
+        Step(HandlerStep.RemovalFound, serverId, channel.UniqueId);
 
         var byReload = channel.RemovedByReload;
 
@@ -815,7 +839,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// entry added through Live's public join, which carries none, is resolved through Live's channel table by the
     /// channel's current name.
     /// </summary>
-    private void OnQueueCallerJoined(string queueName, AsteriskQueueEntry entry, VerbaraServer server)
+    private void OnQueueCallerJoined(string queueName, AsteriskQueueEntry entry, VerbaraServer server, string serverId)
     {
         var uniqueId = entry.UniqueId ?? server.Channels.GetByName(entry.Channel)?.UniqueId;
         if (uniqueId is null || !_byChannelId.TryGetValue(uniqueId, out var session)) return;
@@ -850,6 +874,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.QueueJoined, entry.Channel, null, queueName));
         }
+
+        Step(HandlerStep.QueueVisitWritten, serverId, uniqueId);
 
         _events.OnNext(new CallQueuedEvent(session.SessionId, session.ServerId,
             visitStartedAt, queueName, entry.Position));
