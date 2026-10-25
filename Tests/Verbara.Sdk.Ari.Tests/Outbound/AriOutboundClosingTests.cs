@@ -127,6 +127,151 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             await Task.WhenAll(first, repeated, dispose).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
         }
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Close_ShouldPermitReentrantDisposal_WhenAnObserverCompletes(bool listenerStop)
+    {
+        await using var rig = new Rig();
+        await rig.StartAsync();
+        using var peer = await rig.ConnectAsync();
+        var connection = rig.Last!;
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task? reentrantDispose = null;
+        var disposedInCallback = false;
+        var completions = 0;
+        using var subscription = connection.Events.Subscribe(_ => { }, () =>
+        {
+            Interlocked.Increment(ref completions);
+            reentrantDispose = connection.DisposeAsync().AsTask();
+            // Bound the actual synchronous callback cycle so the unfixed regression can finish cleanup.
+            disposedInCallback = reentrantDispose.Wait(TimeSpan.FromSeconds(1));
+            completed.TrySetResult();
+        });
+        var answer = ReadAndAnswerAsync(peer);
+        var close = listenerStop ? rig.Listener.StopAsync().AsTask() : connection.DisconnectAsync().AsTask();
+        await completed.Task.WaitAsync(Limit);
+        await close.WaitAsync(Limit);
+        await reentrantDispose!.WaitAsync(Limit);
+        using (new AssertionScope())
+        {
+            (await answer.WaitAsync(Limit)).Should().BeTrue("the peer answered the actual normal close before completion");
+            disposedInCallback.Should().BeTrue("completion disposal must not wait for the task invoking that same callback");
+            completions.Should().Be(1, "the common close notifies completion exactly once");
+        }
+    }
+    [Fact]
+    public async Task DisconnectAsync_ShouldNotifyExactlyOnce_WhenDisposalOverlapsCompletionPublication()
+    {
+        using var releasePump = new ManualResetEventSlim();
+        await using var rig = new Rig(beforeClosed: () =>
+        {
+            if (!releasePump.Wait(Limit)) throw new TimeoutException("Pump release was not signalled.");
+        });
+        await rig.StartAsync();
+        using var peer = await rig.ConnectAsync();
+        var connection = rig.Last!;
+        var completions = 0;
+        var hookCalls = 0;
+        Task? competingDispose = null;
+        using var subscription = connection.Events.Subscribe(_ => { }, () => Interlocked.Increment(ref completions));
+        connection.CompletionStarting = () =>
+        {
+            Interlocked.Increment(ref hookCalls);
+            // Do not inherit the publishing callback's execution context: this is another caller.
+            using (ExecutionContext.SuppressFlow())
+                competingDispose = Task.Run(() => connection.DisposeAsync().AsTask());
+            var disposedBeforePublication = competingDispose.Wait(TimeSpan.FromSeconds(1));
+            output.WriteLine($"hookCalls={hookCalls}; competingDispose={disposedBeforePublication}; completions={completions}");
+        };
+        var read = ReadCloseAsync(peer);
+        var disconnect = connection.DisconnectAsync().AsTask();
+        try
+        {
+            (await read.WaitAsync(Limit)).Should().BeTrue("the peer observes the actual connection close");
+            await peer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "answer", CancellationToken.None);
+            await disconnect.WaitAsync(Limit);
+            await competingDispose!.WaitAsync(Limit);
+            hookCalls.Should().Be(1, "the test reaches the gap after claiming completion and before publishing it");
+            completions.Should().Be(1, "concurrent disposal must not suppress the common close's completion");
+        }
+        finally
+        {
+            releasePump.Set();
+            peer.Abort();
+            await disconnect.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StopAsync_ShouldCompleteReentrantStop_WhenACompletionObserverStopsTheListener(bool listenerStop)
+    {
+        using var releasePump = new ManualResetEventSlim();
+        await using var rig = new Rig(beforeClosed: () =>
+        {
+            if (!releasePump.Wait(Limit)) throw new TimeoutException("Pump release was not signalled.");
+        });
+        await rig.StartAsync();
+        using var peer = await rig.ConnectAsync();
+        var notified = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stoppedInCallback = false;
+        using var subscription = rig.Last!.Events.Subscribe(_ => { }, () =>
+        {
+            stoppedInCallback = rig.Listener.StopAsync().AsTask().Wait(TimeSpan.FromSeconds(1));
+            notified.TrySetResult();
+        });
+        var read = ReadCloseAsync(peer);
+        var stop = listenerStop ? rig.Listener.StopAsync().AsTask() : rig.Last.DisconnectAsync().AsTask();
+        try
+        {
+            (await read.WaitAsync(Limit)).Should().BeTrue("the peer observes the stop's actual close");
+            await peer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "answer", CancellationToken.None);
+            await notified.Task.WaitAsync(Limit);
+            await stop.WaitAsync(Limit);
+            stoppedInCallback.Should().BeTrue("completion must not synchronously wait for the stop awaiting that callback");
+        }
+        finally
+        {
+            releasePump.Set();
+            peer.Abort();
+            await stop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
+    }
+    [Fact]
+    public async Task StopAsync_ShouldFinishCleanup_WhenACompletionObserverThrows()
+    {
+        using var releasePump = new ManualResetEventSlim();
+        var rig = new Rig(beforeClosed: () =>
+        {
+            if (!releasePump.Wait(Limit)) throw new TimeoutException("Pump release was not signalled.");
+        });
+        await rig.StartAsync();
+        using var peer = await rig.ConnectAsync();
+        var source = (CancellationTokenSource)typeof(AriOutboundListener).GetField("_cts", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(rig.Listener)!;
+        using var subscription = rig.Last!.Events.Subscribe(_ => { }, () => throw new InvalidOperationException("completion observer failure"));
+        var read = ReadCloseAsync(peer);
+        var stop = rig.Listener.StopAsync().AsTask();
+        try
+        {
+            (await read.WaitAsync(Limit)).Should().BeTrue("the peer observes the stop's actual close");
+            await peer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "answer", CancellationToken.None);
+            var fault = await Record.ExceptionAsync(() => stop.WaitAsync(Limit));
+            using (new AssertionScope())
+            {
+                fault.Should().BeNull("a completion observer must not prevent listener shutdown cleanup");
+                source.IsCancellationRequested.Should().BeTrue("stop must cancel pending handshakes even when an observer throws");
+                rig.Listener.ActiveConnectionCount.Should().Be(0);
+            }
+        }
+        finally
+        {
+            releasePump.Set();
+            peer.Abort();
+            await source.CancelAsync();
+            _ = await Record.ExceptionAsync(() => rig.DisposeAsync().AsTask());
+        }
+    }
     [Fact]
     public async Task DisconnectAsync_ShouldLogClosedWithoutIdleTimeout_WhenItsOwnBoundExpires()
     {
@@ -280,6 +425,16 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         }
         catch (WebSocketException) { return false; }
     }
+    private sealed class BeforeClosedLogger(ILogger<AriOutboundListener> inner, Action beforeClosed) : ILogger<AriOutboundListener>
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => inner.BeginScope(state);
+        public bool IsEnabled(LogLevel logLevel) => inner.IsEnabled(logLevel);
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (eventId.Name == "ConnectionClosed") beforeClosed();
+            inner.Log(logLevel, eventId, state, exception, formatter);
+        }
+    }
     private sealed class Rig : IAsyncDisposable
     {
         private readonly Channel<AriOutboundConnection> _accepted = Channel.CreateUnbounded<AriOutboundConnection>();
@@ -287,12 +442,12 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         internal ClosingLogger<AriOutboundListener> Log { get; } = new();
         internal AriOutboundListener Listener { get; }
         internal AriOutboundConnection? Last { get; private set; }
-        internal Rig(TimeSpan? idle = null, Action<AriOutboundConnection>? beforePump = null, TimeProvider? clock = null)
+        internal Rig(TimeSpan? idle = null, Action<AriOutboundConnection>? beforePump = null, TimeProvider? clock = null, Action? beforeClosed = null)
         {
             Listener = new AriOutboundListener(Options.Create(new AriOutboundListenerOptions
             {
                 ListenAddress = "127.0.0.1", Port = 0, ConnectionIdleTimeout = idle ?? TimeSpan.FromMinutes(10)
-            }), Log, clock ?? TimeProvider.System);
+            }), beforeClosed is null ? Log : new BeforeClosedLogger(Log, beforeClosed), clock ?? TimeProvider.System);
             _subscription = Listener.OnConnectionAccepted.Subscribe(c =>
             {
                 _accepted.Writer.TryWrite(c);

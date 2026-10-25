@@ -75,6 +75,8 @@ public sealed class AriOutboundListener : IAriOutboundListener
     private Task? _acceptLoop;
     private readonly Lock _stopGate = new();
     private Task? _stopTask;
+    private TaskCompletionSource _stopTransportEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private AriOutboundConnection[] _stoppingConnections = [];
     private int _running;
     private int _disposed;
 
@@ -133,7 +135,11 @@ public sealed class AriOutboundListener : IAriOutboundListener
         if (Interlocked.Exchange(ref _running, 1) == 1)
             return ValueTask.CompletedTask;
         lock (_stopGate)
+        {
             _stopTask = null;
+            _stopTransportEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            _stoppingConnections = [];
+        }
 
         // A start that throws after the exchange — an invalid ListenAddress, a port another listener
         // holds — gives the running flag back and leaves no listener, so the listener reports itself
@@ -182,7 +188,8 @@ public sealed class AriOutboundListener : IAriOutboundListener
         lock (_stopGate)
         {
             if (_stopTask is not null)
-                return new ValueTask(_stopTask);
+                return new ValueTask(_stoppingConnections.Any(connection => connection.IsPublishingOnCurrentContext)
+                    ? _stopTransportEnded.Task : _stopTask);
             if (Interlocked.Exchange(ref _running, 0) == 0)
                 return ValueTask.CompletedTask;
             return new ValueTask(_stopTask = StopCoreAsync(ct));
@@ -191,6 +198,8 @@ public sealed class AriOutboundListener : IAriOutboundListener
 
     private async Task StopCoreAsync(CancellationToken ct)
     {
+        // Cache the operation before any synchronous completion callback can reenter StopAsync.
+        await Task.Yield();
 
         // Stopping a listener that is already down: the platform closed the socket under us, or a
         // concurrent DisposeAsync got there first. Either way the listener is not accepting, which is
@@ -201,6 +210,7 @@ public sealed class AriOutboundListener : IAriOutboundListener
         // Start every close before cancelling any reader. All connections share one deadline;
         // the caller's token can end the answer wait but cannot suppress any close frame.
         var snapshot = _connections.Values.ToArray();
+        _stoppingConnections = snapshot.Select(tracked => tracked.Connection).ToArray();
         using var bound = new CancellationTokenSource(StopCloseTimeout, _timeProvider);
         using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct, bound.Token);
         await Task.WhenAll(snapshot.Select(tracked => tracked.Connection.CloseForStopAsync(wait.Token, bound.Token)));
@@ -211,10 +221,13 @@ public sealed class AriOutboundListener : IAriOutboundListener
             await _acceptLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
         foreach (var tracked in snapshot)
-            await tracked.Connection.DisposeAsync();
+            await tracked.Connection.ReleaseTransportAsync();
         _connections.Clear();
 
         AriOutboundListenerLog.ListenerStopped(_logger);
+        _stopTransportEnded.TrySetResult();
+        foreach (var tracked in snapshot)
+            await tracked.Connection.DisposeAsync();
     }
 
     public async ValueTask DisposeAsync()

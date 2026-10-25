@@ -15,6 +15,14 @@ public sealed class AriOutboundConnection : IAsyncDisposable
     private readonly Subject<AriEvent> _eventSubject;
     private int _disposed;
     private int _released;
+    private int _completed;
+    private readonly TaskCompletionSource _completionPublished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    // Observers run synchronously. Keep reentrancy scoped to that call stack rather than
+    // flowing it into independent work an observer queues through its execution context.
+    [ThreadStatic]
+    private static AriOutboundConnection? _completionOwner;
+
+    internal bool IsPublishingOnCurrentContext => _completionOwner == this;
     private readonly Lock _closeGate = new();
     private readonly TaskCompletionSource _readEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _closeSent = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -81,8 +89,10 @@ public sealed class AriOutboundConnection : IAsyncDisposable
     /// </summary>
     public ValueTask DisconnectAsync(CancellationToken ct = default)
     {
+        Task close;
         lock (_closeGate)
-            return new ValueTask(_closeTask ??= DisconnectWithBoundAsync(ct));
+            close = _closeTask ??= DisconnectWithBoundAsync(ct);
+        return new ValueTask(CompleteAfterCloseAsync(close));
     }
 
     internal Task CloseForStopAsync(CancellationToken waitToken, CancellationToken boundToken)
@@ -134,9 +144,48 @@ public sealed class AriOutboundConnection : IAsyncDisposable
             }
         }
         _closeSent.TrySetResult();
+    }
 
-        try { _eventSubject.OnCompleted(); }
-        catch (ObjectDisposedException) { /* Already released after the reader ended. */ }
+    // Test-only scheduling seam for the completion/disposal interleaving.
+    internal Action? CompletionStarting { get; set; }
+
+    private async Task CompleteAfterCloseAsync(Task close)
+    {
+        await close.ConfigureAwait(false);
+        if (Interlocked.Exchange(ref _completed, 1) != 0)
+        {
+            // A callback can synchronously dispose its own connection. Other callers must join
+            // publication before releasing the subject underneath its winning publisher.
+            if (!IsPublishingOnCurrentContext)
+                await _completionPublished.Task.ConfigureAwait(false);
+            return;
+        }
+        var previous = _completionOwner;
+        _completionOwner = this;
+        try
+        {
+            CompletionStarting?.Invoke();
+            try { _eventSubject.OnCompleted(); }
+            catch (Exception) { /* An observer cannot prevent transport shutdown or resource release. */ }
+        }
+        finally
+        {
+            _completionOwner = previous;
+            _completionPublished.TrySetResult();
+            if (Volatile.Read(ref _released) != 0)
+                _eventSubject.Dispose();
+        }
+    }
+
+    // Listener shutdown releases all transports before invoking completion observers. A callback
+    // may stop the listener synchronously, so transport cleanup cannot depend on its return.
+    internal async Task ReleaseTransportAsync()
+    {
+        Task close;
+        lock (_closeGate)
+            close = _closeTask ??= DisconnectWithBoundAsync(CancellationToken.None);
+        await close.ConfigureAwait(false);
+        _webSocket.Dispose();
     }
 
     public async ValueTask DisposeAsync()
@@ -145,6 +194,7 @@ public sealed class AriOutboundConnection : IAsyncDisposable
         if (Interlocked.Exchange(ref _released, 1) != 0)
             return;
         _webSocket.Dispose();
-        _eventSubject.Dispose();
+        if (!IsPublishingOnCurrentContext)
+            _eventSubject.Dispose();
     }
 }
