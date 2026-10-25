@@ -492,7 +492,7 @@ has ended, before the empty-result rule, so a cancelled `StreamAsync` or `Synthe
 contracts state. No public API changes. The HTTP recognizers and synthesizers read with the token on every call and
 were not affected.
 
-### Fixed: an ARI disconnect sends its close before it stops reading, and a close Asterisk sends is answered (#NNN)
+### Fixed: an ARI disconnect sends its close before it stops reading, and a close Asterisk sends is answered (#467)
 
 `AriClient.DisconnectAsync` cancelled its events loop before it sent its close; the cancelled receive aborted the
 socket, so the close never left (0 of 50 settled disconnects put a frame on the wire, measured in process), and a
@@ -508,7 +508,7 @@ maximum 7.9 ms, so the wait costs nothing measurable; the bound is for an Asteri
 `IAriClient.DisconnectAsync` XML doc now says the wait also ends at the caller's token. No public API signature
 changes.
 
-### Fixed: the ARI outbound listener's stop closes every connection together under one second (#NNN)
+### Fixed: the ARI outbound listener's stop closes every connection together under one second (#467)
 
 `AriOutboundListener.StopAsync` cancelled every read pump before it disposed the connections, one after another, so
 no outbound connection got a close frame and N far ends that did not answer cost N bounds; its token was not read.
@@ -520,14 +520,14 @@ close a server sent it on 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2 (1,830 per run,
 6.46 ms with 50 connections), which is why the bound is one second. `IAriOutboundListener.StopAsync`'s XML doc says
 so. No public API signature changes.
 
-### Fixed: disposing an ARI client while it reconnects leaves it `Disconnected` (#NNN)
+### Fixed: disposing an ARI client while it reconnects leaves it `Disconnected` (#467)
 
 `AriClient.DisposeAsync` wrote no state when the client was `Reconnecting` — in its backoff or in a dial the far end
 held — so `State` kept reading `Reconnecting` after the disposal, and the ARI health check read `Degraded`. Disposal
 now writes `Disconnected` after the loop it ended has finished, on every path, as `DisconnectAsync` already did; the
 health check then reads `Unhealthy`, the status its table documents for a disconnected client.
 
-### Fixed: a requested stop is no longer logged as an ARI error or an idle timeout (#NNN)
+### Fixed: a requested stop is no longer logged as an ARI error or an idle timeout (#467)
 
 A disconnect that landed inside a read the ARI client was still finishing logged `[ARI] WebSocket error` at Error,
 and the outbound listener logged a stop inside a read at Error and a connection whose own close bound ran out as an
@@ -535,7 +535,7 @@ idle timeout. Each now reads who asked: a requested stop or a close bound ending
 timeout still logs `Idle timeout` at Warning (including in the middle of a message, unchanged), and only a transport
 failure nobody asked for logs `Connection error` at Error. The stale `TODO` in the listener's read loop is removed.
 
-### Fixed: the OpenAI Realtime bridge answers a close the vendor sends (#NNN)
+### Fixed: the OpenAI Realtime bridge answers a close the vendor sends (#467)
 
 When OpenAI closed the conversation first, the bridge returned without answering the close, also while an input
 audio send was inside its write. It now answers from its one terminal close site, keeps the shared socket open for
@@ -543,7 +543,7 @@ that answer under the existing write discipline and 10-second close bound, and c
 vendor's code. If an input send is still stalled when the output loop ends, the send is ended at that bound by
 aborting the transport; the vendor's code or the receive failure still decides the session.
 
-### Changed — BREAKING: a vendor failure close after the caller hung up counts `failed`, and a host cancellation that surfaces from a send counts `cancelled` (#NNN)
+### Changed — BREAKING: a vendor failure close after the caller hung up counts `failed`, and a host cancellation that surfaces from a send counts `cancelled` (#467)
 
 Two movements between `openai_realtime.sessions.completed`, `.failed` and `.cancelled`:
 
