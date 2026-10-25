@@ -15,6 +15,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
     private Task? _consumerTask;
 
     private long _droppedEvents;
+    private long _droppedUncollected;
     private long _processedEvents;
     private long _droppedOnDispose;
     private long _droppedBeforeCurrent;
@@ -37,12 +38,20 @@ public sealed class AsyncEventPump : IAsyncDisposable
     /// <summary>Number of events dropped since startup due to full buffer.</summary>
     public long DroppedEvents => Volatile.Read(ref _droppedEvents);
 
+    /// <summary>
+    /// How many of the <see cref="DroppedEvents"/> were lost: refused events that no action had received in its answer
+    /// (enqueued with <c>collected</c> false). A refused copy of an event an action's collector had already received is
+    /// counted in <see cref="DroppedEvents"/> only, because nothing was lost when the buffer refused it.
+    /// </summary>
+    internal long DroppedUncollectedEvents => Volatile.Read(ref _droppedUncollected);
+
     /// <summary>Number of events successfully dispatched to handlers.</summary>
     public long ProcessedEvents => Volatile.Read(ref _processedEvents);
 
     /// <summary>
-    /// How many events this pump had dropped (<see cref="DroppedEvents"/>) when the event its handler is running for, or
-    /// ran for last, was enqueued; 0 before the first. The consumer writes it before it calls the handler, so a handler
+    /// How many events this pump had lost (<see cref="DroppedUncollectedEvents"/>) when the event its handler is running
+    /// for, or ran for last, was enqueued; 0 before the first. A refused copy of an event an action had received is not
+    /// counted. The consumer writes it before it calls the handler, so a handler
     /// reads the count as of its own event's arrival, not as of its dispatch: an event dropped while that event waited
     /// in a full buffer arrived after it, and is not counted here.
     /// </summary>
@@ -306,14 +315,25 @@ public sealed class AsyncEventPump : IAsyncDisposable
     }
 
     /// <summary>Enqueue an event for async dispatch. Returns false if the event was dropped.</summary>
-    public bool TryEnqueue(ManagerEvent evt)
+    /// <remarks>A refusal counts as a lost event (<see cref="DroppedUncollectedEvents"/>).</remarks>
+    public bool TryEnqueue(ManagerEvent evt) => TryEnqueue(evt, collected: false);
+
+    /// <summary>
+    /// Enqueue an event for async dispatch, saying whether an action's collector has already received it. Returns false
+    /// if the event was dropped. Every refusal is counted in <see cref="DroppedEvents"/> and reported to
+    /// <see cref="OnEventDropped"/>; only a refusal of an event no collector received (<paramref name="collected"/>
+    /// false) is counted in <see cref="DroppedUncollectedEvents"/>, the count a later event carries to its handler.
+    /// </summary>
+    internal bool TryEnqueue(ManagerEvent evt, bool collected)
     {
         // The pump has one writer, so this is the ordinal the event carries (NextOrdinal, read by the writer before this
         // call, is the same number), and no drop can be counted between this read and the write: the stamp is exact.
         var ordinal = _lastReceived + 1;
-        if (!_channel.Writer.TryWrite(new BufferedEvent(evt, Volatile.Read(ref _droppedEvents), ordinal)))
+        if (!_channel.Writer.TryWrite(new BufferedEvent(evt, Volatile.Read(ref _droppedUncollected), ordinal)))
         {
             Interlocked.Increment(ref _droppedEvents);
+            if (!collected)
+                Interlocked.Increment(ref _droppedUncollected);
             Volatile.Write(ref _lastReceived, ordinal);
 
             // With the consumer idle and the buffer empty, every earlier event has been dispatched, so d passes the drop
@@ -386,7 +406,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
         _cts.Dispose();
     }
 
-    /// <summary>An event in the buffer, with the pump's dropped count when it was enqueued, and its ordinal.</summary>
+    /// <summary>An event in the buffer, with the pump's lost-event count when it was enqueued, and its ordinal.</summary>
     private readonly record struct BufferedEvent(ManagerEvent Event, long DroppedBefore, long Ordinal);
 }
 

@@ -133,6 +133,17 @@ public sealed class AmiConnection : IAmiConnection
     private static readonly KeyValuePair<string, object?> BufferFullReason = new("reason", "buffer_full");
     private static readonly KeyValuePair<string, object?> CallerEndingReason = new("reason", "caller_ending");
 
+    /// <summary>
+    /// Whether an action's answer event carries the name of an event Asterisk also sends unsolicited, so that an observer
+    /// cannot tell the answer's copy from a state change and reads it as one (Verbara.Sdk.Live tracks
+    /// <c>DeviceStateChange</c>, the answer of <c>DeviceStateList</c>). A dropped copy of such an event is a real loss for
+    /// that observer, so it keeps moving <see cref="EventLossMark"/>.
+    /// </summary>
+    private static bool IsReadAsUnsolicited(string? eventType) =>
+        string.Equals(eventType, "DeviceStateChange", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, "PresenceStateChange", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, "ExtensionStatus", StringComparison.OrdinalIgnoreCase);
+
     // How long the caller's ending tries its Logoff: the wait for the write lock and the write itself. A send whose write
     // is blocked by a peer that stopped reading holds the lock until the ending's release disposes the socket, so the
     // Logoff gives up after this and the release runs. A Logoff to a peer that reads is written in well under it.
@@ -306,7 +317,9 @@ public sealed class AmiConnection : IAmiConnection
     /// to learn whether any event was lost between them: the AMI session that delivered the event, and how many events
     /// that session's buffer had dropped because it was full when the event arrived. Read inside an observer's
     /// <c>OnNext</c> (or anything it calls), it is the mark of the event being delivered; read anywhere else, it is the
-    /// current session's mark now. Two marks that differ mean a reconnect or a dropped event lies between them.
+    /// current session's mark now. Two marks that differ mean a reconnect or a lost event lies between them. A dropped copy
+    /// of an event an action had already received in its answer is not lost and does not move the mark (it is still
+    /// counted on <c>ami.events.dropped</c>), unless its type is one an observer reads as an unsolicited event.
     /// </summary>
     /// <remarks>
     /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
@@ -315,7 +328,7 @@ public sealed class AmiConnection : IAmiConnection
     internal AmiEventLossMark EventLossMark =>
         _dispatchFrame.Value is { Finished: false } frame
             ? frame.LossMark
-            : new AmiEventLossMark(Volatile.Read(ref _sessionOrdinal), Volatile.Read(ref _eventPump)?.DroppedEvents ?? 0);
+            : new AmiEventLossMark(Volatile.Read(ref _sessionOrdinal), Volatile.Read(ref _eventPump)?.DroppedUncollectedEvents ?? 0);
 
     /// <summary>
     /// Raised once for each loss of an established connection that its caller did not ask for, with what ended it:
@@ -1524,10 +1537,13 @@ public sealed class AmiConnection : IAmiConnection
                     var pump = _eventPump;
                     var ordinal = pump?.NextOrdinal ?? 0;
 
-                    // Check if this event belongs to an event-generating action
+                    // Check if this event belongs to an event-generating action. One that does was received by that action (its
+                    // collector holds it, or it ended the list), so the pump's copy is not lost if the full buffer refuses it.
                     var actionId = msg.ActionId;
+                    var collected = false;
                     if (actionId is not null && _pendingEventActions.TryGetValue(actionId, out var collector))
                     {
+                        collected = !IsReadAsUnsolicited(msg.EventType);
                         var eventName = msg.EventType ?? "";
                         if (eventName.EndsWith("Complete", StringComparison.OrdinalIgnoreCase))
                         {
@@ -1551,7 +1567,7 @@ public sealed class AmiConnection : IAmiConnection
                         }
                     }
 
-                    pump?.TryEnqueue(evt);
+                    pump?.TryEnqueue(evt, collected);
                 }
             }
         }
