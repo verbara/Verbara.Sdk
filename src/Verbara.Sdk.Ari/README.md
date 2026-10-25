@@ -41,6 +41,26 @@ The token you hand `ConnectAsync` bounds the dial only: cancelling it once the c
 or stopping token, a request token) does not end the connection, its events or a reconnect. End the connection with
 `DisconnectAsync` or by disposing the client.
 
+## Connection attempts
+
+One `ConnectAsync` call or automatic reconnect attempt can open more than one TCP connection within the existing
+five-second connect bound. The .NET HTTP transport can retry a connection that closes before an upgrade response;
+these transport retries are separate from the ARI client's automatic reconnect policy.
+
+With .NET SDK 10.0.402 and runtime 10.0.13, twenty independent failed caller dials per loopback-peer shape recorded:
+
+| Peer behavior | TCP connections per caller dial |
+|---|---:|
+| Accept, then close immediately with FIN | 4 |
+| Accept, then reset immediately with RST | 1–4 |
+| Reply HTTP 401 or HTTP 503 | 1 |
+
+These are measured framework-specific counts, pinned by `AriDialConnectionCountTests`; a framework upgrade may
+change them. They are not a runtime-independent limit for every network. Measurements against Asterisk on the same
+framework also found one TCP connection for a wrong password or direct refusal, and one to four when a proxy accepted
+and closed while Asterisk was stopped. Additional starts matched HTTP transport retry events; no extra SDK retry layer
+was observed. The client does not suppress or replace the runtime's transport retries.
+
 ## Documentation
 
 - [High-Load Tuning Guide](../../docs/guides/high-load-tuning.md)
