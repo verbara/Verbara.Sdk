@@ -266,6 +266,26 @@ and each wire name maps to the same type as in 2.8.0. Only the compiler output c
 `MeetmeActivity`, the `VerbaraServer.MeetMe` types, `QueueMemberPauseEvent` and the fax-license types are not
 deprecated.
 
+### Fixed: the ARI client records its REST instruments (#NNN)
+
+`ari.rest.requests.sent` ("Total ARI REST requests sent to Asterisk") and `ari.rest.roundtrip` ("Roundtrip time for
+ARI REST requests", ms) were published on the `Verbara.Sdk.Ari` meter but nothing recorded them, so a dashboard
+watching them saw nothing. Every request the ARI client issues now adds one to `ari.rest.requests.sent` as it enters
+the client's HTTP pipeline, before it is sent, so a request that then fails at the transport still counts;
+`ari.rest.roundtrip` records once when a response comes back, whatever its status code, and not when the request gets
+no response. Requests sent minus roundtrips is the requests that got no response. Both are recorded whatever the log
+level. No public type or member changed.
+
+### Fixed — BREAKING: `SessionMetrics.SessionsTimedOut` and `SessionsOrphaned` are obsolete with `VSDK0006` (#NNN)
+
+Nothing in the SDK records `sessions.timed_out` or `sessions.orphaned`: the reconciliation sweep ends a call it finds
+gone as a reload ends it and counts it in `sessions.completed` or `sessions.failed`. Both fields are now `[Obsolete]`
+with diagnostic id `VSDK0006`, a warning. A consumer that builds with `TreatWarningsAsErrors` and reads either field by
+symbol gets `error VSDK0006`, and can silence exactly this with `<NoWarn>$(NoWarn);VSDK0006</NoWarn>`. Nothing is
+removed and no removal release is promised: both instruments are still published on the `Verbara.Sdk.Sessions` meter,
+so an exporter that subscribes by meter name is unaffected, and a program compiled against an earlier release keeps
+running, since the fields are unchanged. The migration guide has the section.
+
 ### Fixed: the audio sessions record the audio meter's instruments (#435)
 
 The `Verbara.Sdk.Ari.Audio` meter published ten instruments in `AudioStreamMetrics` and the sessions recorded none

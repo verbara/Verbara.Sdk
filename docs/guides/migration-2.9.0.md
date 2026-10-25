@@ -22,7 +22,7 @@ says:
 - **What to do**: the code change, or the exact warning suppression, and a link to the guide for the change when
   one exists.
 
-Three entries only add warnings (`VSDK0005`, `VSDK0003` and `VSDK0002`). They break nothing unless you build with
+Four entries only add warnings (`VSDK0005`, `VSDK0003`, `VSDK0002` and `VSDK0006`). They break nothing unless you build with
 `TreatWarningsAsErrors`. Two stop compiling where you use them. The other thirteen change no existing signature, but
 change behaviour a program can branch on, a published metric, or a health status; one of them also refuses some
 configuration values at start-up.
@@ -41,6 +41,7 @@ configuration values at start-up.
 | `Verbara.Sdk.Live` | [`BridgeCount` counts the bridges inserted since the start](#lives-counters-across-a-reconnect) | metric meaning |
 | `Verbara.Sdk.Live` | [A reload announces the callers and participants it finds gone](#a-reload-announces-the-callers-and-participants-it-finds-gone) | behaviour |
 | `Verbara.Sdk.Sessions` | [`CallWrapUpEvent` is raised and `WrapUpDuration` is applied](#an-agents-wrap-up-is-opened-timed-and-closed) | behaviour, start-up validation |
+| `Verbara.Sdk.Sessions` | [`sessions.timed_out` and `sessions.orphaned` warn `VSDK0006`](#sessionstimed_out-and-sessionsorphaned-warn-vsdk0006) | warning |
 | `Verbara.Sdk.Activities` | [An activity ends `Cancelled` only when someone asked it to stop](#an-activity-ends-cancelled-only-when-asked-to-stop) | behaviour |
 | `Verbara.Sdk.Activities` | [An attended transfer Asterisk refuses ends `Failed`](#a-refused-attended-transfer-ends-failed) | behaviour |
 | `Verbara.Sdk.Ari` | [`AudioStreamMetrics.BufferUnderruns` warns `VSDK0003`](#audiostreammetricsbufferunderruns-warns-vsdk0003) | warning |
@@ -332,6 +333,28 @@ static IDisposable WatchWrapUps(ICallSessionManager sessions) =>
 A `WrapUpDuration` longer than `CompletedRetention` (10 minutes by default) can deliver the event after the call is
 released, so a lookup by its `SessionId` may find nothing. No separate guide.
 
+### `sessions.timed_out` and `sessions.orphaned` warn `VSDK0006`
+
+**What changed.** Nothing in the SDK records `sessions.timed_out` or `sessions.orphaned`: the reconciliation sweep ends
+a call it finds gone as a reload ends it and counts it in `sessions.completed` or `sessions.failed`.
+`SessionMetrics.SessionsTimedOut` and `SessionMetrics.SessionsOrphaned` (`Verbara.Sdk.Sessions.Diagnostics`) are now
+`[Obsolete]` with diagnostic id `VSDK0006`, a warning. Nothing is removed: both instruments are still published on the
+meter, and a program compiled against an earlier release that reads a field keeps running.
+
+**Who is affected.** Code that names either field and builds with `TreatWarningsAsErrors`: it gets `error VSDK0006`.
+An exporter that subscribes by meter name is not affected.
+
+**What to do.** Stop using the fields; read `sessions.completed` and `sessions.failed`. Until then, silence this
+deprecation alone:
+
+```xml
+<PropertyGroup>
+  <NoWarn>$(NoWarn);VSDK0006</NoWarn>
+</PropertyGroup>
+```
+
+See [Kept, no longer produced](call-session-ending-migration.md) in the call-session-ending guide.
+
 ## Activities
 
 ### An activity ends `Cancelled` only when asked to stop
@@ -522,6 +545,8 @@ None of these breaks a build or a public contract. Each is in the CHANGELOG.
 - **`CallStartedEvent` and `CallQueuedEvent` are raised under the call's lock**, like the other notifications of a
   call. A handler of either runs with that lock held, so it must not wait for another thread that works on the same
   call. A host that removes a server for good can now detach it with `DetachedCalls.Release`; see the Sessions README.
+- **The ARI REST instruments carry measurements.** `ari.rest.requests.sent` and `ari.rest.roundtrip` were published
+  but never recorded; a dashboard on them starts showing data.
 
 - **A stop is a stop, not a cancelled token.** Cancelling the token passed to the start of the ARI AudioSocket or
   WebSocket audio server, the ARI outbound listener, the FastAGI server, or to `PipelineSocketConnection.ConnectAsync`
