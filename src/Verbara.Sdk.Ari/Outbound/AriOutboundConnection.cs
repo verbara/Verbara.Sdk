@@ -22,10 +22,20 @@ public sealed class AriOutboundConnection : IAsyncDisposable
     [ThreadStatic]
     private static CompletionFrame? _completionOwner;
 
-    private sealed record CompletionFrame(AriOutboundConnection Connection, CompletionFrame? Previous);
+    private sealed record CompletionFrame(AriOutboundConnection? Connection, CompletionFrame? Previous);
 
     internal bool IsPublishingOnCurrentContext => HasPublication(this);
     internal static bool IsInCompletionCallback => _completionOwner is not null;
+
+    // Listener disposal resumes asynchronously before completing its accepted stream. Mark that
+    // publication on the executing thread too, so its observers cannot join an active publisher.
+    internal static void PublishAcceptedCompletion(Subject<AriOutboundConnection> subject)
+    {
+        var previous = _completionOwner;
+        _completionOwner = new CompletionFrame(null, previous);
+        try { subject.OnCompleted(); }
+        finally { _completionOwner = previous; }
+    }
 
     private static bool HasPublication(AriOutboundConnection connection)
     {

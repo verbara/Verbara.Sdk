@@ -247,7 +247,7 @@ public sealed class AriOutboundListener : IAriOutboundListener
 
         await StopAsync().ConfigureAwait(false);
         _listener?.Dispose();
-        _connectionSubject.OnCompleted();
+        AriOutboundConnection.PublishAcceptedCompletion(_connectionSubject);
         _connectionSubject.Dispose();
         _cts?.Dispose();
     }

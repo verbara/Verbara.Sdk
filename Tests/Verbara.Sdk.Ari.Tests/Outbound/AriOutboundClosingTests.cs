@@ -746,6 +746,89 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DisposeAsync_ShouldCompleteAcceptedObservers_WhenTheyEndAnActiveConnectionPublisher(bool stopListener)
+    {
+        var releasePump = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pumpParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseStop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var rig = new Rig();
+        await rig.StartAsync();
+        using var peer = await rig.ConnectAsync();
+        var connection = rig.Last!;
+        rig.Listener.ReadEndedBeforeUntracking = () =>
+        {
+            pumpParked.TrySetResult();
+            return releasePump.Task;
+        };
+        var stopEntries = 0;
+        rig.Listener.StopStarting = () =>
+        {
+            Interlocked.Increment(ref stopEntries);
+            return releaseStop.Task;
+        };
+        var connectionReturned = false;
+        var acceptedReturned = false;
+        var acceptedRole = false;
+        var connectionThread = 0;
+        var acceptedThread = 0;
+        var connectionCompletions = 0;
+        var acceptedCompletions = 0;
+        Task? listenerDisposal = null;
+        Task? acceptedEnding = null;
+        Task? publication = null;
+        using var acceptedSubscription = rig.Listener.OnConnectionAccepted.Subscribe(_ => { }, () =>
+        {
+            Interlocked.Increment(ref acceptedCompletions);
+            acceptedThread = Environment.CurrentManagedThreadId;
+            acceptedRole = AriOutboundConnection.IsInCompletionCallback;
+            acceptedEnding = stopListener ? rig.Listener.StopAsync().AsTask() : connection.DisposeAsync().AsTask();
+            acceptedReturned = acceptedEnding.Wait(TimeSpan.FromSeconds(1));
+        });
+        using var connectionSubscription = connection.Events.Subscribe(_ => { }, () =>
+        {
+            Interlocked.Increment(ref connectionCompletions);
+            connectionThread = Environment.CurrentManagedThreadId;
+            listenerDisposal = rig.Listener.DisposeAsync().AsTask();
+            // Keep transport cleanup pending until DisposeAsync has selected its asynchronous join.
+            // Its continuation must publish the accepted stream on another thread, outside this scope.
+            releaseStop.TrySetResult();
+            connectionReturned = listenerDisposal.Wait(TimeSpan.FromSeconds(1));
+        });
+        var answer = ReadAndAnswerAsync(peer);
+        var transport = connection.CloseForStopAsync(CancellationToken.None, CancellationToken.None);
+        try
+        {
+            (await answer.WaitAsync(Limit)).Should().BeTrue("the peer receives and answers the actual normal close");
+            await Task.WhenAll(transport, pumpParked.Task).WaitAsync(Limit);
+            publication = Task.Factory.StartNew(() => connection.DisconnectAsync().AsTask().GetAwaiter().GetResult(),
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            await publication.WaitAsync(Limit);
+            await listenerDisposal!.WaitAsync(Limit);
+            await acceptedEnding!.WaitAsync(Limit);
+            using (new AssertionScope())
+            {
+                stopEntries.Should().Be(1, "the stop-start fence forces listener disposal to suspend before completion publication");
+                acceptedThread.Should().NotBe(connectionThread, "accepted completion executes after the asynchronous disposal continuation");
+                acceptedRole.Should().BeTrue("accepted-stream completion must carry the callback role on its actual executing thread");
+                acceptedReturned.Should().BeTrue("accepted completion must not join the connection publisher that awaits listener disposal");
+                connectionReturned.Should().BeTrue("connection completion can synchronously dispose its listener without a completion cycle");
+                connectionCompletions.Should().Be(1);
+                acceptedCompletions.Should().Be(1);
+            }
+        }
+        finally
+        {
+            releaseStop.TrySetResult();
+            releasePump.TrySetResult();
+            peer.Abort();
+            if (publication is not null)
+                await publication.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
+    }
+
     private sealed class SingleThreadTestContext : SynchronizationContext, IDisposable
     {
         private readonly System.Collections.Concurrent.BlockingCollection<Action> _posts = new();
