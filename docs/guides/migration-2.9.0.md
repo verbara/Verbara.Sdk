@@ -23,7 +23,7 @@ says:
   one exists.
 
 Four entries only add warnings (`VSDK0005`, `VSDK0003`, `VSDK0002` and `VSDK0006`). They break nothing unless you build with
-`TreatWarningsAsErrors`. Two stop compiling where you use them. The other thirteen change no existing signature, but
+`TreatWarningsAsErrors`. Two stop compiling where you use them. The other fourteen change no existing signature, but
 change behaviour a program can branch on, a published metric, or a health status; one of them also refuses some
 configuration values at start-up.
 
@@ -47,6 +47,7 @@ configuration values at start-up.
 | `Verbara.Sdk.Ari` | [`AudioStreamMetrics.BufferUnderruns` warns `VSDK0003`](#audiostreammetricsbufferunderruns-warns-vsdk0003) | warning |
 | `Verbara.Sdk.VoiceAi`, `VoiceAi.OpenAiRealtime` | [A cancelled voice session is counted cancelled](#a-cancelled-voice-session-is-counted-cancelled) | metric meaning |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [The `openai-realtime` health entry reports `Degraded`](#the-openai-realtime-health-entry-reports-degraded) | health status |
+| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [A vendor failure close after a hangup counts failed; a host cancellation from a send counts cancelled](#realtime-sessions-move-between-completed-failed-and-cancelled) | metric meaning |
 | `Verbara.Sdk.Push.Webhooks` | [A webhook receives a topic-less event its event type matches](#a-webhook-receives-a-topic-less-event) | behaviour |
 
 ## Ami
@@ -495,6 +496,21 @@ static void MapProbes(WebApplication app)
 ```
 
 Guide: [The `openai-realtime` health entry reports the vendor's rejections](voice-session-ending-migration.md#the-openai-realtime-health-entry-reports-the-vendors-rejections).
+
+### Realtime sessions move between `completed`, `failed` and `cancelled`
+
+**What changed.** The OpenAI Realtime bridge keeps reading the vendor after the caller hangs up, so a vendor failure
+close that follows a hangup is counted in `openai_realtime.sessions.failed` instead of `.completed`. A host
+cancellation that surfaces from an input audio send as a socket-state error is counted in `.cancelled` instead of
+`.failed`.
+
+**Who is affected.** Anyone who charts or alerts on `openai_realtime.sessions.completed`, `.failed` or `.cancelled`,
+or on the `openai-realtime` health entry: a failure close before any vendor audio reached the caller now counts as a
+rejection also when the caller had left first.
+
+**What to do.** Nothing in code. Expect `.failed` to rise by the vendor failures that used to hide behind hangups,
+and `.failed` to stop moving during host shutdowns; `started - completed - failed - cancelled` is still what is in
+flight. See the bridge's README, *When the conversation ends*.
 
 ## Push webhooks
 
