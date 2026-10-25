@@ -23,7 +23,8 @@ public interface IAriClient : IAsyncDisposable
 
     /// <summary>Disconnect from the ARI WebSocket event stream.</summary>
     /// <remarks>
-    /// Waits at most 5 s for Asterisk's answering close. The close is best effort: an Asterisk that
+    /// Waits at most 5 s for Asterisk's answering close, or until the caller's token is cancelled.
+    /// The close frame is sent before that token ends the wait. The close is best effort: an Asterisk that
     /// never answers it does not hold the call past that bound, and the connection is let go either way.
     /// </remarks>
     ValueTask DisconnectAsync(CancellationToken cancellationToken = default);

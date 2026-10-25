@@ -86,6 +86,8 @@ public sealed class AriClientClosingTests(ITestOutputHelper output)
                 connection.CloseCount.Should().Be(1);
                 connection.CloseStatus.Should().Be(WebSocketCloseStatus.NormalClosure);
                 if (!cancelledToken) socket.State.Should().Be(WebSocketState.Closed, "events preceding the answer must not stop its sole reader");
+                else socket.State.Should().Be(WebSocketState.Aborted, "the already-cancelled caller ends the wait only after the frame went out");
+                sut.EventLoop!.IsCompleted.Should().BeTrue("the sole reader finishes before disconnect returns");
                 sut.State.Should().Be(AriConnectionState.Disconnected);
             }
         }
@@ -234,7 +236,8 @@ public sealed class AriClientClosingTests(ITestOutputHelper output)
     {
         await using var peer = new ClosingPeer { AnswerClose = false };
         using var receive = new ReceiveStartSignal();
-        var sut = Create(peer.Port, new ClosingLogger<AriClient>());
+        var log = new ClosingLogger<AriClient>();
+        var sut = Create(peer.Port, log);
         var clock = new FakeTimeProvider();
         sut.TimeProvider = clock;
         try
@@ -253,6 +256,7 @@ public sealed class AriClientClosingTests(ITestOutputHelper output)
                 sawClose.Should().BeTrue("the peer must see the frame even when it never answers");
                 returnedBeforeBound.Should().BeFalse("an unanswered close waits for the existing bound");
                 sut.State.Should().Be(AriConnectionState.Disconnected);
+                log.Entries.Should().NotContain(e => e.Level == LogLevel.Error, "the requested close bound caused this ending");
             }
         }
         finally { await sut.DisposeAsync(); }
