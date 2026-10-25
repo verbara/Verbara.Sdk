@@ -16,12 +16,11 @@ internal sealed class ClosingPeer : IAsyncDisposable
     private readonly List<Connection> _all = [];
     private readonly Task _accept;
     private int _dials;
-    private int _order;
+    internal bool HoldCloseObservation { get; init; }
     internal bool HoldReconnectUpgrade { get; init; }
     internal bool AnswerClose { get; init; } = true;
     internal bool EventsBeforeAnswer { get; init; }
     internal int Dials => Volatile.Read(ref _dials);
-    internal int SecondDialOrder { get; private set; }
     internal int Port { get; }
     internal ClosingPeer()
     {
@@ -36,7 +35,6 @@ internal sealed class ClosingPeer : IAsyncDisposable
         {
             var tcp = await _listener.AcceptTcpClientAsync(_stop.Token);
             var number = Interlocked.Increment(ref _dials);
-            if (number == 2) SecondDialOrder = Interlocked.Increment(ref _order);
             var stream = tcp.GetStream();
             var (key, _) = await WebSocketAudioServer.ReadUpgradeRequestAsync(stream, _stop.Token);
             var connection = new Connection(this, tcp);
@@ -67,8 +65,11 @@ internal sealed class ClosingPeer : IAsyncDisposable
         private Task _read = Task.CompletedTask;
         private readonly TaskCompletionSource<bool> _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal Task<bool> Ended => _ended.Task;
+        private readonly TaskCompletionSource _closeObservationPending = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseCloseObservation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal Task CloseObservationPending => _closeObservationPending.Task;
+        internal void ReleaseCloseObservation() => _releaseCloseObservation.TrySetResult();
         internal int CloseCount { get; private set; }
-        internal int CloseOrder { get; private set; }
         internal WebSocketCloseStatus? CloseStatus { get; private set; }
         internal void Start()
         {
@@ -87,8 +88,13 @@ internal sealed class ClosingPeer : IAsyncDisposable
                 {
                     var result = await _ws!.ReceiveAsync(buffer.AsMemory(), owner._stop.Token);
                     if (result.MessageType != WebSocketMessageType.Close) continue;
+                    // Pause only publication: ReceiveAsync has read the actual close bytes already.
+                    if (owner.HoldCloseObservation && _ws.State == WebSocketState.Closed)
+                    {
+                        _closeObservationPending.TrySetResult();
+                        await _releaseCloseObservation.Task.WaitAsync(owner._stop.Token);
+                    }
                     CloseCount++;
-                    CloseOrder = Interlocked.Increment(ref owner._order);
                     CloseStatus = _ws.CloseStatus;
                     if (owner.EventsBeforeAnswer && _ws.State == WebSocketState.CloseReceived)
                     {

@@ -22,12 +22,23 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
     private const string Marker = "{\"type\":\"input_audio_buffer.speech_started\"}";
     private const string Meter = "Verbara.Sdk.VoiceAi.OpenAiRealtime";
 
+    private async Task ObserveVendorAnswerAsync(RealtimeFakeServer fake)
+    {
+        var observationFault = await Record.ExceptionAsync(() => fake.CloseObservationPending.WaitAsync(Limit));
+        if (observationFault is null)
+            fake.ClientCloseReceived.IsCompleted.Should().BeFalse("the scheduling gate still holds peer publication after handler completion");
+        fake.ReleaseCloseObservation();
+        if (observationFault is null) await fake.ClientCloseReceived.WaitAsync(Limit);
+        output.WriteLine($"peerCloseReadBeforePublication={fake.CloseObservationPending.IsCompletedSuccessfully}; " +
+            $"peerClosePublished={fake.ClientCloseReceived.IsCompletedSuccessfully}; observationFault={observationFault?.GetType().Name}");
+    }
+
     [Theory]
     [InlineData(1000)]
     [InlineData(3000)]
     public async Task HandleSessionAsync_ShouldAnswerVendorClose_WhenTheVendorClosesFirst(int code)
     {
-        await using var fake = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        await using var fake = new RealtimeFakeServer { HoldOpenUntilDisposed = true, HoldCloseObservation = true };
         fake.Start();
         await using var rig = await AudioRig.StartAsync();
         await using var bridge = Create(fake);
@@ -36,8 +47,10 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
         await fake.SessionUpdateReceived.WaitAsync(Limit);
         await fake.SendCloseAsync((WebSocketCloseStatus)code, "vendor close");
         var fault = await Record.ExceptionAsync(() => run.WaitAsync(Limit));
+        await ObserveVendorAnswerAsync(fake);
         using (new AssertionScope())
         {
+            fake.CloseObservationPending.IsCompletedSuccessfully.Should().BeTrue("the peer actually crossed the observation scheduling gate");
             fake.ClientCloseReceived.IsCompletedSuccessfully.Should().BeTrue("the answering close must arrive before the handler releases TCP");
             if (code == 1000) fault.Should().BeNull();
             else (fault as SpeechProviderFailureException)?.Code.Should().Be("3000");
@@ -51,7 +64,7 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
     [InlineData(3000)]
     public async Task HandleSessionAsync_ShouldPreserveHeldWriteUntilAnswer_WhenTheVendorClosesFirst(int code)
     {
-        await using var fake = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        await using var fake = new RealtimeFakeServer { HoldOpenUntilDisposed = true, HoldCloseObservation = true };
         fake.Start();
         await using var rig = await AudioRig.StartAsync();
         await using var bridge = Create(fake);
@@ -84,6 +97,7 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
             output.WriteLine($"held socket={transport.Socket?.State}; streamDisposed={transport.Disposed.Task.IsCompleted}; streamWriteTokenCanBeCancelled={transport.WriteTokenCanBeCancelled}; disposedAtInputStop={disposedAtInputStop}; stateAtInputStop={stateAtInputStop}");
             transport.Release.TrySetResult();
             var fault = await Record.ExceptionAsync(() => run.WaitAsync(Limit));
+            await ObserveVendorAnswerAsync(fake);
             output.WriteLine($"heldStreamWrite=true; passedTokenCancelled={transport.Cancelled.Task.IsCompleted}; vendorClose={code}; answer={fake.ClientCloseReceived.IsCompletedSuccessfully}; fault={fault?.GetType().Name}");
             using (new AssertionScope())
             {
@@ -92,6 +106,7 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
                 disposedAtInputStop.Should().BeFalse("stopping input reads must preserve the held transport write");
                 stateAtInputStop.Should().Be(WebSocketState.CloseReceived, "vendor shutdown must not abort the shared socket before its answer");
                 transport.Cancelled.Task.IsCompleted.Should().BeFalse("the held stream write must not be cancelled by vendor shutdown");
+                fake.CloseObservationPending.IsCompletedSuccessfully.Should().BeTrue("the peer actually crossed the observation scheduling gate");
                 fake.ClientCloseReceived.IsCompletedSuccessfully.Should().BeTrue("vendor-driven input shutdown preserves TCP through the answering close");
                 if (fake.ClientCloseReceived.IsCompletedSuccessfully)
                     (await fake.ClientCloseReceived).Should().Be(WebSocketCloseStatus.NormalClosure);

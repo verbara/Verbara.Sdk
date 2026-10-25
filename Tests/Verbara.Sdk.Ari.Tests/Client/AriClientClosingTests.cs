@@ -116,29 +116,47 @@ public sealed class AriClientClosingTests(ITestOutputHelper output)
     [InlineData(true)]
     public async Task EventsLoop_ShouldAnswerPeerCloseBeforeRelease_WhenAutoReconnectIsEnabledOrDisabled(bool autoReconnect)
     {
-        await using var peer = new ClosingPeer();
+        await using var peer = new ClosingPeer { HoldCloseObservation = true };
         var log = new ClosingLogger<AriClient>();
         var sut = Create(peer.Port, log, autoReconnect);
+        using var diagnostic = new ReceiveStartSignal();
+        int? closeSendsBeforeReconnect = null;
         try
         {
-            await sut.ConnectAsync();
+            await diagnostic.Watch(() => sut.ConnectAsync().AsTask());
+            log.BeforeReconnect = () => closeSendsBeforeReconnect = diagnostic.CloseSendsCompleted;
             var first = await peer.NextAsync();
             await first.CloseAsync();
             if (autoReconnect) await peer.NextAsync();
             else await sut.EventLoop!.WaitAsync(Limit);
-            // For reconnect-off, the socket remains retained today; the loop has ended but sends no
-            // answer. Its completion is the causal failure signal, not a peer receive timeout.
-            if (autoReconnect) await first.Ended.WaitAsync(Limit);
+
+            // Client completion does not publish the peer's receipt. Hold that publication on
+            // purpose, then join it explicitly. An accept on another socket supplies no order.
+            var observationFault = await Record.ExceptionAsync(() =>
+                Task.WhenAny(first.CloseObservationPending, first.Ended).WaitAsync(Limit));
+            if (first.CloseObservationPending.IsCompletedSuccessfully)
+            {
+                first.CloseCount.Should().Be(0, "the observation gate is still held after the client finished closing");
+                first.Ended.IsCompleted.Should().BeFalse();
+            }
+            first.ReleaseCloseObservation();
+            if (observationFault is null) await first.Ended.WaitAsync(Limit);
             output.WriteLine($"autoReconnect={autoReconnect}; clientCloseFrames={first.CloseCount}; " +
-                $"closeOrder={first.CloseOrder}; secondDialOrder={peer.SecondDialOrder}; " +
-                $"dials={peer.Dials}; peerReadEnded={first.Ended.IsCompleted}; " +
-                $"currentSocketState={((ClientWebSocket)SocketField.GetValue(sut)!).State}");
+                $"dials={peer.Dials}; closeReadBeforePublication={first.CloseObservationPending.IsCompletedSuccessfully}; " +
+                $"peerReadEnded={first.Ended.IsCompleted}; closeSendsBeforeReconnect={closeSendsBeforeReconnect}; " +
+                $"observationFault={observationFault?.GetType().Name}");
             using (new AssertionScope())
             {
+                first.CloseObservationPending.IsCompletedSuccessfully.Should().BeTrue("the peer actually crossed the observation scheduling gate");
                 first.CloseCount.Should().Be(1, "an Asterisk-initiated close is answered before release/redial");
+                first.CloseStatus.Should().Be(WebSocketCloseStatus.NormalClosure);
+                diagnostic.CloseSendsCompleted.Should().Be(1, "the watched client sent exactly one answering frame");
+                diagnostic.CloseCompletedBeforeRelease.Should().BeTrue("the actual close send finished before socket disposal");
                 if (autoReconnect)
                 {
-                    first.CloseOrder.Should().BeGreaterThan(0).And.BeLessThan(peer.SecondDialOrder);
+                    // This synchronous client checkpoint is before the next dial, unlike the
+                    // independent server receive/accept continuations used by the old test.
+                    closeSendsBeforeReconnect.Should().Be(1, "the actual close send finished before reconnect policy could dial");
                     peer.Dials.Should().Be(2, "the existing policy permits exactly one successful reconnect");
                 }
                 else peer.Dials.Should().Be(1, "automatic reconnect is disabled");
@@ -273,6 +291,7 @@ public sealed class AriClientClosingTests(ITestOutputHelper output)
 internal sealed class ClosingLogger<T> : ILogger<T>
 {
     internal ConcurrentQueue<(LogLevel Level, EventId Id, Exception? Exception, string Message)> Entries { get; } = new();
+    internal Action? BeforeReconnect { get; set; }
     internal TaskCompletionSource Reconnecting { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal TaskCompletionSource Closed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
@@ -281,6 +300,10 @@ internal sealed class ClosingLogger<T> : ILogger<T>
     {
         Entries.Enqueue((logLevel, eventId, exception, formatter(state, exception)));
         if (eventId.Name == "ConnectionClosed") Closed.TrySetResult();
-        if (eventId.Name == "Reconnecting") Reconnecting.TrySetResult();
+        if (eventId.Name == "Reconnecting")
+        {
+            BeforeReconnect?.Invoke();
+            Reconnecting.TrySetResult();
+        }
     }
 }
