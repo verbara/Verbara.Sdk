@@ -13,6 +13,7 @@ public sealed class AriOutboundConnection : IAsyncDisposable
 {
     private readonly WebSocket _webSocket;
     private readonly Subject<AriEvent> _eventSubject;
+    private readonly object? _completionScope;
     private int _disposed;
     private int _released;
     private int _completed;
@@ -23,6 +24,7 @@ public sealed class AriOutboundConnection : IAsyncDisposable
     private static AriOutboundConnection? _completionOwner;
 
     internal bool IsPublishingOnCurrentContext => _completionOwner == this;
+    internal static bool IsPublishingFor(object completionScope) => _completionOwner?._completionScope == completionScope;
     private readonly Lock _closeGate = new();
     private readonly TaskCompletionSource _readEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _closeSent = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -33,12 +35,14 @@ public sealed class AriOutboundConnection : IAsyncDisposable
         string applicationName,
         string remoteEndpoint,
         WebSocket webSocket,
-        Subject<AriEvent> eventSubject)
+        Subject<AriEvent> eventSubject,
+        object? completionScope = null)
     {
         ApplicationName = applicationName;
         RemoteEndpoint = remoteEndpoint;
         _webSocket = webSocket;
         _eventSubject = eventSubject;
+        _completionScope = completionScope;
         ConnectedAt = DateTimeOffset.UtcNow;
     }
 

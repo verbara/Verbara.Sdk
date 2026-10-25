@@ -74,11 +74,14 @@ public sealed class AriOutboundListener : IAriOutboundListener
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
     private readonly Lock _stopGate = new();
+    private readonly object _completionScope = new();
     private Task? _stopTask;
     private TaskCompletionSource _stopTransportEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private AriOutboundConnection[] _stoppingConnections = [];
     private int _running;
     private int _disposed;
+
+    // Test-only scheduling seam between the reader ending and the connection being untracked.
+    internal Func<Task>? ReadEndedBeforeUntracking { get; set; }
 
     public AriOutboundListener(
         IOptions<AriOutboundListenerOptions> options,
@@ -138,7 +141,6 @@ public sealed class AriOutboundListener : IAriOutboundListener
         {
             _stopTask = null;
             _stopTransportEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            _stoppingConnections = [];
         }
 
         // A start that throws after the exchange — an invalid ListenAddress, a port another listener
@@ -187,12 +189,16 @@ public sealed class AriOutboundListener : IAriOutboundListener
     {
         lock (_stopGate)
         {
-            if (_stopTask is not null)
-                return new ValueTask(_stoppingConnections.Any(connection => connection.IsPublishingOnCurrentContext)
-                    ? _stopTransportEnded.Task : _stopTask);
-            if (Interlocked.Exchange(ref _running, 0) == 0)
-                return ValueTask.CompletedTask;
-            return new ValueTask(_stopTask = StopCoreAsync(ct));
+            if (_stopTask is null)
+            {
+                if (Interlocked.Exchange(ref _running, 0) == 0)
+                    return ValueTask.CompletedTask;
+                _stopTask = StopCoreAsync(ct);
+            }
+            // Publication can start the first stop or join before its snapshot exists. Its
+            // listener identity is stable even while the pump untracks the connection.
+            return new ValueTask(AriOutboundConnection.IsPublishingFor(_completionScope)
+                ? _stopTransportEnded.Task : _stopTask);
         }
     }
 
@@ -210,7 +216,6 @@ public sealed class AriOutboundListener : IAriOutboundListener
         // Start every close before cancelling any reader. All connections share one deadline;
         // the caller's token can end the answer wait but cannot suppress any close frame.
         var snapshot = _connections.Values.ToArray();
-        _stoppingConnections = snapshot.Select(tracked => tracked.Connection).ToArray();
         using var bound = new CancellationTokenSource(StopCloseTimeout, _timeProvider);
         using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct, bound.Token);
         await Task.WhenAll(snapshot.Select(tracked => tracked.Connection.CloseForStopAsync(wait.Token, bound.Token)));
@@ -371,7 +376,7 @@ public sealed class AriOutboundListener : IAriOutboundListener
                     new WebSocketCreationOptions { IsServer = true });
 
                 var subject = new Subject<AriEvent>();
-                var connection = new AriOutboundConnection(appName!, remoteEndpoint, webSocket, subject);
+                var connection = new AriOutboundConnection(appName!, remoteEndpoint, webSocket, subject, _completionScope);
                 var tracked = new TrackedConnection(Guid.NewGuid(), connection, client, subject);
                 _connections.TryAdd(tracked.Id, tracked);
 
@@ -516,6 +521,8 @@ public sealed class AriOutboundListener : IAriOutboundListener
         finally
         {
             tracked.Connection.ReadEnded();
+            if (ReadEndedBeforeUntracking is { } readEndedBeforeUntracking)
+                await readEndedBeforeUntracking().ConfigureAwait(false);
             _connections.TryRemove(tracked.Id, out _);
             AriOutboundListenerLog.ConnectionClosed(_logger, tracked.Connection.RemoteEndpoint, appName);
 

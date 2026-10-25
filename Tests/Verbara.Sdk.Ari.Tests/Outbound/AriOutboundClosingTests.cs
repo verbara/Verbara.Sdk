@@ -238,6 +238,80 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             await stop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
         }
     }
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task StopAsync_ShouldCompleteInsideTheObserver_WhenThePublishingConnectionIsStillTracked(bool disposeListener, bool stopAlreadyStarted)
+    {
+        var releasePump = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var rig = new Rig();
+        await rig.StartAsync();
+        using var peer = await rig.ConnectAsync();
+        var pumpParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var callbackJoining = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var callbackEnded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        rig.Listener.ReadEndedBeforeUntracking = () =>
+        {
+            pumpParked.TrySetResult();
+            return releasePump.Task;
+        };
+        var stoppedInCallback = false;
+        var trackedAtCallback = 0;
+        Task? callbackStop = null;
+        var heldStop = new HeldStopContext();
+        using var subscription = rig.Last!.Events.Subscribe(_ => { }, () =>
+        {
+            trackedAtCallback = rig.Listener.ActiveConnectionCount;
+            output.WriteLine($"dispose={disposeListener}; cached={stopAlreadyStarted}; publishing={rig.Last.IsPublishingOnCurrentContext}; context={SynchronizationContext.Current?.GetType().Name}");
+            callbackStop = disposeListener ? rig.Listener.DisposeAsync().AsTask() : rig.Listener.StopAsync().AsTask();
+            callbackJoining.TrySetResult();
+            // The join was chosen while the snapshot was absent. Release on an independent
+            // worker here so the test's own continuation cannot gate the callback's return.
+            heldStop.Release();
+            stoppedInCallback = callbackStop.Wait(TimeSpan.FromSeconds(1));
+            var transport = (TaskCompletionSource)typeof(AriOutboundListener).GetField("_stopTransportEnded", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(rig.Listener)!;
+            output.WriteLine($"callbackStop={callbackStop.Status}; transport={transport.Task.Status}; callbackReturned={stoppedInCallback}");
+            callbackEnded.TrySetResult();
+        });
+        var read = ReadCloseAsync(peer);
+        var disconnect = rig.Last.DisconnectAsync().AsTask();
+        Task? firstStop = null;
+        try
+        {
+            (await read.WaitAsync(Limit)).Should().BeTrue("the peer receives the application's actual close frame");
+            if (stopAlreadyStarted)
+            {
+                var previous = SynchronizationContext.Current;
+                SynchronizationContext.SetSynchronizationContext(heldStop);
+                try { firstStop = rig.Listener.StopAsync().AsTask(); }
+                finally { SynchronizationContext.SetSynchronizationContext(previous); }
+                heldStop.IsHeld.Should().BeTrue("the cached stop is parked before it can take its connection snapshot");
+            }
+            await peer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "answer", CancellationToken.None);
+            await pumpParked.Task.WaitAsync(Limit);
+            await callbackJoining.Task.WaitAsync(Limit);
+            heldStop.Release();
+            await callbackEnded.Task.WaitAsync(Limit);
+            await disconnect.WaitAsync(Limit);
+            await callbackStop!.WaitAsync(Limit);
+            if (firstStop is not null) await firstStop.WaitAsync(Limit);
+            using (new AssertionScope())
+            {
+                trackedAtCallback.Should().Be(1, "the publishing connection must still belong to the listener's stop snapshot");
+                stoppedInCallback.Should().BeTrue("first stop, first disposal and pre-snapshot joins must not wait for their own publisher");
+                rig.Listener.ActiveConnectionCount.Should().Be(0, "transport cleanup finishes before the callback's stop returns");
+            }
+        }
+        finally
+        {
+            heldStop.Release();
+            releasePump.TrySetResult();
+            peer.Abort();
+            await disconnect.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
+    }
     [Fact]
     public async Task StopAsync_ShouldFinishCleanup_WhenACompletionObserverThrows()
     {
@@ -424,6 +498,36 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             return result.MessageType == WebSocketMessageType.Close && peer.CloseStatus == WebSocketCloseStatus.NormalClosure;
         }
         catch (WebSocketException) { return false; }
+    }
+    private sealed class HeldStopContext : SynchronizationContext
+    {
+        private readonly Lock _gate = new();
+        private List<Action>? _held = [];
+        internal bool IsHeld { get { lock (_gate) return _held is { Count: > 0 }; } }
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            lock (_gate)
+            {
+                if (_held is not null)
+                {
+                    _held.Add(() => d(state));
+                    return;
+                }
+            }
+            Forward(() => d(state));
+        }
+        internal void Release()
+        {
+            List<Action> held;
+            lock (_gate)
+            {
+                held = _held ?? [];
+                _held = null;
+            }
+            foreach (var resume in held) Forward(resume);
+        }
+        private static void Forward(Action resume) =>
+            _ = Task.Factory.StartNew(resume, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
     private sealed class BeforeClosedLogger(ILogger<AriOutboundListener> inner, Action beforeClosed) : ILogger<AriOutboundListener>
     {
