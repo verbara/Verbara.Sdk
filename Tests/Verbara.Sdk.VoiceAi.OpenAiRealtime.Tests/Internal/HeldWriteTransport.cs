@@ -13,6 +13,8 @@ internal sealed class HeldWriteTransport : IDisposable
     internal TaskCompletionSource Cancelled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal ClientWebSocket? Socket { get; private set; }
+    internal bool ThrowOnHeldWrite { get; init; }
+    internal TaskCompletionSource WriteEnded { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal void Arm() => Volatile.Write(ref _armed, 1);
     internal HeldWriteTransport()
     {
@@ -58,7 +60,15 @@ internal sealed class HeldWriteTransport : IDisposable
                 owner.WriteTokenCanBeCancelled = cancellationToken.CanBeCanceled;
                 owner.Entered.TrySetResult();
                 using var registration = cancellationToken.Register(() => owner.Cancelled.TrySetResult());
-                await owner.Release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    if (owner.ThrowOnHeldWrite) throw new IOException("Held write seam is live.");
+                    // A real pending network write ends when its stream is disposed. Holding it does
+                    // not make it immune to transport teardown, and input cancellation does not release it.
+                    await Task.WhenAny(owner.Release.Task, owner.Disposed.Task).WaitAsync(cancellationToken).ConfigureAwait(false);
+                    ObjectDisposedException.ThrowIf(owner.Disposed.Task.IsCompleted, this);
+                }
+                finally { owner.WriteEnded.TrySetResult(); }
             }
             await inner.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
         }

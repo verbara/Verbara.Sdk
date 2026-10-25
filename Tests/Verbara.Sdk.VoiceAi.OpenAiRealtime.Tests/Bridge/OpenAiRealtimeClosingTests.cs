@@ -112,6 +112,118 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
     }
 
     [Theory]
+    [InlineData(1000)]
+    [InlineData(3000)]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task HandleSessionAsync_ShouldFinishOwnedWriteWithinTheCloseBound_WhenOutputEndsDuringAStalledSend(int code)
+    {
+        await using var fake = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
+        fake.Start();
+        await using var rig = await AudioRig.StartAsync();
+        await using var bridge = Create(fake);
+        var clock = new FakeTimeProvider();
+        bridge.TimeProvider = clock;
+        using var transport = new HeldWriteTransport();
+        bridge.ConnectTransport = transport.ConnectAsync;
+        var inputStop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var host = new CancellationTokenSource();
+        CancellationTokenRegistration registration = default;
+        bridge.InputReadStarting = token => registration = token.Register(() => inputStop.TrySetResult());
+        using var metrics = new MeterCapture(Meter);
+        var run = bridge.HandleSessionAsync(rig.Session, host.Token).AsTask();
+        try
+        {
+            await fake.SessionUpdateReceived.WaitAsync(Limit);
+            while (clock.TimersArmed.TryRead(out _)) { }
+            transport.Arm();
+            await rig.Caller.SendAudioAsync(new byte[320]);
+            await transport.Entered.Task.WaitAsync(Limit);
+            if (code == 0) fake.Abort();
+            else if (code == -1) await fake.SendEventAsync("{\"type\":\"response.output_audio.delta\",\"delta\":\"invalid base64!\"}");
+            else await fake.SendCloseAsync((WebSocketCloseStatus)code, "vendor ends during permanently held send");
+            await inputStop.Task.WaitAsync(Limit);
+            if (code == 0)
+            {
+                // A failed ReceiveAsync already aborts its network stream; this is a green baseline
+                // guard, rather than evidence that the terminal coordination bound was armed.
+                var receiveFault = await Record.ExceptionAsync(() => run.WaitAsync(Limit));
+                receiveFault.Should().BeOfType<WebSocketException>();
+                transport.WriteEnded.Task.IsCompletedSuccessfully.Should().BeTrue();
+                transport.Disposed.Task.IsCompletedSuccessfully.Should().BeTrue();
+                transport.Release.Task.IsCompleted.Should().BeFalse();
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(1);
+                return;
+            }
+            // No test action releases this write, including the input cancellation callback.
+            var bound = await clock.TimersArmed.ReadAsync().AsTask().WaitAsync(Limit);
+            using (new AssertionScope())
+            {
+                bound.Should().Be(TimeSpan.FromSeconds(10), "the existing close bound also bounds terminal write coordination");
+                run.IsCompleted.Should().BeFalse("the transport write is still held before the bound");
+                transport.Release.Task.IsCompleted.Should().BeFalse();
+                if (code > 0)
+                {
+                    transport.Socket!.State.Should().Be(WebSocketState.CloseReceived);
+                    transport.Disposed.Task.IsCompleted.Should().BeFalse("input cancellation preserves the close attempt until its bound");
+                }
+            }
+            clock.Advance(bound);
+            var fault = await Record.ExceptionAsync(() => run.WaitAsync(Limit));
+            output.WriteLine($"stalledWrite=true; vendorCode={code}; fault={fault?.GetType().Name}; writeEnded={transport.WriteEnded.Task.IsCompleted}; disposed={transport.Disposed.Task.IsCompleted}; released={transport.Release.Task.IsCompleted}");
+            using (new AssertionScope())
+            {
+                (fault is TimeoutException).Should().BeFalse("terminal cleanup cannot wait forever for an input send");
+                transport.WriteEnded.Task.IsCompletedSuccessfully.Should().BeTrue("no input transport work outlives the handler");
+                transport.Disposed.Task.IsCompletedSuccessfully.Should().BeTrue();
+                transport.Release.Task.IsCompleted.Should().BeFalse("only transport teardown ended the stalled write");
+                if (code == 1000) fault.Should().BeNull();
+                else if (code == 3000) fault.Should().BeOfType<SpeechProviderFailureException>().Which.Code.Should().Be("3000");
+                else fault.Should().BeOfType<FormatException>();
+                metrics.Get("openai_realtime.sessions.completed").Should().Be(code == 1000 ? 1 : 0);
+                metrics.Get("openai_realtime.sessions.failed").Should().Be(code == 1000 ? 0 : 1);
+                metrics.Get("openai_realtime.sessions.cancelled").Should().Be(0);
+            }
+        }
+        finally
+        {
+            transport.Release.TrySetResult();
+            registration.Dispose();
+            await host.CancelAsync();
+            await run.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
+    }
+
+    [Fact]
+    public async Task HandleSessionAsync_ShouldObserveTheHeldWriteSeam_WhenItsTransportThrows()
+    {
+        await using var fake = new RealtimeFakeServer { HoldOpenUntilClientCloses = true };
+        fake.Start();
+        await using var rig = await AudioRig.StartAsync();
+        await using var bridge = Create(fake);
+        using var transport = new HeldWriteTransport { ThrowOnHeldWrite = true };
+        bridge.ConnectTransport = transport.ConnectAsync;
+        using var host = new CancellationTokenSource();
+        var run = bridge.HandleSessionAsync(rig.Session, host.Token).AsTask();
+        try
+        {
+            await fake.SessionUpdateReceived.WaitAsync(Limit);
+            transport.Arm();
+            await rig.Caller.SendAudioAsync(new byte[320]);
+            await transport.Entered.Task.WaitAsync(Limit);
+            var fault = await Record.ExceptionAsync(() => run.WaitAsync(Limit));
+            fault.Should().NotBeNull("throwing in the held-write seam must reach the real session");
+            fault.Should().NotBeOfType<TimeoutException>();
+            transport.WriteEnded.Task.IsCompletedSuccessfully.Should().BeTrue();
+        }
+        finally
+        {
+            await host.CancelAsync();
+            await run.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
+    }
+
+    [Theory]
     [InlineData(1000, false)]
     [InlineData(4000, false)]
     [InlineData(1000, true)]

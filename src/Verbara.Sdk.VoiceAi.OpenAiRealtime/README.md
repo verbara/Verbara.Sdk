@@ -64,6 +64,11 @@ The bridge runs one Realtime conversation per AudioSocket session, and the sessi
   returns once both of its audio loops have ended, without waiting for a function still running, and an event a session raises after the
   bridge was disposed is dropped and logged at Debug rather than thrown inside the session.
 
+If the vendor loop ends while an input audio send is stalled, the bridge attempts its terminal close
+under the existing write discipline and 10-second close bound. A send still blocking that attempt at
+the bound is ended by aborting the transport; both loops finish before their resources are released.
+This cleanup does not replace the vendor's close code or the receive failure that ended the session.
+
 Every session the bridge starts is counted in exactly one of `openai_realtime.sessions.completed`, `.failed` or
 `.cancelled`. A session is `cancelled` only when the token handed to the bridge was cancelled (the host, a stop that
 is no longer graceful, the broker's disposal), and its `openai_realtime.session.duration_ms` sample carries

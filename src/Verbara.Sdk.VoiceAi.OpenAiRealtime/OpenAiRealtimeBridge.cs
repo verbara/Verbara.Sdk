@@ -26,6 +26,8 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime;
 /// After the caller leaves, vendor audio is dropped while the bridge continues reading until the
 /// vendor's close or the existing 10-second close-answer bound. The vendor's close code still
 /// classifies the session, including when writing vendor audio to the caller failed with <see cref="IOException"/>.
+/// If an input send is still pending when the vendor loop ends, the same 10-second bound limits
+/// terminal close coordination. A transport still blocked at that bound is aborted before cleanup.
 /// </remarks>
 public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 {
@@ -172,8 +174,8 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         // were released as the try exited, before that block ran: a host cancellation that left the try
         // while the caller-to-vendor close was pending left the vendor-to-caller loop running over the
         // released write lock, resamplers and silence bound, faulting where nobody awaited it. The terminal
-        // block releases the sources at one point, after the loops end and before the close, which no
-        // `using` gives: it would release them either before the loops end or after the close.
+        // block releases the sources at one point after both loops end. A pending input write is
+        // coordinated with the terminal close before that wait, under the existing close bound.
         CancellationTokenSource? inputCts = null;
         EndOfInputSilenceBound? silence = null;
         Task? input = null;
@@ -219,16 +221,9 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 // hangup, sending 597 messages into the closed socket (measured live). So stop the
                 // input loop here and end at the vendor's close.
                 await inputCts.CancelAsync().ConfigureAwait(false);
-                try { await input.ConfigureAwait(false); }
-                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-                {
-                    // This method stopped the input loop itself, just above, so its cancellation is
-                    // not the session's. Left to escape, it would reach the terminal block as a
-                    // failure; a cancellation the host asked for still escapes and completes there.
-                }
-
-                // Rethrows the vendor's failure close, when the close was one, so the session fails
-                // with it in the terminal block below.
+                // Classify the output's ending before waiting for a send it made obsolete. The
+                // terminal block answers the close, or aborts at the existing close bound if that
+                // send never releases the write lock, and then observes the input's completion.
                 await output.ConfigureAwait(false);
             }
             else
@@ -304,24 +299,37 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         }
         finally
         {
-            // Both loops end before anything they use is released, on every path out of the try. The
-            // session is already classified above, so what they raise here is observed and nothing more:
-            // a session the host cancelled stays cancelled.
+            // A vendor close or output fault can leave an input write holding the write lock.
+            // Stopping caller reads must not abort it before the answering-close attempt. Bound
+            // that attempt (including its lock wait) with the existing close bound; expiry aborts
+            // the transport, which ends a stalled network write. Both loops are still observed
+            // before their sources, lock, resamplers or socket are released.
+            var pendingInput = input is { IsCompleted: false };
+            using var terminalBound = pendingInput ? new CancellationTokenSource(CloseAnswerBound, TimeProvider) : null;
+            using var abortAtBound = terminalBound?.Token.Register(ws.Abort) ?? default;
             if (input is not null && output is not null)
-                await AwaitLoopsAsync(inputCts!, input, output).ConfigureAwait(false);
-            ReleaseLoopSources(inputCts, silence);
+            {
+                if (pendingInput) await inputCts!.CancelAsync().ConfigureAwait(false);
+                else await AwaitLoopsAsync(inputCts!, input, output).ConfigureAwait(false);
+            }
 
-            // Clean close — never on ct, which is already cancelled. Conditional by necessity:
-            // cancelling a WebSocket operation aborts the socket, so on most cancelled paths there
-            // is nothing left to close politely.
-            await wsWriteLock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+            // Clean close — never on ct, which may already be cancelled. There is one terminal
+            // close site, under the session's write discipline, and a failed attempt cannot replace
+            // the output's already classified ending. The bound abort also ends a blocked send.
+            var closeLockHeld = false;
             try
             {
+                await wsWriteLock.WaitAsync(terminalBound?.Token ?? CancellationToken.None).ConfigureAwait(false);
+                closeLockHeld = true;
                 if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
                     await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
             }
             catch { /* ignore close errors */ }
-            finally { wsWriteLock.Release(); }
+            finally { if (closeLockHeld) wsWriteLock.Release(); }
+
+            if (pendingInput && input is not null && output is not null)
+                await AwaitLoopsAsync(inputCts!, input, output).ConfigureAwait(false);
+            ReleaseLoopSources(inputCts, silence);
 
             // The duration first, then exactly one of the three counters: a listener that treats the
             // session counter as "the handler returned" finds the duration sample already recorded.
