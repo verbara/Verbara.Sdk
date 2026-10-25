@@ -626,7 +626,7 @@ public sealed class AriClient : IAriClient
                 if (loop is not null)
                     await loop.WaitAsync(wait.Token);
             }
-            catch
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 // A caller cancellation or the bound ends the answer wait only after the send. Failed
                 // transports are best effort too, and must release their reader before returning.

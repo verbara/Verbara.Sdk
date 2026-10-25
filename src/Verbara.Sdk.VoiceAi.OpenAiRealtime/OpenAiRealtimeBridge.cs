@@ -327,8 +327,9 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             catch { /* ignore close errors */ }
             finally { if (closeLockHeld) wsWriteLock.Release(); }
 
-            if (pendingInput && input is not null && output is not null)
-                await AwaitLoopsAsync(inputCts!, input, output).ConfigureAwait(false);
+            // A pending input implies the input loop exists.
+            if (pendingInput && output is not null)
+                await AwaitLoopsAsync(inputCts!, input!, output).ConfigureAwait(false);
             ReleaseLoopSources(inputCts, silence);
 
             // The duration first, then exactly one of the three counters: a listener that treats the

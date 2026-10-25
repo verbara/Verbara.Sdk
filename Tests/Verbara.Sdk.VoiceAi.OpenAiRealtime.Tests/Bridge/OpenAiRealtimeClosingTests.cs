@@ -120,7 +120,7 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
         finally
         {
             transport.Release.TrySetResult();
-            inputRegistration.Dispose();
+            _ = inputRegistration.Unregister();
             await host.CancelAsync();
             await run.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
         }
@@ -203,7 +203,7 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
         finally
         {
             transport.Release.TrySetResult();
-            registration.Dispose();
+            _ = registration.Unregister();
             await host.CancelAsync();
             await run.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
         }

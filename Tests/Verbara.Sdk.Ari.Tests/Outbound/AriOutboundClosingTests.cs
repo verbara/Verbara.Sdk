@@ -36,7 +36,7 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             results.Should().OnlyContain(sawClose => sawClose, "every peer must see the listener's close before TCP ends");
             rig.Listener.ActiveConnectionCount.Should().Be(0);
         }
-        finally { foreach (var peer in peers) peer.Dispose(); }
+        finally { DisposeAll(peers); }
     }
     [Fact]
     public async Task StopAsync_ShouldReturnWithinOneBound_WhenTenPeersNeverAnswer()
@@ -50,7 +50,7 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             await rig.Listener.StopAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(6));
             rig.Listener.ActiveConnectionCount.Should().Be(0);
         }
-        finally { foreach (var peer in peers) peer.Dispose(); }
+        finally { DisposeAll(peers); }
     }
     [Fact]
     public async Task StopAsync_ShouldReleaseTenMutePeersAtOneSecond_WhenTheSharedDeadlineExpires()
@@ -75,7 +75,7 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             rig.Listener.ActiveConnectionCount.Should().Be(0, "one shared second releases all ten mute peers");
             timer.DueTime.Should().Be(TimeSpan.FromSeconds(1), "the measured stop bound is one second, not the five-second default");
         }
-        finally { foreach (var peer in peers) peer.Dispose(); }
+        finally { DisposeAll(peers); }
     }
     [Fact]
     public async Task StopAsync_ShouldUseItsSharedDeadline_WhenAnApplicationCloseIsAlreadyPending()
@@ -385,10 +385,9 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         using var hook = new WebSocketReceiveHook();
         hook.Arm(() => { });
         await hook.Watch(() => rig.StartAsync());
-        ClientWebSocket? peer = null;
         try
         {
-            peer = await rig.ConnectAsync();
+            using var peer = await rig.ConnectAsync();
             // The accepted observer still holds the pump: its idle source does not exist yet.
             await peer.SendAsync("{"u8.ToArray().AsMemory(), WebSocketMessageType.Text, false, CancellationToken.None);
             beforePump.Set();
@@ -400,7 +399,6 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         finally
         {
             beforePump.Set();
-            peer?.Dispose();
         }
     }
     [Fact]
@@ -852,6 +850,12 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             finally { SetSynchronizationContext(previous); }
         }
         public void Dispose() => _posts.Dispose();
+    }
+
+    private static void DisposeAll(IEnumerable<ClientWebSocket> peers)
+    {
+        foreach (var peer in peers)
+            peer.Dispose();
     }
 
     private static async Task<bool> ReadAndAnswerAsync(ClientWebSocket peer)

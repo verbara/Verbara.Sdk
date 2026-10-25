@@ -31,11 +31,20 @@ public sealed class AriOutboundConnection : IAsyncDisposable
     // publication on the executing thread too, so its observers cannot join an active publisher.
     internal static void PublishAcceptedCompletion(Subject<AriOutboundConnection> subject)
     {
-        var previous = _completionOwner;
-        _completionOwner = new CompletionFrame(null, previous);
+        var previous = EnterCompletion(null);
         try { subject.OnCompleted(); }
-        finally { _completionOwner = previous; }
+        finally { ExitCompletion(previous); }
     }
+
+    // The publication frame lives on the executing thread; only these two members write it.
+    private static CompletionFrame? EnterCompletion(AriOutboundConnection? connection)
+    {
+        var previous = _completionOwner;
+        _completionOwner = new CompletionFrame(connection, previous);
+        return previous;
+    }
+
+    private static void ExitCompletion(CompletionFrame? previous) => _completionOwner = previous;
 
     private static bool HasPublication(AriOutboundConnection connection)
     {
@@ -183,17 +192,16 @@ public sealed class AriOutboundConnection : IAsyncDisposable
                 await _completionPublished.Task.ConfigureAwait(false);
             return;
         }
-        var previous = _completionOwner;
-        _completionOwner = new CompletionFrame(this, previous);
+        var previous = EnterCompletion(this);
         try
         {
             CompletionStarting?.Invoke();
             try { _eventSubject.OnCompleted(); }
-            catch (Exception) { /* An observer cannot prevent transport shutdown or resource release. */ }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { /* An observer cannot prevent transport shutdown or resource release. */ }
         }
         finally
         {
-            _completionOwner = previous;
+            ExitCompletion(previous);
             _completionPublished.TrySetResult();
             if (Volatile.Read(ref _released) != 0)
                 _eventSubject.Dispose();
