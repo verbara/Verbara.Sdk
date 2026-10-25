@@ -600,8 +600,23 @@ public sealed class AriOutboundListenerTests
         (await WaitForAsync(() => listener.ActiveConnectionCount == 1, TimeSpan.FromSeconds(2)))
             .Should().BeTrue("the loop has accepted once and is parked on the next accept");
 
+        // Answer the connection close: the fake clock below belongs to accept-loop assertions,
+        // so this guard need not advance the listener's shared close deadline.
+        var answer = AnswerStopAsync();
         // Act — StopAsync awaits the accept loop, so it returns only once the loop has ended
         await listener.StopAsync().AsTask().WaitAsync(SignalTimeout);
+        await answer.WaitAsync(SignalTimeout);
+
+        async Task AnswerStopAsync()
+        {
+            try
+            {
+                var result = await client.ReceiveAsync(new byte[4096].AsMemory(), CancellationToken.None);
+                if (result.MessageType == WebSocketMessageType.Close)
+                    await client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "answer stop", CancellationToken.None);
+            }
+            catch (WebSocketException) { /* An aborting stop also ends this peer's read. */ }
+        }
 
         // Assert
         listener.IsRunning.Should().BeFalse();

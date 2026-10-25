@@ -53,6 +53,81 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         finally { foreach (var peer in peers) peer.Dispose(); }
     }
     [Fact]
+    public async Task StopAsync_ShouldReleaseTenMutePeersAtOneSecond_WhenTheSharedDeadlineExpires()
+    {
+        var clock = new FakeTimeProvider();
+        await using var rig = new Rig(clock: clock);
+        await rig.StartAsync();
+        var peers = new List<ClientWebSocket>();
+        try
+        {
+            for (var i = 0; i < 10; i++) peers.Add(await rig.ConnectAsync());
+            var reads = peers.Select(ReadCloseAsync).ToArray();
+            var stop = rig.Listener.StopAsync().AsTask();
+            var received = await Task.WhenAll(reads).WaitAsync(Limit);
+            received.Should().OnlyContain(sawClose => sawClose, "all ten peers receive the close before the shared deadline");
+            var timer = await clock.TimersCreated.ReadAsync().AsTask().WaitAsync(Limit);
+            output.WriteLine($"peersObserved={received.Count(sawClose => sawClose)}; sharedDeadline={timer.DueTime}");
+            clock.Advance(TimeSpan.FromMilliseconds(999));
+            stop.IsCompleted.Should().BeFalse("mute peers keep the shared stop pending immediately before one second");
+            clock.Advance(TimeSpan.FromMilliseconds(1));
+            await stop.WaitAsync(TimeSpan.FromSeconds(1));
+            rig.Listener.ActiveConnectionCount.Should().Be(0, "one shared second releases all ten mute peers");
+            timer.DueTime.Should().Be(TimeSpan.FromSeconds(1), "the measured stop bound is one second, not the five-second default");
+        }
+        finally { foreach (var peer in peers) peer.Dispose(); }
+    }
+    [Fact]
+    public async Task StopAsync_ShouldUseItsSharedDeadline_WhenAnApplicationCloseIsAlreadyPending()
+    {
+        var clock = new FakeTimeProvider();
+        await using var rig = new Rig(clock: clock);
+        await rig.StartAsync();
+        using var peer = await rig.ConnectAsync();
+        rig.Last!.TimeProvider = new FakeTimeProvider();
+        var read = ReadCloseAsync(peer);
+        var ownClose = rig.Last.DisconnectAsync().AsTask();
+        (await read.WaitAsync(Limit)).Should().BeTrue("the application's common close already sent its frame");
+        var stop = rig.Listener.StopAsync().AsTask();
+        try
+        {
+            await clock.TimersCreated.ReadAsync().AsTask().WaitAsync(Limit);
+            clock.Advance(TimeSpan.FromSeconds(1));
+            await stop.WaitAsync(TimeSpan.FromSeconds(1));
+            ownClose.IsCompleted.Should().BeTrue("the stop joins and ends the same close attempt at its earlier shared deadline");
+            rig.Listener.ActiveConnectionCount.Should().Be(0);
+        }
+        finally
+        {
+            peer.Abort();
+            await Task.WhenAll(ownClose, stop).WaitAsync(Limit);
+        }
+    }
+    [Fact]
+    public async Task StopAsync_ShouldJoinThePendingClose_WhenStoppedAgainAndDisposed()
+    {
+        await using var rig = new Rig();
+        await rig.StartAsync();
+        using var peer = await rig.ConnectAsync();
+        var read = ReadCloseAsync(peer);
+        var first = rig.Listener.StopAsync().AsTask();
+        (await read.WaitAsync(Limit)).Should().BeTrue("the first stop has started its close");
+        var repeated = rig.Listener.StopAsync().AsTask();
+        var dispose = rig.Listener.DisposeAsync().AsTask();
+        try
+        {
+            repeated.IsCompleted.Should().BeFalse("a repeated stop joins the pending common close");
+            dispose.IsCompleted.Should().BeFalse("listener disposal cannot release the source before that close ends");
+            await peer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "answer", CancellationToken.None);
+            await Task.WhenAll(first, repeated, dispose).WaitAsync(Limit);
+        }
+        finally
+        {
+            peer.Abort();
+            await Task.WhenAll(first, repeated, dispose).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
+    }
+    [Fact]
     public async Task DisconnectAsync_ShouldLogClosedWithoutIdleTimeout_WhenItsOwnBoundExpires()
     {
         await using var rig = new Rig();
@@ -212,12 +287,12 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         internal ClosingLogger<AriOutboundListener> Log { get; } = new();
         internal AriOutboundListener Listener { get; }
         internal AriOutboundConnection? Last { get; private set; }
-        internal Rig(TimeSpan? idle = null, Action<AriOutboundConnection>? beforePump = null)
+        internal Rig(TimeSpan? idle = null, Action<AriOutboundConnection>? beforePump = null, TimeProvider? clock = null)
         {
             Listener = new AriOutboundListener(Options.Create(new AriOutboundListenerOptions
             {
                 ListenAddress = "127.0.0.1", Port = 0, ConnectionIdleTimeout = idle ?? TimeSpan.FromMinutes(10)
-            }), Log);
+            }), Log, clock ?? TimeProvider.System);
             _subscription = Listener.OnConnectionAccepted.Subscribe(c =>
             {
                 _accepted.Writer.TryWrite(c);
