@@ -242,15 +242,20 @@ A value outside these ranges fails the host's start with an `OptionsValidationEx
 
 `DialingTimeout` is the cost knob for that delay. Lowering it makes such a call eligible sooner; the price is one `Status` per tick per server whenever any held call is older than it, which on a short-call workload is a snapshot the sweep did not send before. A snapshot costs what the figures above say while the buffer keeps up. Right after an overflow it costs more: measured on 2026-10-23 against release candidates of Asterisk 22.12, 23.6 and 24.0 (2,500 calls, 5,000 channels, a 5 s burst of about 1,100 dropped events/s, an 8 ms handler), one reconciliation took 6.3–10.3 s of SDK wall time, nearly all of it the wait for the backlog, and brought about 5,300 answer events (3.3 MiB) and 25–58 ms of Asterisk CPU. Those answer events go through the same buffer as every other event. Lowering `DialingTimeout` never ends a call because of its age.
 
-**Live without Hosting.** `Verbara.Sdk.Live` alone has no sweep, so a call whose `Hangup` was dropped stays in the channel table until the next reconnect's reload. The connection raises no public event per drop; the route is a `MeterListener` on `ami.events.dropped` (meter `Verbara.Sdk.Ami`), and a reconciliation of your own once the drops stop:
+**Live without Hosting.** `Verbara.Sdk.Live` alone has no sweep, so a call whose `Hangup` was dropped stays in the channel table until the next reconnect's reload. The connection raises no public event per drop; the route is a `MeterListener` on `ami.events.dropped` (meter `Verbara.Sdk.Ami`), and a reconciliation of your own once the drops stop, repeated until one is conclusive. `ReconcileChannelsAsync` returns nothing that says whether it removed what the snapshot no longer lists: when its 10 s wait for the backlog runs out it returns normally, having removed nothing, and only its `live channel-reconcile` span (source `Verbara.Sdk.Live`) says so, with the tag `live.reconcile.deferred`. The sample reads that tag through an `ActivityListener`:
 
 ```csharp
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
 VerbaraServer[] servers = []; // your servers
 var ct = CancellationToken.None; // your host's stopping token
-long lastDrop = 0; // Environment.TickCount64 of the last buffer_full measurement; 0 = none since the last reconcile
-using var listener = new MeterListener
+long drops = 0; // buffer_full measurements seen, process-wide
+long lastDropAt = 0; // Environment.TickCount64 of the latest one
+var settled = new long[servers.Length]; // per server: the drop count its last conclusive reconciliation covers
+var deferred = 0; // 1 when a reconciliation's wait for the backlog ran out
+
+using var meters = new MeterListener
 {
     InstrumentPublished = (instrument, l) =>
     {
@@ -258,28 +263,62 @@ using var listener = new MeterListener
             l.EnableMeasurementEvents(instrument);
     },
 };
-listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+meters.SetMeasurementEventCallback<long>((_, _, tags, _) =>
 {
-    // Runs on the thread that refused the event: record the time and return.
+    // Runs on the thread that refused the event: record and return.
     foreach (var tag in tags)
         if (tag.Key == "reason" && tag.Value is "buffer_full")
-            Interlocked.Exchange(ref lastDrop, Environment.TickCount64);
+        {
+            Interlocked.Exchange(ref lastDropAt, Environment.TickCount64);
+            Interlocked.Increment(ref drops);
+        }
 });
-listener.Start();
+meters.Start();
+
+using var spans = new ActivityListener
+{
+    ShouldListenTo = source => source.Name == "Verbara.Sdk.Live",
+    Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+    ActivityStopped = activity =>
+    {
+        if (activity.OperationName == "live channel-reconcile" && activity.GetTagItem("live.reconcile.deferred") is not null)
+            Volatile.Write(ref deferred, 1);
+    },
+};
+ActivitySource.AddActivityListener(spans);
 
 using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
 while (await timer.WaitForNextTickAsync(ct))
 {
-    var last = Interlocked.Read(ref lastDrop);
-    if (last == 0 || Environment.TickCount64 - last < 2_000)
-        continue; // no drop, or the drops have not stopped yet
-    Interlocked.CompareExchange(ref lastDrop, 0, last);
-    foreach (var server in servers) // the measurement does not say which server dropped
-        await server.ReconcileChannelsAsync(ct); // one at a time per server
+    var seen = Interlocked.Read(ref drops);
+    if (Environment.TickCount64 - Interlocked.Read(ref lastDropAt) < 2_000)
+        continue; // drops still arriving
+    for (var i = 0; i < servers.Length; i++) // the measurement does not say which server dropped
+    {
+        if (settled[i] == seen)
+            continue; // no drop since this server's last conclusive reconciliation
+        Volatile.Write(ref deferred, 0);
+        try
+        {
+            await servers[i].ReconcileChannelsAsync(ct); // one at a time per server
+            if (Volatile.Read(ref deferred) == 0)
+                settled[i] = seen; // a drop counted after `seen` leaves it pending
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) // AmiNotConnectedException included: this server stays pending, the others go on
+        {
+            Console.Error.WriteLine(ex.Message); // your logger
+        }
+    }
 }
 ```
 
-The measurement carries only the `reason` tag and is process-wide, so a host with several servers reconciles each of them, one reconciliation in flight per server, spaced by an interval of your choosing. Do not reconcile from the callback or from an event handler. Expect little: in the measurement above, with one reconciliation started as soon as the burst's drops had been delivered, the calls whose `Hangup` was dropped ended at a median of 17.8–24.9 s after the hangup, against 27.4–41.1 s with the 30 s sweep alone, a gain of 9.6–16.2 s that a re-run of one version did not reproduce (the result depends on where the sweep's tick falls). Nearly all of that time is the wait for the backlog.
+A server stays pending, and is reconciled again on a later tick, until a reconciliation of it returns without throwing, without `live.reconcile.deferred`, and with no drop counted since it started. The measurement carries only the `reason` tag and is process-wide, so every server is reconciled, one reconciliation in flight per server, spaced by the tick. Do not reconcile from the callback or from an event handler. The `deferred` flag assumes the loop is the only caller of `ReconcileChannelsAsync`; another one running beside it can only cost the loop an extra reconciliation.
+
+**When to reconcile.** The useful moment is once the connection has delivered the events it received before the drop, and an application cannot see it: the measurement fires when an event is refused, and nothing public reports how far delivery has gone. The sample waits for 2 s without a drop, an unmeasured choice. A reconciliation that starts while the backlog is still being delivered waits up to 10 s for it; when that runs out it removes nothing and the loop tries again on a later tick. The snapshot's own answer events (about 5,300 at 5,000 channels) go through the same buffer; if they overflow it, the drops they cause leave every server pending again, at most one reconciliation per server per tick, so lengthen the tick or the quiet spell if that repeats. Expect little: the measurement above started one reconciliation as soon as the burst's drops had been delivered, a moment the test rig could see and this sample cannot, and the calls whose `Hangup` was dropped ended at a median of 17.8–24.9 s after the hangup, against 27.4–41.1 s with the 30 s sweep alone, a gain of 9.6–16.2 s that a re-run of one version did not reproduce (the result depends on where the sweep's tick falls). Nearly all of that time is the wait for the backlog. This sample's own timing was not measured.
 
 **Tuning levers:**
 

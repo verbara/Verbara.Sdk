@@ -87,8 +87,12 @@ comm -23 /tmp/new_calls.txt /tmp/completed.txt
 # Servers with most errors
 jq 'select(.Level == "Error") | .Properties.ServerId' logs/dashboard-*.json | sort | uniq -c | sort -rn
 
-# Events dropped per hour
-jq -r 'select(.RenderedMessage | test("\\[AMI_EVENT\\] Dropped")) | .Timestamp[:13]' logs/dashboard-*.json | sort | uniq -c
+# Events dropped per hour: an overflow logs one "[AMI_EVENT] Dropped: event_type=..." Warning at its first
+# refused event (the later ones at Debug) and, when the buffer accepts again or is released, one
+# "[AMI_EVENT] Dropped <n> events while the buffer was full (<ms> ms)" Warning; sum the <n> of those, by the
+# hour the overflow ended. An overflow still open when the log ends is not in it; ami.events.dropped
+# (reason=buffer_full) counts every refused event as it happens.
+jq -r 'select(.RenderedMessage | test("\\[AMI_EVENT\\] Dropped [0-9]+ events")) | "\(.Timestamp[:13]) \(.RenderedMessage | capture("Dropped (?<n>[0-9]+) events").n)"' logs/dashboard-*.json | awk '{n[$1] += $2} END {for (h in n) print h, n[h]}' | sort
 
 # Agent login/logoff timeline
 jq -r 'select(.RenderedMessage | test("\\[AGENT\\] (Login|Logoff)")) | "\(.Timestamp) \(.RenderedMessage)"' logs/dashboard-*.json
