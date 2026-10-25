@@ -17,7 +17,7 @@ internal static partial class AriHttpLog
 }
 
 /// <summary>
-/// DelegatingHandler that logs and traces all ARI HTTP requests and responses.
+/// DelegatingHandler that logs, traces and meters all ARI HTTP requests and responses.
 /// The creator assigns <see cref="DelegatingHandler.InnerHandler"/>, which disposing this handler disposes.
 /// </summary>
 internal sealed class AriLoggingHandler(ILogger logger) : DelegatingHandler
@@ -30,9 +30,13 @@ internal sealed class AriLoggingHandler(ILogger logger) : DelegatingHandler
         using var activity = AriActivitySource.StartRequest(method, url);
         AriHttpLog.RequestSending(logger, method, url);
 
+        // Counted when issued, so a request that then fails at the transport still counts; the roundtrip is
+        // recorded only for a request that receives a response, whatever its status. Neither depends on the logger.
+        AriMetrics.RestRequestsSent.Add(1);
         var sw = Stopwatch.StartNew();
         var response = await base.SendAsync(request, cancellationToken);
         sw.Stop();
+        AriMetrics.RestRoundtripMs.Record(sw.Elapsed.TotalMilliseconds);
 
         var statusCode = (int)response.StatusCode;
         AriActivitySource.SetResponse(activity, statusCode);
