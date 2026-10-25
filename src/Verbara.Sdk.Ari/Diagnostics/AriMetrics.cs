@@ -36,7 +36,11 @@ public static class AriMetrics
         Meter.CreateCounter<long>("ari.events.dispatched", "events",
             "ARI events dispatched to observers");
 
-    /// <summary>Total ARI REST requests sent to Asterisk.</summary>
+    /// <summary>
+    /// Total ARI REST requests sent to Asterisk. Incremented by one for every request the ARI client issues, when
+    /// the request enters the client's HTTP pipeline and before it is sent: a request that then fails at the
+    /// transport (refused, reset, timed out or cancelled) still counts. Recorded whatever the log level.
+    /// </summary>
     public static readonly Counter<long> RestRequestsSent =
         Meter.CreateCounter<long>("ari.rest.requests.sent", "requests",
             "Total ARI REST requests sent to Asterisk");
@@ -48,7 +52,12 @@ public static class AriMetrics
 
     // --- Histograms ---
 
-    /// <summary>Roundtrip time for ARI REST requests.</summary>
+    /// <summary>
+    /// Roundtrip time for ARI REST requests, in milliseconds. Recorded once per request when Asterisk's response
+    /// comes back, whatever its status code (a <c>500</c> is a roundtrip too), and not recorded when the request
+    /// fails without a response. The difference between <see cref="RestRequestsSent"/> and the number of
+    /// roundtrips is the requests that got no response. Recorded whatever the log level.
+    /// </summary>
     public static readonly Histogram<double> RestRoundtripMs =
         Meter.CreateHistogram<double>("ari.rest.roundtrip", "ms",
             "Roundtrip time for ARI REST requests");

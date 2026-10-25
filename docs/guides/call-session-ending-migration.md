@@ -167,6 +167,11 @@ whose hangup the SDK never received — ends the way a reconnect's reload ends i
 stored by earlier versions keep binding; the SDK no longer produces them, and the stores still read `TimedOut` as an
 ended state. `SessionOptions.RingingTimeout` is not read any more and is kept so that configuration keeps binding. A
 session read back from a store may still carry `cause=orphaned`; the SDK no longer writes it.
+`SessionMetrics.SessionsTimedOut` and `SessionMetrics.SessionsOrphaned` are marked `[Obsolete]` with the diagnostic
+id `VSDK0006`: code that reads either field gets a warning, or `error VSDK0006` when it builds with
+`TreatWarningsAsErrors`. Both instruments are still published on the `Verbara.Sdk.Sessions` meter, so an exporter
+that subscribes by meter name is not affected. To keep reading a field, add
+`<NoWarn>$(NoWarn);VSDK0006</NoWarn>` to the project, which silences this deprecation and no other.
 
 ### What you have to do
 

@@ -1,9 +1,11 @@
 using System.Diagnostics.Metrics;
 using Verbara.Sdk.Ari.Diagnostics;
 using FluentAssertions;
+using Verbara.Sdk.Ari.Tests.TestSupport;
 
 namespace Verbara.Sdk.Ari.Tests.Diagnostics;
 
+[Collection(AriRestMetricsGroup.Name)]
 public sealed class AriMetricsTests
 {
     [Fact]
@@ -83,29 +85,6 @@ public sealed class AriMetricsTests
     }
 
     [Fact]
-    public void RestRequestsSent_ShouldIncrementCounter()
-    {
-        long observed = 0;
-        using var listener = new MeterListener();
-        listener.InstrumentPublished = (instrument, ml) =>
-        {
-            if (instrument.Name == "ari.rest.requests.sent")
-                ml.EnableMeasurementEvents(instrument);
-        };
-        listener.SetMeasurementEventCallback<long>((instrument, measurement, _, _) =>
-        {
-            if (instrument.Name == "ari.rest.requests.sent")
-                observed += measurement;
-        });
-        listener.Start();
-
-        AriMetrics.RestRequestsSent.Add(3);
-        listener.RecordObservableInstruments();
-
-        observed.Should().BeGreaterThanOrEqualTo(3);
-    }
-
-    [Fact]
     public void Reconnections_ShouldIncrementCounter()
     {
         long observed = 0;
@@ -126,29 +105,6 @@ public sealed class AriMetricsTests
         listener.RecordObservableInstruments();
 
         observed.Should().BeGreaterThanOrEqualTo(1);
-    }
-
-    [Fact]
-    public void RestRoundtripMs_ShouldRecordHistogram()
-    {
-        double observed = 0;
-        using var listener = new MeterListener();
-        listener.InstrumentPublished = (instrument, ml) =>
-        {
-            if (instrument.Name == "ari.rest.roundtrip")
-                ml.EnableMeasurementEvents(instrument);
-        };
-        listener.SetMeasurementEventCallback<double>((instrument, measurement, _, _) =>
-        {
-            if (instrument.Name == "ari.rest.roundtrip")
-                observed += measurement;
-        });
-        listener.Start();
-
-        AriMetrics.RestRoundtripMs.Record(15.3);
-        listener.RecordObservableInstruments();
-
-        observed.Should().BeGreaterThanOrEqualTo(15.3);
     }
 
     [Fact]

@@ -14,19 +14,45 @@ public static class SessionMetrics
         Meter.CreateCounter<long>("sessions.failed", "sessions", "Total sessions failed");
 
     /// <summary>
-    /// The <c>sessions.timed_out</c> counter. Not incremented: the SDK adds nothing to it since 2.7.0, since
+    /// The <c>sessions.timed_out</c> counter. Not emitted: the SDK adds nothing to it since 2.7.0, since
     /// it ends no call in <see cref="CallSessionState.TimedOut"/>.
-    /// <para>Kept, and still published, so that code and dashboards that read it keep binding.</para>
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kept, and still published, so that code and dashboards that read it keep binding: the instrument is still
+    /// created on the meter under the same name, and deprecating the field removes nothing.
+    /// </para>
+    /// <para>
+    /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
+    /// deprecation with <c>&lt;NoWarn&gt;$(NoWarn);VSDK0006&lt;/NoWarn&gt;</c> instead of silencing every
+    /// <c>CS0618</c> in their tree.
+    /// </para>
+    /// </remarks>
+    [Obsolete(
+        "Not emitted: nothing in the SDK records sessions.timed_out. The reconciliation sweep ends a call it finds gone as a reload ends it and counts it in sessions.completed or sessions.failed; nothing in the SDK counts a call as timed out.",
+        DiagnosticId = "VSDK0006")]
     public static readonly Counter<long> SessionsTimedOut =
         Meter.CreateCounter<long>("sessions.timed_out", "sessions", "Total sessions timed out");
 
     /// <summary>
-    /// The <c>sessions.orphaned</c> counter. Not incremented: the SDK adds nothing to it since 2.7.0. A call
+    /// The <c>sessions.orphaned</c> counter. Not emitted: the SDK adds nothing to it since 2.7.0. A call
     /// the reconciliation sweep finds gone ends as a reload ends it and is counted in
     /// <c>sessions.completed</c> or <c>sessions.failed</c>.
-    /// <para>Kept, and still published, so that code and dashboards that read it keep binding.</para>
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kept, and still published, so that code and dashboards that read it keep binding: the instrument is still
+    /// created on the meter under the same name, and deprecating the field removes nothing.
+    /// </para>
+    /// <para>
+    /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
+    /// deprecation with <c>&lt;NoWarn&gt;$(NoWarn);VSDK0006&lt;/NoWarn&gt;</c> instead of silencing every
+    /// <c>CS0618</c> in their tree.
+    /// </para>
+    /// </remarks>
+    [Obsolete(
+        "Not emitted: nothing in the SDK records sessions.orphaned. The reconciliation sweep ends a call it finds gone as a reload ends it and counts it in sessions.completed or sessions.failed; nothing in the SDK counts a call as orphaned.",
+        DiagnosticId = "VSDK0006")]
     public static readonly Counter<long> SessionsOrphaned =
         Meter.CreateCounter<long>("sessions.orphaned", "sessions", "Orphaned sessions detected");
 
