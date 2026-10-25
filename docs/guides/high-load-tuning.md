@@ -235,12 +235,97 @@ A value outside these ranges fails the host's start with an `OptionsValidationEx
 
 **High-load impact:** the cost is one snapshot per sweep, which grows with the number of channels Asterisk holds. Measured on 2026-10-03 against Asterisk 22.10.1 (a container limited to 4 CPUs, `Local` channels, no traffic, 25 reconciliations per run, two runs per size): at 1,000 channels one reconciliation took 5.5 ms of wall time at the median, sent 703 KiB over AMI and allocated 4.3 MB in the SDK; at 5,000 channels, 27–28 ms, 3.3 MiB and 21.4–21.5 MB, with a median of 22–23 ms of Asterisk CPU. No AMI event was dropped. The sweep skips a tick while a load of the same server is running, rather than reading a second snapshot beside it.
 
+**A dropped `Hangup` and `DialingTimeout`.** The sweep does not verify because an event was dropped: a call whose `Hangup` the full buffer dropped is verified only once some held call is older than `DialingTimeout`. In a contact center with long calls that is nearly always true, and the next verification can end the call. In a workload of short calls (IVR legs, short queue calls, outbound attempts) no other call may be that old, so the sweep sends nothing until the call itself is: it becomes eligible once it is `DialingTimeout` old, and the next tick is the first that can verify it, up to one `ReconciliationInterval` later (60–90 s after it opened, with the defaults). That says when a verification can start, not when the call ends, and no fixed ceiling applies:
+- a skipped tick (`skipped:<reason>` on the `session reconciliation` span, see [troubleshooting](troubleshooting.md#session-reconciliation-sweep)) moves the verification to the next one, a full interval later;
+- a reconciliation waits up to 10 s for the events received ahead of its snapshot to be delivered; when that wait runs out, as it can right after an overflow, it removes nothing and only a later tick tries again;
+- a reconciliation that runs takes time of its own: the snapshot, and right after an overflow the wait for the backlog (figures below).
+
+`DialingTimeout` is the cost knob for that delay. Lowering it makes such a call eligible sooner; the price is one `Status` per tick per server whenever any held call is older than it, which on a short-call workload is a snapshot the sweep did not send before. A snapshot costs what the figures above say while the buffer keeps up. Right after an overflow it costs more: measured on 2026-10-23 against release candidates of Asterisk 22.12, 23.6 and 24.0 (2,500 calls, 5,000 channels, a 5 s burst of about 1,100 dropped events/s, an 8 ms handler), one reconciliation took 6.3–10.3 s of SDK wall time, nearly all of it the wait for the backlog, and brought about 5,300 answer events (3.3 MiB) and 25–58 ms of Asterisk CPU. Those answer events go through the same buffer as every other event. Lowering `DialingTimeout` never ends a call because of its age.
+
+**Live without Hosting.** `Verbara.Sdk.Live` alone has no sweep, so a call whose `Hangup` was dropped stays in the channel table until the next reconnect's reload. The connection raises no public event per drop; the route is a `MeterListener` on `ami.events.dropped` (meter `Verbara.Sdk.Ami`), and a reconciliation of your own once the drops stop, repeated until one is conclusive. `ReconcileChannelsAsync` returns nothing that says whether it removed what the snapshot no longer lists: when its 10 s wait for the backlog runs out it returns normally, having removed nothing, and only its `live channel-reconcile` span (source `Verbara.Sdk.Live`) says so, with the tag `live.reconcile.deferred`. The sample reads that tag through an `ActivityListener`:
+
+```csharp
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
+
+VerbaraServer[] servers = []; // your servers
+var ct = CancellationToken.None; // your host's stopping token
+long drops = 0; // buffer_full measurements seen, process-wide
+long lastDropAt = 0; // Environment.TickCount64 of the latest one
+var settled = new long[servers.Length]; // per server: the drop count its last conclusive reconciliation covers
+var deferred = 0; // 1 when a reconciliation's wait for the backlog ran out
+
+using var meters = new MeterListener
+{
+    InstrumentPublished = (instrument, l) =>
+    {
+        if (instrument.Meter.Name == "Verbara.Sdk.Ami" && instrument.Name == "ami.events.dropped")
+            l.EnableMeasurementEvents(instrument);
+    },
+};
+meters.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+{
+    // Runs on the thread that refused the event: record and return.
+    foreach (var tag in tags)
+        if (tag.Key == "reason" && tag.Value is "buffer_full")
+        {
+            Interlocked.Exchange(ref lastDropAt, Environment.TickCount64);
+            Interlocked.Increment(ref drops);
+        }
+});
+meters.Start();
+
+using var spans = new ActivityListener
+{
+    ShouldListenTo = source => source.Name == "Verbara.Sdk.Live",
+    Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+    ActivityStopped = activity =>
+    {
+        if (activity.OperationName == "live channel-reconcile" && activity.GetTagItem("live.reconcile.deferred") is not null)
+            Volatile.Write(ref deferred, 1);
+    },
+};
+ActivitySource.AddActivityListener(spans);
+
+using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+while (await timer.WaitForNextTickAsync(ct))
+{
+    var seen = Interlocked.Read(ref drops);
+    if (Environment.TickCount64 - Interlocked.Read(ref lastDropAt) < 2_000)
+        continue; // drops still arriving
+    for (var i = 0; i < servers.Length; i++) // the measurement does not say which server dropped
+    {
+        if (settled[i] == seen)
+            continue; // no drop since this server's last conclusive reconciliation
+        Volatile.Write(ref deferred, 0);
+        try
+        {
+            await servers[i].ReconcileChannelsAsync(ct); // one at a time per server
+            if (Volatile.Read(ref deferred) == 0)
+                settled[i] = seen; // a drop counted after `seen` leaves it pending
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) // AmiNotConnectedException included: this server stays pending, the others go on
+        {
+            Console.Error.WriteLine(ex.Message); // your logger
+        }
+    }
+}
+```
+
+A server stays pending, and is reconciled again on a later tick, until a reconciliation of it returns without throwing, without `live.reconcile.deferred`, and with no drop counted since it started. The measurement carries only the `reason` tag and is process-wide, so every server is reconciled, one reconciliation in flight per server, spaced by the tick. Do not reconcile from the callback or from an event handler. The `deferred` flag assumes the loop is the only caller of `ReconcileChannelsAsync`; another one running beside it can only cost the loop an extra reconciliation.
+
+**When to reconcile.** The useful moment is once the connection has delivered the events it received before the drop, and an application cannot see it: the measurement fires when an event is refused, and nothing public reports how far delivery has gone. The sample waits for 2 s without a drop, an unmeasured choice. A reconciliation that starts while the backlog is still being delivered waits up to 10 s for it; when that runs out it removes nothing and the loop tries again on a later tick. The snapshot's own answer events (about 5,300 at 5,000 channels) go through the same buffer; if they overflow it, the drops they cause leave every server pending again, at most one reconciliation per server per tick, so lengthen the tick or the quiet spell if that repeats. Expect little: the measurement above started one reconciliation as soon as the burst's drops had been delivered, a moment the test rig could see and this sample cannot, and the calls whose `Hangup` was dropped ended at a median of 17.8–24.9 s after the hangup, against 27.4–41.1 s with the 30 s sweep alone, a gain of 9.6–16.2 s that a re-run of one version did not reproduce (the result depends on where the sweep's tick falls). Nearly all of that time is the wait for the backlog. This sample's own timing was not measured.
+
 **Tuning levers:**
 
 | Option | Default | When to change |
 |--------|---------|----------------|
-| `SessionOptions.ReconciliationInterval` | 30s | Lengthen it to send fewer snapshots: a call whose hangup was lost then ends up to one interval later. `Timeout.InfiniteTimeSpan` switches the sweep off |
-| `SessionOptions.DialingTimeout` | 60s | The age a held call must reach before the sweep asks about it; it never ends a call by itself |
+| `SessionOptions.ReconciliationInterval` | 30s | Lengthen it to send fewer snapshots: a call whose hangup was lost then becomes eligible for verification up to one interval later. `Timeout.InfiniteTimeSpan` switches the sweep off |
+| `SessionOptions.DialingTimeout` | 60s | The age a held call must reach before the sweep asks about it; it never ends a call by itself. On a short-call workload it is the cost knob for a dropped `Hangup`: lower it to verify sooner, at one `Status` per tick per server whenever any held call is older than it (see above) |
 | `SessionOptions.SlaThreshold` | 20s | Align with your contact-center SLA |
 | `SessionOptions.QueueMetricsWindow` | 30min | Rolling window for `QueueSessionTracker` — reduce if per-queue RAM matters |
 | `SessionOptions.WrapUpDuration` | 30s | Set it to the queues' Asterisk `wrapuptime`: the SDK cannot read that value, and without a provider one duration applies to every queue. When queues differ, register an `IWrapUpDurationProvider` that returns each queue's `wrapuptime` per server, read from memory (it runs on the thread that delivers that server's AMI events, so it must not do I/O or wait); this option then covers a queue the provider returns `null` for, an answer it cannot use, and a wrap-up opened by the call's end. A wrap-up opens at a queue member's `AgentComplete` (for a call outside any queue that an agent known by name took, at the call's end) and closes when its duration passes (the provider's answer, else this option) or the same agent's next call connects, raising one `CallWrapUpEvent` each; one timer is held per open wrap-up. Accepted: `00:00:00` to `49.17:02:47.294` (4,294,967,294 ms); zero closes each wrap-up at once (wrap-up off), and a negative value, `Timeout.InfiniteTimeSpan` included, fails the host's start. A value above `CompletedRetention` may reach a subscriber after the call has been released; so may a provider answer above it, which is used and logged once per server and queue at Warning |

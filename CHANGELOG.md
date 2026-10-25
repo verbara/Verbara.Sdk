@@ -266,6 +266,48 @@ and each wire name maps to the same type as in 2.8.0. Only the compiler output c
 `MeetmeActivity`, the `VerbaraServer.MeetMe` types, `QueueMemberPauseEvent` and the fax-license types are not
 deprecated.
 
+### Changed: a dropped copy of an answer an action received no longer counts as a lost event (#466)
+
+When the AMI event buffer is full and refuses an event that an action the SDK sent had already received in its
+answer (a list entry such as a `Status` row, a `…Complete` event, or an asynchronous `OriginateResponse`), the
+refusal no longer counts as a lost event. `ami.events.dropped` (`reason=buffer_full`) still counts every refused
+event, so no number an operator reads changes. The visible effect is in Sessions' queue accounting: a caller who
+leaves a queue by pressing a key while an overflow dropped only such copies is counted as a key exit (offered,
+neither answered nor abandoned) instead of abandoned, so `QueueSession.CallsAbandoned` and `AbandonRate` read lower
+in that case. A dropped copy of `DeviceStateChange`, `PresenceStateChange` or `ExtensionStatus` still counts as
+lost, because those types are also read as unsolicited state events. An event no action received, and a
+reconnect, still count as a possible loss, so a lost abandon report is still counted abandoned. No public member
+changed.
+
+### Changed: a full AMI event buffer logs one Warning per overflow episode, not one per event (#466)
+
+The first event a full buffer refuses is logged as before, `[AMI_EVENT] Dropped: event_type=<type>
+channel=<channel>` at Warning; every later refusal of the same episode logs that line at Debug. When the buffer
+accepts an event again, or is released while an episode is open (the session is lost, or your `DisposeAsync` or
+`DisconnectAsync` ends the connection), one Warning reports the episode: `[AMI_EVENT] Dropped <n> events while the
+buffer was full (<ms> ms)`. An overflow of 20,000 events used to write 20,000 Warning lines on the reader thread;
+it now writes two. `ami.events.dropped` still counts every refused event. An alert or a log query that counts
+`[AMI_EVENT] Dropped` lines now counts episodes: sum the count on the summary lines, or read the counter.
+`[AMI_EVENT] Discarded on caller ending` is unchanged. The
+[troubleshooting guide](docs/guides/troubleshooting.md#events-dropped-ami) has the log shape.
+
+### Fixed: an AMI message cut short by the end of the stream is no longer delivered (#466)
+
+When the AMI connection closed in the middle of a message, the reader returned the fields read so far as a
+message, so a truncated event (a `Hangup` with only some of its fields, for instance) reached the handlers. The
+fragment is now discarded and logged once at Debug, `[AMI] Discarded a message cut by the end of the stream:
+type=<type> fields=<n>`; messages that ended before the close are delivered as before.
+`AmiProtocolReader.ReadMessageAsync` (namespace `Verbara.Sdk.Ami.Internal`) now returns null at such an end of
+stream instead of the partial message.
+
+### Fixed: the guides say when a call whose `Hangup` was dropped can be verified, and how to reconcile without Hosting (#466)
+
+The reconciliation sweep does not verify on a drop alone: a call becomes eligible once it is `DialingTimeout` old (60 s
+by default), and how long recovery then takes depends on the sweep's ticks and the reconciliation's own wait, so the
+guides give no fixed ceiling. `DialingTimeout` is the cost knob for short-call workloads. An application that uses Live
+without Hosting can reconcile on `ami.events.dropped`; the high-load tuning guide has a sample that retries a deferred
+reconciliation and keeps going when one server is disconnected.
+
 ### Fixed: the ARI client records its REST instruments (#465)
 
 `ari.rest.requests.sent` ("Total ARI REST requests sent to Asterisk") and `ari.rest.roundtrip` ("Roundtrip time for

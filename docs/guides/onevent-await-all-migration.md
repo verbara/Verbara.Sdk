@@ -106,8 +106,10 @@ and size `EventPumpCapacity` for the longest burst it has to absorb
 ### 2. `ami.events.dropped` with `reason=buffer_full` started after the upgrade
 
 That is the situation above: a handler that was not the last, and so was never awaited, now holds the
-pump. Each drop is still one `[AMI_EVENT] Dropped` Warning with the event type, and one measurement on
-`ami.events.dropped` tagged `reason=buffer_full`. Time your `OnEvent` handlers to find the slow one —
+pump. Each drop is still one measurement on `ami.events.dropped` tagged `reason=buffer_full`. The log
+carries one `[AMI_EVENT] Dropped` Warning per overflow, at its first refused event and with its event type
+(the later refusals are logged at Debug), and one `[AMI_EVENT] Dropped <n> events while the buffer was full`
+Warning with the count when the buffer accepts again. Time your `OnEvent` handlers to find the slow one —
 the `ami.event.dispatch` histogram covers the observers, not the `OnEvent` handlers, so it does not show
 it — then apply section 1. These drops are real lost events, not
 noise: do not filter them out.

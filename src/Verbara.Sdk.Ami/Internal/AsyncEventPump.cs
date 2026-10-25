@@ -15,9 +15,16 @@ public sealed class AsyncEventPump : IAsyncDisposable
     private Task? _consumerTask;
 
     private long _droppedEvents;
+    private long _droppedUncollected;
     private long _processedEvents;
     private long _droppedOnDispose;
     private long _droppedBeforeCurrent;
+
+    // The overflow episode in progress: the refusals since the buffer last accepted an event, and the clock's timestamp
+    // at the first of them. The one writer moves them; a release takes the episode with an exchange, so a refusal and a
+    // release never report the same episode twice.
+    private long _episodeDrops;
+    private long _episodeStartedAt;
 
     // Event ordinals. The one writer numbers each event it hands to TryEnqueue, and publishes _lastReceived only after
     // that event was written or dropped. _dispatchedThrough is the largest d such that every event numbered d or less
@@ -37,12 +44,20 @@ public sealed class AsyncEventPump : IAsyncDisposable
     /// <summary>Number of events dropped since startup due to full buffer.</summary>
     public long DroppedEvents => Volatile.Read(ref _droppedEvents);
 
+    /// <summary>
+    /// How many of the <see cref="DroppedEvents"/> were lost: refused events that no action had received in its answer
+    /// (enqueued with <c>collected</c> false). A refused copy of an event an action's collector had already received is
+    /// counted in <see cref="DroppedEvents"/> only, because nothing was lost when the buffer refused it.
+    /// </summary>
+    internal long DroppedUncollectedEvents => Volatile.Read(ref _droppedUncollected);
+
     /// <summary>Number of events successfully dispatched to handlers.</summary>
     public long ProcessedEvents => Volatile.Read(ref _processedEvents);
 
     /// <summary>
-    /// How many events this pump had dropped (<see cref="DroppedEvents"/>) when the event its handler is running for, or
-    /// ran for last, was enqueued; 0 before the first. The consumer writes it before it calls the handler, so a handler
+    /// How many events this pump had lost (<see cref="DroppedUncollectedEvents"/>) when the event its handler is running
+    /// for, or ran for last, was enqueued; 0 before the first. A refused copy of an event an action had received is not
+    /// counted. The consumer writes it before it calls the handler, so a handler
     /// reads the count as of its own event's arrival, not as of its dispatch: an event dropped while that event waited
     /// in a full buffer arrived after it, and is not counted here.
     /// </summary>
@@ -69,6 +84,23 @@ public sealed class AsyncEventPump : IAsyncDisposable
 
     /// <summary>Callback invoked when an event is dropped due to full buffer.</summary>
     public Action<ManagerEvent>? OnEventDropped { get; set; }
+
+    /// <summary>
+    /// Called on the writer's thread for every refused event, after <see cref="OnEventDropped"/>, with
+    /// <see langword="true"/> when the refusal opens an overflow episode: the buffer accepted the event before it, or it
+    /// is the pump's first refusal.
+    /// </summary>
+    internal Action<ManagerEvent, bool>? OnEventRefused { get; set; }
+
+    /// <summary>
+    /// Called once per overflow episode with its number of refused events and how long it lasted, from its first refusal:
+    /// on the writer's thread when the buffer next accepts an event, or at the release (<see cref="DisposeAsync"/>,
+    /// <see cref="DrainAndDisposeAsync"/>) when the episode is still open then.
+    /// </summary>
+    internal Action<long, TimeSpan>? OnDropEpisodeEnded { get; set; }
+
+    /// <summary>The clock an overflow episode's duration is measured on. Set it before the first event.</summary>
+    internal TimeProvider Clock { get; init; } = TimeProvider.System;
 
     /// <summary>
     /// A token whose cancellation stops delivery between events: once it is cancelled, the event whose
@@ -306,14 +338,25 @@ public sealed class AsyncEventPump : IAsyncDisposable
     }
 
     /// <summary>Enqueue an event for async dispatch. Returns false if the event was dropped.</summary>
-    public bool TryEnqueue(ManagerEvent evt)
+    /// <remarks>A refusal counts as a lost event (<see cref="DroppedUncollectedEvents"/>).</remarks>
+    public bool TryEnqueue(ManagerEvent evt) => TryEnqueue(evt, collected: false);
+
+    /// <summary>
+    /// Enqueue an event for async dispatch, saying whether an action's collector has already received it. Returns false
+    /// if the event was dropped. Every refusal is counted in <see cref="DroppedEvents"/> and reported to
+    /// <see cref="OnEventDropped"/>; only a refusal of an event no collector received (<paramref name="collected"/>
+    /// false) is counted in <see cref="DroppedUncollectedEvents"/>, the count a later event carries to its handler.
+    /// </summary>
+    internal bool TryEnqueue(ManagerEvent evt, bool collected)
     {
         // The pump has one writer, so this is the ordinal the event carries (NextOrdinal, read by the writer before this
         // call, is the same number), and no drop can be counted between this read and the write: the stamp is exact.
         var ordinal = _lastReceived + 1;
-        if (!_channel.Writer.TryWrite(new BufferedEvent(evt, Volatile.Read(ref _droppedEvents), ordinal)))
+        if (!_channel.Writer.TryWrite(new BufferedEvent(evt, Volatile.Read(ref _droppedUncollected), ordinal)))
         {
             Interlocked.Increment(ref _droppedEvents);
+            if (!collected)
+                Interlocked.Increment(ref _droppedUncollected);
             Volatile.Write(ref _lastReceived, ordinal);
 
             // With the consumer idle and the buffer empty, every earlier event has been dispatched, so d passes the drop
@@ -326,12 +369,30 @@ public sealed class AsyncEventPump : IAsyncDisposable
             }
 
             Release(met, reached: true);
+            var opensEpisode = Interlocked.Increment(ref _episodeDrops) == 1;
+            if (opensEpisode)
+                Volatile.Write(ref _episodeStartedAt, Clock.GetTimestamp());
+
             OnEventDropped?.Invoke(evt);
+            OnEventRefused?.Invoke(evt, opensEpisode);
             return false;
         }
 
         Volatile.Write(ref _lastReceived, ordinal);
+        if (Volatile.Read(ref _episodeDrops) != 0)
+            EndDropEpisode();
+
         return true;
+    }
+
+    // Takes the episode in progress, if any, and reports it. O(1): the refusals are counted, never kept.
+    private void EndDropEpisode()
+    {
+        var count = Interlocked.Exchange(ref _episodeDrops, 0);
+        if (count == 0)
+            return;
+
+        OnDropEpisodeEnded?.Invoke(count, Clock.GetElapsedTime(Volatile.Read(ref _episodeStartedAt)));
     }
 
     /// <summary>
@@ -344,6 +405,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _channel.Writer.TryComplete();
+        EndDropEpisode();
         await _cts.CancelAsync();
 
         if (_consumerTask is not null)
@@ -362,6 +424,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
     internal async ValueTask DrainAndDisposeAsync()
     {
         _channel.Writer.TryComplete();
+        EndDropEpisode();
 
         if (_consumerTask is not null)
         {
@@ -386,7 +449,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
         _cts.Dispose();
     }
 
-    /// <summary>An event in the buffer, with the pump's dropped count when it was enqueued, and its ordinal.</summary>
+    /// <summary>An event in the buffer, with the pump's lost-event count when it was enqueued, and its ordinal.</summary>
     private readonly record struct BufferedEvent(ManagerEvent Event, long DroppedBefore, long Ordinal);
 }
 

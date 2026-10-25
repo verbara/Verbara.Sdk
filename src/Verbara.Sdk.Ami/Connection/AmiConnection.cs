@@ -44,8 +44,20 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Reader error")]
     public static partial void ReaderError(ILogger logger, Exception exception);
 
+    // A peer that closes the stream in the middle of a message: the fields read before the close are discarded.
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI] Discarded a message cut by the end of the stream: type={Type} fields={FieldCount}")]
+    public static partial void FragmentDiscarded(ILogger logger, string? type, int fieldCount);
+
+    // A full buffer logs an overflow as an episode: this Warning at its first refused event, the same line at Debug for
+    // every later refusal, and one summary Warning with the count when the buffer accepts again or is released.
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] Dropped: event_type={EventType} channel={Channel}")]
     public static partial void EventDropped(ILogger logger, string? eventType, string? channel);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_EVENT] Dropped: event_type={EventType} channel={Channel}")]
+    public static partial void EventDroppedInEpisode(ILogger logger, string? eventType, string? channel);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] Dropped {Count} events while the buffer was full ({Ms} ms)")]
+    public static partial void DropEpisodeEnded(ILogger logger, long count, long ms);
 
     // Not the "[AMI_EVENT] Dropped" prefix: the log-analysis guides map that one to a full buffer, whose action
     // (a larger EventPumpCapacity) is the wrong one for a caller's close.
@@ -132,6 +144,17 @@ public sealed class AmiConnection : IAmiConnection
     // Tags of ami.events.dropped: the reasons AmiMetrics.EventsDropped documents.
     private static readonly KeyValuePair<string, object?> BufferFullReason = new("reason", "buffer_full");
     private static readonly KeyValuePair<string, object?> CallerEndingReason = new("reason", "caller_ending");
+
+    /// <summary>
+    /// Whether an action's answer event carries the name of an event Asterisk also sends unsolicited, so that an observer
+    /// cannot tell the answer's copy from a state change and reads it as one (Verbara.Sdk.Live tracks
+    /// <c>DeviceStateChange</c>, the answer of <c>DeviceStateList</c>). A dropped copy of such an event is a real loss for
+    /// that observer, so it keeps moving <see cref="EventLossMark"/>.
+    /// </summary>
+    private static bool IsReadAsUnsolicited(string? eventType) =>
+        string.Equals(eventType, "DeviceStateChange", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, "PresenceStateChange", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(eventType, "ExtensionStatus", StringComparison.OrdinalIgnoreCase);
 
     // How long the caller's ending tries its Logoff: the wait for the write lock and the write itself. A send whose write
     // is blocked by a peer that stopped reading holds the lock until the ending's release disposes the socket, so the
@@ -306,7 +329,9 @@ public sealed class AmiConnection : IAmiConnection
     /// to learn whether any event was lost between them: the AMI session that delivered the event, and how many events
     /// that session's buffer had dropped because it was full when the event arrived. Read inside an observer's
     /// <c>OnNext</c> (or anything it calls), it is the mark of the event being delivered; read anywhere else, it is the
-    /// current session's mark now. Two marks that differ mean a reconnect or a dropped event lies between them.
+    /// current session's mark now. Two marks that differ mean a reconnect or a lost event lies between them. A dropped copy
+    /// of an event an action had already received in its answer is not lost and does not move the mark (it is still
+    /// counted on <c>ami.events.dropped</c>), unless its type is one an observer reads as an unsolicited event.
     /// </summary>
     /// <remarks>
     /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
@@ -315,7 +340,7 @@ public sealed class AmiConnection : IAmiConnection
     internal AmiEventLossMark EventLossMark =>
         _dispatchFrame.Value is { Finished: false } frame
             ? frame.LossMark
-            : new AmiEventLossMark(Volatile.Read(ref _sessionOrdinal), Volatile.Read(ref _eventPump)?.DroppedEvents ?? 0);
+            : new AmiEventLossMark(Volatile.Read(ref _sessionOrdinal), Volatile.Read(ref _eventPump)?.DroppedUncollectedEvents ?? 0);
 
     /// <summary>
     /// Raised once for each loss of an established connection that its caller did not ask for, with what ended it:
@@ -764,13 +789,19 @@ public sealed class AmiConnection : IAmiConnection
             {
                 StopToken = _lifetime.Token,
                 SessionEndedToken = sessionToken,
+                Clock = _timeProvider,
             };
-            pump.OnEventDropped = evt =>
+            pump.OnEventRefused = (evt, opensEpisode) =>
             {
                 AmiMetrics.EventsDropped.Add(1, BufferFullReason);
                 var channel = evt.RawFields is not null && evt.RawFields.TryGetValue("Channel", out var ch) ? ch : null;
-                AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
+                if (opensEpisode)
+                    AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
+                else
+                    AmiConnectionLog.EventDroppedInEpisode(_logger, evt.EventType, channel);
             };
+            pump.OnDropEpisodeEnded = (count, duration) =>
+                AmiConnectionLog.DropEpisodeEnded(_logger, count, (long)duration.TotalMilliseconds);
             _eventPump = pump;
 
             // The pump buffers from now on but dispatches only once the previous session's pump has been released (its
@@ -1481,8 +1512,18 @@ public sealed class AmiConnection : IAmiConnection
         {
             while (!ct.IsCancellationRequested)
             {
-                var msg = await _reader!.ReadMessageAsync(ct);
-                if (msg is null) break;
+                var reader = _reader!;
+                var msg = await reader.ReadMessageAsync(ct);
+                if (msg is null)
+                {
+                    if (reader.DiscardedFragments > 0)
+                    {
+                        AmiConnectionLog.FragmentDiscarded(_logger, reader.LastDiscardedFragmentType,
+                            reader.LastDiscardedFragmentFieldCount);
+                    }
+
+                    break;
+                }
 
                 if (msg.IsResponse)
                 {
@@ -1524,10 +1565,13 @@ public sealed class AmiConnection : IAmiConnection
                     var pump = _eventPump;
                     var ordinal = pump?.NextOrdinal ?? 0;
 
-                    // Check if this event belongs to an event-generating action
+                    // Check if this event belongs to an event-generating action. One that does was received by that action (its
+                    // collector holds it, or it ended the list), so the pump's copy is not lost if the full buffer refuses it.
                     var actionId = msg.ActionId;
+                    var collected = false;
                     if (actionId is not null && _pendingEventActions.TryGetValue(actionId, out var collector))
                     {
+                        collected = !IsReadAsUnsolicited(msg.EventType);
                         var eventName = msg.EventType ?? "";
                         if (eventName.EndsWith("Complete", StringComparison.OrdinalIgnoreCase))
                         {
@@ -1551,7 +1595,7 @@ public sealed class AmiConnection : IAmiConnection
                         }
                     }
 
-                    pump?.TryEnqueue(evt);
+                    pump?.TryEnqueue(evt, collected);
                 }
             }
         }

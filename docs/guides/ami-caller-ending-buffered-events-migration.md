@@ -51,7 +51,7 @@ The counter now carries a `reason` tag:
 
 | `reason` | when | what to do |
 |---|---|---|
-| `buffer_full` | the buffer was full and refused an event (one per event, with an `[AMI_EVENT] Dropped` Warning) | handlers are slower than the event rate: increase `EventPumpCapacity`, speed up or offload the handlers — see [high-load-tuning.md](high-load-tuning.md) |
+| `buffer_full` | the buffer was full and refused an event (one measurement per event; the log carries one `[AMI_EVENT] Dropped` Warning at an overflow's first refused event and one with the count when it ends) | handlers are slower than the event rate: increase `EventPumpCapacity`, speed up or offload the handlers — see [high-load-tuning.md](high-load-tuning.md) |
 | `caller_ending` | your `DisposeAsync` or `DisconnectAsync` found events still buffered (one measurement per released buffer, with the count: one per ending, two when it lands while a redialled session waits for the lost one's delivery) | expected; nothing to tune |
 
 **An alert on `ami.events.dropped > 0` must filter on `reason=buffer_full`**, or it fires on every
