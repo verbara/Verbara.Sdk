@@ -37,22 +37,23 @@ public sealed class AmiProtocolReaderDiscardedFragmentTests
     }
 
     [Theory]
-    [InlineData("")]
-    [InlineData("Event: Newstate\r\nChannel: PJSIP/a-1\r\n\r\n")]
-    [InlineData("\r\n")]
-    public async Task ReadMessageAsync_ShouldCountNoFragment_WhenTheStreamEndsBetweenMessages(string text)
+    [InlineData("", 0)]
+    [InlineData("Event: Newstate\r\nChannel: PJSIP/a-1\r\n\r\n", 1)]
+    [InlineData("\r\n", 0)]
+    public async Task ReadMessageAsync_ShouldCountNoFragment_WhenTheStreamEndsBetweenMessages(string text, int messages)
     {
         var pipe = new Pipe();
         var reader = new AmiProtocolReader(pipe.Reader);
         await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes(text));
         await pipe.Writer.CompleteAsync();
 
+        var complete = 0;
         while (await reader.ReadMessageAsync() is not null)
-        {
-        }
+            complete++;
 
         using (new AssertionScope())
         {
+            complete.Should().Be(messages, "premise: the reader returns every complete message the stream carried");
             reader.DiscardedFragments.Should().Be(0, "every message the stream carried was complete");
             reader.LastDiscardedFragmentType.Should().BeNull();
         }
