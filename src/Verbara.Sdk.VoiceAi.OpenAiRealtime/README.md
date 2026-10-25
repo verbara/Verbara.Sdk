@@ -49,7 +49,9 @@ bridge.Events.Subscribe(evt =>
 The bridge runs one Realtime conversation per AudioSocket session, and the session broker that
 `AddOpenAiRealtimeBridge` registers ends the line as soon as the bridge returns:
 
-- **The vendor closes the conversation.** The bridge returns and the broker hangs the line up with
+- **The vendor closes the conversation.** The bridge answers the vendor's close with its own, also
+  while an input audio send is in flight, and its close code decides the session (a normal close
+  completes it, a failure close fails it). The bridge then returns and the broker hangs the line up with
   one hangup frame. On the `AudioSocket()` route of Asterisk 20 and later the caller goes on in the
   dialplan at once (measured 2026-10-02 on 20.20.1, 22.9.0 and 23.4.1: 60 of 60 calls, within
   2 ms of the bridge returning); on an ARI `externalMedia` route the channel leaves Stasis with the
