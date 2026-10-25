@@ -44,6 +44,10 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Reader error")]
     public static partial void ReaderError(ILogger logger, Exception exception);
 
+    // A peer that closes the stream in the middle of a message: the fields read before the close are discarded.
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI] Discarded a message cut by the end of the stream: type={Type} fields={FieldCount}")]
+    public static partial void FragmentDiscarded(ILogger logger, string? type, int fieldCount);
+
     // A full buffer logs an overflow as an episode: this Warning at its first refused event, the same line at Debug for
     // every later refusal, and one summary Warning with the count when the buffer accepts again or is released.
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] Dropped: event_type={EventType} channel={Channel}")]
@@ -1508,8 +1512,18 @@ public sealed class AmiConnection : IAmiConnection
         {
             while (!ct.IsCancellationRequested)
             {
-                var msg = await _reader!.ReadMessageAsync(ct);
-                if (msg is null) break;
+                var reader = _reader!;
+                var msg = await reader.ReadMessageAsync(ct);
+                if (msg is null)
+                {
+                    if (reader.DiscardedFragments > 0)
+                    {
+                        AmiConnectionLog.FragmentDiscarded(_logger, reader.LastDiscardedFragmentType,
+                            reader.LastDiscardedFragmentFieldCount);
+                    }
+
+                    break;
+                }
 
                 if (msg.IsResponse)
                 {

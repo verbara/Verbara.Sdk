@@ -32,8 +32,24 @@ public sealed class AmiProtocolReader
     }
 
     /// <summary>
+    /// How many messages the end of the stream cut before their blank line, each discarded rather than returned. A
+    /// stream ends at most once, so this is 0 or 1 for the reader of one session.
+    /// </summary>
+    internal int DiscardedFragments { get; private set; }
+
+    /// <summary>
+    /// The <c>Event</c> of the last discarded fragment, or <c>Response: </c> and its status, or <see langword="null"/>
+    /// when the fragment had neither.
+    /// </summary>
+    internal string? LastDiscardedFragmentType { get; private set; }
+
+    /// <summary>How many complete fields the last discarded fragment had read.</summary>
+    internal int LastDiscardedFragmentFieldCount { get; private set; }
+
+    /// <summary>
     /// Reads the next complete AMI message.
-    /// Returns null when the connection is closed (pipe completed).
+    /// Returns null when the connection is closed (pipe completed), including when it closed in the middle of a
+    /// message: the fields read before the close are discarded and counted in <see cref="DiscardedFragments"/>.
     /// </summary>
     public async ValueTask<AmiMessage?> ReadMessageAsync(CancellationToken cancellationToken = default)
     {
@@ -141,10 +157,15 @@ public sealed class AmiProtocolReader
 
             if (result.IsCompleted)
             {
-                // Connection closed; return remaining fields if any
-                if (fields.Count > 0)
+                // The stream ended before the blank line that ends a message: what was read of it is a fragment, not an
+                // event or a response, so it is discarded and counted, never returned as a message.
+                if (fields.Count > 0 || commandOutput is not null || !buffer.IsEmpty)
                 {
-                    return new AmiMessage(fields);
+                    DiscardedFragments++;
+                    LastDiscardedFragmentType = fields.TryGetValue("Event", out var eventType) ? eventType
+                        : fields.TryGetValue("Response", out var response) ? "Response: " + response
+                        : null;
+                    LastDiscardedFragmentFieldCount = fields.Count;
                 }
 
                 return null;
