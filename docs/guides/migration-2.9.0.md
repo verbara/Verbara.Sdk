@@ -547,6 +547,12 @@ None of these breaks a build or a public contract. Each is in the CHANGELOG.
   call. A host that removes a server for good can now detach it with `DetachedCalls.Release`; see the Sessions README.
 - **The ARI REST instruments carry measurements.** `ari.rest.requests.sent` and `ari.rest.roundtrip` were published
   but never recorded; a dashboard on them starts showing data.
+- **A key exit is counted as one when an overflow dropped only copies of an answer.** A caller who leaves a queue by
+  pressing a key is no longer counted abandoned because the event buffer dropped copies of a list answer the SDK had
+  already received; `CallsAbandoned` and `AbandonRate` can read lower.
+- **A full AMI event buffer logs one Warning per overflow, plus a summary with the count.** A query or alert that
+  counts `[AMI_EVENT] Dropped` lines now counts overflows; sum the summary counts or read `ami.events.dropped`.
+- **An AMI message cut short by the end of the stream is no longer delivered** to the handlers.
 
 - **A stop is a stop, not a cancelled token.** Cancelling the token passed to the start of the ARI AudioSocket or
   WebSocket audio server, the ARI outbound listener, the FastAGI server, or to `PipelineSocketConnection.ConnectAsync`
