@@ -266,7 +266,7 @@ and each wire name maps to the same type as in 2.8.0. Only the compiler output c
 `MeetmeActivity`, the `VerbaraServer.MeetMe` types, `QueueMemberPauseEvent` and the fax-license types are not
 deprecated.
 
-### Fixed: the ARI client records its REST instruments (#NNN)
+### Fixed: the ARI client records its REST instruments (#465)
 
 `ari.rest.requests.sent` ("Total ARI REST requests sent to Asterisk") and `ari.rest.roundtrip` ("Roundtrip time for
 ARI REST requests", ms) were published on the `Verbara.Sdk.Ari` meter but nothing recorded them, so a dashboard
@@ -276,7 +276,7 @@ the client's HTTP pipeline, before it is sent, so a request that then fails at t
 no response. Requests sent minus roundtrips is the requests that got no response. Both are recorded whatever the log
 level. No public type or member changed.
 
-### Fixed — BREAKING: `SessionMetrics.SessionsTimedOut` and `SessionsOrphaned` are obsolete with `VSDK0006` (#NNN)
+### Fixed — BREAKING: `SessionMetrics.SessionsTimedOut` and `SessionsOrphaned` are obsolete with `VSDK0006` (#465)
 
 Nothing in the SDK records `sessions.timed_out` or `sessions.orphaned`: the reconciliation sweep ends a call it finds
 gone as a reload ends it and counts it in `sessions.completed` or `sessions.failed`. Both fields are now `[Obsolete]`
