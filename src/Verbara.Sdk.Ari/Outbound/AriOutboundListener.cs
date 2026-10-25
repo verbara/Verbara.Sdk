@@ -55,6 +55,8 @@ internal static partial class AriOutboundListenerLog
 /// </remarks>
 public sealed class AriOutboundListener : IAriOutboundListener
 {
+    private static readonly TimeSpan StopCloseTimeout = TimeSpan.FromSeconds(1);
+
     private const string WebSocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
     /// <summary>The wait after the first of a run of failed accepts.</summary>
@@ -71,8 +73,17 @@ public sealed class AriOutboundListener : IAriOutboundListener
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
+    private readonly Lock _stopGate = new();
+    private Task? _stopTask;
+    private TaskCompletionSource _stopTransportEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _running;
     private int _disposed;
+
+    // Test-only scheduling seam between the reader ending and the connection being untracked.
+    internal Func<Task>? ReadEndedBeforeUntracking { get; set; }
+
+    // Test-only scheduling seam before a stop takes ownership of its connection snapshot.
+    internal Func<Task>? StopStarting { get; set; }
 
     public AriOutboundListener(
         IOptions<AriOutboundListenerOptions> options,
@@ -82,8 +93,8 @@ public sealed class AriOutboundListener : IAriOutboundListener
     }
 
     /// <summary>
-    /// Initializes a new instance whose accept backoff waits on <paramref name="timeProvider"/>, so a
-    /// test can drive that wait with a fake clock instead of sitting out a real one.
+    /// Initializes a new instance whose accept backoff and shared stop deadline run on
+    /// <paramref name="timeProvider"/>.
     /// </summary>
     internal AriOutboundListener(
         IOptions<AriOutboundListenerOptions> options,
@@ -128,6 +139,11 @@ public sealed class AriOutboundListener : IAriOutboundListener
         // end them all when that token is cancelled after the start returned.
         if (Interlocked.Exchange(ref _running, 1) == 1)
             return ValueTask.CompletedTask;
+        lock (_stopGate)
+        {
+            _stopTask = null;
+            _stopTransportEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
 
         // A start that throws after the exchange — an invalid ListenAddress, a port another listener
         // holds — gives the running flag back and leaves no listener, so the listener reports itself
@@ -166,10 +182,34 @@ public sealed class AriOutboundListener : IAriOutboundListener
     public int BoundPort =>
         _listener?.LocalEndpoint is IPEndPoint ep ? ep.Port : _options.Port;
 
-    public async ValueTask StopAsync(CancellationToken ct = default)
+    /// <summary>
+    /// Stops accepting, sends all connection close frames concurrently, then waits for their answers
+    /// under one shared one-second bound or until <paramref name="ct"/> is cancelled. The token never
+    /// suppresses the close sends. Unanswered connections are aborted before they are released.
+    /// </summary>
+    public ValueTask StopAsync(CancellationToken ct = default)
     {
-        if (Interlocked.Exchange(ref _running, 0) == 0)
-            return;
+        lock (_stopGate)
+        {
+            if (_stopTask is null)
+            {
+                if (Interlocked.Exchange(ref _running, 0) == 0)
+                    return ValueTask.CompletedTask;
+                // Run independently of the caller's synchronization context. Any reentrant
+                // callback takes this gate after the shared stop task has been cached.
+                _stopTask = Task.Run(() => StopCoreAsync(ct), CancellationToken.None);
+            }
+            // Completion callbacks can stop each other's listeners concurrently. Join only
+            // transport cleanup from those callbacks so publication cannot form a cycle.
+            return new ValueTask(AriOutboundConnection.IsInCompletionCallback
+                ? _stopTransportEnded.Task : _stopTask);
+        }
+    }
+
+    private async Task StopCoreAsync(CancellationToken ct)
+    {
+        if (StopStarting is { } stopStarting)
+            await stopStarting().ConfigureAwait(false);
 
         // Stopping a listener that is already down: the platform closed the socket under us, or a
         // concurrent DisposeAsync got there first. Either way the listener is not accepting, which is
@@ -177,23 +217,26 @@ public sealed class AriOutboundListener : IAriOutboundListener
         try { _listener?.Stop(); }
         catch (SocketException) { /* Best effort — the listener is already down */ }
 
+        // Start every close before cancelling any reader. All connections share one deadline;
+        // the caller's token can end the answer wait but cannot suppress any close frame.
+        var snapshot = _connections.Values.ToArray();
+        using var bound = new CancellationTokenSource(StopCloseTimeout, _timeProvider);
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct, bound.Token);
+        await Task.WhenAll(snapshot.Select(tracked => tracked.Connection.CloseForStopAsync(wait.Token, bound.Token)));
+
         if (_cts is not null)
             await _cts.CancelAsync();
-
         if (_acceptLoop is not null)
             await _acceptLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
-        // Snapshot then clear so concurrent callers don't race DisposeAsync.
-        var snapshot = _connections.Values.ToArray();
-        _connections.Clear();
         foreach (var tracked in snapshot)
-        {
-            try { await tracked.Connection.DisposeAsync(); }
-            catch (WebSocketException) { /* Best effort */ }
-            catch (ObjectDisposedException) { /* Best effort */ }
-        }
+            await tracked.Connection.ReleaseTransportAsync();
+        _connections.Clear();
 
         AriOutboundListenerLog.ListenerStopped(_logger);
+        _stopTransportEnded.TrySetResult();
+        foreach (var tracked in snapshot)
+            await tracked.Connection.DisposeAsync();
     }
 
     public async ValueTask DisposeAsync()
@@ -202,8 +245,9 @@ public sealed class AriOutboundListener : IAriOutboundListener
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        await StopAsync();
-        _connectionSubject.OnCompleted();
+        await StopAsync().ConfigureAwait(false);
+        _listener?.Dispose();
+        AriOutboundConnection.PublishAcceptedCompletion(_connectionSubject);
         _connectionSubject.Dispose();
         _cts?.Dispose();
     }
@@ -403,7 +447,7 @@ public sealed class AriOutboundListener : IAriOutboundListener
 
         try
         {
-            while (!ct.IsCancellationRequested && webSocket.State == WebSocketState.Open)
+            while (!ct.IsCancellationRequested && webSocket.State is WebSocketState.Open or WebSocketState.CloseSent)
             {
                 bufferWriter.Clear();
                 ValueWebSocketReceiveResult result;
@@ -412,20 +456,27 @@ public sealed class AriOutboundListener : IAriOutboundListener
                 if (idleTimeout > TimeSpan.Zero)
                     idleCts.CancelAfter(idleTimeout);
 
+                tracked.Connection.SetIdleDeadline(idleCts);
                 try
                 {
                     do
                     {
+                        ct.ThrowIfCancellationRequested();
                         var memory = bufferWriter.GetMemory(4096);
                         result = await webSocket.ReceiveAsync(memory, idleCts.Token);
                         bufferWriter.Advance(result.Count);
                     }
                     while (!result.EndOfMessage);
                 }
-                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested && !tracked.Connection.IsClosing)
                 {
                     AriOutboundListenerLog.IdleTimeout(_logger, tracked.Connection.RemoteEndpoint, appName);
                     break;
+                }
+
+                finally
+                {
+                    tracked.Connection.SetIdleDeadline(null);
                 }
 
                 if (result.MessageType == WebSocketMessageType.Close)
@@ -449,8 +500,6 @@ public sealed class AriOutboundListener : IAriOutboundListener
                 if (result.MessageType == WebSocketMessageType.Text && bufferWriter.WrittenCount > 0)
                 {
                     var json = Encoding.UTF8.GetString(bufferWriter.WrittenSpan);
-                    // TODO(v1.12.x): consider extracting ParseEvent into a dedicated helper
-                    // (Verbara.Sdk.Ari.Internal.AriEventParser) once we have a third consumer.
                     var evt = AriClient.ParseEvent(json, _logger);
                     if (evt is not null)
                         subject.OnNext(evt);
@@ -465,12 +514,19 @@ public sealed class AriOutboundListener : IAriOutboundListener
             // above, which logs it and breaks; anything reaching here is the listener stopping.
             /* Best effort — the listener is stopping */
         }
+        catch (WebSocketException) when (ct.IsCancellationRequested || tracked.Connection.IsClosing)
+        {
+            // A requested stop or the connection's close bound aborted this read.
+        }
         catch (WebSocketException ex)
         {
             AriOutboundListenerLog.ConnectionError(_logger, ex, tracked.Connection.RemoteEndpoint);
         }
         finally
         {
+            tracked.Connection.ReadEnded();
+            if (ReadEndedBeforeUntracking is { } readEndedBeforeUntracking)
+                await readEndedBeforeUntracking().ConfigureAwait(false);
             _connections.TryRemove(tracked.Id, out _);
             AriOutboundListenerLog.ConnectionClosed(_logger, tracked.Connection.RemoteEndpoint, appName);
 

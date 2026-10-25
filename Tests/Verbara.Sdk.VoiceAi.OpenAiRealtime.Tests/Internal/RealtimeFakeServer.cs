@@ -136,6 +136,13 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
     /// </summary>
     public bool HoldOpenUntilDisposed { get; set; }
 
+    /// <summary>Test scheduling gate between receipt of a close and publication of its observation.</summary>
+    public bool HoldCloseObservation { get; set; }
+    private readonly TaskCompletionSource _closeObservationPending = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _releaseCloseObservation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public Task CloseObservationPending => _closeObservationPending.Task;
+    public void ReleaseCloseObservation() => _releaseCloseObservation.TrySetResult();
+
     /// <summary>
     /// When <see langword="true"/>, the session holds the socket open after its events and answers
     /// the client's close frame with <c>1000</c> and no reason the moment it arrives.
@@ -585,6 +592,11 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
 
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
+                    if (HoldCloseObservation)
+                    {
+                        _closeObservationPending.TrySetResult();
+                        await _releaseCloseObservation.Task.WaitAsync(ct).ConfigureAwait(false);
+                    }
                     _clientCloseReceived.TrySetResult(ws.CloseStatus ?? WebSocketCloseStatus.Empty);
                     break;
                 }
@@ -657,6 +669,7 @@ internal sealed class RealtimeFakeServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
+        ReleaseCloseObservation();
         await _server.DisposeAsync().ConfigureAwait(false);
 
         // Nothing may stay parked on a waiter after the server is gone.

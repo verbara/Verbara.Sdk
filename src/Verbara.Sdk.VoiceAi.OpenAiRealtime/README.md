@@ -49,23 +49,34 @@ bridge.Events.Subscribe(evt =>
 The bridge runs one Realtime conversation per AudioSocket session, and the session broker that
 `AddOpenAiRealtimeBridge` registers ends the line as soon as the bridge returns:
 
-- **The vendor closes the conversation.** The bridge returns and the broker hangs the line up with
+- **The vendor closes the conversation.** The bridge answers the vendor's close with its own, also
+  while an input audio send is in flight, and its close code decides the session (a normal close
+  completes it, a failure close fails it). The bridge then returns and the broker hangs the line up with
   one hangup frame. On the `AudioSocket()` route of Asterisk 20 and later the caller goes on in the
   dialplan at once (measured 2026-10-02 on 20.20.1, 22.9.0 and 23.4.1: 60 of 60 calls, within
   2 ms of the bridge returning); on an ARI `externalMedia` route the channel leaves Stasis with the
   caller still in your bridge (60 of 60). Put what the caller should hear next in the dialplan or
   your ARI application. On Asterisk 18 the application fails and the call is hung up.
-- **The caller hangs up.** The bridge closes the vendor session and returns; nothing more is sent
-  to the caller.
+- **The caller hangs up.** The bridge stops forwarding vendor audio and sends its close. It keeps
+  reading until the vendor answers or the existing 10-second bound expires, including when an audio
+  write failed because the caller's transport ended. A normal vendor close completes the session;
+  a failure close fails it, even after the caller left.
 - **The host stops.** A graceful stop hangs up every live call with a frame and waits for each
   conversation to return, within the host's shutdown budget. A conversation the host cancels
   returns once both of its audio loops have ended, without waiting for a function still running, and an event a session raises after the
   bridge was disposed is dropped and logged at Debug rather than thrown inside the session.
 
+If the vendor loop ends while an input audio send is stalled, the bridge attempts its terminal close
+under the existing write discipline and 10-second close bound. A send still blocking that attempt at
+the bound is ended by aborting the transport; both loops finish before their resources are released.
+This cleanup does not replace the vendor's close code or the receive failure that ended the session.
+
 Every session the bridge starts is counted in exactly one of `openai_realtime.sessions.completed`, `.failed` or
 `.cancelled`. A session is `cancelled` only when the token handed to the bridge was cancelled (the host, a stop that
 is no longer graceful, the broker's disposal), and its `openai_realtime.session.duration_ms` sample carries
-`voiceai.ending` = `session-cancelled`; a caller's hangup, the vendor's close and a graceful stop are `completed`.
+`voiceai.ending` = `session-cancelled`. A normal vendor close, or an unanswered close after the caller's
+hangup, is `completed`; a vendor failure close is `failed`, including after a hangup. A host cancellation that
+aborts an input audio send is still `cancelled`, even when the socket reports a state error.
 
 Register `AddAudioSocketServer` before `AddOpenAiRealtimeBridge` (the prerequisite above), so the
 broker stops before the server and every call ends with a hangup frame.

@@ -25,6 +25,7 @@ public sealed class ToxiproxyContainer : IAsyncDisposable
         var builder = new ContainerBuilder("ghcr.io/shopify/toxiproxy:2.12.0")
             .WithPortBinding(8474, true)
             .WithPortBinding(15038, true)
+            .WithPortBinding(18088, true)
             // Allow Toxiproxy to reach Asterisk AMI via the host-mapped port using the
             // Docker-standard host.docker.internal DNS name (resolves to the Docker host
             // gateway). This avoids relying on Docker's embedded DNS for the 'asterisk'

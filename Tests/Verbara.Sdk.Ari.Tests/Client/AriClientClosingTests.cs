@@ -1,0 +1,309 @@
+using System.Collections.Concurrent;
+using System.Net.WebSockets;
+using System.Reflection;
+using Verbara.Sdk.Ari.Client;
+using Verbara.Sdk.Ari.Tests.TestSupport;
+using Verbara.Sdk.Enums;
+using Verbara.Sdk.TestInfrastructure.WebSocket;
+using FluentAssertions;
+using FluentAssertions.Execution;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Xunit.Abstractions;
+
+namespace Verbara.Sdk.Ari.Tests.Client;
+
+public sealed class AriClientClosingTests(ITestOutputHelper output)
+{
+    private static readonly TimeSpan Limit = TimeSpan.FromSeconds(10);
+    private static readonly FieldInfo SocketField = typeof(AriClient).GetField("_webSocket", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DisposeAsync_ShouldLeaveStateDisconnected_WhenReconnecting(bool heldUpgrade)
+    {
+        await using var peer = new ClosingPeer { HoldReconnectUpgrade = heldUpgrade };
+        var clock = new FakeTimeProvider();
+        var log = new ClosingLogger<AriClient>();
+        var sut = Create(peer.Port, log, true, heldUpgrade ? TimeSpan.Zero : TimeSpan.FromMinutes(1));
+        sut.TimeProvider = clock;
+        await sut.ConnectAsync();
+        while (clock.TimersCreated.TryRead(out _)) { }
+        var first = await peer.NextAsync();
+        first.Drop();
+        if (heldUpgrade) await peer.NextAsync();
+        else await log.Reconnecting.Task.WaitAsync(Limit);
+        await sut.DisposeAsync().AsTask().WaitAsync(Limit);
+        using (new AssertionScope())
+        {
+            sut.EventLoop!.IsCompleted.Should().BeTrue();
+            sut.State.Should().Be(AriConnectionState.Disconnected, "disposal ended the reconnect loop");
+            peer.Dials.Should().Be(heldUpgrade ? 2 : 1);
+        }
+    }
+
+    [Fact]
+    public async Task DisconnectAsync_ShouldLeaveStateDisconnected_WhenAReconnectUpgradeIsHeld()
+    {
+        await using var peer = new ClosingPeer { HoldReconnectUpgrade = true };
+        var sut = Create(peer.Port, new ClosingLogger<AriClient>(), true);
+        try
+        {
+            await sut.ConnectAsync();
+            (await peer.NextAsync()).Drop();
+            await peer.NextAsync();
+            await sut.DisconnectAsync().AsTask().WaitAsync(Limit);
+            sut.State.Should().Be(AriConnectionState.Disconnected);
+            sut.EventLoop!.IsCompleted.Should().BeTrue();
+            peer.Dials.Should().Be(2);
+        }
+        finally { await sut.DisposeAsync(); }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task DisconnectAsync_ShouldSendOneNormalClose_WhenReceiving(bool cancelledToken, bool eventsBeforeAnswer)
+    {
+        await using var peer = new ClosingPeer { EventsBeforeAnswer = eventsBeforeAnswer, AnswerClose = !cancelledToken };
+        using var receive = new ReceiveStartSignal();
+        var sut = Create(peer.Port, new ClosingLogger<AriClient>());
+        try
+        {
+            await receive.Watch(() => sut.ConnectAsync().AsTask());
+            var connection = await peer.NextAsync();
+            await receive.Started.WaitAsync(Limit);
+            var socket = (ClientWebSocket)SocketField.GetValue(sut)!;
+            using var caller = new CancellationTokenSource();
+            if (cancelledToken) caller.Cancel();
+            await sut.DisconnectAsync(caller.Token).AsTask().WaitAsync(Limit);
+            var sawClose = await connection.Ended.WaitAsync(Limit);
+            using (new AssertionScope())
+            {
+                sawClose.Should().BeTrue("the far end must receive a close frame, not an aborted connection");
+                connection.CloseCount.Should().Be(1);
+                connection.CloseStatus.Should().Be(WebSocketCloseStatus.NormalClosure);
+                if (!cancelledToken) socket.State.Should().Be(WebSocketState.Closed, "events preceding the answer must not stop its sole reader");
+                else socket.State.Should().Be(WebSocketState.Aborted, "the already-cancelled caller ends the wait only after the frame went out");
+                sut.EventLoop!.IsCompleted.Should().BeTrue("the sole reader finishes before disconnect returns");
+                sut.State.Should().Be(AriConnectionState.Disconnected);
+            }
+        }
+        finally { await sut.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task DisconnectAsync_ShouldNotReconnect_WhenThePeerAnswersAndAutoReconnectIsEnabled()
+    {
+        await using var peer = new ClosingPeer();
+        var sut = Create(peer.Port, new ClosingLogger<AriClient>(), true);
+        try
+        {
+            await sut.ConnectAsync();
+            await peer.NextAsync();
+            await sut.DisconnectAsync().AsTask().WaitAsync(Limit);
+            await sut.EventLoop!.WaitAsync(Limit);
+            peer.Dials.Should().Be(1, "a requested ending suppresses reconnect");
+            sut.State.Should().Be(AriConnectionState.Disconnected);
+        }
+        finally { await sut.DisposeAsync(); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EventsLoop_ShouldAnswerPeerCloseBeforeRelease_WhenAutoReconnectIsEnabledOrDisabled(bool autoReconnect)
+    {
+        await using var peer = new ClosingPeer { HoldCloseObservation = true };
+        var log = new ClosingLogger<AriClient>();
+        var sut = Create(peer.Port, log, autoReconnect);
+        using var diagnostic = new ReceiveStartSignal();
+        int? closeSendsBeforeReconnect = null;
+        try
+        {
+            await diagnostic.Watch(() => sut.ConnectAsync().AsTask());
+            log.BeforeReconnect = () => closeSendsBeforeReconnect = diagnostic.CloseSendsCompleted;
+            var first = await peer.NextAsync();
+            await first.CloseAsync();
+            if (autoReconnect) await peer.NextAsync();
+            else await sut.EventLoop!.WaitAsync(Limit);
+
+            // Client completion does not publish the peer's receipt. Hold that publication on
+            // purpose, then join it explicitly. An accept on another socket supplies no order.
+            var observationFault = await Record.ExceptionAsync(() =>
+                Task.WhenAny(first.CloseObservationPending, first.Ended).WaitAsync(Limit));
+            if (first.CloseObservationPending.IsCompletedSuccessfully)
+            {
+                first.CloseCount.Should().Be(0, "the observation gate is still held after the client finished closing");
+                first.Ended.IsCompleted.Should().BeFalse();
+            }
+            first.ReleaseCloseObservation();
+            if (observationFault is null) await first.Ended.WaitAsync(Limit);
+            output.WriteLine($"autoReconnect={autoReconnect}; clientCloseFrames={first.CloseCount}; " +
+                $"dials={peer.Dials}; closeReadBeforePublication={first.CloseObservationPending.IsCompletedSuccessfully}; " +
+                $"peerReadEnded={first.Ended.IsCompleted}; closeSendsBeforeReconnect={closeSendsBeforeReconnect}; " +
+                $"observationFault={observationFault?.GetType().Name}");
+            using (new AssertionScope())
+            {
+                first.CloseObservationPending.IsCompletedSuccessfully.Should().BeTrue("the peer actually crossed the observation scheduling gate");
+                first.CloseCount.Should().Be(1, "an Asterisk-initiated close is answered before release/redial");
+                first.CloseStatus.Should().Be(WebSocketCloseStatus.NormalClosure);
+                diagnostic.CloseSendsCompleted.Should().Be(1, "the watched client sent exactly one answering frame");
+                diagnostic.CloseCompletedBeforeRelease.Should().BeTrue("the actual close send finished before socket disposal");
+                if (autoReconnect)
+                {
+                    // This synchronous client checkpoint is before the next dial, unlike the
+                    // independent server receive/accept continuations used by the old test.
+                    closeSendsBeforeReconnect.Should().Be(1, "the actual close send finished before reconnect policy could dial");
+                    peer.Dials.Should().Be(2, "the existing policy permits exactly one successful reconnect");
+                }
+                else peer.Dials.Should().Be(1, "automatic reconnect is disabled");
+            }
+        }
+        finally { await sut.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task EventsLoop_ShouldLeaveStateDisconnected_WhenPeerClosesWithAutoReconnectDisabled()
+    {
+        await using var peer = new ClosingPeer();
+        var sut = Create(peer.Port, new ClosingLogger<AriClient>());
+        try
+        {
+            await sut.ConnectAsync();
+            await (await peer.NextAsync()).CloseAsync();
+            await sut.EventLoop!.WaitAsync(Limit);
+            output.WriteLine($"eventLoopCompleted={sut.EventLoop.IsCompleted}; state={sut.State}; dials={peer.Dials}");
+            sut.State.Should().Be(AriConnectionState.Disconnected, "the peer close ended the events loop without caller cleanup");
+            peer.Dials.Should().Be(1);
+        }
+        finally { await sut.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task EventsLoop_ShouldLeaveStateDisconnected_WhenPeerCloseAnswerFails()
+    {
+        await using var peer = new ClosingPeer();
+        var log = new ClosingLogger<AriClient>();
+        var sut = Create(peer.Port, log);
+        var answerStarted = false;
+        try
+        {
+            await sut.ConnectAsync();
+            var socket = (ClientWebSocket)SocketField.GetValue(sut)!;
+            sut.TimeProvider = new CloseAnswerTimeProvider(() =>
+            {
+                answerStarted = true;
+                socket.Abort();
+            });
+            await (await peer.NextAsync()).CloseAsync();
+            var fault = await Record.ExceptionAsync(() => sut.EventLoop!.WaitAsync(Limit));
+            output.WriteLine($"answerStarted={answerStarted}; eventLoopCompleted={sut.EventLoop!.IsCompleted}; " +
+                $"state={sut.State}; dials={peer.Dials}; socketState={socket.State}; answerFailure={fault?.GetType().Name}");
+            using (new AssertionScope())
+            {
+                answerStarted.Should().BeTrue("the close bound is armed before the answering send");
+                fault.Should().BeOfType<ObjectDisposedException>("the answering send failed on the injected aborted transport");
+                sut.State.Should().Be(AriConnectionState.Disconnected, "the peer close ended the loop even though its answer failed");
+                peer.Dials.Should().Be(1);
+            }
+        }
+        finally { await sut.DisposeAsync(); }
+    }
+
+    // Reuses the client's existing clock seam to fail the send after CloseReceived was recognized.
+    private sealed class CloseAnswerTimeProvider(Action beforeAnswer) : TimeProvider
+    {
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            beforeAnswer();
+            return System.CreateTimer(callback, state, dueTime, period);
+        }
+    }
+
+    [Fact]
+    public async Task EventsLoop_ShouldNotLogError_WhenDisconnectLandsInsideAPartialRead()
+    {
+        await using var peer = new ClosingPeer();
+        using var receive = new WebSocketReceiveHook();
+        var log = new ClosingLogger<AriClient>();
+        var sut = Create(peer.Port, log);
+        Task? disconnect = null;
+        try
+        {
+            await receive.Watch(() => sut.ConnectAsync().AsTask());
+            var connection = await peer.NextAsync();
+            receive.Arm(() =>
+            {
+                var source = (CancellationTokenSource)typeof(AriClient).GetField("_cts", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(sut)!;
+                source.Cancel();
+                disconnect = sut.DisconnectAsync().AsTask();
+            });
+            await connection.SendAsync("{\"type\":\"StasisStart\",", end: false);
+            await receive.Fired.WaitAsync(Limit);
+            await disconnect!.WaitAsync(Limit);
+            log.Entries.Should().NotContain(e => e.Level == LogLevel.Error, "the reader's requested disconnect caused the socket-state failure");
+        }
+        finally { await sut.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task DisconnectAsync_ShouldWaitForItsBound_WhenThePeerNeverAnswers()
+    {
+        await using var peer = new ClosingPeer { AnswerClose = false };
+        using var receive = new ReceiveStartSignal();
+        var log = new ClosingLogger<AriClient>();
+        var sut = Create(peer.Port, log);
+        var clock = new FakeTimeProvider();
+        sut.TimeProvider = clock;
+        try
+        {
+            await receive.Watch(() => sut.ConnectAsync().AsTask());
+            var first = await peer.NextAsync();
+            await receive.Started.WaitAsync(Limit);
+            while (clock.TimersCreated.TryRead(out _)) { }
+            var disconnect = sut.DisconnectAsync().AsTask();
+            var sawClose = await first.Ended.WaitAsync(Limit);
+            var returnedBeforeBound = disconnect.IsCompleted;
+            clock.Advance(TimeSpan.FromSeconds(5));
+            await disconnect.WaitAsync(Limit);
+            using (new AssertionScope())
+            {
+                sawClose.Should().BeTrue("the peer must see the frame even when it never answers");
+                returnedBeforeBound.Should().BeFalse("an unanswered close waits for the existing bound");
+                sut.State.Should().Be(AriConnectionState.Disconnected);
+                log.Entries.Should().NotContain(e => e.Level == LogLevel.Error, "the requested close bound caused this ending");
+            }
+        }
+        finally { await sut.DisposeAsync(); }
+    }
+
+    internal static AriClient Create(int port, ILogger<AriClient> log, bool reconnect = false, TimeSpan? delay = null) => new(
+        Options.Create(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}", Username = "test", Password = "test", Application = "test-app",
+            AutoReconnect = reconnect, ReconnectInitialDelay = delay ?? TimeSpan.Zero, ReconnectMaxDelay = delay ?? TimeSpan.Zero
+        }), log);
+}
+
+internal sealed class ClosingLogger<T> : ILogger<T>
+{
+    internal ConcurrentQueue<(LogLevel Level, EventId Id, Exception? Exception, string Message)> Entries { get; } = new();
+    internal Action? BeforeReconnect { get; set; }
+    internal TaskCompletionSource Reconnecting { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    internal TaskCompletionSource Closed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public bool IsEnabled(LogLevel logLevel) => true;
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        Entries.Enqueue((logLevel, eventId, exception, formatter(state, exception)));
+        if (eventId.Name == "ConnectionClosed") Closed.TrySetResult();
+        if (eventId.Name == "Reconnecting")
+        {
+            BeforeReconnect?.Invoke();
+            Reconnecting.TrySetResult();
+        }
+    }
+}

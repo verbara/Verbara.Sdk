@@ -103,7 +103,8 @@ disposal), and for syntheses also `barge-in`, `disposal` and `far-end` (a write 
 failed on its transport because the far end left). `.completed` counts only a synthesis whose audio was all written to
 the session. The sessions follow the same rule per handler: `voiceai.sessions.*` and `openai_realtime.sessions.*`
 count each started session in exactly one of `.completed`, `.failed` or `.cancelled`, and a session is `.cancelled`
-only when the token its handler runs under was cancelled; a hangup, a vendor close or a graceful stop is `.completed`.
+only when the token its handler runs under was cancelled; a hangup, a normal vendor close or a graceful stop is
+`.completed`, and a vendor failure close is `.failed`, also when it arrives after the caller hung up.
 The same `voiceai.ending` value rides on the latency sample of a cancelled turn (`stt.transcription.latency_ms`,
 `tts.synthesis.latency_ms`) and on the duration sample of a cancelled session (`voiceai.session.duration_ms`,
 `openai_realtime.session.duration_ms`, always `session-cancelled`). Completed and failed samples carry no tag, so
@@ -226,6 +227,17 @@ Both AMI and ARI support exponential backoff reconnection.
 | `MaxReconnectAttempts` | `0` (unlimited) or more |
 
 A value outside these ranges fails the host's start with an `OptionsValidationException` naming the option (through `AddVerbara`, or any registration that validates on start), and a client constructed directly throws `ArgumentOutOfRangeException` whose `ParamName` is the option. With `AutoReconnect` off the backoff values are not checked, except AMI's `MaxReconnectAttempts`, which must be 0 or more either way.
+
+
+### Closing ARI connections
+
+A disconnect, a host stop and an outbound listener's stop each send a close frame and wait for Asterisk's answer, so a
+stop's cost is Asterisk's answer time, not a timeout. Measured on Asterisk 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2
+against the functional test stack: a generic host stopping 1 `AriConnectionHostedService` took p50 0.16–0.19 ms and 10
+took p50 0.55–0.65 ms (20 stops each, max 7.1 ms); Asterisk answered every close it was sent within 7.9 ms, with up to
+50 outbound connections closed at once. The bounds only matter when nothing answers: a disconnect waits at most 5 s (or
+until its token is cancelled), and an outbound listener's stop waits at most 1 s for all its connections together, so N
+mute far ends cost one second, not N. See the [ARI package README](../../src/Verbara.Sdk.Ari/README.md#closing).
 
 ---
 

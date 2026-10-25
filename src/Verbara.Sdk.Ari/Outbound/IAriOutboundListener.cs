@@ -20,7 +20,10 @@ public interface IAriOutboundListener : IAsyncDisposable
     /// </param>
     ValueTask StartAsync(CancellationToken ct = default);
 
-    /// <summary>Stop accepting new connections and close existing ones.</summary>
+    /// <summary>
+    /// Stops accepting and closes existing connections concurrently under one shared one-second bound.
+    /// The token ends the wait for answering closes, but never suppresses the outgoing close frames.
+    /// </summary>
     ValueTask StopAsync(CancellationToken ct = default);
 
     /// <summary>Whether the listener is currently bound and accepting connections.</summary>

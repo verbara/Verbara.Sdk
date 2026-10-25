@@ -93,6 +93,7 @@ public sealed class AriClient : IAriClient
     private int _state = (int)AriConnectionState.Initial;
     private int _dialsInFlight;
     private int _disposed;
+    private int _disconnectRequested;
 
     public AriConnectionState State => (AriConnectionState)Volatile.Read(ref _state);
     public bool IsConnected => State == AriConnectionState.Connected;
@@ -174,6 +175,7 @@ public sealed class AriClient : IAriClient
 
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
     {
+        Volatile.Write(ref _disconnectRequested, 0);
         SetState(AriConnectionState.Connecting);
 
         // This attempt's own source and socket, in the fields before anything is awaited. What a previous
@@ -319,7 +321,7 @@ public sealed class AriClient : IAriClient
 
         try
         {
-            while (!ct.IsCancellationRequested && _webSocket?.State == WebSocketState.Open)
+            while (!ct.IsCancellationRequested && _webSocket?.State is WebSocketState.Open or WebSocketState.CloseSent)
             {
                 bufferWriter.Clear();
                 ValueWebSocketReceiveResult result;
@@ -327,6 +329,7 @@ public sealed class AriClient : IAriClient
                 // Read potentially fragmented message segments into the buffer writer
                 do
                 {
+                    ct.ThrowIfCancellationRequested();
                     var memory = bufferWriter.GetMemory(4096);
                     result = await _webSocket.ReceiveAsync(memory, ct);
                     bufferWriter.Advance(result.Count);
@@ -334,7 +337,27 @@ public sealed class AriClient : IAriClient
                 while (!result.EndOfMessage);
 
                 if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    try
+                    {
+                        if (_webSocket is { State: WebSocketState.CloseReceived } socket)
+                        {
+                            // Finish a peer-first handshake before reconnect can release this socket or dial again.
+                            // The connection's cancellation does not cancel the answer; the existing close bound does.
+                            using var closeBound = new CancellationTokenSource(CloseTimeout, TimeProvider);
+                            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Closing", closeBound.Token);
+                        }
+                    }
+                    finally
+                    {
+                        if (!_options.AutoReconnect && !ct.IsCancellationRequested)
+                        {
+                            // A peer ending is terminal even if its answer fails; requested endings publish their own state.
+                            Interlocked.CompareExchange(ref _state, (int)AriConnectionState.Disconnected, (int)AriConnectionState.Connected);
+                        }
+                    }
                     break;
+                }
 
                 if (result.MessageType == WebSocketMessageType.Text && bufferWriter.WrittenCount > 0)
                 {
@@ -358,13 +381,17 @@ public sealed class AriClient : IAriClient
             // below, which re-reads the same `ct`: a cancelled loop leaves the method without dialling.
             /* Best effort — the client is disconnecting */
         }
+        catch (WebSocketException) when (ct.IsCancellationRequested)
+        {
+            // A requested stop can abort a pending receive before it reports the cancellation.
+        }
         catch (WebSocketException ex)
         {
             AriClientLog.WebSocketError(_logger, ex);
         }
 
         // Auto-reconnect with exponential backoff
-        if (_options.AutoReconnect && !ct.IsCancellationRequested)
+        if (_options.AutoReconnect && !ct.IsCancellationRequested && Volatile.Read(ref _disconnectRequested) == 0)
         {
             await ReconnectLoopAsync(pump, ct);
         }
@@ -565,35 +592,52 @@ public sealed class AriClient : IAriClient
 
     public async ValueTask DisconnectAsync(CancellationToken cancellationToken = default)
     {
+        // Suppress reconnect before the sole reader can observe the answering close. Its token stays live
+        // until the frame has gone out and the answer, bound or caller ends the wait.
+        Volatile.Write(ref _disconnectRequested, 1);
         SetState(AriConnectionState.Disconnecting);
+        var source = Volatile.Read(ref _cts);
 
-        await CancelQuietlyAsync(Volatile.Read(ref _cts));
-
-        // The connection's buffer is told to stop at once: the dispatch in progress completes and nothing buffered
-        // is delivered after it. It is released, and what it held counted, once the events loop has ended.
+        // Stop delivering buffered events immediately, while keeping the socket reader available for the answer.
         var pump = Interlocked.Exchange(ref _pump, null);
         if (pump is not null)
             await pump.StopAsync();
 
         var socket = Volatile.Read(ref _webSocket);
+        var loop = _eventLoop;
         if (socket?.State == WebSocketState.Open)
         {
-            // CloseAsync waits for Asterisk to answer the close frame and has no deadline of its own, so an
-            // Asterisk that never answered held this call, and DisposeAsync behind it, for as long as the
-            // caller's token allowed: for good, when there was none. The wait now ends at the bound or at
-            // the caller's token, whichever comes first, and either ending is absorbed below like any
-            // other failed close.
             using var closeBound = new CancellationTokenSource(CloseTimeout, TimeProvider);
-            using var close = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, closeBound.Token);
+            // The send does not run on the caller's token. Aborting at the existing bound also releases a
+            // blocked send; await that send itself so no close operation remains after this call returns.
+            using var abortAtBound = closeBound.Token.UnsafeRegister(_ =>
+            {
+                // Publish the requested stop before aborting, so the reader classifies its resulting
+                // socket-state error as teardown rather than an unsolicited transport failure.
+                try { source?.Cancel(); }
+                catch (ObjectDisposedException) { /* The connection attempt already released its source. */ }
+                socket.Abort();
+            }, null);
             try
             {
-                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", close.Token);
+                await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, closeBound.Token);
+                wait.Token.ThrowIfCancellationRequested();
+                if (loop is not null)
+                    await loop.WaitAsync(wait.Token);
             }
-            catch { /* Best effort */ }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // A caller cancellation or the bound ends the answer wait only after the send. Failed
+                // transports are best effort too, and must release their reader before returning.
+                await CancelQuietlyAsync(source);
+                socket.Abort();
+            }
         }
 
-        if (_eventLoop is not null)
-            await _eventLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        await CancelQuietlyAsync(source);
+        if (loop is not null)
+            await loop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
         if (pump is not null)
             await ReleaseOnCallerEndingAsync(pump);
@@ -616,6 +660,8 @@ public sealed class AriClient : IAriClient
         await CancelQuietlyAsync(Volatile.Read(ref _cts));
         if (_eventLoop is not null)
             await _eventLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+        SetState(AriConnectionState.Disconnected);
 
         // A buffer DisconnectAsync did not release: the client was reconnecting, or lost with nothing reconnecting it.
         if (Interlocked.Exchange(ref _pump, null) is { } pump)

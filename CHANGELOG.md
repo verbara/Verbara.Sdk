@@ -534,6 +534,81 @@ has ended, before the empty-result rule, so a cancelled `StreamAsync` or `Synthe
 contracts state. No public API changes. The HTTP recognizers and synthesizers read with the token on every call and
 were not affected.
 
+### Fixed: an ARI disconnect sends its close before it stops reading, and a close Asterisk sends is answered (#467)
+
+`AriClient.DisconnectAsync` cancelled its events loop before it sent its close; the cancelled receive aborted the
+socket, so the close never left (0 of 50 settled disconnects put a frame on the wire, measured in process), and a
+disconnect whose token was already cancelled — a host's stopping token in a `finally` — sent none either. The
+disconnect now sends its close first, on its own bound, and the events loop stays the only reader until Asterisk's
+answer arrives, the existing 5-second bound runs out, or the disconnect's token is cancelled, whichever comes first;
+a token that is already cancelled still sends the frame and then lets the connection go at once. A disconnect starts
+no reconnect, also with `AutoReconnect` on. A close Asterisk sends first is now answered with one close before the
+socket is released and before any reconnect the policy allows, and with `AutoReconnect` off the client reads
+`Disconnected` afterwards instead of staying `Connected`. Measured against Asterisk 22.12.0-rc2, 23.6.0-rc2 and
+24.0.0-rc2 (900 closes per run, two independent runs), Asterisk answered every client close, worst cell p50 0.18 ms,
+maximum 7.9 ms, so the wait costs nothing measurable; the bound is for an Asterisk or proxy that never answers. The
+`IAriClient.DisconnectAsync` XML doc now says the wait also ends at the caller's token. No public API signature
+changes.
+
+### Fixed: the ARI outbound listener's stop closes every connection together under one second (#467)
+
+`AriOutboundListener.StopAsync` cancelled every read pump before it disposed the connections, one after another, so
+no outbound connection got a close frame and N far ends that did not answer cost N bounds; its token was not read.
+The stop now stops accepting, sends every open connection its close at the same time and waits for the answers
+under one shared one-second bound, which the stop's token can shorten but never uses to suppress a frame; a
+connection still unanswered at the bound is aborted before it is released. The read keeps going until the answer,
+so events Asterisk sends after the close are still delivered. Asterisk's outbound WebSocket client answered every
+close a server sent it on 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2 (1,830 per run, two independent runs; worst answer
+6.46 ms with 50 connections), which is why the bound is one second. `IAriOutboundListener.StopAsync`'s XML doc says
+so. No public API signature changes.
+
+### Fixed: disposing an ARI client while it reconnects leaves it `Disconnected` (#467)
+
+`AriClient.DisposeAsync` wrote no state when the client was `Reconnecting` — in its backoff or in a dial the far end
+held — so `State` kept reading `Reconnecting` after the disposal, and the ARI health check read `Degraded`. Disposal
+now writes `Disconnected` after the loop it ended has finished, on every path, as `DisconnectAsync` already did; the
+health check then reads `Unhealthy`, the status its table documents for a disconnected client.
+
+### Fixed: a requested stop is no longer logged as an ARI error or an idle timeout (#467)
+
+A disconnect that landed inside a read the ARI client was still finishing logged `[ARI] WebSocket error` at Error,
+and the outbound listener logged a stop inside a read at Error and a connection whose own close bound ran out as an
+idle timeout. Each now reads who asked: a requested stop or a close bound ending a read logs no error, an idle
+timeout still logs `Idle timeout` at Warning (including in the middle of a message, unchanged), and only a transport
+failure nobody asked for logs `Connection error` at Error. The stale `TODO` in the listener's read loop is removed.
+
+### Fixed: the OpenAI Realtime bridge answers a close the vendor sends (#467)
+
+When OpenAI closed the conversation first, the bridge returned without answering the close, also while an input
+audio send was inside its write. It now answers from its one terminal close site, keeps the shared socket open for
+that answer under the existing write discipline and 10-second close bound, and classifies the session by the
+vendor's code. If an input send is still stalled when the output loop ends, the send is ended at that bound by
+aborting the transport; the vendor's code or the receive failure still decides the session.
+
+### Changed — BREAKING: a vendor failure close after the caller hung up counts `failed`, and a host cancellation that surfaces from a send counts `cancelled` (#467)
+
+Two movements between `openai_realtime.sessions.completed`, `.failed` and `.cancelled`:
+
+- **After a hangup the bridge keeps reading the vendor.** It used to stop reading when the caller left, so the
+  vendor's answering close was never read: a vendor that answered `4000` was counted `completed` (measured end to
+  end on Asterisk 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: 20 of 20 per image before, the close arriving about 3 s after the
+  hangup). It now drops the vendor's audio, keeps reading until the vendor's close or the existing 10-second bound,
+  also when the audio write failed with `ObjectDisposedException` or `IOException` because the caller's transport
+  ended, and counts the session by the code: `1000` → `completed` (20 of 20 per image), `4000` → `failed` with
+  `SpeechProviderFailureException` (20 of 20 per image). An unanswered close after a hangup is still `completed`.
+- **A host cancellation that aborts an input send counts `cancelled`.** A send that met the socket the host's
+  cancellation had just aborted surfaced a `WebSocketException` (`InvalidState`) and counted the session `failed`
+  (in process, with a hook that lands the cancellation inside the send on every run: 110 of 200 runs counted
+  `failed`); it is now converted to the cancellation it is (200 of 200 `cancelled`).
+
+A dashboard that reads `.completed` as "the vendor finished normally" now sees vendor failures after a hangup under
+`.failed`; one that alerts on `.failed` no longer fires for host shutdowns that race an audio send. The
+`openai-realtime` health entry counts a failure close before any vendor audio reached the caller as a rejection,
+also when the caller left first (before this change that session counted as served). No public API signature
+changes.
+
+Labelled breaking because the published counters change meaning; the migration guide has the section.
+
 ### Changed — BREAKING: the `openai-realtime` health entry reports the vendor's rejections (#421)
 
 `RealtimeHealthCheck`, registered by `AddOpenAiRealtimeBridge` as `openai-realtime`, reported `Healthy` whenever an

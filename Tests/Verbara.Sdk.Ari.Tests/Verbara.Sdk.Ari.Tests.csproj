@@ -6,6 +6,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Verbara.Sdk.TestInfrastructure\WebSocket\WebSocketReceiveHook.cs" Link="TestSupport\WebSocketReceiveHook.cs" />
     <Compile Include="..\Shared\Sockets\ReleaseSignallingClient.cs" Link="Shared\Sockets\ReleaseSignallingClient.cs" />
     <Compile Include="..\Shared\Sockets\UnobservedServerFaults.cs" Link="Shared\Sockets\UnobservedServerFaults.cs" />
     <Compile Include="..\Shared\Sockets\LoopbackServerBind.cs" Link="Shared\Sockets\LoopbackServerBind.cs" />

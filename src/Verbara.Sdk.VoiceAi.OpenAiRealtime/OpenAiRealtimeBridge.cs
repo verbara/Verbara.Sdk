@@ -23,6 +23,11 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime;
 /// <remarks>
 /// This class is a singleton. Each call to <see cref="HandleSessionAsync"/> creates fully isolated
 /// per-session state (WebSocket, write lock, resamplers) as local variables — no shared mutable state.
+/// After the caller leaves, vendor audio is dropped while the bridge continues reading until the
+/// vendor's close or the existing 10-second close-answer bound. The vendor's close code still
+/// classifies the session, including when writing vendor audio to the caller failed with <see cref="IOException"/>.
+/// If an input send is still pending when the vendor loop ends, the same 10-second bound limits
+/// terminal close coordination. A transport still blocked at that bound is aborted before cleanup.
 /// </remarks>
 public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 {
@@ -85,6 +90,13 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     // host finally cancelled. Its expiry fails the session like a refused upgrade. Settable by tests
     // (via InternalsVisibleTo); a private value, not an option, for the close bound's reason.
     internal TimeSpan ConnectTimeout { get; set; } = WebSocketConnectBound.Default;
+
+    // Test transport injection: the default uses the same bounded dial as every production session.
+    // The supplying test owns any custom invoker and transport wrapper.
+    internal Action<CancellationToken>? InputReadStarting { get; set; }
+
+    internal Func<ClientWebSocket, Uri, TimeSpan, TimeProvider, CancellationToken, Task> ConnectTransport { get; set; } =
+        WebSocketConnectBound.ConnectAsync;
 
     // Settable by tests (via InternalsVisibleTo); null in production. Awaited when the caller has hung up
     // and the session is about to take its write lock to send its close to the vendor, before it waits
@@ -162,8 +174,8 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         // were released as the try exited, before that block ran: a host cancellation that left the try
         // while the caller-to-vendor close was pending left the vendor-to-caller loop running over the
         // released write lock, resamplers and silence bound, faulting where nobody awaited it. The terminal
-        // block releases the sources at one point, after the loops end and before the close, which no
-        // `using` gives: it would release them either before the loops end or after the close.
+        // block releases the sources at one point after both loops end. A pending input write is
+        // coordinated with the terminal close before that wait, under the existing close bound.
         CancellationTokenSource? inputCts = null;
         EndOfInputSilenceBound? silence = null;
         Task? input = null;
@@ -178,7 +190,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         try
         {
             var uri = new Uri($"{BaseUri}?model={Uri.EscapeDataString(_options.Model)}");
-            await WebSocketConnectBound.ConnectAsync(ws, uri, ConnectTimeout, TimeProvider, ct).ConfigureAwait(false);
+            await ConnectTransport(ws, uri, ConnectTimeout, TimeProvider, ct).ConfigureAwait(false);
             RealtimeLog.WebSocketConnected(_logger, channelId);
 
             // Send session.update (voice, instructions, VAD, tools)
@@ -196,7 +208,8 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             // cancellation still ends the session as it always did, and is never taken for the bound
             // running out.
             silence = new EndOfInputSilenceBound(CloseAnswerBound, TimeProvider, ct);
-            input = InputLoop(session, ws, wsWriteLock, upsampler, inputCts.Token);
+            InputReadStarting?.Invoke(inputCts.Token);
+            input = InputLoop(session, ws, wsWriteLock, upsampler, inputCts.Token, ct);
             output = OutputLoop(session, ws, wsWriteLock, downsampler, silence, vendorAudio, ct);
             var first = await Task.WhenAny(input, output).ConfigureAwait(false);
 
@@ -208,16 +221,9 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 // hangup, sending 597 messages into the closed socket (measured live). So stop the
                 // input loop here and end at the vendor's close.
                 await inputCts.CancelAsync().ConfigureAwait(false);
-                try { await input.ConfigureAwait(false); }
-                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-                {
-                    // This method stopped the input loop itself, just above, so its cancellation is
-                    // not the session's. Left to escape, it would reach the terminal block as a
-                    // failure; a cancellation the host asked for still escapes and completes there.
-                }
-
-                // Rethrows the vendor's failure close, when the close was one, so the session fails
-                // with it in the terminal block below.
+                // Classify the output's ending before waiting for a send it made obsolete. The
+                // terminal block answers the close, or aborts at the existing close bound if that
+                // send never releases the write lock, and then observes the input's completion.
                 await output.ConfigureAwait(false);
             }
             else
@@ -293,24 +299,38 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         }
         finally
         {
-            // Both loops end before anything they use is released, on every path out of the try. The
-            // session is already classified above, so what they raise here is observed and nothing more:
-            // a session the host cancelled stays cancelled.
+            // A vendor close or output fault can leave an input write holding the write lock.
+            // Stopping caller reads must not abort it before the answering-close attempt. Bound
+            // that attempt (including its lock wait) with the existing close bound; expiry aborts
+            // the transport, which ends a stalled network write. Both loops are still observed
+            // before their sources, lock, resamplers or socket are released.
+            var pendingInput = input is { IsCompleted: false };
+            using var terminalBound = pendingInput ? new CancellationTokenSource(CloseAnswerBound, TimeProvider) : null;
+            using var abortAtBound = terminalBound?.Token.Register(ws.Abort) ?? default;
             if (input is not null && output is not null)
-                await AwaitLoopsAsync(inputCts!, input, output).ConfigureAwait(false);
-            ReleaseLoopSources(inputCts, silence);
+            {
+                if (pendingInput) await inputCts!.CancelAsync().ConfigureAwait(false);
+                else await AwaitLoopsAsync(inputCts!, input, output).ConfigureAwait(false);
+            }
 
-            // Clean close — never on ct, which is already cancelled. Conditional by necessity:
-            // cancelling a WebSocket operation aborts the socket, so on most cancelled paths there
-            // is nothing left to close politely.
-            await wsWriteLock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+            // Clean close — never on ct, which may already be cancelled. There is one terminal
+            // close site, under the session's write discipline, and a failed attempt cannot replace
+            // the output's already classified ending. The bound abort also ends a blocked send.
+            var closeLockHeld = false;
             try
             {
-                if (ws.State == WebSocketState.Open)
+                await wsWriteLock.WaitAsync(terminalBound?.Token ?? CancellationToken.None).ConfigureAwait(false);
+                closeLockHeld = true;
+                if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
                     await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
             }
             catch { /* ignore close errors */ }
-            finally { wsWriteLock.Release(); }
+            finally { if (closeLockHeld) wsWriteLock.Release(); }
+
+            // A pending input implies the input loop exists.
+            if (pendingInput && output is not null)
+                await AwaitLoopsAsync(inputCts!, input!, output).ConfigureAwait(false);
+            ReleaseLoopSources(inputCts, silence);
 
             // The duration first, then exactly one of the three counters: a listener that treats the
             // session counter as "the handler returned" finds the duration sample already recorded.
@@ -405,7 +425,8 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         ClientWebSocket ws,
         SemaphoreSlim wsWriteLock,
         PolyphaseResampler? upsampler,
-        CancellationToken ct)
+        CancellationToken ct,
+        CancellationToken sendToken)
     {
         await foreach (var frame in session.ReadAudioAsync(ct).ConfigureAwait(false))
         {
@@ -434,7 +455,16 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             var bytes = JsonSerializer.SerializeToUtf8Bytes(req, RealtimeJsonContext.Default.InputAudioBufferAppendRequest);
 
             await wsWriteLock.WaitAsync(ct).ConfigureAwait(false);
-            try { await ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
+            // Vendor-driven cancellation stops caller reads and write-lock waits, but must not
+            // abort a send already inside its transport write. Only the host may cancel that
+            // send; the terminal answering close waits for this same lock before socket release.
+            try { await ws.SendAsync(bytes, WebSocketMessageType.Text, true, sendToken).ConfigureAwait(false); }
+            catch (WebSocketException ex) when (sendToken.IsCancellationRequested)
+            {
+                // A host-cancelled read may abort the socket under this send. Preserve that
+                // requested ending even when the send reports the socket's state instead.
+                throw new OperationCanceledException("The host cancelled the input audio send.", ex, sendToken);
+            }
             finally { wsWriteLock.Release(); }
             RealtimeMetrics.MessagesSent.Add(1);
         }
@@ -454,6 +484,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         var channelId = session.ChannelId;
         var buf = new byte[1024 * 64];
         DateTimeOffset responseStartTime = default;
+        var callerAudioEnded = false;
 
         while (ws.State is WebSocketState.Open or WebSocketState.CloseSent)
         {
@@ -523,6 +554,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
                 case RealtimeProtocol.ResponseAudioDelta:
                 {
+                    if (callerAudioEnded) break;
                     var audioEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioDeltaEvent);
                     if (audioEvt is null) break;
                     var pcm16Bytes = Convert.FromBase64String(audioEvt.Delta);
@@ -538,12 +570,13 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     {
                         pcm = pcm16Bytes.AsMemory();
                     }
-                    // The caller hanging up while the assistant is speaking is the commonest ending
-                    // of all. Left unhandled it reaches this method's caller as a fault and is
-                    // counted as SessionsFailed — the same misclassification the read side was
-                    // fixed for, two hundred lines away (ADR-0053).
+                    // A caller that left no longer accepts audio. Stop these writes, but keep reading
+                    // the vendor's close: its code classifies the session. The input loop's existing
+                    // hangup path sends our close and bounds the answer, including after a transport
+                    // write failure ends the AudioSocket session.
                     try { await session.WriteAudioAsync(pcm, ct).ConfigureAwait(false); }
-                    catch (ObjectDisposedException) { return false; }
+                    catch (ObjectDisposedException) { callerAudioEnded = true; break; }
+                    catch (IOException) { callerAudioEnded = true; break; }
                     vendorAudio.MarkDelivered();
                     break;
                 }
