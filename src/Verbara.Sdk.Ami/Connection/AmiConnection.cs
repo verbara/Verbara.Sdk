@@ -44,8 +44,16 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] Reader error")]
     public static partial void ReaderError(ILogger logger, Exception exception);
 
+    // A full buffer logs an overflow as an episode: this Warning at its first refused event, the same line at Debug for
+    // every later refusal, and one summary Warning with the count when the buffer accepts again or is released.
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] Dropped: event_type={EventType} channel={Channel}")]
     public static partial void EventDropped(ILogger logger, string? eventType, string? channel);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[AMI_EVENT] Dropped: event_type={EventType} channel={Channel}")]
+    public static partial void EventDroppedInEpisode(ILogger logger, string? eventType, string? channel);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI_EVENT] Dropped {Count} events while the buffer was full ({Ms} ms)")]
+    public static partial void DropEpisodeEnded(ILogger logger, long count, long ms);
 
     // Not the "[AMI_EVENT] Dropped" prefix: the log-analysis guides map that one to a full buffer, whose action
     // (a larger EventPumpCapacity) is the wrong one for a caller's close.
@@ -777,13 +785,19 @@ public sealed class AmiConnection : IAmiConnection
             {
                 StopToken = _lifetime.Token,
                 SessionEndedToken = sessionToken,
+                Clock = _timeProvider,
             };
-            pump.OnEventDropped = evt =>
+            pump.OnEventRefused = (evt, opensEpisode) =>
             {
                 AmiMetrics.EventsDropped.Add(1, BufferFullReason);
                 var channel = evt.RawFields is not null && evt.RawFields.TryGetValue("Channel", out var ch) ? ch : null;
-                AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
+                if (opensEpisode)
+                    AmiConnectionLog.EventDropped(_logger, evt.EventType, channel);
+                else
+                    AmiConnectionLog.EventDroppedInEpisode(_logger, evt.EventType, channel);
             };
+            pump.OnDropEpisodeEnded = (count, duration) =>
+                AmiConnectionLog.DropEpisodeEnded(_logger, count, (long)duration.TotalMilliseconds);
             _eventPump = pump;
 
             // The pump buffers from now on but dispatches only once the previous session's pump has been released (its

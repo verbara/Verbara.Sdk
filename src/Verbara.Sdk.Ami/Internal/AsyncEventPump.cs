@@ -20,6 +20,12 @@ public sealed class AsyncEventPump : IAsyncDisposable
     private long _droppedOnDispose;
     private long _droppedBeforeCurrent;
 
+    // The overflow episode in progress: the refusals since the buffer last accepted an event, and the clock's timestamp
+    // at the first of them. The one writer moves them; a release takes the episode with an exchange, so a refusal and a
+    // release never report the same episode twice.
+    private long _episodeDrops;
+    private long _episodeStartedAt;
+
     // Event ordinals. The one writer numbers each event it hands to TryEnqueue, and publishes _lastReceived only after
     // that event was written or dropped. _dispatchedThrough is the largest d such that every event numbered d or less
     // has been dispatched (its handler returned) or dropped. Both move under _progressLock, which the consumer takes
@@ -78,6 +84,23 @@ public sealed class AsyncEventPump : IAsyncDisposable
 
     /// <summary>Callback invoked when an event is dropped due to full buffer.</summary>
     public Action<ManagerEvent>? OnEventDropped { get; set; }
+
+    /// <summary>
+    /// Called on the writer's thread for every refused event, after <see cref="OnEventDropped"/>, with
+    /// <see langword="true"/> when the refusal opens an overflow episode: the buffer accepted the event before it, or it
+    /// is the pump's first refusal.
+    /// </summary>
+    internal Action<ManagerEvent, bool>? OnEventRefused { get; set; }
+
+    /// <summary>
+    /// Called once per overflow episode with its number of refused events and how long it lasted, from its first refusal:
+    /// on the writer's thread when the buffer next accepts an event, or at the release (<see cref="DisposeAsync"/>,
+    /// <see cref="DrainAndDisposeAsync"/>) when the episode is still open then.
+    /// </summary>
+    internal Action<long, TimeSpan>? OnDropEpisodeEnded { get; set; }
+
+    /// <summary>The clock an overflow episode's duration is measured on. Set it before the first event.</summary>
+    internal TimeProvider Clock { get; init; } = TimeProvider.System;
 
     /// <summary>
     /// A token whose cancellation stops delivery between events: once it is cancelled, the event whose
@@ -346,12 +369,30 @@ public sealed class AsyncEventPump : IAsyncDisposable
             }
 
             Release(met, reached: true);
+            var opensEpisode = Interlocked.Increment(ref _episodeDrops) == 1;
+            if (opensEpisode)
+                Volatile.Write(ref _episodeStartedAt, Clock.GetTimestamp());
+
             OnEventDropped?.Invoke(evt);
+            OnEventRefused?.Invoke(evt, opensEpisode);
             return false;
         }
 
         Volatile.Write(ref _lastReceived, ordinal);
+        if (Volatile.Read(ref _episodeDrops) != 0)
+            EndDropEpisode();
+
         return true;
+    }
+
+    // Takes the episode in progress, if any, and reports it. O(1): the refusals are counted, never kept.
+    private void EndDropEpisode()
+    {
+        var count = Interlocked.Exchange(ref _episodeDrops, 0);
+        if (count == 0)
+            return;
+
+        OnDropEpisodeEnded?.Invoke(count, Clock.GetElapsedTime(Volatile.Read(ref _episodeStartedAt)));
     }
 
     /// <summary>
@@ -364,6 +405,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _channel.Writer.TryComplete();
+        EndDropEpisode();
         await _cts.CancelAsync();
 
         if (_consumerTask is not null)
@@ -382,6 +424,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
     internal async ValueTask DrainAndDisposeAsync()
     {
         _channel.Writer.TryComplete();
+        EndDropEpisode();
 
         if (_consumerTask is not null)
         {
