@@ -266,7 +266,7 @@ and each wire name maps to the same type as in 2.8.0. Only the compiler output c
 `MeetmeActivity`, the `VerbaraServer.MeetMe` types, `QueueMemberPauseEvent` and the fax-license types are not
 deprecated.
 
-### Changed: a dropped copy of an answer an action received no longer counts as a lost event (#NNN)
+### Changed: a dropped copy of an answer an action received no longer counts as a lost event (#466)
 
 When the AMI event buffer is full and refuses an event that an action the SDK sent had already received in its
 answer (a list entry such as a `Status` row, a `…Complete` event, or an asynchronous `OriginateResponse`), the
@@ -279,7 +279,7 @@ lost, because those types are also read as unsolicited state events. An event no
 reconnect, still count as a possible loss, so a lost abandon report is still counted abandoned. No public member
 changed.
 
-### Changed: a full AMI event buffer logs one Warning per overflow episode, not one per event (#NNN)
+### Changed: a full AMI event buffer logs one Warning per overflow episode, not one per event (#466)
 
 The first event a full buffer refuses is logged as before, `[AMI_EVENT] Dropped: event_type=<type>
 channel=<channel>` at Warning; every later refusal of the same episode logs that line at Debug. When the buffer
@@ -291,7 +291,7 @@ it now writes two. `ami.events.dropped` still counts every refused event. An ale
 `[AMI_EVENT] Discarded on caller ending` is unchanged. The
 [troubleshooting guide](docs/guides/troubleshooting.md#events-dropped-ami) has the log shape.
 
-### Fixed: an AMI message cut short by the end of the stream is no longer delivered (#NNN)
+### Fixed: an AMI message cut short by the end of the stream is no longer delivered (#466)
 
 When the AMI connection closed in the middle of a message, the reader returned the fields read so far as a
 message, so a truncated event (a `Hangup` with only some of its fields, for instance) reached the handlers. The
@@ -300,7 +300,7 @@ type=<type> fields=<n>`; messages that ended before the close are delivered as b
 `AmiProtocolReader.ReadMessageAsync` (namespace `Verbara.Sdk.Ami.Internal`) now returns null at such an end of
 stream instead of the partial message.
 
-### Fixed: the guides say when a call whose `Hangup` was dropped can be verified, and how to reconcile without Hosting (#NNN)
+### Fixed: the guides say when a call whose `Hangup` was dropped can be verified, and how to reconcile without Hosting (#466)
 
 The reconciliation sweep does not verify on a drop alone: a call becomes eligible once it is `DialingTimeout` old (60 s
 by default), and how long recovery then takes depends on the sweep's ticks and the reconciliation's own wait, so the
