@@ -173,6 +173,7 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         var connection = rig.Last!;
         var completions = 0;
         var hookCalls = 0;
+        var independentDisposalJoinedPublication = false;
         Task? competingDispose = null;
         using var subscription = connection.Events.Subscribe(_ => { }, () => Interlocked.Increment(ref completions));
         connection.CompletionStarting = () =>
@@ -182,6 +183,7 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             using (ExecutionContext.SuppressFlow())
                 competingDispose = Task.Run(() => connection.DisposeAsync().AsTask());
             var disposedBeforePublication = competingDispose.Wait(TimeSpan.FromSeconds(1));
+            independentDisposalJoinedPublication = !disposedBeforePublication;
             output.WriteLine($"hookCalls={hookCalls}; competingDispose={disposedBeforePublication}; completions={completions}");
         };
         var read = ReadCloseAsync(peer);
@@ -193,6 +195,7 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             await disconnect.WaitAsync(Limit);
             await competingDispose!.WaitAsync(Limit);
             hookCalls.Should().Be(1, "the test reaches the gap after claiming completion and before publishing it");
+            independentDisposalJoinedPublication.Should().BeTrue("an independent caller waits until the target publication finishes");
             completions.Should().Be(1, "concurrent disposal must not suppress the common close's completion");
         }
         finally
@@ -260,7 +263,13 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         var stoppedInCallback = false;
         var trackedAtCallback = 0;
         Task? callbackStop = null;
-        var heldStop = new HeldStopContext();
+        var releaseStop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        rig.Listener.StopStarting = () =>
+        {
+            stopParked.TrySetResult();
+            return releaseStop.Task;
+        };
         using var subscription = rig.Last!.Events.Subscribe(_ => { }, () =>
         {
             trackedAtCallback = rig.Listener.ActiveConnectionCount;
@@ -269,7 +278,7 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             callbackJoining.TrySetResult();
             // The join was chosen while the snapshot was absent. Release on an independent
             // worker here so the test's own continuation cannot gate the callback's return.
-            heldStop.Release();
+            releaseStop.TrySetResult();
             stoppedInCallback = callbackStop.Wait(TimeSpan.FromSeconds(1));
             var transport = (TaskCompletionSource)typeof(AriOutboundListener).GetField("_stopTransportEnded", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(rig.Listener)!;
             output.WriteLine($"callbackStop={callbackStop.Status}; transport={transport.Task.Status}; callbackReturned={stoppedInCallback}");
@@ -283,16 +292,13 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             (await read.WaitAsync(Limit)).Should().BeTrue("the peer receives the application's actual close frame");
             if (stopAlreadyStarted)
             {
-                var previous = SynchronizationContext.Current;
-                SynchronizationContext.SetSynchronizationContext(heldStop);
-                try { firstStop = rig.Listener.StopAsync().AsTask(); }
-                finally { SynchronizationContext.SetSynchronizationContext(previous); }
-                heldStop.IsHeld.Should().BeTrue("the cached stop is parked before it can take its connection snapshot");
+                firstStop = rig.Listener.StopAsync().AsTask();
+                await stopParked.Task.WaitAsync(Limit);
             }
             await peer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "answer", CancellationToken.None);
             await pumpParked.Task.WaitAsync(Limit);
             await callbackJoining.Task.WaitAsync(Limit);
-            heldStop.Release();
+            releaseStop.TrySetResult();
             await callbackEnded.Task.WaitAsync(Limit);
             await disconnect.WaitAsync(Limit);
             await callbackStop!.WaitAsync(Limit);
@@ -306,7 +312,7 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         }
         finally
         {
-            heldStop.Release();
+            releaseStop.TrySetResult();
             releasePump.TrySetResult();
             peer.Abort();
             await disconnect.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
@@ -483,6 +489,288 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         await close.WaitAsync(Limit);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Close_ShouldPreserveOuterPublicationOwnership_WhenCompletionCallbacksNest(bool stopOuterListener)
+    {
+        var releasePumps = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var outerRig = new Rig();
+        await using var innerRig = new Rig();
+        await outerRig.StartAsync();
+        await innerRig.StartAsync();
+        using var outerPeer = await outerRig.ConnectAsync();
+        using var innerPeer = await innerRig.ConnectAsync();
+        var outer = outerRig.Last!;
+        var inner = innerRig.Last!;
+        var parked = 0;
+        var bothParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task ParkPump()
+        {
+            if (Interlocked.Increment(ref parked) == 2) bothParked.TrySetResult();
+            return releasePumps.Task;
+        }
+        outerRig.Listener.ReadEndedBeforeUntracking = ParkPump;
+        innerRig.Listener.ReadEndedBeforeUntracking = ParkPump;
+        var innerReturned = false;
+        var outerReturned = false;
+        var completions = 0;
+        Task? nestedOuter = null;
+        using var outerSubscription = outer.Events.Subscribe(_ => { }, () =>
+        {
+            Interlocked.Increment(ref completions);
+            outerReturned = inner.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(1));
+        });
+        using var innerSubscription = inner.Events.Subscribe(_ => { }, () =>
+        {
+            Interlocked.Increment(ref completions);
+            nestedOuter = stopOuterListener ? outerRig.Listener.StopAsync().AsTask() : outer.DisposeAsync().AsTask();
+            innerReturned = nestedOuter.Wait(TimeSpan.FromSeconds(1));
+        });
+        var outerAnswer = ReadAndAnswerAsync(outerPeer);
+        var innerAnswer = ReadAndAnswerAsync(innerPeer);
+        var outerClose = outer.CloseForStopAsync(CancellationToken.None, CancellationToken.None);
+        var innerClose = inner.CloseForStopAsync(CancellationToken.None, CancellationToken.None);
+        try
+        {
+            (await outerAnswer.WaitAsync(Limit)).Should().BeTrue("the outer peer observes and answers its actual close");
+            (await innerAnswer.WaitAsync(Limit)).Should().BeTrue("the inner peer observes and answers its actual close");
+            await Task.WhenAll(outerClose, innerClose, bothParked.Task).WaitAsync(Limit);
+            // A dedicated independent worker keeps this regression separate from synchronization-context startup.
+            await Task.Factory.StartNew(() => outer.DisconnectAsync().AsTask().GetAwaiter().GetResult(),
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).WaitAsync(Limit);
+            await nestedOuter!.WaitAsync(Limit);
+            using (new AssertionScope())
+            {
+                innerReturned.Should().BeTrue("nested completion must still recognize the outer publisher on the same synchronous stack");
+                outerReturned.Should().BeTrue("the inner connection disposal returns before the outer observer returns");
+                completions.Should().Be(2, "each real connection completes exactly once");
+            }
+        }
+        finally
+        {
+            releasePumps.TrySetResult();
+            outerPeer.Abort();
+            innerPeer.Abort();
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StopAsync_ShouldProgressOffTheCallingContext_WhenACompletionObserverStopsSynchronously(bool disposeListener)
+    {
+        var releasePump = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var parked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var rig = new Rig();
+        await rig.StartAsync();
+        using var peer = await rig.ConnectAsync();
+        rig.Listener.ReadEndedBeforeUntracking = () =>
+        {
+            parked.TrySetResult();
+            return releasePump.Task;
+        };
+        var stoppedInCallback = false;
+        var contextInCallback = false;
+        Task? callbackStop = null;
+        using var context = new SingleThreadTestContext();
+        using var subscription = rig.Last!.Events.Subscribe(_ => { }, () =>
+        {
+            contextInCallback = ReferenceEquals(SynchronizationContext.Current, context);
+            callbackStop = disposeListener ? rig.Listener.DisposeAsync().AsTask() : rig.Listener.StopAsync().AsTask();
+            stoppedInCallback = callbackStop.Wait(TimeSpan.FromSeconds(1));
+        });
+        var peerClose = peer.CloseAsync(WebSocketCloseStatus.NormalClosure, "peer ends first", CancellationToken.None);
+        try
+        {
+            await peerClose.WaitAsync(Limit);
+            await parked.Task.WaitAsync(Limit);
+            await Task.Factory.StartNew(() => context.Run(() => rig.Last.DisconnectAsync().AsTask(), () => callbackStop),
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).WaitAsync(Limit);
+            using (new AssertionScope())
+            {
+                contextInCallback.Should().BeTrue("completion runs synchronously on the actual single-thread caller context");
+                stoppedInCallback.Should().BeTrue("listener startup and disposal must progress while the completion callback blocks that context");
+                rig.Listener.ActiveConnectionCount.Should().Be(0);
+            }
+        }
+        finally
+        {
+            releasePump.TrySetResult();
+            peer.Abort();
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Close_ShouldFinishParallelCallbacks_WhenObserversEndEachOthersConnections(bool stopOtherListener)
+    {
+        var releasePumps = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var firstRig = new Rig();
+        await using var secondRig = new Rig();
+        await firstRig.StartAsync();
+        await secondRig.StartAsync();
+        using var firstPeer = await firstRig.ConnectAsync();
+        using var secondPeer = await secondRig.ConnectAsync();
+        var first = firstRig.Last!;
+        var second = secondRig.Last!;
+        var parked = 0;
+        var bothParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task ParkPump()
+        {
+            if (Interlocked.Increment(ref parked) == 2) bothParked.TrySetResult();
+            return releasePumps.Task;
+        }
+        firstRig.Listener.ReadEndedBeforeUntracking = ParkPump;
+        secondRig.Listener.ReadEndedBeforeUntracking = ParkPump;
+        using var callbacks = new Barrier(2);
+        var firstReturned = false;
+        var secondReturned = false;
+        var firstRendezvous = false;
+        var secondRendezvous = false;
+        var completions = 0;
+        Task? firstJoin = null;
+        Task? secondJoin = null;
+        using var firstSubscription = first.Events.Subscribe(_ => { }, () =>
+        {
+            Interlocked.Increment(ref completions);
+            firstRendezvous = callbacks.SignalAndWait(Limit);
+            firstJoin = stopOtherListener ? secondRig.Listener.StopAsync().AsTask() : second.DisposeAsync().AsTask();
+            firstReturned = firstJoin.Wait(TimeSpan.FromSeconds(1));
+        });
+        using var secondSubscription = second.Events.Subscribe(_ => { }, () =>
+        {
+            Interlocked.Increment(ref completions);
+            secondRendezvous = callbacks.SignalAndWait(Limit);
+            secondJoin = stopOtherListener ? firstRig.Listener.StopAsync().AsTask() : first.DisposeAsync().AsTask();
+            secondReturned = secondJoin.Wait(TimeSpan.FromSeconds(1));
+        });
+        var firstAnswer = ReadAndAnswerAsync(firstPeer);
+        var secondAnswer = ReadAndAnswerAsync(secondPeer);
+        var firstClose = first.CloseForStopAsync(CancellationToken.None, CancellationToken.None);
+        var secondClose = second.CloseForStopAsync(CancellationToken.None, CancellationToken.None);
+        try
+        {
+            (await firstAnswer.WaitAsync(Limit)).Should().BeTrue("the first peer observes and answers its actual close");
+            (await secondAnswer.WaitAsync(Limit)).Should().BeTrue("the second peer observes and answers its actual close");
+            await Task.WhenAll(firstClose, secondClose, bothParked.Task).WaitAsync(Limit);
+            var firstPublication = Task.Factory.StartNew(() => first.DisconnectAsync().AsTask().GetAwaiter().GetResult(),
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            var secondPublication = Task.Factory.StartNew(() => second.DisconnectAsync().AsTask().GetAwaiter().GetResult(),
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            await Task.WhenAll(firstPublication, secondPublication).WaitAsync(Limit);
+            await Task.WhenAll(firstJoin!, secondJoin!).WaitAsync(Limit);
+            using (new AssertionScope())
+            {
+                firstRendezvous.Should().BeTrue("both completion publishers reach their callbacks on different workers");
+                secondRendezvous.Should().BeTrue();
+                firstReturned.Should().BeTrue("completion callbacks must not mutually join the other publisher");
+                secondReturned.Should().BeTrue("completion callbacks must not mutually join the other publisher");
+                completions.Should().Be(2, "both real connections publish exactly one completion");
+            }
+        }
+        finally
+        {
+            releasePumps.TrySetResult();
+            firstPeer.Abort();
+            secondPeer.Abort();
+        }
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ShouldDeferSubjectRelease_WhenAnotherCompletionCallbackDisposesThePublisher()
+    {
+        var releasePumps = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var firstRig = new Rig();
+        await using var secondRig = new Rig();
+        await firstRig.StartAsync();
+        await secondRig.StartAsync();
+        using var firstPeer = await firstRig.ConnectAsync();
+        using var secondPeer = await secondRig.ConnectAsync();
+        var first = firstRig.Last!;
+        var second = secondRig.Last!;
+        var parked = 0;
+        var bothParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task ParkPump()
+        {
+            if (Interlocked.Increment(ref parked) == 2) bothParked.TrySetResult();
+            return releasePumps.Task;
+        }
+        firstRig.Listener.ReadEndedBeforeUntracking = ParkPump;
+        secondRig.Listener.ReadEndedBeforeUntracking = ParkPump;
+        using var releasePublication = new ManualResetEventSlim();
+        var publicationClaimed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        second.CompletionStarting = () =>
+        {
+            publicationClaimed.TrySetResult();
+            if (!releasePublication.Wait(Limit)) throw new TimeoutException("The target publisher was not released.");
+        };
+        var secondCompletions = 0;
+        var disposedInCallback = false;
+        using var secondSubscription = second.Events.Subscribe(_ => { }, () => Interlocked.Increment(ref secondCompletions));
+        using var firstSubscription = first.Events.Subscribe(_ => { }, () =>
+            disposedInCallback = second.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(1)));
+        var firstAnswer = ReadAndAnswerAsync(firstPeer);
+        var secondAnswer = ReadAndAnswerAsync(secondPeer);
+        var firstClose = first.CloseForStopAsync(CancellationToken.None, CancellationToken.None);
+        var secondClose = second.CloseForStopAsync(CancellationToken.None, CancellationToken.None);
+        Task? secondPublication = null;
+        try
+        {
+            (await firstAnswer.WaitAsync(Limit)).Should().BeTrue();
+            (await secondAnswer.WaitAsync(Limit)).Should().BeTrue();
+            await Task.WhenAll(firstClose, secondClose, bothParked.Task).WaitAsync(Limit);
+            secondPublication = Task.Factory.StartNew(() => second.DisconnectAsync().AsTask().GetAwaiter().GetResult(),
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            await publicationClaimed.Task.WaitAsync(Limit);
+            await Task.Factory.StartNew(() => first.DisconnectAsync().AsTask().GetAwaiter().GetResult(),
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).WaitAsync(Limit);
+            var subjectFault = Record.Exception(() => second.Events.Subscribe(_ => { }).Dispose());
+            releasePublication.Set();
+            await secondPublication.WaitAsync(Limit);
+            using (new AssertionScope())
+            {
+                disposedInCallback.Should().BeTrue("a completion callback cannot join a different active publisher");
+                subjectFault.Should().BeNull("release must wait for the target's publication, not the caller's publication identity");
+                secondCompletions.Should().Be(1, "deferred release preserves the target's completion notification");
+            }
+        }
+        finally
+        {
+            releasePublication.Set();
+            releasePumps.TrySetResult();
+            firstPeer.Abort();
+            secondPeer.Abort();
+            if (secondPublication is not null) await secondPublication.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
+    }
+
+    private sealed class SingleThreadTestContext : SynchronizationContext, IDisposable
+    {
+        private readonly System.Collections.Concurrent.BlockingCollection<Action> _posts = new();
+        public override void Post(SendOrPostCallback d, object? state) => _posts.Add(() => d(state));
+        internal void Run(Func<Task> action, Func<Task?> joined)
+        {
+            var previous = Current;
+            SetSynchronizationContext(this);
+            try
+            {
+                var operation = action();
+                var deadline = Environment.TickCount64 + (long)Limit.TotalMilliseconds;
+                while (!operation.IsCompleted || joined() is not { IsCompleted: true })
+                {
+                    if (Environment.TickCount64 >= deadline) throw new TimeoutException("The caller context did not drain its owned shutdown work.");
+                    if (_posts.TryTake(out var next, 10)) next();
+                }
+                operation.GetAwaiter().GetResult();
+                joined()!.GetAwaiter().GetResult();
+            }
+            finally { SetSynchronizationContext(previous); }
+        }
+        public void Dispose() => _posts.Dispose();
+    }
+
     private static async Task<bool> ReadAndAnswerAsync(ClientWebSocket peer)
     {
         if (!await ReadCloseAsync(peer)) return false;
@@ -498,36 +786,6 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             return result.MessageType == WebSocketMessageType.Close && peer.CloseStatus == WebSocketCloseStatus.NormalClosure;
         }
         catch (WebSocketException) { return false; }
-    }
-    private sealed class HeldStopContext : SynchronizationContext
-    {
-        private readonly Lock _gate = new();
-        private List<Action>? _held = [];
-        internal bool IsHeld { get { lock (_gate) return _held is { Count: > 0 }; } }
-        public override void Post(SendOrPostCallback d, object? state)
-        {
-            lock (_gate)
-            {
-                if (_held is not null)
-                {
-                    _held.Add(() => d(state));
-                    return;
-                }
-            }
-            Forward(() => d(state));
-        }
-        internal void Release()
-        {
-            List<Action> held;
-            lock (_gate)
-            {
-                held = _held ?? [];
-                _held = null;
-            }
-            foreach (var resume in held) Forward(resume);
-        }
-        private static void Forward(Action resume) =>
-            _ = Task.Factory.StartNew(resume, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
     }
     private sealed class BeforeClosedLogger(ILogger<AriOutboundListener> inner, Action beforeClosed) : ILogger<AriOutboundListener>
     {

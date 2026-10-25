@@ -74,7 +74,6 @@ public sealed class AriOutboundListener : IAriOutboundListener
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
     private readonly Lock _stopGate = new();
-    private readonly object _completionScope = new();
     private Task? _stopTask;
     private TaskCompletionSource _stopTransportEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _running;
@@ -82,6 +81,9 @@ public sealed class AriOutboundListener : IAriOutboundListener
 
     // Test-only scheduling seam between the reader ending and the connection being untracked.
     internal Func<Task>? ReadEndedBeforeUntracking { get; set; }
+
+    // Test-only scheduling seam before a stop takes ownership of its connection snapshot.
+    internal Func<Task>? StopStarting { get; set; }
 
     public AriOutboundListener(
         IOptions<AriOutboundListenerOptions> options,
@@ -193,19 +195,21 @@ public sealed class AriOutboundListener : IAriOutboundListener
             {
                 if (Interlocked.Exchange(ref _running, 0) == 0)
                     return ValueTask.CompletedTask;
-                _stopTask = StopCoreAsync(ct);
+                // Run independently of the caller's synchronization context. Any reentrant
+                // callback takes this gate after the shared stop task has been cached.
+                _stopTask = Task.Run(() => StopCoreAsync(ct), CancellationToken.None);
             }
-            // Publication can start the first stop or join before its snapshot exists. Its
-            // listener identity is stable even while the pump untracks the connection.
-            return new ValueTask(AriOutboundConnection.IsPublishingFor(_completionScope)
+            // Completion callbacks can stop each other's listeners concurrently. Join only
+            // transport cleanup from those callbacks so publication cannot form a cycle.
+            return new ValueTask(AriOutboundConnection.IsInCompletionCallback
                 ? _stopTransportEnded.Task : _stopTask);
         }
     }
 
     private async Task StopCoreAsync(CancellationToken ct)
     {
-        // Cache the operation before any synchronous completion callback can reenter StopAsync.
-        await Task.Yield();
+        if (StopStarting is { } stopStarting)
+            await stopStarting().ConfigureAwait(false);
 
         // Stopping a listener that is already down: the platform closed the socket under us, or a
         // concurrent DisposeAsync got there first. Either way the listener is not accepting, which is
@@ -241,7 +245,7 @@ public sealed class AriOutboundListener : IAriOutboundListener
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
 
-        await StopAsync();
+        await StopAsync().ConfigureAwait(false);
         _listener?.Dispose();
         _connectionSubject.OnCompleted();
         _connectionSubject.Dispose();
@@ -376,7 +380,7 @@ public sealed class AriOutboundListener : IAriOutboundListener
                     new WebSocketCreationOptions { IsServer = true });
 
                 var subject = new Subject<AriEvent>();
-                var connection = new AriOutboundConnection(appName!, remoteEndpoint, webSocket, subject, _completionScope);
+                var connection = new AriOutboundConnection(appName!, remoteEndpoint, webSocket, subject);
                 var tracked = new TrackedConnection(Guid.NewGuid(), connection, client, subject);
                 _connections.TryAdd(tracked.Id, tracked);
 

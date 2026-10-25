@@ -13,7 +13,6 @@ public sealed class AriOutboundConnection : IAsyncDisposable
 {
     private readonly WebSocket _webSocket;
     private readonly Subject<AriEvent> _eventSubject;
-    private readonly object? _completionScope;
     private int _disposed;
     private int _released;
     private int _completed;
@@ -21,10 +20,22 @@ public sealed class AriOutboundConnection : IAsyncDisposable
     // Observers run synchronously. Keep reentrancy scoped to that call stack rather than
     // flowing it into independent work an observer queues through its execution context.
     [ThreadStatic]
-    private static AriOutboundConnection? _completionOwner;
+    private static CompletionFrame? _completionOwner;
 
-    internal bool IsPublishingOnCurrentContext => _completionOwner == this;
-    internal static bool IsPublishingFor(object completionScope) => _completionOwner?._completionScope == completionScope;
+    private sealed record CompletionFrame(AriOutboundConnection Connection, CompletionFrame? Previous);
+
+    internal bool IsPublishingOnCurrentContext => HasPublication(this);
+    internal static bool IsInCompletionCallback => _completionOwner is not null;
+
+    private static bool HasPublication(AriOutboundConnection connection)
+    {
+        for (var frame = _completionOwner; frame is not null; frame = frame.Previous)
+        {
+            if (frame.Connection == connection)
+                return true;
+        }
+        return false;
+    }
     private readonly Lock _closeGate = new();
     private readonly TaskCompletionSource _readEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _closeSent = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -35,14 +46,12 @@ public sealed class AriOutboundConnection : IAsyncDisposable
         string applicationName,
         string remoteEndpoint,
         WebSocket webSocket,
-        Subject<AriEvent> eventSubject,
-        object? completionScope = null)
+        Subject<AriEvent> eventSubject)
     {
         ApplicationName = applicationName;
         RemoteEndpoint = remoteEndpoint;
         _webSocket = webSocket;
         _eventSubject = eventSubject;
-        _completionScope = completionScope;
         ConnectedAt = DateTimeOffset.UtcNow;
     }
 
@@ -158,14 +167,14 @@ public sealed class AriOutboundConnection : IAsyncDisposable
         await close.ConfigureAwait(false);
         if (Interlocked.Exchange(ref _completed, 1) != 0)
         {
-            // A callback can synchronously dispose its own connection. Other callers must join
-            // publication before releasing the subject underneath its winning publisher.
-            if (!IsPublishingOnCurrentContext)
+            // Completion callbacks may end one another on different threads. They cannot join
+            // publication, while independent callers still wait for its winning publisher.
+            if (!IsInCompletionCallback)
                 await _completionPublished.Task.ConfigureAwait(false);
             return;
         }
         var previous = _completionOwner;
-        _completionOwner = this;
+        _completionOwner = new CompletionFrame(this, previous);
         try
         {
             CompletionStarting?.Invoke();
@@ -198,7 +207,9 @@ public sealed class AriOutboundConnection : IAsyncDisposable
         if (Interlocked.Exchange(ref _released, 1) != 0)
             return;
         _webSocket.Dispose();
-        if (!IsPublishingOnCurrentContext)
+        // A different callback may have requested this release while our publisher was active.
+        // The publisher performs deferred release; its signal also covers a release racing its end.
+        if (_completionPublished.Task.IsCompleted)
             _eventSubject.Dispose();
     }
 }
