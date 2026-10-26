@@ -38,7 +38,7 @@ The SDK is ported from asterisk-java, the most mature Asterisk library in any la
 
 **Companies with existing Asterisk deployments** that want to build custom .NET applications on top of their PBX infrastructure. If you already run Asterisk and your development team works in C#, this SDK bridges the gap without requiring a platform migration.
 
-**ISVs and SaaS providers** building telephony products who need full control over their voice stack without cloud vendor lock-in. Ship your product with Asterisk as the engine and Verbara.Sdk as the control plane, on your customers' infrastructure or your own.
+**ISVs and software vendors** building telephony products who need full control over their voice stack without cloud vendor lock-in. Ship your product with Asterisk as the engine and Verbara.Sdk as the control plane, on your customers' infrastructure or your own.
 
 **Contact center developers** who need a programmable foundation for custom call flows, interactive voice response systems, queue management, and agent desktop tools. The Live API and Session Engine handle the complexity of real-time call state so your team can focus on business logic.
 
@@ -62,7 +62,7 @@ The SDK is ported from asterisk-java, the most mature Asterisk library in any la
 
 For teams building enterprise contact centers, Verbara.Sdk.Pro extends the MIT SDK with commercial features: skill-based routing with proficiency scoring, predictive and progressive dialer campaigns, real-time analytics dashboards, event sourcing for audit trails, multi-tenant isolation, and AI-powered agent assist with live coaching and automatic summarization.
 
-Verbara.Sdk.Pro is a separate commercial product that builds on top of the free SDK. The MIT SDK is complete on its own -- Pro adds features specific to large-scale contact center operations. For more information, see the Verbara.Sdk.Pro repository.
+Verbara is omnichannel contact-center software, licensed for each company to install and operate on its own infrastructure. Verbara.Sdk.Pro is a separate commercial product that builds on top of the free SDK. The MIT SDK is complete on its own -- Pro adds features specific to large-scale contact center operations. For more information, see the Verbara.Sdk.Pro repository.
 
 
 ## Get Started
