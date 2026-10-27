@@ -35,6 +35,7 @@ internal sealed class WithheldFinalFragment
     private readonly TaskCompletionSource _firstFragmentSent = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource<WithheldMessageEnding> _ending = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    /// <summary>Holds <paramref name="message"/> to be sent as its first fragment only.</summary>
     /// <param name="message">The whole text message.</param>
     /// <param name="firstFragmentBytes">How many of its UTF-8 bytes go out as the first fragment.</param>
     public WithheldFinalFragment(string message, int firstFragmentBytes = 16)
