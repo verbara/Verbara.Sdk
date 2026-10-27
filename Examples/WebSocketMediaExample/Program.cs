@@ -1,14 +1,29 @@
 // Verbara.Sdk — chan_websocket audio + JSON control protocol example.
 //
 // Shows how to run WebSocketAudioServer (the native Asterisk 22.8 / 23.2+
-// chan_websocket consumer) and react to the JSON control messages Asterisk
-// sends over TEXT frames (MEDIA_START, MEDIA_BUFFERING, MARK_MEDIA,
-// SET_MEDIA_DIRECTION, XON/XOFF, DTMF).
+// chan_websocket consumer) and react to the control messages Asterisk
+// sends over TEXT frames (MEDIA_BUFFERING, MARK_MEDIA, SET_MEDIA_DIRECTION,
+// XON/XOFF, DTMF). Each stream is keyed by the call its first frame,
+// MEDIA_START, names in channel_id: GetStream(channelId) finds it.
 //
-// Asterisk-side dialplan (needs res_websocket_client + chan_websocket):
+// Asterisk side (needs res_websocket_client + chan_websocket). Every call
+// through the entry upgrades on the same URI, so the URI names no call.
+//
+//   ; websocket_client.conf
+//   [media-demo]
+//   type = websocket_client
+//   connection_type = per_call_config
+//   uri = ws://127.0.0.1:9093/media/demo
+//   protocols = media
+//
+//   ; extensions.conf: the key is the WebSocket channel's uniqueid
 //   exten => 6000,1,Answer()
-//    same => n,WebSocket(ws://127.0.0.1:9093/audio,slin16)
+//    same => n,Dial(WebSocket/media-demo/c(slin16))
 //    same => n,Hangup()
+//
+// Or over ARI: POST /channels/externalMedia with transport=websocket,
+// encapsulation=none and external_host=media-demo; the key is the channel
+// id the create returns.
 
 using Verbara.Sdk.Ari.Audio;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,6 +39,7 @@ var server = new WebSocketAudioServer(options, NullLogger<WebSocketAudioServer>.
 
 using var connSub = server.OnStreamConnected.Subscribe(stream =>
 {
+    // ChannelId is the channel_id of the call's MEDIA_START.
     Console.WriteLine($"[stream] connected channel_id={stream.ChannelId} format={stream.Format} sample_rate={stream.SampleRate}");
 
     // Cast to IChanWebSocketSession to access the JSON control protocol.
@@ -75,7 +91,8 @@ using var connSub = server.OnStreamConnected.Subscribe(stream =>
 
 await server.StartAsync();
 Console.WriteLine($"chan_websocket server listening on port {options.WebSocketPort}");
-Console.WriteLine("Configure Asterisk 22.8+/23.2+ to WebSocket(ws://host:9093/audio,slin16) and call.");
+Console.WriteLine("Point a websocket_client entry (media-demo) at ws://<this host>:9093/media/demo, then call");
+Console.WriteLine("Dial(WebSocket/media-demo/c(slin16)) or create an externalMedia channel with transport=websocket.");
 Console.WriteLine("Press Ctrl+C to stop.");
 
 using var cts = new CancellationTokenSource();
