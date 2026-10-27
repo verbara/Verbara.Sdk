@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: a Deepgram message the recognizer cannot read no longer ends the recognition (#482)
+
+`SpeechRecognizer.StreamAsync` documents three exceptions — `SpeechProviderFailureException`,
+`SpeechProviderEmptyResultException` and `OperationCanceledException` — and the Deepgram recognizer let a fourth
+escape: it parsed each WebSocket read as a whole message, so a message Deepgram sent in fragments, one larger than the
+64 KiB receive buffer, or one it could not read ended the recognition with a `JsonException`. Behind `VoiceAiPipeline`
+that was a failed transcription and the caller's turn left unanswered. The recognizer now assembles each message
+before it reads it, so a fragmented or large transcript arrives whole. A message it still cannot read whose top-level
+`type` is `"Error"` ends the recognition with `SpeechProviderFailureException` (`Signal` = `ErrorFrame`, `Code` null),
+as a readable error message does, carrying the raw text Deepgram sent; any other unreadable message is skipped and
+counted on `stt.frames.unparseable` (meter `Verbara.Sdk.VoiceAi.Stt`, tagged `voiceai.provider`), and the results
+around it are delivered. A partial message left behind by a close, a fault, a cancellation or the end-of-input bound is
+discarded. Request serialization is unchanged and no signature changes. Labelled breaking because code that caught
+`JsonException` from `StreamAsync` no longer receives one; catch `SpeechProviderFailureException`. The migration guide
+has the section
+([A Deepgram message the recognizer cannot read no longer ends the recognition](docs/guides/migration-2.9.0.md#a-deepgram-message-the-recognizer-cannot-read-no-longer-ends-the-recognition)).
+
+### Changed — BREAKING: an OpenAI Realtime event whose JSON the bridge cannot decode no longer ends the call (#482)
+
+The OpenAI Realtime bridge decoded each vendor event with nothing around the decode, so one event whose JSON it could
+not decode (a member of the wrong type) ended the conversation while the caller was on the line: the session counted
+in `openai_realtime.sessions.failed`, and under the session broker the caller was hung up. The call now goes on. An
+`error` event whose JSON cannot be decoded is published as one `RealtimeErrorEvent` whose `Message` is the raw frame,
+with the same Error-level log line a decoded one gets, and is not counted as a failure. Any other such event is
+skipped, logged once at Warning and counted on `openai_realtime.frames.unparseable` (meter
+`Verbara.Sdk.VoiceAi.OpenAiRealtime`, tagged `voiceai.provider`); an undecodable function call runs no function and
+sends no answer. An event that decodes but whose handling fails — an `Events` subscriber that throws, or an audio
+delta whose `delta` is not valid base64 — still ends the session. Request serialization is unchanged and no signature
+changes. Labelled breaking because `openai_realtime.sessions.failed` stops counting sessions that ended on an
+undecodable event, and `RealtimeErrorEvent.Message` can now be the whole frame rather than OpenAI's `error.message`.
+The bridge's README (*When the conversation ends*) and the migration guide have the section
+([An OpenAI Realtime event whose JSON the bridge cannot decode no longer ends the call](docs/guides/migration-2.9.0.md#an-openai-realtime-event-whose-json-the-bridge-cannot-decode-no-longer-ends-the-call)).
+
 ### Changed — BREAKING: a WebSocket audio stream is keyed by the call its `MEDIA_START` names (#481)
 
 `WebSocketAudioServer` now keys each stream by the `channel_id` of the `MEDIA_START` text frame Asterisk's

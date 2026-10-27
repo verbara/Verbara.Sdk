@@ -30,11 +30,13 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
 /// </para>
 /// <para>
 /// The recognizer's bound runs on a <see cref="FakeTimeProvider"/>, which the test advances past the
-/// bound once it has armed. This is the only class in the assembly that runs a pipeline, so the
-/// process-wide VoiceAi counters it reads see no one else's session; xunit runs its tests one at a
-/// time. That is why the connect row lives here rather than beside the connect-bound tests.
+/// bound once it has armed. Every class in the assembly that runs a pipeline, or moves a recognition
+/// counter, is in <see cref="SttProcessWideCounters"/>, so the process-wide VoiceAi counters
+/// it reads see no one else's session; xunit runs the collection's tests one at a time. That is why
+/// the connect row lives here rather than beside the connect-bound tests.
 /// </para>
 /// </remarks>
+[Collection(SttProcessWideCounters.Name)]
 public sealed class SttPipelineMuteVendorTests
 {
     /// <summary>Upper bound on any single wait. Reaching it is a failure, never a pace.</summary>
@@ -170,7 +172,7 @@ public sealed class SttPipelineMuteVendorTests
     }
 
     /// <summary>One AudioSocket call on a loopback server: the session the pipeline serves and the caller's end.</summary>
-    private sealed class AudioSocketCall : IAsyncDisposable
+    internal sealed class AudioSocketCall : IAsyncDisposable
     {
         private readonly AudioSocketServer _server;
 
@@ -225,7 +227,7 @@ public sealed class SttPipelineMuteVendorTests
     }
 
     /// <summary>Every <see cref="PipelineErrorEvent"/> the pipeline publishes.</summary>
-    private sealed class PipelineErrors : IObserver<VoiceAiPipelineEvent>, IDisposable
+    internal sealed class PipelineErrors : IObserver<VoiceAiPipelineEvent>, IDisposable
     {
         private readonly List<PipelineErrorEvent> _errors = [];
         private readonly Lock _gate = new();
@@ -268,7 +270,7 @@ public sealed class SttPipelineMuteVendorTests
     /// The pipeline's counters (<c>Verbara.Sdk.VoiceAi</c>) and the recognition counters
     /// (<c>Verbara.Sdk.VoiceAi.Stt</c>), summed, and how many times each histogram recorded.
     /// </summary>
-    private sealed class VoiceAiMeters : IDisposable
+    internal sealed class VoiceAiMeters : IDisposable
     {
         private readonly MeterListener _listener = new();
         private readonly Dictionary<string, long> _counts = [];
@@ -311,7 +313,7 @@ public sealed class SttPipelineMuteVendorTests
     }
 
     /// <summary>Speech on the first frame, the end of the utterance on the third, nothing after.</summary>
-    private sealed class OneUtteranceDetector : ITurnDetector
+    internal sealed class OneUtteranceDetector : ITurnDetector
     {
         private int _frames;
 
@@ -333,7 +335,7 @@ public sealed class SttPipelineMuteVendorTests
     }
 
     /// <summary>A healthy synthesizer: one 20 ms chunk, then the end.</summary>
-    private sealed class OneChunkSynthesizer : SpeechSynthesizer
+    internal sealed class OneChunkSynthesizer : SpeechSynthesizer
     {
         public override string ProviderName => "OneChunk";
 
