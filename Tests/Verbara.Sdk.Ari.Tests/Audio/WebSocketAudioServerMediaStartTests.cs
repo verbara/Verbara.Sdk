@@ -529,8 +529,14 @@ public sealed class WebSocketAudioServerMediaStartTests
         }
         finally
         {
-            admitted.ForEach(static client => client.Dispose());
+            DisposeAll(admitted);
         }
+    }
+
+    private static void DisposeAll(List<ClientWebSocket> clients)
+    {
+        foreach (var client in clients)
+            client.Dispose();
     }
 
     // ================================================================ (p): a bound that cannot be honoured
