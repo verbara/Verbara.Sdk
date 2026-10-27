@@ -209,10 +209,49 @@ public sealed class WebSocketAudioServerMediaStartTests
             harness.Server.GetStream(naming.ChannelId).Should().BeSameAs(client.Stream);
             harness.Server.GetStream(second.ChannelId).Should().BeNull("a later MEDIA_START re-keys nothing");
             Volatile.Read(ref published).Should().Be(0, "MEDIA_START is stream state, never a control message");
-            logger.Entries.Where(e => e.Level == LogLevel.Debug && e.EventName == "SecondMediaStartIgnored")
-                .Should().ContainSingle("the ignored MEDIA_START is recorded once at Debug; logged [{0}]", logger.Describe())
-                .Which.Message.Should().Contain(second.ChannelId);
+            TheIgnoredMediaStartIsLogged(logger, naming, second);
         }
+    }
+
+    [Fact]
+    public async Task HandleConnection_ShouldLogTheCallTheFirstMediaStartNamed_WhenTheSecondArrivesRightBehindIt()
+    {
+        // Arrange
+        var logger = new RecordingLogger();
+        await using var harness = await Harness.StartAsync(logger: logger);
+        var naming = ExternalMediaPlain;
+        var second = Capture("22.9.0", ChanWebSocketCaptureProducer.ExternalMedia, ChanWebSocketCaptureFormat.Json);
+        var announced = harness.Announcements.NextAsync();
+        using var client = await ConnectAsync(harness.Port, SharedSegment);
+
+        // Act — the naming MEDIA_START and, right behind it, a second one naming another call. The pump can read the
+        // second before the server re-keys the session, so the entry cannot take the call from the session's key.
+        // Then an audio frame, read so the text frame before it has been handled when the assertions run
+        await SendTextAsync(client, naming);
+        await SendTextAsync(client, second);
+        await client.SendAsync(new byte[640], WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None);
+        var (stream, _) = await announced.WaitAsync(WaitLimit);
+        var audio = await stream.ReadFrameAsync().AsTask().WaitAsync(WaitLimit);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            audio.Length.Should().Be(640);
+            stream.ChannelId.Should().Be(naming.ChannelId, "only the first frame names the stream");
+            TheIgnoredMediaStartIsLogged(logger, naming, second);
+        }
+    }
+
+    private static void TheIgnoredMediaStartIsLogged(
+        RecordingLogger logger, ChanWebSocketCapturedFrame naming, ChanWebSocketCapturedFrame second)
+    {
+        var entries = logger.Entries.Where(e => e.Level == LogLevel.Debug && e.EventName == "SecondMediaStartIgnored").ToList();
+        entries.Should().ContainSingle("the ignored MEDIA_START is recorded once at Debug; logged [{0}]", logger.Describe());
+        var message = entries.Count == 1 ? entries[0].Message : string.Empty;
+        message.Should().Contain($"path_segment={SharedSegment} ", "the entry names the path the connection upgraded on");
+        message.Should().Contain(
+            $"first_channel_id={naming.ChannelId} ", "the entry names the call the first MEDIA_START named, never the path in its place");
+        message.Should().EndWith($"ignored_channel_id={second.ChannelId}");
     }
 
     // ================================================================ (g), (h): a first frame that does not name
@@ -282,6 +321,35 @@ public sealed class WebSocketAudioServerMediaStartTests
                     && e.Message.Contains("seg-text") && e.Message.Contains("MEDIA_XOFF"),
                 "the Debug entry names the frame's event; logged [{0}]", logger.Describe());
             logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning, "nothing about it is a warning");
+        }
+    }
+
+    [Fact]
+    public async Task HandleConnection_ShouldLogAMediaStartWithoutChannelIdAsSuch_WhenItIsTheFirstFrame()
+    {
+        // Arrange — Asterisk never sends it: the captured MEDIA_START with its channel_id token taken out
+        var logger = new RecordingLogger();
+        await using var harness = await Harness.StartAsync(logger: logger);
+        var captured = ExternalMediaPlain;
+        var withoutChannelId = string.Join(' ', captured.Text.Split(' ').Where(t => !t.StartsWith("channel_id:", StringComparison.Ordinal)));
+        withoutChannelId.Should().StartWith("MEDIA_START ").And.NotContain(captured.ChannelId);
+        var announced = harness.Announcements.NextAsync();
+        using var client = await ConnectAsync(harness.Port, "seg-no-id");
+
+        // Act
+        await client.SendAsync(Encoding.UTF8.GetBytes(withoutChannelId), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
+        var (stream, _) = await announced.WaitAsync(WaitLimit);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            stream.ChannelId.Should().Be("seg-no-id", "a MEDIA_START that names no call leaves the connection unnamed");
+            logger.Entries.Should().ContainSingle(
+                e => e.Level == LogLevel.Debug && e.EventName == "ConnectionUnnamedByMediaStartWithoutChannelId"
+                    && e.Message.Contains("seg-no-id") && e.Message.Contains("MEDIA_START without a channel_id"),
+                "the Debug entry says the MEDIA_START carries no channel_id; logged [{0}]", logger.Describe());
+            logger.Entries.Should().NotContain(
+                e => e.Message.Contains("not MEDIA_START"), "the frame is a MEDIA_START; logged [{0}]", logger.Describe());
         }
     }
 
@@ -492,11 +560,10 @@ public sealed class WebSocketAudioServerMediaStartTests
     [Fact]
     public async Task AcceptLoop_ShouldAdmitExactlyTheLimit_WhenTenConnectionsWaitToBeNamed()
     {
-        // Arrange — kept green: the admission the re-key must not lose. A limit of 2; nothing elapses, so every
-        // admitted connection is still in its wait when the next one arrives
+        // Arrange — kept green: the admission the re-key must not lose. A limit of 2; no client sends a frame and
+        // nothing elapses, so every admitted connection is still in its wait when the next one arrives
         var time = new FakeTimeProvider();
         await using var harness = await Harness.StartAsync(time: time, maxStreams: 2);
-        var frame = ExternalMediaPlain;
 
         // Act
         var admitted = new List<ClientWebSocket>();
@@ -509,7 +576,6 @@ public sealed class WebSocketAudioServerMediaStartTests
                 try
                 {
                     await client.ConnectAsync(Endpoint(harness.Port, SharedSegment), CancellationToken.None).WaitAsync(WaitLimit);
-                    await SendTextAsync(client, frame);
                     admitted.Add(client);
                 }
                 catch (WebSocketException)
@@ -525,6 +591,8 @@ public sealed class WebSocketAudioServerMediaStartTests
                 admitted.Should().HaveCount(2, "the limit is taken at the accept and held through the wait");
                 refused.Should().Be(8);
                 harness.Options.Admission.Held.Should().Be(2);
+                harness.Server.ActiveStreamCount.Should().Be(0, "every admitted connection is still waiting to be named");
+                harness.Announcements.Count.Should().Be(0, "a connection waiting to be named is not announced");
             }
         }
         finally
@@ -597,9 +665,12 @@ public sealed class WebSocketAudioServerMediaStartTests
         await text.SendAsync(Encoding.UTF8.GetBytes("MEDIA_XOFF"), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
         await announced.WaitAsync(WaitLimit);
 
-        // nothing, until the bound elapses
+        // nothing, until the bound elapses. A connection whose first frame arrived before its wait began armed no
+        // timer, so the first two may have armed one each or none: their waits are over, so every timer they armed
+        // is already published, and draining them leaves the next one as this connection's
+        DrainTimers(time);
         announced = harness.Announcements.NextAsync();
-        var bound = TimerDueAsync(time, DefaultMediaStartTimeout, skip: 2);
+        var bound = TimerDueAsync(time, DefaultMediaStartTimeout);
         using var silent = await ConnectAsync(harness.Port, "q-bound");
         await Task.WhenAny(bound, announced).WaitAsync(WaitLimit);
         time.Advance(DefaultMediaStartTimeout);

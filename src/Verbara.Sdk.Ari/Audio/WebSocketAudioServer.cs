@@ -40,6 +40,9 @@ internal static partial class WebSocketAudioServerLog
     [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] Connection announced under its path segment {PathSegment}: its first frame is the text frame {Event}, not MEDIA_START")]
     public static partial void ConnectionUnnamedByTextFirstFrame(ILogger logger, string pathSegment, string @event);
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] Connection announced under its path segment {PathSegment}: its first frame is a MEDIA_START without a channel_id")]
+    public static partial void ConnectionUnnamedByMediaStartWithoutChannelId(ILogger logger, string pathSegment);
+
     [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] Connection announced under its path segment {PathSegment}: it sent no frame within MediaStartTimeout ({MediaStartTimeout})")]
     public static partial void ConnectionUnnamedByMediaStartTimeout(ILogger logger, string pathSegment, TimeSpan mediaStartTimeout);
 
@@ -652,6 +655,8 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 WebSocketAudioServerLog.ConnectionUnnamedByMediaStartTimeout(_logger, segment, _mediaStartTimeout);
             else if (frame.Kind == WebSocketFirstFrameKind.Binary)
                 WebSocketAudioServerLog.ConnectionUnnamedByBinaryFirstFrame(_logger, segment);
+            else if (string.Equals(frame.Value, ChanWebSocketTextFrameHead.MediaStartEvent, StringComparison.Ordinal))
+                WebSocketAudioServerLog.ConnectionUnnamedByMediaStartWithoutChannelId(_logger, segment);
             else
             {
                 var eventName = ChanWebSocketMediaStartParser.ForLog(frame.Value);

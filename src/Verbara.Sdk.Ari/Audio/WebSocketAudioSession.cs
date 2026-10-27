@@ -19,8 +19,8 @@ internal static partial class WebSocketAudioSessionLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] Transport failed under a live session, which ends as Disconnected: channel_id={ChannelId}")]
     public static partial void TransportFailed(ILogger logger, Exception exception, string channelId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] A second MEDIA_START on one connection is ignored: channel_id={ChannelId} ignored_channel_id={IgnoredChannelId}")]
-    public static partial void SecondMediaStartIgnored(ILogger logger, string channelId, string ignoredChannelId);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] A second MEDIA_START on one connection is ignored: path_segment={PathSegment} first_channel_id={FirstChannelId} ignored_channel_id={IgnoredChannelId}")]
+    public static partial void SecondMediaStartIgnored(ILogger logger, string pathSegment, string firstChannelId, string ignoredChannelId);
 }
 
 /// <summary>How a WebSocket audio connection's wait for its first frame ended.</summary>
@@ -63,10 +63,14 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     private readonly Channel<ReceivedAudioFrame> _audioInChannel;
     private readonly CancellationTokenSource _cts = new();
     private readonly ILogger _logger;
+    private readonly string _pathSegment;
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private Task? _readPumpTask;
     private int _disposed;
     private string _channelId;
+
+    // The channel_id of the connection's first MEDIA_START, written and read by the read pump only.
+    private string? _firstMediaStartChannelId;
     private volatile bool _isNamed;
     private bool _firstFrameRead;
     private int _mediaStarts;
@@ -114,6 +118,7 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         _webSocket = webSocket;
         _logger = logger;
         _channelId = channelId;
+        _pathSegment = channelId;
         _state = new AudioStreamStateChannel(AudioStreamState.Connected, logger, () => ChannelId);
         Format = format;
         SampleRate = FormatToSampleRate(format);
@@ -199,7 +204,9 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
                     case WebSocketMessageType.Text when head.IsMediaStart:
                         // Stream state, never a control message. Only the first frame names the stream; a later
                         // MEDIA_START re-keys nothing, and a second one on the connection is recorded at Debug.
-                        if (Interlocked.Increment(ref _mediaStarts) > 1)
+                        if (Interlocked.Increment(ref _mediaStarts) == 1)
+                            _firstMediaStartChannelId = head.ChannelId;
+                        else
                             LogSecondMediaStart(head.ChannelId);
 
                         break;
@@ -242,13 +249,17 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         }
     }
 
+    // Names the path segment and the connection's first MEDIA_START, never the session's key: the server re-keys
+    // the session on its own continuation, so the pump can read a second MEDIA_START before the key has changed.
+    // When that MEDIA_START was the first frame and ended the server's wait to be named, its channel_id is the key.
     private void LogSecondMediaStart(string? ignoredChannelId)
     {
         if (_logger.IsEnabled(LogLevel.Debug))
         {
-            var key = ChanWebSocketMediaStartParser.ForLog(ChannelId);
+            var segment = ChanWebSocketMediaStartParser.ForLog(_pathSegment);
+            var first = ChanWebSocketMediaStartParser.ForLog(_firstMediaStartChannelId);
             var ignored = ChanWebSocketMediaStartParser.ForLog(ignoredChannelId);
-            WebSocketAudioSessionLog.SecondMediaStartIgnored(_logger, key, ignored);
+            WebSocketAudioSessionLog.SecondMediaStartIgnored(_logger, segment, first, ignored);
         }
     }
 
