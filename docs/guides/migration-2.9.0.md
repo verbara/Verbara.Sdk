@@ -23,7 +23,7 @@ says:
   one exists.
 
 Four entries only add warnings (`VSDK0005`, `VSDK0003`, `VSDK0002` and `VSDK0006`). They break nothing unless you build with
-`TreatWarningsAsErrors`. Two stop compiling where you use them. The other seventeen change no existing signature, but
+`TreatWarningsAsErrors`. Two stop compiling where you use them. The other eighteen change no existing signature, but
 change behaviour a program can branch on, a published metric, or a health status; two of them also refuse some
 configuration values at start-up.
 
@@ -51,6 +51,7 @@ configuration values at start-up.
 | `Verbara.Sdk.VoiceAi.Stt` | [A Deepgram message the recognizer cannot read no longer ends the recognition](#a-deepgram-message-the-recognizer-cannot-read-no-longer-ends-the-recognition) | behaviour |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [The `openai-realtime` health entry reports `Degraded`](#the-openai-realtime-health-entry-reports-degraded) | health status |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [A vendor failure close after a hangup counts failed; a host cancellation from a send counts cancelled](#realtime-sessions-move-between-completed-failed-and-cancelled) | metric meaning |
+| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An OpenAI Realtime event the bridge cannot read no longer ends the call](#an-openai-realtime-event-the-bridge-cannot-read-no-longer-ends-the-call) | behaviour, metric meaning |
 | `Verbara.Sdk.Push.Webhooks` | [A webhook receives a topic-less event its event type matches](#a-webhook-receives-a-topic-less-event) | behaviour |
 
 ## Ami
@@ -573,6 +574,31 @@ rejection also when the caller had left first.
 **What to do.** Nothing in code. Expect `.failed` to rise by the vendor failures that used to hide behind hangups,
 and `.failed` to stop moving during host shutdowns; `started - completed - failed - cancelled` is still what is in
 flight. See the bridge's README, *When the conversation ends*.
+
+### An OpenAI Realtime event the bridge cannot read no longer ends the call
+
+**What changed.** The OpenAI Realtime bridge decoded each vendor event with nothing around the decode, so one event
+it could not read (a member of the wrong type, say) ended the conversation while the caller was on the line: the
+session was counted in `openai_realtime.sessions.failed`, and under the session broker the caller was hung up. Now
+the call goes on:
+
+- An `error` event that cannot be read is reported as a readable one is: one `RealtimeErrorEvent` on `Events`, whose
+  `Message` is the raw text of what OpenAI sent, and the same Error-level log line. It is not counted as a failure.
+- Any other event that cannot be read is skipped, logged once at Warning and counted on
+  `openai_realtime.frames.unparseable` (meter `Verbara.Sdk.VoiceAi.OpenAiRealtime`, tagged `voiceai.provider` =
+  `OpenAiRealtime`). An unreadable function call runs no function and sends no answer to OpenAI. The transcript and
+  audio that follow it reach the caller.
+
+No signature changes. An event that is read but whose handling fails, such as an `Events` subscriber that throws,
+still ends the session as before.
+
+**Who is affected.** A dashboard or alert on `openai_realtime.sessions.failed`: an unreadable event no longer counts
+there. Code that reads `RealtimeErrorEvent.Message` as OpenAI's `error.message`: for an `error` event the bridge
+could not read, it is the whole frame.
+
+**What to do.** To see the events the bridge skipped, watch `openai_realtime.frames.unparseable`. Treat a
+`RealtimeErrorEvent.Message` as text to log, not as a fixed shape. See the bridge's README, *When the conversation
+ends*.
 
 ## Push webhooks
 
