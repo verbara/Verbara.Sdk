@@ -529,8 +529,7 @@ public sealed class WebSocketAudioServerMediaStartTests
         }
         finally
         {
-            foreach (var client in admitted)
-                client.Dispose();
+            admitted.ForEach(static client => client.Dispose());
         }
     }
 

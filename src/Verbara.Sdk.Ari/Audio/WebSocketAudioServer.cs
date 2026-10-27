@@ -648,13 +648,15 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
         if (_logger.IsEnabled(LogLevel.Debug))
         {
             var segment = ChanWebSocketMediaStartParser.ForLog(pathSegment);
-            var eventName = ChanWebSocketMediaStartParser.ForLog(first?.Value);
-            if (first is null)
+            if (first is not { } frame)
                 WebSocketAudioServerLog.ConnectionUnnamedByMediaStartTimeout(_logger, segment, _mediaStartTimeout);
-            else if (first.Value.Kind == WebSocketFirstFrameKind.Binary)
+            else if (frame.Kind == WebSocketFirstFrameKind.Binary)
                 WebSocketAudioServerLog.ConnectionUnnamedByBinaryFirstFrame(_logger, segment);
             else
+            {
+                var eventName = ChanWebSocketMediaStartParser.ForLog(frame.Value);
                 WebSocketAudioServerLog.ConnectionUnnamedByTextFirstFrame(_logger, segment, eventName);
+            }
         }
     }
 
@@ -737,10 +739,10 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
             else if (line.StartsWith("Sec-WebSocket-Protocol:", StringComparison.OrdinalIgnoreCase))
             {
                 // A comma-separated list, and the header may repeat (RFC 6455 §4.1).
-                foreach (var offered in line["Sec-WebSocket-Protocol:".Length..].Split(','))
+                if (line["Sec-WebSocket-Protocol:".Length..].Split(',')
+                    .Any(offered => string.Equals(offered.Trim(), MediaSubprotocol, StringComparison.OrdinalIgnoreCase)))
                 {
-                    if (string.Equals(offered.Trim(), MediaSubprotocol, StringComparison.OrdinalIgnoreCase))
-                        offersMedia = true;
+                    offersMedia = true;
                 }
             }
         }
