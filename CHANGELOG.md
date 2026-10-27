@@ -165,6 +165,18 @@ threads go alongside it. A handler that throws no longer keeps the events queued
 exception is rethrown from the call that made the change. A handler must not block on another event of the same manager caused by
 its own calls. The full rules are in the troubleshooting guide.
 
+### Fixed: a call that rings before it is dialed records its ring (#NNN)
+
+An AMI `Originate`'s `DialBegin` names the originated leg and no calling channel, so the call never leaves `Created`,
+and the `Newstate: Ringing` that follows used to be dropped: the call ended with `CallSession.RingingAt` null and no
+`Ringing` entry in its audit trail, on Asterisk 20, 22 and 23. A `Ringing` reported while the call is `Created` is
+now recorded: `RingingAt` is set to when the SDK observed the first such ring, `CallSession.Events` gains one
+`Ringing` entry naming the leg that rang, and the call is handed to the session store. The call stays `Created`:
+its state trail, transitions, domain events, `SessionMetrics` and what the reconciliation sweep does with it are
+unchanged, and a `DialBegin` that follows still moves it to `Dialing`. `ChannelState.Ring`, the state a leg is
+created in while Asterisk receives it, records nothing. `RingingAt` therefore means "the first ring the SDK
+observed", not "the call passed through `Ringing`". No public API changes.
+
 ### Added: a server removed for good can let go of its calls without ending them (#464)
 
 `CallSessionManager` and `ICallSessionManager` gain `DetachFromServer(serverId, DetachedCalls calls)`.
