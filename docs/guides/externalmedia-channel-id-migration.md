@@ -158,9 +158,22 @@ reports the symptom one layer away from the cause. If you hit this, either set `
 
 Callers with **no** audio server, or with a WebSocket server only, take an unchanged path.
 
-## What this does not cover
+## The WebSocket transport
 
-The WebSocket transport. `WebSocketAudioServer` keys its table on the last segment of the request
-path, not on an identification frame, so `channelId` does not make its lookups work. What
-`externalMedia` with `transport=websocket` actually puts in the request path has not been measured,
-and is tracked separately rather than designed from a reading of the code.
+`WebSocketAudioServer` is keyed by the call too, by another route. Every call through one
+`websocket_client` connection upgrades on the same fixed URI, so the request path names no call;
+what names it is the first frame chan_websocket sends, `MEDIA_START`, whose `channel_id` is the
+channel's id. For `externalMedia` with `transport=websocket` that is the `Channel.Id` the create
+returned, whether the creator passed `channelId` or let Asterisk mint one, so
+`GetStream(Channel.Id)` finds the stream once it is announced. This was measured off the wire on
+Asterisk 20.20.1, 22.9.0, 22.10.1 and 23.4.1, and on the 22.12.0, 23.6.0 and 24.0.0 release
+candidates.
+
+For a call that reaches the server through `Dial(WebSocket/<connection>)`, the key is the uniqueid
+of the WebSocket channel Asterisk creates, not the caller's, and the plain-text `MEDIA_START`
+carries no variable that correlates it with the caller.
+
+A connection whose first frame is not `MEDIA_START`, or that sends no frame within
+`AudioServerOptions.MediaStartTimeout` (default 2 seconds), keeps the earlier key, the last segment
+of its request path. Set `MediaStartTimeout` to `TimeSpan.Zero` to key every connection that way,
+for a client that never sends `MEDIA_START`.

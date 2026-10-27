@@ -10,22 +10,24 @@ namespace Verbara.Sdk.Activities.Activities;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Only the AudioSocket branch is routed.</b> This activity looks the stream up by
-/// <see cref="AriChannel.Id"/> on whichever server it was handed, and that only works for
-/// AudioSocket because this class arranges it: it mints one identifier and sends it as both
+/// This activity looks the stream up by <see cref="AriChannel.Id"/> on whichever server it was
+/// handed, and both servers register it under that id.
+/// </para>
+/// <para>
+/// <b>AudioSocket.</b> This class arranges it: it mints one identifier and sends it as both
 /// <c>channelId</c> and <c>data</c>, so the ARI channel id and the key
 /// <see cref="AudioSocketServer"/> registers the stream under are the same string.
 /// </para>
 /// <para>
-/// Nothing arranges that for <see cref="WebSocketAudioServer"/>. It keys its table on the last path
-/// segment of the HTTP upgrade request URL with the query string stripped, while a non-AudioSocket
-/// create leaves <see cref="AriChannel.Id"/> an Asterisk-minted uniqueid such as
-/// <c>1790244226.1</c>. This class does not make those two match, so a
-/// <see cref="WebSocketAudioServer"/> passed to this activity is expected to poll out
-/// <see cref="ConnectionTimeout"/> and throw <see cref="TimeoutException"/> however well the
-/// WebSocket connection itself went — unless that request path happens to carry the very id
-/// Asterisk minted, which is exactly what no probe has measured. That is why this branch is
-/// documented here rather than fixed.
+/// <b>WebSocket.</b> Asterisk arranges it: with <c>transport=websocket</c>, chan_websocket connects
+/// through the <c>websocket_client</c> connection named in <see cref="ExternalHost"/>, and the first
+/// frame it sends, <c>MEDIA_START</c>, carries the channel's id in <c>channel_id</c>.
+/// <see cref="WebSocketAudioServer"/> registers the stream under that value, so
+/// <c>GetStream(Channel.Id)</c> finds it once the stream is announced. That needs a server whose
+/// <see cref="AudioServerOptions.MediaStartTimeout"/> is above zero, as the default is: at zero the
+/// server keys every connection by its upgrade path's last segment, and the activity polls out
+/// <see cref="ConnectionTimeout"/> and throws <see cref="TimeoutException"/>, as it does for any
+/// connection that never names its call.
 /// </para>
 /// </remarks>
 public sealed class ExternalMediaActivity : AriActivityBase

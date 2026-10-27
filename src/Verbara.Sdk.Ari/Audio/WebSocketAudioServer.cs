@@ -33,11 +33,32 @@ internal static partial class WebSocketAudioServerLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] Stream limit reached ({Limit}), rejecting connection")]
     public static partial void StreamLimitReached(ILogger logger, int limit);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] Connection announced under its path segment {PathSegment}: its first frame is binary, not MEDIA_START")]
+    public static partial void ConnectionUnnamedByBinaryFirstFrame(ILogger logger, string pathSegment);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] Connection announced under its path segment {PathSegment}: its first frame is the text frame {Event}, not MEDIA_START")]
+    public static partial void ConnectionUnnamedByTextFirstFrame(ILogger logger, string pathSegment, string @event);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] Connection announced under its path segment {PathSegment}: its first frame is a MEDIA_START without a channel_id")]
+    public static partial void ConnectionUnnamedByMediaStartWithoutChannelId(ILogger logger, string pathSegment);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] Connection announced under its path segment {PathSegment}: it sent no frame within MediaStartTimeout ({MediaStartTimeout})")]
+    public static partial void ConnectionUnnamedByMediaStartTimeout(ILogger logger, string pathSegment, TimeSpan mediaStartTimeout);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] A connection's path segment {PathSegment} equals the channel_id {ChannelId} another connection named in its MEDIA_START: the connection that named the call holds the key, and the other is listed and counted but not found under it")]
+    public static partial void PathSegmentCollision(ILogger logger, string pathSegment, string channelId);
 }
 
 /// <summary>
-/// Listens for incoming WebSocket connections from Asterisk ExternalMedia channels.
-/// Uses TcpListener + manual HTTP upgrade + WebSocket.CreateFromStream() (ADR-1).
+/// Listens for the WebSocket media connections Asterisk's chan_websocket makes through a
+/// <c>websocket_client</c> connection: from an ARI <c>externalMedia</c> channel created with
+/// <c>transport=websocket</c>, and from a dialplan <c>Dial(WebSocket/&lt;connection&gt;)</c>. Each stream is keyed
+/// by the call its first frame, <c>MEDIA_START</c>, names.
+/// The server owns a <see cref="TcpListener"/> and answers the HTTP upgrade itself, then wraps the upgraded stream
+/// with <see cref="WebSocket.CreateFromStream(Stream, WebSocketCreationOptions)"/>: it needs no ASP.NET Core host,
+/// so it runs inside any process, Native AOT included, and it reads the upgrade's path, which carries the key of a
+/// connection that names no call.
 /// </summary>
 public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 {
@@ -48,6 +69,12 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 
     /// <summary>The longest wait between failed accepts, however long the run.</summary>
     internal static readonly TimeSpan MaxAcceptBackoff = TimeSpan.FromSeconds(5);
+
+    /// <summary>The longest <see cref="AudioServerOptions.MediaStartTimeout"/> a timer can be armed for.</summary>
+    internal static readonly TimeSpan MaxMediaStartTimeout = TimeSpan.FromMilliseconds(uint.MaxValue - 1.0);
+
+    /// <summary>The subprotocol Asterisk's <c>websocket_client</c> offers, and the 101 selects when offered.</summary>
+    internal const string MediaSubprotocol = "media";
 
     private readonly AudioServerOptions _options;
     private readonly ILogger<WebSocketAudioServer> _logger;
@@ -69,17 +96,27 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     private int _running;
     private int _disposed;
 
+    // The bound the running server waits on, read from the options and validated by StartAsync.
+    private TimeSpan _mediaStartTimeout;
+
     /// <summary>Observable that emits each new audio stream when a connection is established.</summary>
     public IObservable<IAudioStream> OnStreamConnected => _streamSubject;
 
     /// <summary>
-    /// Get an active stream by the last path segment of the HTTP upgrade request URL it arrived on,
-    /// query string stripped — not by an ARI channel id, and not by the AudioSocket identification
-    /// UUID. When several live connections present one segment, this returns the earliest of them
-    /// still connected; the others are announced on <see cref="OnStreamConnected"/>, listed and
-    /// counted, but not found until they take the segment over. See
-    /// <see cref="IAudioServer.GetStream(string)"/>.
+    /// Get an active stream by the call its <c>MEDIA_START</c> named: the literal <c>channel_id</c> of the
+    /// connection's first frame, compared ordinally. For an <c>externalMedia</c> channel that is the ARI channel id
+    /// the create returned; for a <c>Dial(WebSocket/…)</c> it is the uniqueid of the WebSocket channel, not the
+    /// caller's. A connection whose first frame is not <c>MEDIA_START</c>, or that sends nothing within
+    /// <see cref="AudioServerOptions.MediaStartTimeout"/>, is keyed by the last path segment of its upgrade request,
+    /// query string stripped.
     /// </summary>
+    /// <remarks>
+    /// When several live connections present one key, this returns the earliest of them still connected in the
+    /// highest tier present: a connection that names the call outranks one that only presents the value as its path
+    /// segment. The others are announced on <see cref="OnStreamConnected"/>, listed and counted, but not found until
+    /// they take the key over. A connection still waiting for its first frame is not found. See
+    /// <see cref="IAudioServer.GetStream(string)"/>.
+    /// </remarks>
     public IAudioStream? GetStream(string channelId) =>
         _streams.TryGetValue(channelId, out var session) ? session : null;
 
@@ -148,8 +185,26 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     /// binds nothing. The server serves until <see cref="StopAsync"/> or <see cref="DisposeAsync"/>.
     /// </summary>
     /// <param name="cancellationToken">Unused: this start begins nothing that can be aborted.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="AudioServerOptions.MediaStartTimeout"/> is negative, infinite, or longer than a timer can be armed
+    /// for. Nothing is bound.
+    /// </exception>
     public ValueTask StartAsync(CancellationToken cancellationToken = default)
     {
+        // There is no validator for AudioServerOptions, so the bound is checked here, before anything binds: a
+        // value no timer can honour would fail every connection's wait instead of the start.
+        var mediaStartTimeout = _options.MediaStartTimeout;
+        if (mediaStartTimeout < TimeSpan.Zero || mediaStartTimeout > MaxMediaStartTimeout)
+        {
+#pragma warning disable CA2208, MA0015 // The value at fault is the option this start reads, named as the consumer sets it.
+            throw new ArgumentOutOfRangeException(
+                nameof(AudioServerOptions.MediaStartTimeout),
+                mediaStartTimeout,
+                "MediaStartTimeout must be zero (no wait) or a positive duration a timer can be armed for; " +
+                "a negative or infinite value cannot be honoured.");
+#pragma warning restore CA2208, MA0015
+        }
+
         // The parameter is deliberately unused: it means the start was aborted, and this start begins
         // nothing that can be aborted. The accept loop and every connection handler get the token this
         // server owns, which the server's own stop cancels; a source linked to the start's token would
@@ -178,6 +233,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
         }
 
         _cts = new CancellationTokenSource();
+        _mediaStartTimeout = mediaStartTimeout;
 
         WebSocketAudioServerLog.ServerStarted(_logger, _options.WebSocketPort);
 
@@ -303,42 +359,81 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     private ValueTask<TcpClient> AcceptAsync(CancellationToken ct) =>
         AcceptOverride?.Invoke(ct) ?? _listener!.AcceptTcpClientAsync(ct);
 
-    // Several live connections can present one key: chan_websocket upgrades every call through one
-    // websocket_client connection on the same URI, so on this server a shared key is the normal case.
-    // The first to register holds it. Each later one is announced but waits here, unregistered, in
-    // arrival order, and takes the key over when the connections ahead of it have ended. It is still
-    // listed and counted: ActiveStreams and ActiveStreamCount read _live, which holds every announced
-    // connection. The gate orders Register's retry against every Release. Lookups read _streams, and
-    // neither they nor the counts take it.
+    // Several live connections can present one key: two connections can name one call (Asterisk does not
+    // reject a duplicate channel_id), and connections that name no call share their path segment, which is
+    // the same for every call of one websocket_client connection. There is one keyspace and two tiers:
+    // connections that named the call in their MEDIA_START, then connections that only present the value as
+    // their path segment. The holder is the earliest live connection of the highest tier present. Each other
+    // one is announced but waits here, unregistered, ordered by (tier, arrival), and takes the key over when
+    // the connections ahead of it have ended. A named connection takes the key from an unnamed holder, which
+    // returns to the head of its own tier. Every waiter is still listed and counted: ActiveStreams and
+    // ActiveStreamCount read _live, which holds every announced connection. The gate orders Register's retry
+    // against every Release. Lookups read _streams, and neither they nor the counts take it.
     private readonly Lock _registryGate = new();
     private readonly Dictionary<string, List<WebSocketAudioSession>> _waiting = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Registers <paramref name="session"/> under <paramref name="id"/>, or, while another live
-    /// connection holds that id, appends it to the id's waiting list. The uncontended path takes no
-    /// lock.
+    /// connection holds that id, places it in the id's waiting list by (tier, arrival). A session that
+    /// named the call takes the id from a holder that only presents it as its path segment. The
+    /// uncontended path takes no lock.
     /// </summary>
     private void Register(string id, WebSocketAudioSession session)
     {
         if (_streams.TryAdd(id, session))
             return;
 
+        bool collision;
         lock (_registryGate)
         {
-            // The holder may have been released between the first attempt and the lock.
-            if (_streams.TryAdd(id, session))
-                return;
+            while (true)
+            {
+                // The holder may have been released between the first attempt and the lock, or between two turns.
+                if (_streams.TryAdd(id, session))
+                    return;
+                if (!_streams.TryGetValue(id, out var holder))
+                    continue;
 
-            if (!_waiting.TryGetValue(id, out var waiters))
-                _waiting[id] = waiters = [];
-            waiters.Add(session);
+                if (!_waiting.TryGetValue(id, out var waiters))
+                    _waiting[id] = waiters = [];
+
+                if (session.IsNamed && !holder.IsNamed)
+                {
+                    // One atomic replace, as in Release; it fails only when the entry moved since the read above,
+                    // and the next turn reads it again.
+                    if (!_streams.TryUpdate(id, session, holder))
+                        continue;
+
+                    // The displaced holder goes back ahead of every other connection of its tier. No named
+                    // connection can be waiting here: one would have displaced this holder at its own turn.
+                    waiters.Insert(NamedCount(waiters), holder);
+                    collision = true;
+                    break;
+                }
+
+                waiters.Insert(session.IsNamed ? NamedCount(waiters) : waiters.Count, session);
+                collision = holder.IsNamed && !session.IsNamed;
+                break;
+            }
         }
+
+        if (collision)
+            WebSocketAudioServerLog.PathSegmentCollision(_logger, ChanWebSocketMediaStartParser.ForLog(id), ChanWebSocketMediaStartParser.ForLog(id));
+    }
+
+    /// <summary>The number of named sessions at the head of a waiting list: where the unnamed tier begins.</summary>
+    private static int NamedCount(List<WebSocketAudioSession> waiters)
+    {
+        var count = 0;
+        while (count < waiters.Count && waiters[count].IsNamed)
+            count++;
+        return count;
     }
 
     /// <summary>
     /// Releases what <paramref name="session"/> holds under <paramref name="id"/>: its place in the
-    /// waiting list, or the entry itself. A held entry passes to the earliest waiting connection still
-    /// connected, or is removed when none is left. An entry that maps to another session is neither
+    /// waiting list, or the entry itself. A held entry passes to the first waiting connection still
+    /// connected, in (tier, arrival) order, or is removed when none is left. An entry that maps to another session is neither
     /// removed nor handed over.
     /// </summary>
     private void Release(string id, WebSocketAudioSession session)
@@ -422,13 +517,13 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 // Read HTTP upgrade request, within IdleTimeout. The connection holds a place in the
                 // shared admission count from its accept, so one that never sends its upgrade must give
                 // it back, as the AudioSocket server's identification wait already does.
-                (string? wsKey, string? channelId) upgrade;
+                (string? wsKey, string? channelId, bool offersMedia) upgrade;
                 using (var idle = new CancellationTokenSource(_options.IdleTimeout, _timeProvider))
                 using (var upgradeCts = CancellationTokenSource.CreateLinkedTokenSource(ct, idle.Token))
                 {
                     try
                     {
-                        upgrade = await ReadUpgradeRequestAsync(stream, upgradeCts.Token);
+                        upgrade = await ReadUpgradeAsync(stream, upgradeCts.Token);
                     }
                     catch (OperationCanceledException) when (idle.IsCancellationRequested && !ct.IsCancellationRequested)
                     {
@@ -438,24 +533,50 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                     }
                 }
 
-                var (wsKey, channelId) = upgrade;
-                if (wsKey is null || channelId is null)
+                var (wsKey, pathSegment, offersMedia) = upgrade;
+                if (wsKey is null || pathSegment is null)
                 {
                     WebSocketAudioServerLog.InvalidUpgrade(_logger);
                     return;
                 }
 
-                // Send HTTP 101 response
-                await SendUpgradeResponseAsync(stream, wsKey, ct);
+                // Send HTTP 101 response, selecting the media subprotocol when the upgrade offered it. The offer
+                // is only echoed: it is operator configuration, so it decides nothing about the key.
+                await SendUpgradeResponseAsync(stream, wsKey, offersMedia ? MediaSubprotocol : null, ct);
 
                 // Create ManagedWebSocket
                 var webSocket = WebSocket.CreateFromStream(stream, new WebSocketCreationOptions { IsServer = true });
 
-                session = new WebSocketAudioSession(webSocket, channelId, _options.DefaultFormat, _logger);
+                session = new WebSocketAudioSession(webSocket, pathSegment, _options.DefaultFormat, _logger);
                 session.Start();
 
+                // The wait to be named. It sits after the session starts, so its pump reads the first frame, and
+                // before the registration, so the session is re-keyed before anything can find or announce it.
+                // The place taken at the accept is held through it, and nothing lists or counts the connection
+                // until it is announced. It runs on the server's own token, never the start's.
+                if (_mediaStartTimeout > TimeSpan.Zero)
+                {
+                    var first = await AwaitFirstFrameAsync(session, ct);
+                    switch (first?.Kind)
+                    {
+                        case WebSocketFirstFrameKind.Ended:
+                            // The peer closed or reset before its first frame. Its ending has been processed, so
+                            // it is never registered, listed, counted or announced; the finally below disposes
+                            // it, and the place goes back when this handler returns.
+                            return;
+                        case WebSocketFirstFrameKind.MediaStart:
+                            session.Rekey(first.Value.Value!);
+                            break;
+                        default:
+                            // Unnamed: a binary first frame, a text one that is not MEDIA_START, or the bound.
+                            LogUnnamed(first, pathSegment);
+                            break;
+                    }
+                }
+
+                var key = session.ChannelId;
                 var endpoint = client.Client.RemoteEndPoint?.ToString();
-                WebSocketAudioServerLog.ConnectionAccepted(_logger, endpoint, channelId);
+                WebSocketAudioServerLog.ConnectionAccepted(_logger, endpoint, key);
 
                 // The stop is read before the registration and again after the add, as the Voice AI
                 // server does. A connection whose stop has begun is refused: closed, never announced or
@@ -466,7 +587,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                     return;
 
                 var entry = new RegistryEntry();
-                Register(channelId, session);
+                Register(key, session);
                 _live.TryAdd(session, entry);
                 AfterRegistryAdd?.Invoke();
 
@@ -488,8 +609,9 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 // The stop token, and only that. Unlike the AudioSocket server's counterpart this
                 // method schedules no idle deadline, so no second source is linked into `ct` and no
                 // second ending arrives here. `ct` is `_cts.Token`, cancelled by `StopAsync` and
-                // `DisposeAsync`; every await in the `try` is the upgrade request, the 101 response or
-                // the wait for the session to disconnect, each under that token. The `finally` still
+                // `DisposeAsync`; every await in the `try` is the upgrade request, the 101 response, the
+                // wait for the first frame or the wait for the session to disconnect, each under that token.
+                // A connection the stop reaches during its wait for the first frame is never announced. The `finally` still
                 // deregisters and disposes the session, and the enclosing `using (client)` still
                 // closes the connection.
                 /* Best effort — the server is stopping */
@@ -523,11 +645,66 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
         }
     }
 
+    /// <summary>Records at Debug why a connection is announced under its path segment.</summary>
+    private void LogUnnamed(WebSocketFirstFrame? first, string pathSegment)
+    {
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            var segment = ChanWebSocketMediaStartParser.ForLog(pathSegment);
+            if (first is not { } frame)
+                WebSocketAudioServerLog.ConnectionUnnamedByMediaStartTimeout(_logger, segment, _mediaStartTimeout);
+            else if (frame.Kind == WebSocketFirstFrameKind.Binary)
+                WebSocketAudioServerLog.ConnectionUnnamedByBinaryFirstFrame(_logger, segment);
+            else if (string.Equals(frame.Value, ChanWebSocketTextFrameHead.MediaStartEvent, StringComparison.Ordinal))
+                WebSocketAudioServerLog.ConnectionUnnamedByMediaStartWithoutChannelId(_logger, segment);
+            else
+            {
+                var eventName = ChanWebSocketMediaStartParser.ForLog(frame.Value);
+                WebSocketAudioServerLog.ConnectionUnnamedByTextFirstFrame(_logger, segment, eventName);
+            }
+        }
+    }
+
     /// <summary>
-    /// Read HTTP upgrade request headers, extract Sec-WebSocket-Key and channel ID from URL path.
-    /// Expected URL: /ws/{channelId} or /{channelId}
+    /// Waits for <paramref name="session"/>'s first frame, bounded by
+    /// <see cref="AudioServerOptions.MediaStartTimeout"/> and by the server's stop. The bound elapsing is reported
+    /// as <see langword="null"/>; the stop throws <see cref="OperationCanceledException"/>.
+    /// </summary>
+    private async Task<WebSocketFirstFrame?> AwaitFirstFrameAsync(WebSocketAudioSession session, CancellationToken ct)
+    {
+        var firstFrame = session.FirstFrame;
+        if (!firstFrame.IsCompleted)
+        {
+            using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var bound = Task.Delay(_mediaStartTimeout, _timeProvider, wait.Token);
+            await Task.WhenAny(firstFrame, bound).ConfigureAwait(false);
+
+            // Disarms the bound's timer when the frame came first.
+            await wait.CancelAsync().ConfigureAwait(false);
+        }
+
+        ct.ThrowIfCancellationRequested();
+        return firstFrame.IsCompleted ? await firstFrame.ConfigureAwait(false) : null;
+    }
+
+    /// <summary>
+    /// Read HTTP upgrade request headers, extract Sec-WebSocket-Key and the last segment of the request path,
+    /// query string stripped. The path segment is the key of a connection whose first frame names no call;
+    /// Asterisk's <c>websocket_client</c> upgrades every call of one connection on the same fixed URI, so it is
+    /// not where a call is named.
     /// </summary>
     internal static async Task<(string? wsKey, string? channelId)> ReadUpgradeRequestAsync(
+        Stream stream, CancellationToken ct)
+    {
+        var (wsKey, channelId, _) = await ReadUpgradeAsync(stream, ct);
+        return (wsKey, channelId);
+    }
+
+    /// <summary>
+    /// <see cref="ReadUpgradeRequestAsync"/>, plus whether the upgrade offers the <c>media</c> subprotocol in
+    /// <c>Sec-WebSocket-Protocol</c>.
+    /// </summary>
+    internal static async Task<(string? wsKey, string? channelId, bool offersMedia)> ReadUpgradeAsync(
         Stream stream, CancellationToken ct)
     {
         var buffer = new byte[4096];
@@ -537,7 +714,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
         while (totalRead < buffer.Length)
         {
             var bytesRead = await stream.ReadAsync(buffer.AsMemory(totalRead), ct);
-            if (bytesRead == 0) return (null, null);
+            if (bytesRead == 0) return (null, null, false);
             totalRead += bytesRead;
 
             if (Encoding.ASCII.GetString(buffer, 0, totalRead).Contains("\r\n\r\n", StringComparison.Ordinal))
@@ -546,36 +723,53 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 
         var request = Encoding.ASCII.GetString(buffer, 0, totalRead);
         var lines = request.Split("\r\n");
-        if (lines.Length == 0) return (null, null);
+        if (lines.Length == 0) return (null, null, false);
 
-        // Parse request line: GET /ws/{channelId} HTTP/1.1
+        // The request line: GET /<path>/<segment> HTTP/1.1. Asterisk's websocket_client sends the URI its
+        // connection entry configures, the same for every call of that entry.
         var requestLine = lines[0].Split(' ');
-        if (requestLine.Length < 2) return (null, null);
+        if (requestLine.Length < 2) return (null, null, false);
 
         var path = requestLine[1];
         var channelId = path.TrimStart('/').Split('/').LastOrDefault()?.Split('?').FirstOrDefault();
 
         string? wsKey = null;
+        var offersMedia = false;
         foreach (var line in lines)
         {
-            if (line.StartsWith("Sec-WebSocket-Key:", StringComparison.OrdinalIgnoreCase))
+            if (wsKey is null && line.StartsWith("Sec-WebSocket-Key:", StringComparison.OrdinalIgnoreCase))
             {
                 wsKey = line["Sec-WebSocket-Key:".Length..].Trim();
-                break;
+            }
+            else if (line.StartsWith("Sec-WebSocket-Protocol:", StringComparison.OrdinalIgnoreCase)
+                     // A comma-separated list, and the header may repeat (RFC 6455 §4.1).
+                     && line["Sec-WebSocket-Protocol:".Length..].Split(',')
+                         .Any(offered => string.Equals(offered.Trim(), MediaSubprotocol, StringComparison.OrdinalIgnoreCase)))
+            {
+                offersMedia = true;
             }
         }
 
-        return (wsKey, channelId);
+        return (wsKey, channelId, offersMedia);
     }
 
-    /// <summary>Send HTTP 101 Switching Protocols response.</summary>
+    /// <summary>Send HTTP 101 Switching Protocols response, selecting no subprotocol.</summary>
+    internal static Task SendUpgradeResponseAsync(Stream stream, string wsKey, CancellationToken ct) =>
+        SendUpgradeResponseAsync(stream, wsKey, subProtocol: null, ct);
+
+    /// <summary>
+    /// Send HTTP 101 Switching Protocols response, selecting <paramref name="subProtocol"/> in
+    /// <c>Sec-WebSocket-Protocol</c> when it is not <see langword="null"/>. The caller passes only a subprotocol the
+    /// upgrade offered.
+    /// </summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Security", "CA5350:Do Not Use Weak Cryptographic Algorithms", Justification = "SHA1 is required by RFC 6455 WebSocket protocol")]
-    internal static async Task SendUpgradeResponseAsync(Stream stream, string wsKey, CancellationToken ct)
+    internal static async Task SendUpgradeResponseAsync(Stream stream, string wsKey, string? subProtocol, CancellationToken ct)
     {
         var acceptKey = Convert.ToBase64String(
             SHA1.HashData(Encoding.ASCII.GetBytes(wsKey + WebSocketGuid)));
 
-        var response = $"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {acceptKey}\r\n\r\n";
+        var selected = subProtocol is null ? "" : $"Sec-WebSocket-Protocol: {subProtocol}\r\n";
+        var response = $"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {acceptKey}\r\n{selected}\r\n";
         await stream.WriteAsync(Encoding.ASCII.GetBytes(response), ct);
         await stream.FlushAsync(ct);
     }

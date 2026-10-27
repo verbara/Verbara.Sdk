@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Channels;
 using Verbara.Sdk.Ari.Audio;
 using Verbara.Sdk.Ari.Tests.TestSupport;
+using Verbara.Sdk.TestInfrastructure.Wire;
 using Verbara.Sdk.Tests.Shared.Sockets;
 using FluentAssertions;
 using FluentAssertions.Execution;
@@ -1025,69 +1026,39 @@ public class WebSocketAudioServerTests
     }
 
     [Fact]
-    public async Task HandleConnectionAsync_ShouldKeepDeliveringAudio_WhenAsteriskSendsItsJsonMediaStart()
-    {
-        // Arrange — chan_websocket's JSON control format (Dial option f(json)): the first frame is
-        // MEDIA_START, named by `event`, as captured from Asterisk 22.9.0 and 23.4.1. The connection keeps
-        // its path key; nothing here depends on the key.
-        var (started, port) = await StartOnLoopbackAsync();
-        await using var server = started;
-        using var announcements = new Announcements(server);
-        using var client = new ClientWebSocket();
-        await client.ConnectAsync(ChannelUri(port, "ch-json"), CancellationToken.None);
-        var (stream, _) = await announcements.NextAsync();
-
-        // The SDK's control-message model does not read Asterisk's `event` field yet, so this frame
-        // must be dropped: nothing is published for it. That the audio survives is what is claimed
-        // here, not that control messages are understood.
-        var published = 0;
-        using var controlMessages = ((IChanWebSocketSession)stream).ControlMessages.Subscribe(
-            _ => Interlocked.Increment(ref published));
-
-        await client.SendAsync(
-            Encoding.UTF8.GetBytes(
-                "{\"event\":\"MEDIA_START\",\"connection_id\":\"c1\",\"channel\":\"WebSocket/c1/0x7f0638004770\"," +
-                "\"channel_id\":\"1790617675.20\",\"format\":\"slin16\",\"optimal_frame_size\":640,\"ptime\":20}"),
-            WebSocketMessageType.Text,
-            endOfMessage: true,
-            CancellationToken.None);
-        await client.SendAsync(new byte[640], WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None);
-
-        // Act
-        var frame = await stream.ReadFrameAsync().AsTask().WaitAsync(WaitLimit);
-
-        // Assert
-        using (new AssertionScope())
-        {
-            frame.Length.Should().Be(
-                640, "a control message the SDK does not model must not end the call's audio stream");
-            Volatile.Read(ref published).Should().Be(
-                0, "a text frame the SDK cannot read is dropped, not published as a control message");
-        }
-    }
+    public Task HandleConnectionAsync_ShouldKeepDeliveringAudio_WhenAsteriskSendsItsJsonMediaStart() =>
+        // chan_websocket's JSON control format (Dial option f(json)): the first frame is MEDIA_START, named by
+        // `event`, as captured from Asterisk 22.9.0.
+        MediaStartNamesTheStreamAndTheAudioFlowsAsync(CapturedMediaStart("22.9.0", ChanWebSocketCaptureFormat.Json), "ch-json");
 
     [Fact]
-    public async Task HandleConnectionAsync_ShouldKeepDeliveringAudio_WhenAsteriskSendsItsPlainTextMediaStart()
+    public Task HandleConnectionAsync_ShouldKeepDeliveringAudio_WhenAsteriskSendsItsPlainTextMediaStart() =>
+        // chan_websocket's default control format: the first frame is a plain-text MEDIA_START, which is not JSON
+        MediaStartNamesTheStreamAndTheAudioFlowsAsync(CapturedMediaStart("22.9.0", ChanWebSocketCaptureFormat.PlainText), "ch-text");
+
+    /// <summary>
+    /// The first frame is the captured <c>MEDIA_START</c>, sent BEFORE the announcement is awaited: the server
+    /// announces the stream only once that frame has named it, under its <c>channel_id</c>. No subprotocol is
+    /// offered, so the key is decided by the frame and not by the offer. The audio frame that follows is delivered,
+    /// and nothing is published on <c>ControlMessages</c> for the naming frame: it is stream state, not a control
+    /// message.
+    /// </summary>
+    private static async Task MediaStartNamesTheStreamAndTheAudioFlowsAsync(ChanWebSocketCapturedFrame mediaStart, string pathSegment)
     {
-        // Arrange — chan_websocket's default control format: the first frame is a plain-text
-        // MEDIA_START, which is not JSON at all
-        var (started, port) = await StartOnLoopbackAsync();
+        // Arrange — the default MediaStartTimeout: these are tests of the re-key
+        var (started, port) = await StartOnLoopbackAsync(mediaStartTimeout: new AudioServerOptions().MediaStartTimeout);
         await using var server = started;
         using var announcements = new Announcements(server);
         using var client = new ClientWebSocket();
-        await client.ConnectAsync(ChannelUri(port, "ch-text"), CancellationToken.None);
+        await client.ConnectAsync(ChannelUri(port, pathSegment), CancellationToken.None);
+
+        // The naming frame goes first; only then is the announcement awaited
+        await client.SendAsync(mediaStart.Payload(), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
         var (stream, _) = await announcements.NextAsync();
         var published = 0;
         using var controlMessages = ((IChanWebSocketSession)stream).ControlMessages.Subscribe(
             _ => Interlocked.Increment(ref published));
 
-        await client.SendAsync(
-            Encoding.UTF8.GetBytes(
-                "MEDIA_START connection_id:c1 channel:WebSocket/c1/0x7f0638004770 channel_id:1790617675.20 " +
-                "format:slin16 optimal_frame_size:640 ptime:20"),
-            WebSocketMessageType.Text,
-            endOfMessage: true,
-            CancellationToken.None);
         await client.SendAsync(new byte[640], WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None);
 
         // Act
@@ -1096,10 +1067,17 @@ public class WebSocketAudioServerTests
         // Assert
         using (new AssertionScope())
         {
-            frame.Length.Should().Be(640, "the plain-text MEDIA_START is dropped and the audio keeps flowing");
-            Volatile.Read(ref published).Should().Be(0, "no control message is published for it");
+            frame.Length.Should().Be(640, "MEDIA_START must not end the call's audio stream");
+            Volatile.Read(ref published).Should().Be(0, "the naming MEDIA_START is stream state, not a control message");
+            stream.ChannelId.Should().Be(mediaStart.ChannelId, "the stream is keyed by the call its MEDIA_START names ({0})", mediaStart.Source);
+            server.GetStream(mediaStart.ChannelId).Should().BeSameAs(stream);
+            server.GetStream(pathSegment).Should().BeNull("the path segment is not a named stream's key");
         }
     }
+
+    private static ChanWebSocketCapturedFrame CapturedMediaStart(string version, ChanWebSocketCaptureFormat format) =>
+        ChanWebSocketWireCapture.MediaStart.First(f =>
+            f.AsteriskVersion == version && f.Producer == ChanWebSocketCaptureProducer.Dial && f.Format == format && f.Option == "none");
 
     // ------------------------------------ every place taken at the accept comes back when its connection ends
 
@@ -1300,12 +1278,21 @@ public class WebSocketAudioServerTests
     /// </summary>
     private const int PortTheOsPicks = 0;
 
+    /// <remarks>
+    /// <c>MediaStartTimeout</c> is <see cref="TimeSpan.Zero"/> unless a test names another value. These are the
+    /// tests of the zero bound's exception: their subject is the waiting list, the count, the limit, the stop, the
+    /// restart and the ending, and their clients send no <c>MEDIA_START</c>, so each connection is announced at once
+    /// under its path segment, as it was before the re-key. Without it each connection would wait out the 2 s
+    /// default before its announcement, and under a fake clock it would never be announced. The re-key's own tests
+    /// pass the default and send the captured <c>MEDIA_START</c> first.
+    /// </remarks>
     private static WebSocketAudioServer CreateServer(
         int port,
         ILogger<WebSocketAudioServer>? logger = null,
         TimeProvider? timeProvider = null,
         int maxStreams = 1000,
-        TimeSpan? idleTimeout = null) =>
+        TimeSpan? idleTimeout = null,
+        TimeSpan? mediaStartTimeout = null) =>
         new(
             new AudioServerOptions
             {
@@ -1313,6 +1300,7 @@ public class WebSocketAudioServerTests
                 WebSocketPort = port,
                 MaxConcurrentStreams = maxStreams,
                 IdleTimeout = idleTimeout ?? TimeSpan.FromSeconds(60),
+                MediaStartTimeout = mediaStartTimeout ?? TimeSpan.Zero,
             },
             logger ?? NullLogger<WebSocketAudioServer>.Instance,
             timeProvider ?? TimeProvider.System);
@@ -1326,9 +1314,10 @@ public class WebSocketAudioServerTests
     private static Task<(WebSocketAudioServer Server, int Port)> StartOnLoopbackAsync(
         ILogger<WebSocketAudioServer>? logger = null,
         TimeProvider? timeProvider = null,
-        int maxStreams = 1000) =>
+        int maxStreams = 1000,
+        TimeSpan? mediaStartTimeout = null) =>
         LoopbackServerBind.StartAsync(
-            port => CreateServer(port, logger, timeProvider, maxStreams),
+            port => CreateServer(port, logger, timeProvider, maxStreams, mediaStartTimeout: mediaStartTimeout),
             server => server.StartAsync());
 
     private static Uri ChannelUri(int port, string channelId) => new($"ws://127.0.0.1:{port}/ws/{channelId}");

@@ -23,8 +23,8 @@ says:
   one exists.
 
 Four entries only add warnings (`VSDK0005`, `VSDK0003`, `VSDK0002` and `VSDK0006`). They break nothing unless you build with
-`TreatWarningsAsErrors`. Two stop compiling where you use them. The other fourteen change no existing signature, but
-change behaviour a program can branch on, a published metric, or a health status; one of them also refuses some
+`TreatWarningsAsErrors`. Two stop compiling where you use them. The other sixteen change no existing signature, but
+change behaviour a program can branch on, a published metric, or a health status; two of them also refuse some
 configuration values at start-up.
 
 | Package | Change | Kind |
@@ -37,6 +37,7 @@ configuration values at start-up.
 | `Verbara.Sdk.Live` | [A conference counts every caller](#a-conference-counts-every-caller) | does not compile |
 | `Verbara.Sdk.Live` | [A conference participant shows whether it is muted and talking](#a-conference-participant-shows-muted-and-talking) | behaviour |
 | `Verbara.Sdk.Live` | [A start cut short by your own connect throws](#a-start-cut-short-by-your-own-connect-throws) | behaviour |
+| `Verbara.Sdk.Live` | [A server pool refuses an empty or reserved server id](#a-server-pool-refuses-an-empty-or-reserved-server-id) | behaviour |
 | `Verbara.Sdk.Live` | [Live's queue counters across a reconnect](#lives-counters-across-a-reconnect) | metric meaning |
 | `Verbara.Sdk.Live` | [`BridgeCount` counts the bridges inserted since the start](#lives-counters-across-a-reconnect) | metric meaning |
 | `Verbara.Sdk.Live` | [A reload announces the callers and participants it finds gone](#a-reload-announces-the-callers-and-participants-it-finds-gone) | behaviour |
@@ -44,6 +45,7 @@ configuration values at start-up.
 | `Verbara.Sdk.Sessions` | [`sessions.timed_out` and `sessions.orphaned` warn `VSDK0006`](#sessionstimed_out-and-sessionsorphaned-warn-vsdk0006) | warning |
 | `Verbara.Sdk.Activities` | [An activity ends `Cancelled` only when someone asked it to stop](#an-activity-ends-cancelled-only-when-asked-to-stop) | behaviour |
 | `Verbara.Sdk.Activities` | [An attended transfer Asterisk refuses ends `Failed`](#a-refused-attended-transfer-ends-failed) | behaviour |
+| `Verbara.Sdk.Ari` | [A WebSocket stream is found by the call it names](#a-websocket-stream-is-found-by-the-call-it-names) | behaviour, start-up validation |
 | `Verbara.Sdk.Ari` | [`AudioStreamMetrics.BufferUnderruns` warns `VSDK0003`](#audiostreammetricsbufferunderruns-warns-vsdk0003) | warning |
 | `Verbara.Sdk.VoiceAi`, `VoiceAi.OpenAiRealtime` | [A cancelled voice session is counted cancelled](#a-cancelled-voice-session-is-counted-cancelled) | metric meaning |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [The `openai-realtime` health entry reports `Degraded`](#the-openai-realtime-health-entry-reports-degraded) | health status |
@@ -432,6 +434,27 @@ static async Task TransferAsync(IAmiConnection ami, string customerChannel, Canc
 Guide: [Activity endings, What you have to do](activity-ending-migration.md#what-you-have-to-do).
 
 ## Ari audio
+
+### A WebSocket stream is found by the call it names
+
+**What changed.** `WebSocketAudioServer` keys each stream by the `channel_id` in the `MEDIA_START` frame Asterisk
+sends first, not by the last segment of the upgrade path. A connection that sends no `MEDIA_START` first keeps its
+path-segment key, after waiting up to `AudioServerOptions.MediaStartTimeout` (2 s by default) for its first frame.
+
+**Who is affected.** Code that looks a WebSocket stream up, or reads `IAudioStream.ChannelId`, expecting the path
+segment of a chan_websocket connection (for example the `external_host` name of a `websocket_client` entry). A
+WebSocket client of your own that sends nothing after the upgrade is announced up to 2 s later than before; one
+that sends audio first is announced at its first frame, under its path segment.
+
+**What to do.** Look the stream up by the ARI channel id: `GetStream(channel.Id)` for an `externalMedia` channel,
+or the WebSocket channel's id for `Dial(WebSocket/…)` (not the caller's). To keep 2.8.x's keys and timing for a
+client that never sends `MEDIA_START`, set:
+
+```csharp
+var options = new Verbara.Sdk.Ari.Audio.AudioServerOptions { MediaStartTimeout = TimeSpan.Zero };
+```
+
+See [the externalMedia channel id guide](externalmedia-channel-id-migration.md).
 
 ### `AudioStreamMetrics.BufferUnderruns` warns `VSDK0003`
 

@@ -39,4 +39,26 @@ public sealed class AudioServerOptions
     /// its place under <see cref="MaxConcurrentStreams"/> is given back.
     /// </remarks>
     public TimeSpan IdleTimeout { get; set; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// How long a WebSocket connection has, after its upgrade, to send its first frame before
+    /// <see cref="WebSocketAudioServer"/> announces it. Default: 2 seconds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asterisk's chan_websocket sends <c>MEDIA_START</c> as the first frame of every connection, and that frame
+    /// names the call in <c>channel_id</c>; the server announces the stream, and registers it, under that
+    /// value. A connection that sends no frame within it is announced under its path segment, the last segment
+    /// of its upgrade request's path. So is one whose first frame is a binary frame or a text frame that is not
+    /// <c>MEDIA_START</c>, without waiting out the rest of it.
+    /// </para>
+    /// <para>
+    /// <see cref="TimeSpan.Zero"/> means no wait: every connection is announced at once under its path segment,
+    /// and a <c>MEDIA_START</c> it sends later does not change its key. It is the setting for a client that never
+    /// sends <c>MEDIA_START</c>. A negative or infinite value, or one longer than a timer can be armed for, is
+    /// refused when the server starts, with <see cref="ArgumentOutOfRangeException"/>. While a connection waits
+    /// it holds its place under <see cref="MaxConcurrentStreams"/>, and it is neither listed, counted nor found.
+    /// </para>
+    /// </remarks>
+    public TimeSpan MediaStartTimeout { get; set; } = TimeSpan.FromSeconds(2);
 }

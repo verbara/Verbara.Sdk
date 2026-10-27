@@ -717,11 +717,16 @@ public interface IAudioStream : IAsyncDisposable
     /// appears in no stream table.
     /// </para>
     /// <para>
-    /// <b>WebSocket.</b> Not an Asterisk identifier at all: the last segment of the HTTP upgrade
-    /// request's path with any query string removed —
-    /// <c>path.TrimStart('/').Split('/').LastOrDefault()?.Split('?').FirstOrDefault()</c>. It is
-    /// whatever the caller put at the end of the URL it dialled, so every connection that dials the
-    /// same URL yields the same key.
+    /// <b>WebSocket.</b> The <c>channel_id</c> of the <c>MEDIA_START</c> chan_websocket sends as the
+    /// connection's first frame, literal and compared ordinally, with no normalisation. For an
+    /// <c>externalMedia</c> channel created with <c>transport=websocket</c> it is the ARI channel id
+    /// the create returned (<see cref="AriChannel.Id"/>). For a call that reaches the server through
+    /// <c>Dial(WebSocket/&lt;connection&gt;)</c> it is the uniqueid of the WebSocket channel, not the
+    /// caller's, and the plain-text <c>MEDIA_START</c> carries no variable that correlates it with
+    /// the caller. A connection whose first frame is not <c>MEDIA_START</c>, or that sends no frame
+    /// within <c>AudioServerOptions.MediaStartTimeout</c> (or every connection, when that is zero),
+    /// is keyed by the last segment of its HTTP upgrade request's path, query string removed: the
+    /// same for every call of one <c>websocket_client</c> connection.
     /// </para>
     /// </remarks>
     string ChannelId { get; }
@@ -770,25 +775,29 @@ public interface IAudioServer
     IObservable<IAudioStream> OnStreamConnected { get; }
 
     /// <summary>
-    /// Get an active stream by the key its server registered it under. That key is <b>not</b> an
-    /// ARI channel id in general, and it is not interchangeable between implementations — a
-    /// <c>CompositeAudioServer</c> hands this one string to servers that do not agree on what it
-    /// means.
+    /// Get an active stream by the key its server registered it under. Each implementation states
+    /// what that key is, in what form, and where a caller obtains it; see the parameter.
     /// </summary>
     /// <param name="channelId">
     /// The registration key. It is the stream's <see cref="IAudioStream.ChannelId"/> and is
-    /// described in full there; the parameter keeps its old name for source compatibility, not
-    /// because the value is a channel id. In short — for <c>AudioSocketServer</c>: the UUID from
-    /// Asterisk's AudioSocket identification frame, in canonical lowercase hyphenated form and
-    /// compared <b>ordinally</b>, so any other spelling of the same UUID misses. For
-    /// <c>WebSocketAudioServer</c>: the last path segment of the HTTP upgrade request URL, query
-    /// string stripped. An ARI <see cref="AriChannel.Id"/> is a key for the first only when the
-    /// channel was created with that same value in both <c>channelId</c> and <c>data</c>, as
-    /// <c>ExternalMediaActivity</c> does; it is not a key for the second.
+    /// described in full there; the parameter keeps its old name for source compatibility. In short
+    /// — for <c>AudioSocketServer</c>: the UUID from Asterisk's AudioSocket identification frame, in
+    /// canonical lowercase hyphenated form and compared <b>ordinally</b>, so any other spelling of
+    /// the same UUID misses; an ARI <see cref="AriChannel.Id"/> is that key only when the channel
+    /// was created with that same value in both <c>channelId</c> and <c>data</c>, as
+    /// <c>ExternalMediaActivity</c> does. For <c>WebSocketAudioServer</c>: the literal
+    /// <c>channel_id</c> of the connection's <c>MEDIA_START</c>, compared ordinally — for an
+    /// <c>externalMedia</c> channel the <see cref="AriChannel.Id"/> the create returned, for a
+    /// <c>Dial(WebSocket/…)</c> the WebSocket channel's uniqueid; a connection that names no call
+    /// is keyed by its upgrade path's last segment, and a connection that names the call outranks
+    /// one that only presents the same value as its path segment.
     /// </param>
     /// <returns>
-    /// The stream registered under that key, or <see langword="null"/> if there is none. A key in
-    /// the wrong form is indistinguishable from an absent stream, which is why the form matters.
+    /// The live stream registered under that key, or <see langword="null"/> when none is. An
+    /// aggregate over several servers (<c>CompositeAudioServer</c>) returns the first stream any of
+    /// them holds under the key, and its <see langword="null"/> means that none of them holds a live
+    /// stream under it; a found stream says its transport by its type (a WebSocket stream is an
+    /// <c>IChanWebSocketSession</c>).
     /// </returns>
     IAudioStream? GetStream(string channelId);
 
