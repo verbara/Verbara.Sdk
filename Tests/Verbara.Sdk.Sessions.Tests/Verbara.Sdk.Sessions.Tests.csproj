@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <Compile Include="..\Shared\Sessions\SessionIndexInvariant.cs" Link="Shared\Sessions\SessionIndexInvariant.cs" />
     <Compile Include="..\Shared\Sessions\StepParker.cs" Link="Shared\Sessions\StepParker.cs" />
   </ItemGroup>
   <ItemGroup>

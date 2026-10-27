@@ -86,6 +86,89 @@ public sealed class ChannelManager
     /// </summary>
     private readonly Dictionary<string, long> _departures = new(StringComparer.Ordinal);
 
+    private readonly ConcurrentDictionary<string, object> _linkedChannels = new(1, 31, StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, int> _departingChannels = new(1, 31, StringComparer.Ordinal);
+    private static string CallKey(AsteriskChannel channel) => string.IsNullOrEmpty(channel.LinkedId) ? channel.UniqueId : channel.LinkedId;
+    internal LinkedChannelSnapshot ChannelsOfLinkedId(string linkedId) => new(_linkedChannels.GetValueOrDefault(linkedId));
+    internal bool HoldsLinkedId(string linkedId) => _linkedChannels.ContainsKey(linkedId);
+    internal static bool IsDeparting(AsteriskChannel channel) => channel.IsOutsideTable;
+    internal bool IsHeldOrDeparting(string id) => _channelsByUniqueId.ContainsKey(id) || _departingChannels.ContainsKey(id);
+    // A single-channel group reuses that channel object; multi-channel groups keep immutable arrays.
+    // Readers retain the same lock-free snapshot semantics without allocating the common singleton array.
+    private void AddLinkedLocked(AsteriskChannel channel)
+    {
+        var key = CallKey(channel);
+        if (!_linkedChannels.TryGetValue(key, out var held))
+            _linkedChannels[key] = channel;
+        else if (held is AsteriskChannel single)
+            _linkedChannels[key] = new[] { single, channel };
+        else
+        {
+            var channels = (AsteriskChannel[])held;
+            var added = new AsteriskChannel[channels.Length + 1];
+            Array.Copy(channels, added, channels.Length);
+            added[^1] = channel;
+            _linkedChannels[key] = added;
+        }
+    }
+
+    private void BeginDepartureLocked(AsteriskChannel channel)
+    {
+        channel.MarkOutsideTable();
+        {
+            // All writers already hold _readWindowGate: only an existing incarnation needs a count read.
+            if (!_departingChannels.TryAdd(channel.UniqueId, 1))
+                _departingChannels[channel.UniqueId] = _departingChannels[channel.UniqueId] + 1;
+        }
+    }
+    private void RemoveLinkedLocked(AsteriskChannel channel)
+    {
+        var key = CallKey(channel);
+        if (!_linkedChannels.TryGetValue(key, out var held)) return;
+        if (held is AsteriskChannel single)
+        {
+            if (ReferenceEquals(single, channel)) _linkedChannels.TryRemove(key, out _);
+            return;
+        }
+        var channels = (AsteriskChannel[])held;
+        var count = 0;
+        AsteriskChannel? last = null;
+        for (var i = 0; i < channels.Length; i++)
+        {
+            if (ReferenceEquals(channels[i], channel)) continue;
+            count++;
+            last = channels[i];
+        }
+        if (count == channels.Length) return;
+        if (count == 0) _linkedChannels.TryRemove(key, out _);
+        else if (count == 1) _linkedChannels[key] = last!;
+        else
+        {
+            var remaining = new AsteriskChannel[count];
+            var at = 0;
+            for (var i = 0; i < channels.Length; i++)
+                if (!ReferenceEquals(channels[i], channel)) remaining[at++] = channels[i];
+            _linkedChannels[key] = remaining;
+        }
+    }
+
+    private void AnnounceDeparture(AsteriskChannel channel)
+    {
+        try { ChannelRemoved?.Invoke(channel); }
+        finally
+        {
+            lock (_readWindowGate)
+            {
+                if (_departingChannels.TryGetValue(channel.UniqueId, out var count))
+                {
+                    if (count == 1) _departingChannels.TryRemove(channel.UniqueId, out _);
+                    else _departingChannels[channel.UniqueId] = count - 1;
+                }
+                RemoveLinkedLocked(channel);
+            }
+        }
+    }
+
     public event Action<AsteriskChannel>? ChannelAdded;
     public event Action<AsteriskChannel>? ChannelRemoved;
     public event Action<AsteriskChannel>? ChannelStateChanged;
@@ -289,8 +372,10 @@ public sealed class ChannelManager
                 // Stamped before the channel is published to either index, so a channel visible to
                 // a concurrent reconciliation always carries the mark that ordered it.
                 channel.AdmissionMark = Interlocked.Increment(ref _admissions);
+                channel.MarkInsideTable();
                 _channelsByUniqueId[entry.UniqueId] = channel;
                 _channelsByName[entry.Name] = channel;
+                AddLinkedLocked(channel);
             }
 
             LiveMetrics.ChannelsCreated.Add(1);
@@ -299,6 +384,39 @@ public sealed class ChannelManager
         }
 
         return Admission.Admitted;
+    }
+
+    /// <summary>
+    /// Visit each channel under its own lock, only if the table still holds that instance.
+    /// A removal may leave the table during the visit, but posts its notification only after
+    /// acquiring this same channel lock. The callback may take a call lock: channel precedes call.
+    /// Callers must therefore enter the walk outside any call lock.
+    /// </summary>
+    internal void VisitHeld(Action<AsteriskChannel> visit)
+    {
+        foreach (var channel in _channelsByUniqueId.Values)
+            VisitHeldChannel(channel, visit);
+    }
+
+    /// <summary>Visit only the held instances in one linked-id group, with the same lock order.</summary>
+    internal void VisitHeld(string linkedId, Action<AsteriskChannel> visit)
+    {
+        var channels = ChannelsOfLinkedId(linkedId);
+        for (var i = 0; i < channels.Length; i++)
+            VisitHeldChannel(channels[i], visit);
+    }
+
+    private void VisitHeldChannel(AsteriskChannel channel, Action<AsteriskChannel> visit)
+    {
+        lock (channel.SyncRoot)
+        {
+            lock (_readWindowGate)
+            {
+                if (!_channelsByUniqueId.TryGetValue(channel.UniqueId, out var held) || !ReferenceEquals(held, channel))
+                    return;
+            }
+            visit(channel);
+        }
     }
 
     /// <summary>Handle a NewState event (channel state changed).</summary>
@@ -341,6 +459,7 @@ public sealed class ChannelManager
             if (!_channelsByUniqueId.TryRemove(uniqueId, out channel))
                 return;
             _channelsByName.TryRemove(channel.Name, out _);
+            BeginDepartureLocked(channel);
         }
 
         // Taken after the manager lock is released. Admission posted under this same channel lock,
@@ -349,7 +468,7 @@ public sealed class ChannelManager
         {
             channel.HangupCause = cause;
             channel.State = ChannelState.Down;
-            _events.Post(() => ChannelRemoved?.Invoke(channel));
+            _events.Post(() => AnnounceDeparture(channel));
         }
         LiveMetrics.ChannelsDestroyed.Add(1);
         ChannelManagerLog.Hangup(_logger, uniqueId, cause);
@@ -622,6 +741,7 @@ public sealed class ChannelManager
             RecordDepartureLocked(channel.UniqueId);
             if (!_channelsByUniqueId.TryRemove(channel.UniqueId, out gone))
                 return false;
+            BeginDepartureLocked(gone);
         }
 
         string name;
@@ -630,7 +750,7 @@ public sealed class ChannelManager
             name = gone.Name;
             gone.MarkRemovedByReload();
             gone.State = ChannelState.Down;
-            _events.Post(() => ChannelRemoved?.Invoke(gone));
+            _events.Post(() => AnnounceDeparture(gone));
         }
 
         // Drop the name index only while it still points at this instance, so a reused or renamed
@@ -651,11 +771,31 @@ public sealed class ChannelManager
     {
         lock (_readWindowGate)
         {
+            // Capture before clearing, then invalidate only after actual removal. Lock-free readers
+            // may retain an old object; they must never see it absent while the table still owns it.
+            var cleared = _channelsByUniqueId.Values.ToArray();
             _channelsByUniqueId.Clear();
+            foreach (var channel in cleared)
+            {
+                channel.MarkOutsideTable();
+                RemoveLinkedLocked(channel);
+            }
+            // Already-posted departures belong to their notifications until their handlers return.
+            // Their UID counts must also survive a Clear followed by another incarnation of that UID.
             _channelsByName.Clear();
             _departures.Clear();
         }
     }
+}
+
+internal readonly struct LinkedChannelSnapshot
+{
+    private readonly object? _channels;
+    internal LinkedChannelSnapshot(object? channels) => _channels = channels;
+    internal int Length => _channels is AsteriskChannel ? 1 : (_channels as AsteriskChannel[])?.Length ?? 0;
+    internal AsteriskChannel this[int index] => _channels is AsteriskChannel single
+        ? index == 0 ? single : throw new ArgumentOutOfRangeException(nameof(index))
+        : ((AsteriskChannel[])_channels!)[index];
 }
 
 /// <summary>
@@ -753,6 +893,15 @@ public sealed class AsteriskChannel : LiveObjectBase
     /// </para>
     /// </summary>
     internal long AdmissionMark { get; set; }
+
+    // Cache the old reference-identity table-absence test. A removed instance never re-enters:
+    // each admission constructs a new channel. Like a stale table lookup, a delayed flag write
+    // can only keep a call until the departure handler (which runs after MarkOutsideTable).
+    private bool _outsideTable = true;
+    internal bool IsOutsideTable => Volatile.Read(ref _outsideTable);
+    internal void MarkInsideTable() => Volatile.Write(ref _outsideTable, false);
+    internal void MarkOutsideTable() => Volatile.Write(ref _outsideTable, true);
+
 
     /// <summary>
     /// True when this channel entered <see cref="ChannelManager"/>'s table out of a <c>Status</c>

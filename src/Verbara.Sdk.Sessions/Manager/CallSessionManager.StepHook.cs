@@ -8,6 +8,39 @@ namespace Verbara.Sdk.Sessions.Manager;
 /// </summary>
 internal enum HandlerStep
 {
+    /// <summary>The OnChannelStateChanged handler found its call, before taking that call's lock.</summary>
+    StateChangeFound,
+
+    /// <summary>The OnChannelHeld handler found its call, before taking that call's lock.</summary>
+    HoldFound,
+
+    /// <summary>The OnChannelUnheld handler found its call, before taking that call's lock.</summary>
+    UnholdFound,
+
+    /// <summary>The OnBridgeChannelEntered handler found its call, before taking that call's lock.</summary>
+    BridgeEntryFound,
+
+    /// <summary>The OnTransfer handler found its call, before taking that call's lock.</summary>
+    TransferFound,
+
+    /// <summary>The OnQueueCallerLeft handler found its call, before taking that call's lock.</summary>
+    QueueLeftFound,
+
+    /// <summary>The OnQueueCallerAbandonReported handler found its call, before taking that call's lock.</summary>
+    QueueAbandonFound,
+
+    /// <summary>The OnCallerQueueStatus handler found its call, before taking that call's lock.</summary>
+    QueueStatusFound,
+
+    /// <summary>The OnQueueCallerConnected handler found its call, before taking that call's lock.</summary>
+    QueueConnectFound,
+
+    /// <summary>The OnChannelDialBegin handler found its call, before taking that call's lock.</summary>
+    DialBeginFound,
+
+    /// <summary>The OnChannelDialEnd handler found its call, before taking that call's lock.</summary>
+    DialEndFound,
+
     /// <summary>A departing channel's call was found by the channel id, before the call's lock is taken.</summary>
     RemovalFound,
 

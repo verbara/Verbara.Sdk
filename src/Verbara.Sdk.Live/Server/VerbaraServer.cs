@@ -387,11 +387,29 @@ public sealed class VerbaraServer : IVerbaraServer
     // Justification: event handler for Action delegate requires async void.
     // All exceptions are caught in the try/catch below — no unobserved exceptions.
 #pragma warning disable VSTHRD100 // Avoid async void — required by Action event delegate
+    private int _channelTableVerified;
+    private int _channelApplications;
+    private long _channelVerifiedSession;
+    private Task? _channelVerifiedConnection;
+    internal bool ChannelTableComplete => Volatile.Read(ref _channelTableVerified) != 0
+        && Volatile.Read(ref _channelApplications) == 0
+        && Interlocked.Read(ref _channelVerifiedSession) == Interlocked.Read(ref _reconnects)
+        && (_connection is not AmiConnection ami || ReferenceEquals(Volatile.Read(ref _channelVerifiedConnection), ami.FullyBooted));
+    // Attachment generations belong to the subscriber. The emitting instance/session lets a new
+    // subscription accept a read that was already in flight when that attachment was installed.
+    internal event Action<ChannelSnapshotCompletion>? ChannelSnapshotCompleted;
+    internal string? PoolId { get; set; }
+
+    /// <summary>Requests the channel-only snapshot needed by an admission on an incomplete table.</summary>
+    internal ValueTask RequestChannelSnapshotAsync(CancellationToken cancellationToken = default) =>
+        ChannelTableComplete ? ValueTask.CompletedTask : ReconcileChannelsAsync(cancellationToken);
+
     private async void OnReconnected()
 #pragma warning restore VSTHRD100
     {
         // First, before anything is reloaded or delivered: every event the outage swallowed lies before it.
         Interlocked.Increment(ref _reconnects);
+        Volatile.Write(ref _channelTableVerified, 0);
 
         // A new AMI session: the channel reconciliation's first refusal on it is a Warning again.
         Volatile.Write(ref _statusRefusalWarned, 0);
@@ -582,16 +600,37 @@ public sealed class VerbaraServer : IVerbaraServer
         // every hangup the event observer delivers is recorded for it, so a channel the answer still lists after it hung
         // up is not brought back. It is closed on every way out of them — completed, refused, thrown, cancelled or ended
         // with the session — so nothing it keeps outlives this snapshot.
+        var channelSession = Interlocked.Read(ref _reconnects);
+        var channelConnection = (_connection as AmiConnection)?.FullyBooted;
         using var window = Channels.OpenReadWindow();
         var mark = session is not null ? new ListSnapshotMark() : null;
         var channelSnapshot = await ReadChannelSnapshotAsync(session, mark, states, activity, reader, cancellationToken);
         if (channelSnapshot is null)
+        {
+            Volatile.Write(ref _channelTableVerified, 0);
             return null;
+        }
 
         // Before the snapshot removes anything, the pump dispatches every event received before StatusComplete, so a
         // Hangup still queued then removes its channel first, as the hangup it is. The window stays open while it waits.
         var full = await AwaitBarrierAsync(session, mark, "Status", states, reader.Name, activity, barriers, cancellationToken);
-        Channels.ReconcileWithSnapshot(channelSnapshot, window, removeAbsent: full);
+        Interlocked.Increment(ref _channelApplications);
+        try
+        {
+            Volatile.Write(ref _channelTableVerified, 0);
+            Channels.ReconcileWithSnapshot(channelSnapshot, window, removeAbsent: full);
+            Volatile.Write(ref _channelVerifiedConnection, channelConnection);
+            Interlocked.Exchange(ref _channelVerifiedSession, channelSession);
+            Volatile.Write(ref _channelTableVerified, full && channelSession == Interlocked.Read(ref _reconnects) ? 1 : 0);
+        }
+        catch
+        {
+            Volatile.Write(ref _channelTableVerified, 0);
+            throw;
+        }
+        finally { Interlocked.Decrement(ref _channelApplications); }
+        if (full && ChannelTableComplete)
+            ChannelSnapshotCompleted?.Invoke(new ChannelSnapshotCompletion(this, channelSession, channelConnection));
         return channelSnapshot;
     }
 
@@ -2004,3 +2043,6 @@ public sealed class OriginateResult
     public string? Message { get; init; }
     public string? ChannelId { get; init; }
 }
+
+/// <summary>A fully applied channel reconciliation of the emitting instance's AMI session.</summary>
+internal readonly record struct ChannelSnapshotCompletion(VerbaraServer Server, long SessionGeneration, Task? SessionIdentity);

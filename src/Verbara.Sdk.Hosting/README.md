@@ -65,6 +65,42 @@ var server = host.Services.GetRequiredService<VerbaraServer>();   // Live API ag
 var ari = host.Services.GetRequiredService<IAriClient>();
 ```
 
+## Session options from configuration
+
+Each sessions registration accepts the host configuration: `AddVerbaraSessions`, `AddVerbaraSessionsBuilder`,
+`AddVerbaraSessionsMultiServer`, and `AddVerbaraSessionsMultiServerBuilder`. Each reads every settable
+`SessionOptions` property from the `Sessions` section; the builder variants still return the builder for
+`UseRedis(...)` or `UsePostgres(...)`.
+
+```csharp
+builder.Services.AddVerbaraSessions(builder.Configuration, options =>
+{
+    // Runs after binding; override the configured retention for this host.
+    options.CompletedRetention = TimeSpan.FromMinutes(1);
+});
+```
+
+```json
+{
+  "Sessions": {
+    "ReconciliationInterval": "00:00:10",
+    "DialingTimeout": "00:01:00",
+    "CompletedRetention": "00:05:00",
+    "InboundContextPatterns": ["from-carrier"],
+    "OutboundContextPatterns": ["to-carrier"]
+  }
+}
+```
+
+For a pool, pass the configuration to `AddVerbaraSessionsMultiServer(builder.Configuration)` after
+`AddVerbaraMultiServer()`. A configured context list replaces its default list, including when the provider exposes
+an empty list key. An absent list keeps its own default, and an absent `Sessions` section keeps all defaults.
+Values use invariant culture; a malformed value throws an `InvalidOperationException` naming its configuration key
+when options are resolved. The existing options validator runs on startup, just as with inline configuration.
+`"ReconciliationInterval": "-00:00:00.001"` switches the sweep off without starting a timer. The overloads use
+source-generated binding and support Native AOT. Existing calls with a configure delegate or a literal `null` keep
+using the existing overloads.
+
 ## Health endpoint
 
 The package auto-registers `IHealthCheck` for AMI/ARI/AGI. Wire to ASP.NET Core:

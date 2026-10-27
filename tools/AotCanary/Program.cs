@@ -221,8 +221,30 @@ await bus.PublishAsync(sample);
     var poolServices = new ServiceCollection();
     poolServices.AddLogging();
     poolServices.AddVerbaraMultiServer();
-    poolServices.AddVerbaraSessionsMultiServer();
+    var sessionsConfiguration = new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Sessions:ReconciliationInterval"] = "-00:00:00.001",
+            ["Sessions:DialingTimeout"] = "00:00:10.250",
+            ["Sessions:InboundContextPatterns:0"] = "from-canary",
+            ["Sessions:OutboundContextPatterns:0"] = "to-canary",
+        })
+        .Build();
+    poolServices.AddVerbaraSessionsMultiServer(sessionsConfiguration);
     await using var poolProvider = poolServices.BuildServiceProvider();
+    var sessionOptions = poolProvider.GetRequiredService<IOptions<SessionOptions>>().Value;
+    Console.WriteLine(
+        $"AddVerbaraSessionsMultiServer(IConfiguration): interval={sessionOptions.ReconciliationInterval:c} " +
+        $"dialing={sessionOptions.DialingTimeout:c} inbound={string.Join(",", sessionOptions.InboundContextPatterns)} " +
+        $"outbound={string.Join(",", sessionOptions.OutboundContextPatterns)}");
+    if (sessionOptions.ReconciliationInterval != Timeout.InfiniteTimeSpan ||
+        sessionOptions.DialingTimeout != TimeSpan.FromMilliseconds(10_250) ||
+        !sessionOptions.InboundContextPatterns.SequenceEqual(["from-canary"]) ||
+        !sessionOptions.OutboundContextPatterns.SequenceEqual(["to-canary"]))
+    {
+        Console.Error.WriteLine("AOT canary: the sessions configuration registration did not deliver the configured values.");
+        return 1;
+    }
     var hosted = poolProvider.GetServices<Microsoft.Extensions.Hosting.IHostedService>().ToList();
     foreach (var service in hosted)
         await service.StartAsync(CancellationToken.None);

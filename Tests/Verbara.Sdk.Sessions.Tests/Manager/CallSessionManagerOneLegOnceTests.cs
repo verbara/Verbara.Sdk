@@ -78,12 +78,17 @@ public sealed class CallSessionManagerOneLegOnceTests : IAsyncLifetime
         Caller(_first);
         Agent(_first);
         Caller(_second);
-        var call = _sut.GetByLinkedId(LinkedId)
+        var call = _sut.GetByLinkedId("srv-1", LinkedId)
             ?? throw new InvalidOperationException("premise: a session was opened for the call");
         var participantsAfterAdds = call.Participants.Count;
+        var other = _sut.GetByLinkedId("srv-2", LinkedId)!;
+        other.Participants.Should().ContainSingle();
 
         _first.Channels.OnHangup(CallerUid, HangupCause.NormalClearing);
+        other.EndingDelivered.Should().BeFalse("first server cannot end second server");
         _second.Channels.OnHangup(CallerUid, HangupCause.NormalClearing);
+        call.EndingDelivered.Should().BeFalse("its own agent leg is still present");
+        EndingsOf(other).Should().Be(1);
         _first.Channels.OnHangup(AgentUid, HangupCause.NormalClearing);
 
         new { Participants = participantsAfterAdds, Ended = EndingsOf(call) }.Should().BeEquivalentTo(
@@ -103,8 +108,8 @@ public sealed class CallSessionManagerOneLegOnceTests : IAsyncLifetime
         var departed = call.Participants.Single(p => p.UniqueId == CallerUid);
         var firstLeftAt = departed.LeftAt;
 
-        Caller(_second);
-        _second.Channels.OnHangup(CallerUid, HangupCause.NormalClearing);
+        Caller(_first);
+        _first.Channels.OnHangup(CallerUid, HangupCause.NormalClearing);
         _first.Channels.OnHangup(AgentUid, HangupCause.NormalClearing);
 
         new

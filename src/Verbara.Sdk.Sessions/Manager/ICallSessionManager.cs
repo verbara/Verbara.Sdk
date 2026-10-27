@@ -8,6 +8,14 @@ public interface ICallSessionManager : IAsyncDisposable
     CallSession? GetByLinkedId(string linkedId);
     CallSession? GetByChannelId(string uniqueId);
     CallSession? GetByBridgeId(string bridgeId);
+
+    /// <summary>Returns the unscoped bridge answer only when it belongs to the named server.</summary>
+    /// <remarks>The default can return null for an ambiguous id even when the engine's scoped implementation finds it.</remarks>
+    CallSession? GetByBridgeId(string serverId, string bridgeId)
+    {
+        var call = GetByBridgeId(bridgeId);
+        return call?.ServerId == serverId ? call : null;
+    }
     IEnumerable<CallSession> ActiveSessions { get; }
     IEnumerable<CallSession> GetRecentCompleted(int count = 100);
 
@@ -37,6 +45,8 @@ public interface ICallSessionManager : IAsyncDisposable
     /// </remarks>
     IObservable<SessionDomainEvent> Events { get; }
 
+    /// <summary>Attaches this instance under the id; attaching it again changes nothing.</summary>
+    /// <exception cref="InvalidOperationException">A different instance is already attached under this id.</exception>
     void AttachToServer(VerbaraServer server, string serverId);
     void DetachFromServer(string serverId);
 
@@ -57,7 +67,7 @@ public interface ICallSessionManager : IAsyncDisposable
     /// <summary>
     /// Registers a session reconstructed during cluster failover.
     /// Adds to all indices without firing creation events.
-    /// Skips if a session with the same LinkedId already exists.
+    /// Skips if a session of the same server with the same LinkedId already exists.
     /// </summary>
     bool RegisterReconstructedSession(CallSession session);
 }

@@ -33,3 +33,7 @@ override Verbara.Sdk.Sessions.CallReleasedEvent.ToString() -> string!
 override sealed Verbara.Sdk.Sessions.CallReleasedEvent.Equals(Verbara.Sdk.Sessions.SessionDomainEvent? other) -> bool
 static Verbara.Sdk.Sessions.CallReleasedEvent.operator !=(Verbara.Sdk.Sessions.CallReleasedEvent? left, Verbara.Sdk.Sessions.CallReleasedEvent? right) -> bool
 static Verbara.Sdk.Sessions.CallReleasedEvent.operator ==(Verbara.Sdk.Sessions.CallReleasedEvent? left, Verbara.Sdk.Sessions.CallReleasedEvent? right) -> bool
+Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByLinkedId(string! serverId, string! linkedId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByChannelId(string! serverId, string! uniqueId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByBridgeId(string! serverId, string! bridgeId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetByBridgeId(string! serverId, string! bridgeId) -> Verbara.Sdk.Sessions.CallSession?

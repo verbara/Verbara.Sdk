@@ -1,5 +1,6 @@
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Networks;
+using DotNet.Testcontainers.Images;
 using Verbara.Sdk.TestInfrastructure.Containers;
 
 namespace Verbara.Sdk.TestInfrastructure.Stacks;
@@ -48,6 +49,7 @@ public sealed class MultiServerFixture : IAsyncLifetime
     private static readonly TimeSpan BootBound = TimeSpan.FromSeconds(90);
 
     private readonly Func<CancellationToken, Task>? _beforeServerBStarts;
+    private readonly IImage? _imageOverride;
     private readonly Dictionary<string, string> _secretsA;
     private readonly Dictionary<string, string> _secretsB;
     private bool _configWritten;
@@ -67,9 +69,11 @@ public sealed class MultiServerFixture : IAsyncLifetime
     /// <param name="beforeServerBStarts">
     /// Called after A has booted and before B starts. A test makes it throw to see a failed start cleaned up.
     /// </param>
-    public MultiServerFixture(Func<CancellationToken, Task>? beforeServerBStarts = null)
+    /// <param name="imageOverride">An immutable campaign image; the normal fixture image when omitted.</param>
+    public MultiServerFixture(Func<CancellationToken, Task>? beforeServerBStarts = null, IImage? imageOverride = null)
     {
         _beforeServerBStarts = beforeServerBStarts;
+        _imageOverride = imageOverride;
         var prefix = Environment.GetEnvironmentVariable("VERBARA_FUNCTIONAL_DOCKER_PREFIX") ?? "verbara-";
         RunName = prefix + "multi-" + Guid.NewGuid().ToString("N")[..8];
         ConfigDirectory = Path.Join(Path.GetTempPath(), RunName);
@@ -135,7 +139,7 @@ public sealed class MultiServerFixture : IAsyncLifetime
         try
         {
             WriteConfiguration();
-            var image = await AsteriskContainer.CreateImageAsync().ConfigureAwait(false);
+            var image = _imageOverride ?? await AsteriskContainer.CreateImageAsync().ConfigureAwait(false);
 
             Network = new NetworkBuilder().WithName(RunName).Build();
             await Network.CreateAsync().ConfigureAwait(false);

@@ -189,15 +189,16 @@ public sealed class CallSessionManagerDetachReleaseWindowTests
     }
 
     [Fact]
-    public async Task DetachFromServer_ShouldLeaveNoEntryOnTheReleasedCall_WhenALegOfAnotherServerJoiningItIsLetGoAfterTheRelease()
+    public async Task DetachFromServer_ShouldLeaveNoEntryOnTheReleasedCall_WhenALegOfItsOldAttachmentJoiningItIsLetGoAfterTheRelease()
     {
         await using var rig = await ReleaseRig.StartAsync("a", "b");
         var call = rig.ConnectedCall("a", "xj");
-        using var parker = StepParker.Install(rig.Manager, HandlerStep.JoinFound, "b", "b-leg-xj");
-        var join = ReleaseRig.OnThread(() => rig["b"].Server.Channels.OnNewChannel("b-leg-xj", "PJSIP/300-xj",
+        using var parker = StepParker.Install(rig.Manager, HandlerStep.JoinFound, "a", "b-leg-xj");
+        var join = ReleaseRig.OnThread(() => rig["a"].Server.Channels.OnNewChannel("b-leg-xj", "PJSIP/300-xj",
             Enums.ChannelState.Up, context: "from-trunk", linkedId: ReleaseRig.LinkedIdOf("xj")));
         parker.WaitUntilParked(ReleaseRig.Bound);
 
+        rig.Manager.DetachFromServer("a", DetachedCalls.Keep);
         var release = ReleaseRig.OnThread(() => rig.Release("a"));
         var returned = ReleaseRig.Returns(release);
         parker.LetGo();
@@ -215,16 +216,16 @@ public sealed class CallSessionManagerDetachReleaseWindowTests
                 || ReferenceEquals(rig.Manager.GetByChannelId(ReleaseRig.CallerLeg("xj")), call)
                 || ReferenceEquals(rig.Manager.GetByChannelId(ReleaseRig.CalleeLeg("xj")), call)
                 || ReferenceEquals(legsCall, call),
-            LegsCallOfB = legsCall is not null && !ReferenceEquals(legsCall, call) && legsCall.ServerId == "b",
+            LegsCallOfA = legsCall is not null && !ReferenceEquals(legsCall, call) && legsCall.ServerId == "a",
             AfterRelease = kinds.SkipWhile(k => k != nameof(CallReleasedEvent)).Skip(1).ToArray(),
         }.Should().BeEquivalentTo(
             new
             {
                 returned = true, joined = true, Released = new[] { call.SessionId }, NamesC = false,
-                LegsCallOfB = true, AfterRelease = Array.Empty<string>(),
+                LegsCallOfA = true, AfterRelease = Array.Empty<string>(),
             },
-            "a leg of b that found the call by its linkedid before the release and is let go after it writes no "
-            + "entry naming the released call and opens a call of its own on b; nothing follows the release "
+            "a leg of the old attachment that found the call by its linkedid before the release and is let go after it writes no "
+            + "entry naming the released call and opens a call of its own on a; nothing follows the release "
             + "notification. " + rig.Describe());
     }
 

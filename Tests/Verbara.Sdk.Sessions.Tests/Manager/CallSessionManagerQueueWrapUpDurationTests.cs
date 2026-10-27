@@ -145,12 +145,12 @@ public sealed class CallSessionManagerQueueWrapUpDurationTests
         clock.Advance(TimeSpan.FromSeconds(60));
         rig.DeliverTo("s2", AgentComplete(Queue, "s2c1", CallerChannel("s2c1"), "c1", Member, "s2m1",
             MemberChannel(Member, "s2m1"), 60));
-        var callServer = rig.Session("c1").ServerId;
+        var callServer = rig.Manager.GetByLinkedId("s2", "c1")!.ServerId;
+        rig.Manager.GetByLinkedId("s1", "c1")!.ServerId.Should().Be("s1");
 
         new { CallServer = callServer, Asks = provider.Asks }.Should().BeEquivalentTo(
-            new { CallServer = "s1", Asks = new[] { ("s2", Queue) } },
-            "the call is s1's, but the AgentComplete came through s2's attachment: the provider is asked with s2, "
-            + "the server that reported the member finishing, not with the call's server. " + Describe(rig, provider));
+            new { CallServer = "s2", Asks = new[] { ("s2", Queue) } },
+            "each server keeps its own call under this linkedid; the completion and provider request belong to s2. " + Describe(rig, provider));
     }
 
     [Fact]

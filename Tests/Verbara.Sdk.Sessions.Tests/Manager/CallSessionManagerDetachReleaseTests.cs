@@ -288,15 +288,15 @@ public sealed class CallSessionManagerDetachReleaseTests
         rig.HangUpCall("a", "old");
         rig["b"].Server.Channels.OnNewChannel("b-leg-old", "PJSIP/300-old", ChannelState.Up, context: "from-trunk",
             linkedId: ReleaseRig.LinkedIdOf("old"));
-        var c5 = rig.Manager.GetByLinkedId(ReleaseRig.LinkedIdOf("old"))!;
+        var c5 = rig.Manager.GetByLinkedId("b", ReleaseRig.LinkedIdOf("old"))!;
 
         var released = rig.Release("a");
 
         new
         {
             Released = released.Select(c => c.SessionId).ToArray(),
-            ChannelStillB = ReferenceEquals(rig.Manager.GetByChannelId(ReleaseRig.CallerLeg("nw")), c2),
-            LinkedIdStillB = ReferenceEquals(rig.Manager.GetByLinkedId(ReleaseRig.LinkedIdOf("old")), c5),
+            ChannelStillB = ReferenceEquals(rig.Manager.GetByChannelId("b", ReleaseRig.CallerLeg("nw")), c2),
+            LinkedIdStillB = ReferenceEquals(rig.Manager.GetByLinkedId("b", ReleaseRig.LinkedIdOf("old")), c5),
             C2Held = ReferenceEquals(rig.Manager.GetById(c2.SessionId), c2),
             C5Held = ReferenceEquals(rig.Manager.GetById(c5.SessionId), c5),
         }.Should().BeEquivalentTo(

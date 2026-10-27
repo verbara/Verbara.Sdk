@@ -18,9 +18,17 @@ namespace Verbara.Sdk.Sessions.Manager;
 public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisitSource
 {
     private readonly ConcurrentDictionary<string, CallSession> _sessions = new();
-    private readonly ConcurrentDictionary<string, CallSession> _byLinkedId = new();
-    private readonly ConcurrentDictionary<string, CallSession> _byChannelId = new();
-    private readonly ConcurrentDictionary<string, string> _bridgeToSession = new();
+    private readonly ConcurrentDictionary<string, ServerIndex> _serverIndexes = new(StringComparer.Ordinal);
+
+    private sealed class ServerIndex
+    {
+        public ConcurrentDictionary<string, CallSession> ByLinkedId { get; } = new(StringComparer.Ordinal);
+        public ConcurrentDictionary<string, CallSession> ByChannelId { get; } = new(StringComparer.Ordinal);
+        public ConcurrentDictionary<string, string> BridgeToSession { get; } = new(StringComparer.Ordinal);
+    }
+
+    private ServerIndex IndexOf(string serverId) =>
+        _serverIndexes.GetOrAdd(serverId, static _ => new ServerIndex());
 
     /// <summary>
     /// The unordered server pairs already reported at Warning for sharing a channel id or a
@@ -211,13 +219,47 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     public IEnumerable<CallSession> ActiveSessions => _sessions.Values.Where(s => !HasEnded(s));
 
     public CallSession? GetById(string sessionId) => _sessions.GetValueOrDefault(sessionId);
-    public CallSession? GetByLinkedId(string linkedId) => _byLinkedId.GetValueOrDefault(linkedId);
-    public CallSession? GetByChannelId(string uniqueId) => _byChannelId.GetValueOrDefault(uniqueId);
+    public CallSession? GetByLinkedId(string linkedId) => FindUnique(linkedId, IndexKind.LinkedId);
+    public CallSession? GetByChannelId(string uniqueId) => FindUnique(uniqueId, IndexKind.ChannelId);
+    public CallSession? GetByBridgeId(string bridgeId) => FindUnique(bridgeId, IndexKind.BridgeId);
 
-    public CallSession? GetByBridgeId(string bridgeId) =>
-        _bridgeToSession.TryGetValue(bridgeId, out var sessionId)
-            ? _sessions.GetValueOrDefault(sessionId)
-            : null;
+    /// <summary>Returns the call indexed by this linked id on the named server, or null.</summary>
+    public CallSession? GetByLinkedId(string serverId, string linkedId) =>
+        _serverIndexes.TryGetValue(serverId, out var index) ? index.ByLinkedId.GetValueOrDefault(linkedId) : null;
+
+    /// <summary>Returns the call indexed by this channel id on the named server, or null.</summary>
+    public CallSession? GetByChannelId(string serverId, string uniqueId) =>
+        _serverIndexes.TryGetValue(serverId, out var index) ? index.ByChannelId.GetValueOrDefault(uniqueId) : null;
+
+    /// <summary>Returns the call indexed by this bridge id on the named server, or null.</summary>
+    public CallSession? GetByBridgeId(string serverId, string bridgeId) =>
+        _serverIndexes.TryGetValue(serverId, out var index)
+            && index.BridgeToSession.TryGetValue(bridgeId, out var sessionId)
+            && _sessions.TryGetValue(sessionId, out var call)
+            && string.Equals(call.ServerId, serverId, StringComparison.Ordinal)
+            ? call : null;
+
+    private enum IndexKind { LinkedId, ChannelId, BridgeId }
+
+    private CallSession? FindUnique(string id, IndexKind kind)
+    {
+        CallSession? found = null;
+        foreach (var entry in _serverIndexes)
+        {
+            var index = entry.Value;
+            var candidate = kind switch
+            {
+                IndexKind.LinkedId => index.ByLinkedId.GetValueOrDefault(id),
+                IndexKind.ChannelId => index.ByChannelId.GetValueOrDefault(id),
+                _ => index.BridgeToSession.TryGetValue(id, out var sessionId)
+                    ? _sessions.GetValueOrDefault(sessionId) : null,
+            };
+            if (candidate is null || !string.Equals(candidate.ServerId, entry.Key, StringComparison.Ordinal)) continue;
+            if (found is not null) return null;
+            found = candidate;
+        }
+        return found;
+    }
 
     public IEnumerable<CallSession> GetRecentCompleted(int count = 100) =>
         _sessions.Values
@@ -261,31 +303,32 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     public void AttachToServer(VerbaraServer server, string serverId)
     {
+        var index = IndexOf(serverId);
         // Every handler runs through this attachment's gate, which only a release closes; the typed delegates are kept
         // so they can be unsubscribed later.
         var gate = new AttachmentGate();
-        var onAdded = Gated<AsteriskChannel>(gate, ch => OnChannelAdded(ch, serverId));
-        var onRemoved = Gated<AsteriskChannel>(gate, ch => OnChannelRemoved(ch, serverId));
-        var onStateChanged = Gated<AsteriskChannel>(gate, OnChannelStateChanged);
-        var onDialBegin = Gated<AsteriskChannel>(gate, OnChannelDialBegin);
-        var onDialEnd = Gated<AsteriskChannel>(gate, OnChannelDialEnd);
-        var onHeld = Gated<AsteriskChannel>(gate, OnChannelHeld);
-        var onUnheld = Gated<AsteriskChannel>(gate, OnChannelUnheld);
-        var onBridgeEntered = Gated<AsteriskBridge, string>(gate, OnBridgeChannelEntered);
-        var onBridgeDestroyed = Gated<AsteriskBridge>(gate, OnBridgeDestroyed);
-        var onTransfer = Gated<BridgeTransferInfo>(gate, OnTransfer);
+        var onAdded = Gated<AsteriskChannel>(gate, ch => OnChannelAdded(ch, serverId, index));
+        var onRemoved = Gated<AsteriskChannel>(gate, ch => OnChannelRemoved(ch, serverId, index));
+        var onStateChanged = Gated<AsteriskChannel>(gate, arg => OnChannelStateChanged(arg, serverId, index));
+        var onDialBegin = Gated<AsteriskChannel>(gate, arg => OnChannelDialBegin(arg, serverId, index));
+        var onDialEnd = Gated<AsteriskChannel>(gate, arg => OnChannelDialEnd(arg, serverId, index));
+        var onHeld = Gated<AsteriskChannel>(gate, arg => OnChannelHeld(arg, serverId, index));
+        var onUnheld = Gated<AsteriskChannel>(gate, arg => OnChannelUnheld(arg, serverId, index));
+        var onBridgeEntered = Gated<AsteriskBridge, string>(gate, (bridge, id) => OnBridgeChannelEntered(bridge, id, serverId, index));
+        var onBridgeDestroyed = Gated<AsteriskBridge>(gate, arg => OnBridgeDestroyed(arg, serverId, index));
+        var onTransfer = Gated<BridgeTransferInfo>(gate, info => OnTransfer(info, serverId, index));
         var onCallerJoined = Gated<string, AsteriskQueueEntry>(gate,
-            (queueName, entry) => OnQueueCallerJoined(queueName, entry, server, serverId));
-        var onCallerLeft = Gated<QueueCallerLeaveReport>(gate, OnQueueCallerLeft);
-        var onAbandonReported = Gated<string, string>(gate, OnQueueCallerAbandonReported);
-        var onQueueStatus = Gated<string, string, string>(gate, OnCallerQueueStatus);
+            (queueName, entry) => OnQueueCallerJoined(queueName, entry, server, serverId, index));
+        var onCallerLeft = Gated<QueueCallerLeaveReport>(gate, report => OnQueueCallerLeft(report, serverId, index));
+        var onAbandonReported = Gated<string, string>(gate, (id, queue) => OnQueueCallerAbandonReported(id, queue, serverId, index));
+        var onQueueStatus = Gated<string, string, string>(gate, (id, channel, value) => OnCallerQueueStatus(id, channel, value, serverId, index));
         var onSnapshotCompleted = Gated<QueueSnapshotCompletion>(gate, completion => OnQueueSnapshotCompleted(completion, serverId));
         var onAgentConnected = Gated<string, string?, string?>(gate,
-            (agentId, linkedId, interface_) => OnAgentConnected(agentId, linkedId, interface_, serverId));
+            (agentId, linkedId, interface_) => OnAgentConnected(agentId, linkedId, interface_, serverId, index));
         var onQueueCallerConnected = Gated<string?, string?, string?>(gate,
             (callerUniqueId, memberName, memberInterface) =>
-                OnQueueCallerConnected(callerUniqueId, memberName, memberInterface, serverId));
-        var onQueueCallerCompleted = Gated<QueueCallerCompletion>(gate, completion => OnQueueCallerCompleted(completion, serverId));
+                OnQueueCallerConnected(callerUniqueId, memberName, memberInterface, serverId, index));
+        var onQueueCallerCompleted = Gated<QueueCallerCompletion>(gate, completion => OnQueueCallerCompleted(completion, serverId, index));
 
         Subscribe(serverId, new ServerSubscriptions(gate, server,
             onAdded, onRemoved, onStateChanged, onDialBegin, onDialEnd,
@@ -374,7 +417,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// watching the same channel — adds nothing: no participant, no audit entry, no save.
     /// </para>
     /// </summary>
-    private void OnChannelAdded(AsteriskChannel channel, string serverId)
+    private void OnChannelAdded(AsteriskChannel channel, string serverId, ServerIndex index)
     {
         // Release rides arrivals as well as endings, so a process that keeps accepting calls but has
         // stopped completing them still lets go of what it holds past retention. It runs before the
@@ -385,17 +428,23 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         var linkedId = channel.LinkedId;
         if (string.IsNullOrEmpty(linkedId)) linkedId = channel.UniqueId;
 
-        // The indexes are shared by every attached server, so an id another server's call holds is a
-        // collision of the indexes. It is judged here, before this arrival writes the channel-id index,
-        // and again on the linkedid entry the loop below is about to join or replace; at most one entry
-        // per arrival. Only the held session's server decides it, never the spelling of the id, and
-        // nothing about where the leg goes changes.
-        var collisionReported = false;
-        if (_byChannelId.TryGetValue(channel.UniqueId, out var holder)
-            && !string.Equals(holder.ServerId, serverId, StringComparison.Ordinal))
+        // Correlation is local; collision diagnostics still compare the other servers before publishing.
+        if (_serverSubs.Count > 1)
         {
-            ReportCrossServerCollision(serverId, holder.ServerId, ChannelIdKind, channel.UniqueId);
-            collisionReported = true;
+            foreach (var other in _serverIndexes)
+            {
+                if (string.Equals(other.Key, serverId, StringComparison.Ordinal)) continue;
+                if (other.Value.ByChannelId.ContainsKey(channel.UniqueId))
+                {
+                    ReportCrossServerCollision(serverId, other.Key, ChannelIdKind, channel.UniqueId);
+                    break;
+                }
+                if (other.Value.ByLinkedId.ContainsKey(linkedId))
+                {
+                    ReportCrossServerCollision(serverId, other.Key, LinkedIdKind, linkedId);
+                    break;
+                }
+            }
         }
 
         // The session this leg opens if it finds no live call to join. Built once, fully, before it can
@@ -455,25 +504,19 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         while (true)
         {
-            var found = _byLinkedId.TryGetValue(linkedId, out var existing);
+            var found = index.ByLinkedId.TryGetValue(linkedId, out var existing);
             if (found)
             {
                 Step(HandlerStep.JoinFound, serverId, channel.UniqueId);
 
-                if (!collisionReported && !string.Equals(existing!.ServerId, serverId, StringComparison.Ordinal))
-                {
-                    ReportCrossServerCollision(serverId, existing.ServerId, LinkedIdKind, linkedId);
-                    collisionReported = true;
-                }
-
                 // Outside the new session's lock, so no thread ever holds two calls' locks.
-                if (TryJoin(existing!, channel))
+                if (TryJoin(existing!, channel, index))
                     return;
             }
 
             // No live call to join (the one this leg's linkedid names has ended, or is no longer held): the leg
             // opens its own call, in place of the ended one provided the index still names it.
-            if (TryPublishArrival(session, linkedId, found ? existing : null, serverId, channel.UniqueId))
+            if (TryPublishArrival(session, linkedId, found ? existing : null, serverId, channel.UniqueId, index))
                 break;
         }
 
@@ -487,7 +530,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (!IsHeld(session))
                 return;
 
-            _byChannelId[channel.UniqueId] = session;
+            index.ByChannelId[channel.UniqueId] = session;
             SessionMetrics.SessionsCreated.Add(1);
 
             Publish(new CallStartedEvent(session.SessionId, serverId,
@@ -505,7 +548,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// that selects it in between waits for the lock and finds it published by both ids, or withdrawn.
     /// </summary>
     private bool TryPublishArrival(CallSession session, string linkedId, CallSession? existing, string serverId,
-        string uniqueId)
+        string uniqueId, ServerIndex index)
     {
         lock (session.SyncRoot)
         {
@@ -513,8 +556,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             Step(HandlerStep.ArrivalHeldById, serverId, uniqueId);
 
             var published = existing is not null
-                ? _byLinkedId.TryUpdate(linkedId, session, existing)
-                : _byLinkedId.TryAdd(linkedId, session);
+                ? index.ByLinkedId.TryUpdate(linkedId, session, existing)
+                : index.ByLinkedId.TryAdd(linkedId, session);
             if (published)
                 return true;
 
@@ -566,7 +609,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// holds it, and answers whether the leg now belongs to it. A leg already present in the call is not added again.
     /// The leg is indexed under the call's lock, so a call let go of meanwhile is never indexed again.
     /// </summary>
-    private bool TryJoin(CallSession call, AsteriskChannel channel)
+    private bool TryJoin(CallSession call, AsteriskChannel channel, ServerIndex index)
     {
         lock (call.SyncRoot)
         {
@@ -589,7 +632,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             });
             call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.ParticipantJoined, channel.Name, null, role.ToString()));
-            _byChannelId[channel.UniqueId] = call;
+            index.ByChannelId[channel.UniqueId] = call;
         }
 
         _ = PersistAsync(call);
@@ -626,9 +669,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// (<c>ADR-0062</c>, design D3).
     /// </para>
     /// </summary>
-    private void OnChannelRemoved(AsteriskChannel channel, string serverId)
+    private void OnChannelRemoved(AsteriskChannel channel, string serverId, ServerIndex index)
     {
-        if (!_byChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+        if (!index.ByChannelId.TryGetValue(channel.UniqueId, out var session)) return;
 
         Step(HandlerStep.RemovalFound, serverId, channel.UniqueId);
 
@@ -722,7 +765,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         }
 
         // By object: an entry naming another call, which holds the channel id since, keeps it.
-        _byChannelId.TryRemove(new KeyValuePair<string, CallSession>(channel.UniqueId, session));
+        index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(channel.UniqueId, session));
     }
 
     [LoggerMessage(Level = LogLevel.Information,
@@ -730,9 +773,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             + "proved its channels gone; no hangup was observed, so no cause is recorded")]
     private partial void LogEndedByReload(string sessionId, string linkedId, CallSessionState state);
 
-    private void OnChannelStateChanged(AsteriskChannel channel)
+    private void OnChannelStateChanged(AsteriskChannel channel, string serverId, ServerIndex index)
     {
-        if (!_byChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+        if (!index.ByChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+
+        Step(HandlerStep.StateChangeFound, session.ServerId, session.SessionId);
 
         lock (session.SyncRoot)
         {
@@ -779,9 +824,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         }
     }
 
-    private void OnChannelHeld(AsteriskChannel channel)
+    private void OnChannelHeld(AsteriskChannel channel, string serverId, ServerIndex index)
     {
-        if (!_byChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+        if (!index.ByChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+
+        Step(HandlerStep.HoldFound, session.ServerId, session.SessionId);
 
         lock (session.SyncRoot)
         {
@@ -799,9 +846,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         }
     }
 
-    private void OnChannelUnheld(AsteriskChannel channel)
+    private void OnChannelUnheld(AsteriskChannel channel, string serverId, ServerIndex index)
     {
-        if (!_byChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+        if (!index.ByChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+
+        Step(HandlerStep.UnholdFound, session.ServerId, session.SessionId);
 
         lock (session.SyncRoot)
         {
@@ -819,9 +868,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         }
     }
 
-    private void OnBridgeChannelEntered(AsteriskBridge bridge, string uniqueId)
+    private void OnBridgeChannelEntered(AsteriskBridge bridge, string uniqueId, string serverId, ServerIndex index)
     {
-        if (!_byChannelId.TryGetValue(uniqueId, out var session)) return;
+        if (!index.ByChannelId.TryGetValue(uniqueId, out var session)) return;
+
+        Step(HandlerStep.BridgeEntryFound, session.ServerId, session.SessionId);
 
         lock (session.SyncRoot)
         {
@@ -829,7 +880,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 return;
 
             session.BridgeId = bridge.BridgeUniqueid;
-            _bridgeToSession[bridge.BridgeUniqueid] = session.SessionId;
+            index.BridgeToSession[bridge.BridgeUniqueid] = session.SessionId;
 
             // A queued call is connected only by app_queue's report of it (OnQueueCallerConnected,
             // OnAgentConnected): a member leg can enter a bridge that app_queue never connects, as a
@@ -854,10 +905,12 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         }
     }
 
-    private void OnTransfer(BridgeTransferInfo info)
+    private void OnTransfer(BridgeTransferInfo info, string serverId, ServerIndex index)
     {
-        var session = GetByBridgeId(info.BridgeId);
+        var session = GetByBridgeId(serverId, info.BridgeId);
         if (session is null) return;
+
+        Step(HandlerStep.TransferFound, session.ServerId, session.SessionId);
 
         lock (session.SyncRoot)
         {
@@ -881,10 +934,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// entry added through Live's public join, which carries none, is resolved through Live's channel table by the
     /// channel's current name.
     /// </summary>
-    private void OnQueueCallerJoined(string queueName, AsteriskQueueEntry entry, VerbaraServer server, string serverId)
+    private void OnQueueCallerJoined(string queueName, AsteriskQueueEntry entry, VerbaraServer server, string serverId, ServerIndex index)
     {
         var uniqueId = entry.UniqueId ?? server.Channels.GetByName(entry.Channel)?.UniqueId;
-        if (uniqueId is null || !_byChannelId.TryGetValue(uniqueId, out var session)) return;
+        if (uniqueId is null || !index.ByChannelId.TryGetValue(uniqueId, out var session)) return;
 
         Step(HandlerStep.QueueJoinFound, serverId, uniqueId);
 
@@ -983,9 +1036,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// connects the caller, so the mark never keeps a visit from being announced.
     /// </para>
     /// </summary>
-    private void OnQueueCallerLeft(QueueCallerLeaveReport report)
+    private void OnQueueCallerLeft(QueueCallerLeaveReport report, string serverId, ServerIndex index)
     {
-        if (!_byChannelId.TryGetValue(report.UniqueId, out var session)) return;
+        if (!index.ByChannelId.TryGetValue(report.UniqueId, out var session)) return;
+
+        Step(HandlerStep.QueueLeftFound, session.ServerId, session.SessionId);
 
         lock (session.SyncRoot)
         {
@@ -1013,9 +1068,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// caller's Uniqueid: the current visit, when it is in that queue and not connected, is marked abandon-reported and
     /// <see cref="VisitAbandonReported"/> is raised, once per visit.
     /// </summary>
-    private void OnQueueCallerAbandonReported(string uniqueId, string queueName)
+    private void OnQueueCallerAbandonReported(string uniqueId, string queueName, string serverId, ServerIndex index)
     {
-        if (!_byChannelId.TryGetValue(uniqueId, out var session)) return;
+        if (!index.ByChannelId.TryGetValue(uniqueId, out var session)) return;
+
+        Step(HandlerStep.QueueAbandonFound, session.ServerId, session.SessionId);
 
         lock (session.SyncRoot)
         {
@@ -1038,13 +1095,15 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// app_queue's <c>QUEUESTATUS</c> on a channel, found by its Uniqueid: <c>TIMEOUT</c> on the caller of a visit the
     /// queue never connected raises <see cref="VisitTimedOut"/> for that visit. Every other value raises nothing.
     /// </summary>
-    private void OnCallerQueueStatus(string uniqueId, string channel, string status)
+    private void OnCallerQueueStatus(string uniqueId, string channel, string status, string serverId, ServerIndex index)
     {
         if (!string.Equals(status, "TIMEOUT", StringComparison.Ordinal)
-            || !_byChannelId.TryGetValue(uniqueId, out var session))
+            || !index.ByChannelId.TryGetValue(uniqueId, out var session))
         {
             return;
         }
+
+        Step(HandlerStep.QueueStatusFound, session.ServerId, session.SessionId);
 
         lock (session.SyncRoot)
         {
@@ -1214,8 +1273,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     }
 
     /// <summary>
-    /// Delivers the ending of a call whose participants have all left: its release-queue entry, its
-    /// tracing span, its completion measurements and its <see cref="CallEndedEvent"/>. Runs under the
+    /// Delivers the ending of a call whose participants have all left: drops its bridge index entry,
+    /// queues its release and records its tracing span, completion measurements and <see cref="CallEndedEvent"/>. Runs under the
     /// session's lock, from <see cref="OnChannelRemoved"/>.
     /// <para>
     /// Every participant can be found to have left more than once: a departure can still be reported
@@ -1234,6 +1293,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             _ = PersistAsync(session);
             return;
         }
+
+        if (session.BridgeId is { } bridgeId)
+            IndexOf(session.ServerId).BridgeToSession.TryRemove(
+                new KeyValuePair<string, string>(bridgeId, session.SessionId));
 
         QueueForRelease(session);
 
@@ -1351,10 +1414,12 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// </summary>
     private void Release(CallSession session)
     {
+        var index = IndexOf(session.ServerId);
         _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
-        _byLinkedId.TryRemove(new KeyValuePair<string, CallSession>(session.LinkedId, session));
+        index.ByLinkedId.TryRemove(new KeyValuePair<string, CallSession>(session.LinkedId, session));
         _store.OnReleasedByManager(session);
     }
+
 
     /// <summary>
     /// One delivered ending waiting for release: the session it ended, and the completion time that
@@ -1374,6 +1439,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     public bool RegisterReconstructedSession(CallSession session)
     {
+        var index = IndexOf(session.ServerId);
         // Every index write runs in one hold of the session's lock, taken before the first: the session-id write
         // makes it held, so a release that selects it meanwhile waits for the lock and then finds it indexed
         // everywhere, or withdrawn. Held by id before it is published by linkedid, as a session opened by an
@@ -1389,7 +1455,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (!IsHeld(session))
                 return false;
 
-            if (!_byLinkedId.TryAdd(session.LinkedId, session))
+            if (!index.ByLinkedId.TryAdd(session.LinkedId, session))
             {
                 if (added)
                     _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
@@ -1397,10 +1463,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             }
 
             foreach (var participant in session.Participants)
-                _byChannelId.TryAdd(participant.UniqueId, session);
+                index.ByChannelId.TryAdd(participant.UniqueId, session);
 
             if (session.BridgeId is not null)
-                _bridgeToSession.TryAdd(session.BridgeId, session.SessionId);
+                index.BridgeToSession.TryAdd(session.BridgeId, session.SessionId);
         }
 
         _ = PersistAsync(session);
@@ -1427,9 +1493,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     // --- Agent event handlers ---
 
-    private void OnAgentConnected(string agentId, string? linkedId, string? interface_, string serverId)
+    private void OnAgentConnected(string agentId, string? linkedId, string? interface_, string serverId, ServerIndex index)
     {
-        if (linkedId is null || !_byLinkedId.TryGetValue(linkedId, out var session))
+        if (linkedId is null || !index.ByLinkedId.TryGetValue(linkedId, out var session))
             return;
 
         Step(HandlerStep.AgentConnectFound, serverId, linkedId);
@@ -1485,10 +1551,12 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// </para>
     /// </summary>
     private void OnQueueCallerConnected(string? callerUniqueId, string? memberName, string? memberInterface,
-        string serverId)
+        string serverId, ServerIndex index)
     {
-        if (callerUniqueId is null || !_byChannelId.TryGetValue(callerUniqueId, out var session))
+        if (callerUniqueId is null || !index.ByChannelId.TryGetValue(callerUniqueId, out var session))
             return;
+
+        Step(HandlerStep.QueueConnectFound, session.ServerId, session.SessionId);
 
         lock (session.SyncRoot)
         {
@@ -1536,9 +1604,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     // --- Dial event handlers ---
 
-    private void OnChannelDialBegin(AsteriskChannel channel)
+    private void OnChannelDialBegin(AsteriskChannel channel, string serverId, ServerIndex index)
     {
-        if (!_byChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+        if (!index.ByChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+
+        Step(HandlerStep.DialBeginFound, session.ServerId, session.SessionId);
 
         lock (session.SyncRoot)
         {
@@ -1554,9 +1624,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         }
     }
 
-    private void OnChannelDialEnd(AsteriskChannel channel)
+    private void OnChannelDialEnd(AsteriskChannel channel, string serverId, ServerIndex index)
     {
-        if (!_byChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+        if (!index.ByChannelId.TryGetValue(channel.UniqueId, out var session)) return;
+
+        Step(HandlerStep.DialEndFound, session.ServerId, session.SessionId);
 
         lock (session.SyncRoot)
         {
@@ -1578,14 +1650,14 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     // --- Bridge destroyed handler ---
 
-    private void OnBridgeDestroyed(AsteriskBridge bridge)
+    private void OnBridgeDestroyed(AsteriskBridge bridge, string serverId, ServerIndex index)
     {
-        if (_bridgeToSession.TryRemove(bridge.BridgeUniqueid, out var sessionId) &&
+        if (index.BridgeToSession.TryRemove(bridge.BridgeUniqueid, out var sessionId) &&
             _sessions.TryGetValue(sessionId, out var session))
         {
             lock (session.SyncRoot)
             {
-                if (IsHeld(session) && session.BridgeId == bridge.BridgeUniqueid)
+                if (IsHeld(session) && session.ServerId == serverId && session.BridgeId == bridge.BridgeUniqueid)
                     session.BridgeId = null;
             }
         }
@@ -1616,49 +1688,50 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     {
         /// <summary>The gate every handler of this attachment runs through.</summary>
         public AttachmentGate Gate { get; } = gate;
+        public VerbaraServer Server { get; } = server;
 
         public void Attach()
         {
-            server.Channels.ChannelAdded += onAdded;
-            server.Channels.ChannelRemoved += onRemoved;
-            server.Channels.ChannelStateChanged += onStateChanged;
-            server.Channels.ChannelDialBegin += onDialBegin;
-            server.Channels.ChannelDialEnd += onDialEnd;
-            server.Channels.ChannelHeld += onHeld;
-            server.Channels.ChannelUnheld += onUnheld;
-            server.Bridges.ChannelEntered += onBridgeEntered;
-            server.Bridges.BridgeDestroyed += onBridgeDestroyed;
-            server.Bridges.TransferOccurred += onTransfer;
-            server.Queues.CallerJoined += onCallerJoined;
-            server.Queues.CallerLeaveReported += onCallerLeft;
-            server.Queues.CallerAbandonReported += onAbandonReported;
-            server.Queues.CallerQueueStatus += onQueueStatus;
-            server.Queues.QueueSnapshotCompleted += onSnapshotCompleted;
-            server.Agents.AgentConnected += onAgentConnected;
-            server.Agents.QueueCallerConnected += onQueueCallerConnected;
-            server.Agents.QueueCallerCompleted += onQueueCallerCompleted;
+            Server.Channels.ChannelAdded += onAdded;
+            Server.Channels.ChannelRemoved += onRemoved;
+            Server.Channels.ChannelStateChanged += onStateChanged;
+            Server.Channels.ChannelDialBegin += onDialBegin;
+            Server.Channels.ChannelDialEnd += onDialEnd;
+            Server.Channels.ChannelHeld += onHeld;
+            Server.Channels.ChannelUnheld += onUnheld;
+            Server.Bridges.ChannelEntered += onBridgeEntered;
+            Server.Bridges.BridgeDestroyed += onBridgeDestroyed;
+            Server.Bridges.TransferOccurred += onTransfer;
+            Server.Queues.CallerJoined += onCallerJoined;
+            Server.Queues.CallerLeaveReported += onCallerLeft;
+            Server.Queues.CallerAbandonReported += onAbandonReported;
+            Server.Queues.CallerQueueStatus += onQueueStatus;
+            Server.Queues.QueueSnapshotCompleted += onSnapshotCompleted;
+            Server.Agents.AgentConnected += onAgentConnected;
+            Server.Agents.QueueCallerConnected += onQueueCallerConnected;
+            Server.Agents.QueueCallerCompleted += onQueueCallerCompleted;
         }
 
         public void Detach()
         {
-            server.Channels.ChannelAdded -= onAdded;
-            server.Channels.ChannelRemoved -= onRemoved;
-            server.Channels.ChannelStateChanged -= onStateChanged;
-            server.Channels.ChannelDialBegin -= onDialBegin;
-            server.Channels.ChannelDialEnd -= onDialEnd;
-            server.Channels.ChannelHeld -= onHeld;
-            server.Channels.ChannelUnheld -= onUnheld;
-            server.Bridges.ChannelEntered -= onBridgeEntered;
-            server.Bridges.BridgeDestroyed -= onBridgeDestroyed;
-            server.Bridges.TransferOccurred -= onTransfer;
-            server.Queues.CallerJoined -= onCallerJoined;
-            server.Queues.CallerLeaveReported -= onCallerLeft;
-            server.Queues.CallerAbandonReported -= onAbandonReported;
-            server.Queues.CallerQueueStatus -= onQueueStatus;
-            server.Queues.QueueSnapshotCompleted -= onSnapshotCompleted;
-            server.Agents.AgentConnected -= onAgentConnected;
-            server.Agents.QueueCallerConnected -= onQueueCallerConnected;
-            server.Agents.QueueCallerCompleted -= onQueueCallerCompleted;
+            Server.Channels.ChannelAdded -= onAdded;
+            Server.Channels.ChannelRemoved -= onRemoved;
+            Server.Channels.ChannelStateChanged -= onStateChanged;
+            Server.Channels.ChannelDialBegin -= onDialBegin;
+            Server.Channels.ChannelDialEnd -= onDialEnd;
+            Server.Channels.ChannelHeld -= onHeld;
+            Server.Channels.ChannelUnheld -= onUnheld;
+            Server.Bridges.ChannelEntered -= onBridgeEntered;
+            Server.Bridges.BridgeDestroyed -= onBridgeDestroyed;
+            Server.Bridges.TransferOccurred -= onTransfer;
+            Server.Queues.CallerJoined -= onCallerJoined;
+            Server.Queues.CallerLeaveReported -= onCallerLeft;
+            Server.Queues.CallerAbandonReported -= onAbandonReported;
+            Server.Queues.CallerQueueStatus -= onQueueStatus;
+            Server.Queues.QueueSnapshotCompleted -= onSnapshotCompleted;
+            Server.Agents.AgentConnected -= onAgentConnected;
+            Server.Agents.QueueCallerConnected -= onQueueCallerConnected;
+            Server.Agents.QueueCallerCompleted -= onQueueCallerCompleted;
         }
     }
 }

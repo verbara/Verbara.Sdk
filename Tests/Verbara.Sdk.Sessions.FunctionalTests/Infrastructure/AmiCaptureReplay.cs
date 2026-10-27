@@ -849,7 +849,7 @@ internal static class AmiCaptureReplay
     /// A started server and a session manager attached to it, with the server's own event observer
     /// taken from the substitute connection it subscribed to.
     /// </summary>
-    private sealed class ReplayRig : IAsyncDisposable
+    internal sealed class ReplayRig : IAsyncDisposable
     {
         private readonly VerbaraServer _server;
         private readonly IObserver<ManagerEvent> _observer;

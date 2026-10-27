@@ -61,6 +61,12 @@ public sealed partial class CallSessionManager
             {
                 if (!_releasesInProgress.TryGetValue(serverId, out inProgress))
                 {
+                    if (_serverSubs.TryGetValue(serverId, out var attached))
+                    {
+                        if (ReferenceEquals(attached.Server, subscriptions.Server))
+                            return;
+                        throw new InvalidOperationException($"Server '{serverId}' is already attached to a different instance; detach it before replacing it.");
+                    }
                     subscriptions.Attach();
                     _serverSubs[serverId] = subscriptions;
                     return;

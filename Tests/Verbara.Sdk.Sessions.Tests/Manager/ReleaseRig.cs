@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Verbara.Sdk.Tests.Shared.Sessions;
 using System.Diagnostics.Metrics;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -157,7 +158,7 @@ internal sealed class ReleaseRig : IAsyncDisposable
         bridges.OnBridgeCreated(BridgeOf(id), "mixing", "simple_bridge", null, null);
         bridges.OnChannelEntered(BridgeOf(id), CallerLeg(id));
         bridges.OnChannelEntered(BridgeOf(id), CalleeLeg(id));
-        var session = Manager.GetByLinkedId(LinkedIdOf(id))
+        var session = Manager.GetByLinkedId(serverId, LinkedIdOf(id))
             ?? throw new InvalidOperationException($"premise: no session holds call {id} on {serverId}");
         if (session.State != CallSessionState.Connected)
             throw new InvalidOperationException($"premise: call {id} is {session.State}, not Connected");
@@ -171,7 +172,7 @@ internal sealed class ReleaseRig : IAsyncDisposable
     {
         this[serverId].Server.Channels.OnNewChannel(CallerLeg(id), $"PJSIP/trunk-{id}-a", ChannelState.Up,
             context: "from-trunk", linkedId: LinkedIdOf(id));
-        return Manager.GetByLinkedId(LinkedIdOf(id))
+        return Manager.GetByLinkedId(serverId, LinkedIdOf(id))
             ?? throw new InvalidOperationException($"premise: no session holds call {id} on {serverId}");
     }
 
@@ -240,6 +241,9 @@ internal sealed class ReleaseRig : IAsyncDisposable
     {
         var ownAssertionFailed = TakeAssertionFailed();
         var leftovers = Manager.ReleaseLeftovers(_released);
+        Exception? invariantFailure = null;
+        try { SessionIndexInvariant.Assert(Manager); }
+        catch (InvalidOperationException ex) { invariantFailure = ex; }
         _subscription.Dispose();
         await Manager.DisposeAsync();
         while (_all.TryDequeue(out var server))
@@ -247,6 +251,7 @@ internal sealed class ReleaseRig : IAsyncDisposable
 
         if (!ownAssertionFailed)
         {
+            invariantFailure.Should().BeNull("every real scoped entry and present leg must resolve to its held owner");
             leftovers.Should().BeEmpty("a release leaves no index entry naming a released call and no connected-leg "
                 + "count including its legs. " + Describe());
         }
