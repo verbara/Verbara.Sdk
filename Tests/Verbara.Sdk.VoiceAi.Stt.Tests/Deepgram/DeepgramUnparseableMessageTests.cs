@@ -1,10 +1,14 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using Verbara.Sdk.Audio;
+using Verbara.Sdk.VoiceAi.Events;
+using Verbara.Sdk.VoiceAi.Pipeline;
 using Verbara.Sdk.VoiceAi.Stt.Deepgram;
 using Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
 
@@ -37,6 +41,13 @@ public sealed class DeepgramUnparseableMessageTests : IAsyncLifetime
 
     /// <summary>The recognizer's end-of-input silence bound.</summary>
     private static readonly TimeSpan EndOfInputBound = TimeSpan.FromSeconds(10);
+
+    /// <summary>A recorded final <c>Results</c> frame whose <c>is_final</c> is <c>null</c>: it fails to deserialize and names no failure.</summary>
+    private static readonly string NullIsFinalFrame = WithIsFinalNull(DeepgramFakeServer.BuildResultJson("lost", 0.9f, isFinal: true));
+
+    /// <summary>An <c>Error</c> frame whose <c>description</c> is an object: it fails to deserialize, and its envelope names the failure.</summary>
+    private const string UnreadableErrorFrame =
+        """{"type":"Error","description":{"code":"DATA-0000","detail":"deepgram did not receive audio data"},"message":"NET-0001"}""";
 
     private readonly DeepgramFakeServer _server = new();
     private readonly FakeTimeProvider _clock = new();
@@ -78,6 +89,175 @@ public sealed class DeepgramUnparseableMessageTests : IAsyncLifetime
         // Assert
         results.Should().ContainSingle().Which.Transcript.Should().Be(transcript);
         _unparseable.Deepgram.Should().Be(0);
+    }
+
+    /// <summary>
+    /// (c) A message that fails to deserialize and names no failure, then a good one: no fault, the good
+    /// result delivered, the unreadable one counted once with the provider named.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldCountSkipAndDeliverTheNextResult_WhenAMessageFailsToDeserializeAndNamesNoFailure()
+    {
+        // Arrange
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(NullIsFinalFrame);
+        _server.ResultMessages.Add(DeepgramFakeServer.BuildResultJson("hola mundo", 0.95f, isFinal: true));
+
+        // Act
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        results.Should().ContainSingle().Which.Transcript.Should().Be("hola mundo");
+        _unparseable.Deepgram.Should().Be(1, "the unreadable message is counted once, tagged voiceai.provider=Deepgram");
+    }
+
+    /// <summary>
+    /// (d) An <c>Error</c> frame the recognizer cannot read is the failure a readable one raises: the
+    /// error-frame signal, no code (the readable branch passes none) and the raw frame in the message.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowErrorFrameFailureCarryingTheRawFrame_WhenAnErrorFrameCannotBeRead()
+    {
+        // Arrange
+        _server.ErrorFrameJson = UnreadableErrorFrame;
+
+        // Act
+        var act = async () => await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Code.Should().BeNull("the readable error branch passes no code either");
+        failure.Message.Should().Contain(UnreadableErrorFrame, "the member that failed may be the one holding the message");
+        _unparseable.Deepgram.Should().Be(0, "a named failure is reported, not counted");
+    }
+
+    /// <summary>(e) The unreadable <c>Error</c> frame of (d), sent in fragments: the same failure, judged on the whole message.</summary>
+    [Fact]
+    public async Task StreamAsync_ShouldThrowErrorFrameFailureCarryingTheRawFrame_WhenAnUnreadableErrorFrameArrivesInFragments()
+    {
+        // Arrange
+        _server.ErrorFrameJson = UnreadableErrorFrame;
+        _server.TextFrameFragmentBytes = 16;
+
+        // Act
+        var act = async () => await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Code.Should().BeNull();
+        failure.Message.Should().Contain(UnreadableErrorFrame);
+        _unparseable.Deepgram.Should().Be(0);
+    }
+
+    /// <summary>(f) A text message that is not JSON at all names no failure: counted, skipped, the transcript after it delivered.</summary>
+    [Fact]
+    public async Task StreamAsync_ShouldCountSkipAndDeliverTheNextResult_WhenATextMessageIsNotJson()
+    {
+        // Arrange
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add("upstream timeout, retry later");
+        _server.ResultMessages.Add(DeepgramFakeServer.BuildResultJson("hola mundo", 0.95f, isFinal: true));
+
+        // Act
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        results.Should().ContainSingle().Which.Transcript.Should().Be("hola mundo");
+        _unparseable.Deepgram.Should().Be(1);
+    }
+
+    /// <summary>
+    /// (g) A session whose every message was skipped heard the vendor: it completes with no results and
+    /// no exception, as a session of readable non-transcript messages does — not the empty-session failure.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldCompleteWithNoResults_WhenEveryMessageTheVendorSentWasSkipped()
+    {
+        // Arrange
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(NullIsFinalFrame);
+        _server.ResultMessages.Add("not json");
+        _server.AnswerTerminatorWithMetadata = false;
+
+        // Act
+        var act = async () => await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        var results = (await act.Should().NotThrowAsync()).Subject;
+        results.Should().BeEmpty();
+        _unparseable.Deepgram.Should().Be(2);
+    }
+
+    /// <summary>(i) Control: readable messages only — green on the unfixed code, and the counter does not move.</summary>
+    [Fact]
+    public async Task StreamAsync_ShouldYieldEveryResultAndCountNothing_WhenEveryMessageIsReadable()
+    {
+        // Arrange
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(DeepgramFakeServer.ReadFrame(DeepgramFakeServer.MetadataFrame));
+        _server.ResultMessages.Add(DeepgramFakeServer.BuildResultJson("hola", 0.8f, isFinal: false));
+        _server.ResultMessages.Add(DeepgramFakeServer.BuildResultJson("hola mundo", 0.95f, isFinal: true));
+
+        // Act
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        results.Select(r => r.Transcript).Should().Equal("hola", "hola mundo");
+        _unparseable.Deepgram.Should().Be(0);
+    }
+
+    /// <summary>
+    /// (j) The turn behind <see cref="VoiceAiPipeline"/>: an unparseable message ahead of the final
+    /// transcript costs that message, not the turn — the handler answers from the transcript and no
+    /// transcription is counted as failed.
+    /// </summary>
+    [Fact]
+    public async Task HandleSessionAsync_ShouldAnswerTheTurn_WhenAnUnparseableMessagePrecedesTheTranscript()
+    {
+        // Arrange
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(NullIsFinalFrame);
+        _server.ResultMessages.Add(DeepgramFakeServer.BuildResultJson("hola mundo", 0.95f, isFinal: true));
+        using var meters = new SttPipelineMuteVendorTests.VoiceAiMeters();
+        var handler = new RecordingHandler();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConversationHandler>(handler);
+        services.AddSingleton<ITurnDetector>(new SttPipelineMuteVendorTests.OneUtteranceDetector());
+        await using var provider = services.BuildServiceProvider();
+        await using var pipeline = new VoiceAiPipeline(
+            BuildRecognizer(),
+            new SttPipelineMuteVendorTests.OneChunkSynthesizer(),
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new VoiceAiPipelineOptions()),
+            NullLogger<VoiceAiPipeline>.Instance);
+        using var errors = new SttPipelineMuteVendorTests.PipelineErrors(pipeline);
+        using var settled = new TurnSettled(pipeline);
+        await using var call = await SttPipelineMuteVendorTests.AudioSocketCall.StartAsync();
+
+        var sessionTask = pipeline.HandleSessionAsync(call.Session, CancellationToken.None).AsTask();
+        for (var i = 0; i < 3; i++)
+            await call.Caller.SendAudioAsync(new byte[320]);
+
+        // Act — the turn settles one way or the other: answered, or lost to a recognition error.
+        var outcome = await settled.Task.WaitAsync(SignalTimeout);
+        await call.HangUpAsync();
+        var fault = await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));
+
+        // Assert
+        using (new AssertionScope())
+        {
+            outcome.Should().BeOfType<ResponseGeneratedEvent>(
+                "the turn is answered from the transcript, not lost to the message before it");
+            errors.Snapshot.Should().BeEmpty("no recognition error is published");
+            handler.Transcripts.Should().Equal("hola mundo");
+            meters.Count("stt.transcriptions.failed").Should().Be(0);
+            meters.Count("stt.transcriptions.completed").Should().Be(1);
+            _unparseable.Deepgram.Should().Be(1);
+            fault.Should().BeNull();
+        }
     }
 
     public static TheoryData<string> PartialMessageEndings => ["PeerCloses", "TransportAborts", "CallerCancels", "SilenceBoundExpires"];
@@ -249,6 +429,13 @@ public sealed class DeepgramUnparseableMessageTests : IAsyncLifetime
         }
     }
 
+    private static string WithIsFinalNull(string frame)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(frame)!;
+        node["is_final"] = null;
+        return node.ToJsonString();
+    }
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];
@@ -300,5 +487,56 @@ public sealed class DeepgramUnparseableMessageTests : IAsyncLifetime
         public long Deepgram => Interlocked.Read(ref _deepgram);
 
         public void Dispose() => _listener.Dispose();
+    }
+
+    /// <summary>Completes on the first sign the turn settled: an answer, or a pipeline error.</summary>
+    private sealed class TurnSettled : IObserver<VoiceAiPipelineEvent>, IDisposable
+    {
+        private readonly TaskCompletionSource<VoiceAiPipelineEvent> _settled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly IDisposable _subscription;
+
+        public TurnSettled(VoiceAiPipeline pipeline) => _subscription = pipeline.Events.Subscribe(this);
+
+        public Task<VoiceAiPipelineEvent> Task => _settled.Task;
+
+        public void OnNext(VoiceAiPipelineEvent value)
+        {
+            if (value is ResponseGeneratedEvent or PipelineErrorEvent)
+                _settled.TrySetResult(value);
+        }
+
+        public void OnError(Exception error)
+        {
+            // The pipeline's subject never faults; nothing to settle.
+        }
+
+        public void OnCompleted()
+        {
+            // Disposal of the pipeline; the outcome, if any, is already recorded.
+        }
+
+        public void Dispose() => _subscription.Dispose();
+    }
+
+    private sealed class RecordingHandler : IConversationHandler
+    {
+        private readonly List<string> _transcripts = [];
+        private readonly Lock _gate = new();
+
+        public IReadOnlyList<string> Transcripts
+        {
+            get
+            {
+                lock (_gate)
+                    return [.. _transcripts];
+            }
+        }
+
+        public ValueTask<string> HandleAsync(string transcript, ConversationContext context, CancellationToken ct = default)
+        {
+            lock (_gate)
+                _transcripts.Add(transcript);
+            return ValueTask.FromResult("ok");
+        }
     }
 }

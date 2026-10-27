@@ -264,7 +264,26 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
 
             var json = System.Text.Encoding.UTF8.GetString(message.WrittenSpan);
             message.ResetWrittenCount();
-            var msg = JsonSerializer.Deserialize(json, VoiceAiSttJsonContext.Default.DeepgramResultMessage);
+
+            // One message this client cannot read costs that message, not the session: only the parse is
+            // guarded, so nothing after it (the write to the caller's channel) is absorbed here.
+            DeepgramResultMessage? msg;
+            try
+            {
+                msg = JsonSerializer.Deserialize(json, VoiceAiSttJsonContext.Default.DeepgramResultMessage);
+            }
+            catch (JsonException)
+            {
+                // Judged by the loop's own failure test below: an envelope that says "Error" is the
+                // failure a readable error frame raises, carrying the raw frame because the member that
+                // failed may be the one holding the vendor's message. Anything else is counted and skipped.
+                if (NamesErrorFrame(json))
+                    throw SpeechProviderFailureException.FromErrorFrame(provider, null, json);
+
+                SttReceiveLoopMetrics.CountUnparseable(provider);
+                continue;
+            }
+
             if (msg is null) continue;
 
             // Door 1 (ADR-0050 E1) — and the one branch of this change on this surface with no
@@ -288,6 +307,27 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
         }
 
         return sawVendorFrame;
+    }
+
+    /// <summary>
+    /// Whether a message that failed to deserialize says <c>"type": "Error"</c> at its top level — the
+    /// test the readable branch applies. A message that is not a JSON object names no failure.
+    /// </summary>
+    private static bool NamesErrorFrame(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("type", out var type)
+                && type.ValueKind == JsonValueKind.String
+                && type.ValueEquals("Error");
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private Uri BuildUri(AudioFormat format)

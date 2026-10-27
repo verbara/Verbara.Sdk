@@ -160,6 +160,13 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
     /// </summary>
     public WithheldFinalFragment? WithholdFinalFragment { get; set; }
 
+    /// <summary>
+    /// Whether the session answers the client's terminator with the recorded <c>Metadata</c> summary
+    /// before it closes, as the service does. <see langword="false"/> closes without it, so the messages
+    /// a test seeds are the only ones the session carries.
+    /// </summary>
+    public bool AnswerTerminatorWithMetadata { get; set; } = true;
+
     public DeepgramFakeServer()
     {
         _server = new WebSocketTestServer(HandleSessionAsync);
@@ -301,7 +308,8 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
                 var metadata = ReadFrame(MetadataFrame);
                 try
                 {
-                    await SendTextAsync(ws, metadata, ct).ConfigureAwait(false);
+                    if (AnswerTerminatorWithMetadata)
+                        await SendTextAsync(ws, metadata, ct).ConfigureAwait(false);
                     await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
                         .ConfigureAwait(false);
                 }

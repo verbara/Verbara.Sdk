@@ -23,7 +23,7 @@ says:
   one exists.
 
 Four entries only add warnings (`VSDK0005`, `VSDK0003`, `VSDK0002` and `VSDK0006`). They break nothing unless you build with
-`TreatWarningsAsErrors`. Two stop compiling where you use them. The other sixteen change no existing signature, but
+`TreatWarningsAsErrors`. Two stop compiling where you use them. The other seventeen change no existing signature, but
 change behaviour a program can branch on, a published metric, or a health status; two of them also refuse some
 configuration values at start-up.
 
@@ -48,6 +48,7 @@ configuration values at start-up.
 | `Verbara.Sdk.Ari` | [A WebSocket stream is found by the call it names](#a-websocket-stream-is-found-by-the-call-it-names) | behaviour, start-up validation |
 | `Verbara.Sdk.Ari` | [`AudioStreamMetrics.BufferUnderruns` warns `VSDK0003`](#audiostreammetricsbufferunderruns-warns-vsdk0003) | warning |
 | `Verbara.Sdk.VoiceAi`, `VoiceAi.OpenAiRealtime` | [A cancelled voice session is counted cancelled](#a-cancelled-voice-session-is-counted-cancelled) | metric meaning |
+| `Verbara.Sdk.VoiceAi.Stt` | [A Deepgram message the recognizer cannot read no longer ends the recognition](#a-deepgram-message-the-recognizer-cannot-read-no-longer-ends-the-recognition) | behaviour |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [The `openai-realtime` health entry reports `Degraded`](#the-openai-realtime-health-entry-reports-degraded) | health status |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [A vendor failure close after a hangup counts failed; a host cancellation from a send counts cancelled](#realtime-sessions-move-between-completed-failed-and-cancelled) | metric meaning |
 | `Verbara.Sdk.Push.Webhooks` | [A webhook receives a topic-less event its event type matches](#a-webhook-receives-a-topic-less-event) | behaviour |
@@ -499,6 +500,33 @@ old openai_realtime.sessions.completed = openai_realtime.sessions.completed + op
 ```
 
 Guide: [A cancelled session is counted `cancelled`, not `completed`](voice-session-ending-migration.md#a-cancelled-session-is-counted-cancelled-not-completed).
+
+### A Deepgram message the recognizer cannot read no longer ends the recognition
+
+**What changed.** `DeepgramSpeechRecognizer.StreamAsync` read each WebSocket read as a whole message and parsed it
+with nothing around the parse, so a message it could not read ended the recognition with a `JsonException` out of
+the caller's enumeration, a type `StreamAsync` does not document. Behind `VoiceAiPipeline` that was a failed
+transcription and the caller's turn left unanswered. Now:
+
+- A message the vendor sends in fragments, or one larger than the 64 KiB receive buffer, is assembled and read
+  whole.
+- A message that cannot be read and whose top-level `type` is `"Error"` ends the recognition with
+  `SpeechProviderFailureException` (`Signal` = `ErrorFrame`, `Code` null), the failure a readable error message
+  raises; its message carries the raw text of what Deepgram sent.
+- Any other message that cannot be read, JSON or not, is skipped and counted on `stt.frames.unparseable` (meter
+  `Verbara.Sdk.VoiceAi.Stt`, tagged `voiceai.provider` = `Deepgram`). The results before and after it are
+  delivered, and a session whose every message was skipped completes with no results.
+
+No signature changes.
+
+**Who is affected.** Code that catches `JsonException` from `StreamAsync` on the Deepgram recognizer: it no longer
+receives one. A dashboard or alert on `stt.transcriptions.failed` behind `VoiceAiPipeline`: an unreadable Deepgram
+message no longer fails the transcription.
+
+**What to do.** Catch `SpeechProviderFailureException`, which `StreamAsync` documents, instead of `JsonException`.
+To see the messages the recognizer skipped, watch `stt.frames.unparseable`.
+
+No separate guide.
 
 ### The `openai-realtime` health entry reports `Degraded`
 
