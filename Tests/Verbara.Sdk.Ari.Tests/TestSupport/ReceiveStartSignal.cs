@@ -42,7 +42,10 @@ internal sealed class ReceiveStartSignal : EventListener
             Volatile.Write(ref _closeSendStarted, 1);
         if (eventData.EventName == "SendStop" && Interlocked.Exchange(ref _closeSendStarted, 0) == 1)
             Interlocked.Increment(ref _closeSendsCompleted);
-        if (eventData.EventName == "WsTrace" && Payload(eventData, "memberName") == "Dispose" &&
+        // DisposeCore, not Dispose: it is the one release every path takes. When the peer's own close
+        // write returns after the answer arrived, the peer's ManagedWebSocket disposes its stream, the
+        // client's WaitForServerToCloseConnectionAsync reads EOF and releases through DisposeCore alone.
+        if (eventData.EventName == "WsTrace" && Payload(eventData, "memberName") == "DisposeCore" &&
             Volatile.Read(ref _firstRelease) == 0)
         {
             _closeCompletedBeforeRelease = CloseSendsCompleted == 1;
