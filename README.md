@@ -529,7 +529,7 @@ composable NuGet packages for clustering, outbound campaigns, event sourcing, an
 
 This project is licensed under the **[MIT License](LICENSE)**. See [`NOTICE`](NOTICE) for attributions.
 
-This is the open-source base SDK of the **Verbara** open-core contact-center stack. Verbara is omnichannel contact-center software, licensed for each company to install and operate on its own infrastructure. The stack:
+Verbara is omnichannel contact-center software, licensed for each company to install and operate on its own infrastructure. Open-core: auditable engine and commercial overlays, no per-minute fees. This repository is its open-source base SDK (MIT). The stack:
 
 | Repository | License | Role |
 |---|---|---|
