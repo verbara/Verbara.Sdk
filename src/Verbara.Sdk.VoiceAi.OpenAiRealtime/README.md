@@ -71,10 +71,11 @@ under the existing write discipline and 10-second close bound. A send still bloc
 the bound is ended by aborting the transport; both loops finish before their resources are released.
 This cleanup does not replace the vendor's close code or the receive failure that ended the session.
 
-An event the bridge cannot read does not end the conversation. An unreadable `error` event is published as a
-`RealtimeErrorEvent` carrying the raw frame, as a readable one is published with its message; any other unreadable
-event is skipped, logged at Warning and counted on `openai_realtime.frames.unparseable` (tagged `voiceai.provider`),
-and the call goes on.
+An event whose JSON the bridge cannot decode does not end the conversation. An `error` event whose JSON cannot be
+decoded is published as a `RealtimeErrorEvent` carrying the raw frame, as a decoded one is published with its message;
+any other such event is skipped, logged at Warning and counted on `openai_realtime.frames.unparseable` (tagged
+`voiceai.provider`), and the call goes on. An event that decodes but cannot be handled still ends the session: an
+audio delta whose `delta` is not valid base64 counts in `openai_realtime.sessions.failed`.
 
 Every session the bridge starts is counted in exactly one of `openai_realtime.sessions.completed`, `.failed` or
 `.cancelled`. A session is `cancelled` only when the token handed to the bridge was cancelled (the host, a stop that
