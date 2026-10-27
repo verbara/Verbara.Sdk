@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed — BREAKING: a WebSocket audio stream is keyed by the call its `MEDIA_START` names (#NNN)
+### Changed — BREAKING: a WebSocket audio stream is keyed by the call its `MEDIA_START` names (#481)
 
 `WebSocketAudioServer` now keys each stream by the `channel_id` of the `MEDIA_START` text frame Asterisk's
 chan_websocket sends first, instead of by the last segment of the upgrade path. Every call through one
@@ -17,14 +17,14 @@ over one that only presents the same value as its path segment. For `Dial(WebSoc
 channel's id, not the caller's. The [migration guide](docs/guides/migration-2.9.0.md#a-websocket-stream-is-found-by-the-call-it-names)
 has the section.
 
-### Added: `AudioServerOptions.MediaStartTimeout` (#NNN)
+### Added: `AudioServerOptions.MediaStartTimeout` (#481)
 
 How long a WebSocket connection may take to send its first frame before it is announced under its path segment.
 Default 2 s (with up to 500 calls starting at once, the slowest `MEDIA_START` measured arrived 21.6 ms after the upgrade request). `TimeSpan.Zero` waits
 for nothing and keeps 2.8.x's path-segment key. `StartAsync` throws `ArgumentOutOfRangeException` for a negative or
 infinite value, or one longer than a timer can be armed for.
 
-### Fixed: the WebSocket upgrade selects the `media` subprotocol, and the lookup contract says what keys a stream (#NNN)
+### Fixed: the WebSocket upgrade selects the `media` subprotocol, and the lookup contract says what keys a stream (#481)
 
 The 101 response now carries `Sec-WebSocket-Protocol: media` when the client offers it; a client that offers nothing
 gets no header, as before (every Asterisk version measured accepted either). The doc comments of
