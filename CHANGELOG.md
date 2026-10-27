@@ -165,6 +165,34 @@ threads go alongside it. A handler that throws no longer keeps the events queued
 exception is rethrown from the call that made the change. A handler must not block on another event of the same manager caused by
 its own calls. The full rules are in the troubleshooting guide.
 
+### Added: the server pool announces each server that joins or leaves it (#NNN)
+
+`VerbaraServerPool` gains `ServerAdded` and `ServerRemoved`, both `Action<string, VerbaraServer>`. `ServerAdded` is
+raised once a server has started and is still the instance the pool holds under its id. `ServerRemoved` is raised for
+every server that leaves the pool, including one whose start failed, before it is disposed; for one id, the old
+instance's removal is raised before its replacement's addition. Both are raised synchronously, one at a time, under the
+pool's membership lock, and disposal runs outside it. A handler that calls `AddServerAsync`, `AddExistingServer`,
+`RemoveServerAsync` or `DisposeAsync` gets `InvalidOperationException` and the pool does not change: schedule such a
+change off the notifying thread. A handler that throws is logged once at Warning with its exception, and the other
+handlers still run. `docs/guides/follow-server-pool.md` shows how to follow a pool that already has servers: subscribe
+under your own lock, walk `Servers`, and install for an instance only while the pool still holds it.
+
+### Changed — BREAKING: a server pool refuses an empty or reserved server id (#NNN)
+
+`VerbaraServerPool.AddServerAsync` and `AddExistingServer` throw `ArgumentException` for a null, empty or white-space
+id and for the reserved id `status-refused`. `AddServerAsync` throws before it connects. These ids used to be accepted.
+See the 2.9.0 migration guide.
+
+### Added: the sessions registrations bind a `Sessions` configuration section (#NNN)
+
+`AddVerbaraSessions`, `AddVerbaraSessionsBuilder`, `AddVerbaraSessionsMultiServer` and
+`AddVerbaraSessionsMultiServerBuilder` each gain an overload taking an `IConfiguration`, plus an optional
+`Action<SessionOptions>` that runs after binding. The overload binds the `Sessions` section with the configuration
+binding source generator, so it is safe under Native AOT. A configured context list replaces its default; an absent
+list or section keeps the defaults. A malformed value throws `InvalidOperationException` naming its key when the
+options are resolved, and the existing start-up validation still applies. Existing calls, with a delegate or a literal
+`null`, keep binding to the old overloads.
+
 ### Fixed: a call that rings before it is dialed records its ring (#475)
 
 An AMI `Originate`'s `DialBegin` names the originated leg and no calling channel, so the call never leaves `Created`,
