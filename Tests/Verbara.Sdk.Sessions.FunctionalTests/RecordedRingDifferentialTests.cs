@@ -175,7 +175,7 @@ public sealed class RecordedRingDifferentialTests
                     fixture.SimulateQueueCallerJoined(Queue, OriginatedChannel, "7000");
                     Step();
                     // Slept on the test's thread, so the session meter's thread filter keeps the steps that follow.
-                    Thread.Sleep(QueueWait);
+                    Thread.Sleep(QueueWait); // fence-allow: SIMULATED-WORK — the caller waits in the queue this long; the wait time is asserted against it
 
                     if (flow is Flow.AnsweredQueuedAndAbandoned)
                     {
@@ -191,7 +191,7 @@ public sealed class RecordedRingDifferentialTests
                         Step();
                         fixture.Server.Agents.OnAgentConnect(AgentId, OriginatedChannel, LinkedId, AgentInterface);
                         Step();
-                        Thread.Sleep(Talk);
+                        Thread.Sleep(Talk); // fence-allow: SIMULATED-WORK — the agent talks this long; the talk time is asserted against it
                         fixture.SimulateHangup(AgentUid, HangupCause.NormalClearing);
                         Step();
                         fixture.SimulateHangup(OriginatedUid, HangupCause.NormalClearing);
