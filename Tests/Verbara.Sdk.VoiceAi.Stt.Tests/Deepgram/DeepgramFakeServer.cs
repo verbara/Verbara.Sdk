@@ -141,6 +141,25 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
     /// </summary>
     public bool EndSessionSilently { get; set; }
 
+    /// <summary>
+    /// When greater than zero, every text message this session sends is sent in WebSocket fragments
+    /// of this many bytes, with <c>endOfMessage: false</c> on all but the last.
+    /// </summary>
+    /// <remarks>
+    /// The knob <c>CartesiaFakeServer</c> and <c>ElevenLabsFakeServer</c> carry in the synthesis suite.
+    /// Until it existed no fake here had ever produced a fragment, so a receive loop that parsed each
+    /// read as a whole message stayed green for the life of this suite; it makes that failure
+    /// reachable without a 64 KiB fixture. Zero, the default, sends each message in one frame.
+    /// </remarks>
+    public int TextFrameFragmentBytes { get; set; }
+
+    /// <summary>
+    /// When set, the session answers the client's terminator with this message's first fragment only
+    /// and withholds the rest until the test releases it, closes or aborts — a message the socket ends
+    /// in the middle of. <see langword="null"/>, the default, answers the terminator as before.
+    /// </summary>
+    public WithheldFinalFragment? WithholdFinalFragment { get; set; }
+
     public DeepgramFakeServer()
     {
         _server = new WebSocketTestServer(HandleSessionAsync);
@@ -188,9 +207,7 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
         {
             try
             {
-                var failure = Encoding.UTF8.GetBytes(errorFrame);
-                await ws.SendAsync(failure.AsMemory(), WebSocketMessageType.Text, true, ct)
-                    .ConfigureAwait(false);
+                await SendTextAsync(ws, errorFrame, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { return; }
 
@@ -204,9 +221,7 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
         foreach (var msg in messages)
         {
             if (ws.State != WebSocketState.Open) return;
-            var bytes = Encoding.UTF8.GetBytes(msg);
-            await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct)
-                .ConfigureAwait(false);
+            await SendTextAsync(ws, msg, ct).ConfigureAwait(false);
         }
 
         if (AbortAfterSend)
@@ -252,13 +267,41 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
                 // contract, which is the defect §3.6d measured on the other two surfaces.
                 ReceivedTerminatorText = Encoding.UTF8.GetString(buf, 0, result.Count);
 
+                if (WithholdFinalFragment is { } withheld)
+                {
+                    WithheldMessageEnding ending;
+                    try
+                    {
+                        ending = await SendFirstFragmentAndWaitAsync(ws, withheld, ct).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { break; }
+
+                    if (ending == WithheldMessageEnding.Abort)
+                    {
+                        ws.Abort();
+                        return;
+                    }
+
+                    if (ending == WithheldMessageEnding.Close)
+                    {
+                        try
+                        {
+                            await ws.CloseOutputAsync(
+                                    CloseStatus ?? WebSocketCloseStatus.NormalClosure, CloseStatusDescription, ct)
+                                .ConfigureAwait(false);
+                        }
+                        catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { break; }
+
+                        continue;
+                    }
+                }
+
                 // Read before the try: a missing recording is a defect in the suite, not a peer
                 // that went away, so it must fail the session rather than close it normally.
-                var metadata = Encoding.UTF8.GetBytes(ReadFrame(MetadataFrame));
+                var metadata = ReadFrame(MetadataFrame);
                 try
                 {
-                    await ws.SendAsync(metadata.AsMemory(), WebSocketMessageType.Text, true, ct)
-                        .ConfigureAwait(false);
+                    await SendTextAsync(ws, metadata, ct).ConfigureAwait(false);
                     await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
                         .ConfigureAwait(false);
                 }
@@ -272,6 +315,55 @@ internal sealed class DeepgramFakeServer : IAsyncDisposable
         }
 
         await CloseWithConfiguredStatusAsync(ws).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sends <paramref name="withheld"/>'s first fragment once the test allows it, then waits for the
+    /// test to say how the session goes on. A release sends the rest of the message here.
+    /// </summary>
+    private static async Task<WithheldMessageEnding> SendFirstFragmentAndWaitAsync(
+        System.Net.WebSockets.WebSocket ws, WithheldFinalFragment withheld, CancellationToken ct)
+    {
+        var bytes = Encoding.UTF8.GetBytes(withheld.Message);
+
+        await withheld.WaitForFirstFragmentAsync(ct).ConfigureAwait(false);
+        await ws.SendAsync(
+                bytes.AsMemory(0, withheld.FirstFragmentBytes), WebSocketMessageType.Text, false, ct)
+            .ConfigureAwait(false);
+        withheld.MarkFirstFragmentSent();
+
+        var ending = await withheld.WaitForEndingAsync(ct).ConfigureAwait(false);
+        if (ending == WithheldMessageEnding.Release)
+        {
+            await ws.SendAsync(
+                    bytes.AsMemory(withheld.FirstFragmentBytes), WebSocketMessageType.Text, true, ct)
+                .ConfigureAwait(false);
+        }
+
+        return ending;
+    }
+
+    /// <summary>
+    /// Sends one text message, fragmented when <see cref="TextFrameFragmentBytes"/> asks for it.
+    /// </summary>
+    private async Task SendTextAsync(System.Net.WebSockets.WebSocket ws, string message, CancellationToken ct)
+    {
+        var bytes = Encoding.UTF8.GetBytes(message);
+        var fragment = TextFrameFragmentBytes;
+
+        if (fragment <= 0 || fragment >= bytes.Length)
+        {
+            await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            return;
+        }
+
+        for (var offset = 0; offset < bytes.Length; offset += fragment)
+        {
+            var length = Math.Min(fragment, bytes.Length - offset);
+            await ws.SendAsync(
+                    bytes.AsMemory(offset, length), WebSocketMessageType.Text, offset + length >= bytes.Length, ct)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
