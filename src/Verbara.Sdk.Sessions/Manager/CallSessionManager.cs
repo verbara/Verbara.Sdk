@@ -749,6 +749,19 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                             CallSessionEventType.Ringing, channel.Name, null, null));
                         changed = true;
                     }
+                    else if (channel.State == ChannelState.Ringing)
+                    {
+                        // A ring observed while the call is still in its initial state (an originated
+                        // leg ringing before any dial names it) is recorded, not followed: the call
+                        // stays where it is. Ring is a receiving leg's arrival, not a ring.
+                        var ringingAt = DateTimeOffset.UtcNow;
+                        if (session.TryRecordRingInInitialState(ringingAt))
+                        {
+                            session.AddEvent(new CallSessionEvent(ringingAt,
+                                CallSessionEventType.Ringing, channel.Name, null, null));
+                            changed = true;
+                        }
+                    }
                     break;
 
                 case ChannelState.Up:
