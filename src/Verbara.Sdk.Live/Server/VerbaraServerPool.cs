@@ -344,7 +344,7 @@ public sealed class VerbaraServerPool : IAsyncDisposable
             {
                 handler(serverId, server);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 VerbaraServerPoolLog.MembershipSubscriberFailed(_logger, notification, serverId, ex);
             }
