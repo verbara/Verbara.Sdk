@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Documentation: the README licence section opens with the canonical sentence, and names open-core only with its commercial overlays (PRNUM)
+
+The licence section of `README.md`, which nuget.org shows, now opens with the sentence "Verbara is omnichannel
+contact-center software, licensed for each company to install and operate on its own infrastructure.", followed by
+"Open-core: auditable engine and commercial overlays, no per-minute fees." and "This repository is its open-source
+base SDK (MIT)." The word "open-core" no longer precedes the sentence without the commercial overlays beside it
+(verbara-meta/PDR-0006). No code, package or API changes.
+
 ### Documentation: the READMEs say Verbara is software each company installs and operates itself (#468)
 
 Verbara runs no hosted service (verbara-meta/PDR-0006). The licence section of `README.md`, which nuget.org shows, and
