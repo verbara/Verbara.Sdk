@@ -13,3 +13,5 @@ Verbara.Sdk.Live.MeetMe.MeetMeRoom.Users.get -> System.Collections.Concurrent.Co
 Verbara.Sdk.Live.MeetMe.MeetMeUser.UniqueId.get -> string?
 Verbara.Sdk.Live.MeetMe.MeetMeUser.UniqueId.init -> void
 Verbara.Sdk.Live.Server.VerbaraServer.ReconcileChannelsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Live.Server.VerbaraServerPool.ServerAdded -> System.Action<string!, Verbara.Sdk.Live.Server.VerbaraServer!>?
+Verbara.Sdk.Live.Server.VerbaraServerPool.ServerRemoved -> System.Action<string!, Verbara.Sdk.Live.Server.VerbaraServer!>?
