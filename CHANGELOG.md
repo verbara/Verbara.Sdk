@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Documentation: the README licence section opens with the canonical sentence, and names open-core only with its commercial overlays (PRNUM)
+### Documentation: the README licence section opens with the canonical sentence, and names open-core only with its commercial overlays (#478)
 
 The licence section of `README.md`, which nuget.org shows, now opens with the sentence "Verbara is omnichannel
 contact-center software, licensed for each company to install and operate on its own infrastructure.", followed by
