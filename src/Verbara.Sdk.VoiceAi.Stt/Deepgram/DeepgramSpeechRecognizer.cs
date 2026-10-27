@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net.WebSockets;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
@@ -193,6 +194,13 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
     {
         var buf = new byte[65536];
 
+        // A text message is assembled here across reads and parsed only once its final fragment is in.
+        // The vendor sizes and fragments its messages, not this client: parsing each read as a whole
+        // message handed JSON a truncated document whenever one outgrew this buffer or arrived in parts.
+        // Bytes still here when the loop leaves (a close, a fault, a cancel) are a message that never
+        // finished, and are discarded with it.
+        var message = new ArrayBufferWriter<byte>(buf.Length);
+
         // Counts messages, not transcripts, and excludes the close frame: "the vendor closed and
         // said nothing else" is precisely the case this has to report.
         var sawVendorFrame = false;
@@ -241,11 +249,21 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
                 break;
             }
 
-            sawVendorFrame = true;
+            // Every read restarts the bound, a fragment of a message still being assembled included: a
+            // vendor that is sending is not silent.
             silence.Heard();
+
+            // A partial read goes back to the top of the loop, where the socket's state and the bound
+            // are checked before the next read, rather than into an inner loop that would read on.
+            if (result.MessageType == WebSocketMessageType.Text) message.Write(buf.AsSpan(0, result.Count));
+            if (!result.EndOfMessage) continue;
+
+            // A whole message arrived. A fragment whose message never finished is not one.
+            sawVendorFrame = true;
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
-            var json = System.Text.Encoding.UTF8.GetString(buf, 0, result.Count);
+            var json = System.Text.Encoding.UTF8.GetString(message.WrittenSpan);
+            message.ResetWrittenCount();
             var msg = JsonSerializer.Deserialize(json, VoiceAiSttJsonContext.Default.DeepgramResultMessage);
             if (msg is null) continue;
 
