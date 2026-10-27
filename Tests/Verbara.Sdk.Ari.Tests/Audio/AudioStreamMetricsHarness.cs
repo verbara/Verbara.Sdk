@@ -235,6 +235,12 @@ internal sealed class WebSocketCall : ServedAudioCall
                 ListenAddress = "127.0.0.1",
                 DefaultFormat = "slin16",
                 IdleTimeout = TimeSpan.FromSeconds(30),
+
+                // MediaStartTimeout = Zero: these are tests of the zero bound's exception (no wait). Their subject is the
+                // waiting list, the count, the limit, the stop, the restart or the ending, and their clients send no
+                // MEDIA_START, so each connection is announced at once under its path segment, as before the re-key;
+                // without it each would wait out the 2 s default before its announcement.
+                MediaStartTimeout = TimeSpan.Zero,
             },
             new CapturingLogger<WebSocketAudioServer>());
     }
