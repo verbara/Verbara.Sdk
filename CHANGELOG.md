@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — BREAKING: a Deepgram message the recognizer cannot read no longer ends the recognition (#NNN)
+### Fixed — BREAKING: a Deepgram message the recognizer cannot read no longer ends the recognition (#482)
 
 `SpeechRecognizer.StreamAsync` documents three exceptions — `SpeechProviderFailureException`,
 `SpeechProviderEmptyResultException` and `OperationCanceledException` — and the Deepgram recognizer let a fourth
@@ -21,7 +21,7 @@ discarded. Request serialization is unchanged and no signature changes. Labelled
 has the section
 ([A Deepgram message the recognizer cannot read no longer ends the recognition](docs/guides/migration-2.9.0.md#a-deepgram-message-the-recognizer-cannot-read-no-longer-ends-the-recognition)).
 
-### Changed — BREAKING: an OpenAI Realtime event whose JSON the bridge cannot decode no longer ends the call (#NNN)
+### Changed — BREAKING: an OpenAI Realtime event whose JSON the bridge cannot decode no longer ends the call (#482)
 
 The OpenAI Realtime bridge decoded each vendor event with nothing around the decode, so one event whose JSON it could
 not decode (a member of the wrong type) ended the conversation while the caller was on the line: the session counted
