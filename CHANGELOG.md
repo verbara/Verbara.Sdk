@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation: the READMEs say Verbara is software each company installs and operates itself (#468)
 
-Verbara runs no hosted service. The licence section of `README.md`, which nuget.org shows, and
+Verbara runs no hosted service (verbara-meta/PDR-0006). The licence section of `README.md`, which nuget.org shows, and
 the Enterprise Extension section of `docs/README-commercial.md` now carry the sentence "Verbara is omnichannel
 contact-center software, licensed for each company to install and operate on its own infrastructure.", and
 `docs/README-commercial.md` addresses "ISVs and software vendors" instead of "ISVs and SaaS providers". No code,
