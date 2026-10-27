@@ -165,7 +165,7 @@ threads go alongside it. A handler that throws no longer keeps the events queued
 exception is rethrown from the call that made the change. A handler must not block on another event of the same manager caused by
 its own calls. The full rules are in the troubleshooting guide.
 
-### Added: the server pool announces each server that joins or leaves it (#NNN)
+### Added: the server pool announces each server that joins or leaves it (#477)
 
 `VerbaraServerPool` gains `ServerAdded` and `ServerRemoved`, both `Action<string, VerbaraServer>`. `ServerAdded` is
 raised once a server has started and is still the instance the pool holds under its id. `ServerRemoved` is raised for
@@ -177,13 +177,13 @@ change off the notifying thread. A handler that throws is logged once at Warning
 handlers still run. `docs/guides/follow-server-pool.md` shows how to follow a pool that already has servers: subscribe
 under your own lock, walk `Servers`, and install for an instance only while the pool still holds it.
 
-### Changed — BREAKING: a server pool refuses an empty or reserved server id (#NNN)
+### Changed — BREAKING: a server pool refuses an empty or reserved server id (#477)
 
 `VerbaraServerPool.AddServerAsync` and `AddExistingServer` throw `ArgumentException` for a null, empty or white-space
 id and for the reserved id `status-refused`. `AddServerAsync` throws before it connects. These ids used to be accepted.
 See the 2.9.0 migration guide.
 
-### Added: the sessions registrations bind a `Sessions` configuration section (#NNN)
+### Added: the sessions registrations bind a `Sessions` configuration section (#477)
 
 `AddVerbaraSessions`, `AddVerbaraSessionsBuilder`, `AddVerbaraSessionsMultiServer` and
 `AddVerbaraSessionsMultiServerBuilder` each gain an overload taking an `IConfiguration`, plus an optional
