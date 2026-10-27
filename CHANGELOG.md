@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: a WebSocket audio stream is keyed by the call its `MEDIA_START` names (#NNN)
+
+`WebSocketAudioServer` now keys each stream by the `channel_id` of the `MEDIA_START` text frame Asterisk's
+chan_websocket sends first, instead of by the last segment of the upgrade path. Every call through one
+`websocket_client` connection upgrades on the same path, so up to 2.8.x concurrent calls shared one key and
+`GetStream(channel.Id)` found none of them. Measured on Asterisk 22.10.1, 23.4.1, 22.12.0, 23.6.0 and 24.0.0
+(release candidates for the last three): `MEDIA_START` is the first frame and carries the WebSocket channel's id on
+every connection. A connection whose first frame is not a `MEDIA_START`, or that sends nothing within
+`MediaStartTimeout`, is announced under its path segment as before; a connection that names its call holds the key
+over one that only presents the same value as its path segment. For `Dial(WebSocket/…)` the key is the WebSocket
+channel's id, not the caller's. The [migration guide](docs/guides/migration-2.9.0.md#a-websocket-stream-is-found-by-the-call-it-names)
+has the section.
+
+### Added: `AudioServerOptions.MediaStartTimeout` (#NNN)
+
+How long a WebSocket connection may take to send its first frame before it is announced under its path segment.
+Default 2 s (with up to 500 calls starting at once, the slowest `MEDIA_START` measured arrived 21.6 ms after the upgrade request). `TimeSpan.Zero` waits
+for nothing and keeps 2.8.x's path-segment key. `StartAsync` throws `ArgumentOutOfRangeException` for a negative or
+infinite value, or one longer than a timer can be armed for.
+
+### Fixed: the WebSocket upgrade selects the `media` subprotocol, and the lookup contract says what keys a stream (#NNN)
+
+The 101 response now carries `Sec-WebSocket-Protocol: media` when the client offers it; a client that offers nothing
+gets no header, as before (every Asterisk version measured accepted either). The doc comments of
+`IAudioServer.GetStream`, `IAudioStream.ChannelId`, `CompositeAudioServer` and `ExternalMediaActivity`, and the
+[externalMedia migration guide](docs/guides/externalmedia-channel-id-migration.md), now say what keys a WebSocket stream
+(the literal `channel_id`, compared ordinally) and that the aggregate's `null` means no server holds that key.
+`WebSocketMediaExample` configures a `websocket_client` entry and reaches it with `Dial(WebSocket/…)` or
+`externalMedia`, instead of the nonexistent `WebSocket()` application.
+
 ### Documentation: the README licence section opens with the canonical sentence, and names open-core only with its commercial overlays (#478)
 
 The licence section of `README.md`, which nuget.org shows, now opens with the sentence "Verbara is omnichannel
