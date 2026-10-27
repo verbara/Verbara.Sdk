@@ -236,6 +236,17 @@ runs still returns and logs a Warning.
 
 Guide: [With a `VerbaraServer` on the connection, reload it yourself](ami-connection-state-and-health-migration.md#connecting-again-after-a-loss).
 
+### A server pool refuses an empty or reserved server id
+
+**What changed.** `VerbaraServerPool.AddServerAsync` and `AddExistingServer` throw `ArgumentException` for a null,
+empty or white-space id and for the reserved id `status-refused`. `AddServerAsync` throws before it connects.
+
+**Who is affected.** Code that adds a server under one of those ids, for example from configuration that can leave the
+id blank.
+
+**What to do.** Give every server a non-empty id other than `status-refused`, and validate ids you read from
+configuration before you add the server.
+
 ### Live's counters across a reconnect
 
 **What changed.** A reload reconciles Live's tables instead of clearing them, so three published numbers change

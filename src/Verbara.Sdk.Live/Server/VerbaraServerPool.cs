@@ -11,6 +11,9 @@ internal static partial class VerbaraServerPoolLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[POOL] AMI connection dispose failed: server={ServerId}")]
     public static partial void ConnectionDisposeFailed(ILogger logger, string serverId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[POOL] Membership subscriber failed: event={Notification}, server={ServerId}")]
+    public static partial void MembershipSubscriberFailed(ILogger logger, string notification, string serverId, Exception exception);
 }
 
 /// <summary>
@@ -23,6 +26,7 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     private readonly IAmiConnectionFactory _connectionFactory;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger _logger;
+    private readonly Lock _membershipLock = new();
     private readonly ConcurrentDictionary<string, VerbaraServer> _servers = new();
     private readonly ConcurrentDictionary<string, string> _agentRouting = new();
 
@@ -44,6 +48,68 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// <summary>All servers in the pool.</summary>
     public IEnumerable<KeyValuePair<string, VerbaraServer>> Servers => _servers;
 
+    /// <summary>Raised after a server has started successfully and is still the current instance in the pool.</summary>
+    /// <remarks>
+    /// <para>
+    /// For one id, the old instance's removal finishes before its replacement's addition. An instance is never
+    /// announced as added after its removal; a failed or removed start can have a removal alone.
+    /// Notifications run synchronously under the pool membership lock. A handler must not wait on another thread
+    /// calling the pool. Add, remove and disposal requested on the notifying thread throw
+    /// <see cref="InvalidOperationException"/> before changing membership or routing. A handler that must change the
+    /// pool schedules the change off the handler; the membership lock then orders it. Each failing handler is logged
+    /// once at Warning with its exception, and the other handlers still run.
+    /// </para>
+    /// <para>
+    /// Follow the pool by instance, never by id alone. Initialize one subscriber-local lock and per-instance ownership
+    /// records. Hold that lock while subscribing to both membership events, then release it before walking
+    /// <see cref="Servers"/>. Both the added callback and each walk candidate use the same installation routine:
+    /// under that local lock, re-check <c>ReferenceEquals(pool.GetServer(id), instance)</c>, skip an absent, replaced
+    /// or already-owned instance, then install subscriptions and record ownership before releasing the lock. If
+    /// installation fails, undo all partial subscriptions and ownership before leaving the lock. The removed callback
+    /// uses the same lock to uninstall and drop only that exact owned instance; ignore an unowned removal only within
+    /// this complete protocol. A walker can see a server still starting and receive its removal without an addition.
+    /// </para>
+    /// <para>
+    /// <see cref="GetServer"/> is a lock-free current-instance read. While holding the subscriber lock, never acquire
+    /// the membership lock, mutate the pool, await a pool operation or wait on another thread calling the pool.
+    /// Installation and removal use only synchronous instance subscription operations. The only nested lock order
+    /// is pool membership then subscriber. This closes both removal-before-recheck and removal-during-installation
+    /// windows and makes duplicate walk/added sightings harmless.
+    /// </para>
+    /// </remarks>
+    public event Action<string, VerbaraServer>? ServerAdded;
+
+    /// <summary>Raised for every actual departure, including failed starts, before the instance is disposed.</summary>
+    /// <remarks>
+    /// <para>
+    /// For one id, the old instance's removal finishes before its replacement's addition. An instance is never
+    /// announced as added after its removal; a failed or removed start can have a removal alone.
+    /// Notifications run synchronously under the pool membership lock. A handler must not wait on another thread
+    /// calling the pool. Add, remove and disposal requested on the notifying thread throw
+    /// <see cref="InvalidOperationException"/> before changing membership or routing. A handler that must change the
+    /// pool schedules the change off the handler; the membership lock then orders it. Each failing handler is logged
+    /// once at Warning with its exception, and the other handlers still run.
+    /// </para>
+    /// <para>
+    /// Follow the pool by instance, never by id alone. Initialize one subscriber-local lock and per-instance ownership
+    /// records. Hold that lock while subscribing to both membership events, then release it before walking
+    /// <see cref="Servers"/>. Both the added callback and each walk candidate use the same installation routine:
+    /// under that local lock, re-check <c>ReferenceEquals(pool.GetServer(id), instance)</c>, skip an absent, replaced
+    /// or already-owned instance, then install subscriptions and record ownership before releasing the lock. If
+    /// installation fails, undo all partial subscriptions and ownership before leaving the lock. The removed callback
+    /// uses the same lock to uninstall and drop only that exact owned instance; ignore an unowned removal only within
+    /// this complete protocol. A walker can see a server still starting and receive its removal without an addition.
+    /// </para>
+    /// <para>
+    /// <see cref="GetServer"/> is a lock-free current-instance read. While holding the subscriber lock, never acquire
+    /// the membership lock, mutate the pool, await a pool operation or wait on another thread calling the pool.
+    /// Installation and removal use only synchronous instance subscription operations. The only nested lock order
+    /// is pool membership then subscriber. This closes both removal-before-recheck and removal-during-installation
+    /// windows and makes duplicate walk/added sightings harmless.
+    /// </para>
+    /// </remarks>
+    public event Action<string, VerbaraServer>? ServerRemoved;
+
     /// <summary>
     /// Add a new Asterisk server to the pool, connect, and start tracking its state.
     /// </summary>
@@ -64,31 +130,40 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// released by that call, not again by the add.
     /// </para>
     /// </remarks>
-    /// <exception cref="InvalidOperationException">A server with <paramref name="serverId"/> is already in the pool.</exception>
+    /// <exception cref="ArgumentException">The id is empty, white space or the reserved name <c>status-refused</c>.</exception>
+    /// <exception cref="InvalidOperationException">The id is already held, or a membership handler requested this change
+    /// on the notifying thread. No connection is created for an invalid id or a reentrant change.</exception>
     public async ValueTask<VerbaraServer> AddServerAsync(
         string serverId,
         AmiConnectionOptions options,
         CancellationToken cancellationToken = default)
     {
-        // Refused before a connection is made: a duplicate costs no AMI login. The TryAdd below still guards two adds of
-        // the same id that both pass this check.
-        if (_servers.ContainsKey(serverId))
-            throw new InvalidOperationException($"Server '{serverId}' already exists in pool");
+        RefuseReentrantMembershipChange();
+        ValidateServerId(serverId);
+        // A duplicate costs no AMI login. The second check still guards concurrent connected adds.
+        lock (_membershipLock)
+        {
+            if (_servers.ContainsKey(serverId))
+                throw new InvalidOperationException($"Server '{serverId}' already exists in pool");
+        }
 
         var connection = await _connectionFactory.CreateAndConnectAsync(options, cancellationToken);
         var logger = _loggerFactory.CreateLogger<VerbaraServer>();
         var server = new VerbaraServer(connection, logger);
 
-        if (!_servers.TryAdd(serverId, server))
+        bool takenIn;
+        lock (_membershipLock)
+        {
+            takenIn = _servers.TryAdd(serverId, server);
+            if (takenIn)
+                TrackAgentRouting(serverId, server);
+        }
+        if (!takenIn)
         {
             await server.DisposeAsync();
             await connection.DisposeAsync();
             throw new InvalidOperationException($"Server '{serverId}' already exists in pool");
         }
-
-        // Subscribe to agent events to maintain routing table
-        server.Agents.AgentLoggedIn += a => _agentRouting[a.AgentId] = serverId;
-        server.Agents.AgentLoggedOff += a => _agentRouting.TryRemove(a.AgentId, out _);
 
         try
         {
@@ -100,7 +175,14 @@ public sealed class VerbaraServerPool : IAsyncDisposable
             // remove it. Only this instance is removed; if a removal or the pool's disposal already took it out, that
             // call releases it and it is not released twice. The server goes before its routes, so that a login
             // dispatched meanwhile cannot write a route back once the server has unsubscribed.
-            if (_servers.TryRemove(new KeyValuePair<string, VerbaraServer>(serverId, server)))
+            bool removed;
+            lock (_membershipLock)
+            {
+                removed = _servers.TryRemove(new KeyValuePair<string, VerbaraServer>(serverId, server));
+                if (removed)
+                    Announce(ServerRemoved, nameof(ServerRemoved), serverId, server);
+            }
+            if (removed)
             {
                 await ReleaseAsync(serverId, server);
                 DropRoutesTo(serverId);
@@ -108,12 +190,14 @@ public sealed class VerbaraServerPool : IAsyncDisposable
             throw;
         }
 
-        // Index existing agents after initial state load
-        foreach (var agent in server.Agents.Agents)
+        lock (_membershipLock)
         {
-            _agentRouting[agent.AgentId] = serverId;
+            if (ReferenceEquals(GetServer(serverId), server))
+            {
+                IndexAgentRouting(serverId, server);
+                Announce(ServerAdded, nameof(ServerAdded), serverId, server);
+            }
         }
-
         return server;
     }
 
@@ -128,20 +212,20 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// do not hand the same connection in behind a second server. If <paramref name="serverId"/> is already in
     /// the pool, the server is rejected, and both it and its connection stay the caller's, undisposed.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">A server with <paramref name="serverId"/> is already in the pool.</exception>
+    /// <exception cref="ArgumentException">The id is empty, white space or the reserved name <c>status-refused</c>.</exception>
+    /// <exception cref="InvalidOperationException">The id is already held, or a membership handler requested this change
+    /// on the notifying thread. No connection is created for an invalid id or a reentrant change.</exception>
     public void AddExistingServer(string serverId, VerbaraServer server)
     {
-        if (!_servers.TryAdd(serverId, server))
-            throw new InvalidOperationException($"Server '{serverId}' already exists in the pool.");
-
-        // Subscribe to agent events to maintain routing table
-        server.Agents.AgentLoggedIn += a => _agentRouting[a.AgentId] = serverId;
-        server.Agents.AgentLoggedOff += a => _agentRouting.TryRemove(a.AgentId, out _);
-
-        // Index existing agents
-        foreach (var agent in server.Agents.Agents)
+        RefuseReentrantMembershipChange();
+        ValidateServerId(serverId);
+        lock (_membershipLock)
         {
-            _agentRouting[agent.AgentId] = serverId;
+            if (!_servers.TryAdd(serverId, server))
+                throw new InvalidOperationException($"Server '{serverId}' already exists in the pool.");
+            TrackAgentRouting(serverId, server);
+            IndexAgentRouting(serverId, server);
+            Announce(ServerAdded, nameof(ServerAdded), serverId, server);
         }
     }
 
@@ -165,10 +249,10 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// </remarks>
     public async ValueTask RemoveServerAsync(string serverId)
     {
-        if (_servers.TryRemove(serverId, out var server))
+        RefuseReentrantMembershipChange();
+        var server = TakeOut(serverId);
+        if (server is not null)
         {
-            // The server goes before its routes, so that a login dispatched meanwhile cannot write a route back once
-            // the server has unsubscribed.
             await ReleaseAsync(serverId, server);
             DropRoutesTo(serverId);
         }
@@ -188,7 +272,7 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     }
 
     /// <summary>
-    /// Get a server by its ID.
+    /// Get a server by its ID with a lock-free current-instance read, suitable for a pool follower's exact-instance check.
     /// </summary>
     public VerbaraServer? GetServer(string serverId) =>
         _servers.GetValueOrDefault(serverId);
@@ -206,6 +290,7 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// </remarks>
     public async ValueTask DisposeAsync()
     {
+        RefuseReentrantMembershipChange();
         // Taken out one by one before each is disposed: a second or concurrent disposal finds nothing to dispose again.
         foreach (var serverId in _servers.Keys)
         {
@@ -220,8 +305,62 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// </summary>
     private async ValueTask TakeOutAndReleaseAsync(string serverId)
     {
-        if (_servers.TryRemove(serverId, out var server))
+        var server = TakeOut(serverId);
+        if (server is not null)
             await ReleaseAsync(serverId, server);
+    }
+
+    private VerbaraServer? TakeOut(string serverId)
+    {
+        lock (_membershipLock)
+        {
+            if (!_servers.TryRemove(serverId, out var server))
+                return null;
+            Announce(ServerRemoved, nameof(ServerRemoved), serverId, server);
+            return server;
+        }
+    }
+
+    private void RefuseReentrantMembershipChange()
+    {
+        if (_membershipLock.IsHeldByCurrentThread)
+            throw new InvalidOperationException("A membership notification handler must schedule pool changes off the notifying thread.");
+    }
+
+    private static void ValidateServerId(string serverId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(serverId);
+        if (string.Equals(serverId, "status-refused", StringComparison.Ordinal))
+            throw new ArgumentException("The server id 'status-refused' is reserved for pool health data.", nameof(serverId));
+    }
+
+    private void Announce(Action<string, VerbaraServer>? handlers, string notification, string serverId, VerbaraServer server)
+    {
+        if (handlers is null)
+            return;
+        foreach (Action<string, VerbaraServer> handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(serverId, server);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                VerbaraServerPoolLog.MembershipSubscriberFailed(_logger, notification, serverId, ex);
+            }
+        }
+    }
+
+    private void TrackAgentRouting(string serverId, VerbaraServer server)
+    {
+        server.Agents.AgentLoggedIn += a => _agentRouting[a.AgentId] = serverId;
+        server.Agents.AgentLoggedOff += a => _agentRouting.TryRemove(a.AgentId, out _);
+    }
+
+    private void IndexAgentRouting(string serverId, VerbaraServer server)
+    {
+        foreach (var agent in server.Agents.Agents)
+            _agentRouting[agent.AgentId] = serverId;
     }
 
     /// <summary>Removes every agent route that points to <paramref name="serverId"/>, and only those.</summary>

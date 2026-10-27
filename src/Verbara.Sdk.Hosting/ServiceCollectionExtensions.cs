@@ -213,7 +213,7 @@ public static class ServiceCollectionExtensions
     /// Add session engine services and return an <see cref="ISessionsBuilder"/> so backend
     /// packages (Redis, Postgres, ...) can register themselves fluently:
     /// <c>services.AddVerbaraSessionsBuilder().UseRedis(...)</c>.
-    /// Behaves identically to <see cref="AddVerbaraSessions"/>: registers the InMemory
+    /// Behaves identically to <see cref="AddVerbaraSessions(IServiceCollection, Action{SessionOptions})"/>: registers the InMemory
     /// default store via <c>TryAddSingleton</c> and wires the auto-attach hosted services, which attach
     /// before the server's first load, so calls already in progress at start have a session.
     /// </summary>
@@ -252,7 +252,7 @@ public static class ServiceCollectionExtensions
     /// server is not in the pool is left alone. <see cref="Timeout.InfiniteTimeSpan"/> switches the sweep off
     /// (<c>configure: o =&gt; o.ReconciliationInterval = Timeout.InfiniteTimeSpan</c>); any other interval of zero or
     /// less fails the host's start with <see cref="ArgumentOutOfRangeException"/>. Calling this method more than once
-    /// registers one sweep; on a host that also calls <see cref="AddVerbaraSessions"/>, the single DI server is left to
+    /// registers one sweep; on a host that also calls <see cref="AddVerbaraSessions(IServiceCollection, Action{SessionOptions})"/>, the single DI server is left to
     /// that registration's sweep.
     /// </para>
     /// <para>
@@ -272,7 +272,7 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Add session engine services for multi-server deployments, and the reconciliation sweep of the pool, and return an
     /// <see cref="ISessionsBuilder"/> so backend packages can register themselves fluently. Behaves identically to
-    /// <see cref="AddVerbaraSessionsMultiServer"/> otherwise, sweep included.
+    /// <see cref="AddVerbaraSessionsMultiServer(IServiceCollection, Action{SessionOptions})"/> otherwise, sweep included.
     /// </summary>
     public static ISessionsBuilder AddVerbaraSessionsMultiServerBuilder(
         this IServiceCollection services,
@@ -281,6 +281,82 @@ public static class ServiceCollectionExtensions
         AddSessionsCore(services, configure);
         AddPoolSweep(services);
         return new SessionsBuilder(services);
+    }
+
+    /// <summary>
+    /// Add session engine services, binding every option from the <c>Sessions</c> section using the
+    /// configuration-binding source generator. Configured context lists replace their defaults; an absent
+    /// section keeps all defaults. Values use invariant culture; malformed values throw an
+    /// <see cref="InvalidOperationException"/> naming their key. The optional delegate runs after binding.
+    /// Registration and startup validation match <see cref="AddVerbaraSessions(IServiceCollection, Action{SessionOptions})"/>.
+    /// </summary>
+    public static IServiceCollection AddVerbaraSessions(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Action<SessionOptions>? configure = null) =>
+        services.AddVerbaraSessions(BindSessionOptions(configuration, configure));
+
+    /// <summary>
+    /// Add session engine services, binding every option from the <c>Sessions</c> section using the
+    /// configuration-binding source generator. Configured context lists replace their defaults; an absent
+    /// section keeps all defaults. Values use invariant culture; malformed values throw an
+    /// <see cref="InvalidOperationException"/> naming their key. The optional delegate runs after binding.
+    /// Registration and startup validation match <see cref="AddVerbaraSessionsBuilder(IServiceCollection, Action{SessionOptions})"/>.
+    /// </summary>
+    public static ISessionsBuilder AddVerbaraSessionsBuilder(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Action<SessionOptions>? configure = null) =>
+        services.AddVerbaraSessionsBuilder(BindSessionOptions(configuration, configure));
+
+    /// <summary>
+    /// Add session engine services, binding every option from the <c>Sessions</c> section using the
+    /// configuration-binding source generator. Configured context lists replace their defaults; an absent
+    /// section keeps all defaults. Values use invariant culture; malformed values throw an
+    /// <see cref="InvalidOperationException"/> naming their key. The optional delegate runs after binding.
+    /// Registration and startup validation match <see cref="AddVerbaraSessionsMultiServer(IServiceCollection, Action{SessionOptions})"/>.
+    /// </summary>
+    public static IServiceCollection AddVerbaraSessionsMultiServer(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Action<SessionOptions>? configure = null) =>
+        services.AddVerbaraSessionsMultiServer(BindSessionOptions(configuration, configure));
+
+    /// <summary>
+    /// Add session engine services, binding every option from the <c>Sessions</c> section using the
+    /// configuration-binding source generator. Configured context lists replace their defaults; an absent
+    /// section keeps all defaults. Values use invariant culture; malformed values throw an
+    /// <see cref="InvalidOperationException"/> naming their key. The optional delegate runs after binding.
+    /// Registration and startup validation match <see cref="AddVerbaraSessionsMultiServerBuilder(IServiceCollection, Action{SessionOptions})"/>.
+    /// </summary>
+    public static ISessionsBuilder AddVerbaraSessionsMultiServerBuilder(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        Action<SessionOptions>? configure = null) =>
+        services.AddVerbaraSessionsMultiServerBuilder(BindSessionOptions(configuration, configure));
+
+    /// <summary>Builds the configure callback shared by the four configuration registrations.</summary>
+    private static Action<SessionOptions> BindSessionOptions(
+        IConfiguration configuration,
+        Action<SessionOptions>? configure)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var section = configuration.GetSection("Sessions");
+        return options =>
+        {
+            // The generated binder appends to existing arrays. A child key also represents an explicitly empty
+            // list, whose section can have neither a value nor children, so Exists() is insufficient here.
+            foreach (var child in section.GetChildren())
+            {
+                if (string.Equals(child.Key, nameof(SessionOptions.InboundContextPatterns), StringComparison.OrdinalIgnoreCase))
+                    options.InboundContextPatterns = [];
+                else if (string.Equals(child.Key, nameof(SessionOptions.OutboundContextPatterns), StringComparison.OrdinalIgnoreCase))
+                    options.OutboundContextPatterns = [];
+            }
+
+            section.Bind(options);
+            configure?.Invoke(options);
+        };
     }
 
     /// <summary>
