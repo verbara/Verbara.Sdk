@@ -165,7 +165,7 @@ threads go alongside it. A handler that throws no longer keeps the events queued
 exception is rethrown from the call that made the change. A handler must not block on another event of the same manager caused by
 its own calls. The full rules are in the troubleshooting guide.
 
-### Fixed: a call that rings before it is dialed records its ring (#NNN)
+### Fixed: a call that rings before it is dialed records its ring (#475)
 
 An AMI `Originate`'s `DialBegin` names the originated leg and no calling channel, so the call never leaves `Created`,
 and the `Newstate: Ringing` that follows used to be dropped: the call ended with `CallSession.RingingAt` null and no
