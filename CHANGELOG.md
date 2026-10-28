@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: a Live event nobody hears costs its manager nothing, and one a handler hears costs one entry (#493, #NNN)
+### Fixed: a Live event nobody hears costs its manager nothing, and one a handler hears costs one entry (#493, #494)
 
 Since the channel, queue and conference events moved out of their managers' locks (#457, #462), every change queued a
 notification and walked the queue whether or not a handler was subscribed, and a state change for a channel the table
