@@ -48,7 +48,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 - **Live API** — Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges and event counters via `System.Diagnostics.Metrics`.
 - **Activities** — High-level telephony operations (Dial, Hold, Transfer, Park, Bridge, Conference) modeled as async state machines with `IObservable<ActivityStatus>` tracking. Real cancellation support, re-entrance guards, and channel variable capture (`DIALSTATUS`, `QUEUESTATUS`).
 - **Session Engine** — Correlate AMI events into unified call sessions using LinkedId grouping. `CallSessionState` lifecycle (`Ringing`, `Connected`, `OnHold`, `Transferring`, `Completed`), domain events (`CallStartedEvent`, `CallConnectedEvent`, `CallEndedEvent`), a reconciliation sweep that ends a call whose hangup was lost once Asterisk's channel snapshot no longer lists it, and extension base classes (`CallRouterBase`, `AgentSelectorBase`, `SessionStoreBase`). See [the package README](src/Verbara.Sdk.Sessions/README.md).
-- **Voice AI** — Full stack for AI-powered telephony: PCM audio processing (resampler, VAD, gain), AudioSocket and `chan_websocket` transports with the Asterisk 22/23 JSON control protocol, STT/TTS abstraction layer with pluggable providers (Deepgram, Google, Whisper, Azure Whisper, Cartesia, AssemblyAI, Speechmatics for STT; ElevenLabs Flash 2.5, Deepgram Aura 2, LMNT, Azure, Cartesia, Speechmatics for TTS), `tts.synthesis.ttfa_ms` Time-To-First-Audio metric for latency observability, barge-in pipeline with turn-taking, and a direct OpenAI Realtime API bridge.
+- **Voice AI** — Full stack for AI-powered telephony: PCM audio processing (resampler, VAD, gain), AudioSocket and `chan_websocket` transports with the Asterisk 22/23 control messages (plain text or JSON), STT/TTS abstraction layer with pluggable providers (Deepgram, Google, Whisper, Azure Whisper, Cartesia, AssemblyAI, Speechmatics for STT; ElevenLabs Flash 2.5, Deepgram Aura 2, LMNT, Azure, Cartesia, Speechmatics for TTS), `tts.synthesis.ttfa_ms` Time-To-First-Audio metric for latency observability, barge-in pipeline with turn-taking, and a direct OpenAI Realtime API bridge.
 - **Config Parser** — Read and parse Asterisk `.conf` files and `extensions.conf` dialplans. Quote-aware comment stripping.
 - **Hosting** — `IHostedService` for AMI and Live API lifecycle. `IHealthCheck` for AMI connection state. AOT-safe `IConfiguration` binding.
 - **Native AOT** — Zero reflection at runtime. Four source generators replace runtime code generation. 0 trim warnings.
@@ -62,7 +62,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 Release history — every version, with what changed and why — is in [`CHANGELOG.md`](CHANGELOG.md). It is not restated here: a second copy in the README is one nobody updates, and this block had drifted three releases behind before anyone noticed.
 
-API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 243 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` JSON control protocol both supported. Supported: **Asterisk 22 LTS** (primary) and **23 Standard** (secondary, until its end of life on 2027-10-15); 24 LTS becomes primary once it is generally available and in CI, and 20 and earlier are not supported — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for the policy, CI coverage and lifecycle.
+API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 243 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` control messages (plain text or JSON) both supported. Supported: **Asterisk 22 LTS** (primary) and **23 Standard** (secondary, until its end of life on 2027-10-15); 24 LTS becomes primary once it is generally available and in CI, and 20 and earlier are not supported — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for the policy, CI coverage and lifecycle.
 
 ---
 
@@ -456,7 +456,7 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 |---------|-------------|
 | **Verbara.Sdk.Audio** | Polyphase FIR resampler, VAD, PCM16 processing — zero dependencies |
 | **Verbara.Sdk.VoiceAi** | Pipeline orchestration (`VoiceAiPipeline`), `ISessionHandler`, `IConversationHandler`, `ITurnDetector` (pluggable turn detection) |
-| **Verbara.Sdk.VoiceAi.AudioSocket** | AudioSocket + `chan_websocket` (JSON control protocol) servers with `System.IO.Pipelines` bidirectional streaming |
+| **Verbara.Sdk.VoiceAi.AudioSocket** | AudioSocket + `chan_websocket` (plain-text and JSON control messages) servers with `System.IO.Pipelines` bidirectional streaming |
 | **Verbara.Sdk.VoiceAi.Stt** | STT providers: AssemblyAI, Cartesia (Ink-Whisper), Deepgram, Google Speech, Speechmatics, Whisper (cloud REST), Azure Whisper |
 | **Verbara.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs (Flash 2.5), Azure, Cartesia (Sonic-3), Speechmatics, Deepgram (Aura 2 WS), LMNT (WS+HTTP; vendor shut down). Vendor-published latencies, cited and dated, are in that package's README |
 | **Verbara.Sdk.VoiceAi.OpenAiRealtime** | OpenAI Realtime API bridge (default model `gpt-realtime`): dual-loop WebSocket, function calling, observability events |
@@ -494,7 +494,7 @@ The `Examples/` directory contains standalone console applications demonstrating
 | `VoiceAiSpeechmaticsExample` | Voice AI with Speechmatics STT provider |
 | `VoiceAiCustomProviderExample` | Custom VoiceAi provider implementation pattern |
 | `OpenAiRealtimeExample` | Direct speech-to-speech bridge via OpenAI Realtime API with function calling |
-| `WebSocketMediaExample` | chan_websocket audio + JSON control protocol |
+| `WebSocketMediaExample` | chan_websocket audio + control messages (plain text or JSON) |
 | `TelemetryExample` | OpenTelemetry discovery: ActivitySources, Meters, HealthChecks |
 | `PbxAdmin` | _(Moved to [own repo](https://github.com/verbara/Verbara.Sdk.PbxAdmin))_ |
 

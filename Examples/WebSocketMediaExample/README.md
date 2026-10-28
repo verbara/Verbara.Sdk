@@ -37,7 +37,7 @@ exten => 6000,1,Answer()
 or create the channel over ARI with `POST /channels/externalMedia` and `transport=websocket`,
 `encapsulation=none`, `external_host=media-demo`, where the key is the channel id the create returns.
 That connection uses Asterisk's global `control_message_format` (plain text unless
-`chan_websocket.conf` sets `json`), so the example skips its `SET_MEDIA_DIRECTION` there.
+`chan_websocket.conf` sets `json`; read in Asterisk's source, not measured), so the example skips its `SET_MEDIA_DIRECTION` there.
 
 (Replace `127.0.0.1` with the IP of the host running this example.)
 
