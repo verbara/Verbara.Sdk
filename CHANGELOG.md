@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: ARI delivers `ChannelDestroyed` and `ChannelHangupRequest` when Asterisk sends `tech_cause` as a number (#NNN)
+
+Asterisk sends `tech_cause` as a JSON number (for example `486` for a PJSIP callee that answered Busy), while the SDK
+read it as a string, so either event failed to parse and was dropped whole: a subscriber never saw the channel end.
+Captured off Asterisk 20.20.1, 22.10.1, 22.11.0, 23.4.1 and 23.5.0, every `tech_cause` was a number, as Asterisk's
+source and its ARI schema type it. `TechCause` keeps its `string?` type and now carries the number's text (`"486"`); a
+string is still read as before, and an absent field reads null. The warning logged for an event that fails to parse
+now names its event type. No public signature changes.
+
 ### Changed: CI runs the Asterisk 22 and 23 suites on 22.11.0 and 23.5.0 (#488)
 
 `docker/asterisk-base-images.txt` pins the 22 line to 22.11.0 and the 23 line to 23.5.0, the newest generally
