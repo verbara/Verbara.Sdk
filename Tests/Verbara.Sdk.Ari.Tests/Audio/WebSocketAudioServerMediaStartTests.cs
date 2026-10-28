@@ -214,13 +214,12 @@ public sealed class WebSocketAudioServerMediaStartTests
             harness.Server.GetStream(naming.ChannelId).Should().BeSameAs(client.Stream);
             harness.Server.GetStream(second.ChannelId).Should().BeNull("a later MEDIA_START re-keys nothing");
             Volatile.Read(ref published).Should().Be(0, "MEDIA_START is stream state, never a control message");
-            var mediaStart = ((IChanWebSocketSession)client.Stream).MediaStart;
-            mediaStart.Should().NotBeNull();
-            mediaStart?.ChannelId.Should().Be(naming.ChannelId, "a second MEDIA_START leaves MediaStart at the first one's values");
-            mediaStart?.Format.Should().Be("slin16");
+            var mediaStart = ((IChanWebSocketSession)client.Stream).MediaStart.Should().BeOfType<ChanWebSocketMediaStart>().Subject;
+            mediaStart.ChannelId.Should().Be(naming.ChannelId, "a second MEDIA_START leaves MediaStart at the first one's values");
+            mediaStart.Format.Should().Be("slin16");
             client.Stream.Format.Should().Be("slin16", "a second MEDIA_START of another format leaves the first one's format");
             client.Stream.SampleRate.Should().Be(16000, "and the first one's rate");
-            mediaStart?.Rate.Should().Be(client.Stream.SampleRate);
+            mediaStart.Rate.Should().Be(client.Stream.SampleRate);
             TheIgnoredMediaStartIsLogged(logger, naming, second);
         }
     }
@@ -301,12 +300,12 @@ public sealed class WebSocketAudioServerMediaStartTests
             harness.Server.GetStream("seg-binary").Should().BeSameAs(stream);
             harness.Server.GetStream(frame.ChannelId).Should().BeNull("a MEDIA_START after the first frame re-keys nothing");
             Volatile.Read(ref published).Should().Be(0, "MEDIA_START is never a control message");
-            var mediaStart = ((IChanWebSocketSession)stream).MediaStart;
-            mediaStart.Should().NotBeNull("a late MEDIA_START fills MediaStart");
-            mediaStart?.ChannelId.Should().Be(frame.ChannelId, "MediaStart carries the later MEDIA_START's values");
+            var mediaStart = ((IChanWebSocketSession)stream).MediaStart.Should()
+                .BeOfType<ChanWebSocketMediaStart>("a late MEDIA_START fills MediaStart").Subject;
+            mediaStart.ChannelId.Should().Be(frame.ChannelId, "MediaStart carries the later MEDIA_START's values");
             stream.Format.Should().Be("slin16", "a late MEDIA_START corrects the format once");
             stream.SampleRate.Should().Be(16000);
-            mediaStart?.Rate.Should().Be(stream.SampleRate);
+            mediaStart.Rate.Should().Be(stream.SampleRate);
             logger.Entries.Should().ContainSingle(
                 e => e.Level == LogLevel.Debug && e.EventName == "ConnectionUnnamedByBinaryFirstFrame" && e.Message.Contains("seg-binary"),
                 "why the connection is unnamed is logged at Debug; logged [{0}]", logger.Describe());
@@ -400,12 +399,11 @@ public sealed class WebSocketAudioServerMediaStartTests
         // Assert
         using (new AssertionScope(frame.Source))
         {
-            var mediaStart = ((IChanWebSocketSession)client.Stream).MediaStart;
-            mediaStart.Should().NotBeNull();
+            var mediaStart = ((IChanWebSocketSession)client.Stream).MediaStart.Should().BeOfType<ChanWebSocketMediaStart>().Subject;
             client.Stream.Format.Should().Be("slin16", "the wire's format wins over the configured default");
             client.Stream.SampleRate.Should().Be(16000);
-            mediaStart?.Format.Should().Be(client.Stream.Format);
-            mediaStart?.Rate.Should().Be(client.Stream.SampleRate);
+            mediaStart.Format.Should().Be(client.Stream.Format);
+            mediaStart.Rate.Should().Be(client.Stream.SampleRate);
             client.Stream.ChannelId.Should().Be(frame.ChannelId);
         }
     }
@@ -431,7 +429,7 @@ public sealed class WebSocketAudioServerMediaStartTests
                 var send = session.SendMarkAsync("m").AsTask();
                 seen.TrySetResult((mediaStart, stream.Format == mediaStart?.Format, stream.SampleRate == mediaStart?.Rate, send, null));
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
                 seen.TrySetResult((mediaStart, stream.Format == mediaStart?.Format, stream.SampleRate == mediaStart?.Rate, null, ex));
             }

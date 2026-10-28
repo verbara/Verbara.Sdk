@@ -1072,13 +1072,14 @@ public class WebSocketAudioServerTests
             stream.ChannelId.Should().Be(mediaStart.ChannelId, "the stream is keyed by the call its MEDIA_START names ({0})", mediaStart.Source);
             server.GetStream(mediaStart.ChannelId).Should().BeSameAs(stream);
             server.GetStream(pathSegment).Should().BeNull("the path segment is not a named stream's key");
-            var read = ((IChanWebSocketSession)stream).MediaStart;
-            read.Should().NotBeNull("a consumer that obtains the stream after its announcement reads the naming MEDIA_START");
-            read?.ChannelId.Should().Be(mediaStart.ChannelId);
-            read?.Format.Should().Be("slin16");
-            read?.ConnectionId.Should().Be("h1media", "the captured connection_id ({0})", mediaStart.Source);
-            read?.Ptime.Should().Be(20);
-            read?.OptimalFrameSize.Should().Be(640);
+            var read = ((IChanWebSocketSession)stream).MediaStart.Should()
+                .BeOfType<ChanWebSocketMediaStart>("a consumer that obtains the stream after its announcement reads the naming MEDIA_START")
+                .Subject;
+            read.ChannelId.Should().Be(mediaStart.ChannelId);
+            read.Format.Should().Be("slin16");
+            read.ConnectionId.Should().Be("h1media", "the captured connection_id ({0})", mediaStart.Source);
+            read.Ptime.Should().Be(20);
+            read.OptimalFrameSize.Should().Be(640);
         }
     }
 

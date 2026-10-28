@@ -165,9 +165,8 @@ public class ChanWebSocketControlMessageTests
         // Assert
         using (new AssertionScope(captured.Source))
         {
-            foreach (var message in new[] { fromString, fromBytes })
+            foreach (var dtmf in new[] { fromString, fromBytes }.Select(m => m.Should().BeOfType<ChanWebSocketDtmf>().Subject))
             {
-                var dtmf = message.Should().BeOfType<ChanWebSocketDtmf>().Subject;
                 dtmf.Digit.Should().Be(captured.Value);
                 dtmf.ChannelId.Should().Be(captured.ChannelId);
             }

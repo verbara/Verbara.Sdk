@@ -127,7 +127,7 @@ public sealed class ChanWebSocketCapturedWireTests
             var root = json.RootElement;
             root.GetProperty("event").GetString().Should().Be(message.Event, message.Source);
             root.GetProperty("channel_id").GetString().Should().Be(message.ChannelId, message.Source);
-            message.ChannelId.Should().Be(message.ConnectionChannelId, "a JSON frame names the call it belongs to ({0})", message.Source);
+            message.ConnectionChannelId.Should().Be(message.ChannelId, "a JSON frame names the call it belongs to ({0})", message.Source);
             var value = message.Event switch
             {
                 "DTMF_END" => root.GetProperty("digit").GetString(),

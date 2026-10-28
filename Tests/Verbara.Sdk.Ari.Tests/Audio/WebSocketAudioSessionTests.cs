@@ -553,18 +553,17 @@ public class WebSocketAudioSessionTests
         // Assert
         using (new AssertionScope())
         {
-            var variables = fed.MediaStart?.ChannelVariables;
-            variables.Should().NotBeNull();
-            variables!.Should().HaveCount(5, "exactly the members sent");
+            // BeAssignableTo is the non-null check here: the member is already declared IReadOnlyDictionary<string, string>
+            var variables = fed.MediaStart?.ChannelVariables.Should().BeAssignableTo<IReadOnlyDictionary<string, string>>().Which;
+            variables.Should().HaveCount(5, "exactly the members sent");
             variables["N"].Should().Be("1", "a number is kept as its raw JSON text");
             variables["O"].Should().Be("""{"x":[1]}""", "an object is kept as its raw JSON text");
             variables["Z"].Should().Be("null", "a JSON null is kept as its raw JSON text");
             variables["k"].Should().Be("a");
             variables["K"].Should().Be("b", "keys are compared ordinally, so two keys that differ by case are two entries");
             variables.Should().NotBeOfType<Dictionary<string, string>>("the instance is immutable, not the parser's buffer");
-            var asMutable = variables as IDictionary<string, string>;
-            asMutable.Should().NotBeNull();
-            asMutable!.Invoking(d => d.Add("added", "x")).Should().Throw<NotSupportedException>("the instance is immutable");
+            var asMutable = variables.Should().BeAssignableTo<IDictionary<string, string>>().Which;
+            asMutable.Invoking(d => d.Add("added", "x")).Should().Throw<NotSupportedException>("the instance is immutable");
             fed.Published.Should().BeEmpty();
         }
     }
