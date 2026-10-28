@@ -32,7 +32,7 @@ using Microsoft.Extensions.Logging;
 /// refusal fails on Asterisk's own message), and each event wait sends a Ping every <see cref="NudgeInterval"/> until
 /// the event arrives; a green run that sees its event within that interval sends none. Asterisk 22.11.0 and 23.5.0
 /// replaced that wake-up with a per-session alert pipe, which closes the gap; the Ping stays for the builds before
-/// them (22.10.1 and 23.4.1 still have the gap), on which the suite also runs.
+/// them (measured on 22.10.1 and 23.4.1).
 /// </para>
 /// </remarks>
 [Collection("Functional")]
