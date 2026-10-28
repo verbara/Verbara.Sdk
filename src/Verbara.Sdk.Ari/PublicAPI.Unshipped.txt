@@ -114,3 +114,58 @@ Verbara.Sdk.Ari.Outbound.IAriOutboundListener.StartAsync(System.Threading.Cancel
 Verbara.Sdk.Ari.Outbound.IAriOutboundListener.StopAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 *REMOVED*Verbara.Sdk.Ari.Resources.AriChannelsResource.CreateExternalMediaAsync(string! app, string! externalHost, string! format, string? encapsulation = null, string? transport = null, string? connectionType = null, string? direction = null, string? data = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
 Verbara.Sdk.Ari.Resources.AriChannelsResource.CreateExternalMediaAsync(string! app, string! externalHost, string! format, string? encapsulation = null, string? transport = null, string? connectionType = null, string? direction = null, string? data = null, string? channelId = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketError.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketError.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketError!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketError.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketError.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketError.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.ToString() -> string!
+static Verbara.Sdk.Ari.Audio.ChanWebSocketError.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketError? left, Verbara.Sdk.Ari.Audio.ChanWebSocketError? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketError.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketError? left, Verbara.Sdk.Ari.Audio.ChanWebSocketError? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage? left, Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage? left, Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage? right) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.ChannelId.get -> string?
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.ChannelId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketError
+Verbara.Sdk.Ari.Audio.ChanWebSocketError.ChannelId.get -> string!
+Verbara.Sdk.Ari.Audio.ChanWebSocketError.ChannelId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketError.ChanWebSocketError(string! ChannelId, string! ErrorText) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketError.Deconstruct(out string! ChannelId, out string! ErrorText) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketError.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketError? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketError.ErrorText.get -> string!
+Verbara.Sdk.Ari.Audio.ChanWebSocketError.ErrorText.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.ChannelId.get -> string?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.ChannelId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Channel.get -> string?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ChannelId.get -> string?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ChannelId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Channel.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ChannelVariables.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ChannelVariables.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ConnectionId.get -> string?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ConnectionId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.OptimalFrameSize.get -> int?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.OptimalFrameSize.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Passthrough.get -> bool?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Passthrough.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Ptime.get -> int?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Ptime.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Unbuffered.get -> bool?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Unbuffered.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.ChannelId.get -> string?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.ChannelId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon.ChannelId.get -> string?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXon.ChannelId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage
+Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.ChanWebSocketUnknownMessage(string! Event, string! RawText) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.Deconstruct(out string! Event, out string! RawText) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.Event.get -> string!
+Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.Event.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.RawText.get -> string!
+Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.RawText.init -> void
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.MediaStart.get -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart?

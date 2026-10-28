@@ -190,14 +190,19 @@ public sealed class WebSocketAudioServerMediaStartTests
         await using var harness = await Harness.StartAsync(logger: logger);
         var naming = ExternalMediaPlain;
         var second = Capture("22.9.0", ChanWebSocketCaptureProducer.ExternalMedia, ChanWebSocketCaptureFormat.Json);
+        // Every capture is slin16, so the second is made "of another format" in the test: synthetic, the captured JSON
+        // MEDIA_START with "format":"slin16" replaced by "format":"ulaw"
+        var secondOfAnotherFormat = second.Text.Replace("\"format\":\"slin16\"", "\"format\":\"ulaw\"", StringComparison.Ordinal);
+        secondOfAnotherFormat.Should().NotBe(second.Text, "the synthetic frame differs from the capture in its format only");
         using var client = await harness.ConnectNamedAsync(SharedSegment, naming);
         var published = 0;
         using var controls = ((IChanWebSocketSession)client.Stream).ControlMessages.Subscribe(
             _ => Interlocked.Increment(ref published));
 
-        // Act — a second MEDIA_START naming another call, then an audio frame, read so the text frame before it
-        // has been handled when the assertions run
-        await SendTextAsync(client.Client, second);
+        // Act — a second MEDIA_START naming another call in another format, then an audio frame, read so the text frame
+        // before it has been handled when the assertions run
+        await client.Client.SendAsync(
+            Encoding.UTF8.GetBytes(secondOfAnotherFormat), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
         await client.Client.SendAsync(new byte[640], WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None);
         var audio = await client.Stream.ReadFrameAsync().AsTask().WaitAsync(WaitLimit);
 
@@ -209,6 +214,13 @@ public sealed class WebSocketAudioServerMediaStartTests
             harness.Server.GetStream(naming.ChannelId).Should().BeSameAs(client.Stream);
             harness.Server.GetStream(second.ChannelId).Should().BeNull("a later MEDIA_START re-keys nothing");
             Volatile.Read(ref published).Should().Be(0, "MEDIA_START is stream state, never a control message");
+            var mediaStart = ((IChanWebSocketSession)client.Stream).MediaStart;
+            mediaStart.Should().NotBeNull();
+            mediaStart?.ChannelId.Should().Be(naming.ChannelId, "a second MEDIA_START leaves MediaStart at the first one's values");
+            mediaStart?.Format.Should().Be("slin16");
+            client.Stream.Format.Should().Be("slin16", "a second MEDIA_START of another format leaves the first one's format");
+            client.Stream.SampleRate.Should().Be(16000, "and the first one's rate");
+            mediaStart?.Rate.Should().Be(client.Stream.SampleRate);
             TheIgnoredMediaStartIsLogged(logger, naming, second);
         }
     }
@@ -261,7 +273,7 @@ public sealed class WebSocketAudioServerMediaStartTests
     {
         // Arrange
         var logger = new RecordingLogger();
-        await using var harness = await Harness.StartAsync(logger: logger);
+        await using var harness = await Harness.StartAsync(logger: logger, defaultFormat: "ulaw");
         var frame = DialPlain;
         var announced = harness.Announcements.NextAsync();
         using var client = await ConnectAsync(harness.Port, "seg-binary");
@@ -289,6 +301,12 @@ public sealed class WebSocketAudioServerMediaStartTests
             harness.Server.GetStream("seg-binary").Should().BeSameAs(stream);
             harness.Server.GetStream(frame.ChannelId).Should().BeNull("a MEDIA_START after the first frame re-keys nothing");
             Volatile.Read(ref published).Should().Be(0, "MEDIA_START is never a control message");
+            var mediaStart = ((IChanWebSocketSession)stream).MediaStart;
+            mediaStart.Should().NotBeNull("a late MEDIA_START fills MediaStart");
+            mediaStart?.ChannelId.Should().Be(frame.ChannelId, "MediaStart carries the later MEDIA_START's values");
+            stream.Format.Should().Be("slin16", "a late MEDIA_START corrects the format once");
+            stream.SampleRate.Should().Be(16000);
+            mediaStart?.Rate.Should().Be(stream.SampleRate);
             logger.Entries.Should().ContainSingle(
                 e => e.Level == LogLevel.Debug && e.EventName == "ConnectionUnnamedByBinaryFirstFrame" && e.Message.Contains("seg-binary"),
                 "why the connection is unnamed is logged at Debug; logged [{0}]", logger.Describe());
@@ -315,6 +333,7 @@ public sealed class WebSocketAudioServerMediaStartTests
         {
             audio.Length.Should().Be(640, "the audio that follows is delivered");
             stream.ChannelId.Should().Be("seg-text");
+            ((IChanWebSocketSession)stream).MediaStart.Should().BeNull("no MEDIA_START has arrived");
             harness.Server.GetStream("seg-text").Should().BeSameAs(stream);
             logger.Entries.Should().ContainSingle(
                 e => e.Level == LogLevel.Debug && e.EventName == "ConnectionUnnamedByTextFirstFrame"
@@ -350,6 +369,62 @@ public sealed class WebSocketAudioServerMediaStartTests
                 "the Debug entry says the MEDIA_START carries no channel_id; logged [{0}]", logger.Describe());
             logger.Entries.Should().NotContain(
                 e => e.Message.Contains("not MEDIA_START"), "the frame is a MEDIA_START; logged [{0}]", logger.Describe());
+        }
+    }
+
+    // ================================================================ the stream's format follows its first MEDIA_START
+
+    public static TheoryData<string, ChanWebSocketCaptureFormat> EveryVersionInEachFormat()
+    {
+        var data = new TheoryData<string, ChanWebSocketCaptureFormat>();
+        foreach (var version in ChanWebSocketWireCapture.Versions)
+        {
+            data.Add(version, ChanWebSocketCaptureFormat.PlainText);
+            data.Add(version, ChanWebSocketCaptureFormat.Json);
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryVersionInEachFormat))]
+    public async Task Format_ShouldFollowTheNamingMediaStart_WhenTheDefaultFormatIsOfAnotherRate(string version, ChanWebSocketCaptureFormat format)
+    {
+        // Arrange — a server configured for ulaw (8000 Hz); the captured frame names slin16
+        await using var harness = await Harness.StartAsync(defaultFormat: "ulaw");
+        var frame = Capture(version, ChanWebSocketCaptureProducer.ExternalMedia, format);
+
+        // Act
+        using var client = await harness.ConnectNamedAsync(SharedSegment, frame);
+
+        // Assert
+        using (new AssertionScope(frame.Source))
+        {
+            var mediaStart = ((IChanWebSocketSession)client.Stream).MediaStart;
+            mediaStart.Should().NotBeNull();
+            client.Stream.Format.Should().Be("slin16", "the wire's format wins over the configured default");
+            client.Stream.SampleRate.Should().Be(16000);
+            mediaStart?.Format.Should().Be(client.Stream.Format);
+            mediaStart?.Rate.Should().Be(client.Stream.SampleRate);
+            client.Stream.ChannelId.Should().Be(frame.ChannelId);
+        }
+    }
+
+    [Fact]
+    public async Task Format_ShouldKeepTheDefault_WhenAnUnnamedConnectionSendsNoMediaStart()
+    {
+        // Arrange
+        await using var harness = await Harness.StartAsync(defaultFormat: "ulaw");
+
+        // Act — an audio frame first, and no MEDIA_START
+        using var client = await harness.ConnectUnnamedAsync("seg-default");
+
+        // Assert
+        using (new AssertionScope())
+        {
+            client.Stream.Format.Should().Be("ulaw");
+            client.Stream.SampleRate.Should().Be(8000);
+            ((IChanWebSocketSession)client.Stream).MediaStart.Should().BeNull();
         }
     }
 
@@ -817,12 +892,15 @@ public sealed class WebSocketAudioServerMediaStartTests
         await client.SendAsync(new byte[640], WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None);
         (await stream.ReadFrameAsync().AsTask().WaitAsync(WaitLimit)).Length.Should().Be(640);
 
-        // Assert — zero never re-keys
+        // Assert — zero never re-keys, and the MEDIA_START is state
         using (new AssertionScope())
         {
             harness.Server.GetStream(frame.ChannelId).Should().BeNull();
             stream.ChannelId.Should().Be("seg-zero");
             harness.Server.GetStream("seg-zero").Should().BeSameAs(stream);
+            var mediaStart = ((IChanWebSocketSession)stream).MediaStart;
+            mediaStart.Should().NotBeNull("a MEDIA_START after a zero-bound announcement fills MediaStart");
+            mediaStart?.ChannelId.Should().Be(frame.ChannelId);
         }
     }
 
@@ -951,7 +1029,8 @@ public sealed class WebSocketAudioServerMediaStartTests
             TimeProvider? time = null,
             ILogger<WebSocketAudioServer>? logger = null,
             int maxStreams = 1000,
-            TimeSpan? mediaStartTimeout = null)
+            TimeSpan? mediaStartTimeout = null,
+            string? defaultFormat = null)
         {
             AudioServerOptions? options = null;
             var (server, port) = await LoopbackServerBind.StartAsync(
@@ -966,6 +1045,8 @@ public sealed class WebSocketAudioServerMediaStartTests
                     };
                     if (mediaStartTimeout is { } value)
                         options.MediaStartTimeout = value;
+                    if (defaultFormat is not null)
+                        options.DefaultFormat = defaultFormat;
                     return new WebSocketAudioServer(options, logger ?? NullLogger<WebSocketAudioServer>.Instance, time ?? TimeProvider.System);
                 },
                 s => s.StartAsync());

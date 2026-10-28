@@ -6,7 +6,6 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Reactive.Subjects;
-using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Verbara.Sdk;
@@ -46,14 +45,16 @@ internal readonly record struct WebSocketFirstFrame(WebSocketFirstFrameKind Kind
 
 /// <summary>
 /// A single WebSocket audio connection. Receives binary frames via ManagedWebSocket
-/// (audio payload) and text frames parsed as <see cref="ChanWebSocketControlMessage"/>.
+/// (audio payload) and text frames read in the format Asterisk sends them: <c>MEDIA_START</c> as the stream's
+/// state (<see cref="MediaStart"/>), every other frame as a <see cref="ChanWebSocketControlMessage"/>.
 /// </summary>
 /// <remarks>
 /// Records the <c>Verbara.Sdk.Ari.Audio</c> instruments, each measurement tagged
 /// <c>audio.transport=websocket</c>: the stream opened at its start and closed at its one ending, the
 /// non-empty binary messages and their payload bytes received and sent, the time from receipt to the
 /// consumer's read, and a transport failure under a live session. It records no hangup or error frames:
-/// those instruments count AudioSocket frames, and a <see cref="ChanWebSocketHangup"/> is a control message.
+/// those instruments count AudioSocket frames; chan_websocket ends a call with a close frame, and its <c>ERROR</c> is a
+/// control message.
 /// </remarks>
 internal sealed class WebSocketAudioSession : IChanWebSocketSession
 {
@@ -75,6 +76,12 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     private bool _firstFrameRead;
     private int _mediaStarts;
 
+    // Set once, by the read pump, from the connection's first MEDIA_START: the format first, then the record, so a
+    // consumer that reads MediaStart reads the format it carried.
+    private volatile string _format;
+    private volatile int _sampleRate;
+    private ChanWebSocketMediaStart? _mediaStart;
+
     // Completed once, by the read pump: with the first frame of any type, or with Ended when the pump ends first.
     private readonly TaskCompletionSource<WebSocketFirstFrame> _firstFrame = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -93,8 +100,14 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
 
     /// <summary>Completes with the connection's first frame, or with <see cref="WebSocketFirstFrameKind.Ended"/>.</summary>
     internal Task<WebSocketFirstFrame> FirstFrame => _firstFrame.Task;
-    public string Format { get; }
-    public int SampleRate { get; }
+    /// <summary>The server's configured format until the connection's first <c>MEDIA_START</c>, then the one it names.</summary>
+    public string Format => _format;
+
+    /// <summary>The rate of <see cref="Format"/>, derived as <see cref="ChanWebSocketMediaStart.Rate"/> is.</summary>
+    public int SampleRate => _sampleRate;
+
+    /// <inheritdoc />
+    public ChanWebSocketMediaStart? MediaStart => Volatile.Read(ref _mediaStart);
     public bool IsConnected => Volatile.Read(ref _disposed) == 0 && _webSocket.State == WebSocketState.Open;
     public IObservable<AudioStreamState> StateChanges => _state;
     public IObservable<ChanWebSocketControlMessage> ControlMessages => _controlSubject;
@@ -120,8 +133,8 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         _channelId = channelId;
         _pathSegment = channelId;
         _state = new AudioStreamStateChannel(AudioStreamState.Connected, logger, () => ChannelId);
-        Format = format;
-        SampleRate = FormatToSampleRate(format);
+        _format = format;
+        _sampleRate = AudioFormats.SampleRateOf(format);
 
         _audioInChannel = Channel.CreateBounded<ReceivedAudioFrame>(new BoundedChannelOptions(1000)
         {
@@ -171,9 +184,19 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
                 if (result.MessageType == WebSocketMessageType.Close)
                     break;
 
-                var head = result.MessageType == WebSocketMessageType.Text
+                // A text frame is read once: whether it is MEDIA_START, the call it names and the record it maps to all
+                // come from this one read, so they cannot disagree.
+                var text = result.MessageType == WebSocketMessageType.Text
                     ? ChanWebSocketMediaStartParser.Read(bufferWriter.WrittenSpan)
-                    : default;
+                    : null;
+                var head = text?.Head ?? default;
+                var isMediaStart = text is not null
+                    && string.Equals(head.Event, ChanWebSocketTextFrameHead.MediaStartEvent, StringComparison.Ordinal);
+
+                // Stream state, never a control message, and read before the first-frame decision below: a naming
+                // MEDIA_START has filled MediaStart, Format and SampleRate before the server can announce the stream.
+                if (isMediaStart)
+                    OnMediaStart(text!, head.ChannelId);
 
                 // The first frame decides the key, once, whatever it is; the server reads the decision before it
                 // registers the session. The frame itself is handled below like any other: a binary first frame is
@@ -201,18 +224,12 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
                         _audioInChannel.Writer.TryWrite(new ReceivedAudioFrame(bufferWriter.WrittenMemory.ToArray(), Stopwatch.GetTimestamp()));
                         break;
 
-                    case WebSocketMessageType.Text when head.IsMediaStart:
-                        // Stream state, never a control message. Only the first frame names the stream; a later
-                        // MEDIA_START re-keys nothing, and a second one on the connection is recorded at Debug.
-                        if (Interlocked.Increment(ref _mediaStarts) == 1)
-                            _firstMediaStartChannelId = head.ChannelId;
-                        else
-                            LogSecondMediaStart(head.ChannelId);
-
+                    case WebSocketMessageType.Text when isMediaStart:
+                        // Handled above, as state.
                         break;
 
                     case WebSocketMessageType.Text:
-                        TryDispatchControlMessage(bufferWriter.WrittenSpan);
+                        TryDispatchControlMessage(text!);
                         break;
                 }
             }
@@ -249,6 +266,42 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         }
     }
 
+    // The first MEDIA_START on the connection, whenever it arrives, fills MediaStart and the stream's format, once, and
+    // is traced once. Only the first frame names the stream (the server decides that from FirstFrame); a later one
+    // re-keys nothing, and a second one on the connection changes nothing and is recorded at Debug.
+    private void OnMediaStart(ChanWebSocketTextFrame frame, string? channelId)
+    {
+        if (Interlocked.Increment(ref _mediaStarts) != 1)
+        {
+            LogSecondMediaStart(channelId);
+            return;
+        }
+
+        _firstMediaStartChannelId = channelId;
+        var mediaStart = ChanWebSocketInboundReader.ReadMediaStart(frame, _format);
+        _format = mediaStart.Format;
+        _sampleRate = mediaStart.Rate;
+        Volatile.Write(ref _mediaStart, mediaStart);
+        EmitMediaStarted(mediaStart);
+    }
+
+    // The MEDIA_START that fills MediaStart, mirrored once onto Activity.Current, tagged with the call the frame names
+    // (not the key, which a late frame never changes). No media.channels tag: it is 1 on every frame.
+    private static void EmitMediaStarted(ChanWebSocketMediaStart mediaStart)
+    {
+        var activity = Activity.Current;
+        if (activity is null) return;
+
+        activity.AddEvent(new ActivityEvent(
+            VerbaraSemanticConventions.Events.MediaStarted,
+            tags: new ActivityTagsCollection
+            {
+                [VerbaraSemanticConventions.Channel.Id] = mediaStart.ChannelId,
+                [VerbaraSemanticConventions.Media.Codec] = mediaStart.Format,
+                [VerbaraSemanticConventions.Media.SampleRate] = mediaStart.Rate,
+            }));
+    }
+
     // Names the path segment and the connection's first MEDIA_START, never the session's key: the server re-keys
     // the session on its own continuation, so the pump can read a second MEDIA_START before the key has changed.
     // When that MEDIA_START was the first frame and ended the server's wait to be named, its channel_id is the key.
@@ -263,37 +316,23 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         }
     }
 
-    private void TryDispatchControlMessage(ReadOnlySpan<byte> utf8Json)
+    // Every text frame that is not MEDIA_START is published: as the typed record its event maps to, or as the generic
+    // record with its event name and exact text. None is dropped. The reader maps MEDIA_START to no record, so it can
+    // never be published here even if a caller routed one this way.
+    private void TryDispatchControlMessage(ChanWebSocketTextFrame frame)
     {
-        ChanWebSocketControlMessage? message;
-        try
-        {
-            message = ChanWebSocketControlMessageSerializer.Deserialize(utf8Json);
-        }
-        catch (JsonException)
-        {
-            // Malformed or unknown-discriminator JSON: drop silently (logged at server level in future).
+        var message = ChanWebSocketInboundReader.ReadMessage(frame);
+        if (message is null)
             return;
-        }
-        catch (NotSupportedException)
-        {
-            // JSON with no `kind` discriminator, which is every JSON control message Asterisk sends: it
-            // names the message in `event` ({"event":"MEDIA_START",...}, captured on 22.9.0 and 23.4.1).
-            // Uncaught, this ended the read pump and so the call's stream right after MEDIA_START.
-            return;
-        }
 
-        if (message is not null)
-        {
-            EmitActivityEvent(message);
-            _controlSubject.OnNext(message);
-        }
+        EmitActivityEvent(message);
+        _controlSubject.OnNext(message);
     }
 
     // Mirrors event-shaped control messages onto Activity.Current as span events
-    // (not span tags) so consumer traces capture DTMF arrivals and hangups without
+    // (not span tags) so consumer traces capture DTMF arrivals and mark acknowledgements without
     // overwriting span attributes. No-op if no span is active on the current
-    // execution context, matching OTel event semantics.
+    // execution context, matching OTel event semantics. DTMF_END carries no duration, so no duration tag.
     private void EmitActivityEvent(ChanWebSocketControlMessage message)
     {
         var activity = Activity.Current;
@@ -308,36 +347,6 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
                     {
                         [VerbaraSemanticConventions.Channel.Id] = ChannelId,
                         ["asterisk.dtmf.digit"] = dtmf.Digit,
-                        ["asterisk.dtmf.duration_ms"] = dtmf.DurationMs,
-                    }));
-                break;
-            case ChanWebSocketHangup hangup:
-                activity.AddEvent(new ActivityEvent(
-                    VerbaraSemanticConventions.Events.ChannelHangup,
-                    tags: new ActivityTagsCollection
-                    {
-                        [VerbaraSemanticConventions.Channel.Id] = ChannelId,
-                        ["cause"] = hangup.Cause,
-                    }));
-                break;
-            case ChanWebSocketMediaStart mediaStart:
-                activity.AddEvent(new ActivityEvent(
-                    VerbaraSemanticConventions.Events.MediaStarted,
-                    tags: new ActivityTagsCollection
-                    {
-                        [VerbaraSemanticConventions.Channel.Id] = ChannelId,
-                        [VerbaraSemanticConventions.Media.Codec] = mediaStart.Format,
-                        [VerbaraSemanticConventions.Media.SampleRate] = mediaStart.Rate,
-                        ["media.channels"] = mediaStart.Channels,
-                    }));
-                break;
-            case ChanWebSocketMediaBuffering buffering:
-                activity.AddEvent(new ActivityEvent(
-                    VerbaraSemanticConventions.Events.MediaBuffering,
-                    tags: new ActivityTagsCollection
-                    {
-                        [VerbaraSemanticConventions.Channel.Id] = ChannelId,
-                        ["asterisk.media.buffer_bytes"] = buffering.Bytes,
                     }));
                 break;
             case ChanWebSocketMediaMarkProcessed markProcessed:
@@ -419,17 +428,6 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         }
     }
 
-    private static int FormatToSampleRate(string format) => format.ToLowerInvariant() switch
-    {
-        "slin16" or "slin/16000" => 16000,
-        "slin" or "slin/8000" or "slin8" => 8000,
-        "slin32" or "slin/32000" => 32000,
-        "slin48" or "slin/48000" => 48000,
-        "ulaw" or "alaw" or "g711" => 8000,
-        "g722" => 16000,
-        "opus" => 48000,
-        _ => 8000
-    };
 
     public async ValueTask DisposeAsync()
     {

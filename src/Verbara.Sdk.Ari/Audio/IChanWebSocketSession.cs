@@ -15,10 +15,27 @@ namespace Verbara.Sdk.Ari.Audio;
 public interface IChanWebSocketSession : IAudioStream
 {
     /// <summary>
-    /// Observable stream of control messages received from Asterisk (DTMF, flow control,
-    /// hangup, media-start, mark acknowledgements, buffer pressure).
+    /// Control messages Asterisk sends on this connection, read in the format it sends them (plain text by default,
+    /// JSON with <c>f(json)</c>; captured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2): DTMF, flow
+    /// control (<c>MEDIA_XOFF</c>/<c>MEDIA_XON</c>), mark acknowledgements, Asterisk's <c>ERROR</c> replies, and the
+    /// generic record for any message the model does not name. Never <c>MEDIA_START</c>, which is
+    /// <see cref="MediaStart"/>. A hangup is not a message: Asterisk closes the connection, and the ending is
+    /// published on <see cref="IAudioStream.StateChanges"/>.
     /// </summary>
     IObservable<ChanWebSocketControlMessage> ControlMessages { get; }
+
+    /// <summary>
+    /// The first <c>MEDIA_START</c> the connection sent, with the values it carried; <see langword="null"/> until one
+    /// has been read. Set once, whenever it arrives, and traced once as <c>asterisk.media.started</c> on the current
+    /// activity; a later <c>MEDIA_START</c> changes nothing. Only a <c>MEDIA_START</c> that is the connection's first
+    /// frame names the stream, so <see cref="IAudioStream.ChannelId"/>, not this value, says which key the stream has:
+    /// a <c>MEDIA_START</c> that follows audio fills this and leaves the key at the path segment.
+    /// </summary>
+    /// <remarks>
+    /// The default implementation never reports a <c>MEDIA_START</c> and returns <see langword="null"/>; the SDK's
+    /// session overrides it. It is a default member so an implementation written against 2.8.0 still compiles.
+    /// </remarks>
+    ChanWebSocketMediaStart? MediaStart => null;
 
     /// <summary>
     /// Send a <c>mark_media</c> control message to tag a position in the outbound audio stream.

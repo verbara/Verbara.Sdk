@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 
 namespace Verbara.Sdk.Ari.Audio;
 
@@ -34,25 +33,20 @@ internal readonly record struct ChanWebSocketTextFrameHead(string? Event, string
 ///   <c>{"event":"MEDIA_START","connection_id":"c1",…,"channel_id":"1790612016.4",…}</c>.</item>
 /// </list>
 /// Unknown plain-text tokens and unknown JSON members are ignored, so the fields later versions add
-/// (<c>passthrough</c>, <c>unbuffered</c> from 22.12, 23.6 and 24.0) change nothing. The JSON half reads with
-/// <see cref="Utf8JsonReader"/>: no reflection, so it is safe under Native AOT.
+/// (<c>passthrough</c>, <c>unbuffered</c> from 22.12, 23.6 and 24.0) change nothing. A text frame is read once, into a
+/// <see cref="ChanWebSocketTextFrame"/>: whether it is <c>MEDIA_START</c>, the call it names and the record it maps to
+/// all come from that one read, so they cannot disagree.
 /// </remarks>
 internal static class ChanWebSocketMediaStartParser
 {
-    private const string ChannelIdToken = "channel_id:";
-
     /// <summary>The longest value a log line carries from a frame.</summary>
     private const int LoggedValueLimit = 64;
 
-    /// <summary>Reads the event and the <c>channel_id</c> of one text frame, in either format.</summary>
-    public static ChanWebSocketTextFrameHead Read(ReadOnlySpan<byte> utf8)
-    {
-        var trimmed = utf8.TrimStart((byte)' ');
-        if (trimmed.IsEmpty)
-            return default;
-
-        return trimmed[0] == (byte)'{' ? ReadJson(trimmed) : ReadPlainText(Encoding.UTF8.GetString(trimmed));
-    }
+    /// <summary>
+    /// Reads one text frame, in either format, once: its <see cref="ChanWebSocketTextFrame.Head"/> says whether it is
+    /// <c>MEDIA_START</c> and the call it names, and <see cref="ChanWebSocketInboundReader"/> maps the same read.
+    /// </summary>
+    public static ChanWebSocketTextFrame Read(ReadOnlySpan<byte> utf8) => ChanWebSocketTextFrame.Read(utf8);
 
     /// <summary>
     /// A frame's value as a log line may carry it: letters, digits and <c>. _ - / :</c> kept, anything else
@@ -74,73 +68,5 @@ internal static class ChanWebSocketMediaStartParser
         if (value.Length > LoggedValueLimit)
             builder.Append('…');
         return builder.ToString();
-    }
-
-    private static ChanWebSocketTextFrameHead ReadPlainText(string text)
-    {
-        string? eventName = null;
-        string? channelId = null;
-        var first = true;
-        foreach (var token in text.Split([' ', '\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (first)
-            {
-                first = false;
-                if (!token.Contains(':', StringComparison.Ordinal))
-                {
-                    eventName = token;
-                    continue;
-                }
-            }
-
-            if (channelId is null
-                && token.StartsWith(ChannelIdToken, StringComparison.Ordinal)
-                && token.Length > ChannelIdToken.Length)
-            {
-                channelId = token[ChannelIdToken.Length..];
-            }
-        }
-
-        return new ChanWebSocketTextFrameHead(eventName, channelId);
-    }
-
-    private static ChanWebSocketTextFrameHead ReadJson(ReadOnlySpan<byte> utf8)
-    {
-        string? eventName = null;
-        string? channelId = null;
-        try
-        {
-            var reader = new Utf8JsonReader(utf8);
-            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
-                return default;
-
-            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
-            {
-                if (reader.ValueTextEquals("event"u8))
-                {
-                    reader.Read();
-                    eventName = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
-                }
-                else if (reader.ValueTextEquals("channel_id"u8))
-                {
-                    reader.Read();
-                    channelId = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
-                }
-                else
-                {
-                    // The member's value, whatever it is: a scalar is one token, and Skip passes an object or
-                    // array (channel_variables) whole.
-                    reader.Read();
-                    reader.Skip();
-                }
-            }
-        }
-        catch (JsonException)
-        {
-            // Not JSON after all: it names nothing, so it names no call, which is the only decision this read feeds.
-            return default;
-        }
-
-        return new ChanWebSocketTextFrameHead(eventName, channelId);
     }
 }
