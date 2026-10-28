@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Documentation: the public figures and the Asterisk support policy agree with the tree (#NNN)
+### Documentation: the public figures and the Asterisk support policy agree with the tree (#487)
 
 The README, the technical and commercial overviews and CONTRIBUTING now say 29 packages, 25 examples and more than
 7,400 unit tests. The `AddVerbara` reference sets `options.Ami.EventPumpCapacity`, whose default is 20,000, not 10,000.
