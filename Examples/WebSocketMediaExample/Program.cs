@@ -50,13 +50,13 @@ using var connSub = server.OnStreamConnected.Subscribe(stream =>
         var line = msg switch
         {
             ChanWebSocketMediaStart s        => $"MEDIA_START  format={s.Format} rate={s.Rate} channels={s.Channels}",
-            ChanWebSocketMediaBuffering b    => $"MEDIA_BUFFERING  bytes={b.Bytes}",
             ChanWebSocketMediaMarkProcessed m => $"MEDIA_MARK_PROCESSED  mark={m.Mark}",
             ChanWebSocketMediaXon            => "MEDIA_XON  (resume)",
             ChanWebSocketMediaXoff           => "MEDIA_XOFF (pause)",
-            ChanWebSocketDtmf d              => $"DTMF  digit={d.Digit} duration_ms={d.DurationMs}",
-            ChanWebSocketHangup              => "HANGUP",
-            _                                => $"(unknown) {msg.GetType().Name}"
+            ChanWebSocketDtmf d              => $"DTMF_END  digit={d.Digit} channel_id={d.ChannelId}",
+            ChanWebSocketError err           => $"ERROR  {err.ErrorText}",
+            ChanWebSocketUnknownMessage u    => $"(unknown) {u.Event}",
+            _                                => $"(unhandled) {msg.GetType().Name}"
         };
         Console.WriteLine($"[control] {line}");
     });

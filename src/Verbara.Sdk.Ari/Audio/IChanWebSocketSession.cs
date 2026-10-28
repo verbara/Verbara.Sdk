@@ -45,13 +45,49 @@ public interface IChanWebSocketSession : IAudioStream
     ValueTask SendMarkAsync(string mark, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Send a <c>media_xon</c> flow-control signal to Asterisk, asking the peer to resume sending audio.
+    /// Throws <see cref="NotSupportedException"/> and writes nothing: chan_websocket has no XON command. Flow control is
+    /// Asterisk's to send, as <see cref="ChanWebSocketMediaXoff"/> and <see cref="ChanWebSocketMediaXon"/> on
+    /// <see cref="ControlMessages"/>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, in both control formats: Asterisk answers
+    /// every XON/XOFF spelling with <c>command unknown</c> and acts on none. The method still compiles and stays on the
+    /// interface; nothing is taken away.
+    /// </para>
+    /// <para>
+    /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
+    /// deprecation with <c>&lt;NoWarn&gt;$(NoWarn);VSDK0004&lt;/NoWarn&gt;</c> instead of silencing every <c>CS0618</c>
+    /// in their tree.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always, synchronously, before anything is written.</exception>
+    [Obsolete(
+        "Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: 'command unknown', no reply), so this method throws NotSupportedException and writes nothing. Flow control is Asterisk's to send: read ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages.",
+        DiagnosticId = "VSDK0004")]
     ValueTask SendXonAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Send a <c>media_xoff</c> flow-control signal to Asterisk, asking the peer to pause sending audio.
+    /// Throws <see cref="NotSupportedException"/> and writes nothing: chan_websocket has no XOFF command. Flow control is
+    /// Asterisk's to send, as <see cref="ChanWebSocketMediaXoff"/> and <see cref="ChanWebSocketMediaXon"/> on
+    /// <see cref="ControlMessages"/>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, in both control formats: Asterisk answers
+    /// every XON/XOFF spelling with <c>command unknown</c> and acts on none. The method still compiles and stays on the
+    /// interface; nothing is taken away.
+    /// </para>
+    /// <para>
+    /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
+    /// deprecation with <c>&lt;NoWarn&gt;$(NoWarn);VSDK0004&lt;/NoWarn&gt;</c> instead of silencing every <c>CS0618</c>
+    /// in their tree.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always, synchronously, before anything is written.</exception>
+    [Obsolete(
+        "Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: 'command unknown', no reply), so this method throws NotSupportedException and writes nothing. Flow control is Asterisk's to send: read ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages.",
+        DiagnosticId = "VSDK0004")]
     ValueTask SendXoffAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
