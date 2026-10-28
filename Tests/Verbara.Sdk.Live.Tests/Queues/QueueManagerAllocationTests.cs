@@ -10,15 +10,16 @@ namespace Verbara.Sdk.Live.Tests.Queues;
 /// What the queue table's reports cost in heap bytes: a member's status (from <c>QueueMemberStatus</c> or a
 /// <c>DeviceStateChange</c>), a <c>VarSet</c> of <c>QUEUESTATUS</c>, a <c>QueueCallerAbandon</c>, and every other
 /// notification the table raises: queue params, a member added or removed, a caller joining, leaving or reported
-/// leaving, and a completed snapshot. Bytes, not time: the allocation counter is exact and per thread, and every
-/// object counted escapes into the outbox, so no JIT tier removes it. A caller's join and leave record metrics; the
-/// classes that listen to them run in a collection no other class runs beside, so no listener runs on the measuring
-/// thread.
+/// leaving, and a completed snapshot. Bytes, not time: the allocation counter is per thread and exact once two
+/// readings of the same round agree, and every object counted escapes into the outbox, so no JIT tier removes it. A
+/// caller's join and leave record metrics; the classes that listen to them run in a collection no other class runs
+/// beside, so no listener runs on the measuring thread.
 /// </summary>
 public sealed class QueueManagerAllocationTests
 {
     private const int Members = 1_000;
     private const int WarmUpRounds = 3;
+    private const int MaxReadings = 20;
     private const string Queue = "sales";
 
     // One queued entry, one drain frame and the two execution-context copies the drain's frame switch makes, with
@@ -393,20 +394,24 @@ public sealed class QueueManagerAllocationTests
             round();
         }
 
-        setUp();
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        round();
-        return GC.GetAllocatedBytesForCurrentThread() - before;
-    }
-
-    // Warm-up rounds first, so tiering stubs and one-time initialisation fall before the measured round.
-    private static long Measure(Action round)
-    {
-        for (var i = 0; i < WarmUpRounds; i++)
+        // A round costs the same bytes every time, but a reading taken while a background collection runs can be a few
+        // bytes to a few kilobytes off, either way. Two readings in a row that agree are what the round cost.
+        long? previous = null;
+        for (var reading = 0; reading < MaxReadings; reading++)
+        {
+            setUp();
+            var before = GC.GetAllocatedBytesForCurrentThread();
             round();
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (allocated == previous)
+                return allocated;
+            previous = allocated;
+        }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        round();
-        return GC.GetAllocatedBytesForCurrentThread() - before;
+        throw new Xunit.Sdk.XunitException(string.Create(CultureInfo.InvariantCulture,
+            $"no two of {MaxReadings} readings of the same round agreed; the last read {previous} bytes"));
     }
+
+    // Warm-up rounds first, so tiering stubs and one-time initialisation fall before the measured rounds.
+    private static long Measure(Action round) => MeasureAfter(static () => { }, round);
 }
