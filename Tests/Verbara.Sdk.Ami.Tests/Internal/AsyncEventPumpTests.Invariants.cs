@@ -203,6 +203,46 @@ public partial class AsyncEventPumpTests
         }
     }
 
+    /// <summary>
+    /// A handler that throws ends the consumer as the last event would: when it was the last buffered event's handler, the
+    /// barrier passes the refusal behind it, as it does after a handler that returns, and a wait on that refusal is
+    /// reached rather than ended.
+    /// </summary>
+    [Fact]
+    public async Task WaitDispatchedThroughAsync_ShouldPassATrailingDrop_WhenTheLastBufferedEventsHandlerThrows()
+    {
+        var pump = new AsyncEventPump(capacity: 1);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        pump.Start(async evt =>
+        {
+            if (evt.EventType == "E1")
+            {
+                entered.TrySetResult();
+                await gate.Task;
+                return;
+            }
+
+            throw new InvalidOperationException("the handler faults");
+        });
+
+        Accept(pump, "E1");
+        await entered.Task.WaitAsync(Bound);
+        Accept(pump, "E2");
+        Refuse(pump, "R3", collected: false);
+        var wait = pump.WaitDispatchedThroughAsync(3, Bound, TimeProvider.System).AsTask();
+        gate.TrySetResult();
+        var outcome = await wait.WaitAsync(Bound);
+        await pump.DisposeAsync();
+
+        using (new AssertionScope())
+        {
+            pump.ProcessedEvents.Should().Be(2, "premise: both buffered events reached the handler");
+            pump.DispatchedThrough.Should().Be(3, "the faulted handler's event was the last buffered one, so the refusal behind it is passed");
+            outcome.Should().Be(DispatchBarrierOutcome.Reached);
+        }
+    }
+
     private static void Accept(AsyncEventPump pump, string type) =>
         pump.TryEnqueue(CreateEvent(type), collected: false).Should().BeTrue($"premise: the buffer accepts {type}");
 
