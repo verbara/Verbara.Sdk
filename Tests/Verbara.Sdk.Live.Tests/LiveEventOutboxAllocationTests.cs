@@ -72,7 +72,7 @@ public sealed class LiveEventOutboxAllocationTests
         aRaising.Wait(WaitBound).Should().BeTrue("caller A's handler must start");
         callerB.Start();
         // fence-allow: LOOP-DRIVER — waits for caller B to block on its turn before A's handler is released, so the wake-up is what releases B
-        SpinWait.SpinUntil(() => (callerB.ThreadState & System.Threading.ThreadState.WaitSleepJoin) == System.Threading.ThreadState.WaitSleepJoin, WaitBound)
+        SpinWait.SpinUntil(() => outbox.WaitingDrains == 1, WaitBound)
             .Should().BeTrue("caller B must be waiting for its turn");
         var releasedAt = clock.Elapsed;
         releaseA.Set();

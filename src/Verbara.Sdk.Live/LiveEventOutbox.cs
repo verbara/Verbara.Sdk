@@ -58,6 +58,22 @@ internal sealed class LiveEventOutbox
         _turnWait = turnWait;
     }
 
+    /// <summary>Drains blocked waiting for their turn, read under the lock; exposed for deterministic tests.</summary>
+    internal int WaitingDrains
+    {
+        get
+        {
+            lock (_sync)
+                return _waiters;
+        }
+    }
+
+    /// <summary>
+    /// Null outside deterministic tests; runs on a drain's thread, with its frame still current, after its last
+    /// notification was raised and before the drain hands back what it did not raise.
+    /// </summary>
+    internal Action? FrameExiting { get; set; }
+
     /// <summary>Queues a notification. Call it under the lock that orders the transition it reports.</summary>
     internal void Post(Action raise) => Post(InvokeAction, raise, null, null);
 
@@ -156,6 +172,7 @@ internal sealed class LiveEventOutbox
         }
         finally
         {
+            FrameExiting?.Invoke();
             lock (_sync)
             {
                 frame.Active = false;

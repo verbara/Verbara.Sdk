@@ -281,6 +281,39 @@ public sealed class LiveEventOrderAcrossThreadsTests
         reported.Should().Equal("abandoned-handler");
     }
 
+    // The window is the moment a drain has raised its last notification and has not yet left its frame. The hook holds
+    // the drain there while a thread started from its frame (as a handler's task would be) posts and drains, so the
+    // interleaving is forced rather than hoped for.
+    [Fact]
+    public void Drain_ShouldRaiseANotificationBeforeReturning_WhenAThreadStartedFromAFinishingDrainPostsIt()
+    {
+        var outbox = new LiveEventOutbox(_ => { }, OtherThreadWait);
+        var raised = 0;
+        var raisedWhenItsDrainReturned = -1;
+        var hooked = 0;
+        outbox.FrameExiting = () =>
+        {
+            if (Interlocked.Exchange(ref hooked, 1) != 0)
+                return;
+            // Started on the finishing drain's thread: the execution context, and the drain's frame with it, flows here.
+            var started = new Thread(() =>
+            {
+                outbox.Post(() => Interlocked.Increment(ref raised));
+                outbox.Drain();
+                Volatile.Write(ref raisedWhenItsDrainReturned, Volatile.Read(ref raised));
+            }) { IsBackground = true, Name = "outbox-frame-exit-poster" };
+            started.Start();
+            started.Join(OtherThreadWait).Should().BeTrue("the started thread's drain must return");
+        };
+        outbox.Post(() => { });
+
+        outbox.Drain();
+
+        raisedWhenItsDrainReturned.Should().Be(1,
+            "a drain that has nothing left to raise no longer adopts a post, so the posting thread raises it itself");
+        Volatile.Read(ref raised).Should().Be(1);
+    }
+
     [Fact]
     public void Drain_ShouldRaiseEveryNotificationAndRethrowTheFirstFailure_WhenAHandlerThrows()
     {
