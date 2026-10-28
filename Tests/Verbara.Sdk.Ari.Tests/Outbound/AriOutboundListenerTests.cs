@@ -257,16 +257,49 @@ public sealed class AriOutboundListenerTests
     [Fact]
     public async Task IdleTimeout_ShouldCloseConnection_WhenNoFramesSent()
     {
-        var (listener, _) = CreateListener(o => o.ConnectionIdleTimeout = TimeSpan.FromMilliseconds(250));
+        // Arrange — the connection is observed from the listener's own announcement, not by polling
+        // the count: the server can accept, time out and untrack it before the client's connect even
+        // returns, so a poll that starts after the connect can miss the whole tracked interval. The
+        // listener tracks a connection before it announces it, so the announcement is where "tracked"
+        // is read; the event stream completes after the connection is untracked, so its completion is
+        // where "untracked" is read.
+        var logger = new CapturingLogger();
+        var (listener, _) = CreateListener(o => o.ConnectionIdleTimeout = TimeSpan.FromMilliseconds(250), logger);
+        AriOutboundConnection? announced = null;
+        var trackedWhenAnnounced = false;
+        IDisposable? eventsSubscription = null;
+        var eventsCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var sub = listener.OnConnectionAccepted.Subscribe(connection =>
+        {
+            announced = connection;
+            trackedWhenAnnounced = listener.ActiveConnections.Contains(connection);
+            eventsSubscription = connection.Events.Subscribe(_ => { }, () => eventsCompleted.TrySetResult());
+        });
+
         await listener.StartAsync();
         try
         {
-            using var client = await ConnectClientAsync(listener.BoundPort);
-            (await WaitForAsync(() => listener.ActiveConnectionCount == 1, TimeSpan.FromSeconds(2)))
-                .Should().BeTrue();
+            using var eventsRelease = Disposable.Create(() => eventsSubscription?.Dispose());
 
-            (await WaitForAsync(() => listener.ActiveConnectionCount == 0, TimeSpan.FromSeconds(3)))
-                .Should().BeTrue();
+            // Act — the client connects and sends nothing.
+            using var client = await ConnectClientAsync(listener.BoundPort).WaitAsync(SignalTimeout);
+            await eventsCompleted.Task.WaitAsync(SignalTimeout);
+
+            // Assert
+            announced.Should().NotBeNull("the listener announces every connection it accepts");
+            using (new AssertionScope())
+            {
+                trackedWhenAnnounced.Should().BeTrue("an accepted connection is active while it is served");
+                listener.ActiveConnectionCount.Should().Be(
+                    0,
+                    "a connection the idle timeout ended is untracked before its event stream completes");
+                announced!.IsConnected.Should().BeFalse("the idle timeout closed the connection");
+                logger.Entries.Should().ContainSingle(
+                    entry => entry.EventName == "IdleTimeout",
+                    "the idle timeout, and nothing else, ended a connection that sent no frames; the " +
+                    "listener logged [{0}]",
+                    Describe(logger));
+            }
         }
         finally
         {
