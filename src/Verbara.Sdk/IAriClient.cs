@@ -732,9 +732,17 @@ public interface IAudioStream : IAsyncDisposable
     string ChannelId { get; }
 
     /// <summary>Audio format (e.g., "slin16", "ulaw", "alaw").</summary>
+    /// <remarks>
+    /// For a WebSocket stream, the <c>format</c> of the first <c>MEDIA_START</c> the connection sent, or the server's
+    /// <c>AudioServerOptions.DefaultFormat</c> until one is read.
+    /// </remarks>
     string Format { get; }
 
     /// <summary>Sample rate in Hz derived from format.</summary>
+    /// <remarks>
+    /// For a WebSocket stream, the rate of the first <c>MEDIA_START</c>'s <c>format</c>, or of the server's
+    /// <c>AudioServerOptions.DefaultFormat</c> until one is read.
+    /// </remarks>
     int SampleRate { get; }
 
     /// <summary>Whether the stream is actively connected.</summary>

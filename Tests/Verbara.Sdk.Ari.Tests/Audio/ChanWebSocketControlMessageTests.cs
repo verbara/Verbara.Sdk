@@ -1,252 +1,231 @@
-using System.Text.Json;
-using Verbara.Sdk.Ari.Audio;
+using System.Text;
 using FluentAssertions;
+using FluentAssertions.Execution;
+using Verbara.Sdk.Ari.Audio;
+using Verbara.Sdk.TestInfrastructure.Wire;
 
 namespace Verbara.Sdk.Ari.Tests.Audio;
 
 public class ChanWebSocketControlMessageTests
 {
-    // ------------------------------------------------------------------------
-    // Round-trip serialization (Inbound messages)
-    // ------------------------------------------------------------------------
-
-    [Fact]
-    public void MediaStart_ShouldRoundTrip_WhenSerializedAndDeserialized()
-    {
-        var original = new ChanWebSocketMediaStart("slin16", 16000, 1);
-
-        var json = ChanWebSocketControlMessageSerializer.Serialize(original);
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        decoded.Should().BeOfType<ChanWebSocketMediaStart>().Which.Should().BeEquivalentTo(original);
-    }
-
-    [Fact]
-    public void MediaXoff_ShouldRoundTrip_WhenSerializedAndDeserialized()
-    {
-        var original = new ChanWebSocketMediaXoff();
-
-        var json = ChanWebSocketControlMessageSerializer.Serialize(original);
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        decoded.Should().BeOfType<ChanWebSocketMediaXoff>();
-    }
-
-    [Fact]
-    public void MediaXon_ShouldRoundTrip_WhenSerializedAndDeserialized()
-    {
-        var original = new ChanWebSocketMediaXon();
-
-        var json = ChanWebSocketControlMessageSerializer.Serialize(original);
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        decoded.Should().BeOfType<ChanWebSocketMediaXon>();
-    }
-
-    [Fact]
-    public void MediaBuffering_ShouldRoundTrip_WhenSerializedAndDeserialized()
-    {
-        var original = new ChanWebSocketMediaBuffering(4096);
-
-        var json = ChanWebSocketControlMessageSerializer.Serialize(original);
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        decoded.Should().BeOfType<ChanWebSocketMediaBuffering>()
-            .Which.Bytes.Should().Be(4096);
-    }
-
-    [Fact]
-    public void MediaMarkProcessed_ShouldRoundTrip_WhenSerializedAndDeserialized()
-    {
-        var original = new ChanWebSocketMediaMarkProcessed("prompt-end");
-
-        var json = ChanWebSocketControlMessageSerializer.Serialize(original);
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        decoded.Should().BeOfType<ChanWebSocketMediaMarkProcessed>()
-            .Which.Mark.Should().Be("prompt-end");
-    }
-
-    [Fact]
-    public void Dtmf_ShouldRoundTrip_WhenSerializedAndDeserialized()
-    {
-        var original = new ChanWebSocketDtmf("5", 120);
-
-        var json = ChanWebSocketControlMessageSerializer.Serialize(original);
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        var dtmf = decoded.Should().BeOfType<ChanWebSocketDtmf>().Subject;
-        dtmf.Digit.Should().Be("5");
-        dtmf.DurationMs.Should().Be(120);
-    }
-
-    [Fact]
-    public void Hangup_ShouldRoundTrip_WithCause_WhenSerializedAndDeserialized()
-    {
-        var original = new ChanWebSocketHangup("Normal Clearing");
-
-        var json = ChanWebSocketControlMessageSerializer.Serialize(original);
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        decoded.Should().BeOfType<ChanWebSocketHangup>()
-            .Which.Cause.Should().Be("Normal Clearing");
-    }
-
-    [Fact]
-    public void Hangup_ShouldRoundTrip_WithNullCause_WhenSerializedAndDeserialized()
-    {
-        var original = new ChanWebSocketHangup(Cause: null);
-
-        var json = ChanWebSocketControlMessageSerializer.Serialize(original);
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        decoded.Should().BeOfType<ChanWebSocketHangup>()
-            .Which.Cause.Should().BeNull();
-    }
+    // The inbound round trips of the SDK's own `kind` JSON were replaced by facts fed captured Asterisk frames
+    // (WebSocketAudioSessionTests: every captured control message and MEDIA_START, through the session's read pump).
+    // The outbound `kind` round trips are rewritten onto the captured command bytes (ChanWebSocketCommandSpelling), and the
+    // `kind` discriminator test is gone: nothing writes or reads that shape any more.
 
     // ------------------------------------------------------------------------
-    // Round-trip serialization (Outbound messages)
+    // The writer: the captured spelling, in the named format
     // ------------------------------------------------------------------------
 
     [Fact]
-    public void MarkMedia_ShouldRoundTrip_WhenSerializedAndDeserialized()
+    public void SerializeToUtf8Bytes_ShouldWriteTheCapturedMarkMediaSpelling_InEachFormat()
     {
-        var original = new ChanWebSocketMarkMedia("tts-sentence-42");
+        // Arrange
+        var record = new ChanWebSocketMarkMedia("m");
 
-        var json = ChanWebSocketControlMessageSerializer.Serialize(original);
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(json);
+        // Act
+        var plain = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, ChanWebSocketControlMessageFormat.PlainText);
+        var json = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, ChanWebSocketControlMessageFormat.Json);
 
-        decoded.Should().BeOfType<ChanWebSocketMarkMedia>()
-            .Which.Mark.Should().Be("tts-sentence-42");
+        // Assert
+        using (new AssertionScope())
+        {
+            plain.Should().Equal(ChanWebSocketCommandSpelling.MarkPlain("m"), "the captured plain-text spelling");
+            plain.Should().HaveCount(12);
+            json.Should().Equal(ChanWebSocketCommandSpelling.MarkJson("m"), "the captured JSON spelling");
+            json.Should().HaveCount(45);
+            ChanWebSocketControlMessageSerializer.Serialize(record).Should().Be(
+                ChanWebSocketControlMessageSerializer.Serialize(record, ChanWebSocketControlMessageFormat.Json),
+                "the format-less writer writes the JSON form");
+            ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record).Should().Equal(json);
+            foreach (var format in new[] { ChanWebSocketControlMessageFormat.PlainText, ChanWebSocketControlMessageFormat.Json })
+            {
+                Encoding.UTF8.GetBytes(ChanWebSocketControlMessageSerializer.Serialize(record, format)).Should().Equal(
+                    ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, format), "the string overload is the UTF-8 one decoded ({0})", format);
+            }
+        }
     }
 
     [Theory]
-    [InlineData(ChanWebSocketMediaDirection.In, "in")]
-    [InlineData(ChanWebSocketMediaDirection.Out, "out")]
-    [InlineData(ChanWebSocketMediaDirection.Both, "both")]
-    public void SetMediaDirection_ShouldRoundTrip_WhenAllDirectionValues(
-        ChanWebSocketMediaDirection direction,
-        string expectedWireValue)
+    [InlineData(ChanWebSocketMediaDirection.In, "in", 50)]
+    [InlineData(ChanWebSocketMediaDirection.Out, "out", 51)]
+    [InlineData(ChanWebSocketMediaDirection.Both, "both", 52)]
+    public void SerializeToUtf8Bytes_ShouldWriteTheCapturedSetMediaDirectionSpelling_InJsonOnly(
+        ChanWebSocketMediaDirection direction, string wireValue, int length)
     {
-        var original = new ChanWebSocketSetMediaDirection(direction);
+        // Arrange
+        var record = new ChanWebSocketSetMediaDirection(direction);
 
-        var json = ChanWebSocketControlMessageSerializer.Serialize(original);
+        // Act
+        var json = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, ChanWebSocketControlMessageFormat.Json);
+        Action plain = () => ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, ChanWebSocketControlMessageFormat.PlainText);
+        Action plainString = () => ChanWebSocketControlMessageSerializer.Serialize(record, ChanWebSocketControlMessageFormat.PlainText);
 
-        json.Should().Contain($"\"direction\":\"{expectedWireValue}\"");
+        // Assert
+        using (new AssertionScope())
+        {
+            json.Should().Equal(ChanWebSocketCommandSpelling.SetMediaDirectionJson(wireValue), "the captured JSON spelling");
+            json.Should().HaveCount(length);
+            ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record).Should().Equal(json, "the format-less writer writes the JSON form");
+            plain.Should().Throw<NotSupportedException>("Asterisk accepts SET_MEDIA_DIRECTION in JSON only");
+            plainString.Should().Throw<NotSupportedException>();
+        }
+    }
 
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(json);
-        decoded.Should().BeOfType<ChanWebSocketSetMediaDirection>()
-            .Which.Direction.Should().Be(direction);
+    public static TheoryData<string> EveryRecordAsteriskSends() =>
+    [
+        nameof(ChanWebSocketMediaStart), nameof(ChanWebSocketMediaXoff), nameof(ChanWebSocketMediaXon),
+        nameof(ChanWebSocketMediaMarkProcessed), nameof(ChanWebSocketDtmf), nameof(ChanWebSocketError),
+#pragma warning disable VSDK0004 // the obsolete type is the point: a record no capture shows Asterisk sending has no command form either
+        nameof(ChanWebSocketUnknownMessage), nameof(ChanWebSocketHangup), nameof(ChanWebSocketMediaBuffering),
+#pragma warning restore VSDK0004
+    ];
+
+    [Theory]
+    [MemberData(nameof(EveryRecordAsteriskSends))]
+    public void Serialize_ShouldThrowNotSupportedException_WhenTheRecordIsOneAsteriskSends(string recordType)
+    {
+        // Arrange
+        var record = RecordAsteriskSends(recordType);
+
+        // Act
+        Action plain = () => ChanWebSocketControlMessageSerializer.Serialize(record, ChanWebSocketControlMessageFormat.PlainText);
+        Action json = () => ChanWebSocketControlMessageSerializer.Serialize(record, ChanWebSocketControlMessageFormat.Json);
+        Action plainBytes = () => ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, ChanWebSocketControlMessageFormat.PlainText);
+        Action jsonBytes = () => ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, ChanWebSocketControlMessageFormat.Json);
+
+        // Assert — a record Asterisk sends has no command form in either format
+        using (new AssertionScope(recordType))
+        {
+            plain.Should().Throw<NotSupportedException>();
+            json.Should().Throw<NotSupportedException>();
+            plainBytes.Should().Throw<NotSupportedException>();
+            jsonBytes.Should().Throw<NotSupportedException>();
+        }
+    }
+
+    private static ChanWebSocketControlMessage RecordAsteriskSends(string recordType) => recordType switch
+    {
+        nameof(ChanWebSocketMediaStart) => new ChanWebSocketMediaStart("slin16", 16000, 1),
+        nameof(ChanWebSocketMediaXoff) => new ChanWebSocketMediaXoff(),
+        nameof(ChanWebSocketMediaXon) => new ChanWebSocketMediaXon(),
+        nameof(ChanWebSocketMediaMarkProcessed) => new ChanWebSocketMediaMarkProcessed("m"),
+        nameof(ChanWebSocketDtmf) => new ChanWebSocketDtmf("1", 0),
+        nameof(ChanWebSocketError) => new ChanWebSocketError("c", "e"),
+        nameof(ChanWebSocketUnknownMessage) => new ChanWebSocketUnknownMessage("FUTURE_EVENT", "FUTURE_EVENT"),
+#pragma warning disable VSDK0004 // the obsolete type is the point: it has no command form either
+        nameof(ChanWebSocketHangup) => new ChanWebSocketHangup(null),
+        nameof(ChanWebSocketMediaBuffering) => new ChanWebSocketMediaBuffering(0),
+#pragma warning restore VSDK0004
+        _ => throw new ArgumentOutOfRangeException(nameof(recordType), recordType, null),
+    };
+
+    [Fact]
+    public void Serialize_ShouldThrowForTheArgument_WhenTheMessageIsNullOrTheFormatIsOutsideTheEnum()
+    {
+        // Act
+        Action nullMessage = () => ChanWebSocketControlMessageSerializer.Serialize(null!, ChanWebSocketControlMessageFormat.Json);
+        Action nullMessageBytes = () => ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(null!, ChanWebSocketControlMessageFormat.Json);
+        Action badFormat = () => ChanWebSocketControlMessageSerializer.Serialize(new ChanWebSocketMarkMedia("m"), (ChanWebSocketControlMessageFormat)2);
+        Action badFormatBytes = () => ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(new ChanWebSocketMarkMedia("m"), (ChanWebSocketControlMessageFormat)2);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            nullMessage.Should().Throw<ArgumentNullException>();
+            nullMessageBytes.Should().Throw<ArgumentNullException>();
+            badFormat.Should().Throw<ArgumentOutOfRangeException>().Which.ParamName.Should().Be("format");
+            badFormatBytes.Should().Throw<ArgumentOutOfRangeException>().Which.ParamName.Should().Be("format");
+        }
+    }
+
+    [Fact]
+    public void ControlMessageFormat_ShouldBePlainText_WhenTheRecordIsBuiltWithoutIt()
+    {
+        new ChanWebSocketMediaStart("slin16", 16000, 1).ControlMessageFormat.Should().Be(ChanWebSocketControlMessageFormat.PlainText);
     }
 
     // ------------------------------------------------------------------------
-    // Discriminator & wire-format validation
+    // The reader: a text frame as Asterisk sends it
     // ------------------------------------------------------------------------
 
-    [Fact]
-    public void Serialize_ShouldEmitKindDiscriminator_WhenAnyMessageSerialized()
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json)]
+    public void Deserialize_ShouldReadTheCapturedDtmfEnd_ThroughBothOverloads(ChanWebSocketCaptureFormat format)
     {
-        var json = ChanWebSocketControlMessageSerializer.Serialize(
-            new ChanWebSocketMediaStart("ulaw", 8000, 1));
+        // Arrange
+        var captured = ChanWebSocketWireCapture.ControlMessages.First(
+            m => m.AsteriskVersion == "24.0.0-rc2" && m.Event == "DTMF_END" && m.Format == format);
 
-        json.Should().StartWith("{\"kind\":\"media_start\"");
+        // Act
+        var fromString = ChanWebSocketControlMessageSerializer.Deserialize(captured.Text);
+        var fromBytes = ChanWebSocketControlMessageSerializer.Deserialize(captured.Payload().AsSpan());
+
+        // Assert
+        using (new AssertionScope(captured.Source))
+        {
+            foreach (var dtmf in new[] { fromString, fromBytes }.Select(m => m.Should().BeOfType<ChanWebSocketDtmf>().Subject))
+            {
+                dtmf.Digit.Should().Be(captured.Value);
+                dtmf.ChannelId.Should().Be(captured.ChannelId);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText, ChanWebSocketControlMessageFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json, ChanWebSocketControlMessageFormat.Json)]
+    public void Deserialize_ShouldReadTheCapturedMediaStartWithItsFormat_ThroughBothOverloads(
+        ChanWebSocketCaptureFormat captureFormat, ChanWebSocketControlMessageFormat expected)
+    {
+        // Arrange
+        var captured = ChanWebSocketWireCapture.MediaStart.First(f =>
+            f.AsteriskVersion == "24.0.0-rc2" && f.Producer == ChanWebSocketCaptureProducer.ExternalMedia && f.Format == captureFormat && f.Option == "none");
+
+        // Act
+        var fromString = ChanWebSocketControlMessageSerializer.Deserialize(captured.Text);
+        var fromBytes = ChanWebSocketControlMessageSerializer.Deserialize(captured.Payload().AsSpan());
+
+        // Assert
+        using (new AssertionScope(captured.Source))
+        {
+            foreach (var message in new[] { fromString, fromBytes })
+            {
+                var mediaStart = message.Should().BeOfType<ChanWebSocketMediaStart>().Subject;
+                mediaStart.ChannelId.Should().Be(captured.ChannelId);
+                mediaStart.ControlMessageFormat.Should().Be(expected, "the format is derived from the frame's grammar");
+            }
+        }
     }
 
     [Fact]
-    public void Serialize_ShouldEmitSnakeCaseProperties_WhenDtmfSerialized()
+    public void Deserialize_ShouldReadTheKindJsonAsTheGenericRecord_WhenGivenTheShapeNothingSends()
     {
-        var json = ChanWebSocketControlMessageSerializer.Serialize(
-            new ChanWebSocketDtmf("#", 80));
+        // Arrange — 2.8.x's own `kind` JSON, written in the test: the shape nothing sends any more
+        const string kindJson = """{"kind":"dtmf","digit":"5","duration_ms":120}""";
 
-        json.Should().Contain("\"duration_ms\":80");
-        json.Should().Contain("\"digit\":\"#\"");
+        // Act
+        var fromString = ChanWebSocketControlMessageSerializer.Deserialize(kindJson);
+        var fromBytes = ChanWebSocketControlMessageSerializer.Deserialize(Encoding.UTF8.GetBytes(kindJson).AsSpan());
+
+        // Assert
+        using (new AssertionScope())
+        {
+            foreach (var message in new[] { fromString, fromBytes })
+            {
+                var generic = message.Should().BeOfType<ChanWebSocketUnknownMessage>().Subject;
+                generic.Event.Should().BeEmpty("the frame names no event");
+                generic.RawText.Should().Be(kindJson);
+            }
+        }
     }
 
     [Fact]
-    public void Serialize_ShouldEmitSnakeCaseDiscriminator_WhenMediaMarkProcessedSerialized()
+    public void Deserialize_ShouldThrowArgumentNullException_WhenTheTextIsNull()
     {
-        var json = ChanWebSocketControlMessageSerializer.Serialize(
-            new ChanWebSocketMediaMarkProcessed("m1"));
+        Action act = () => ChanWebSocketControlMessageSerializer.Deserialize((string)null!);
 
-        json.Should().Contain("\"kind\":\"media_mark_processed\"");
-    }
-
-    [Fact]
-    public void Deserialize_ShouldThrowJsonException_WhenDiscriminatorUnknown()
-    {
-        const string json = """{"kind":"unknown_message_type","foo":"bar"}""";
-
-        Action act = () => ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        act.Should().Throw<JsonException>();
-    }
-
-    [Fact]
-    public void Deserialize_ShouldThrow_WhenDiscriminatorMissing()
-    {
-        // STJ's polymorphic reader throws NotSupportedException for payloads missing
-        // the type discriminator on an abstract base (documented behaviour).
-        const string json = """{"format":"slin16","rate":16000,"channels":1}""";
-
-        Action act = () => ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        act.Should().Throw<NotSupportedException>()
-            .WithMessage("*type discriminator*");
-    }
-
-    [Fact]
-    public void Deserialize_ShouldThrowNotSupportedException_WhenTheMessageIsNamedByEvent()
-    {
-        // Asterisk's JSON control format names each message in `event`, never in `kind`, as captured
-        // from Asterisk 22.9.0 and 23.4.1. The model reads only `kind`, so this is a missing
-        // discriminator, and the reader throws NotSupportedException rather than JsonException: the
-        // session has to drop that type too, or the frame ends its read pump.
-        const string json =
-            """{"event":"MEDIA_START","connection_id":"c1","channel":"WebSocket/c1/0x7f0638004770","channel_id":"1790617675.20","format":"slin16","optimal_frame_size":640,"ptime":20}""";
-
-        Action act = () => ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        act.Should().Throw<NotSupportedException>();
-    }
-
-    [Fact]
-    public void Deserialize_ShouldReadUtf8Bytes_WhenSpanOverloadUsed()
-    {
-        var utf8 = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(
-            new ChanWebSocketMediaBuffering(1024));
-
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(utf8.AsSpan());
-
-        decoded.Should().BeOfType<ChanWebSocketMediaBuffering>()
-            .Which.Bytes.Should().Be(1024);
-    }
-
-    [Fact]
-    public void Deserialize_ShouldAcceptRealAsteriskPayload_WhenMediaStartReceived()
-    {
-        // Simulates an actual Asterisk 23.2+ media_start text frame.
-        const string asteriskJson =
-            """{"kind":"media_start","format":"slin16","rate":16000,"channels":1}""";
-
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(asteriskJson);
-
-        var start = decoded.Should().BeOfType<ChanWebSocketMediaStart>().Subject;
-        start.Format.Should().Be("slin16");
-        start.Rate.Should().Be(16000);
-        start.Channels.Should().Be(1);
-    }
-
-    [Fact]
-    public void Deserialize_ShouldBeCaseInsensitive_WhenPropertyCasingDiffers()
-    {
-        // JsonSourceGenerationOptions.PropertyNameCaseInsensitive = true.
-        const string json =
-            """{"kind":"dtmf","Digit":"*","Duration_Ms":150}""";
-
-        var decoded = ChanWebSocketControlMessageSerializer.Deserialize(json);
-
-        var dtmf = decoded.Should().BeOfType<ChanWebSocketDtmf>().Subject;
-        dtmf.Digit.Should().Be("*");
-        dtmf.DurationMs.Should().Be(150);
+        act.Should().Throw<ArgumentNullException>();
     }
 }

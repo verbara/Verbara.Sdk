@@ -57,6 +57,9 @@
     <Project Path="src/Verbara.Sdk.Cluster.Postgres/Verbara.Sdk.Cluster.Postgres.csproj" />
     <Project Path="src/Verbara.Sdk.VoiceAi.TurnDetection/Verbara.Sdk.VoiceAi.TurnDetection.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Verbara.Sdk.BuildAnalyzers/Verbara.Sdk.BuildAnalyzers.csproj" />
+  </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/Verbara.Sdk.Agi.Tests/Verbara.Sdk.Agi.Tests.csproj" />
     <Project Path="Tests/Verbara.Sdk.Resilience.Tests/Verbara.Sdk.Resilience.Tests.csproj" />

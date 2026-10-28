@@ -12,6 +12,12 @@
   <ItemGroup>
     <ProjectReference Include="..\Verbara.Sdk\Verbara.Sdk.csproj" />
     <ProjectReference Include="..\Verbara.Sdk.Resilience\Verbara.Sdk.Resilience.csproj" />
+    <!-- Build-time only: suppresses the chan_websocket deprecation id in the System.Text.Json generator's output
+         alone, where the shipped [JsonSerializable] rows name deprecated members and no pragma can go. Never packed. -->
+    <ProjectReference Include="..\..\tools\Verbara.Sdk.BuildAnalyzers\Verbara.Sdk.BuildAnalyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

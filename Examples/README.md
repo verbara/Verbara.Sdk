@@ -40,7 +40,7 @@ dotnet run --project Examples/{ExampleName}/
 | [AriStasisExample](AriStasisExample/) | ARI WebSocket connection and Stasis event handling |
 | [AriChannelControlExample](AriChannelControlExample/) | ARI channel origination and bridge management |
 | [AriOutboundExample](AriOutboundExample/) | ARI outbound WebSocket listener (Asterisk connects to your app) |
-| [WebSocketMediaExample](WebSocketMediaExample/) | chan_websocket audio streaming and JSON control protocol (Asterisk 22.8+/23.2+) |
+| [WebSocketMediaExample](WebSocketMediaExample/) | chan_websocket audio streaming and control messages, plain text or JSON (Asterisk 22.8+/23.2+) |
 
 ### Live API
 

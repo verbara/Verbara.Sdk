@@ -1041,7 +1041,7 @@ public class WebSocketAudioServerTests
     /// announces the stream only once that frame has named it, under its <c>channel_id</c>. No subprotocol is
     /// offered, so the key is decided by the frame and not by the offer. The audio frame that follows is delivered,
     /// and nothing is published on <c>ControlMessages</c> for the naming frame: it is stream state, not a control
-    /// message.
+    /// message, read from <see cref="IChanWebSocketSession.MediaStart"/>.
     /// </summary>
     private static async Task MediaStartNamesTheStreamAndTheAudioFlowsAsync(ChanWebSocketCapturedFrame mediaStart, string pathSegment)
     {
@@ -1072,6 +1072,14 @@ public class WebSocketAudioServerTests
             stream.ChannelId.Should().Be(mediaStart.ChannelId, "the stream is keyed by the call its MEDIA_START names ({0})", mediaStart.Source);
             server.GetStream(mediaStart.ChannelId).Should().BeSameAs(stream);
             server.GetStream(pathSegment).Should().BeNull("the path segment is not a named stream's key");
+            var read = ((IChanWebSocketSession)stream).MediaStart.Should()
+                .BeOfType<ChanWebSocketMediaStart>("a consumer that obtains the stream after its announcement reads the naming MEDIA_START")
+                .Subject;
+            read.ChannelId.Should().Be(mediaStart.ChannelId);
+            read.Format.Should().Be("slin16");
+            read.ConnectionId.Should().Be("h1media", "the captured connection_id ({0})", mediaStart.Source);
+            read.Ptime.Should().Be(20);
+            read.OptimalFrameSize.Should().Be(640);
         }
     }
 

@@ -75,7 +75,7 @@ internal sealed class AudioSocketSession : IAudioStream
         _logger = logger;
         _state = new AudioStreamStateChannel(AudioStreamState.Connecting, logger, () => ChannelId);
         Format = format;
-        SampleRate = FormatToSampleRate(format);
+        SampleRate = AudioFormats.SampleRateOf(format);
 
         var pipeOptions = new PipeOptions(
             pool: MemoryPool<byte>.Shared,
@@ -322,17 +322,6 @@ internal sealed class AudioSocketSession : IAudioStream
         return Encoding.UTF8.GetString(payload);
     }
 
-    private static int FormatToSampleRate(string format) => format.ToLowerInvariant() switch
-    {
-        "slin16" or "slin/16000" => 16000,
-        "slin" or "slin/8000" or "slin8" => 8000,
-        "slin32" or "slin/32000" => 32000,
-        "slin48" or "slin/48000" => 48000,
-        "ulaw" or "alaw" or "g711" => 8000,
-        "g722" => 16000,
-        "opus" => 48000,
-        _ => 8000
-    };
 
     public async ValueTask DisposeAsync()
     {
