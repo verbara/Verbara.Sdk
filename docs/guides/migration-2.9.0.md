@@ -22,8 +22,9 @@ says:
 - **What to do**: the code change, or the exact warning suppression, and a link to the guide for the change when
   one exists.
 
-Four entries only add warnings (`VSDK0005`, `VSDK0003`, `VSDK0002` and `VSDK0006`). They break nothing unless you build with
-`TreatWarningsAsErrors`. Two stop compiling where you use them. The other twenty change no existing signature, but
+Four entries are breaking only for the warnings they add (`VSDK0005`, `VSDK0003`, `VSDK0002` and `VSDK0006`). They break
+nothing unless you build with `TreatWarningsAsErrors`; `VSDK0002`'s entry also fills `StatusEvent.Extension`, which read
+null before. Two stop compiling where you use them. The other twenty change no existing signature, but
 change behaviour a program can branch on, a published metric, or a health status; two of them also refuse some
 configuration values at start-up, and one, `VSDK0004`, also adds warnings.
 
