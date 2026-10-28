@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: a buffered AMI event costs what it did in 2.8.0, and its dispatch takes no lock (#NNN)
+### Fixed: a buffered AMI event costs what it did in 2.8.0, and its dispatch takes no lock (#496)
 
 Since the connection started numbering its events for the reconnect's reload barrier (#457, #463, #466), each slot of
 the event buffer carried the event, its ordinal and the lost-event count — 24 bytes instead of 2.8.0's 16 — and the
