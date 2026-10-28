@@ -496,7 +496,6 @@ Verbara.Sdk.IAriChannelsResource
 Verbara.Sdk.IAriChannelsResource.AnswerAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.IAriChannelsResource.ContinueAsync(string! channelId, string? context = null, string? extension = null, int? priority = null, string? label = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.IAriChannelsResource.CreateAsync(string! endpoint, string? app = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
-Verbara.Sdk.IAriChannelsResource.CreateExternalMediaAsync(string! app, string! externalHost, string! format, string? encapsulation = null, string? transport = null, string? connectionType = null, string? direction = null, string? data = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
 Verbara.Sdk.IAriChannelsResource.CreateWithoutDialAsync(string! endpoint, string! app, string? channelId = null, string? otherChannelId = null, string? originator = null, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? variables = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
 Verbara.Sdk.IAriChannelsResource.DialAsync(string! channelId, string? caller = null, int? timeout = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.IAriChannelsResource.GetAsync(string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
@@ -623,3 +622,98 @@ Verbara.Sdk.ManagerResponse.RawFields.get -> System.Collections.Generic.IReadOnl
 Verbara.Sdk.ManagerResponse.RawFields.set -> void
 Verbara.Sdk.ManagerResponse.Response.get -> string?
 Verbara.Sdk.ManagerResponse.Response.set -> void
+Verbara.Sdk.Ami.Connection.EventActionOutcome
+Verbara.Sdk.Ami.Connection.EventActionOutcome.EventActionOutcome() -> void
+Verbara.Sdk.Ami.Connection.EventActionOutcome.Rejection.get -> string?
+Verbara.Sdk.Ami.Connection.EventActionOutcome.Reported.get -> bool
+Verbara.Sdk.Ami.Connection.EventActionOutcome.SessionEnded.get -> bool
+Verbara.Sdk.AmiConnectionStateChange
+Verbara.Sdk.AmiConnectionStateChange.AmiConnectionStateChange(Verbara.Sdk.Enums.AmiConnectionState previous, Verbara.Sdk.Enums.AmiConnectionState current, System.Exception? cause, bool byCaller) -> void
+Verbara.Sdk.AmiConnectionStateChange.ByCaller.get -> bool
+Verbara.Sdk.AmiConnectionStateChange.Cause.get -> System.Exception?
+Verbara.Sdk.AmiConnectionStateChange.Current.get -> Verbara.Sdk.Enums.AmiConnectionState
+Verbara.Sdk.AmiConnectionStateChange.IsFinal.get -> bool
+Verbara.Sdk.AmiConnectionStateChange.IsLoss.get -> bool
+Verbara.Sdk.AmiConnectionStateChange.Previous.get -> Verbara.Sdk.Enums.AmiConnectionState
+Verbara.Sdk.IAmiConnection.ReportsEventActionOutcome.get -> bool
+Verbara.Sdk.IAmiConnection.SendEventGeneratingActionAsync(Verbara.Sdk.ManagerAction! action, Verbara.Sdk.Ami.Connection.EventActionOutcome? outcome, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.ManagerEvent!>!
+Verbara.Sdk.IAmiConnection.StateChanged -> System.Action<Verbara.Sdk.AmiConnectionStateChange!>?
+Verbara.Sdk.IAmiConnection.Subscribe(System.Func<Verbara.Sdk.ManagerEvent!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! handler) -> System.IDisposable!
+Verbara.Sdk.IAriChannelsResource.CreateExternalMediaAsync(string! app, string! externalHost, string! format, string? encapsulation = null, string? transport = null, string? connectionType = null, string? direction = null, string? data = null, string? channelId = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
+Verbara.Sdk.VerbaraSemanticConventions
+Verbara.Sdk.VerbaraSemanticConventions.Agent
+Verbara.Sdk.VerbaraSemanticConventions.Audio
+Verbara.Sdk.VerbaraSemanticConventions.Bridge
+Verbara.Sdk.VerbaraSemanticConventions.Calls
+Verbara.Sdk.VerbaraSemanticConventions.Channel
+Verbara.Sdk.VerbaraSemanticConventions.Dialplan
+Verbara.Sdk.VerbaraSemanticConventions.Event
+Verbara.Sdk.VerbaraSemanticConventions.Events
+Verbara.Sdk.VerbaraSemanticConventions.Media
+Verbara.Sdk.VerbaraSemanticConventions.Node
+Verbara.Sdk.VerbaraSemanticConventions.Queues
+Verbara.Sdk.VerbaraSemanticConventions.Resource
+Verbara.Sdk.VerbaraSemanticConventions.Sip
+Verbara.Sdk.VerbaraSemanticConventions.Tenant
+Verbara.Sdk.VerbaraSemanticConventions.VoiceAi
+const Verbara.Sdk.VerbaraSemanticConventions.Agent.Id = "asterisk.agent.id" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Agent.State = "asterisk.agent.state" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Audio.Transport = "audio.transport" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Bridge.ChannelCount = "asterisk.bridge.channel_count" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Bridge.Id = "asterisk.bridge.id" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Bridge.Name = "asterisk.bridge.name" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Bridge.Type = "asterisk.bridge.type" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Calls.Direction = "call.direction" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Calls.DurationMs = "call.duration_ms" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Calls.Id = "call.id" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Calls.State = "call.state" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Channel.Driver = "asterisk.channel.driver" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Channel.Id = "asterisk.channel.id" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Channel.Name = "asterisk.channel.name" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Channel.State = "asterisk.channel.state" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Dialplan.Application = "dialplan.application" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Dialplan.Context = "dialplan.context" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Dialplan.Extension = "dialplan.extension" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Dialplan.Priority = "dialplan.priority" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Event.Count = "event.count" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Event.Id = "event.id" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Event.Type = "event.type" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Events.ChannelHangup = "asterisk.channel.hangup" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Events.DtmfReceived = "asterisk.dtmf.received" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Events.MediaBuffering = "asterisk.media.buffering" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Events.MediaMarkProcessed = "asterisk.media.mark_processed" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Events.MediaStarted = "asterisk.media.started" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Media.BitrateBps = "media.bitrate_bps" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Media.Codec = "media.codec" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Media.Direction = "media.direction" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Media.FramesLost = "media.frames_lost" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Media.FramesReceived = "media.frames_received" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Media.SampleRate = "media.sample_rate" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Node.OriginId = "origin.node.id" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Node.ReceiverId = "receiver.node.id" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Queues.Name = "asterisk.queue.name" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Queues.Strategy = "asterisk.queue.strategy" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Queues.WaitMs = "asterisk.queue.wait_ms" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Resource.SdkVersion = "asterisk.sdk.version" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Resource.ServerHostname = "asterisk.server.hostname" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Resource.ServerName = "asterisk.server.name" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Resource.ServerVersion = "asterisk.server.version" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Sip.CallId = "sip.call_id" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Sip.FromUri = "sip.from_uri" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Sip.Method = "sip.method" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Sip.ResponseCode = "sip.response_code" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Sip.ResponsePhrase = "sip.response_phrase" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Sip.ToUri = "sip.to_uri" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Sip.Transport = "sip.transport" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Sip.UserAgent = "sip.user_agent" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.Tenant.Id = "tenant.id" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.VoiceAi.AudioDurationMs = "voiceai.audio.duration_ms" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.VoiceAi.Interrupted = "voiceai.interrupted" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.VoiceAi.Language = "voiceai.language" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.VoiceAi.LatencyTtfbMs = "voiceai.latency.ttfb_ms" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.VoiceAi.LatencyTtftMs = "voiceai.latency.ttft_ms" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.VoiceAi.Model = "voiceai.model" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.VoiceAi.Operation = "voiceai.operation" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.VoiceAi.Provider = "voiceai.provider" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.VoiceAi.TokensInput = "voiceai.tokens.input" -> string!
+const Verbara.Sdk.VerbaraSemanticConventions.VoiceAi.TokensOutput = "voiceai.tokens.output" -> string!
