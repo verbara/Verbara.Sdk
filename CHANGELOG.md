@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Documentation: the public figures and the Asterisk support policy agree with the tree (#487)
+
+The README, the technical and commercial overviews and CONTRIBUTING now say 29 packages, 25 examples and more than
+7,400 unit tests. The `AddVerbara` reference sets `options.Ami.EventPumpCapacity`, whose default is 20,000, not 10,000.
+The Voice AI telemetry note names the three packages that publish an `ActivitySource` instead of claiming all of them
+do, and the Push section lists all four packages. The version matrix states the support policy once: Asterisk 22 LTS
+primary, 23 Standard secondary until its end of life on 2027-10-15, 24 LTS primary once it is generally available and
+in CI, 20 and earlier not supported. It gives upstream's lifecycle dates and what CI runs against each version. No
+code, package or API changes.
+
 ### Fixed — BREAKING: chan_websocket commands are written as Asterisk acts on them, in the format the connection negotiated (#485)
 
 Up to 2.8.x `ChanWebSocketControlMessageSerializer` wrote every command as a `kind` JSON object, which no supported
@@ -144,12 +154,12 @@ gets no header, as before (every Asterisk version measured accepted either). The
 The licence section of `README.md`, which nuget.org shows, now opens with the sentence "Verbara is omnichannel
 contact-center software, licensed for each company to install and operate on its own infrastructure.", followed by
 "Open-core: auditable engine and commercial overlays, no per-minute fees." and "This repository is its open-source
-base SDK (MIT)." The word "open-core" no longer precedes the sentence without the commercial overlays beside it
-(verbara-meta/PDR-0006). No code, package or API changes.
+base SDK (MIT)." The word "open-core" no longer precedes the sentence without the commercial overlays beside it.
+No code, package or API changes.
 
 ### Documentation: the READMEs say Verbara is software each company installs and operates itself (#468)
 
-Verbara runs no hosted service (verbara-meta/PDR-0006). The licence section of `README.md`, which nuget.org shows, and
+Verbara runs no hosted service. The licence section of `README.md`, which nuget.org shows, and
 the Enterprise Extension section of `docs/README-commercial.md` now carry the sentence "Verbara is omnichannel
 contact-center software, licensed for each company to install and operate on its own infrastructure.", and
 `docs/README-commercial.md` addresses "ISVs and software vendors" instead of "ISVs and SaaS providers". No code,
@@ -899,6 +909,12 @@ resolved 10.0.12 before. Pin the patch you want to run; NuGetAudit still warns a
 through a floor. Not breaking: no public API, behaviour or assembly contents change — the code the
 `Microsoft.Extensions.*` source generators emit into the shipped assemblies is the same at 10.0.0 and 10.0.12, the
 packages compile against 10.0.0, and the AOT canary publishes and runs at 10.0.0.
+
+### Changed: `Verbara.Sdk.Push.Nats` declares `NATS.Client.Core >= 3.3.1` (#456)
+
+`Verbara.Sdk.Push.Nats` declared `NATS.Client.Core >= 3.3.0` in 2.8.0 and now declares `>= 3.3.1`. An application
+that pins `NATS.Client.Core` below 3.3.1 raises its pin to restore without a package-downgrade warning. No public
+API or behaviour of the bridge changes.
 
 ### Changed: a public member added to a shipped package fails the build unless its record declares it (#406)
 

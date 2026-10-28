@@ -33,8 +33,9 @@
 // Or over ARI: POST /channels/externalMedia with transport=websocket,
 // encapsulation=none and external_host=media-demo; the key is the channel
 // id the create returns. That connection is plain text unless
-// control_message_format = json is set in chan_websocket.conf, so the
-// SET_MEDIA_DIRECTION demo below skips it.
+// control_message_format = json is set in chan_websocket.conf (read in
+// Asterisk's source, not measured), so the SET_MEDIA_DIRECTION demo below
+// skips it.
 
 using System.Net.WebSockets;
 using Verbara.Sdk;

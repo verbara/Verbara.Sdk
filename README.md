@@ -48,7 +48,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 - **Live API** — Real-time in-memory tracking of channels, queues, agents, and conference rooms from AMI events. Secondary indices for O(1) lookups by name. Observable gauges and event counters via `System.Diagnostics.Metrics`.
 - **Activities** — High-level telephony operations (Dial, Hold, Transfer, Park, Bridge, Conference) modeled as async state machines with `IObservable<ActivityStatus>` tracking. Real cancellation support, re-entrance guards, and channel variable capture (`DIALSTATUS`, `QUEUESTATUS`).
 - **Session Engine** — Correlate AMI events into unified call sessions using LinkedId grouping. `CallSessionState` lifecycle (`Ringing`, `Connected`, `OnHold`, `Transferring`, `Completed`), domain events (`CallStartedEvent`, `CallConnectedEvent`, `CallEndedEvent`), a reconciliation sweep that ends a call whose hangup was lost once Asterisk's channel snapshot no longer lists it, and extension base classes (`CallRouterBase`, `AgentSelectorBase`, `SessionStoreBase`). See [the package README](src/Verbara.Sdk.Sessions/README.md).
-- **Voice AI** — Full stack for AI-powered telephony: PCM audio processing (resampler, VAD, gain), AudioSocket and `chan_websocket` transports with the Asterisk 22/23 JSON control protocol, STT/TTS abstraction layer with pluggable providers (Deepgram, Google, Whisper, Azure Whisper, Cartesia, AssemblyAI, Speechmatics for STT; ElevenLabs Flash 2.5, Deepgram Aura 2, LMNT, Azure, Cartesia, Speechmatics for TTS), `tts.synthesis.ttfa_ms` Time-To-First-Audio metric for latency observability, barge-in pipeline with turn-taking, and a direct OpenAI Realtime API bridge.
+- **Voice AI** — Full stack for AI-powered telephony: PCM audio processing (resampler, VAD, gain), AudioSocket and `chan_websocket` transports with the Asterisk 22/23 control messages (plain text or JSON), STT/TTS abstraction layer with pluggable providers (Deepgram, Google, Whisper, Azure Whisper, Cartesia, AssemblyAI, Speechmatics for STT; ElevenLabs Flash 2.5, Deepgram Aura 2, LMNT, Azure, Cartesia, Speechmatics for TTS), `tts.synthesis.ttfa_ms` Time-To-First-Audio metric for latency observability, barge-in pipeline with turn-taking, and a direct OpenAI Realtime API bridge.
 - **Config Parser** — Read and parse Asterisk `.conf` files and `extensions.conf` dialplans. Quote-aware comment stripping.
 - **Hosting** — `IHostedService` for AMI and Live API lifecycle. `IHealthCheck` for AMI connection state. AOT-safe `IConfiguration` binding.
 - **Native AOT** — Zero reflection at runtime. Four source generators replace runtime code generation. 0 trim warnings.
@@ -58,11 +58,11 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Status
 
-**v2.8.0** — 29 NuGet packages, 0 build warnings, 0 trim warnings, ~2,924 unit tests + 154 functional + 65 integration (Testcontainers).
+**v2.8.0** — 29 NuGet packages, 0 build warnings, 0 trim warnings, more than 7,400 unit tests, plus functional and integration suites against a real Asterisk (Testcontainers).
 
 Release history — every version, with what changed and why — is in [`CHANGELOG.md`](CHANGELOG.md). It is not restated here: a second copy in the README is one nobody updates, and this block had drifted three releases behind before anyone noticed.
 
-API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 243 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` JSON control protocol both supported. Compatible with **Asterisk 18, 20, 22 LTS, and 23 Standard** — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for lifecycle and break-change risk areas.
+API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 243 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` control messages (plain text or JSON) both supported. Supported: **Asterisk 22 LTS** (primary) and **23 Standard** (secondary, until its end of life on 2027-10-15); 24 LTS becomes primary once it is generally available and in CI, and 20 and earlier are not supported — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for the policy, CI coverage and lifecycle.
 
 ---
 
@@ -75,7 +75,7 @@ API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%),
 | High-load tuning (10K / 100K agents) | [docs/guides/high-load-tuning.md](docs/guides/high-load-tuning.md) |
 | Session store backends (InMemory / Redis / Postgres) | [docs/guides/session-store-backends.md](docs/guides/session-store-backends.md) |
 | Troubleshooting (connection, auth, events, tracing) | [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md) |
-| Asterisk 18/20/22/23 version compatibility | [docs/guides/asterisk-version-compatibility.md](docs/guides/asterisk-version-compatibility.md) |
+| Asterisk version compatibility: events, fields and version-specific behaviour | [docs/guides/asterisk-version-compatibility.md](docs/guides/asterisk-version-compatibility.md) |
 | Asterisk Realtime (ODBC) setup | [docs/guides/manual-asterisk-realtime-setup.md](docs/guides/manual-asterisk-realtime-setup.md) |
 | Benchmarks (AMD Ryzen 9 9900X, .NET 10) | [Tests/Verbara.Sdk.Benchmarks/README.md](Tests/Verbara.Sdk.Benchmarks/README.md) |
 | Release notes | [CHANGELOG.md](CHANGELOG.md) |
@@ -152,7 +152,7 @@ The `Verbara.Sdk.Hosting` meta-package includes all core sub-packages and DI ext
 
 ## Quick Start
 
-**First contact in 10 lines.** Create a new console app, install `Verbara.Sdk.Hosting`, and drop the snippet below into `Program.cs` — on start it connects to your Asterisk over AMI, exposes a `/health` endpoint, and auto-disconnects on shutdown.
+**First contact in 15 lines.** Create a new console app, install `Verbara.Sdk.Hosting`, and drop the snippet below into `Program.cs` — on start it connects to your Asterisk over AMI, registers the SDK's health checks, and auto-disconnects on shutdown.
 
 ```csharp
 using Verbara.Sdk.Hosting;
@@ -169,7 +169,7 @@ builder.Services.AddVerbara(options =>
 var host = builder.Build();
 await host.RunAsync();
 // AMI connects on start, disconnects on shutdown via IHostedService.
-// Health check available at /health for K8s probes.
+// Health checks registered; an ASP.NET Core host serves them with MapHealthChecks("/health").
 ```
 
 Need a full runnable example (including `appsettings.json` config and event subscriptions)? Jump to **[Examples/BasicAmiExample/](Examples/BasicAmiExample/)** — it's the fastest path to a "working demo on your machine" with Docker-backed Asterisk 23.
@@ -456,7 +456,7 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 |---------|-------------|
 | **Verbara.Sdk.Audio** | Polyphase FIR resampler, VAD, PCM16 processing — zero dependencies |
 | **Verbara.Sdk.VoiceAi** | Pipeline orchestration (`VoiceAiPipeline`), `ISessionHandler`, `IConversationHandler`, `ITurnDetector` (pluggable turn detection) |
-| **Verbara.Sdk.VoiceAi.AudioSocket** | AudioSocket + `chan_websocket` (JSON control protocol) servers with `System.IO.Pipelines` bidirectional streaming |
+| **Verbara.Sdk.VoiceAi.AudioSocket** | AudioSocket + `chan_websocket` (plain-text and JSON control messages) servers with `System.IO.Pipelines` bidirectional streaming |
 | **Verbara.Sdk.VoiceAi.Stt** | STT providers: AssemblyAI, Cartesia (Ink-Whisper), Deepgram, Google Speech, Speechmatics, Whisper (cloud REST), Azure Whisper |
 | **Verbara.Sdk.VoiceAi.Tts** | TTS providers: ElevenLabs (Flash 2.5), Azure, Cartesia (Sonic-3), Speechmatics, Deepgram (Aura 2 WS), LMNT (WS+HTTP; vendor shut down). Vendor-published latencies, cited and dated, are in that package's README |
 | **Verbara.Sdk.VoiceAi.OpenAiRealtime** | OpenAI Realtime API bridge (default model `gpt-realtime`): dual-loop WebSocket, function calling, observability events |
@@ -494,7 +494,7 @@ The `Examples/` directory contains standalone console applications demonstrating
 | `VoiceAiSpeechmaticsExample` | Voice AI with Speechmatics STT provider |
 | `VoiceAiCustomProviderExample` | Custom VoiceAi provider implementation pattern |
 | `OpenAiRealtimeExample` | Direct speech-to-speech bridge via OpenAI Realtime API with function calling |
-| `WebSocketMediaExample` | chan_websocket audio + JSON control protocol |
+| `WebSocketMediaExample` | chan_websocket audio + control messages (plain text or JSON) |
 | `TelemetryExample` | OpenTelemetry discovery: ActivitySources, Meters, HealthChecks |
 | `PbxAdmin` | _(Moved to [own repo](https://github.com/verbara/Verbara.Sdk.PbxAdmin))_ |
 
@@ -521,7 +521,7 @@ composable NuGet packages for clustering, outbound campaigns, event sourcing, an
 ## Requirements
 
 - **.NET 10.0** or later
-- **Asterisk 18+** (tested with Asterisk 18, 20, 22, and 23)
+- **Asterisk 22 LTS or 23 Standard** (CI runs both; see the [version support matrix](docs/guides/asterisk-version-matrix.md))
 
 ---
 
