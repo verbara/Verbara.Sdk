@@ -61,7 +61,9 @@ public sealed class MeetMeManager
     private readonly HashSet<ConferenceSnapshotWindow> _openWindows = [];
 
     // Every event this manager raises, posted under the room lock of its transition and raised once _windowGate is
-    // released, so a handler may wait for another thread that calls into this manager.
+    // released, so a handler may wait for another thread that calls into this manager. An event no handler is
+    // subscribed to is not posted; the drains stay unconditional, since an earlier call of this thread that threw
+    // between its post and its drain leaves notifications the next drain raises.
     private readonly LiveEventOutbox _events;
 
     private void RaisePending()
@@ -176,7 +178,11 @@ public sealed class MeetMeManager
             {
                 room.Users[channel] = user;
                 MeetMeManagerLog.UserJoined(_logger, roomNumber, channel, userNum);
-                _events.Post(() => UserJoined?.Invoke(room, user));
+                if (UserJoined is not null)
+                {
+                    _events.Post(static (m, r, u) => ((MeetMeManager)m).UserJoined?.Invoke((MeetMeRoom)r!, (MeetMeUser)u!),
+                        this, room, user);
+                }
             }
         }
         RaisePending();
@@ -214,7 +220,7 @@ public sealed class MeetMeManager
                     user.State = MeetMeUserState.Left;
                     RemoveIfEmpty(room);
                     MeetMeManagerLog.UserLeft(_logger, roomNumber, user.Channel, user.UserNum);
-                    _events.Post(() => UserLeft?.Invoke(room, user));
+                    PostUserLeft(room, user);
                 }
             }
         }
@@ -304,8 +310,22 @@ public sealed class MeetMeManager
             MeetMeManagerLog.UserTalking(_logger, room.RoomNumber, user.Channel, value, changed);
         }
 
-        if (changed)
-            _events.Post(() => UserStateChanged?.Invoke(room, user));
+        if (changed && UserStateChanged is not null)
+        {
+            _events.Post(static (m, r, u) => ((MeetMeManager)m).UserStateChanged?.Invoke((MeetMeRoom)r!, (MeetMeUser)u!),
+                this, room, user);
+        }
+    }
+
+    // Posted under the room lock of the leave. Queued only when a handler is subscribed; the raise reads the handler
+    // list again, so one unsubscribed in between is not called.
+    private void PostUserLeft(MeetMeRoom room, MeetMeUser user)
+    {
+        if (UserLeft is not null)
+        {
+            _events.Post(static (m, r, u) => ((MeetMeManager)m).UserLeft?.Invoke((MeetMeRoom)r!, (MeetMeUser)u!),
+                this, room, user);
+        }
     }
 
     /// <summary>
@@ -361,7 +381,7 @@ public sealed class MeetMeManager
                 foreach (var user in departed)
                 {
                     MeetMeManagerLog.UserLeft(_logger, roomNumber, user.Channel, user.UserNum);
-                    _events.Post(() => UserLeft?.Invoke(room, user));
+                    PostUserLeft(room, user);
                 }
             }
         }
@@ -494,7 +514,7 @@ public sealed class MeetMeManager
                             RemoveIfEmpty(room);
                             MeetMeManagerLog.UserRemovedBySnapshot(_logger, room.RoomNumber, held.Channel);
                             removed++;
-                            _events.Post(() => UserLeft?.Invoke(room, held));
+                            PostUserLeft(room, held);
                         }
                     }
                 }

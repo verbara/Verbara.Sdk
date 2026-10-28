@@ -16,7 +16,7 @@ public sealed class ChannelManagerAllocationTests
     private const int WarmUpRounds = 3;
 
     // One queued entry, one drain frame and the two execution-context copies the drain's frame switch makes
-    // (168 bytes on .NET 10), with slack for that copy's size across runtime versions. A capturing lambda per
+    // (176 bytes on .NET 10), with slack for that copy's size across runtime versions. A capturing lambda per
     // change (the smallest regression of this kind) lands above it.
     private const int ObservedEventBound = 200;
 
