@@ -54,10 +54,12 @@ public sealed class AudioServerOptions
     /// </para>
     /// <para>
     /// <see cref="TimeSpan.Zero"/> means no wait: every connection is announced at once under its path segment,
-    /// and a <c>MEDIA_START</c> it sends later does not change its key. It is the setting for a client that never
-    /// sends <c>MEDIA_START</c>. A negative or infinite value, or one longer than a timer can be armed for, is
-    /// refused when the server starts, with <see cref="ArgumentOutOfRangeException"/>. While a connection waits
-    /// it holds its place under <see cref="MaxConcurrentStreams"/>, and it is neither listed, counted nor found.
+    /// and a <c>MEDIA_START</c> it sends later does not change its key. Until that later <c>MEDIA_START</c> is read the
+    /// stream's control format is not known, and <see cref="IChanWebSocketSession.SendMarkAsync"/> and
+    /// <see cref="IChanWebSocketSession.SendSetMediaDirectionAsync"/> throw <see cref="InvalidOperationException"/>. It is
+    /// the setting for a client that never sends <c>MEDIA_START</c>. A negative or infinite value, or one longer than a
+    /// timer can be armed for, is refused when the server starts, with <see cref="ArgumentOutOfRangeException"/>. While a
+    /// connection waits it holds its place under <see cref="MaxConcurrentStreams"/>, and it is neither listed, counted nor found.
     /// </para>
     /// </remarks>
     public TimeSpan MediaStartTimeout { get; set; } = TimeSpan.FromSeconds(2);

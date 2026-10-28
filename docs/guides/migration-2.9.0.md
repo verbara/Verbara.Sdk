@@ -23,9 +23,9 @@ says:
   one exists.
 
 Four entries only add warnings (`VSDK0005`, `VSDK0003`, `VSDK0002` and `VSDK0006`). They break nothing unless you build with
-`TreatWarningsAsErrors`. Two stop compiling where you use them. The other eighteen change no existing signature, but
+`TreatWarningsAsErrors`. Two stop compiling where you use them. The other twenty change no existing signature, but
 change behaviour a program can branch on, a published metric, or a health status; two of them also refuse some
-configuration values at start-up.
+configuration values at start-up, and one, `VSDK0004`, also adds warnings.
 
 | Package | Change | Kind |
 |---|---|---|
@@ -46,6 +46,8 @@ configuration values at start-up.
 | `Verbara.Sdk.Activities` | [An activity ends `Cancelled` only when someone asked it to stop](#an-activity-ends-cancelled-only-when-asked-to-stop) | behaviour |
 | `Verbara.Sdk.Activities` | [An attended transfer Asterisk refuses ends `Failed`](#a-refused-attended-transfer-ends-failed) | behaviour |
 | `Verbara.Sdk.Ari` | [A WebSocket stream is found by the call it names](#a-websocket-stream-is-found-by-the-call-it-names) | behaviour, start-up validation |
+| `Verbara.Sdk.Ari` | [chan_websocket control messages are read and written as Asterisk sends them](#chan_websocket-control-messages-are-read-and-written-as-asterisk-sends-them) | behaviour |
+| `Verbara.Sdk.Ari` | [`SendXonAsync`, `SendXoffAsync` and three chan_websocket members warn `VSDK0004`](#sendxonasync-sendxoffasync-and-three-chan_websocket-members-warn-vsdk0004) | behaviour, warning |
 | `Verbara.Sdk.Ari` | [`AudioStreamMetrics.BufferUnderruns` warns `VSDK0003`](#audiostreammetricsbufferunderruns-warns-vsdk0003) | warning |
 | `Verbara.Sdk.VoiceAi`, `VoiceAi.OpenAiRealtime` | [A cancelled voice session is counted cancelled](#a-cancelled-voice-session-is-counted-cancelled) | metric meaning |
 | `Verbara.Sdk.VoiceAi.Stt` | [A Deepgram message the recognizer cannot read no longer ends the recognition](#a-deepgram-message-the-recognizer-cannot-read-no-longer-ends-the-recognition) | behaviour |
@@ -457,6 +459,88 @@ var options = new Verbara.Sdk.Ari.Audio.AudioServerOptions { MediaStartTimeout =
 ```
 
 See [the externalMedia channel id guide](externalmedia-channel-id-migration.md).
+
+### chan_websocket control messages are read and written as Asterisk sends them
+
+**What changed.** A chan_websocket session reads the control messages Asterisk sends in the format the connection
+uses: plain-text lines, Asterisk's default, or JSON objects with `f(json)` or `control_message_format = json`. 2.8.x
+read only a JSON shape no Asterisk sends, so `ControlMessages` stayed silent; it now publishes `ChanWebSocketDtmf`,
+`ChanWebSocketMediaXoff`, `ChanWebSocketMediaXon`, `ChanWebSocketMediaMarkProcessed`, the new `ChanWebSocketError`,
+and `ChanWebSocketUnknownMessage` for a message the SDK does not model. The connection's `MEDIA_START` is never
+published: it is `IChanWebSocketSession.MediaStart`, and its `ControlMessageFormat` is the format the connection
+negotiated. The commands follow it:
+
+- `SendMarkAsync` writes `MARK_MEDIA` in the connection's format, which Asterisk acts on; 2.8.x wrote a JSON object
+  Asterisk ignored. A mark whose command would exceed 128 bytes (117 bytes of mark in plain text, 84 in JSON) now
+  throws `ArgumentOutOfRangeException` instead of being written and dropped; shorten the mark — no Asterisk version
+  acted on the longer one.
+- Before the connection's `MEDIA_START` has been read (`MediaStart` is `null`: a stream announced under
+  `MediaStartTimeout = TimeSpan.Zero`, or before a late first frame) `SendMarkAsync` and `SendSetMediaDirectionAsync`
+  now throw `InvalidOperationException` instead of writing a command in a guessed format; keep the default
+  `MediaStartTimeout`, or call once `MediaStart` is set.
+- `SendSetMediaDirectionAsync` writes only on a JSON connection, the one format Asterisk accepts the command in, and
+  throws `InvalidOperationException` on a plain-text one, where 2.8.x wrote JSON Asterisk ignored: set
+  `control_message_format = json` in `chan_websocket.conf` for a channel the SDK creates (read in Asterisk's source,
+  not measured), or add `f(json)` to a dial string you write.
+- `ChanWebSocketControlMessageSerializer.Serialize` / `SerializeToUtf8Bytes` now take the connection's format
+  (`ChanWebSocketControlMessageFormat.PlainText` or `.Json`, read from `MediaStart.ControlMessageFormat`) and write the
+  command Asterisk acts on; the format-less overloads write the JSON form. They throw `NotSupportedException` for a
+  record Asterisk sends (`ChanWebSocketDtmf`, `ChanWebSocketMediaXon`, …) and for `ChanWebSocketSetMediaDirection` in
+  plain text — to log a received record, use its `ToString()`. `Deserialize` reads a frame as Asterisk sends it, in
+  either format, and no longer reads the `kind` JSON of 2.8.x: that input now reads as the generic record.
+
+**Who is affected.** Code that subscribes to `ControlMessages` (it starts receiving messages), matches
+`ChanWebSocketMediaStart` there (read `MediaStart` instead), calls `SendMarkAsync` or `SendSetMediaDirectionAsync`, or
+calls `ChanWebSocketControlMessageSerializer` directly.
+
+**What to do.** Read the connection's format from `MediaStart` before a command that exists only in JSON:
+
+```csharp
+using Verbara.Sdk.Ari.Audio;
+
+static async Task SetBothWaysAsync(IChanWebSocketSession ws)
+{
+    // Set once the connection's MEDIA_START has been read; Json is the only format with SET_MEDIA_DIRECTION.
+    if (ws.MediaStart?.ControlMessageFormat == ChanWebSocketControlMessageFormat.Json)
+        await ws.SendSetMediaDirectionAsync(ChanWebSocketMediaDirection.Both);
+}
+```
+
+A serializer call names the format: `ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, format)`.
+
+No separate guide; the chan_websocket section of
+[the externalMedia channel id guide](externalmedia-channel-id-migration.md#the-websocket-transport) has the rest.
+
+### `SendXonAsync`, `SendXoffAsync` and three chan_websocket members warn `VSDK0004`
+
+**What changed.** Five members of the chan_websocket surface have no counterpart on the wire, so each is now
+`[Obsolete]` with diagnostic id `VSDK0004`. Nothing is removed. `SendXonAsync` and `SendXoffAsync` now throw
+`NotSupportedException`: Asterisk has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2,
+23.6.0-rc2 and 24.0.0-rc2; `command unknown`, no reply). The other three hold what they held in practice:
+
+| Member | Why | Read instead |
+|---|---|---|
+| `ChanWebSocketHangup` | Never published: Asterisk ends a call with a WebSocket close frame | the ending on `IAudioStream.StateChanges` |
+| `ChanWebSocketMediaBuffering` | Never published: no message reports a buffer fill | `ChanWebSocketMediaXoff` / `ChanWebSocketMediaXon` on `ControlMessages` |
+| `ChanWebSocketDtmf.DurationMs` | Always 0: `DTMF_END` carries the digit and the channel id only | `ChannelDtmfReceivedEvent.DurationMs` (ARI, of the bridged peer channel; seen when the peer is in Stasis or the application subscribes to all) or `DtmfEndEvent.DurationMs` (AMI, on the peer) |
+
+**Who is affected.** Code that uses any of the five (for `DurationMs`, a read of the property; its constructor
+parameter does not warn) and builds with `TreatWarningsAsErrors`: it gets `error VSDK0004`. Code that calls `SendXonAsync` or `SendXoffAsync` gets `NotSupportedException` at run time.
+
+**What to do.** Remove the call; flow control arrives from Asterisk as `ChanWebSocketMediaXoff` /
+`ChanWebSocketMediaXon` on `ControlMessages`. Move the other three to what the table names. Until then, silence this
+deprecation alone:
+
+```xml
+<PropertyGroup>
+  <NoWarn>$(NoWarn);VSDK0004</NoWarn>
+</PropertyGroup>
+```
+
+A `JsonSerializerContext` of your own that lists `ChanWebSocketDtmf`, `ChanWebSocketHangup` or
+`ChanWebSocketMediaBuffering` in a `[JsonSerializable]` row gets `VSDK0004` in its generated metadata as well, where no
+pragma can go; the `NoWarn` above is the remedy there. The SDK's own context keeps its rows and silences the id only in
+the generator's output, never for hand-written code.
 
 ### `AudioStreamMetrics.BufferUnderruns` warns `VSDK0003`
 

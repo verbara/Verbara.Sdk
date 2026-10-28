@@ -53,8 +53,8 @@ internal readonly record struct WebSocketFirstFrame(WebSocketFirstFrameKind Kind
 /// <c>audio.transport=websocket</c>: the stream opened at its start and closed at its one ending, the
 /// non-empty binary messages and their payload bytes received and sent, the time from receipt to the
 /// consumer's read, and a transport failure under a live session. It records no hangup or error frames:
-/// those instruments count AudioSocket frames; chan_websocket ends a call with a close frame, and its <c>ERROR</c> is a
-/// control message.
+/// those instruments count AudioSocket frames. On chan_websocket a hangup is the peer's close frame, which ends the
+/// session, and its <c>ERROR</c> is a control message.
 /// </remarks>
 internal sealed class WebSocketAudioSession : IChanWebSocketSession
 {

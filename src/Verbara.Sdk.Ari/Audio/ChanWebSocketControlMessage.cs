@@ -3,17 +3,23 @@ using System.Text.Json.Serialization;
 namespace Verbara.Sdk.Ari.Audio;
 
 /// <summary>
-/// Base type for all chan_websocket text-frame control messages (Asterisk 22.8 / 23.2+).
-/// The concrete type is discriminated by the <c>kind</c> JSON property.
+/// Base type for the chan_websocket text-frame control messages (Asterisk 22.8 / 23.2+): the messages Asterisk sends,
+/// read in the format it sends them, and the two commands it acts on.
 /// </summary>
 /// <remarks>
 /// chan_websocket sends two kinds of WebSocket frames on the consumer's server:
 /// <list type="bullet">
 ///   <item>Binary frames: raw audio payload (slin16, ulaw, alaw, ...).</item>
-///   <item>Text frames: JSON control messages modeled by this type hierarchy.</item>
+///   <item>
+///   Text frames: control messages in the connection's control format, fixed per channel
+///   (<see cref="ChanWebSocketControlMessageFormat"/>): plain-text <c>EVENT key:value …</c> lines by default, or JSON
+///   objects named by <c>event</c> with <c>f(json)</c> or <c>control_message_format = json</c>. Both formats were
+///   captured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2.
+///   </item>
 /// </list>
-/// Serialization is performed through <see cref="ChanWebSocketJsonContext"/> (source-generated)
-/// to remain Native AOT-safe with zero runtime reflection.
+/// <see cref="ChanWebSocketControlMessageSerializer"/> reads and writes them, with no runtime reflection. The
+/// <c>kind</c> polymorphism attributes on this type are 2.8.0's shape, kept so nothing shipped is removed; no Asterisk
+/// frame carries a <c>kind</c> property.
 /// </remarks>
 [JsonPolymorphic(
     TypeDiscriminatorPropertyName = "kind",
@@ -66,7 +72,10 @@ public sealed record ChanWebSocketMediaStart(
     [JsonIgnore]
     public string? ConnectionId { get; init; }
 
-    /// <summary>The frame's <c>channel</c>: the Asterisk channel name, <c>WebSocket/&lt;connection_id&gt;/0x…</c>.</summary>
+    /// <summary>
+    /// The frame's <c>channel</c>: the Asterisk channel name (<c>WebSocket/&lt;connection_id&gt;/0x…</c>), the one
+    /// Asterisk's log lines and AMI <c>Channel:</c> headers carry; <see cref="ChannelId"/> is the uniqueid.
+    /// </summary>
     [JsonIgnore]
     public string? Channel { get; init; }
 
@@ -87,18 +96,24 @@ public sealed record ChanWebSocketMediaStart(
     public bool? Unbuffered { get; init; }
 
     /// <summary>
-    /// The JSON frame's <c>channel_variables</c>: exactly the members sent, keys compared ordinally, a value that is not
-    /// a JSON string kept as its raw JSON text. <see langword="null"/> on a plain-text connection, which does not send them.
+    /// The JSON frame's <c>channel_variables</c>: the WebSocket channel's variables when Asterisk built the frame,
+    /// exactly the members sent, keys compared ordinally, a value that is not a JSON string kept as its raw JSON text.
+    /// JSON only: <see langword="null"/> on a plain-text connection, which does not send them.
     /// </summary>
+    /// <remarks>
+    /// The values come from the dialplan and from the peer, so the SDK never logs them. To pass data to the stream, set
+    /// an inherited variable before <c>Dial(WebSocket/…)</c>, or <c>variables</c> on an ARI <c>externalMedia</c> you
+    /// create outside the SDK.
+    /// </remarks>
     [JsonIgnore]
     public IReadOnlyDictionary<string, string>? ChannelVariables { get; init; }
 
     /// <summary>
-    /// The control-message format the frame arrived in, derived from its grammar, not read from a field:
-    /// <see cref="ChanWebSocketControlMessageFormat.Json"/> for a JSON object, <see cref="ChanWebSocketControlMessageFormat.PlainText"/>
-    /// for a plain-text line. On the connection's first <c>MEDIA_START</c> it is the format the connection negotiated, the
-    /// one every command the session writes is in. <see cref="ChanWebSocketControlMessageFormat.PlainText"/>, Asterisk's
-    /// default, on a record built without it.
+    /// The format this frame arrived in — <see cref="ChanWebSocketControlMessageFormat.Json"/> for a JSON object,
+    /// <see cref="ChanWebSocketControlMessageFormat.PlainText"/> for a plain-text line — derived from the frame, never read
+    /// from a field, as <see cref="Rate"/> is derived from <see cref="Format"/>. It is the connection's control-message
+    /// format, in which every command is written; not the audio format, which is <see cref="Format"/>.
+    /// <see cref="ChanWebSocketControlMessageFormat.PlainText"/> on a record built without it.
     /// </summary>
     [JsonIgnore]
     public ChanWebSocketControlMessageFormat ControlMessageFormat { get; init; }
@@ -106,20 +121,28 @@ public sealed record ChanWebSocketMediaStart(
 
 /// <summary>
 /// Inbound. <c>MEDIA_XOFF</c>: Asterisk's queue of audio from the SDK is full; it sends it unprompted under pressure.
+/// Captured in both control formats on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2.
 /// </summary>
 public sealed record ChanWebSocketMediaXoff : ChanWebSocketControlMessage
 {
-    /// <summary>The JSON frame's <c>channel_id</c>; <see langword="null"/> in plain text, where the frame is bare.</summary>
+    /// <summary>
+    /// The JSON <c>channel_id</c>; <see langword="null"/> on a plain-text connection, where the frame is bare. Equals the
+    /// session's <see cref="IAudioStream.ChannelId"/> on a named session.
+    /// </summary>
     [JsonIgnore]
     public string? ChannelId { get; init; }
 }
 
 /// <summary>
 /// Inbound. <c>MEDIA_XON</c>: Asterisk's queue of audio from the SDK has drained below its resume level.
+/// Captured in both control formats on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2.
 /// </summary>
 public sealed record ChanWebSocketMediaXon : ChanWebSocketControlMessage
 {
-    /// <summary>The JSON frame's <c>channel_id</c>; <see langword="null"/> in plain text, where the frame is bare.</summary>
+    /// <summary>
+    /// The JSON <c>channel_id</c>; <see langword="null"/> on a plain-text connection, where the frame is bare. Equals the
+    /// session's <see cref="IAudioStream.ChannelId"/> on a named session.
+    /// </summary>
     [JsonIgnore]
     public string? ChannelId { get; init; }
 }
@@ -147,8 +170,9 @@ public sealed record ChanWebSocketMediaXon : ChanWebSocketControlMessage
 public sealed record ChanWebSocketMediaBuffering(int Bytes) : ChanWebSocketControlMessage;
 
 /// <summary>
-/// Inbound. Acknowledges that a previously-sent <see cref="ChanWebSocketMarkMedia"/>
-/// has been processed by Asterisk's playback pipeline.
+/// Inbound. <c>MEDIA_MARK_PROCESSED</c>: acknowledges that a previously-sent <see cref="ChanWebSocketMarkMedia"/>
+/// has been processed by Asterisk's playback pipeline. Captured in both control formats on 22.10.1, 23.4.1,
+/// 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2.
 /// </summary>
 /// <param name="Mark">
 /// The correlation id Asterisk echoes: the value after the event name in plain text, <c>correlation_id</c> in JSON;
@@ -156,20 +180,25 @@ public sealed record ChanWebSocketMediaBuffering(int Bytes) : ChanWebSocketContr
 /// </param>
 public sealed record ChanWebSocketMediaMarkProcessed(string Mark) : ChanWebSocketControlMessage
 {
-    /// <summary>The JSON frame's <c>channel_id</c>; <see langword="null"/> in plain text, where the frame is bare.</summary>
+    /// <summary>
+    /// The JSON <c>channel_id</c>; <see langword="null"/> on a plain-text connection, where the frame is bare. Equals the
+    /// session's <see cref="IAudioStream.ChannelId"/> on a named session.
+    /// </summary>
     [JsonIgnore]
     public string? ChannelId { get; init; }
 }
 
 /// <summary>
-/// Inbound. A DTMF digit was detected on the Asterisk side.
+/// Inbound. <c>DTMF_END</c>: a DTMF digit was detected on the Asterisk side. Captured in both control formats on
+/// 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2.
 /// </summary>
 /// <param name="Digit">The DTMF digit (<c>0</c>-<c>9</c>, <c>*</c>, <c>#</c>, <c>A</c>-<c>D</c>).</param>
 /// <param name="DurationMs">
 /// Always 0: chan_websocket's <c>DTMF_END</c> carries <c>digit</c> and <c>channel_id</c> only, on every supported version
 /// and in both control formats (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2). Read the duration
 /// from the ARI <c>ChannelDtmfReceived</c> event of the bridged peer channel that received the digit
-/// (<c>ChannelDtmfReceivedEvent.DurationMs</c>) or from AMI <c>DTMFEnd</c> on that peer (<c>DtmfEndEvent.DurationMs</c>).
+/// (<c>ChannelDtmfReceivedEvent.DurationMs</c>; seen when the peer is in Stasis or the application subscribes to all) or
+/// from AMI <c>DTMFEnd</c> on that peer (<c>DtmfEndEvent.DurationMs</c>), never from the WebSocket channel's.
 /// </param>
 /// <remarks>
 /// <para>
@@ -196,8 +225,9 @@ public sealed record ChanWebSocketDtmf(
 }
 
 /// <summary>
-/// Inbound. <c>ERROR</c>: Asterisk refused a command the SDK sent, for a reason only it decides (a passthrough
-/// connection, or media direction <c>in</c>).
+/// Inbound. <c>ERROR</c>: Asterisk refused a command the SDK sent, for a reason only it decides (a mark on a
+/// passthrough connection on 22.10.1/23.4.1, or while the media direction is <c>in</c>). Captured in both control formats on 22.10.1, 23.4.1, 22.12.0-rc2,
+/// 23.6.0-rc2 and 24.0.0-rc2.
 /// </summary>
 /// <param name="ChannelId">The frame's <c>channel_id</c>: the call whose command was refused.</param>
 /// <param name="ErrorText">The frame's <c>error_text</c>, verbatim, including a trailing newline where Asterisk sends one.</param>
@@ -241,15 +271,22 @@ public sealed record ChanWebSocketHangup(string? Cause) : ChanWebSocketControlMe
 // ---------------------------------------------------------------------------
 
 /// <summary>
-/// Outbound. Tag a position in the outbound audio stream. Asterisk will reply with
-/// a <see cref="ChanWebSocketMediaMarkProcessed"/> once the marker reaches playback.
+/// Outbound. <c>MARK_MEDIA</c>: tag a position in the outbound audio stream, written by
+/// <see cref="IChanWebSocketSession.SendMarkAsync"/>. For a mark that was written, Asterisk replies with a
+/// <see cref="ChanWebSocketMediaMarkProcessed"/> when the marker reaches playback, or with a
+/// <see cref="ChanWebSocketError"/> in passthrough mode (22.10.1/23.4.1) or while the media direction is <c>in</c>.
 /// Useful for synchronising application events with audio playout (e.g. barge-in).
 /// </summary>
-/// <param name="Mark">Opaque marker string correlating request and acknowledgement.</param>
+/// <param name="Mark">
+/// Opaque marker string correlating request and acknowledgement. The whole command must fit
+/// <see cref="ChanWebSocketControlMessageSerializer.MaxCommandBytes"/>; see
+/// <see cref="IChanWebSocketSession.SendMarkAsync"/>.
+/// </param>
 public sealed record ChanWebSocketMarkMedia(string Mark) : ChanWebSocketControlMessage;
 
 /// <summary>
-/// Outbound. Change the media direction of the chan_websocket channel (Asterisk 23.3+).
+/// Outbound. <c>SET_MEDIA_DIRECTION</c>: change the media direction of the chan_websocket channel, written by
+/// <see cref="IChanWebSocketSession.SendSetMediaDirectionAsync"/>. JSON only: Asterisk has no plain-text form of it.
 /// </summary>
 /// <param name="Direction">The desired media direction: <c>in</c>, <c>out</c>, or <c>both</c>.</param>
 public sealed record ChanWebSocketSetMediaDirection(ChanWebSocketMediaDirection Direction)

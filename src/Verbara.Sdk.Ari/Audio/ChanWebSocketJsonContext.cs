@@ -6,13 +6,14 @@ using System.Text.Json.Serialization;
 namespace Verbara.Sdk.Ari.Audio;
 
 /// <summary>
-/// Source-generated JSON context for chan_websocket control-message serialization.
+/// Source-generated JSON metadata for the chan_websocket control-message records, shipped in 2.8.0.
 /// Zero runtime reflection — safe under Native AOT and aggressive trimming.
 /// </summary>
 /// <remarks>
-/// Polymorphic dispatch uses the <c>kind</c> discriminator declared on
-/// <see cref="ChanWebSocketControlMessage"/>. Property names are emitted/parsed in
-/// <c>snake_case_lower</c> to match Asterisk's on-the-wire convention.
+/// The context still serves its <see cref="System.Text.Json.Serialization.Metadata.JsonTypeInfo"/> getters, kept so
+/// nothing shipped is removed, for an application that serializes the records itself (for example to store or log
+/// them). Their shape is the SDK's own, not Asterisk's: no Asterisk frame looks like it. The SDK reads and writes the wire
+/// through <see cref="ChanWebSocketControlMessageSerializer"/>, which does not use this context.
 /// </remarks>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
@@ -37,8 +38,8 @@ namespace Verbara.Sdk.Ari.Audio;
 public sealed partial class ChanWebSocketJsonContext : JsonSerializerContext;
 
 /// <summary>
-/// Writes the commands chan_websocket acts on, in a named control-message format, and reads a text frame as Asterisk
-/// sends it.
+/// Writes the two commands Asterisk acts on, in the format the connection negotiated, and reads a text frame as
+/// Asterisk sends it, in either format; the session is the writer — see <see cref="IChanWebSocketSession"/>.
 /// </summary>
 /// <remarks>
 /// The writer has two commands, in the spelling captured from Asterisk 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and
@@ -54,22 +55,44 @@ public static class ChanWebSocketControlMessageSerializer
     /// </summary>
     public const int MaxCommandBytes = 128;
 
-    /// <summary>Writes the JSON form of a command: <see cref="Serialize(ChanWebSocketControlMessage, ChanWebSocketControlMessageFormat)"/> with <see cref="ChanWebSocketControlMessageFormat.Json"/>, the one format in which every command exists.</summary>
+    /// <summary>
+    /// Writes the JSON command form, the one format in which every command exists:
+    /// <see cref="Serialize(ChanWebSocketControlMessage, ChanWebSocketControlMessageFormat)"/> with
+    /// <see cref="ChanWebSocketControlMessageFormat.Json"/>. The session writes in the connection's format
+    /// (<see cref="ChanWebSocketMediaStart.ControlMessageFormat"/> of <see cref="IChanWebSocketSession.MediaStart"/>) — name
+    /// it with the overload.
+    /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException"><paramref name="message"/> is a record Asterisk sends, which has no command form.</exception>
     public static string Serialize(ChanWebSocketControlMessage message)
         => Serialize(message, ChanWebSocketControlMessageFormat.Json);
 
-    /// <summary>Writes the JSON form of a command as UTF-8: <see cref="SerializeToUtf8Bytes(ChanWebSocketControlMessage, ChanWebSocketControlMessageFormat)"/> with <see cref="ChanWebSocketControlMessageFormat.Json"/>.</summary>
+    /// <summary>
+    /// Writes the JSON command form as UTF-8, the one format in which every command exists:
+    /// <see cref="SerializeToUtf8Bytes(ChanWebSocketControlMessage, ChanWebSocketControlMessageFormat)"/> with
+    /// <see cref="ChanWebSocketControlMessageFormat.Json"/>. The session writes in the connection's format
+    /// (<see cref="ChanWebSocketMediaStart.ControlMessageFormat"/> of <see cref="IChanWebSocketSession.MediaStart"/>) — name
+    /// it with the overload.
+    /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException"><paramref name="message"/> is a record Asterisk sends, which has no command form.</exception>
     public static byte[] SerializeToUtf8Bytes(ChanWebSocketControlMessage message)
         => SerializeToUtf8Bytes(message, ChanWebSocketControlMessageFormat.Json);
 
-    /// <summary>Writes a command in <paramref name="format"/>: the UTF-8 form of <see cref="SerializeToUtf8Bytes(ChanWebSocketControlMessage, ChanWebSocketControlMessageFormat)"/>, decoded.</summary>
+    /// <summary>
+    /// Writes a command in <paramref name="format"/>, as the UTF-8 form of
+    /// <see cref="SerializeToUtf8Bytes(ChanWebSocketControlMessage, ChanWebSocketControlMessageFormat)"/> decodes:
+    /// <see cref="ChanWebSocketMarkMedia"/> as <c>MARK_MEDIA &lt;mark&gt;</c> in plain text and
+    /// <c>{"command":"MARK_MEDIA","correlation_id":"&lt;mark&gt;"}</c> in JSON; <see cref="ChanWebSocketSetMediaDirection"/>
+    /// as <c>{"command":"SET_MEDIA_DIRECTION","direction":"in|out|both"}</c> in JSON only. No length check: the session
+    /// enforces <see cref="MaxCommandBytes"/>.
+    /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="format"/> is not a <see cref="ChanWebSocketControlMessageFormat"/> value.</exception>
-    /// <exception cref="NotSupportedException">The command has no form in <paramref name="format"/>.</exception>
+    /// <exception cref="NotSupportedException">
+    /// <paramref name="message"/> is a record Asterisk sends, which has no command form, or a
+    /// <see cref="ChanWebSocketSetMediaDirection"/> in plain text. To log a received record, use its <c>ToString()</c>.
+    /// </exception>
     public static string Serialize(ChanWebSocketControlMessage message, ChanWebSocketControlMessageFormat format)
         => Encoding.UTF8.GetString(SerializeToUtf8Bytes(message, format));
 
@@ -78,12 +101,13 @@ public static class ChanWebSocketControlMessageSerializer
     /// in plain text and <c>{"command":"MARK_MEDIA","correlation_id":"&lt;mark&gt;"}</c> in JSON;
     /// <see cref="ChanWebSocketSetMediaDirection"/> as <c>{"command":"SET_MEDIA_DIRECTION","direction":"in|out|both"}</c> in
     /// JSON only. JSON strings are escaped as <see cref="System.Text.Encodings.Web.JavaScriptEncoder.Default"/> escapes them.
+    /// No length check: the session enforces <see cref="MaxCommandBytes"/>.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="format"/> is not a <see cref="ChanWebSocketControlMessageFormat"/> value.</exception>
     /// <exception cref="NotSupportedException">
-    /// The command has no form in <paramref name="format"/> (<c>SET_MEDIA_DIRECTION</c> in plain text), or
-    /// <paramref name="message"/> is a record Asterisk sends.
+    /// <paramref name="message"/> is a record Asterisk sends, which has no command form, or a
+    /// <see cref="ChanWebSocketSetMediaDirection"/> in plain text. To log a received record, use its <c>ToString()</c>.
     /// </exception>
     public static byte[] SerializeToUtf8Bytes(ChanWebSocketControlMessage message, ChanWebSocketControlMessageFormat format)
     {
@@ -106,10 +130,13 @@ public static class ChanWebSocketControlMessageSerializer
     }
 
     /// <summary>
-    /// Reads one text frame as Asterisk sends it, in either format (the parameter's name is historical): the typed record
-    /// for a message the model names (<see cref="ChanWebSocketMediaStart"/> for a <c>MEDIA_START</c>), otherwise
-    /// <see cref="ChanWebSocketUnknownMessage"/> with the frame's event name and exact text. Never <see langword="null"/>.
+    /// Reads one text frame as Asterisk sends it, plain text or JSON, into the record the session would publish — or
+    /// <see cref="ChanWebSocketMediaStart"/>, which the session keeps as <see cref="IChanWebSocketSession.MediaStart"/>
+    /// and never publishes — and <see cref="ChanWebSocketUnknownMessage"/>, with the frame's event name and exact text, for
+    /// a frame the model does not name. Never <see langword="null"/>. 2.8.x's <c>kind</c> JSON, which no Asterisk sends,
+    /// reads as <see cref="ChanWebSocketUnknownMessage"/>.
     /// </summary>
+    /// <param name="json">The frame's text, in either format (the parameter's name is shipped).</param>
     /// <exception cref="ArgumentNullException"><paramref name="json"/> is <see langword="null"/>.</exception>
     public static ChanWebSocketControlMessage? Deserialize(string json)
     {
@@ -118,9 +145,12 @@ public static class ChanWebSocketControlMessageSerializer
     }
 
     /// <summary>
-    /// Reads one UTF-8 text frame as Asterisk sends it, in either format (the parameter's name is historical), as
+    /// Reads one UTF-8 text frame as Asterisk sends it, plain text or JSON, into the record the session would publish — or
+    /// <see cref="ChanWebSocketMediaStart"/>, which the session keeps as <see cref="IChanWebSocketSession.MediaStart"/>
+    /// and never publishes — and <see cref="ChanWebSocketUnknownMessage"/> for a frame the model does not name, as
     /// <see cref="Deserialize(string)"/> does. Never <see langword="null"/>.
     /// </summary>
+    /// <param name="utf8Json">The frame's text as UTF-8, in either format (the parameter's name is shipped).</param>
     public static ChanWebSocketControlMessage? Deserialize(ReadOnlySpan<byte> utf8Json)
         => ChanWebSocketInboundReader.Read(ChanWebSocketTextFrame.Read(utf8Json));
 
