@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed — BREAKING: chan_websocket commands are written as Asterisk acts on them, in the format the connection negotiated (#NNN)
+### Fixed — BREAKING: chan_websocket commands are written as Asterisk acts on them, in the format the connection negotiated (#485)
 
 Up to 2.8.x `ChanWebSocketControlMessageSerializer` wrote every command as a `kind` JSON object, which no supported
 Asterisk acts on: measured on 22.10.1, 23.4.1, 22.12.0, 23.6.0 and 24.0.0 (release candidates for the last three),
@@ -30,7 +30,7 @@ text frame as Asterisk sends it, in either format, into the typed record or the 
 changes and three calls now throw where 2.8.x wrote a command Asterisk ignored. The migration guide has the section
 ([chan_websocket control messages are read and written as Asterisk sends them](docs/guides/migration-2.9.0.md#chan_websocket-control-messages-are-read-and-written-as-asterisk-sends-them)).
 
-### Fixed — BREAKING: `SendXonAsync`, `SendXoffAsync` and three chan_websocket members Asterisk never sends warn `VSDK0004` (#NNN)
+### Fixed — BREAKING: `SendXonAsync`, `SendXoffAsync` and three chan_websocket members Asterisk never sends warn `VSDK0004` (#485)
 
 Five members of the chan_websocket surface have no counterpart on the wire, so each is now `[Obsolete]` with
 diagnostic id `VSDK0004`, a warning whose message names what to use instead: `IChanWebSocketSession.SendXonAsync` and
@@ -50,7 +50,7 @@ too, where no pragma can go; `<NoWarn>$(NoWarn);VSDK0004</NoWarn>` is the remedy
 section
 ([`SendXonAsync`, `SendXoffAsync` and three chan_websocket members warn `VSDK0004`](docs/guides/migration-2.9.0.md#sendxonasync-sendxoffasync-and-three-chan_websocket-members-warn-vsdk0004)).
 
-### Fixed: `ControlMessages` delivers the chan_websocket messages it documents, in the format Asterisk sends them (#NNN)
+### Fixed: `ControlMessages` delivers the chan_websocket messages it documents, in the format Asterisk sends them (#485)
 
 `IChanWebSocketSession.ControlMessages` read only a JSON shape no Asterisk sends, so it stayed silent. It now reads
 each control message in the format the connection uses — plain-text lines, Asterisk's default, or JSON objects with
@@ -64,7 +64,7 @@ fills `MediaStart`, tagged `channel.id`, `media.codec` and `media.sample_rate`; 
 never fired for a frame Asterisk sent. Its `media.channels` tag, always 1, is gone. Verified against frames captured
 from Asterisk 22.10.1, 23.4.1, 22.12.0, 23.6.0 and 24.0.0 (release candidates for the last three).
 
-### Added: chan_websocket's `MEDIA_START` fields, the call on each inbound record, and the format commands are written in (#NNN)
+### Added: chan_websocket's `MEDIA_START` fields, the call on each inbound record, and the format commands are written in (#485)
 
 `IChanWebSocketSession.MediaStart` (a default interface member, `null` until the connection's first `MEDIA_START` is
 read); the wire's fields as `init` members of `ChanWebSocketMediaStart` — `ChannelId`, `ConnectionId`, `Channel`,
