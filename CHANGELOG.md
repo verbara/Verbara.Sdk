@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: a Live channel event nobody hears costs the channel table nothing, and one a handler hears costs one entry (#NNN)
+### Fixed: a Live channel event nobody hears costs the channel table nothing, and one a handler hears costs one entry (#493)
 
 Since the channel events moved out of the channel table's locks (#457, #462), every change queued a notification and
 walked the queue whether or not a handler was subscribed, and a state change for a channel the table did not hold did
