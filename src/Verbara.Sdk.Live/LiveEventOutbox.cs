@@ -58,6 +58,22 @@ internal sealed class LiveEventOutbox
         _turnWait = turnWait;
     }
 
+    /// <summary>Drains blocked waiting for their turn, read under the lock; exposed for deterministic tests.</summary>
+    internal int WaitingDrains
+    {
+        get
+        {
+            lock (_sync)
+                return _waiters;
+        }
+    }
+
+    /// <summary>
+    /// Null outside deterministic tests; runs on a drain's thread, with its frame still current, after its last
+    /// notification was raised and before the drain hands back what it did not raise.
+    /// </summary>
+    internal Action? FrameExiting { get; set; }
+
     /// <summary>Queues a notification. Call it under the lock that orders the transition it reports.</summary>
     internal void Post(Action raise) => Post(InvokeAction, raise, null, null);
 
@@ -67,12 +83,23 @@ internal sealed class LiveEventOutbox
     /// lambda costs nothing beyond the queued entry. Call it under the lock that orders the transition it reports, and
     /// only when the event has a subscriber: a notification nobody hears need not be queued.
     /// </summary>
-    internal void Post(Action<object, object?, object?> raise, object target, object? arg1, object? arg2)
+    internal void Post(Action<object, object?, object?> raise, object target, object? arg1, object? arg2) =>
+        Enqueue(raise, target, arg1, arg2, null);
+
+    /// <summary>
+    /// Queues a notification that carries three values without a closure: the outbox calls <paramref name="raise"/>
+    /// with <paramref name="target"/>, <paramref name="arg1"/>, <paramref name="arg2"/> and <paramref name="arg3"/>.
+    /// Call it under the lock that orders the transition it reports, and only when the event has a subscriber.
+    /// </summary>
+    internal void Post(Action<object, object?, object?, object?> raise, object target, object? arg1, object? arg2, object? arg3) =>
+        Enqueue(raise, target, arg1, arg2, arg3);
+
+    private void Enqueue(Delegate raise, object target, object? arg1, object? arg2, object? arg3)
     {
         lock (_sync)
         {
             var frame = _current.Value;
-            var entry = new Entry(raise, target, arg1, arg2, Environment.CurrentManagedThreadId, frame is { Active: true } ? frame : null);
+            var entry = new Entry(raise, target, arg1, arg2, arg3, Environment.CurrentManagedThreadId, frame is { Active: true } ? frame : null);
             if (_tail is null)
                 _head = entry;
             else
@@ -134,7 +161,13 @@ internal sealed class LiveEventOutbox
                 {
                     next = FirstOwnedBy(frame);
                     if (next is null)
+                    {
+                        // Closed in the same lock section that found nothing left: a post that precedes this check is
+                        // found by it, and one that follows finds the frame closed and is owned by its own thread,
+                        // never by a drain that is leaving.
+                        frame.Active = false;
                         break;
+                    }
                     if (!WaitForTurn(next, started))
                         unowned = ClaimUnownedBefore(next);
                     next.Claimed = true;
@@ -157,8 +190,10 @@ internal sealed class LiveEventOutbox
         }
         finally
         {
+            FrameExiting?.Invoke();
             lock (_sync)
             {
+                // Already closed on the normal way out; closed here when a raise was abandoned.
                 frame.Active = false;
                 // Only when a raise was abandoned by an exception that is not a handler's: what is left goes back to
                 // this thread, so its next call raises it.
@@ -262,10 +297,11 @@ internal sealed class LiveEventOutbox
     }
 
     private sealed class Entry(
-        Action<object, object?, object?> raise,
+        Delegate raise,
         object target,
         object? arg1,
         object? arg2,
+        object? arg3,
         int thread,
         Frame? owner)
     {
@@ -282,10 +318,17 @@ internal sealed class LiveEventOutbox
         /// <summary>The entry posted after it, while both are in the list.</summary>
         internal Entry? Next { get; set; }
 
-        internal void Invoke() => raise(target, arg1, arg2);
+        // The two delegate shapes the Post overloads take; a two-value notification leaves arg3 unused.
+        internal void Invoke()
+        {
+            if (raise is Action<object, object?, object?> twoValues)
+                twoValues(target, arg1, arg2);
+            else
+                ((Action<object, object?, object?, object?>)raise)(target, arg1, arg2, arg3);
+        }
     }
 
-    // One Drain call. Active while it can still raise what is posted to it.
+    // One Drain call. Active while it can still raise what is posted to it: closed once it found nothing left to raise.
     private sealed class Frame
     {
         internal bool Active { get; set; }
