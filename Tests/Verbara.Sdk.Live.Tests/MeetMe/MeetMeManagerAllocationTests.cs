@@ -7,7 +7,8 @@ namespace Verbara.Sdk.Live.Tests.MeetMe;
 
 /// <summary>
 /// What a participant's join, leave, mute or talking change costs the conference table in heap bytes. Bytes, not
-/// time: the allocation counter is per thread and exact once two readings of the same round agree, and every object
+/// time: the allocation counter is per thread and exact once two readings of the same round agree (a cost paid in every
+/// round is caught; one paid in fewer than half of them is not what these tests measure), and every object
 /// counted escapes into the outbox, so no JIT tier removes it. These paths record no metric, so no listener can run
 /// on the measuring thread.
 /// </summary>

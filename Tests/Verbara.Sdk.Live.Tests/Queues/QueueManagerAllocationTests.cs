@@ -11,7 +11,8 @@ namespace Verbara.Sdk.Live.Tests.Queues;
 /// <c>DeviceStateChange</c>), a <c>VarSet</c> of <c>QUEUESTATUS</c>, a <c>QueueCallerAbandon</c>, and every other
 /// notification the table raises: queue params, a member added or removed, a caller joining, leaving or reported
 /// leaving, and a completed snapshot. Bytes, not time: the allocation counter is per thread and exact once two
-/// readings of the same round agree, and every object counted escapes into the outbox, so no JIT tier removes it. A
+/// readings of the same round agree (a cost paid in every round is caught; one paid in fewer than half of them is not
+/// what these tests measure), and every object counted escapes into the outbox, so no JIT tier removes it. A
 /// caller's join and leave record metrics; the classes that listen to them run in a collection no other class runs
 /// beside, so no listener runs on the measuring thread.
 /// </summary>
