@@ -18,7 +18,7 @@ Docker test infrastructure, and known-divergent behaviour to watch for.
 | Asterisk | Type | Released | Security fixes only from | EOL | SDK support | CI coverage |
 |---|---|---|---|---|---|---|
 | **22.x** | LTS | 2024-10-16 | 2028-10-16 | 2029-10-16 | **Primary** — production recommended | Functional + Integration suites in the merge queue (pinned build: `docker/asterisk-base-images.txt`) |
-| **23.x** | Standard | 2025-10-15 | 2026-10-15 | 2027-10-15 | **Secondary** — until EOL | Functional + Integration suites on every pull request and in the merge queue |
+| **23.x** | Standard | 2025-10-15 | 2026-10-15 | 2027-10-15 | **Secondary** — until EOL | Functional + Integration suites in the merge queue (on a pull request only with the `ci:functional` label) |
 | 24.x | LTS | planned 2026-10-15; not out yet (release candidates since 2026-09-17, `24.0.0-rc3` on 2026-10-22) | 2030-10-15 (planned) | 2031-10-15 (planned) | **Primary once GA and in CI** | Not in CI yet |
 | 20.x | LTS (old) | 2022-10-19 | 2026-10-19 | 2027-10-19 | Not supported | Not in CI (a build stays pinned for local measurement) |
 | 18.x | LTS (old) | 2020-10-20 | 2024-10-20 | 2025-10-20 | Not supported | — |
@@ -80,8 +80,8 @@ When a divergence is detected by running the 23 matrix, file it here with an exp
 ## CI matrix expectations
 
 The `Functional Tests (Testcontainers)` job of `.github/workflows/ci.yml` runs the Functional and Integration suites
-against Asterisk 23 on every pull request, and against both 22 and 23 in the merge queue. The 23 leg is a required
-check, so a failure there blocks the merge; the 22 leg runs only in the merge queue and is not a required check, so a
+against both 22 and 23 in the merge queue; on a pull request they run only when it carries the `ci:functional` label.
+The 23 leg is a required check, so a 23 failure in the queue blocks the merge; the 22 leg is not a required check, so a
 22-only failure has to be read from the queue run. Each leg builds its image on the build that
 `docker/asterisk-base-images.txt` pins for that version.
 

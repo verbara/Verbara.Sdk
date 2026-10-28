@@ -78,7 +78,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 | line | claim | class | guard | status |
 |---|---|---|---|---|
 | 10 | .NET 10.0.100+ pinned | ENFORCING | `global.json` | OK |
-| 11 | Asterisk 22 LTS or 23 Standard; CI runs both; 20 and earlier not supported | ENFORCING | `ci.yml` functional matrix | OK — corrected 2026-10-28: `[23]` on pull requests (required check), `[22, 23]` in the merge queue; was "tested with 18, 20, 22, 23", and 18 and 20 were tested by nothing |
+| 11 | Asterisk 22 LTS or 23 Standard; CI runs both; 20 and earlier not supported | ENFORCING | `ci.yml` functional matrix | OK — corrected 2026-10-28: `[22, 23]` in the merge queue, where both suites run (23 is the required check); the `[23]` pull-request leg runs them only with the `ci:functional` label; was "tested with 18, 20, 22, 23", and 18 and 20 were tested by nothing |
 | 189 | Core (9 packages) | ENFORCING | — | GAP — correct as a subset |
 | 203 | Voice AI (8 packages) | ENFORCING | — | GAP — correct |
 | 213 | Pipecat smart-turn-v3.2 ONNX | ATTRIBUTED | content-hash pin | **OK** — `<Description>` now says v3.2-cpu too |
@@ -112,6 +112,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 | 19 | four custom source generators | ENFORCING | — | GAP — correct |
 | 30 | providers "Deepgram, ElevenLabs, Azure, Google, Whisper" (5) | ENFORCING | — | GAP — understates; 7 STT + 6 TTS ship |
 | 32, 58 | more than 7,400 unit tests, plus functional and integration suites (no figure) | COHERENCE | — | GAP — corrected 2026-10-28, the same measurement as `README.md:61` |
+| 58 | CI runs the functional and integration suites against Asterisk 22 and 23 in the merge queue | ENFORCING | `ci.yml` functional matrix | GAP — true on 2026-10-28 (`[22, 23]` in `merge_group`); nothing pins the sentence |
 | 32 | zero compiler warnings | ENFORCING | `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
 | 32 | passes AOT trim analysis cleanly | ENFORCING | AotCanary | PARTIAL — 17/28 runtime packages analyzed by ILC (see line 13) |
 | 32 | "**designed for** … exceeding 100,000 concurrent agents" | EVIDENCE | — | **OK** — reworded 2026-09-20: "tested" removed, deferral declared with its blocker (D9). Was: GAP — nothing executes a load test at any scale; "designed for" is supported, "tested" is not |
@@ -295,7 +296,7 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 | `provider-wire-conformance.md` (~120 further figures) | vendor byte counts, durations, accuracy scores, defect tallies | **EVIDENCE** | dated wire captures against live vendor APIs |
 
 | `asterisk-version-matrix.md:7-27` | the support policy (22 primary, 23 secondary until 2027-10-15, 24 once GA and in CI, 20 and earlier not supported) and the lifecycle table's dates | **ATTRIBUTED** | GAP — dates are upstream's (docs.asterisk.org *Asterisk Versions*, read 2026-10-28, cited in the guide); `24.0.0-rc3` on 2026-10-22 and rc1 on 2026-09-17 from the `asterisk/asterisk` GitHub releases; the CI column against `ci.yml`'s functional matrix and the required checks of `main` (`(23)` required, `(22)` merge queue only). The 24 row goes stale at 24's GA |
-| `asterisk-version-matrix.md:82-86` | the 23 leg is a required check and the 22 leg runs only in the merge queue | ENFORCING | GAP — true against `ci.yml` and the branch's required checks on 2026-10-28; nothing pins it |
+| `asterisk-version-matrix.md:82-86` | both suites run against 22 and 23 in the merge queue, on a pull request only with `ci:functional`; the 23 leg is a required check and the 22 leg is not | ENFORCING | GAP — true against `ci.yml` and the branch's required checks on 2026-10-28; nothing pins it |
 
 `manual-asterisk-realtime-setup.md`, `log-analysis-prompt.md`: no quantitative claims.
 

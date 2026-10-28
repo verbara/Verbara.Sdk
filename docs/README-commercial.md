@@ -55,7 +55,7 @@ The SDK is ported from asterisk-java, the most mature Asterisk library in any la
 
 **29 composable NuGet packages** -- The SDK is modular by design. Install only the packages your application needs. The core alone is under 200 KB. Voice AI, cluster, data-access, and observability packages are completely separate from the AMI/AGI/ARI stack. Every package declares its dependencies explicitly, so your deployment includes only what you use.
 
-**7,400+ unit tests and 25 example applications** -- Every protocol parser, every event mapping, every state machine transition is covered by more than 7,400 unit tests, plus functional and integration suites against a real Asterisk PBX (Testcontainers; CI runs them against Asterisk 23 on every pull request and against 22 and 23 in the merge queue). The repository includes 25 runnable example applications demonstrating common integration patterns (including OpenTelemetry wiring and custom STT/TTS providers).
+**7,400+ unit tests and 25 example applications** -- Every protocol parser, every event mapping, every state machine transition is covered by more than 7,400 unit tests, plus functional and integration suites against a real Asterisk PBX (Testcontainers; CI runs them against Asterisk 22 and 23 in the merge queue before anything lands). The repository includes 25 runnable example applications demonstrating common integration patterns (including OpenTelemetry wiring and custom STT/TTS providers).
 
 
 ## Enterprise Extension

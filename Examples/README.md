@@ -6,7 +6,7 @@ Every example is a self-contained project you can build and run individually.
 ## Prerequisites
 
 - .NET 10 SDK (10.0.100+)
-- Asterisk 18+ for examples that connect to a live PBX (AMI, AGI, ARI, Live, Sessions)
+- Asterisk 22 LTS or 23 Standard (see `docs/guides/asterisk-version-matrix.md`) for examples that connect to a live PBX (AMI, AGI, ARI, Live, Sessions)
 - Provider API keys for VoiceAi examples (AssemblyAI, Cartesia, Speechmatics, OpenAI)
 - Docker for Redis/PostgreSQL session store examples
 - NATS server for the NatsBridge example
