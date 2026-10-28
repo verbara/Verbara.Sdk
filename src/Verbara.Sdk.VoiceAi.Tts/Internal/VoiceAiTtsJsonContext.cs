@@ -25,7 +25,7 @@ internal sealed class ElevenLabsVoiceSettings
 /// The two alignment members are deliberately <b>not</b> modelled. They are optional metadata the
 /// synthesizer has no use for, and <c>System.Text.Json</c> skips unmapped members by default — so
 /// tolerating them costs nothing and modelling them would pin a shape this SDK does not consume.
-/// Adding required-member fences is <c>provider-dto-robustness-fences</c>' business, not this type's.
+/// Required-member fences on provider DTOs are separate work, not this type's.
 /// </remarks>
 internal sealed class ElevenLabsAudioOutput
 {
