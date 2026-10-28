@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a Live channel event nobody hears costs the channel table nothing, and one a handler hears costs one entry (#493)
+
+Since the channel events moved out of the channel table's locks (#457, #462), every change queued a notification and
+walked the queue whether or not a handler was subscribed, and a state change for a channel the table did not hold did
+the same. Measured against 2.8.0 on the same machine, a state change with no subscriber went from 0 bytes and about
+31 ns to 688 bytes and about 230 ns, counting the benchmark's own id string. A change no handler is subscribed to now
+queues nothing and allocates nothing, the same figures as 2.8.0. A change a handler hears costs one queue entry,
+168 bytes and about 105–110 ns, where the unreleased tree cost 656 bytes and about 185 ns. A call arriving and hanging
+up in the session engine now allocates about 3.65 KB and 541 bytes instead of 4.14 KB and 1,029 bytes. The rules of
+#457 and #462 are unchanged: no lock is held while a handler runs, each channel's events keep the order of their
+changes, an event waits up to one second for the earlier ones, and a handler's failure reaches the call that caused it.
+A handler subscribed after a change was made does not receive that change, as in 2.8.0. No public signature changes.
+
 ### Fixed: ARI delivers `ChannelDestroyed` and `ChannelHangupRequest` when Asterisk sends `tech_cause` as a number (#490)
 
 Asterisk sends `tech_cause` as a JSON number (for example `486` for a PJSIP callee that answered Busy), while the SDK

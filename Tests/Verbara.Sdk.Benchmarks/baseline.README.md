@@ -101,6 +101,13 @@ times (`gh workflow run "Perf Regression"`) and use the observed across-run spre
 configuration error (exit 2), because its report would never be looked for and its absence would go
 unnoticed.
 
+Measured but not baselined today, on purpose:
+
+- `TurnDetectionBenchmark` — `sources._turn_detection_note`.
+- `ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber` — the state-change row with one
+  subscribed handler; `_channel_manager_one_subscriber_note`. Its band comes from two weekly runs;
+  until then its bytes are gated by `ChannelManagerAllocationTests` in `Verbara.Sdk.Live.Tests`.
+
 ## Removing a band without removing the benchmark
 
 A benchmark whose mean has fallen to BenchmarkDotNet's resolution floor can no longer carry a

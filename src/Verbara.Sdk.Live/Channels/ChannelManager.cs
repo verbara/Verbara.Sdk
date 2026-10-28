@@ -47,7 +47,10 @@ public sealed class ChannelManager
     private readonly ConcurrentDictionary<string, AsteriskChannel> _channelsByName = new();
     private readonly ILogger _logger;
 
-    // Post under the channel lock that orders the transition; drain after every manager lock is released.
+    // Post under the channel lock that orders the transition; drain after every manager lock is released. A post is
+    // made only when the event has a subscriber at the change, through a static lambda that reads the event again when
+    // it is raised, so a change nobody hears allocates nothing. The drains stay unconditional: an empty one is free, and
+    // one may still owe entries an earlier call left behind.
     private readonly LiveEventOutbox _events;
 
     /// <summary>
@@ -295,7 +298,8 @@ public sealed class ChannelManager
 
             LiveMetrics.ChannelsCreated.Add(1);
             ChannelManagerLog.NewChannel(_logger, entry.UniqueId, entry.Name, entry.State);
-            _events.Post(() => ChannelAdded?.Invoke(channel));
+            if (ChannelAdded is not null)
+                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelAdded?.Invoke((AsteriskChannel)c!), this, channel, null);
         }
 
         return Admission.Admitted;
@@ -315,7 +319,8 @@ public sealed class ChannelManager
                     channel.Name = channelName;
                     _channelsByName[channelName] = channel;
                 }
-                _events.Post(() => ChannelStateChanged?.Invoke(channel));
+                if (ChannelStateChanged is not null)
+                    _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelStateChanged?.Invoke((AsteriskChannel)c!), this, channel, null);
             }
             ChannelManagerLog.StateChanged(_logger, uniqueId, newState);
         }
@@ -349,7 +354,8 @@ public sealed class ChannelManager
         {
             channel.HangupCause = cause;
             channel.State = ChannelState.Down;
-            _events.Post(() => ChannelRemoved?.Invoke(channel));
+            if (ChannelRemoved is not null)
+                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelRemoved?.Invoke((AsteriskChannel)c!), this, channel, null);
         }
         LiveMetrics.ChannelsDestroyed.Add(1);
         ChannelManagerLog.Hangup(_logger, uniqueId, cause);
@@ -405,7 +411,8 @@ public sealed class ChannelManager
         lock (channel.SyncRoot)
         {
             channel.DialedChannel = destChannel;
-            _events.Post(() => ChannelDialBegin?.Invoke(channel));
+            if (ChannelDialBegin is not null)
+                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelDialBegin?.Invoke((AsteriskChannel)c!), this, channel, null);
         }
         _events.Drain();
     }
@@ -416,7 +423,8 @@ public sealed class ChannelManager
         lock (channel.SyncRoot)
         {
             channel.DialStatus = dialStatus;
-            _events.Post(() => ChannelDialEnd?.Invoke(channel));
+            if (ChannelDialEnd is not null)
+                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelDialEnd?.Invoke((AsteriskChannel)c!), this, channel, null);
         }
         _events.Drain();
     }
@@ -428,7 +436,8 @@ public sealed class ChannelManager
         {
             channel.IsOnHold = true;
             channel.HoldMusicClass = musicClass;
-            _events.Post(() => ChannelHeld?.Invoke(channel));
+            if (ChannelHeld is not null)
+                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelHeld?.Invoke((AsteriskChannel)c!), this, channel, null);
         }
         _events.Drain();
     }
@@ -440,7 +449,8 @@ public sealed class ChannelManager
         {
             channel.IsOnHold = false;
             channel.HoldMusicClass = null;
-            _events.Post(() => ChannelUnheld?.Invoke(channel));
+            if (ChannelUnheld is not null)
+                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelUnheld?.Invoke((AsteriskChannel)c!), this, channel, null);
         }
         _events.Drain();
     }
@@ -630,7 +640,8 @@ public sealed class ChannelManager
             name = gone.Name;
             gone.MarkRemovedByReload();
             gone.State = ChannelState.Down;
-            _events.Post(() => ChannelRemoved?.Invoke(gone));
+            if (ChannelRemoved is not null)
+                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelRemoved?.Invoke((AsteriskChannel)c!), this, gone, null);
         }
 
         // Drop the name index only while it still points at this instance, so a reused or renamed
