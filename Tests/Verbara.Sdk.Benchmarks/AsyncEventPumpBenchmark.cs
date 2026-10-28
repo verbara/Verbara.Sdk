@@ -47,4 +47,25 @@ public class AsyncEventPumpBenchmark
         for (int i = 0; i < 10_000; i++)
             pump.TryEnqueue(_events[i]);
     }
+
+    // The consumer's cost alone: 10,000 events buffered before the consumer starts, so no write races a read.
+    [Benchmark]
+    public async Task Prefill10000ThenConsume()
+    {
+        var consumed = 0;
+        await using var pump = new AsyncEventPump();
+
+        for (int i = 0; i < 10_000; i++)
+            pump.TryEnqueue(_events[i]);
+
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        pump.Start(evt =>
+        {
+            if (Interlocked.Increment(ref consumed) >= 10_000)
+                tcs.TrySetResult();
+            return ValueTask.CompletedTask;
+        });
+
+        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    }
 }
