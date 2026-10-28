@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: ARI delivers `ChannelDestroyed` and `ChannelHangupRequest` when Asterisk sends `tech_cause` as a number (#NNN)
+### Fixed: ARI delivers `ChannelDestroyed` and `ChannelHangupRequest` when Asterisk sends `tech_cause` as a number (#490)
 
 Asterisk sends `tech_cause` as a JSON number (for example `486` for a PJSIP callee that answered Busy), while the SDK
 read it as a string, so either event failed to parse and was dropped whole: a subscriber never saw the channel end.
