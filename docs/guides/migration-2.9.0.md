@@ -3,6 +3,12 @@
 This is the one migration guide for 2.9.0. It has one section per breaking entry of the release, says who each
 one reaches and what to do, and links to the longer guide where one exists. The [CHANGELOG](../../CHANGELOG.md) has the full entry for each.
 
+2.9.0's CI runs the Functional and Integration suites on Asterisk 22.11.0 and 23.5.0, the newest generally
+available build of each supported line on the day it was tagged; its chan_websocket, ARI WebSocket and AMI
+reload behaviour was also measured on 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2 by image digest. 22.12.0, 23.6.0
+and 24.0.0 were still release candidates (rc3, 2026-10-22) at the tag, so 2.9.0 claims no support for
+Asterisk 24; the 2.9.x release that pins a 24 GA build in CI will say so here.
+
 ## Before you start: move every package at once
 
 Every `Verbara.Sdk.*` package moves to 2.9.0 together. Do not mix versions: `Verbara.Sdk.Live` 2.8.0 names two
