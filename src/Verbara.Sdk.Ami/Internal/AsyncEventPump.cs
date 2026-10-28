@@ -232,13 +232,20 @@ public sealed class AsyncEventPump : IAsyncDisposable
                     var ordinal = buffered.Ordinal;
                     Interlocked.Increment(ref _processedEvents);
                     Volatile.Write(ref _droppedBeforeCurrent, _uncollectedSeen);
+                    var returned = false;
                     try
                     {
                         await handler(buffered.Event).ConfigureAwait(false);
+                        returned = true;
                     }
                     finally
                     {
-                        MarkDispatchedBusy(ordinal);
+                        // A handler that throws ends the consumer: it goes idle here, so the drop path and a trailing
+                        // drop see it idle, as they would after the last buffered event's handler returned.
+                        if (returned)
+                            MarkDispatchedBusy(ordinal);
+                        else
+                            MarkIdle(reader, ordinal);
                     }
 
                     // Busy to idle, or a stop: nothing is read after the event in progress once the pump is stopped.
