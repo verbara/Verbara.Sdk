@@ -16,16 +16,12 @@ public partial class AsyncEventPumpTests
 {
     private const int InvariantEvents = 20_000;
 
-    [Theory]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(3)]
-    public async Task Pump_ShouldKeepTheOrderTheStampAndTheBarrierExact_WhenTheBufferRefusesMostEventsUnderRandomHandlerDelays(int seed)
+    // Which events an action already collected, how long each handler spins, and the events themselves, from one seed;
+    // the generator is returned so the reader's pauses continue the same sequence.
+    private static (Random Rnd, bool[] Collected, int[] Spins, ManagerEvent[] Events) InvariantPlan(int seed, int n)
     {
-        const int n = InvariantEvents;
         var rnd = new Random(seed);
         var collected = new bool[n + 1];
-        var accepted = new bool[n + 1];
         var spins = new int[n + 1];
         for (var i = 1; i <= n; i++)
             collected[i] = rnd.Next(3) == 0;
@@ -34,6 +30,18 @@ public partial class AsyncEventPumpTests
         var events = Enumerable.Range(0, n + 1)
             .Select(i => new ManagerEvent { EventType = "Test", UniqueId = i.ToString(CultureInfo.InvariantCulture) })
             .ToArray();
+        return (rnd, collected, spins, events);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task Pump_ShouldKeepTheOrderTheStampAndTheBarrierExact_WhenTheBufferRefusesMostEventsUnderRandomHandlerDelays(int seed)
+    {
+        const int n = InvariantEvents;
+        var (rnd, collected, spins, events) = InvariantPlan(seed, n);
+        var accepted = new bool[n + 1];
 
         // Written by the consumer only, read once it has returned.
         var seen = new List<(long Ordinal, long DroppedBefore, long DispatchedAtEntry)>(n);

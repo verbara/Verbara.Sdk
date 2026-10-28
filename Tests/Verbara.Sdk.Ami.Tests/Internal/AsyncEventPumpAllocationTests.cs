@@ -143,11 +143,8 @@ public sealed class AsyncEventPumpAllocationTests
     private static int Fill(AsyncEventPump pump)
     {
         var accepted = 0;
-        foreach (var evt in Buffered)
-        {
-            if (pump.TryEnqueue(evt))
-                accepted++;
-        }
+        for (var i = 0; i < Buffered.Length; i++)
+            accepted += pump.TryEnqueue(Buffered[i]) ? 1 : 0;
 
         return accepted;
     }
