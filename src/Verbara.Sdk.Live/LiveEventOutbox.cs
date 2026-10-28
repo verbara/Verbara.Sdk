@@ -142,9 +142,10 @@ internal sealed class LiveEventOutbox
 
                 if (unowned is not null)
                 {
-                    foreach (var entry in unowned)
+                    for (var i = 0; i < unowned.Count; i++)
                     {
-                        if (Raise(entry) is { } unownedFailure)
+                        var unownedFailure = Raise(unowned[i]);
+                        if (unownedFailure is not null)
                             _reportUnownedFailure(unownedFailure);
                     }
                 }
