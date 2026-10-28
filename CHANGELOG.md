@@ -4,6 +4,78 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: chan_websocket commands are written as Asterisk acts on them, in the format the connection negotiated (#NNN)
+
+Up to 2.8.x `ChanWebSocketControlMessageSerializer` wrote every command as a `kind` JSON object, which no supported
+Asterisk acts on: measured on 22.10.1, 23.4.1, 22.12.0, 23.6.0 and 24.0.0 (release candidates for the last three),
+in both control-message formats, a mark sent with `SendMarkAsync` was never answered. The session now writes the two
+commands Asterisk acts on, in the format its first `MEDIA_START` arrived in: `MARK_MEDIA` in plain text or JSON, and
+`SET_MEDIA_DIRECTION` in JSON, the only format Asterisk accepts it in. `SendSetMediaDirectionAsync` throws
+`InvalidOperationException` on a plain-text connection instead of writing JSON Asterisk ignored. Before the
+connection's `MEDIA_START` has been read (`MediaStart` is `null`: a stream announced under
+`MediaStartTimeout = TimeSpan.Zero`, or before a late first frame) `SendMarkAsync` and `SendSetMediaDirectionAsync`
+throw `InvalidOperationException` instead of writing a command in a guessed format — a plain-text command on a JSON
+connection was answered `ERROR Unable to parse JSON command` and dropped on every supported version, and a JSON one on
+a plain-text connection was ignored without a reply. `SendMarkAsync` refuses, with `ArgumentOutOfRangeException`
+before anything is written, a mark whose command would exceed the 128 bytes Asterisk reads from a text frame
+(`ChanWebSocketControlMessageSerializer.MaxCommandBytes`; 117 bytes of mark in plain text, 84 in JSON before escaping)
+— such a frame was dropped without a reply on every supported version in both formats, so every mark that is written
+is answered: by `MEDIA_MARK_PROCESSED` when it reaches playback, or by the typed `ERROR` in passthrough mode
+(22.10.1, 23.4.1) or while the media direction is `in`. The serializer writes through `Serialize(message, format)` /
+`SerializeToUtf8Bytes(message, format)`; the format-less overloads write the JSON form. It throws
+`NotSupportedException` for a record Asterisk sends (`ChanWebSocketDtmf`, `ChanWebSocketMediaXon`, …) and for
+`ChanWebSocketSetMediaDirection` in plain text; to log a received record, use its `ToString()`. `Deserialize` reads a
+text frame as Asterisk sends it, in either format, into the typed record or the generic record, and no longer reads
+2.8.x's `kind` JSON (that input is now the generic record). Labelled breaking because the serializer's output
+changes and three calls now throw where 2.8.x wrote a command Asterisk ignored. The migration guide has the section
+([chan_websocket control messages are read and written as Asterisk sends them](docs/guides/migration-2.9.0.md#chan_websocket-control-messages-are-read-and-written-as-asterisk-sends-them)).
+
+### Fixed — BREAKING: `SendXonAsync`, `SendXoffAsync` and three chan_websocket members Asterisk never sends warn `VSDK0004` (#NNN)
+
+Five members of the chan_websocket surface have no counterpart on the wire, so each is now `[Obsolete]` with
+diagnostic id `VSDK0004`, a warning whose message names what to use instead: `IChanWebSocketSession.SendXonAsync` and
+`SendXoffAsync` (Asterisk has no XON/XOFF command in any spelling; flow control is Asterisk's to send, as
+`ChanWebSocketMediaXoff` / `ChanWebSocketMediaXon` on `ControlMessages`), `ChanWebSocketHangup` (never published:
+Asterisk ends a call with a WebSocket close frame, read the ending on `IAudioStream.StateChanges`),
+`ChanWebSocketMediaBuffering` (never published: no message reports a buffer fill) and `ChanWebSocketDtmf.DurationMs`
+(always 0: `DTMF_END` carries the digit and the channel id only; the duration is on the bridged peer's ARI
+`ChannelDtmfReceivedEvent` or AMI `DtmfEndEvent`). Nothing is removed and a binary built against an earlier release
+keeps running. `SendXonAsync` and `SendXoffAsync` throw `NotSupportedException` when called, where 2.8.x wrote
+`{"kind":"media_xon"}` / `{"kind":"media_xoff"}` that every supported version answered `command unknown`. The
+`asterisk.dtmf.duration_ms` trace tag, always 0, is gone. Labelled breaking because a build with
+`TreatWarningsAsErrors` that uses one of the five fails with `error VSDK0004`; move to the replacement, or add
+`VSDK0004` to `NoWarn` to silence this deprecation alone. A `JsonSerializerContext` of your own that lists
+`ChanWebSocketDtmf`, `ChanWebSocketHangup` or `ChanWebSocketMediaBuffering` gets `VSDK0004` in its generated metadata
+too, where no pragma can go; `<NoWarn>$(NoWarn);VSDK0004</NoWarn>` is the remedy there. The migration guide has the
+section
+([`SendXonAsync`, `SendXoffAsync` and three chan_websocket members warn `VSDK0004`](docs/guides/migration-2.9.0.md#sendxonasync-sendxoffasync-and-three-chan_websocket-members-warn-vsdk0004)).
+
+### Fixed: `ControlMessages` delivers the chan_websocket messages it documents, in the format Asterisk sends them (#NNN)
+
+`IChanWebSocketSession.ControlMessages` read only a JSON shape no Asterisk sends, so it stayed silent. It now reads
+each control message in the format the connection uses — plain-text lines, Asterisk's default, or JSON objects with
+`f(json)` or `control_message_format = json` — and publishes `ChanWebSocketDtmf`, `ChanWebSocketMediaXoff`,
+`ChanWebSocketMediaXon` and `ChanWebSocketMediaMarkProcessed` with the values Asterisk sent, the new
+`ChanWebSocketError` for an `ERROR` reply, and `ChanWebSocketUnknownMessage` for a message the SDK does not model. A
+JSON value the reader cannot read is published as the generic record and the call goes on. The connection's
+`MEDIA_START` is stream state, never a control message: it fills `IChanWebSocketSession.MediaStart` before the stream
+is announced, and a later one changes nothing. `asterisk.media.started` is traced once, for the `MEDIA_START` that
+fills `MediaStart`, tagged `channel.id`, `media.codec` and `media.sample_rate`; the 1.13.0 entry promised it, and it
+never fired for a frame Asterisk sent. Its `media.channels` tag, always 1, is gone. Verified against frames captured
+from Asterisk 22.10.1, 23.4.1, 22.12.0, 23.6.0 and 24.0.0 (release candidates for the last three).
+
+### Added: chan_websocket's `MEDIA_START` fields, the call on each inbound record, and the format commands are written in (#NNN)
+
+`IChanWebSocketSession.MediaStart` (a default interface member, `null` until the connection's first `MEDIA_START` is
+read); the wire's fields as `init` members of `ChanWebSocketMediaStart` — `ChannelId`, `ConnectionId`, `Channel`,
+`OptimalFrameSize`, `Ptime`, `Passthrough`, `Unbuffered`, `ChannelVariables` (JSON only: the channel's variables,
+including those inherited from the dialplan, `null` in plain text) and `ControlMessageFormat`, the format the
+connection's first `MEDIA_START` arrived in and the one every command is written in; `ChannelId` on
+`ChanWebSocketDtmf`, `ChanWebSocketMediaXoff`, `ChanWebSocketMediaXon` and `ChanWebSocketMediaMarkProcessed` (`null`
+on a plain-text connection); `ChanWebSocketUnknownMessage`; `ChanWebSocketError`;
+`ChanWebSocketControlMessageFormat` (`PlainText`, `Json`) and the `ChanWebSocketControlMessageSerializer.Serialize` /
+`SerializeToUtf8Bytes` overloads that take it; and `ChanWebSocketControlMessageSerializer.MaxCommandBytes` (128).
+
 ### Fixed — BREAKING: a Deepgram message the recognizer cannot read no longer ends the recognition (#482)
 
 `SpeechRecognizer.StreamAsync` documents three exceptions — `SpeechProviderFailureException`,

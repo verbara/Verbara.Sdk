@@ -525,7 +525,8 @@ No separate guide; the chan_websocket section of
 | `ChanWebSocketDtmf.DurationMs` | Always 0: `DTMF_END` carries the digit and the channel id only | `ChannelDtmfReceivedEvent.DurationMs` (ARI, of the bridged peer channel; seen when the peer is in Stasis or the application subscribes to all) or `DtmfEndEvent.DurationMs` (AMI, on the peer) |
 
 **Who is affected.** Code that uses any of the five (for `DurationMs`, a read of the property; its constructor
-parameter does not warn) and builds with `TreatWarningsAsErrors`: it gets `error VSDK0004`. Code that calls `SendXonAsync` or `SendXoffAsync` gets `NotSupportedException` at run time.
+parameter does not warn, and neither does a positional pattern or deconstruction that reads it, which C# does not
+check for `[Obsolete]`) and builds with `TreatWarningsAsErrors`: it gets `error VSDK0004`. Code that calls `SendXonAsync` or `SendXoffAsync` gets `NotSupportedException` at run time.
 
 **What to do.** Remove the call; flow control arrives from Asterisk as `ChanWebSocketMediaXoff` /
 `ChanWebSocketMediaXon` on `ControlMessages`. Move the other three to what the table names. Until then, silence this
