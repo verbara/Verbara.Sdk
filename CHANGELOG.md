@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a buffered AMI event costs what it did in 2.8.0, and its dispatch takes no lock (#496)
+
+Since the connection started numbering its events for the reconnect's reload barrier (#457, #463, #466), each slot of
+the event buffer carried the event, its ordinal and the lost-event count — 24 bytes instead of 2.8.0's 16 — and the
+consumer took the progress lock twice per event and read the buffer's count once more through the buffer's own lock,
+the one the reader writes through. The buffer grows by doubling and never shrinks, so a buffer that had held 10,000
+events retained 787 KB instead of 525 KB, a full default buffer 768 KiB instead of 512 KiB, and draining 10,000
+buffered events took about 0.72 ms where 2.8.0 took 0.41 ms. A slot is 16 bytes again (the event and its ordinal; the
+lost-event count is rebuilt from a log of refusal runs the reader keeps only while the buffer overflows, at no cost per
+refusal), and the consumer takes the lock only when it finds the buffer empty and for a caller waiting on the barrier:
+the buffer's bytes are 2.8.0's, and draining 10,000 events takes about 0.42 ms. On the wire-to-handler path the
+connection allocates about 1.85 KB and spends about 1.65 µs per event, as 2.8.0 did. The rules of #457, #463 and #466
+are unchanged: a reload waits for every event received before its snapshot completed, a redial does not wait for the
+lost session's delivery, a refused copy an action had already received is not a loss, one Warning per overflow
+episode, and a handler that throws still lets the barrier pass the events refused behind it. No public signature
+changes.
+
 ### Fixed: a Live event nobody hears costs its manager nothing, and one a handler hears costs one entry (#493, #494)
 
 Since the channel, queue and conference events moved out of their managers' locks (#457, #462), every change queued a

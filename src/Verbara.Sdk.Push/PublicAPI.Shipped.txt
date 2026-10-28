@@ -58,7 +58,6 @@ Verbara.Sdk.Push.Events.PushEventMetadata.CorrelationId.get -> string?
 Verbara.Sdk.Push.Events.PushEventMetadata.CorrelationId.init -> void
 Verbara.Sdk.Push.Events.PushEventMetadata.OccurredAt.get -> System.DateTimeOffset
 Verbara.Sdk.Push.Events.PushEventMetadata.OccurredAt.init -> void
-Verbara.Sdk.Push.Events.PushEventMetadata.PushEventMetadata(string! TenantId, string? UserId, System.DateTimeOffset OccurredAt, string? CorrelationId, string? TopicPath = null) -> void
 Verbara.Sdk.Push.Events.PushEventMetadata.TopicPath.get -> string?
 Verbara.Sdk.Push.Events.PushEventMetadata.TopicPath.init -> void
 Verbara.Sdk.Push.Events.PushEventMetadata.TenantId.get -> string!
@@ -172,3 +171,15 @@ virtual Verbara.Sdk.Push.Events.PushEvent.Equals(Verbara.Sdk.Push.Events.PushEve
 virtual Verbara.Sdk.Push.Events.PushEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
 ~override Verbara.Sdk.Push.Authz.AuthorizationResult.Equals(object obj) -> bool
 ~override Verbara.Sdk.Push.Authz.AuthorizationResult.ToString() -> string
+Verbara.Sdk.Push.Events.PushEventMetadata.PushEventMetadata(string! TenantId, string? UserId, System.DateTimeOffset OccurredAt, string? CorrelationId, string? TopicPath = null, string? TraceContext = null) -> void
+Verbara.Sdk.Push.Events.PushEventMetadata.TraceContext.get -> string?
+Verbara.Sdk.Push.Events.PushEventMetadata.TraceContext.init -> void
+Verbara.Sdk.Push.Events.RemotePushEvent
+Verbara.Sdk.Push.Events.RemotePushEvent.OriginalEventType.get -> string!
+Verbara.Sdk.Push.Events.RemotePushEvent.OriginalEventType.init -> void
+Verbara.Sdk.Push.Events.RemotePushEvent.RawPayload.get -> byte[]!
+Verbara.Sdk.Push.Events.RemotePushEvent.RawPayload.init -> void
+Verbara.Sdk.Push.Events.RemotePushEvent.RemotePushEvent(string! OriginalEventType, string? SourceNodeId, byte[]! RawPayload) -> void
+Verbara.Sdk.Push.Events.RemotePushEvent.SourceNodeId.get -> string?
+Verbara.Sdk.Push.Events.RemotePushEvent.SourceNodeId.init -> void
+override Verbara.Sdk.Push.Events.RemotePushEvent.EventType.get -> string!
