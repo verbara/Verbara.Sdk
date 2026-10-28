@@ -38,8 +38,8 @@ internal static partial class AriClientLog
     [LoggerMessage(Level = LogLevel.Information, Message = "[ARI] Reconnected: attempts={Attempt}")]
     public static partial void ReconnectedSuccess(ILogger logger, int attempt);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "[ARI] Event parse failed: json_length={JsonLength}")]
-    public static partial void EventParseFailed(ILogger logger, Exception exception, int jsonLength);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[ARI] Event parse failed: event_type={EventType} json_length={JsonLength}")]
+    public static partial void EventParseFailed(ILogger logger, Exception exception, string? eventType, int jsonLength);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[ARI] Reconnect gave up: max_attempts={MaxAttempts}")]
     public static partial void ReconnectGaveUp(ILogger logger, int maxAttempts);
@@ -554,12 +554,14 @@ public sealed class AriClient : IAriClient
 
     internal static AriEvent? ParseEvent(string json, ILogger? logger = null)
     {
+        // Read before the typed parse so a frame that fails it is still named in the warning.
+        string? type = null;
         try
         {
             // Quick-parse to extract "type" field
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+            type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
 
             AriEvent? evt = null;
 
@@ -583,7 +585,7 @@ public sealed class AriClient : IAriClient
         catch (Exception ex)
         {
             if (logger is not null)
-                AriClientLog.EventParseFailed(logger, ex, json.Length);
+                AriClientLog.EventParseFailed(logger, ex, type, json.Length);
             return null;
         }
     }
