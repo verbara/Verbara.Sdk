@@ -23,7 +23,8 @@ ValueTask<AriChannel> CreateExternalMediaAsync(string app, string externalHost, 
 
 Optional parameters are compile-time sugar. The nine-parameter member is gone from both assemblies,
 which is why this is a break and not an addition: `CP0002` in both packages, plus `CP0006` on the
-interface. Those three are declared in each package's `CompatibilitySuppressions.xml`.
+interface. Those three were declared in each package's `CompatibilitySuppressions.xml` until the package
+validation baseline moved to 2.6.0, which ships the new signature.
 
 ## Why a parameter is worth a break
 
