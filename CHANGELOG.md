@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed: CI runs the Asterisk 22 and 23 suites on 22.11.0 and 23.5.0 (#NNN)
+### Changed: CI runs the Asterisk 22 and 23 suites on 22.11.0 and 23.5.0 (#488)
 
 `docker/asterisk-base-images.txt` pins the 22 line to 22.11.0 and the 23 line to 23.5.0, the newest generally
 available build of each (andrius build `c6e8a0e`, by index digest), instead of 22.10.1 and 23.4.1. They are the first
