@@ -24,11 +24,22 @@ internal sealed class LiveEventOutbox
     /// <summary>How long a notification waits for the earlier ones before it is raised alongside them.</summary>
     internal static readonly TimeSpan DefaultTurnWait = TimeSpan.FromSeconds(1);
 
-    // Guards the entry list and every entry's and frame's state. Never held while a handler runs.
+    // Raises a notification posted as a plain Action: the action travels as the target, so the wrapper adds no closure.
+    private static readonly Action<object, object?, object?> InvokeAction = static (raise, _, _) => ((Action)raise)();
+
+    // Guards the entry list, the counters below and every entry's and frame's state. Never held while a handler runs.
     private readonly object _sync = new();
 
-    // Entries not yet raised to the end, in posting order.
-    private readonly LinkedList<Entry> _entries = new();
+    // Entries not yet raised to the end, in posting order: a singly linked list that entries leave only from the head,
+    // once they are done.
+    private Entry? _head;
+    private Entry? _tail;
+
+    // Entries in the list. Written only under _sync; read without it by Drain's fast path.
+    private int _count;
+
+    // Drains blocked in Monitor.Wait for their turn. Under _sync; a finished raise pulses only when one is waiting.
+    private int _waiters;
 
     // The drain whose handler is running in this execution context, if any.
     private readonly AsyncLocal<Frame?> _current = new();
@@ -48,12 +59,26 @@ internal sealed class LiveEventOutbox
     }
 
     /// <summary>Queues a notification. Call it under the lock that orders the transition it reports.</summary>
-    internal void Post(Action raise)
+    internal void Post(Action raise) => Post(InvokeAction, raise, null, null);
+
+    /// <summary>
+    /// Queues a notification without a closure: the outbox calls <paramref name="raise"/> with
+    /// <paramref name="target"/>, <paramref name="arg1"/> and <paramref name="arg2"/>, so a <see langword="static"/>
+    /// lambda costs nothing beyond the queued entry. Call it under the lock that orders the transition it reports, and
+    /// only when the event has a subscriber: a notification nobody hears need not be queued.
+    /// </summary>
+    internal void Post(Action<object, object?, object?> raise, object target, object? arg1, object? arg2)
     {
         lock (_sync)
         {
             var frame = _current.Value;
-            _entries.AddLast(new Entry(raise, Environment.CurrentManagedThreadId, frame is { Active: true } ? frame : null));
+            var entry = new Entry(raise, target, arg1, arg2, Environment.CurrentManagedThreadId, frame is { Active: true } ? frame : null);
+            if (_tail is null)
+                _head = entry;
+            else
+                _tail.Next = entry;
+            _tail = entry;
+            Volatile.Write(ref _count, _count + 1);
         }
     }
 
@@ -61,25 +86,34 @@ internal sealed class LiveEventOutbox
     /// Raises the notifications this thread posted, each once the earlier ones have finished or the turn wait ran out.
     /// Inside a handler of this outbox it returns at once: the handler's drain raises them after the handler returns. A
     /// handler that throws does not stop the others: the first exception is rethrown once this call's notifications
-    /// have all been raised.
+    /// have all been raised. With nothing queued it returns at once and allocates nothing.
     /// </summary>
     internal void Drain()
     {
+        // A thread's own posts precede its drain in program order, so a zero read proves this thread has nothing
+        // posted; everything else a drain does (claim, wait, adopt) only happens for a thread that owns an entry.
+        if (Volatile.Read(ref _count) == 0)
+            return;
+
+        DrainSlow();
+    }
+
+    private void DrainSlow()
+    {
         var thread = Environment.CurrentManagedThreadId;
-        var frame = new Frame();
+        Frame? frame = null;
         lock (_sync)
         {
             if (_current.Value is { Active: true })
                 return;
 
-            var any = false;
-            foreach (var entry in _entries.Where(e => e is { Claimed: false, Owner: null } && e.Thread == thread))
+            for (var entry = _head; entry is not null; entry = entry.Next)
             {
-                entry.Owner = frame;
-                any = true;
+                if (entry is { Claimed: false, Owner: null } && entry.Thread == thread)
+                    entry.Owner = frame ??= new Frame();
             }
 
-            if (!any)
+            if (frame is null)
                 return;
             frame.Active = true;
         }
@@ -88,7 +122,7 @@ internal sealed class LiveEventOutbox
         _current.Value = frame;
         // One turn wait per drain, not per notification: once it ran out, this call's later notifications do not wait
         // again behind the same blocked handler.
-        var waited = System.Diagnostics.Stopwatch.StartNew();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         ExceptionDispatchInfo? failure = null;
         try
         {
@@ -101,15 +135,18 @@ internal sealed class LiveEventOutbox
                     next = FirstOwnedBy(frame);
                     if (next is null)
                         break;
-                    if (!WaitForTurn(next, waited))
+                    if (!WaitForTurn(next, started))
                         unowned = ClaimUnownedBefore(next);
                     next.Claimed = true;
                 }
 
                 if (unowned is not null)
                 {
-                    foreach (var unownedFailure in unowned.Select(Raise).OfType<Exception>())
-                        _reportUnownedFailure(unownedFailure);
+                    foreach (var entry in unowned)
+                    {
+                        if (Raise(entry) is { } unownedFailure)
+                            _reportUnownedFailure(unownedFailure);
+                    }
                 }
 
                 var own = Raise(next);
@@ -124,8 +161,11 @@ internal sealed class LiveEventOutbox
                 frame.Active = false;
                 // Only when a raise was abandoned by an exception that is not a handler's: what is left goes back to
                 // this thread, so its next call raises it.
-                foreach (var entry in _entries.Where(e => e is { Claimed: false } && ReferenceEquals(e.Owner, frame)))
-                    entry.Owner = null;
+                for (var entry = _head; entry is not null; entry = entry.Next)
+                {
+                    if (!entry.Claimed && ReferenceEquals(entry.Owner, frame))
+                        entry.Owner = null;
+                }
             }
 
             _current.Value = outer;
@@ -136,7 +176,7 @@ internal sealed class LiveEventOutbox
 
     private Entry? FirstOwnedBy(Frame frame)
     {
-        foreach (var entry in _entries)
+        for (var entry = _head; entry is not null; entry = entry.Next)
         {
             if (!entry.Claimed && ReferenceEquals(entry.Owner, frame))
                 return entry;
@@ -146,14 +186,24 @@ internal sealed class LiveEventOutbox
     }
 
     // Under _sync. True once every entry posted before next has finished; false when the turn wait ran out first.
-    private bool WaitForTurn(Entry next, System.Diagnostics.Stopwatch waited)
+    // The waiter count rises under the lock before Monitor.Wait releases it atomically, and a finished raise pulses
+    // under the same lock, so a waiter is never missed.
+    private bool WaitForTurn(Entry next, long started)
     {
-        while (!ReferenceEquals(_entries.First?.Value, next))
+        while (!ReferenceEquals(_head, next))
         {
-            var remaining = _turnWait - waited.Elapsed;
+            var remaining = _turnWait - System.Diagnostics.Stopwatch.GetElapsedTime(started);
             if (remaining <= TimeSpan.Zero)
                 return false;
-            Monitor.Wait(_sync, remaining);
+            _waiters++;
+            try
+            {
+                Monitor.Wait(_sync, remaining);
+            }
+            finally
+            {
+                _waiters--;
+            }
         }
 
         return true;
@@ -164,12 +214,12 @@ internal sealed class LiveEventOutbox
     private List<Entry>? ClaimUnownedBefore(Entry next)
     {
         List<Entry>? unowned = null;
-        for (var node = _entries.First; node is not null && !ReferenceEquals(node.Value, next); node = node.Next)
+        for (var entry = _head; entry is not null && !ReferenceEquals(entry, next); entry = entry.Next)
         {
-            if (node.Value is { Claimed: false, Owner: null })
+            if (entry is { Claimed: false, Owner: null })
             {
-                node.Value.Claimed = true;
-                (unowned ??= []).Add(node.Value);
+                entry.Claimed = true;
+                (unowned ??= []).Add(entry);
             }
         }
 
@@ -181,7 +231,7 @@ internal sealed class LiveEventOutbox
         Exception? failure = null;
         try
         {
-            entry.Raise();
+            entry.Invoke();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -192,19 +242,32 @@ internal sealed class LiveEventOutbox
             lock (_sync)
             {
                 entry.Done = true;
-                while (_entries.First is { Value.Done: true })
-                    _entries.RemoveFirst();
-                Monitor.PulseAll(_sync);
+                var removed = 0;
+                while (_head is { Done: true } done)
+                {
+                    _head = done.Next;
+                    removed++;
+                }
+
+                if (_head is null)
+                    _tail = null;
+                Volatile.Write(ref _count, _count - removed);
+                if (_waiters > 0)
+                    Monitor.PulseAll(_sync);
             }
         }
 
         return failure;
     }
 
-    private sealed class Entry(Action raise, int thread, Frame? owner)
+    private sealed class Entry(
+        Action<object, object?, object?> raise,
+        object target,
+        object? arg1,
+        object? arg2,
+        int thread,
+        Frame? owner)
     {
-        internal Action Raise { get; } = raise;
-
         /// <summary>The thread that posted it, whose next drain raises it unless a drain already owns it.</summary>
         internal int Thread { get; } = thread;
 
@@ -214,6 +277,11 @@ internal sealed class LiveEventOutbox
         internal bool Claimed { get; set; }
 
         internal bool Done { get; set; }
+
+        /// <summary>The entry posted after it, while both are in the list.</summary>
+        internal Entry? Next { get; set; }
+
+        internal void Invoke() => raise(target, arg1, arg2);
     }
 
     // One Drain call. Active while it can still raise what is posted to it.
