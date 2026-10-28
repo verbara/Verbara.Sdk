@@ -48,12 +48,13 @@ decision records, specs, plans and research notes are kept locally and are not t
 | 61 | 29 NuGet packages | ENFORCING | — | GAP |
 | 61 | 0 build warnings | ENFORCING | `Directory.Build.props` `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
 | 61 | 0 trim warnings | ENFORCING | AotCanary | PARTIAL — 17/28 runtime packages analyzed by ILC (see line 13) |
-| 61 | ~2,924 unit + 154 functional + 65 integration | COHERENCE | — | WRONG — the suite runs **3,295** (measured 2026-08-29); note nothing in-tree *records* that number until §4.1 commits the record |
+| 61 | more than 7,400 unit tests, plus functional and integration suites (no figure) | COHERENCE | — | GAP — corrected 2026-10-28: the unit lane (`ci.yml` `Unit Tests` filter, Release) ran **7,442** tests in 30 assemblies at `2066e1c2`, so the floor holds as tests are added; the functional (154) and integration (65) figures were dropped, not re-measured. Nothing in-tree records the count yet |
 | 61 | headline version **v2.8.0** | COHERENCE | `StatusBlockCoherenceTests` — against `Directory.Build.props` `<PackageVersion>` | **OK** |
 | ~~65~~ | ONNX model 8.3 MB | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history |
 | ~~67~~ | 94.26% English accuracy, in upstream's voice | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history. The figure survives at `:465` (row below) with its citation and hash pin; this was the duplicate. |
 | ~~67~~ | ~12 ms CPU inference | — | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals*. Its line was also removed with the release bullets on 2026-09-20. |
 | 65 | 148/152 AMI (97%), 94/98 ARI (96%), 46/46, 27/27, 243 events | ENFORCING | — | GAP — the event figure was corrected 2026-09-24 (was 278), then 269 → 243 in 2.9.0 (26 obsolete event types removed) |
+| 65 | supported: 22 LTS primary, 23 Standard secondary until 2027-10-15, 24 once GA and in CI, 20 and earlier not | ATTRIBUTED | — | GAP — corrected 2026-10-28 (was "Compatible with Asterisk 18, 20, 22 LTS, and 23 Standard"); same sources as `asterisk-version-matrix.md:7-27` |
 | ~~67~~ | ~~**60 ADRs**~~ | — | — | **DELETED** — the figure left `README.md` with the public decision catalog it counted (decision records are kept locally, no longer tracked); the two `StatusBlockCoherenceTests` cases that pinned it were removed with it. |
 | 89 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | `PerformanceTableCoherenceTests` — the header provenance test | PARTIAL — matched against the whole file rather than this line, and blind to the AMI row's .NET 10.0.6 MediumRunJob exception (`performance-record.json:12`); the two session-store rows measured apart from it state their own at :110 |
 | 93 | AMI parse+dispatch 1.62M events/sec (617.6 ns) | ENFORCING + COHERENCE | `PerformanceTableCoherenceTests` against `performance-record.json`; `perf-regression.yml` `*AmiProtocolReader*` against `baseline.json` | PARTIAL — COHERENCE bound; the regression gate has a baseline since #232 but observes only (`PERF_GATE_ENFORCE: 'false'`) |
@@ -68,7 +69,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 | 125 | 15 Meters | ENFORCING | `MarketingClaimsTests.cs:52-57` | OK |
 | 126 | 12 IHealthChecks — 7 core + 5 VoiceAi | ENFORCING | `MarketingClaimsTests.cs:76-97` | PARTIAL — total pinned, the 7/5 split is not |
 | 127 | 61 const strings, 15 nested classes, "14+ unit tests" | ENFORCING | `MarketingClaimsTests.cs:59-74` | PARTIAL — the "14+ tests" sub-claim is unpinned |
-| 155 | "First contact in 10 lines" | COHERENCE | — | WRONG — the snippet at :158-172 is 15 lines (13 non-blank); the old anchor :166-182 was already off before #322 |
+| 155 | "First contact in 15 lines" | COHERENCE | — | GAP — corrected 2026-10-28: the snippet at :158-172 is 15 lines (13 non-blank); "exposes a `/health` endpoint" also corrected — `AddVerbara` registers the checks, a console host maps no endpoint |
 | 461 | Cartesia Sonic-3, no figure | — | — | **DELETED** — the figure moved to `src/Verbara.Sdk.VoiceAi.Tts/README.md`, cited; `40-90 ms` was never Cartesia's number (they publish sub-90 ms) |
 | 463 | smart-turn-v3.2-cpu, 94.26% in upstream's voice | ATTRIBUTED | citation + hash pin | **OK** — this line previously carried the figure with no citation at all |
 
@@ -77,23 +78,23 @@ decision records, specs, plans and research notes are kept locally and are not t
 | line | claim | class | guard | status |
 |---|---|---|---|---|
 | 10 | .NET 10.0.100+ pinned | ENFORCING | `global.json` | OK |
-| 11 | tested with Asterisk 18, 20, 22, 23 | ENFORCING | `ci.yml:310` matrix | PARTIAL — matrix is `[23]` on PR, `[22,23]` on merge_group; **18 and 20 are tested by nothing** |
+| 11 | Asterisk 22 LTS or 23 Standard; CI runs both; 20 and earlier not supported | ENFORCING | `ci.yml` functional matrix | OK — corrected 2026-10-28: `[23]` on pull requests (required check), `[22, 23]` in the merge queue; was "tested with 18, 20, 22, 23", and 18 and 20 were tested by nothing |
 | 189 | Core (9 packages) | ENFORCING | — | GAP — correct as a subset |
 | 203 | Voice AI (8 packages) | ENFORCING | — | GAP — correct |
 | 213 | Pipecat smart-turn-v3.2 ONNX | ATTRIBUTED | content-hash pin | **OK** — `<Description>` now says v3.2-cpu too |
-| 216 | **All** VoiceAi packages expose Meter + ActivitySource + IHealthCheck | ENFORCING | — | WRONG — 3 of 7; falsifiable against the very array it cites |
-| 218 | Push (2 packages) | ENFORCING | — | WRONG — 4 on disk |
-| 225 | Source Generators (1 analyzer) | ENFORCING | — | GAP — correct |
-| 275-282 | four source generators | ENFORCING | — | GAP — correct |
-| 304 | measurement tuple (BDN v0.14.0, .NET 10.0.5, Ryzen 9 9900X, ShortRun 3+3) | COHERENCE | — | GAP — **and carries no date**, which D7 requires |
-| 310-390 | the 32-figure benchmark block | COHERENCE | — | **ORPHANED** — 29 of 32 means match no committed value; 26 of 29 allocations match exactly. Being replaced with the v1.11 recorded values by this change |
-| 394-398 | derived ranges and "~3.9M messages/sec theoretical" | COHERENCE | — | GAP — inherits :370's class; the record's own figure is 26.7 µs → 3.75M |
-| 432 | build produces zero warnings | ENFORCING | `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
-| 438-479 | project tree: 17 package dirs, 13 examples | ENFORCING | — | WRONG — 29 packages, 25 examples |
-| 494 | `Ami.Port = 5038 // default` | ENFORCING | — | GAP — correct |
-| 503 | `EventPumpCapacity = 10_000 // default` | ENFORCING | — | **WRONG — `AsyncEventPump.DefaultCapacity` is 20_000** |
-| 543 | "all 148 AMI actions" | ENFORCING | — | GAP — corrected 2026-09-24 (was 111). The same row also named a type that does not exist, `AmiAction` in `Verbara.Sdk.Ami.Actions`; the base is `ManagerAction` in `Verbara.Sdk` |
-| 544 | "all 243 AMI events" | ENFORCING | — | GAP — corrected 2026-09-24 (was 215); 269 → 243 in 2.9.0 (26 obsolete event types removed). Same type defect: `AmiEvent` in `Verbara.Sdk.Ami.Events` does not exist; the base is `ManagerEvent` in `Verbara.Sdk` |
+| 216 | five VoiceAi packages ship an `IHealthCheck`, three an `ActivitySource`, five meters | ENFORCING | — | GAP — corrected 2026-10-28 against `VerbaraTelemetry.cs:10-41` and the `Diagnostics/` folders; was "all" |
+| 218 | Push (4 packages) | ENFORCING | — | GAP — corrected 2026-10-28; matches `src/` |
+| 227 | Source Generators (1 analyzer) | ENFORCING | — | GAP — correct |
+| 277-284 | four source generators | ENFORCING | — | GAP — correct |
+| 306 | measurement tuple (BDN v0.14.0, .NET 10.0.5, Ryzen 9 9900X, ShortRun 3+3) | COHERENCE | — | GAP — **and carries no date**, which D7 requires |
+| 312-392 | the 32-figure benchmark block | COHERENCE | — | **ORPHANED** — 29 of 32 means match no committed value; 26 of 29 allocations match exactly. Being replaced with the v1.11 recorded values by this change |
+| 396-400 | derived ranges and "~3.9M messages/sec theoretical" | COHERENCE | — | GAP — inherits :370's class; the record's own figure is 26.7 µs → 3.75M |
+| 434 | build produces zero warnings | ENFORCING | `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
+| 440-449 | project tree: 29 packages by group, 25 examples | ENFORCING | — | GAP — corrected 2026-10-28; was 17 package dirs and 13 examples |
+| 464 | `Ami.Port = 5038 // default` | ENFORCING | — | GAP — correct |
+| 473 | `Ami.EventPumpCapacity = 20_000 // default` | ENFORCING | — | GAP — corrected 2026-10-28: `AsyncEventPump.DefaultCapacity` is 20_000 (`AsyncEventPump.cs:42`, the default of `AmiConnectionOptions.cs:69`); the line also set the property on `VerbaraOptions`, which has none |
+| 513 | "all 148 AMI actions" | ENFORCING | — | GAP — corrected 2026-09-24 (was 111). The same row also named a type that does not exist, `AmiAction` in `Verbara.Sdk.Ami.Actions`; the base is `ManagerAction` in `Verbara.Sdk` |
+| 514 | "all 243 AMI events" | ENFORCING | — | GAP — corrected 2026-09-24 (was 215); 269 → 243 in 2.9.0 (26 obsolete event types removed). Same type defect: `AmiEvent` in `Verbara.Sdk.Ami.Events` does not exist; the base is `ManagerEvent` in `Verbara.Sdk` |
 
 ## `docs/README-commercial.md`
 
@@ -110,16 +111,16 @@ decision records, specs, plans and research notes are kept locally and are not t
 | 19 | asterisk-java "over 2,470 commits", "**449 GitHub stars**" | — | — | **DELETE** — a star count fails all three D8 obligations and is stale the next day; the sentence's argument survives without it |
 | 19 | four custom source generators | ENFORCING | — | GAP — correct |
 | 30 | providers "Deepgram, ElevenLabs, Azure, Google, Whisper" (5) | ENFORCING | — | GAP — understates; 7 STT + 6 TTS ship |
-| 32, 58 | ~2,924 unit + 154 functional + 65 integration | COHERENCE | — | WRONG — stale by ~370 |
+| 32, 58 | more than 7,400 unit tests, plus functional and integration suites (no figure) | COHERENCE | — | GAP — corrected 2026-10-28, the same measurement as `README.md:61` |
 | 32 | zero compiler warnings | ENFORCING | `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
 | 32 | passes AOT trim analysis cleanly | ENFORCING | AotCanary | PARTIAL — 17/28 runtime packages analyzed by ILC (see line 13) |
 | 32 | "**designed for** … exceeding 100,000 concurrent agents" | EVIDENCE | — | **OK** — reworded 2026-09-20: "tested" removed, deferral declared with its blocker (D9). Was: GAP — nothing executes a load test at any scale; "designed for" is supported, "tested" is not |
 | 50 | "start in under 10 milliseconds" | — | — | GAP — **no startup measurement exists anywhere in the repo** |
 | 54 | four Roslyn source generators | ENFORCING | — | GAP — correct |
-| 56 | **28** composable NuGet packages | ENFORCING | — | WRONG — 29 |
+| 56 | **29** composable NuGet packages | ENFORCING | — | GAP — corrected 2026-10-28 |
 | 56 | core alone under 200 KB | ENFORCING | — | GAP — true (dll 45,568 B) |
-| 58 | ~3,000+ automated tests | COHERENCE | — | GAP — true |
-| 58 | **26** example applications | ENFORCING | — | WRONG — 25 tracked |
+| 58 | 7,400+ unit tests | COHERENCE | — | GAP — corrected 2026-10-28, the same measurement as `README.md:61` |
+| 58 | **25** example applications | ENFORCING | — | GAP — corrected 2026-10-28; 25 `Examples/*/` projects |
 
 ## `src/*/README.md` and `src/*/*.csproj`
 
@@ -159,9 +160,9 @@ decision records, specs, plans and research notes are kept locally and are not t
 | `VoiceAi.Tts/README.md:9-14,75,83` | per-vendor TTFA (~150 ms, 40-90 ms, sub-100 ms, …) | ATTRIBUTED | — | GAP — no citation; the same vendor figure appears three times with three values |
 | `VoiceAi.Stt/README.md:3` | 7 providers | ENFORCING | — | GAP |
 | `VoiceAi.Stt/README.md:9` | "lowest latency in the catalog (~150ms)" | ATTRIBUTED | — | GAP |
-| `VoiceAi.TurnDetection/README.md:3` | smart-turn-**v3** | ATTRIBUTED | — | WRONG — contradicts `:11` in the same file |
+| `VoiceAi.TurnDetection/README.md:3` | smart-turn-v3.2-cpu | ATTRIBUTED | — | GAP — reads v3.2-cpu, agreeing with `:11` (re-verified 2026-10-28) |
 | `VoiceAi.TurnDetection/README.md:11` | bundles `smart-turn-v3.2-cpu.onnx` | ATTRIBUTED | — | GAP — no content-hash pin |
-| `VoiceAi.TurnDetection.csproj:3` `<Description>` | smart-turn-**v3** | ATTRIBUTED | — | WRONG — ships to nuget.org; resource at `:26` is v3.2 |
+| `VoiceAi.TurnDetection.csproj:3` `<Description>` | smart-turn-v3.2-cpu | ATTRIBUTED | — | GAP — reads v3.2-cpu, matching the bundled resource (re-verified 2026-10-28) |
 | `VoiceAi.AudioSocket/README.md:94,99` | a connection presenting a UUID that a live session holds waits at most 1 second for it; a UUID still live after 1 second is refused | ENFORCING | `AudioSocketServer.SameIdGrace`; `AudioSocketServerEdgeCaseTests.HandleConnectionAsync_ShouldServeAConnectionThatPresentsAHeldId_WhenTheHolderHangsUpWithinTheGrace` asserts the wait's timer is due at 1 s, and `…_ShouldLogTheChannelIdNotTheLimit_WhenItRefusesASameIdConnection` that the refusal comes once 1 s has passed on the manual clock and logs `1000 ms` | OK |
 | `VoiceAi.AudioSocket/README.md:103-105` | after the server's hangup frame, `AudioSocket()` returns and the dialplan goes on, on Asterisk 20 and later; on Asterisk 18 any end from the server hangs the call up | **EVIDENCE** | — | dated record — measured 2026-09-28 against Asterisk 20.20.1, 22.9.0 and 23.4.1 with a bare TCP listener in place of the server: two calls presenting one UUID, the second refused four ways, immediately or after 300 ms of unread audio, 10 calls per refusal style, route (`AudioSocket()` and `Dial(AudioSocket/…,,g)`) and version. After a hangup frame, immediate or late, `AudioSocket()` returned and the dialplan went on in every call; a bare close after unread audio (a reset) or an error frame failed the application and hung the call up on the `AudioSocket()` route. The same day, the server's own refusal, 10 calls per route and version: the refused call's dialplan went on in 60 of 60 on the three versions, and in 10 of 10 on 22.9.0 on a second harness. Re-measured 2026-09-29 with this server on 22.9.0 and 23.4.1, 10 calls per route and version: the refused call's dialplan went on in 40 of 40, refused 998–1006 ms after it connected, with the call holding the UUID untouched. On 18.26.4, measured 2026-09-28, 10 calls: any end from the server, a hangup frame included, failed the application and both calls were hung up |
 | `VoiceAi.AudioSocket/README.md:46-56` | `HangupAsync` writes at most one hangup frame per session and nothing on a session already ended; a hangup waits for the audio write in flight | ENFORCING | `AudioSocketSessionHangupTests` (`HangupAsync_ShouldLeaveOneHangupFrameInAll_WhenCalledTwice`, `…ShouldCompleteAndWriteNothing_WhenTheCallerAlreadyHungUp`, `…WhenTheOwnerDisposedTheSession`, `…ShouldWaitForTheAudioWriteInFlight_WhenCalledBeforeThatWriteHasFinished`) | OK |
@@ -198,9 +199,9 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 
 | line | claim | class | guard | status |
 |---|---|---|---|---|
-| 30 | "28 SDK packages: 9 core + 8 VoiceAi + 4 Push + 2 Sessions backends" | ENFORCING | — | **WRONG** — 29 |
-| 33 | "26 example applications" | ENFORCING | — | **WRONG** — 25 tracked |
-| 34 | "33 test projects" | ENFORCING | — | **WRONG** — 37 under `Tests/` |
+| 30 | "29 SDK packages: 9 core + 8 VoiceAi + 4 Push + 2 Sessions backends" | ENFORCING | — | GAP — corrected 2026-10-28 |
+| 33 | "25 example applications" | ENFORCING | — | GAP — corrected 2026-10-28 |
+| 34-35 | "34 test projects" plus 3 test-infrastructure libraries and the benchmarks | ENFORCING | — | GAP — corrected 2026-10-28: 38 `*.csproj` under `Tests/` |
 
 ## `docs/guides/`
 
@@ -208,12 +209,12 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 
 | location | claim | class | status |
 |---|---|---|---|
-| `high-load-tuning.md:89` | "All **five** VoiceAi packages publish a Meter + ActivitySource + IHealthCheck" | ENFORCING | **WRONG** — same falsity as `README-technical.md:216`: only 3 ActivitySources exist, so Stt and Tts publish a Meter and a HealthCheck but no source |
+| `high-load-tuning.md:89` | five VoiceAi packages ship an `IHealthCheck`; five meters; three `ActivitySource`s | ENFORCING | GAP — corrected 2026-10-28, the same correction as `README-technical.md:216`; was "all five … publish a Meter + ActivitySource + IHealthCheck" |
 | `high-load-tuning.md:130` | 9 sources, 15 meters | ENFORCING | OK — `MarketingClaimsTests` |
 | `high-load-tuning.md:19-24` | RAM per buffer (est.) | ENFORCING | GAP — derivable from capacity × entry size |
 | `high-load-tuning.md:19-24,26,315` | events/sec per agent tier; 200K/sec queue storm; VarSet 50%+ of volume | — | GAP — workload estimates about the reader's PBX; see *Unresolved* |
 | `high-load-tuning.md:173-175` | pauseWriter 1 MB / resumeWriter 512 KB / segment 4 KB "hardcoded" | ENFORCING | GAP |
-| `high-load-tuning.md:259` | EventPumpCapacity 20,000 | ENFORCING | OK — matches source; `README-technical.md:503` is the wrong one |
+| `high-load-tuning.md:259` | EventPumpCapacity 20,000 | ENFORCING | OK — matches source; `README-technical.md:473` now agrees (corrected 2026-10-28) |
 | `high-load-tuning.md:246,254-255` | the reconciliation sweep runs every 30 s and asks once a held call is older than 60 s, by default | — | GAP — documented defaults, true against `SessionOptions` as of 2026-10-03, unclassed until *Unresolved* 1 is ruled |
 | `high-load-tuning.md:248` | one channels-only reconciliation: 5.5 ms, 703 KiB and 4.3 MB at 1,000 channels; 27–28 ms, 3.3 MiB, 21.4–21.5 MB and 22–23 ms of Asterisk CPU at 5,000; no event dropped | **EVIDENCE** | dated record — measured 2026-10-03 on Asterisk 22.10.1 (`andrius/asterisk:22`, a container limited to 4 CPUs, a 24-core host at load 0.7–5.2), `Local` channels (80 % in `Wait`, 20 % waiting in 50 queues of 20 unreachable members, 200 agents), `VerbaraServer.ReconcileChannelsAsync` called 25 times per run with no traffic, two runs per size (AMI users with and without `Hangup`); medians; bytes are the container's `eth0` transmit, Asterisk CPU the container's cgroup CPU less its idle rate, allocation `GC.GetTotalAllocatedBytes`. 0 `ami.events.dropped` in the four runs, including 2,000 short calls at 50 per second during 125–139 back-to-back reconciliations per run: 0 calls ended before Asterisk ended them, 0 endings missed, 0 channels admitted again from a snapshot, 0 duplicated calls |
 | `high-load-tuning.md:218,220-227` | with `MaxReconnectAttempts = N` the client makes N reconnect attempts; while `AutoReconnect` is on the backoff options are accepted from `00:00:00` / `ReconnectInitialDelay` to `24.20:31:23.647` (`int.MaxValue` ms), a multiplier of at least `1.0`, and `MaxReconnectAttempts` of 0 or more | ENFORCING | OK — `AmiConnectionOptionsValidatorTests` / `AriClientOptionsValidatorTests` `Validate_ShouldAgreeWithTheBackoffScheduleAndTheWaitLimit_OverTheBoundarySet` (the boundary set holds exactly `int.MaxValue` ms, accepted, and 60 days, rejected) and `…ShouldAcceptOnlyValuesTheBackoffComputesAtEveryAttempt`; `AmiReconnectLoopTests.ReconnectLoop_ShouldMakeExactlyNConnects_WhenEveryReconnectIsRefused` and `AriClientStateTests.ReconnectLoop_ShouldMakeExactlyNDials_WhenEveryReconnectIsRefused` (N ∈ {1, 2, 4}) |
@@ -282,7 +283,7 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 | `call-session-ending-migration.md:284-289`, `troubleshooting.md:359` | `Timeout.InfiniteTimeSpan` is minus one millisecond, written `-00:00:00.001` in configuration, and a value bound from it switches the pool sweep off | ENFORCING | OK — `PoolSweepRegistrationTests.PoolSweep_ShouldStartNoTimer_WhenTheIntervalIsBoundFromConfigurationAsMinusOneMillisecond` |
 | `call-session-ending-migration.md:310-319` | before 2.8.0 a multi-server host left 60 of 60 lost hangups open per version and 100 of 100 under 100 simultaneous calls; with the pool sweep 0, all `cause=reload` once, the other server's 60 ended by their own hangups; trunk, hot-add and network-cut cells: every lost hangup ended once, no live call ended, no double ending | **EVIDENCE** | dated record — measured 2026-10-08 on two servers per version (20.20.1 routes only; 22.10.1 and 23.4.1 all cells), pinned builds by tag and digest, each server with its own `systemname`; a host built with `AddVerbaraMultiServer` + `AddVerbaraSessionsMultiServer`, servers joined by connect, start, add, attach; `DialingTimeout` 3 s, interval 1 s, retention 5 s; ten calls per route (rings 8 s and talks 5 s; rings only; answered with no dial 8 s; dial never answered; answered 100 s; rings 160 s and talks 5 s), one AMI user with every event and one with `eventfilter=!Event: Hangup`; the base and the change interleaved per version; 0 channels on both servers after every cell |
 | `log-analysis-reference.md:5,22` | SDK Tags (11), Dashboard Tags (8) | ENFORCING | GAP |
-| `asterisk-version-compatibility.md:9,157` | "**no data is ever lost**", "zero data loss" | ENFORCING | GAP — absolute claim, testable against the `RawFields` fallback |
+| `asterisk-version-compatibility.md:11,132` | "**no data is ever lost**", "zero data loss" | ENFORCING | GAP — absolute claim, testable against the `RawFields` fallback |
 | `provider-test-substrate.md:6` | fourteen provider surfaces | ENFORCING | GAP |
 | `provider-test-substrate.md:33,36,114` | ~30 assemblies, coverage 80.42% → 61.96%, six defects | **EVIDENCE** | dated record |
 | `provider-recording-protocol.md:6-7,54` | 14 surfaces = 6 HTTP + 8 WebSocket; five of six automated | ENFORCING | GAP |
@@ -293,7 +294,10 @@ Missed by the first sweep — tracked, public, and read as current by every cont
 | `provider-wire-conformance.md:801-805` | the bound running out inside a read that returns part of a message, through Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1: completed with the close unanswered on every run with the fix, failed on every run before it; 3.7–12.7 % of unanswered closes failed in an in-process race no hook forced | **EVIDENCE** | dated record — measured 2026-09-28 with no live vendor: Asterisk hangs up a call bridged over AudioSocket after 3 s, the client closes toward a local fake of the vendor that never answers, and the bound runs out, forced by a hook on the runtime's receive, inside the read that returns the first 64 KiB of a 70,000-character message. Two independent harnesses: 50 calls per version on 20.20.1, 22.9.0 and 23.4.1 (hook at the read's lock release), and 20 per version on 18.26.4, 22.9.0 and 23.4.1 (hook after the payload read); 10 control calls per version whose close was answered completed in both builds. The range is in process, without Asterisk and without the hook, 300 sessions per series, the clock advanced at a random instant while the fake streamed: 3.7 % and 12.7 % with back-to-back 70,000-character frames in the two harnesses, 7.7 % and 4.0 % with fragmented messages; 0 of 300 in every series with the fix. The instant itself is also pinned by deterministic tests (`OpenAiRealtimeBridgeEndingTests`) |
 | `provider-wire-conformance.md` (~120 further figures) | vendor byte counts, durations, accuracy scores, defect tallies | **EVIDENCE** | dated wire captures against live vendor APIs |
 
-`asterisk-version-matrix.md`, `manual-asterisk-realtime-setup.md`, `log-analysis-prompt.md`: no quantitative claims.
+| `asterisk-version-matrix.md:7-27` | the support policy (22 primary, 23 secondary until 2027-10-15, 24 once GA and in CI, 20 and earlier not supported) and the lifecycle table's dates | **ATTRIBUTED** | GAP — dates are upstream's (docs.asterisk.org *Asterisk Versions*, read 2026-10-28, cited in the guide); `24.0.0-rc3` on 2026-10-22 and rc1 on 2026-09-17 from the `asterisk/asterisk` GitHub releases; the CI column against `ci.yml`'s functional matrix and the required checks of `main` (`(23)` required, `(22)` merge queue only). The 24 row goes stale at 24's GA |
+| `asterisk-version-matrix.md:82-86` | the 23 leg is a required check and the 22 leg runs only in the merge queue | ENFORCING | GAP — true against `ci.yml` and the branch's required checks on 2026-10-28; nothing pins it |
+
+`manual-asterisk-realtime-setup.md`, `log-analysis-prompt.md`: no quantitative claims.
 
 ---
 
@@ -470,3 +474,11 @@ Corrected in the same pass, and **pre-existing** rather than caused by that edit
 parse+dispatch row transcribed the claim as `1.53M events/sec (653 ns)` while `README.md` has said
 `1.62M events/sec (617.6 ns)` on `main` for some time. The registry's own copy of a figure had
 drifted from the figure — the exact failure it exists to detect, one level up.
+
+Updated 2026-10-28 for the pre-release figures sweep — the rows of `README.md` (61, 155), `docs/README-technical.md`
+(11, 216, 218, the project tree, the `EventPumpCapacity` default), `docs/README-commercial.md` (32, 56, 58),
+`CONTRIBUTING.md` (30, 33, 34), `high-load-tuning.md:89`, the two smart-turn rows already fixed in the tree, and two new
+rows for `asterisk-version-matrix.md`. Each corrected figure was re-read against `main` at `2066e1c2`; the unit-test
+floor comes from running the unit lane there (7,442 tests). The `README-technical.md` rows below the Push table were
+re-pointed (+2 above the project tree, −30 below it) and each checked against the line it now names. No other row was
+re-verified.

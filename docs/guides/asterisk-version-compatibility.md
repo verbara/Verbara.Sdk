@@ -1,6 +1,8 @@
 # Asterisk Version Compatibility Matrix
 
-> SDK: Verbara.Sdk 0.1.0-beta.1 | Supported: Asterisk 18-23
+> Which Asterisk versions the SDK supports, and what CI runs against each, is in the
+> [version support matrix](asterisk-version-matrix.md): 22 LTS primary, 23 Standard secondary, 20 and earlier not
+> supported. The notes below also name older releases, because what arrives depends on the Asterisk that sends it.
 
 ## AMI Event Coverage by Version
 

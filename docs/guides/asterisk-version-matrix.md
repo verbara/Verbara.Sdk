@@ -1,17 +1,30 @@
 # Asterisk version support matrix
 
-The SDK targets **Asterisk 22 LTS** as its primary support tier and adds **Asterisk 23 Standard** as a secondary tier starting with SDK v1.15.0. This guide describes which versions are covered, the Docker test infrastructure for each, and known-divergent behaviour to watch for.
+The SDK supports the **Asterisk LTS releases** as its primary tier and the current **Standard release** as a secondary
+tier until that release's end of life. This guide states which versions are covered, what CI runs against each, the
+Docker test infrastructure, and known-divergent behaviour to watch for.
 
-## Supported versions (as of SDK v1.15.0 — 2026-04-20)
+## Support policy (SDK 2.9.0)
 
-| Asterisk | Type | Released | Security until | EOL | SDK support | CI coverage |
+- **Primary — Asterisk 22 LTS**, and **Asterisk 24 LTS** once it is generally available and in CI. On 2026-10-22
+  upstream's newest 24 build was `24.0.0-rc3`, a release candidate; until a 24 GA is pinned and tested, the SDK does
+  not claim support for 24.
+- **Secondary — Asterisk 23 Standard**, until its end of life on 2027-10-15. Upstream ships it security fixes only
+  from 2026-10-15.
+- **Not supported — Asterisk 20 and earlier.** 20 has been out of the SDK's CI since v1.15.0, although upstream
+  ships it security fixes until 2027-10-19. 18 reached end of life on 2025-10-20. Some guides record measurements
+  taken on 20, but no release is tested on it.
+
+| Asterisk | Type | Released | Security fixes only from | EOL | SDK support | CI coverage |
 |---|---|---|---|---|---|---|
-| **22.x** | LTS | 2024-10-16 | 2028-10-16 | 2029-10-16 | **Primary** — production recommended | Full Functional + Integration suites |
-| **23.x** | Standard | 2025-10-15 | 2026-10-15 | 2027-10-15 | **Secondary** — opt-in dual matrix | Dual CI matrix (this release); functional subset |
-| 24.x (future) | LTS | Expected 2026-10 | TBD | TBD | Planned after GA | Matrix addition in the first post-24-GA release |
-| 20.x | LTS (old) | 2022-10-19 | 2026-10-19 | 2027-10-19 | Not supported (out of CI) | — |
+| **22.x** | LTS | 2024-10-16 | 2028-10-16 | 2029-10-16 | **Primary** — production recommended | Functional + Integration suites in the merge queue (pinned build: `docker/asterisk-base-images.txt`) |
+| **23.x** | Standard | 2025-10-15 | 2026-10-15 | 2027-10-15 | **Secondary** — until EOL | Functional + Integration suites on every pull request and in the merge queue |
+| 24.x | LTS | planned 2026-10-15; not out yet (release candidates since 2026-09-17, `24.0.0-rc3` on 2026-10-22) | 2030-10-15 (planned) | 2031-10-15 (planned) | **Primary once GA and in CI** | Not in CI yet |
+| 20.x | LTS (old) | 2022-10-19 | 2026-10-19 | 2027-10-19 | Not supported | Not in CI (a build stays pinned for local measurement) |
+| 18.x | LTS (old) | 2020-10-20 | 2024-10-20 | 2025-10-20 | Not supported | — |
 
-Source of truth for Asterisk lifecycle: https://docs.asterisk.org/About-the-Project/Asterisk-Versions/
+Lifecycle dates: https://docs.asterisk.org/About-the-Project/Asterisk-Versions/ (read 2026-10-28); release-candidate
+dates: the `asterisk/asterisk` GitHub releases.
 
 ## Running the 22 LTS stack
 
@@ -58,7 +71,7 @@ new build's `asterisk -V` and digest measured first. `CODEC_OPUS_VERSION` picks 
 |---|---|---|---|
 | AMI action set | Stable | Upstream changelog notes no removed actions; several additive fields on `CoreShowChannels` / `Status` | **Low** — additive fields tolerated by generated parsers. |
 | ARI schemas | REST+WS stable | Minor additions to `channel` / `bridge` snapshots (check `GetInfoAsync` for new fields) | **Low** — our Ari.Client treats unknown fields as tolerated. |
-| PJSIP / Realtime columns | schema v22 | Upstream PJSIP additions; column set for `ps_endpoints` / `ps_aors` grew by ~3 fields | **Medium** — Pro.Realtime provisioning may need additive column support. Not blocking. |
+| PJSIP / Realtime columns | schema v22 | Upstream PJSIP additions; column set for `ps_endpoints` / `ps_aors` grew by ~3 fields | **None** — the SDK does not read or write the Realtime tables. |
 | Dialplan applications | Stable | No removals | **None** for the SDK (we don't inject dialplan). |
 | Codec negotiation | Opus optional | Opus optional | **None**. |
 
@@ -66,10 +79,17 @@ When a divergence is detected by running the 23 matrix, file it here with an exp
 
 ## CI matrix expectations
 
-The CI workflow runs Functional + Integration tests against both stacks in parallel jobs. A failure isolated to the 23 matrix surfaces as a non-blocking flag on the PR unless the failure category is "regression in SDK public API" — in which case it promotes to a blocker.
+The `Functional Tests (Testcontainers)` job of `.github/workflows/ci.yml` runs the Functional and Integration suites
+against Asterisk 23 on every pull request, and against both 22 and 23 in the merge queue. The 23 leg is a required
+check, so a failure there blocks the merge; the 22 leg runs only in the merge queue and is not a required check, so a
+22-only failure has to be read from the queue run. Each leg builds its image on the build that
+`docker/asterisk-base-images.txt` pins for that version.
 
 ## Migration guidance for consumers
 
-- Default: stay on Asterisk 22 LTS until 24 LTS ships (October 2026). LTS offers security support through 2028.
-- Early adopters on 23: pin the Docker stack via `docker-compose.test-23.yml` + run Functional matrix locally before upgrading production PBXs.
-- Do not mix 22 and 23 nodes within the same cluster — Pro.Cluster assumes homogeneous versions for session snapshot compatibility.
+- Default: run Asterisk 22 LTS. Move to 24 LTS once the SDK lists it as supported here; it becomes primary when its
+  GA is pinned and in CI.
+- On 23: plan the move to an LTS before 23's end of life on 2027-10-15. To try a 23 build locally, start the stack
+  from `docker-compose.test-23.yml` and run the Functional suite against it before upgrading production PBXs.
+- On 20 or earlier: upgrade to 22. The SDK is not tested on 20, and 2.9.0 removed 26 legacy event types; what an
+  Asterisk that still sends one of them delivers is in [the compatibility guide](asterisk-version-compatibility.md).
