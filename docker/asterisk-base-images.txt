@@ -7,5 +7,5 @@
 # Re-pinning is one reviewed edit here, with the new build's `asterisk -V` and digest measured first.
 # 20 is pinned for local measurement; CI runs 22 and 23.
 20 andrius/asterisk:20.20.1_debian-trixie-d0182a6@sha256:c202cdf0f0348ab75e6dee49967418ce8c08853644b8a5c00de91f6b4aca4dd1
-22 andrius/asterisk:22.10.1_debian-trixie-6bb254a@sha256:212326bd3f973a597be9e4747be5d6653802e4950159e95aa7d728e394de2012
-23 andrius/asterisk:23.4.1_debian-trixie-d0182a6@sha256:f741171a6a779f22e590498cdd39bfa98443ac5a30108a1e4fe5fdd7ece83bf5
+22 andrius/asterisk:22.11.0_debian-trixie-c6e8a0e@sha256:d6333b8b331563c5887b98b12da9371ef48317e657d17d81770fe085f335041d
+23 andrius/asterisk:23.5.0_debian-trixie-c6e8a0e@sha256:532e68e4194e968e866a27f321ccce03fdd66bd7e369ffa17c07e7210da0fde1
