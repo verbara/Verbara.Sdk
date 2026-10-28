@@ -7,6 +7,7 @@ using System.Net.WebSockets;
 using System.Reactive.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 using Verbara.Sdk;
 using Verbara.Sdk.Ari.Audio;
 using Verbara.Sdk.Ari.Tests.TestSupport;
@@ -751,6 +752,444 @@ public class WebSocketAudioSessionTests
         fed.Published.Should().ContainSingle("the message is delivered").Which.Should().BeOfType<ChanWebSocketDtmf>();
     }
 
+    // -- Outbound commands -------------------------------------------------------
+#pragma warning disable CA2012 // `_ = session.Send…Async(…)` in an Action: the facts assert the throw comes before any ValueTask exists
+    // Every command is compared with the captured spelling (ChanWebSocketCommandSpelling). A session is "plain" or "JSON"
+    // by the captured MEDIA_START it read first; one that has read none has no format and writes no command.
+
+    private const string FormatNotYetKnown = "control format is not yet known";
+
+    /// <summary>A started session fed nothing: MediaStart is null, as a server with MediaStartTimeout = Zero announces it.</summary>
+    private static (FakeWebSocket Ws, WebSocketAudioSession Session) StartedFedNothing()
+    {
+        var ws = new FakeWebSocket();
+        var session = CreateSession(ws);
+        session.Start();
+        return (ws, session);
+    }
+
+    /// <summary>A session pre-fed the captured MEDIA_START of <paramref name="format"/> and one 640-byte frame, read by the consumer.</summary>
+    private static async Task<(FakeWebSocket Ws, WebSocketAudioSession Session)> NegotiatedAsync(ChanWebSocketCaptureFormat format)
+    {
+        var ws = new FakeWebSocket();
+        ws.EnqueueReceive(CapturedMediaStart("24.0.0-rc2", format).Payload(), WebSocketMessageType.Text);
+        ws.EnqueueReceive(new byte[640]);
+        var session = CreateSession(ws);
+        session.Start();
+        var frame = await session.ReadFrameAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        frame.Length.Should().Be(640, "the pump handles frames in order, so the MEDIA_START before it has been read");
+        return (ws, session);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="act"/> and returns what it threw, without awaiting anything: a throw captured in a returned
+    /// ValueTask reads as no exception, so a non-null result proves the throw came before any ValueTask existed. Any other exception type escapes and fails the test.
+    /// </summary>
+    private static TException? Synchronously<TException>(Action act)
+        where TException : Exception
+    {
+        try
+        {
+            act();
+            return null;
+        }
+        catch (TException ex)
+        {
+            return ex;
+        }
+    }
+
+    private static async Task DisposeAsync((FakeWebSocket Ws, WebSocketAudioSession Session) s)
+    {
+        await s.Session.DisposeAsync();
+        s.Ws.Dispose();
+    }
+
+    [Fact]
+    public async Task FakeWebSocket_ShouldCompleteAPendingReceive_WhenAFrameIsEnqueuedAfterIt()
+    {
+        // Arrange — the seam the facts below stand on: a receive already parked on an empty queue
+        using var ws = new FakeWebSocket();
+        var buffer = new byte[16];
+        var pending = ws.ReceiveAsync(buffer.AsMemory(), CancellationToken.None).AsTask();
+        pending.IsCompleted.Should().BeFalse("nothing is queued yet");
+
+        // Act
+        ws.EnqueueReceive([1, 2, 3]);
+
+        // Assert
+        var result = await pending.WaitAsync(TimeSpan.FromSeconds(5));
+        result.Count.Should().Be(3);
+        buffer[..3].Should().Equal(1, 2, 3);
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText, ChanWebSocketControlMessageFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json, ChanWebSocketControlMessageFormat.Json)]
+    public async Task MediaStart_ShouldSayTheControlFormatItArrivedIn_WhenTheCapturedMediaStartIsRead(
+        ChanWebSocketCaptureFormat format, ChanWebSocketControlMessageFormat expected)
+    {
+        var s = await NegotiatedAsync(format);
+        try
+        {
+            ((IChanWebSocketSession)s.Session).MediaStart!.ControlMessageFormat.Should().Be(expected);
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText, 117)]
+    [InlineData(ChanWebSocketCaptureFormat.Json, 84)]
+    public async Task SendMarkAsync_ShouldWriteOne128ByteFrameInTheCapturedSpelling_WhenTheMarkFillsTheFrame(
+        ChanWebSocketCaptureFormat format, int markBytes)
+    {
+        // Arrange
+        var s = await NegotiatedAsync(format);
+        var mark = new string('a', markBytes);
+        var expected = format == ChanWebSocketCaptureFormat.PlainText
+            ? ChanWebSocketCommandSpelling.MarkPlain(mark)
+            : ChanWebSocketCommandSpelling.MarkJson(mark);
+        try
+        {
+            // Act
+            await s.Session.SendMarkAsync(mark);
+
+            // Assert
+            using (new AssertionScope())
+            {
+                s.Ws.Sent.Should().ContainSingle();
+                s.Ws.Sent[0].Type.Should().Be(WebSocketMessageType.Text);
+                s.Ws.Sent[0].Data.Should().Equal(expected);
+                s.Ws.Sent[0].Data.Should().HaveCount(ChanWebSocketControlMessageSerializer.MaxCommandBytes);
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    public static TheoryData<ChanWebSocketCaptureFormat, string, string> MarksOverTheFrame() => new()
+    {
+        // (a)/(b): one ASCII byte over the budget, 129-byte frames
+        { ChanWebSocketCaptureFormat.PlainText, new string('a', 118), "118 ASCII bytes" },
+        { ChanWebSocketCaptureFormat.Json, new string('a', 85), "85 ASCII bytes" },
+        // (c): 59 characters but 118 UTF-8 bytes; (d): 130 bytes raw, 302 escaped
+        { ChanWebSocketCaptureFormat.PlainText, new string('\u00E9', 59), "59 x U+00E9" },
+        { ChanWebSocketCaptureFormat.Json, new string('\u00E9', 43), "43 x U+00E9" },
+        // The length the captures measured dropped unread, no reply, on every version in both formats
+        { ChanWebSocketCaptureFormat.PlainText, new string('a', 200), "200 ASCII bytes" },
+        { ChanWebSocketCaptureFormat.Json, new string('a', 200), "200 ASCII bytes" },
+    };
+
+    [Theory]
+    [MemberData(nameof(MarksOverTheFrame))]
+    public async Task SendMarkAsync_ShouldThrowSynchronouslyAndWriteNothing_WhenTheFrameWouldExceedTheLimit(
+        ChanWebSocketCaptureFormat format, string mark, string because)
+    {
+        // Arrange
+        var s = await NegotiatedAsync(format);
+        try
+        {
+            var negotiated = ((IChanWebSocketSession)s.Session).MediaStart!.ControlMessageFormat;
+            var encoded = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(new ChanWebSocketMarkMedia(mark), negotiated).Length;
+
+            // Act — never awaited: the throw comes before any ValueTask exists
+            var thrown = Synchronously<ArgumentOutOfRangeException>(() => _ = s.Session.SendMarkAsync(mark));
+
+            // Assert
+            using (new AssertionScope(because))
+            {
+                s.Ws.Sent.Should().BeEmpty("nothing is written for a frame Asterisk drops unread");
+                var refused = thrown.Should().BeOfType<ArgumentOutOfRangeException>().Subject;
+                refused.ParamName.Should().Be("mark");
+                refused.ActualValue.Should().Be(encoded);
+                refused.Message.Should().Contain(encoded.ToString(CultureInfo.InvariantCulture)).And.Contain(negotiated.ToString())
+                    .And.Contain("128").And.Contain("117").And.Contain("84");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json)]
+    public async Task SendMarkAsync_ShouldCarryThe129ByteEncodingAsItsActualValue_WhenTheMarkIsOneByteOver(ChanWebSocketCaptureFormat format)
+    {
+        var s = await NegotiatedAsync(format);
+        try
+        {
+            var mark = new string('a', format == ChanWebSocketCaptureFormat.PlainText ? 118 : 85);
+            var thrown = Synchronously<ArgumentOutOfRangeException>(() => _ = s.Session.SendMarkAsync(mark));
+
+            using (new AssertionScope())
+            {
+                s.Ws.Sent.Should().BeEmpty();
+                thrown.Should().BeOfType<ArgumentOutOfRangeException>().Which.ActualValue.Should().Be(129);
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Fact]
+    public async Task SendMarkAsync_ShouldWriteThe11ByteCommand_WhenTheMarkIsEmptyOnAPlainTextConnection()
+    {
+        var s = await NegotiatedAsync(ChanWebSocketCaptureFormat.PlainText);
+        try
+        {
+            await s.Session.SendMarkAsync("");
+
+            s.Ws.Sent.Should().ContainSingle().Which.Data.Should().Equal(ChanWebSocketCommandSpelling.MarkPlain("")).And.HaveCount(11);
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketMediaDirection.In, "in")]
+    [InlineData(ChanWebSocketMediaDirection.Out, "out")]
+    [InlineData(ChanWebSocketMediaDirection.Both, "both")]
+    public async Task SendSetMediaDirectionAsync_ShouldWriteTheCapturedJsonCommand_WhenTheConnectionIsJson(
+        ChanWebSocketMediaDirection direction, string wireValue)
+    {
+        var s = await NegotiatedAsync(ChanWebSocketCaptureFormat.Json);
+        try
+        {
+            await s.Session.SendSetMediaDirectionAsync(direction);
+
+            using (new AssertionScope())
+            {
+                var sent = s.Ws.Sent.Should().ContainSingle().Subject;
+                sent.Type.Should().Be(WebSocketMessageType.Text);
+                sent.Data.Should().Equal(ChanWebSocketCommandSpelling.SetMediaDirectionJson(wireValue));
+                if (direction == ChanWebSocketMediaDirection.Both)
+                    sent.Data.Should().HaveCount(52, "the longest of the three, under the limit");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Fact]
+    public async Task SendSetMediaDirectionAsync_ShouldThrowSynchronouslyNamingTheRemedy_WhenTheConnectionIsPlainText()
+    {
+        var s = await NegotiatedAsync(ChanWebSocketCaptureFormat.PlainText);
+        try
+        {
+            var thrown = Synchronously<InvalidOperationException>(() => _ = s.Session.SendSetMediaDirectionAsync(ChanWebSocketMediaDirection.Both));
+
+            using (new AssertionScope())
+            {
+                s.Ws.Sent.Should().BeEmpty();
+                thrown.Should().BeOfType<InvalidOperationException>()
+                    .Which.Message.Should().Contain("control_message_format = json").And.Contain("f(json) to a dial string you write");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Fact]
+    public async Task SendSetMediaDirectionAsync_ShouldThrowSynchronouslyAndWriteNothing_WhenNoMediaStartHasBeenRead()
+    {
+        var s = StartedFedNothing();
+        try
+        {
+            var thrown = Synchronously<InvalidOperationException>(() => _ = s.Session.SendSetMediaDirectionAsync(ChanWebSocketMediaDirection.Both));
+
+            using (new AssertionScope())
+            {
+                s.Ws.Sent.Should().BeEmpty();
+                thrown.Should().BeOfType<InvalidOperationException>()
+                    .Which.Message.Should().Contain(FormatNotYetKnown).And.Contain("MediaStartTimeout");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.Json)]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText)]
+    public async Task SendMarkAsync_ShouldBeRefusedUntilAMediaStartIsRead_ThenWriteInItsFormat(ChanWebSocketCaptureFormat format)
+    {
+        // Arrange — (h): a started session fed nothing
+        var s = StartedFedNothing();
+        try
+        {
+            // Act — never awaited: the refusal is synchronous
+            var refused = Synchronously<InvalidOperationException>(() => _ = s.Session.SendMarkAsync("m"));
+
+            // Assert
+            using (new AssertionScope("before MEDIA_START"))
+            {
+                s.Ws.Sent.Should().BeEmpty();
+                ((IChanWebSocketSession)s.Session).MediaStart.Should().BeNull();
+                refused.Should().BeOfType<InvalidOperationException>()
+                    .Which.Message.Should().Contain(FormatNotYetKnown).And.Contain("MediaStartTimeout");
+            }
+            var sentBeforeMediaStart = s.Ws.Sent.Length;
+
+            // Act — (i)/(j): the captured MEDIA_START and an audio frame arrive on the session already parked in its receive
+            s.Ws.EnqueueReceive(CapturedMediaStart("24.0.0-rc2", format).Payload(), WebSocketMessageType.Text);
+            s.Ws.EnqueueReceive(new byte[640]);
+            var frame = await s.Session.ReadFrameAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+            await s.Session.SendMarkAsync("m");
+
+            // Assert
+            using (new AssertionScope("after MEDIA_START"))
+            {
+                frame.Length.Should().Be(640);
+                ((IChanWebSocketSession)s.Session).MediaStart.Should().NotBeNull();
+                var expected = format == ChanWebSocketCaptureFormat.Json
+                    ? ChanWebSocketCommandSpelling.MarkJson("m")
+                    : ChanWebSocketCommandSpelling.MarkPlain("m");
+                s.Ws.Sent.Skip(sentBeforeMediaStart).Should().ContainSingle().Which.Data.Should().Equal(expected)
+                    .And.HaveCount(format == ChanWebSocketCaptureFormat.Json ? 45 : 12);
+                s.Ws.Sent.Should().HaveCount(1, "the mark is the only entry");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Fact]
+    public async Task Commands_ShouldBeRefused_WhenThePeerSentAudioAndNoMediaStart()
+    {
+        // Arrange — (k): one audio frame and no MEDIA_START, read by the consumer, which then writes one frame
+        using var ws = new FakeWebSocket();
+        ws.EnqueueReceive(new byte[640]);
+        var sut = CreateSession(ws);
+        sut.Start();
+        (await sut.ReadFrameAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5))).Length.Should().Be(640);
+        var audio = new byte[] { 1, 2, 3 };
+        await sut.WriteFrameAsync(audio);
+
+        // Act — never awaited
+        var mark = Synchronously<InvalidOperationException>(() => _ = sut.SendMarkAsync("m"));
+        var direction = Synchronously<InvalidOperationException>(() => _ = sut.SendSetMediaDirectionAsync(ChanWebSocketMediaDirection.Both));
+
+        // Assert
+        using (new AssertionScope())
+        {
+            ((IChanWebSocketSession)sut).MediaStart.Should().BeNull();
+            ws.Sent.Should().ContainSingle("only the audio frame the consumer wrote");
+            ws.Sent[0].Type.Should().Be(WebSocketMessageType.Binary);
+            ws.Sent[0].Data.Should().Equal(audio);
+            mark.Should().BeOfType<InvalidOperationException>().Which.Message.Should().Contain(FormatNotYetKnown);
+            direction.Should().BeOfType<InvalidOperationException>().Which.Message.Should().Contain(FormatNotYetKnown);
+        }
+
+        await sut.DisposeAsync();
+    }
+
+    public static TheoryData<string, string> EveryStateForTheDeprecatedSends()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var method in new[] { "Xon", "Xoff" })
+        {
+            foreach (var state in new[] { "none", "plain", "json" })
+                data.Add(method, state);
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryStateForTheDeprecatedSends))]
+    public async Task SendXonAndSendXoff_ShouldThrowNotSupportedExceptionSynchronouslyAndWriteNothing_InEveryState(string method, string state)
+    {
+        // Arrange — (r)/(s): no MEDIA_START, a plain-text one, a JSON one
+        var s = state switch
+        {
+            "none" => StartedFedNothing(),
+            "plain" => await NegotiatedAsync(ChanWebSocketCaptureFormat.PlainText),
+            _ => await NegotiatedAsync(ChanWebSocketCaptureFormat.Json),
+        };
+        try
+        {
+            var mediaStart = ((IChanWebSocketSession)s.Session).MediaStart;
+            var sentBefore = s.Ws.Sent.Length;
+
+            // Act — never awaited: the throw is the method's first statement
+#pragma warning disable VSDK0004 // the obsolete call is the point
+            var thrown = method == "Xon"
+                ? Synchronously<NotSupportedException>(() => _ = s.Session.SendXonAsync())
+                : Synchronously<NotSupportedException>(() => _ = s.Session.SendXoffAsync());
+#pragma warning restore VSDK0004
+
+            // Assert
+            using (new AssertionScope($"{method} {state}"))
+            {
+                s.Ws.Sent.Should().HaveCount(sentBefore).And.BeEmpty();
+                ((IChanWebSocketSession)s.Session).MediaStart.Should().BeSameAs(mediaStart);
+                thrown.Should().BeOfType<NotSupportedException>()
+                    .Which.Message.Should().Contain("no XON/XOFF command").And.Contain("ChanWebSocketMediaXoff");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+#pragma warning restore CA2012
+
+    [Theory]
+    // Synthetic, in the captured JSON grammar: a lone surrogate escape the reader accepts and GetString() cannot decode.
+    [InlineData("""{"event":"DTMF_END","digit":"\uD800","channel_id":"synthetic-1"}""")]
+    // Synthetic, the same in a member name.
+    [InlineData("""{"event":"DTMF_END","\uDC00":"1","channel_id":"synthetic-1"}""")]
+    // Synthetic, an invalid escape.
+    [InlineData("""{"event":"DTMF_END","digit":"\x","channel_id":"synthetic-1"}""")]
+    public async Task ControlMessages_ShouldPublishTheGenericRecordAndKeepReading_WhenAJsonValueIsUnreadable(string synthetic)
+    {
+        // Arrange — the unreadable frame, then an audio marker; no close frame, so the session can only end on its own
+        using var ws = new FakeWebSocket();
+        ws.EnqueueReceive(Encoding.UTF8.GetBytes(synthetic), WebSocketMessageType.Text);
+        ws.EnqueueReceive(AudioMarker);
+        var sut = CreateSession(ws);
+        var published = new ConcurrentQueue<ChanWebSocketControlMessage>();
+        var states = new ConcurrentQueue<AudioStreamState>();
+        using var messages = sut.ControlMessages.Subscribe(published.Enqueue);
+        using var stateChanges = sut.StateChanges.Subscribe(states.Enqueue);
+        sut.Start();
+
+        // Act — the marker is read only if the pump read past the unreadable frame
+        var marker = await sut.ReadFrameAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        using (new AssertionScope(synthetic))
+        {
+            marker.Length.Should().Be(AudioMarker.Length, "the next frame is read");
+            var generic = published.Should().ContainSingle().Which.Should().BeOfType<ChanWebSocketUnknownMessage>().Subject;
+            generic.RawText.Should().Be(synthetic);
+            sut.IsConnected.Should().BeTrue("the session did not end");
+            states.Should().Equal([AudioStreamState.Connected], "no ending was published");
+        }
+
+        await sut.DisposeAsync();
+    }
+
     // -- helpers -----------------------------------------------------------------
 
     private static ChanWebSocketCapturedFrame CapturedMediaStart(string version, ChanWebSocketCaptureFormat format) =>
@@ -912,17 +1351,26 @@ public class WebSocketAudioSessionTests
 
     private sealed class FakeWebSocket : WebSocket
     {
-        private readonly Queue<(WebSocketMessageType Type, byte[] Data, bool EndOfMessage)> _receiveQueue = new();
-        private readonly List<byte[]> _sentData = [];
-        private WebSocketState _state = WebSocketState.Open;
+        // Unbounded and signalled: a receive pending on an empty queue completes when the test enqueues, cancellation
+        // still ends it, and the test and pump threads never share an unsynchronised queue.
+        private readonly Channel<(WebSocketMessageType Type, byte[] Data, bool EndOfMessage)> _receive =
+            Channel.CreateUnbounded<(WebSocketMessageType Type, byte[] Data, bool EndOfMessage)>();
+        private readonly List<(WebSocketMessageType Type, byte[] Data)> _sent = [];
+        private volatile WebSocketState _state = WebSocketState.Open;
 
-        public IReadOnlyList<byte[]> SentData => _sentData;
+        /// <summary>Every message sent, in order, with its type: a snapshot.</summary>
+        public (WebSocketMessageType Type, byte[] Data)[] Sent
+        {
+            get { lock (_sent) return _sent.ToArray(); }
+        }
+
+        public IReadOnlyList<byte[]> SentData => Sent.Select(m => m.Data).ToArray();
 
         public void EnqueueReceive(byte[] data, WebSocketMessageType type = WebSocketMessageType.Binary, bool endOfMessage = true)
-            => _receiveQueue.Enqueue((type, data, endOfMessage));
+            => _receive.Writer.TryWrite((type, data, endOfMessage));
 
         public void EnqueueClose()
-            => _receiveQueue.Enqueue((WebSocketMessageType.Close, [], true));
+            => _receive.Writer.TryWrite((WebSocketMessageType.Close, [], true));
 
         public void Close() => _state = WebSocketState.Closed;
 
@@ -931,32 +1379,24 @@ public class WebSocketAudioSessionTests
         public override string? CloseStatusDescription => null;
         public override string? SubProtocol => null;
 
-        public override ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(Memory<byte> buffer, CancellationToken ct)
+        public override async ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(Memory<byte> buffer, CancellationToken ct)
         {
-            if (_receiveQueue.Count == 0)
-            {
-                // Block until cancelled
-                return new ValueTask<ValueWebSocketReceiveResult>(
-                    Task.Delay(Timeout.Infinite, ct).ContinueWith<ValueWebSocketReceiveResult>(
-                        _ => throw new OperationCanceledException(ct),
-                        ct));
-            }
-
-            var (type, data, eom) = _receiveQueue.Dequeue();
+            var (type, data, eom) = await _receive.Reader.ReadAsync(ct);
             if (type == WebSocketMessageType.Close)
             {
                 _state = WebSocketState.CloseReceived;
-                return new(new ValueWebSocketReceiveResult(0, WebSocketMessageType.Close, true));
+                return new ValueWebSocketReceiveResult(0, WebSocketMessageType.Close, true);
             }
 
             var count = Math.Min(data.Length, buffer.Length);
             data.AsMemory(0, count).CopyTo(buffer);
-            return new(new ValueWebSocketReceiveResult(count, type, eom));
+            return new ValueWebSocketReceiveResult(count, type, eom);
         }
 
         public override ValueTask SendAsync(ReadOnlyMemory<byte> buffer, WebSocketMessageType type, bool endOfMessage, CancellationToken ct)
         {
-            _sentData.Add(buffer.ToArray());
+            lock (_sent)
+                _sent.Add((type, buffer.ToArray()));
             return ValueTask.CompletedTask;
         }
 
@@ -975,8 +1415,9 @@ public class WebSocketAudioSessionTests
         public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken ct)
             => throw new NotSupportedException("Use Memory overload");
 
+        // A byte[] binds to this overload; recorded like the Memory one, so no send goes unseen.
         public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType type, bool endOfMessage, CancellationToken ct)
-            => throw new NotSupportedException("Use Memory overload");
+            => SendAsync(buffer.AsMemory(), type, endOfMessage, ct).AsTask();
 
         public override void Abort() => _state = WebSocketState.Aborted;
 

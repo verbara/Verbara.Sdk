@@ -36,8 +36,19 @@ internal static class ChanWebSocketInboundReader
             Passthrough = frame.GetBool("passthrough"),
             Unbuffered = frame.GetBool("unbuffered"),
             ChannelVariables = frame.ChannelVariables,
+            ControlMessageFormat = frame.IsJson ? ChanWebSocketControlMessageFormat.Json : ChanWebSocketControlMessageFormat.PlainText,
         };
     }
+
+    /// <summary>
+    /// Reads any frame into its record, <c>MEDIA_START</c> included (as <see cref="ChanWebSocketMediaStart"/>, whose
+    /// <c>format</c> is empty when the frame names none): the public reader's entry. The session routes
+    /// <c>MEDIA_START</c> to its state instead and never publishes it.
+    /// </summary>
+    public static ChanWebSocketControlMessage Read(ChanWebSocketTextFrame frame) =>
+        string.Equals(frame.Event, ChanWebSocketTextFrameHead.MediaStartEvent, StringComparison.Ordinal)
+            ? ReadMediaStart(frame, string.Empty)
+            : ReadMessage(frame)!;
 
     /// <summary>
     /// Reads a frame into the record its event maps to, or into <see cref="ChanWebSocketUnknownMessage"/> with the
@@ -195,9 +206,11 @@ internal sealed class ChanWebSocketTextFrame
 
             Event = Get("event");
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
-            // Not JSON after all: it names nothing, and none of what was read is trusted.
+            // Not JSON after all (JsonException), or a value Utf8JsonReader cannot hand out as a string, such as a lone
+            // surrogate escape (InvalidOperationException from GetString): it names nothing, none of what was read is
+            // trusted, and the frame is published as the generic record with its exact text. Never the session's end.
             _values.Clear();
             ChannelVariables = null;
             Event = null;

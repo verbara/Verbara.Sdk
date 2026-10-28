@@ -395,39 +395,78 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         }
     }
 
+    // The refusals a session can predict from its own state are thrown before anything is written, and synchronously:
+    // each Send…Async below is the non-async front half (argument, then state, then encoding in the connection's format,
+    // then length) and returns the ValueTask of the async back half, which only takes the send lock and writes.
+
+    private const string FormatNotYetKnownMessage =
+        "No MEDIA_START has been read yet, so the connection's control format is not yet known: keep " +
+        "AudioServerOptions.MediaStartTimeout at its default so the stream is announced once Asterisk's MEDIA_START has " +
+        "been read, or call once MediaStart is set.";
+
+    private const string SetMediaDirectionNeedsJsonMessage =
+        "The connection's control format is plain text; Asterisk accepts SET_MEDIA_DIRECTION in JSON only — set " +
+        "control_message_format = json in chan_websocket.conf, or add f(json) to a dial string you write.";
+
+    private const string NoXonXoffCommandMessage =
+        "chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and " +
+        "24.0.0-rc2: 'command unknown', no reply); nothing was written. Flow control is Asterisk's to send: read " +
+        "ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages.";
+
     public ValueTask SendMarkAsync(string mark, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(mark);
-        return SendControlMessageAsync(new ChanWebSocketMarkMedia(mark), cancellationToken);
+        var format = NegotiatedFormat();
+        var command = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(new ChanWebSocketMarkMedia(mark), format);
+        if (command.Length > ChanWebSocketControlMessageSerializer.MaxCommandBytes)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(mark),
+                command.Length,
+                $"The MARK_MEDIA command for this mark is {command.Length} bytes in {format}, over the " +
+                $"{ChanWebSocketControlMessageSerializer.MaxCommandBytes}-byte text frame chan_websocket reads (a longer one is " +
+                "dropped unread, with no reply); nothing was written. A mark may carry at most 117 bytes in PlainText, 84 in " +
+                "Json before escaping.");
+        }
+
+        return SendCommandAsync(command, cancellationToken);
     }
 
     public ValueTask SendXonAsync(CancellationToken cancellationToken = default)
-        => SendControlMessageAsync(new ChanWebSocketMediaXon(), cancellationToken);
+        => throw new NotSupportedException(NoXonXoffCommandMessage);
 
     public ValueTask SendXoffAsync(CancellationToken cancellationToken = default)
-        => SendControlMessageAsync(new ChanWebSocketMediaXoff(), cancellationToken);
+        => throw new NotSupportedException(NoXonXoffCommandMessage);
 
     public ValueTask SendSetMediaDirectionAsync(
         ChanWebSocketMediaDirection direction,
         CancellationToken cancellationToken = default)
-        => SendControlMessageAsync(new ChanWebSocketSetMediaDirection(direction), cancellationToken);
-
-    private async ValueTask SendControlMessageAsync(
-        ChanWebSocketControlMessage message,
-        CancellationToken cancellationToken)
     {
-        var utf8 = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(message);
+        var format = NegotiatedFormat();
+        if (format != ChanWebSocketControlMessageFormat.Json)
+            throw new InvalidOperationException(SetMediaDirectionNeedsJsonMessage);
+
+        var command = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(new ChanWebSocketSetMediaDirection(direction), format);
+        return SendCommandAsync(command, cancellationToken);
+    }
+
+    // The connection's control format: the first MEDIA_START's, read once from the one write that publishes it. Before
+    // one has been read there is none, and no command is written.
+    private ChanWebSocketControlMessageFormat NegotiatedFormat() =>
+        MediaStart?.ControlMessageFormat ?? throw new InvalidOperationException(FormatNotYetKnownMessage);
+
+    private async ValueTask SendCommandAsync(ReadOnlyMemory<byte> command, CancellationToken cancellationToken)
+    {
         await _sendLock.WaitAsync(cancellationToken);
         try
         {
-            await _webSocket.SendAsync(utf8, WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
+            await _webSocket.SendAsync(command, WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
         }
         finally
         {
             _sendLock.Release();
         }
     }
-
 
     public async ValueTask DisposeAsync()
     {

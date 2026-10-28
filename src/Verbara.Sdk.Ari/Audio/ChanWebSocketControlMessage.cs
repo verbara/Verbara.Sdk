@@ -88,6 +88,16 @@ public sealed record ChanWebSocketMediaStart(
     /// </summary>
     [JsonIgnore]
     public IReadOnlyDictionary<string, string>? ChannelVariables { get; init; }
+
+    /// <summary>
+    /// The control-message format the frame arrived in, derived from its grammar, not read from a field:
+    /// <see cref="ChanWebSocketControlMessageFormat.Json"/> for a JSON object, <see cref="ChanWebSocketControlMessageFormat.PlainText"/>
+    /// for a plain-text line. On the connection's first <c>MEDIA_START</c> it is the format the connection negotiated, the
+    /// one every command the session writes is in. <see cref="ChanWebSocketControlMessageFormat.PlainText"/>, Asterisk's
+    /// default, on a record built without it.
+    /// </summary>
+    [JsonIgnore]
+    public ChanWebSocketControlMessageFormat ControlMessageFormat { get; init; }
 }
 
 /// <summary>
@@ -192,6 +202,20 @@ public sealed record ChanWebSocketMarkMedia(string Mark) : ChanWebSocketControlM
 /// <param name="Direction">The desired media direction: <c>in</c>, <c>out</c>, or <c>both</c>.</param>
 public sealed record ChanWebSocketSetMediaDirection(ChanWebSocketMediaDirection Direction)
     : ChanWebSocketControlMessage;
+
+/// <summary>
+/// The format of a chan_websocket connection's control messages, fixed per channel by Asterisk's
+/// <c>control_message_format</c> or the dial string's <c>f(plain-text|json)</c> and read by the session from the
+/// connection's first <c>MEDIA_START</c>; measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2.
+/// </summary>
+public enum ChanWebSocketControlMessageFormat
+{
+    /// <summary>Asterisk's default: <c>EVENT key:value …</c> lines and <c>COMMAND data</c> commands.</summary>
+    PlainText = 0,
+
+    /// <summary>Objects named by <c>event</c>, commands named by <c>command</c>; the only format in which every command exists.</summary>
+    Json = 1,
+}
 
 /// <summary>
 /// Media direction for <see cref="ChanWebSocketSetMediaDirection"/>.

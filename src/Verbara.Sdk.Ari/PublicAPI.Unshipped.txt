@@ -128,6 +128,12 @@ static Verbara.Sdk.Ari.Audio.ChanWebSocketError.operator !=(Verbara.Sdk.Ari.Audi
 static Verbara.Sdk.Ari.Audio.ChanWebSocketError.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketError? left, Verbara.Sdk.Ari.Audio.ChanWebSocketError? right) -> bool
 static Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage? left, Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage? right) -> bool
 static Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage? left, Verbara.Sdk.Ari.Audio.ChanWebSocketUnknownMessage? right) -> bool
+const Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.MaxCommandBytes = 128 -> int
+static Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.Serialize(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage! message, Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageFormat format) -> string!
+static Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage! message, Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageFormat format) -> byte[]!
+Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageFormat
+Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageFormat.Json = 1 -> Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageFormat
+Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageFormat.PlainText = 0 -> Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageFormat
 Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.ChannelId.get -> string?
 Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.ChannelId.init -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketError
@@ -148,6 +154,8 @@ Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ChannelVariables.get -> System.Col
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ChannelVariables.init -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ConnectionId.get -> string?
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ConnectionId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ControlMessageFormat.get -> Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageFormat
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.ControlMessageFormat.init -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.OptimalFrameSize.get -> int?
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.OptimalFrameSize.init -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Passthrough.get -> bool?

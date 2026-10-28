@@ -410,6 +410,63 @@ public sealed class WebSocketAudioServerMediaStartTests
         }
     }
 
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText, ChanWebSocketControlMessageFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json, ChanWebSocketControlMessageFormat.Json)]
+    public async Task OnStreamConnected_ShouldHandOutASessionThatCanSendAMark_WhenTheObserverSendsFromInsideTheAnnouncement(
+        ChanWebSocketCaptureFormat format, ChanWebSocketControlMessageFormat expected)
+    {
+        // Arrange — the default bound, and an observer that acts synchronously inside the announcement, before the pump
+        // has read another frame
+        await using var harness = await Harness.StartAsync();
+        var frame = Capture("24.0.0-rc2", ChanWebSocketCaptureProducer.ExternalMedia, format);
+        var seen = new TaskCompletionSource<(ChanWebSocketMediaStart? MediaStart, bool FormatAgrees, bool RateAgrees, Task? Send, Exception? Thrown)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var observer = harness.Server.OnStreamConnected.Subscribe(stream =>
+        {
+            var session = (IChanWebSocketSession)stream;
+            var mediaStart = session.MediaStart;
+            try
+            {
+                var send = session.SendMarkAsync("m").AsTask();
+                seen.TrySetResult((mediaStart, stream.Format == mediaStart?.Format, stream.SampleRate == mediaStart?.Rate, send, null));
+            }
+            catch (Exception ex)
+            {
+                seen.TrySetResult((mediaStart, stream.Format == mediaStart?.Format, stream.SampleRate == mediaStart?.Rate, null, ex));
+            }
+        });
+
+        // Act
+        using var client = await harness.ConnectNamedAsync(SharedSegment, frame);
+        var observed = await seen.Task.WaitAsync(WaitLimit);
+
+        // Assert — what the observer saw inside OnNext
+        using (new AssertionScope(frame.Source))
+        {
+            observed.Thrown.Should().BeNull("MediaStart is published before the announcement, so the format is known");
+            observed.MediaStart.Should().NotBeNull();
+            observed.MediaStart?.ControlMessageFormat.Should().Be(expected);
+            observed.FormatAgrees.Should().BeTrue("the stream's Format is MediaStart.Format");
+            observed.RateAgrees.Should().BeTrue("the stream's SampleRate is MediaStart.Rate");
+        }
+
+        // Assert — what the peer received
+        await observed.Send!.WaitAsync(WaitLimit);
+        var buffer = new byte[256];
+        var received = await client.Client.ReceiveAsync(buffer.AsMemory(), CancellationToken.None).AsTask().WaitAsync(WaitLimit);
+        var expectedBytes = format == ChanWebSocketCaptureFormat.PlainText
+            ? ChanWebSocketCommandSpelling.MarkPlain("m")
+            : ChanWebSocketCommandSpelling.MarkJson("m");
+        using (new AssertionScope())
+        {
+            received.MessageType.Should().Be(WebSocketMessageType.Text);
+            received.EndOfMessage.Should().BeTrue();
+            buffer.AsSpan(0, received.Count).ToArray().Should().Equal(expectedBytes)
+                .And.HaveCount(format == ChanWebSocketCaptureFormat.PlainText ? 12 : 45);
+        }
+    }
+
     [Fact]
     public async Task Format_ShouldKeepTheDefault_WhenAnUnnamedConnectionSendsNoMediaStart()
     {
