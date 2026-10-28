@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using Verbara.Sdk;
+using Verbara.Sdk.Ari.Internal;
 
 namespace Verbara.Sdk.Ari.Events;
 
@@ -34,7 +36,11 @@ public sealed class ChannelHangupRequestEvent : AriEvent
 {
     public AriChannel? Channel { get; set; }
     public int? Cause { get; set; }
-    /// <summary>Technology-specific cause code (e.g. SIP response code). Asterisk 22.7+/23+.</summary>
+    /// <summary>
+    /// Technology-specific cause code (e.g. SIP response code), as the decimal text of the integer
+    /// Asterisk sends; null when the channel driver set none, which Asterisk signals by omitting it.
+    /// </summary>
+    [JsonConverter(typeof(AriNumberAsTextConverter))]
     public string? TechCause { get; set; }
 }
 
@@ -102,7 +108,11 @@ public sealed class ChannelDestroyedEvent : AriEvent
     public AriChannel? Channel { get; set; }
     public int? Cause { get; set; }
     public string? CauseTxt { get; set; }
-    /// <summary>Technology-specific cause code (e.g. SIP response code). Asterisk 22.7+/23+.</summary>
+    /// <summary>
+    /// Technology-specific cause code (e.g. SIP response code), as the decimal text of the integer
+    /// Asterisk sends; null when the channel driver set none, which Asterisk signals by omitting it.
+    /// </summary>
+    [JsonConverter(typeof(AriNumberAsTextConverter))]
     public string? TechCause { get; set; }
 }
 
