@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: CI runs the Asterisk 22 and 23 suites on 22.11.0 and 23.5.0 (#488)
+
+`docker/asterisk-base-images.txt` pins the 22 line to 22.11.0 and the 23 line to 23.5.0, the newest generally
+available build of each (andrius build `c6e8a0e`, by index digest), instead of 22.10.1 and 23.4.1. They are the first
+builds with Asterisk's rewritten AMI event delivery; the Functional and Integration suites pass on both. The Dockerfile
+default and the 23 compose file follow the table. `docs/guides/asterisk-version-matrix.md` and the migration guide say
+which builds 2.9.0 was tested and measured on, and three sentences of the chan_websocket entry below say "every version
+measured" instead of "every supported version". No package changes.
+
 ### Documentation: the public figures and the Asterisk support policy agree with the tree (#487)
 
 The README, the technical and commercial overviews and CONTRIBUTING now say 29 packages, 25 examples and more than
@@ -25,11 +34,11 @@ commands Asterisk acts on, in the format its first `MEDIA_START` arrived in: `MA
 connection's `MEDIA_START` has been read (`MediaStart` is `null`: a stream announced under
 `MediaStartTimeout = TimeSpan.Zero`, or before a late first frame) `SendMarkAsync` and `SendSetMediaDirectionAsync`
 throw `InvalidOperationException` instead of writing a command in a guessed format — a plain-text command on a JSON
-connection was answered `ERROR Unable to parse JSON command` and dropped on every supported version, and a JSON one on
+connection was answered `ERROR Unable to parse JSON command` and dropped on every version measured, and a JSON one on
 a plain-text connection was ignored without a reply. `SendMarkAsync` refuses, with `ArgumentOutOfRangeException`
 before anything is written, a mark whose command would exceed the 128 bytes Asterisk reads from a text frame
 (`ChanWebSocketControlMessageSerializer.MaxCommandBytes`; 117 bytes of mark in plain text, 84 in JSON before escaping)
-— such a frame was dropped without a reply on every supported version in both formats, so every mark that is written
+— such a frame was dropped without a reply on every version measured in both formats, so every mark that is written
 is answered: by `MEDIA_MARK_PROCESSED` when it reaches playback, or by the typed `ERROR` in passthrough mode
 (22.10.1, 23.4.1) or while the media direction is `in`. The serializer writes through `Serialize(message, format)` /
 `SerializeToUtf8Bytes(message, format)`; the format-less overloads write the JSON form. It throws
@@ -51,7 +60,7 @@ Asterisk ends a call with a WebSocket close frame, read the ending on `IAudioStr
 (always 0: `DTMF_END` carries the digit and the channel id only; the duration is on the bridged peer's ARI
 `ChannelDtmfReceivedEvent` or AMI `DtmfEndEvent`). Nothing is removed and a binary built against an earlier release
 keeps running. `SendXonAsync` and `SendXoffAsync` throw `NotSupportedException` when called, where 2.8.x wrote
-`{"kind":"media_xon"}` / `{"kind":"media_xoff"}` that every supported version answered `command unknown`. The
+`{"kind":"media_xon"}` / `{"kind":"media_xoff"}` that every version measured answered `command unknown`. The
 `asterisk.dtmf.duration_ms` trace tag, always 0, is gone. Labelled breaking because a build with
 `TreatWarningsAsErrors` that uses one of the five fails with `error VSDK0004`; move to the replacement, or add
 `VSDK0004` to `NoWarn` to silence this deprecation alone. A `JsonSerializerContext` of your own that lists

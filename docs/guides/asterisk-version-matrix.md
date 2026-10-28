@@ -6,6 +6,12 @@ Docker test infrastructure, and known-divergent behaviour to watch for.
 
 ## Support policy (SDK 2.9.0)
 
+2.9.0's CI runs the Functional and Integration suites on Asterisk 22.11.0 and 23.5.0, the newest generally
+available build of each supported line on the day it was tagged; its chan_websocket, ARI WebSocket and AMI
+reload behaviour was also measured on 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2 by image digest. 22.12.0, 23.6.0
+and 24.0.0 were still release candidates (rc3, 2026-10-22) at the tag, so 2.9.0 claims no support for
+Asterisk 24; the 2.9.x release that pins a 24 GA build in CI will say so here.
+
 - **Primary — Asterisk 22 LTS**, and **Asterisk 24 LTS** once it is generally available and in CI. On 2026-10-22
   upstream's newest 24 build was `24.0.0-rc3`, a release candidate; until a 24 GA is pinned and tested, the SDK does
   not claim support for 24.
@@ -17,8 +23,8 @@ Docker test infrastructure, and known-divergent behaviour to watch for.
 
 | Asterisk | Type | Released | Security fixes only from | EOL | SDK support | CI coverage |
 |---|---|---|---|---|---|---|
-| **22.x** | LTS | 2024-10-16 | 2028-10-16 | 2029-10-16 | **Primary** — production recommended | Functional + Integration suites in the merge queue (pinned build: `docker/asterisk-base-images.txt`) |
-| **23.x** | Standard | 2025-10-15 | 2026-10-15 | 2027-10-15 | **Secondary** — until EOL | Functional + Integration suites in the merge queue (on a pull request only with the `ci:functional` label) |
+| **22.x** | LTS | 2024-10-16 | 2028-10-16 | 2029-10-16 | **Primary** — production recommended | Functional + Integration suites in the merge queue (pinned build 22.11.0: `docker/asterisk-base-images.txt`) |
+| **23.x** | Standard | 2025-10-15 | 2026-10-15 | 2027-10-15 | **Secondary** — until EOL | Functional + Integration suites on pinned build 23.5.0 in the merge queue (on a pull request only with the `ci:functional` label) |
 | 24.x | LTS | planned 2026-10-15; not out yet (release candidates since 2026-09-17, `24.0.0-rc3` on 2026-10-22) | 2030-10-15 (planned) | 2031-10-15 (planned) | **Primary once GA and in CI** | Not in CI yet |
 | 20.x | LTS (old) | 2022-10-19 | 2026-10-19 | 2027-10-19 | Not supported | Not in CI (a build stays pinned for local measurement) |
 | 18.x | LTS (old) | 2020-10-20 | 2024-10-20 | 2025-10-20 | Not supported | — |
