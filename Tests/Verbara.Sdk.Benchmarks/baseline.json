@@ -2,8 +2,11 @@
   "_readme": "HUMAN-AUTHORED FILE. CI NEVER WRITES BACK (ADR-0042 D6). The update protocol — what a re-baseline PR must state — lives in baseline.README.md next to this file. Read it before changing a number here.",
   "_what_these_numbers_are": "Hosted-runner (ubuntu-latest) means, in NANOSECONDS, with a per-benchmark tolerance band in PERCENT. They are deliberately NOT the workstation figures published in README.md / docs/README-technical.md (AMD Ryzen 9 9900X, 12C/24T), which are 1.97x-2.35x faster; gating against those would red this job permanently (ADR-0042 D4, Option D). Regression protection is this file's job; document-vs-record correspondence is COHERENCE's (D7). The two are separate failures and are detected separately.",
   "_dispatch_1_observer_note": "ObserverDispatchBenchmark.Dispatch_1Observer is measured but deliberately NOT baselined, so the comparison reports it as measured-but-not-baselined rather than gating it. Its mean sits at BenchmarkDotNet's resolution floor: on 2026-09-20 it read 0.2145 ns with a StdDev of 1.6012 ns - seven times the mean - and BenchmarkDotNet raised ZeroMeasurement, \"the method duration is indistinguishable from the empty method duration\". A percentage band around a figure that small tracks the harness, not the code: it produced the two largest breaches in issue #275 (+77.19% and +66.49% FASTER) on runs where nothing in this repository changed. The published ~0.21 ns/observer figure (README.md) is unaffected - it is COHERENCE against Tests/Verbara.Sdk.Benchmarks/performance-record.json (ADR-0042 D7) - and dispatch cost stays gated by Dispatch_10Observers and Dispatch_100Observers. Restore a band only if the benchmark is rewritten to measure a workload above the floor.",
-  "_channel_manager_one_subscriber_note": "ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber is measured but deliberately NOT baselined yet. It is the same thousand state changes as Update1000ChannelStates on a table with one subscribed handler - the shape of every production host - added because the unsubscribed row cannot see what an observed change costs. It has no hosted-runner observations, and a band guessed from a workstation would not match the runner (Update1000ChannelStates reads about 66 us on ubuntu-latest and about 32 us on the workstation). Its band is set from two weekly runs, in its own PR. Until then its byte cost is gated by the allocation tests in Tests/Verbara.Sdk.Live.Tests/Channels/ChannelManagerAllocationTests.cs.",
+  "_channel_manager_one_subscriber_note": "ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber is baselined on BYTES only (208,000 B per thousand observed changes, exact). It is the same thousand state changes as Update1000ChannelStates on a table with one subscribed handler - the shape of every production host - added because the unsubscribed row cannot see what an observed change costs. Its time has no hosted-runner observations, and a band guessed from a workstation would not match the runner (Update1000ChannelStates reads about 66 us on ubuntu-latest and about 35 us on the workstation), so its mean_ns/tolerance_pct are set from two weekly runs, in their own PR.",
+  "_bytes_note": "BYTES DECIDE, TIME INFORMS. `bytes` is BenchmarkDotNet's Memory.BytesAllocatedPerOperation and `bytes_tolerance` an absolute two-sided bound in bytes (0 = exact). Allocated bytes do not depend on the CPU, its vector width or the runner fleet, so they are calibrated where they are measured: two local runs on .NET 10.0.14, one with the JIT at x86-64-v3 and one at x86-64-v4, gave identical bytes on every row below, while time moved by up to 31% between them (AriJsonBenchmark.SerializeChannel). Rows with `bytes` and no `mean_ns` are gated on bytes only until two weekly runs give their time band. The two AsyncEventPumpBenchmark rows carry a 1 KB bound: the per-pump fixed cost of its lock, waiter list and run log, while the 10,000 slots themselves are exact. EnqueueAndConsume1000Events is not baselined on bytes at all: it is bimodal by a writer/consumer race (about 32 KB or about 50 KB), so equality is not a bar for it.",
+  "_isa_note": "`jit_isa` pins what the comparison expects the JIT to target. ubuntu-latest mixes AMD EPYC 7763 (no AVX-512, x86-64-v3) and EPYC 9V74 (AVX-512, x86-64-v4), and .NET 10 uses AVX-512 where it exists, so the same code read faster or slower by host. The workflow sets DOTNET_EnableAVX512=0 for the whole job (DOTNET_EnableAVX512F=0, the older name, is accepted and ignored by .NET 10.0.14: the JIT still reports x86-64-v4), and the comparator fails closed when a BenchmarkDotNet log names any other ISA. The time bands below were calibrated before the pin, pooled across both CPUs; a re-calibration under the pin is its own PR, from observed runs.",
   "schema_version": 1,
+  "jit_isa": "x86-64-v3",
   "calibration": {
     "method": "Parsed the BenchmarkDotNet `-report-full-compressed.json` artifacts of 13 real runs of .github/workflows/perf-regression.yml — 12 scheduled (weekly cron) plus 1 workflow_dispatch. `mean_ns` is the mean of those per-run means; the band is set to cover the observed across-run spread with headroom.",
     "runs": 13,
@@ -29,80 +32,179 @@
     "channel-manager": "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark",
     "observer": "Verbara.Sdk.Benchmarks.ObserverDispatchBenchmark",
     "turn-detection": "Verbara.Sdk.Benchmarks.TurnDetectionBenchmark",
+    "async-event-pump": "Verbara.Sdk.Benchmarks.AsyncEventPumpBenchmark",
+    "queue-manager": "Verbara.Sdk.Benchmarks.QueueManagerBenchmark",
+    "meetme-manager": "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark",
     "_turn_detection_note": "Present here with NO rows in \"benchmarks\" below, and that is deliberate rather than an oversight. The step must run and produce a report — a missing results/ directory is still a hard failure, which is the point — but its band cannot be calibrated yet: every other band in this file came from 13 observed runs and this benchmark has none. Its band is set in the PR that flips PERF_GATE_ENFORCE, from its own observations. Guessing one here would break the rule this file exists to enforce, in the change that wrote it."
   },
   "benchmarks": {
     "Verbara.Sdk.Benchmarks.AmiProtocolReaderBenchmark.ParseSingleEvent": {
       "mean_ns": 1484.0,
-      "tolerance_pct": 25
+      "tolerance_pct": 25,
+      "bytes": 1888,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.AmiProtocolReaderBenchmark.ParseResponse": {
       "mean_ns": 981.16,
-      "tolerance_pct": 25
+      "tolerance_pct": 25,
+      "bytes": 1288,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.AmiProtocolReaderBenchmark.Parse100EventBatch": {
       "mean_ns": 88642.0,
-      "tolerance_pct": 10
+      "tolerance_pct": 10,
+      "bytes": 69712,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.AriJsonBenchmark.DeserializeChannel": {
       "mean_ns": 666.79,
-      "tolerance_pct": 20
+      "tolerance_pct": 20,
+      "bytes": 216,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.AriJsonBenchmark.SerializeChannel": {
       "mean_ns": 363.01,
-      "tolerance_pct": 45
+      "tolerance_pct": 45,
+      "bytes": 424,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.AriJsonBenchmark.DeserializeBridge": {
       "mean_ns": 562.22,
-      "tolerance_pct": 30
+      "tolerance_pct": 30,
+      "bytes": 832,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.AriJsonBenchmark.SerializeBridge": {
       "mean_ns": 264.5,
-      "tolerance_pct": 35
+      "tolerance_pct": 35,
+      "bytes": 280,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.AriJsonBenchmark.Deserialize100Channels": {
       "mean_ns": 64354.0,
-      "tolerance_pct": 15
+      "tolerance_pct": 15,
+      "bytes": 23488,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.AriParseEventBenchmark.ParseStasisStart": {
       "mean_ns": 3947.0,
-      "tolerance_pct": 25
+      "tolerance_pct": 25,
+      "bytes": 1592,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.AriParseEventBenchmark.ParseChannelDtmf": {
       "mean_ns": 1939.0,
-      "tolerance_pct": 25
+      "tolerance_pct": 25,
+      "bytes": 1096,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.AriParseEventBenchmark.ParseUnknownEvent": {
       "mean_ns": 547.36,
-      "tolerance_pct": 25
+      "tolerance_pct": 25,
+      "bytes": 304,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.Create1000Channels": {
       "mean_ns": 353056.0,
-      "tolerance_pct": 30
+      "tolerance_pct": 30,
+      "bytes": 936528,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.Update1000ChannelStates": {
       "mean_ns": 65925.0,
-      "tolerance_pct": 15
+      "tolerance_pct": 15,
+      "bytes": 32000,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.LookupByUniqueId": {
       "mean_ns": 12.01,
-      "tolerance_pct": 15
+      "tolerance_pct": 15,
+      "bytes": 0,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.LookupByName": {
       "mean_ns": 14.69,
-      "tolerance_pct": 15
+      "tolerance_pct": 15,
+      "bytes": 0,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.EnumerateByState": {
       "mean_ns": 125710.0,
-      "tolerance_pct": 30
+      "tolerance_pct": 30,
+      "bytes": 80224,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.ObserverDispatchBenchmark.Dispatch_10Observers": {
       "mean_ns": 5.67,
-      "tolerance_pct": 20
+      "tolerance_pct": 20,
+      "bytes": 0,
+      "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.ObserverDispatchBenchmark.Dispatch_100Observers": {
       "mean_ns": 47.61,
-      "tolerance_pct": 15
+      "tolerance_pct": 15,
+      "bytes": 0,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber": {
+      "bytes": 208000,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.AsyncEventPumpBenchmark.EnqueueOnly10000Events": {
+      "bytes": 525994,
+      "bytes_tolerance": 1024
+    },
+    "Verbara.Sdk.Benchmarks.AsyncEventPumpBenchmark.Prefill10000ThenConsume": {
+      "bytes": 527461,
+      "bytes_tolerance": 1024
+    },
+    "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.MemberStatus_NoSubscriber": {
+      "bytes": 0,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.MemberStatus_OneSubscriber": {
+      "bytes": 176,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.DeviceState_NoSubscriber": {
+      "bytes": 88,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.DeviceState_OneSubscriber": {
+      "bytes": 264,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.QueueStatus_NoSubscriber": {
+      "bytes": 0,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.QueueStatus_OneSubscriber": {
+      "bytes": 176,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.Abandon_NoSubscriber": {
+      "bytes": 0,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.Abandon_OneSubscriber": {
+      "bytes": 176,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.JoinLeave_NoSubscriber": {
+      "bytes": 264,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.JoinLeave_OneSubscriber": {
+      "bytes": 616,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark.Mute_NoSubscriber": {
+      "bytes": 0,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark.Mute_OneSubscriber": {
+      "bytes": 176,
+      "bytes_tolerance": 0
     }
   }
 }
