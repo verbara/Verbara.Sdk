@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: OpenTelemetry 1.20.1 (#501)
+
+`Verbara.Sdk.OpenTelemetry` now requires `OpenTelemetry`, `OpenTelemetry.Extensions.Hosting`,
+`OpenTelemetry.Exporter.Console` and `OpenTelemetry.Exporter.OpenTelemetryProtocol` 1.20.1 or later (was 1.19.1), and
+`OpenTelemetry.Exporter.Prometheus.AspNetCore` 1.20.1-beta.1 or later (was 1.19.1-beta.1). Every instrument of the 15
+meters and every span of the 9 activity sources exports with the same name, unit, description, type, temporality,
+histogram buckets and attributes as in 2.9.0, through the in-memory, console, OTLP and Prometheus exporters; the only
+difference is the resource's `telemetry.sdk.version`. The packages must move together: the OTLP exporter 1.19.1 cannot
+serialize a histogram on OpenTelemetry 1.20.x, so an application that raises only `OpenTelemetry` exports traces and no
+metrics over OTLP, with the error only in OpenTelemetry's self-diagnostics log. This already applies to 2.9.0, whose
+floors allow that pair: an application on 2.9.0 that takes `OpenTelemetry` 1.20.x must also take
+`OpenTelemetry.Exporter.OpenTelemetryProtocol` 1.20.x. A new test exports a histogram through `WithOtlpExporter` to a
+loopback receiver, and Dependabot now proposes every OpenTelemetry package in a single pull request. Upstream changes
+an application can see in its own telemetry: an `HttpClient` the OTLP exporter creates no longer follows redirects (a
+3xx is a failed export); `byte[]` attributes are truncated to `OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT`; event and link
+attribute counts fall back to `OTEL_ATTRIBUTE_COUNT_LIMIT`; scope attributes from `ActivitySource.Tags` count against
+`OTEL_ATTRIBUTE_COUNT_LIMIT`; blobs that an earlier version wrote to the experimental disk-retry storage are not resent.
+The SDK's own telemetry triggers none of these. No public API change.
+
 ### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.5 (#474)
 
 `Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.5` instead of `>= 3.3.1`; its
@@ -15,6 +34,7 @@ instead of one; the second carries only the library's configuration channel. All
 connection-count alerts. To keep one connection, add `sharedSubscriptionConnection=true` to the configuration string,
 after checking the server's pub/sub output-buffer limit against your largest replies. A store given its own
 `IConnectionMultiplexer` follows the application's StackExchange.Redis version. No public API change.
+
 
 ## [2.9.0] - 2026-10-28
 
