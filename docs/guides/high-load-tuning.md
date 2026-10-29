@@ -18,12 +18,12 @@ Both AMI (`AsyncEventPump`) and ARI (`AriEventPump`) use bounded `Channel<T>` bu
 
 | Agents | Events/sec (est.) | `EventPumpCapacity` | RAM per buffer (est.) |
 |--------|-------------------|---------------------|-----------------------|
-| 100 | ~50-200 | 20,000 (default) | ~5 MB |
-| 1,000 | ~500-2,000 | 20,000 (default) | ~5 MB |
-| 10,000 | ~5,000-20,000 | 50,000 | ~12 MB |
-| 100,000 | ~50,000-200,000 | 100,000-200,000 | ~25-50 MB |
+| 100 | ~50-200 | 20,000 (default) | ~39 MB |
+| 1,000 | ~500-2,000 | 20,000 (default) | ~39 MB |
+| 10,000 | ~5,000-20,000 | 50,000 | ~97 MB |
+| 100,000 | ~50,000-200,000 | 100,000-200,000 | ~195-390 MB |
 
-> **Rule of thumb:** Set capacity to handle ~10 seconds of peak event volume. At 100K agents, a queue storm can generate 200K events/sec for a few seconds.
+> **Rule of thumb:** Set capacity to handle ~10 seconds of peak event volume. At 100K agents, a queue storm can generate 200K events/sec for a few seconds. The RAM column is that buffer full: `EventPumpCapacity` × (16 B slot + ≈ 1.9 KB event), in decimal MB, rounded, using the larger of two measured event sizes (1,928 + 16 = 1,944 B). The slot is the event's reference and its ordinal; the event is an Asterisk 22 AMI `Newchannel` or `VarSet` of 18 headers, typed object and `RawFields` together, measured at 1,928 B and 1,884 B retained. An event with fewer headers costs less, and a buffer that keeps up holds a few events, not its capacity.
 
 ### Configuration
 
