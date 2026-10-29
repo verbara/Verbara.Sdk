@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed: OpenTelemetry 1.20.1 (#NNN)
+### Changed: OpenTelemetry 1.20.1 (#501)
 
 `Verbara.Sdk.OpenTelemetry` now requires `OpenTelemetry`, `OpenTelemetry.Extensions.Hosting`,
 `OpenTelemetry.Exporter.Console` and `OpenTelemetry.Exporter.OpenTelemetryProtocol` 1.20.1 or later (was 1.19.1), and
