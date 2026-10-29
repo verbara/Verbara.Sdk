@@ -58,7 +58,8 @@ percentage points.**
 
 Time on a shared runner depends on the host; allocated bytes do not. Two local runs of the whole
 suite on .NET 10.0.14, one with the JIT at x86-64-v3 and one at x86-64-v4, gave **identical bytes on
-every synchronous row** while time moved by up to 31% (`AriJsonBenchmark.SerializeChannel`). So a
+every synchronous row**; on that host an interleaved run moved time by at most about 5%, and the spread across
+hosted runners is what a re-calibration under the ISA pin measures. So a
 row whose allocation is deterministic carries `bytes`, gated exactly (`bytes_tolerance: 0`) or
 within a stated bound, and the bytes are calibrated where they are measured — any machine, one run,
 then confirmed by the next. A row may carry `bytes` alone, without `mean_ns`/`tolerance_pct`, until

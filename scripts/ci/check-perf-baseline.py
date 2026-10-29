@@ -32,7 +32,8 @@ BYTES DECIDE, TIME INFORMS. A baseline entry may also carry `bytes` (BenchmarkDo
 `Memory.BytesAllocatedPerOperation`) and `bytes_tolerance` (an absolute two-sided bound in bytes,
 default 0 = exact). Allocated bytes do not depend on the CPU, its vector width or the runner fleet:
 measured identical with the JIT targeting x86-64-v3 and x86-64-v4 on every synchronous row of this
-suite, where the same pair moved time by up to 31%. So a row whose allocation is deterministic is
+suite, where the same pair moved time by at most about 5% on that host (the spread across hosted
+runners is measured by a re-calibration under the ISA pin). So a row whose allocation is deterministic is
 gated on its bytes, exactly or within a stated bound, and a row may be baselined on bytes alone
 (no `mean_ns`/`tolerance_pct`) until its hosted-runner time spread has been observed. A baselined
 row with bytes but no `Memory.BytesAllocatedPerOperation` in its report is a structural failure:

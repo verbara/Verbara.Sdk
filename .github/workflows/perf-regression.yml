@@ -27,7 +27,7 @@ name: Perf Regression
 # on a missing/empty/unparseable result — because every benchmark step below is
 # suffixed `|| true`, so a benchmark that NEVER RAN would otherwise read green.
 # That is the hole this closes. The `|| true` stays: it is what lets one broken
-# filter still leave the other four benchmarks measurable, and the comparison
+# filter still leave the other benchmarks measurable, and the comparison
 # step is now what notices.
 #
 # Manual run: gh workflow run "Perf Regression"
@@ -83,7 +83,7 @@ jobs:
       - name: Build benchmarks (Release)
         run: dotnet build Tests/Verbara.Sdk.Benchmarks/ -c Release --nologo
 
-      # Each `--filter` argument runs ONE benchmark class. We run the five
+      # Each `--filter` argument runs ONE benchmark class. We run the
       # README-cited hot paths in series so a single failure (timeout, missing
       # type) doesn't kill the whole job before the rest produce data.
       #
@@ -107,7 +107,7 @@ jobs:
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*AriParseEvent*' --exporters json --artifacts ../../artifacts/ari-event || true
-      - name: ChannelManager.GetById
+      - name: ChannelManager lookups
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*ChannelManager*' --exporters json --artifacts ../../artifacts/channel-manager || true
