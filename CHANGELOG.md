@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-28
+
 ### Fixed: a buffered AMI event costs what it did in 2.8.0, and its dispatch takes no lock (#496)
 
 Since the connection started numbering its events for the reconnect's reload barrier (#457, #463, #466), each slot of

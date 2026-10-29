@@ -49,7 +49,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 | 61 | 0 build warnings | ENFORCING | `Directory.Build.props` `TreatWarningsAsErrors` + `Pack Warnings Gate` | OK |
 | 61 | 0 trim warnings | ENFORCING | AotCanary | PARTIAL — 17/28 runtime packages analyzed by ILC (see line 13) |
 | 61 | more than 7,400 unit tests, plus functional and integration suites (no figure) | COHERENCE | — | GAP — corrected 2026-10-28: the unit lane (`ci.yml` `Unit Tests` filter, Release) ran **7,442** tests in 30 assemblies at `2066e1c2`, so the floor holds as tests are added; the functional (154) and integration (65) figures were dropped, not re-measured. Nothing in-tree records the count yet |
-| 61 | headline version **v2.8.0** | COHERENCE | `StatusBlockCoherenceTests` — against `Directory.Build.props` `<PackageVersion>` | **OK** |
+| 61 | headline version **v2.9.0** | COHERENCE | `StatusBlockCoherenceTests` — against `Directory.Build.props` `<PackageVersion>` | **OK** |
 | ~~65~~ | ONNX model 8.3 MB | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history |
 | ~~67~~ | 94.26% English accuracy, in upstream's voice | — | — | **DELETED** — lived in the release bullets, cut by the 2026-09-20 ruling on `README.md` release history. The figure survives at `:465` (row below) with its citation and hash pin; this was the duplicate. |
 | ~~67~~ | ~12 ms CPU inference | — | `TurnDetectionBenchmark` | **DELETED** — measured at 26.18–37.30 ms; deferred, see *Deferrals*. Its line was also removed with the release bullets on 2026-09-20. |
