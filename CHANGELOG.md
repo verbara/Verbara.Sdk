@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.5 (#474)
+
+`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.5` instead of `>= 3.3.1`; its
+`Microsoft.Extensions.*` dependencies stay at `>= 10.0.5`. Since 3.4.0, StackExchange.Redis opens a separate
+subscription connection under RESP3, as it always did under RESP2, so the interactive connection is no longer subject
+to the server's much tighter `client-output-buffer-limit pubsub`. Measured against Redis 7 with default settings, a
+store registered with `UseRedis(o => o.ConfigurationString = ...)` now holds two client connections per server
+instead of one; the second carries only the library's configuration channel. Allow for it in `maxclients` and in
+connection-count alerts. To keep one connection, add `sharedSubscriptionConnection=true` to the configuration string,
+after checking the server's pub/sub output-buffer limit against your largest replies. A store given its own
+`IConnectionMultiplexer` follows the application's StackExchange.Redis version. No public API change.
+
 ## [2.9.0] - 2026-10-28
 
 ### Fixed: a buffered AMI event costs what it did in 2.8.0, and its dispatch takes no lock (#496)
