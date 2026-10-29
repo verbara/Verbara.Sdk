@@ -7,13 +7,16 @@ namespace Verbara.Sdk.Live.Tests.MeetMe;
 
 /// <summary>
 /// What a participant's join, leave, mute or talking change costs the conference table in heap bytes. Bytes, not
-/// time: the allocation counter is exact and per thread, and every object counted escapes into the outbox, so no JIT
-/// tier removes it. These paths record no metric, so no listener can run on the measuring thread.
+/// time: the allocation counter is per thread and exact once two readings of the same round agree (a cost paid in every
+/// round is caught; one paid in fewer than half of them is not what these tests measure), and every object
+/// counted escapes into the outbox, so no JIT tier removes it. These paths record no metric, so no listener can run
+/// on the measuring thread.
 /// </summary>
 public sealed class MeetMeManagerAllocationTests
 {
     private const int Participants = 1_000;
     private const int WarmUpRounds = 3;
+    private const int MaxReadings = 20;
     private const string Room = "100";
 
     // One queued entry, one drain frame and the two execution-context copies the drain's frame switch makes, with
@@ -145,6 +148,13 @@ public sealed class MeetMeManagerAllocationTests
         return allocated;
     }
 
+    private static MeetMeManager WithParticipants()
+    {
+        var manager = new MeetMeManager(NullLogger.Instance);
+        Join(manager);
+        return manager;
+    }
+
     // As Measure, with the state each round consumes put back, unmeasured, before it.
     private static long MeasureAfter(Action setUp, Action round)
     {
@@ -154,27 +164,24 @@ public sealed class MeetMeManagerAllocationTests
             round();
         }
 
-        setUp();
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        round();
-        return GC.GetAllocatedBytesForCurrentThread() - before;
-    }
-
-    private static MeetMeManager WithParticipants()
-    {
-        var manager = new MeetMeManager(NullLogger.Instance);
-        Join(manager);
-        return manager;
-    }
-
-    // Warm-up rounds first, so tiering stubs and one-time initialisation fall before the measured round.
-    private static long Measure(Action round)
-    {
-        for (var i = 0; i < WarmUpRounds; i++)
+        // A round costs the same bytes every time, but a reading taken while a background collection runs can be a few
+        // bytes to a few kilobytes off, either way. Two readings in a row that agree are what the round cost.
+        long? previous = null;
+        for (var reading = 0; reading < MaxReadings; reading++)
+        {
+            setUp();
+            var before = GC.GetAllocatedBytesForCurrentThread();
             round();
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (allocated == previous)
+                return allocated;
+            previous = allocated;
+        }
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        round();
-        return GC.GetAllocatedBytesForCurrentThread() - before;
+        throw new Xunit.Sdk.XunitException(string.Create(CultureInfo.InvariantCulture,
+            $"no two of {MaxReadings} readings of the same round agreed; the last read {previous} bytes"));
     }
+
+    // Warm-up rounds first, so tiering stubs and one-time initialisation fall before the measured rounds.
+    private static long Measure(Action round) => MeasureAfter(static () => { }, round);
 }
