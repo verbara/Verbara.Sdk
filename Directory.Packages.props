@@ -21,7 +21,7 @@
        property values, and a central pin, transitive pins included, below a dependency's minimum is
        NU1109 in this build. -->
   <PropertyGroup>
-    <MicrosoftExtensionsVersion>10.0.13</MicrosoftExtensionsVersion>
+    <MicrosoftExtensionsVersion>10.0.14</MicrosoftExtensionsVersion>
     <MicrosoftExtensionsFloorVersion>$([System.Version]::Parse('$(MicrosoftExtensionsVersion)').ToString(2)).0</MicrosoftExtensionsFloorVersion>
   </PropertyGroup>
   <ItemGroup>
