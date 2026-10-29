@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Documentation: published figures match the code and a measurement (#NNN)
+### Documentation: published figures match the code and a measurement (#505)
 
 The README's performance row named `ChannelManager.GetById`, which does not exist; it is `GetByUniqueId`, on the
 unique-id index (figures unchanged). The README's API coverage is recounted against what Asterisk 22.12 and the 24.0
