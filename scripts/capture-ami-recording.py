@@ -573,9 +573,9 @@ exten => hop,1,NoOp(hop)
  same => n,Hangup()
 
 [capture-flash]
-; the answering leg of the PJSIP loopback call
+; the answering leg of the PJSIP loopback call, up long enough for both flashes to land
 exten => flash-in,1,Answer()
- same => n,Wait(3)
+ same => n,Wait(8)
  same => n,Hangup()
 
 [capture-parked-timeout]
@@ -627,7 +627,15 @@ def _dialplan_and_parking(tap: Tap):
     waiting channel; a call parked with Park(), listed with ParkedCalls and Parkinglots and picked
     up by dialling its space; one whose caller gives up while it is parked; one that times out; the
     SendFlash help text, then SendFlash with Receive, without it, and to a channel that does not
-    exist, on a PJSIP loopback call; and the empty parked-call listing."""
+    exist, on a PJSIP loopback call; and the empty parked-call listing.
+
+    Both SendFlash forms answer the same Success, because AMI ignores a header it does not know, so
+    each form gets its own step and waits for its Flash event: the channel it lands on tells whether
+    Receive was applied (the target leg itself) or ignored (the far leg). Any channel is accepted,
+    so a build that ignores Receive still finishes the capture. The first flash waits until the far
+    leg has left Answer(): on 22.11.0 a Flash it received during Answer() was reported a second
+    time afterwards, in the next step. Each form then settles for a second so a late Flash still
+    falls inside its own step."""
     steps = []
 
     def step(name):
@@ -692,15 +700,27 @@ def _dialplan_and_parking(tap: Tap):
     step("send-flash-help")
     tap.action([("Action", "Command"), ("Command", "manager show command SendFlash")])
 
-    mark = step("send-flash")
+    def is_flash(f):
+        return f.get("Event") == "Flash"
+
+    call = mark = step("send-flash-receive")
     originate("PJSIP/flash", 10, "7107")
     tap.wait_count(_is("Newstate", Channel="PJSIP/flash-", ChannelStateDesc="Up"), 2, 20, mark,
                    "both PJSIP legs up")
     outbound = tap.wait_for(_is("Newchannel", Channel="PJSIP/flash-"), 1, mark, "the PJSIP Newchannel")
+    tap.wait_for(_is("Newexten", Channel="PJSIP/flash-", Exten="flash-in", Application="Wait"), 20, mark,
+                 "the far leg's Wait")
     tap.action([("Action", "SendFlash"), ("Channel", outbound["Channel"]), ("Receive", "true")])
+    tap.wait_for(is_flash, 5, mark, "a Flash event")
+    tap.pump(1.0)
+    mark = step("send-flash-plain")
     tap.action([("Action", "SendFlash"), ("Channel", outbound["Channel"])])
+    tap.wait_for(is_flash, 5, mark, "a Flash event")
+    tap.pump(1.0)
+    step("send-flash-missing")
     tap.action([("Action", "SendFlash"), ("Channel", "PJSIP/capture-no-such-channel")])
-    tap.wait_count(_is("Hangup", Channel="PJSIP/flash-"), 2, 20, mark, "the PJSIP legs' hangups")
+    tap.pump(0.5)
+    tap.wait_count(_is("Hangup", Channel="PJSIP/flash-"), 2, 20, call, "the PJSIP legs' hangups")
     tap.pump(1.0)
 
     step("parked-empty")

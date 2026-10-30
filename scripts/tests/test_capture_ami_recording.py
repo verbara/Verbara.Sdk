@@ -396,10 +396,17 @@ class _ParkingPbx:
             "Parkinglots": [b"Response: Success\r\nActionID: {id}\r\nEventList: start\r\n\r\n",
                             b"Event: ParkinglotsComplete\r\nActionID: {id}\r\nEventList: Complete\r\n\r\n"],
             "Command": [self.ok("Command output follows")],
-            "SendFlash": lambda h: [self.ok() if h.get("Channel") == self.FLASH_OUT else
-                                    b"Response: Error\r\nActionID: {id}\r\nMessage: No such channel\r\n\r\n"],
+            "SendFlash": self.send_flash,
             "Logoff": [b"Response: Goodbye\r\nActionID: {id}\r\n\r\n"],
         }
+
+    def send_flash(self, h):
+        """As 22.11.0 answers: the Receive form flashes the target leg itself, the plain form the
+        far leg, and both answer the same Success, so only the Flash event's channel tells them apart."""
+        if h.get("Channel") != self.FLASH_OUT:
+            return [b"Response: Error\r\nActionID: {id}\r\nMessage: No such channel\r\n\r\n"]
+        flashed = self.FLASH_OUT if h.get("Receive") == "true" else self.FLASH_IN
+        return [self.ok("Flash successfully queued"), _ev(("Event", "Flash"), ("Channel", flashed))]
 
     def originate(self, h):
         channel = h["Channel"]
@@ -419,7 +426,7 @@ class _ParkingPbx:
             n = f"{self.parks:08d}"
             stem = channel[: -len("/n")].replace("@capture", "@capture-" + n)
             parked = queued + [_ev(("Event", "ParkedCall"), ("ParkeeChannel", stem + ";2"),
-                                   ("ParkingSpace", self.SPACE), ("ParkingLot", "default"))]
+                                   ("ParkingSpace", self.SPACE), ("Parkinglot", "default"))]
             if channel.startswith("Local/park-short"):
                 return parked + [_ev(("Event", "ParkedCallTimeOut"), ("ParkeeChannel", stem + ";2"),
                                      ("ParkingSpace", self.SPACE))] + _hangups(stem + ";2", stem + ";1")
@@ -438,6 +445,8 @@ class _ParkingPbx:
                 _ev(("Event", "Newchannel"), ("Channel", self.FLASH_IN), ("ChannelStateDesc", "Ring")),
                 _ev(("Event", "Newstate"), ("Channel", self.FLASH_IN), ("ChannelStateDesc", "Up")),
                 _ev(("Event", "Newstate"), ("Channel", self.FLASH_OUT), ("ChannelStateDesc", "Up")),
+                _ev(("Event", "Newexten"), ("Channel", self.FLASH_IN), ("Context", "capture-flash"),
+                    ("Exten", "flash-in"), ("Priority", "2"), ("Application", "Wait")),
                 *_hangups(self.FLASH_IN, self.FLASH_OUT)]
         return [b"Response: Error\r\nActionID: {id}\r\nMessage: Originate failed\r\n\r\n"]
 
@@ -445,7 +454,7 @@ class _ParkingPbx:
 class DialplanAndParkingWorkloadTests(unittest.TestCase):
     _NAME = "dialplan-and-parking"
 
-    def _run(self):
+    def _run(self, instrument=None):
         pbx_state = _ParkingPbx()
         ours, theirs = socket.socketpair()
         pbx = _FakePbx(theirs, pbx_state.script())
@@ -453,6 +462,8 @@ class DialplanAndParkingWorkloadTests(unittest.TestCase):
         try:
             tap = cap.Tap(ours)
             tap.pump = lambda seconds: cap.Tap.pump(tap, min(seconds, 0.02))
+            if instrument:
+                instrument(tap)
             tap.login("capture", "secret")
             steps = cap.WORKLOADS[self._NAME]["run"](tap)
             tap.logoff()
@@ -493,7 +504,8 @@ class DialplanAndParkingWorkloadTests(unittest.TestCase):
         steps, _received, _tap = self._run()
 
         self.assertEqual(["dialplan", "redirect", "park", "parked-list", "unpark", "giveup", "timeout",
-                          "send-flash-help", "send-flash", "parked-empty", "done"], steps)
+                          "send-flash-help", "send-flash-receive", "send-flash-plain", "send-flash-missing",
+                          "parked-empty", "done"], steps)
 
     def test_run_ShouldPickUpTheSpaceTheParkedCallEventNamed(self):
         _steps, received, _tap = self._run()
@@ -523,6 +535,56 @@ class DialplanAndParkingWorkloadTests(unittest.TestCase):
         self.assertEqual(["manager show command SendFlash"], commands)
         errors = [f for f in tap.frames if f.get("Response") == "Error"]
         self.assertEqual(1, len(errors))
+
+    def test_run_ShouldRecordEachFlashInsideItsOwnStep_SoTheChannelTellsWhetherReceiveWasApplied(self):
+        _steps, received, tap = self._run()
+
+        step, flashes = None, []
+        for f in tap.frames:
+            if f.get("Event") == "UserEvent" and f.get("UserEvent") == "CaptureMarker":
+                step = f.get("Step")
+            elif f.get("Event") == "Flash":
+                flashes.append((step, f.get("Channel")))
+        self.assertEqual([("send-flash-receive", _ParkingPbx.FLASH_OUT),
+                          ("send-flash-plain", _ParkingPbx.FLASH_IN)], flashes)
+        sent_in = {}
+        step = None
+        for h in received:
+            if h.get("Action") == "UserEvent":
+                step = h.get("Step")
+            elif h.get("Action") == "SendFlash":
+                sent_in[step] = h.get("Receive")
+        self.assertEqual({"send-flash-receive": "true", "send-flash-plain": None, "send-flash-missing": None},
+                         sent_in)
+
+    def test_run_ShouldSendTheFirstFlashOnlyOnceTheFarLegLeftAnswer(self):
+        log = []
+
+        def instrument(tap):
+            send, wait_for = tap.send, tap.wait_for
+
+            def logged_send(fields):
+                log.append(("send", dict(fields).get("Action")))
+                return send(fields)
+
+            def logged_wait_for(*args, **kwargs):
+                frame = wait_for(*args, **kwargs)
+                log.append(("awaited", frame.get("Event"), frame.get("Exten"), frame.get("Application")))
+                return frame
+
+            tap.send, tap.wait_for = logged_send, logged_wait_for
+
+        self._run(instrument)
+
+        first_flash = log.index(("send", "SendFlash"))
+        self.assertIn(("awaited", "Newexten", "flash-in", "Wait"), log[:first_flash],
+                      "on 22.11.0 a far-leg Flash that arrived during Answer() was reported again after it")
+
+    def test_files_ShouldKeepTheFarLegUpLongEnoughForBothFlashes(self):
+        extensions = cap.WORKLOADS[self._NAME]["files"]["extensions.conf"]
+
+        flash_in = extensions[extensions.index("exten => flash-in,1,Answer()"):]
+        self.assertIn(" same => n,Wait(8)", flash_in.split("\n\n")[0])
 
 
 if __name__ == "__main__":
