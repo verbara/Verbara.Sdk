@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Documentation: published figures match the code and a measurement (#505)
+
+The README's performance row named `ChannelManager.GetById`, which does not exist; it is `GetByUniqueId`, on the
+unique-id index (figures unchanged). The README's API coverage is recounted against what Asterisk 22.12 and the 24.0
+release candidate document: 115 of 154 AMI actions, 92 of 109 ARI REST operations and 42 of 45 ARI event types; the
+old 148/152, 94/98, 46/46 and 27/27 described no current Asterisk. The high-load tuning guide's RAM per AMI event
+buffer is derived from the 16-byte slot and a measured ≈ 1.9 KB per 18-header event: about 39 MB for a full default
+buffer of 20,000, where it said 5 MB. The Sessions README now says that `Events` replays nothing, so a subscriber added
+after the host starts does not see the first load's `CallStartedEvent`. No code, package or API changes.
+
 ### Changed: OpenTelemetry 1.20.1 (#501)
 
 `Verbara.Sdk.OpenTelemetry` now requires `OpenTelemetry`, `OpenTelemetry.Extensions.Hosting`,

@@ -62,7 +62,7 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 Release history — every version, with what changed and why — is in [`CHANGELOG.md`](CHANGELOG.md). It is not restated here: a second copy in the README is one nobody updates, and this block had drifted three releases behind before anyone noticed.
 
-API coverage (cumulative): 148/152 AMI actions (97%), 94/98 ARI endpoints (96%), 46/46 ARI event types (100%), 27/27 ARI models (100%), 243 AMI events covering Asterisk 18-23. Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` control messages (plain text or JSON) both supported. Supported: **Asterisk 22 LTS** (primary) and **23 Standard** (secondary, until its end of life on 2027-10-15); 24 LTS becomes primary once it is generally available and in CI, and 20 and earlier are not supported — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for the policy, CI coverage and lifecycle.
+API coverage, counted against what Asterisk 22.12 and the 24.0 release candidate document (the two document the same set): 115 of 154 AMI actions, 92 of 109 ARI REST operations, 42 of 45 ARI event types, plus 243 AMI event types. The SDK maps 148 AMI actions; the other 33 are names that 22 and 24 no longer register (the SIP, Skype, Zap and Monitor actions among them). Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` control messages (plain text or JSON) both supported. Supported: **Asterisk 22 LTS** (primary) and **23 Standard** (secondary, until its end of life on 2027-10-15); 24 LTS becomes primary once it is generally available and in CI, and 20 and earlier are not supported — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for the policy, CI coverage and lifecycle.
 
 ---
 
@@ -93,7 +93,7 @@ Benchmarked on AMD Ryzen 9 9900X (12C/24T), .NET 10.0.5, BenchmarkDotNet v0.14.0
 | AMI event parse + dispatch | **1.62M events/sec** (617.6 ns) |
 | ARI JSON deserialize `Channel` | **3.54M ops/sec** (283 ns) |
 | ARI parse `StasisStart` event | **595K events/sec** (1.68 µs) — *2.7× faster than v1.0* |
-| `ChannelManager.GetById` (secondary index) | **163.9M lookups/sec** (6.1 ns) |
+| `ChannelManager.GetByUniqueId` (primary index) | **163.9M lookups/sec** (6.1 ns) |
 | Observer dispatch (copy-on-write array) | **~0.21 ns / observer** (zero-alloc) |
 | Session store Redis `SaveAsync` | **~33.3K saves/sec** (p50 30 µs) / batch 91,021 sess/sec |
 | Session store Postgres `SaveAsync` | **~500 saves/sec** (p50 1.97 ms) / batch 13,489 sess/sec |

@@ -35,6 +35,8 @@ call's lock**, after checking that it still holds the call; since 2.9.0 that inc
 `CallQueuedEvent`, which were raised outside it before. A `CallWrapUpEvent` is not: it is the agent's after-call time,
 raised when the wrap-up closes. A subscriber that blocks holds them up; keep handlers short and hand long work off.
 
+**`Events` replays nothing.** With `AddVerbaraSessions`, the host's start runs the server's first load, which opens a session for every call already up and raises its `CallStartedEvent` then; a subscriber added after `host.StartAsync` returns never sees those, so read `ActiveSessions` for them, or subscribe before the host starts.
+
 **A subscriber that throws fails alone.** Its exception is caught at that subscriber, logged once at `Warning` with the
 exception and counted on `sessions.events.subscriber_faults` (meter `Verbara.Sdk.Sessions`):
 

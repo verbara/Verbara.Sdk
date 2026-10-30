@@ -33,11 +33,11 @@
       "record_ref": "benchmark-analysis.md:37 and :54"
     },
     {
-      "operation": "`ChannelManager.GetById` (secondary index)",
+      "operation": "`ChannelManager.GetByUniqueId` (primary index)",
       "latency": "6.1 ns",
       "throughput": "163.9M lookups/sec",
       "record_ref": "benchmark-analysis.md:40",
-      "note": "The benchmark method is named LookupByUniqueId; the README names the public API. Both are correct for their audience, but a reader diffing the two will not find a match."
+      "note": "The benchmark method LookupByUniqueId calls ChannelManager.GetByUniqueId, the lookup in the unique-id index every channel is stored under. Until 2.10.0 the README named this row GetById, a member ChannelManager does not have, and called the index secondary; the figures are unchanged."
     },
     {
       "operation": "Observer dispatch (copy-on-write array)",
