@@ -111,9 +111,9 @@ public sealed class CallSessionManagerReloadSubscriberTests
     {
         const string UniqueId = "snapshot-answered";
         const string LinkedId = "snapshot-call";
-        var connection = Substitute.For<IAmiConnection>();
-        connection.AsteriskVersion.Returns("22.9.0");
-        await using var server = new VerbaraServer(connection, NullLogger<VerbaraServer>.Instance);
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.StartAsync(peer);
+        var server = run.Server;
         var store = new RecordingStateStore();
         await using var manager = new CallSessionManager(
             Options.Create(new SessionOptions()), NullLogger<CallSessionManager>.Instance, store);
@@ -160,9 +160,10 @@ public sealed class CallSessionManagerReloadSubscriberTests
         var workerJoined = false;
         try
         {
-            using var window = server.Channels.OpenReadWindow();
-            server.Channels.ReconcileWithSnapshot(
-                [new(UniqueId, "PJSIP/snapshot-answered", ChannelState.Up, LinkedId: LinkedId)], window);
+            peer.StatusChannels = [new StatusChannel(UniqueId, "PJSIP/snapshot-answered", LinkedId)];
+            // Exercise the server's completed snapshot, not a bare table mutation: a snapshot-admitted
+            // call is unverified until this completion, even when its observed hangup already arrived.
+            await server.ReconcileChannelsAsync().AsTask().WaitAsync(Run.Bound);
             // The probe records its two-second handler wait; assertions run after worker cleanup.
             finishedInsideHandler = probe.FinishedInsideTheHandler();
         }
@@ -193,7 +194,7 @@ public sealed class CallSessionManagerReloadSubscriberTests
             session.ConnectedAt.Should().BeNull("a reload never observed when the call answered");
             endings.Should().ContainSingle().Which.SessionId.Should().Be(session.SessionId);
             store.Saves.Where(saved => saved.SessionId == session.SessionId).Select(saved => saved.State)
-                .Should().Equal(CallSessionState.Connected, CallSessionState.Completed);
+                .Should().Equal(CallSessionState.Connected, CallSessionState.Connected, CallSessionState.Completed);
         }
         endings.Should().ContainSingle().Which.Cause.Should().Be(HangupCause.NormalClearing);
     }

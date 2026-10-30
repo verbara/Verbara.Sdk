@@ -88,6 +88,9 @@ internal enum HandlerStep
     /// id.
     /// </summary>
     QueueJoinFound,
+
+    /// <summary>A registration join checked channel ownership, immediately before its atomic claim.</summary>
+    RegistrationJoinReady,
 }
 
 public sealed partial class CallSessionManager

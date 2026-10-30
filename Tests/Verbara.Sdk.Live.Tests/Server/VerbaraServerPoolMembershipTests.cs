@@ -387,6 +387,7 @@ public sealed class VerbaraServerPoolMembershipTests
             removing.Wait(Bound).Should().BeTrue();
             if (afterRecheck)
             {
+                // fence-allow: GUARD-TIMEOUT — observe the actual dictionary removal while the subscriber lock still gates its callback.
                 SpinWait.SpinUntil(() => rig.Pool.GetServer("n1") is null, Bound).Should().BeTrue("removal mutates membership while the walker still holds its subscriber lock");
                 removal.IsCompleted.Should().BeFalse("the removal callback must wait for installation to finish");
             }
@@ -453,6 +454,7 @@ public sealed class VerbaraServerPoolMembershipTests
     // Merely seeing that it was scheduled would let an unlocked mutation win by scheduling luck.
     private static void AssertWaitingOnMembership(Task operation, Thread caller)
     {
+        // fence-allow: GUARD-TIMEOUT — bound observation of the competing caller reaching its blocked or completed state.
         SpinWait.SpinUntil(() => operation.IsCompleted || (caller.ThreadState & ThreadState.WaitSleepJoin) != ThreadState.Running, Bound)
             .Should().BeTrue("the competing membership caller reaches a blocked or completed state before the handler gate opens");
         operation.IsCompleted.Should().BeFalse("the gated notification must finish before the competing membership operation");

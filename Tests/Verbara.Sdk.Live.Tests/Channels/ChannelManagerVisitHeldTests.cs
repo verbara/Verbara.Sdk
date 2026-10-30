@@ -111,6 +111,7 @@ public sealed class ChannelManagerVisitHeldTests
             visitor = StartThread(() => manager.VisitHeld("call", seen.Add));
             WaitUntilBlocked(visitor.Thread); // The indexed group has been captured; the old lock is next.
             removal = Task.Run(() => manager.OnHangup("x"));
+            // fence-allow: GUARD-TIMEOUT — observe table removal while the held channel lock gates the removal notification.
             SpinWait.SpinUntil(() => manager.GetByUniqueId("x") is null, Bound).Should().BeTrue();
             Add(manager, "x", "call");
             manager.GetByUniqueId("x").Should().NotBeSameAs(old);
@@ -171,6 +172,7 @@ public sealed class ChannelManagerVisitHeldTests
                     manager.ReconcileWithSnapshot([], window);
                 }
             });
+            // fence-allow: GUARD-TIMEOUT — observe table removal while the held channel lock gates the removal notification.
             SpinWait.SpinUntil(() => manager.GetByUniqueId("x") is null, Bound).Should().BeTrue();
             ChannelManager.IsDeparting(channel).Should().BeTrue();
             Volatile.Read(ref removals).Should().Be(0);
@@ -210,6 +212,7 @@ public sealed class ChannelManagerVisitHeldTests
     }
 
     private static void WaitUntilBlocked(Thread thread) =>
+        // fence-allow: GUARD-TIMEOUT — prove the dedicated visitor is waiting on the channel lock held by this test.
         SpinWait.SpinUntil(() => (thread.ThreadState & ThreadState.WaitSleepJoin) != ThreadState.Running, Bound)
             .Should().BeTrue("the dedicated visitor must actually be waiting for the held channel lock");
 

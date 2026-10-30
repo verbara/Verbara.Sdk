@@ -308,7 +308,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         // so they can be unsubscribed later.
         var gate = new AttachmentGate();
         var onAdded = Gated<AsteriskChannel>(gate, ch => OnChannelAdded(ch, serverId, index));
-        var onRemoved = Gated<AsteriskChannel>(gate, ch => OnChannelRemoved(ch, serverId, index));
+        var onRemoved = Gated<AsteriskChannel>(gate, ch => OnChannelRemoved(ch, serverId, index, server, gate));
         var onStateChanged = Gated<AsteriskChannel>(gate, arg => OnChannelStateChanged(arg, serverId, index));
         var onDialBegin = Gated<AsteriskChannel>(gate, arg => OnChannelDialBegin(arg, serverId, index));
         var onDialEnd = Gated<AsteriskChannel>(gate, arg => OnChannelDialEnd(arg, serverId, index));
@@ -330,11 +330,22 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 OnQueueCallerConnected(callerUniqueId, memberName, memberInterface, serverId, index));
         var onQueueCallerCompleted = Gated<QueueCallerCompletion>(gate, completion => OnQueueCallerCompleted(completion, serverId, index));
 
+        Action<ChannelSnapshotCompletion> onChannelSnapshotCompleted = _ =>
+        {
+            if (!gate.TryEnter()) return;
+            try
+            {
+                if (_serverSubs.TryGetValue(serverId, out var current) && ReferenceEquals(current.Gate, gate))
+                    DecideCompleteTable(serverId, current);
+            }
+            finally { gate.Exit(); }
+        };
+
         Subscribe(serverId, new ServerSubscriptions(gate, server,
             onAdded, onRemoved, onStateChanged, onDialBegin, onDialEnd,
             onHeld, onUnheld, onBridgeEntered, onBridgeDestroyed, onTransfer, onCallerJoined,
             onCallerLeft, onAbandonReported, onQueueStatus, onSnapshotCompleted, onAgentConnected, onQueueCallerConnected,
-            onQueueCallerCompleted));
+            onQueueCallerCompleted, onChannelSnapshotCompleted));
     }
 
     public void DetachFromServer(string serverId)
@@ -452,6 +463,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         var direction = _correlator.InferDirection(channel.Context, channel.Extension);
         var session = new CallSession(Guid.NewGuid().ToString("N"), linkedId, serverId, direction);
 
+        session.Unverified = channel.AdmittedFromSnapshot;
+        session.SetParticipantMark(channel.UniqueId, channel.AdmissionMark);
         session.Context = channel.Context;
         session.Extension = channel.Extension;
 
@@ -609,15 +622,29 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// holds it, and answers whether the leg now belongs to it. A leg already present in the call is not added again.
     /// The leg is indexed under the call's lock, so a call let go of meanwhile is never indexed again.
     /// </summary>
-    private bool TryJoin(CallSession call, AsteriskChannel channel, ServerIndex index)
+    private bool TryJoin(CallSession call, AsteriskChannel channel, ServerIndex index, bool preserveOwnership = false)
     {
         lock (call.SyncRoot)
         {
-            if (!IsHeld(call) || HasEnded(call))
+            if (!IsHeld(call) || HasEnded(call) || call.EndingDelivered)
                 return false;
 
-            if (call.Participants.Any(p => p.UniqueId == channel.UniqueId && !p.LeftAt.HasValue))
+            // The registration join cannot replace an owner that claimed the channel after its lookup.
+            // Claim before every mutation, including marks; the live arrival route retains its existing protocol.
+            if (preserveOwnership && !index.ByChannelId.TryAdd(channel.UniqueId, call)
+                && (!index.ByChannelId.TryGetValue(channel.UniqueId, out var owner) || !ReferenceEquals(owner, call)))
+            {
+                LogRegistrationJoinSkipped(call.SessionId, channel.UniqueId);
+                return false;
+            }
+
+            if (FindPresentParticipant(call, channel.UniqueId) is not null)
+            {
+                call.SetParticipantMark(channel.UniqueId, channel.AdmissionMark);
                 return true;
+            }
+
+            call.SetParticipantMark(channel.UniqueId, channel.AdmissionMark);
 
             var role = SessionCorrelator.InferRole(channel.Name, call.Participants.Count);
             call.AddParticipant(new SessionParticipant
@@ -669,103 +696,211 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// (<c>ADR-0062</c>, design D3).
     /// </para>
     /// </summary>
-    private void OnChannelRemoved(AsteriskChannel channel, string serverId, ServerIndex index)
+    private void OnChannelRemoved(AsteriskChannel channel, string serverId, ServerIndex index, VerbaraServer sourceServer, AttachmentGate sourceGate)
     {
-        if (!index.ByChannelId.TryGetValue(channel.UniqueId, out var session)) return;
-
-        Step(HandlerStep.RemovalFound, serverId, channel.UniqueId);
-
-        var byReload = channel.RemovedByReload;
-
-        // The one read of channel.HangupCause in this method. Null when nothing was observed —
-        // distinct from HangupCause.NotDefined, which is what "observed, and Asterisk said zero"
-        // would look like.
-        var observedCause = byReload ? (HangupCause?)null : channel.HangupCause;
-
-        lock (session.SyncRoot)
+        if (!_serverSubs.TryGetValue(serverId, out var source) || (!ReferenceEquals(source.Server, sourceServer) || !ReferenceEquals(source.Gate, sourceGate))) return;
+        index.ByChannelId.TryGetValue(channel.UniqueId, out var byChannel);
+        if (byChannel is not null)
         {
-            // A call let go of since its channel was looked up is no longer this manager's: a late departure
-            // records nothing on it, ends nothing and announces nothing.
-            if (IsHeld(session))
+            Step(HandlerStep.RemovalFound, serverId, channel.UniqueId);
+            DecideCall(byChannel, channel, source: source, sourceId: serverId);
+        }
+        var key = string.IsNullOrEmpty(channel.LinkedId) ? channel.UniqueId : channel.LinkedId;
+        if (index.ByLinkedId.TryGetValue(key, out var byLinked)
+            && !ReferenceEquals(byLinked, byChannel)) DecideCall(byLinked, channel, source: source, sourceId: serverId);
+    }
+
+    private void MarkUnverified(string serverId)
+    {
+        foreach (var call in _sessions.Values.Where(c => string.Equals(c.ServerId, serverId, StringComparison.Ordinal)))
+        {
+            lock (call.SyncRoot)
             {
-                // The leg still present: a leg with this id that already left keeps its own departure.
-                var participant = session.Participants.FirstOrDefault(
-                    p => p.UniqueId == channel.UniqueId && !p.LeftAt.HasValue);
-                if (participant is not null)
+                if (!IsHeld(call) || HasEnded(call) || call.EndingDelivered) continue;
+                call.Unverified = true;
+                call.ClearRecordedDepartures();
+                call.LastDeparture = null;
+                call.ClearParticipantMarks();
+            }
+        }
+    }
+
+    internal void DecideCompleteTable(string serverId, VerbaraServer? expectedServer = null)
+    {
+        if (!_serverSubs.TryGetValue(serverId, out var subs)
+            || (expectedServer is not null && !ReferenceEquals(expectedServer, subs.Server))
+            || !subs.Server.ChannelTableComplete) return;
+        DecideCompleteTable(serverId, subs);
+    }
+
+    private void DecideCompleteTable(string serverId, ServerSubscriptions attachment)
+    {
+        foreach (var call in _sessions.Values.Where(c => c.Unverified && string.Equals(c.ServerId, serverId, StringComparison.Ordinal)))
+            DecideCall(call, expected: attachment);
+    }
+
+    private static SessionParticipant? FindPresentParticipant(CallSession call, string uniqueId)
+    {
+        var participants = call.ParticipantStorage;
+        for (var i = 0; i < participants.Count; i++)
+        {
+            var participant = participants[i];
+            if (participant.UniqueId == uniqueId && !participant.LeftAt.HasValue) return participant;
+        }
+        return null;
+    }
+
+    private static bool HasPresentParticipant(CallSession call)
+    {
+        var participants = call.ParticipantStorage;
+        for (var i = 0; i < participants.Count; i++)
+            if (!participants[i].LeftAt.HasValue) return true;
+        return false;
+    }
+
+    private void DecideCall(CallSession call, AsteriskChannel? departure = null, ServerSubscriptions? expected = null, ServerSubscriptions? source = null, string? sourceId = null)
+    {
+        lock (call.SyncRoot)
+        {
+            if (!IsHeld(call) || HasEnded(call) || call.EndingDelivered) return;
+            if (source is not null && (sourceId is null || !_serverSubs.TryGetValue(sourceId, out var currentSource) || !ReferenceEquals(source, currentSource))) return;
+            ServerSubscriptions subs;
+            // The source attachment was dynamically rechecked just above, under this call's lock.
+            // Reuse that object only for the same server; cross-server base collisions still resolve their own.
+            if (source is not null && string.Equals(call.ServerId, sourceId, StringComparison.Ordinal)) subs = source;
+            else
+            {
+                if (!_serverSubs.TryGetValue(call.ServerId, out var attached)) return;
+                subs = attached;
+            }
+            if (expected is not null && !ReferenceEquals(expected, subs)) return;
+            var index = IndexOf(call.ServerId);
+            var table = subs.Server.Channels;
+            var complete = subs.Server.ChannelTableComplete;
+            var changed = false;
+            string? removedDepartureId = null;
+            if (complete)
+            {
+                var participants = call.ParticipantStorage;
+                for (var i = 0; i < participants.Count; i++)
                 {
+                    var participant = participants[i];
+                    if (participant.LeftAt.HasValue || table.IsHeldOrDeparting(participant.UniqueId)) continue;
+                    changed = true;
                     participant.LeftAt = DateTimeOffset.UtcNow;
-                    participant.HangupCause = observedCause;
+                    participant.HangupCause = null;
+                    call.RecordDeparture(participant.UniqueId, call.GetParticipantMark(participant.UniqueId));
+                    call.LastDeparture ??= (true, null);
+                    call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow, CallSessionEventType.ParticipantLeft,
+                        participant.Channel, null, EndingProvenanceReload));
+                    index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(participant.UniqueId, call));
                 }
-
-                session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
-                    CallSessionEventType.ParticipantLeft, channel.Name, null,
-                    byReload ? EndingProvenanceReload : observedCause.ToString()));
-
-                // Check if all participants have left
-                if (session.Participants.All(p => p.LeftAt.HasValue))
+            }
+            if (departure is not null)
+            {
+                if (call.RecordDeparture(departure.UniqueId, departure.AdmissionMark))
                 {
-                    session.HangupCause = observedCause;
-
-                    if (byReload)
+                    changed = true;
+                    var participant = FindPresentParticipant(call, departure.UniqueId);
+                    if (participant is not null && call.GetParticipantMark(participant.UniqueId) <= departure.AdmissionMark)
                     {
-                        // Marked on the session, which is what a consumer can reach from the SessionId
-                        // on CallEndedEvent. The event record itself gains no field: CallEndedEvent is
-                        // a positional record, so adding one would move the public API this change
-                        // claims it does not touch.
-                        session.SetMetadata(EndingProvenanceKey, EndingProvenanceReload);
-
-                        // No cause exists, so the outcome follows from what the session already was: a
-                        // call that was up really took place and is over; one that never connected
-                        // never became a call. A call is up when it connected, and also when the SDK
-                        // observed its answer while it was still in its initial state, with no dial or
-                        // queue reaching it (an IVR, an originate answered with no dial onward): that one
-                        // ends completed from its observed answer. Transferring is deliberately absent —
-                        // it has no valid transition to Completed — and falls to the Failed arm below.
-                        if (!session.TryCompleteAnsweredInInitialState())
-                        {
-                            var reloadTarget = session.State is CallSessionState.Connected
-                                or CallSessionState.OnHold or CallSessionState.Conference
-                                ? CallSessionState.Completed
-                                : CallSessionState.Failed;
-
-                            if (!session.TryTransition(reloadTarget))
-                                session.TryTransition(CallSessionState.Failed);
-                        }
-
-                        LogEndedByReload(session.SessionId, session.LinkedId, session.State);
+                        participant.LeftAt = DateTimeOffset.UtcNow;
+                        participant.HangupCause = departure.RemovedByReload ? null : departure.HangupCause;
                     }
-                    else
-                    {
-                        var targetState = channel.HangupCause == HangupCause.NormalClearing
-                            ? CallSessionState.Completed
-                            : CallSessionState.Failed;
-
-                        // Try the natural progression if needed. A call still in its initial state ends
-                        // failed, unless the SDK observed its answer and it hung up normally: then the
-                        // dialplan answered it, no dial or queue reached it, and it is a completed call.
-                        if (session.State == CallSessionState.Created)
-                        {
-                            if (targetState != CallSessionState.Completed
-                                || !session.TryCompleteAnsweredInInitialState())
-                                session.TryTransition(CallSessionState.Failed);
-                        }
-                        else if (!session.TryTransition(targetState))
-                        {
-                            session.TryTransition(CallSessionState.Failed);
-                        }
-                    }
-
-                    OnSessionCompleted(session);
+                    call.LastDeparture = (departure.RemovedByReload, departure.RemovedByReload ? null : departure.HangupCause);
+                    call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow, CallSessionEventType.ParticipantLeft,
+                        departure.Name, null, departure.RemovedByReload ? EndingProvenanceReload : departure.HangupCause.ToString()));
                 }
-                else
-                {
-                    _ = PersistAsync(session);
-                }
+                if (call.GetParticipantMark(departure.UniqueId) <= departure.AdmissionMark
+                    && index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(departure.UniqueId, call)))
+                    removedDepartureId = departure.UniqueId;
+            }
+            // Read the same immutable linked-channel snapshot and predicate without per-departure iterators/delegates.
+            var channels = table.ChannelsOfLinkedId(call.LinkedId);
+            var remaining = false;
+            var allRemainingPresent = true;
+            for (var i = 0; i < channels.Length; i++)
+            {
+                var channel = channels[i];
+                if (ChannelManager.IsDeparting(channel)
+                    && call.HasRecordedDeparture(channel.UniqueId, channel.AdmissionMark)) continue;
+                remaining = true;
+                if (complete && call.Unverified && FindPresentParticipant(call, channel.UniqueId) is null)
+                    allRemainingPresent = false;
+            }
+            if (!HasPresentParticipant(call) && !remaining && (complete || !call.Unverified))
+            {
+                var provenance = call.LastDeparture ?? (Reload: true, Cause: (HangupCause?)null);
+                FinishCall(call, provenance.Reload, provenance.Cause, removedDepartureId);
+                call.ClearRecordedDepartures();
+            }
+            else if (complete && call.Unverified && allRemainingPresent)
+                call.Unverified = false;
+            if (changed && !HasEnded(call)) _ = PersistAsync(call);
+        }
+    }
+
+    private void FinishCall(CallSession session, bool byReload, HangupCause? observedCause, string? removedDepartureId)
+    {
+        var index = IndexOf(session.ServerId);
+        var participants = session.ParticipantStorage;
+        // A successful identity removal just above cannot regain this call while its lock is held:
+        // every admission/registration claim for this call takes that same lock. Other keys keep identity removal.
+        for (var i = 0; i < participants.Count; i++)
+            if (!string.Equals(participants[i].UniqueId, removedDepartureId, StringComparison.Ordinal))
+                index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(participants[i].UniqueId, session));
+        session.HangupCause = observedCause;
+
+        if (byReload)
+        {
+            // Marked on the session, which is what a consumer can reach from the SessionId
+            // on CallEndedEvent. The event record itself gains no field: CallEndedEvent is
+            // a positional record, so adding one would move the public API this change
+            // claims it does not touch.
+            session.SetMetadata(EndingProvenanceKey, EndingProvenanceReload);
+
+            // No cause exists, so the outcome follows from what the session already was: a
+            // call that was up really took place and is over; one that never connected
+            // never became a call. A call is up when it connected, and also when the SDK
+            // observed its answer while it was still in its initial state, with no dial or
+            // queue reaching it (an IVR, an originate answered with no dial onward): that one
+            // ends completed from its observed answer. Transferring is deliberately absent —
+            // it has no valid transition to Completed — and falls to the Failed arm below.
+            if (!session.TryCompleteAnsweredInInitialState())
+            {
+                var reloadTarget = session.State is CallSessionState.Connected
+                    or CallSessionState.OnHold or CallSessionState.Conference
+                    ? CallSessionState.Completed
+                    : CallSessionState.Failed;
+
+                if (!session.TryTransition(reloadTarget))
+                    session.TryTransition(CallSessionState.Failed);
+            }
+
+            LogEndedByReload(session.SessionId, session.LinkedId, session.State);
+        }
+        else
+        {
+            var targetState = observedCause == HangupCause.NormalClearing
+                ? CallSessionState.Completed
+                : CallSessionState.Failed;
+
+            // Try the natural progression if needed. A call still in its initial state ends
+            // failed, unless the SDK observed its answer and it hung up normally: then the
+            // dialplan answered it, no dial or queue reached it, and it is a completed call.
+            if (session.State == CallSessionState.Created)
+            {
+                if (targetState != CallSessionState.Completed
+                    || !session.TryCompleteAnsweredInInitialState())
+                    session.TryTransition(CallSessionState.Failed);
+            }
+            else if (!session.TryTransition(targetState))
+            {
+                session.TryTransition(CallSessionState.Failed);
             }
         }
 
-        // By object: an entry naming another call, which holds the channel id since, keeps it.
-        index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(channel.UniqueId, session));
+        OnSessionCompleted(session);
     }
 
     [LoggerMessage(Level = LogLevel.Information,
@@ -1450,6 +1585,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         public bool EndedWithin(DateTimeOffset cutoff) => CompletedAt >= cutoff;
     }
 
+    /// <summary>Registers a reconstructed call, joins its attached server's held legs and decides it.</summary>
+    /// <remarks>Do not call this member synchronously from a session-event subscriber: the join takes channel locks,
+    /// while session events are published under a call lock. Schedule the registration outside that callback.</remarks>
     public bool RegisterReconstructedSession(CallSession session)
     {
         var index = IndexOf(session.ServerId);
@@ -1475,6 +1613,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 return false;
             }
 
+            session.Unverified = true;
             foreach (var participant in session.Participants)
                 index.ByChannelId.TryAdd(participant.UniqueId, session);
 
@@ -1482,10 +1621,36 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 index.BridgeToSession.TryAdd(session.BridgeId, session.SessionId);
         }
 
+        if (_serverSubs.TryGetValue(session.ServerId, out var attachment))
+        {
+            attachment.Server.Channels.VisitHeld(session.LinkedId, channel =>
+            {
+                // VisitHeld holds the channel lock; the call lock is always inside it.
+                lock (session.SyncRoot)
+                {
+                    if (!IsHeld(session) || HasEnded(session) || session.EndingDelivered) return;
+                    if (!_serverSubs.TryGetValue(session.ServerId, out var current)
+                        || !ReferenceEquals(current, attachment)) return;
+                    if (index.ByChannelId.TryGetValue(channel.UniqueId, out var owner)
+                        && !ReferenceEquals(owner, session))
+                    {
+                        LogRegistrationJoinSkipped(session.SessionId, channel.UniqueId);
+                        return;
+                    }
+                    Step(HandlerStep.RegistrationJoinReady, session.ServerId, channel.UniqueId);
+                    TryJoin(session, channel, index, preserveOwnership: true);
+                }
+            });
+            DecideCall(session, expected: attachment);
+        }
         _ = PersistAsync(session);
 
         return true;
     }
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Reconstructed session {SessionId} did not join channel {ChannelId}: another call owns it")]
+    private partial void LogRegistrationJoinSkipped(string sessionId, string channelId);
 
     public async ValueTask DisposeAsync()
     {
@@ -1697,7 +1862,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         Action<QueueSnapshotCompletion> onSnapshotCompleted,
         Action<string, string?, string?> onAgentConnected,
         Action<string?, string?, string?> onQueueCallerConnected,
-        Action<QueueCallerCompletion> onQueueCallerCompleted)
+        Action<QueueCallerCompletion> onQueueCallerCompleted,
+        Action<ChannelSnapshotCompletion> onChannelSnapshotCompleted)
     {
         /// <summary>The gate every handler of this attachment runs through.</summary>
         public AttachmentGate Gate { get; } = gate;
@@ -1705,6 +1871,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         public void Attach()
         {
+            Server.ChannelSnapshotCompleted += onChannelSnapshotCompleted;
             Server.Channels.ChannelAdded += onAdded;
             Server.Channels.ChannelRemoved += onRemoved;
             Server.Channels.ChannelStateChanged += onStateChanged;
@@ -1727,6 +1894,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         public void Detach()
         {
+            Server.ChannelSnapshotCompleted -= onChannelSnapshotCompleted;
             Server.Channels.ChannelAdded -= onAdded;
             Server.Channels.ChannelRemoved -= onRemoved;
             Server.Channels.ChannelStateChanged -= onStateChanged;

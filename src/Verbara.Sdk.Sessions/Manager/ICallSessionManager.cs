@@ -69,5 +69,7 @@ public interface ICallSessionManager : IAsyncDisposable
     /// Adds to all indices without firing creation events.
     /// Skips if a session of the same server with the same LinkedId already exists.
     /// </summary>
+    /// <remarks>Joins held legs of the attached server. Do not call synchronously from a session-event subscriber:
+    /// registration takes channel locks, while notifications run under a call lock. Schedule it outside the callback.</remarks>
     bool RegisterReconstructedSession(CallSession session);
 }

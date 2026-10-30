@@ -332,6 +332,7 @@ public sealed class ChannelNotificationBoundaryTests(ITestOutputHelper output)
         lock (channel.SyncRoot)
         {
             worker = Task.Run(() => rig.Hangup("X"));
+            // fence-allow: GUARD-TIMEOUT — observe actual table removal before unlocking the channel and permitting callbacks.
             removed = SpinWait.SpinUntil(() => channels.GetByUniqueId("X") is null, EndingBaselineRig.Bound);
             before = Volatile.Read(ref callbacks);
             engineBefore = rig.Ends(call);

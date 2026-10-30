@@ -72,6 +72,7 @@ public sealed class ChannelLinkedIndexTests
         {
             held.Wait(Run.Bound).Should().BeTrue();
             hangup = Task.Run(() => manager.OnHangup("x"));
+            // fence-allow: GUARD-TIMEOUT — observe the actual departing transition while the channel lock prevents notification.
             SpinWait.SpinUntil(() => ChannelManager.IsDeparting(channel), Run.Bound).Should().BeTrue();
             manager.GetByUniqueId("x").Should().BeNull();
             hangup.IsCompleted.Should().BeFalse();
