@@ -12,6 +12,8 @@ Micro-benchmarks for the SDK's hot paths, driven by [BenchmarkDotNet](https://be
 | `AsyncEventPumpBenchmark` | Channel-based event pump throughput |
 | `EventDeserializerBenchmark` | Source-generated `EventDeserializer` lookup |
 | `ChannelManagerBenchmark` | `ChannelManager` O(1) lookups (primary + secondary index) |
+| `QueueManagerBenchmark` | `QueueManager` per-event cost of member, device, caller-status, abandon and join/leave events, with and without one subscriber |
+| `MeetMeManagerBenchmark` | `MeetMeManager` per-event cost of a participant's mute change, with and without one subscriber |
 | `ObserverDispatchBenchmark` | Copy-on-write volatile array observer dispatch |
 | `ConcurrentThroughputBenchmark` | AMI end-to-end on a single connection |
 | `AriJsonBenchmark` | ARI source-generated JSON deserialization |

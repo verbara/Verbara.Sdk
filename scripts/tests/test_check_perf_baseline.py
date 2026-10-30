@@ -41,7 +41,7 @@ _BASELINE = {
 }
 
 
-def _entry(full_name, mean=1000.0, stats="ok"):
+def _entry(full_name, mean=1000.0, stats="ok", allocated=None, memory=True):
     entry = {
         "Namespace": "Verbara.Sdk.Benchmarks",
         "Type": "FakeBenchmark",
@@ -64,7 +64,31 @@ def _entry(full_name, mean=1000.0, stats="ok"):
         entry["Statistics"] = None
     elif stats == "absent":
         pass
+    if memory:
+        entry["Memory"] = {"Gen0Collections": 0, "Gen1Collections": 0, "Gen2Collections": 0,
+                           "TotalOperations": 1000, "BytesAllocatedPerOperation": allocated}
+        if allocated is None:
+            entry["Memory"]["BytesAllocatedPerOperation"] = 0
     return entry
+
+
+_GAMMA = f"{_TYPE}.Gamma"
+
+# Bytes decide, time informs: Alpha is gated on time AND exact bytes, Gamma on bytes only within a bound.
+_BYTES_BASELINE = {
+    "sources": {"fake": _TYPE},
+    "jit_isa": "x86-64-v3",
+    "benchmarks": {
+        _ALPHA: {"mean_ns": 1000.0, "tolerance_pct": 10, "bytes": 168, "bytes_tolerance": 0},
+        _GAMMA: {"bytes": 525994, "bytes_tolerance": 1024},
+    },
+}
+
+
+def _bdn_log(isa):
+    return ("// * Summary *\n\nBenchmarkDotNet v0.15.8, Linux\n"
+            f"  [Host]   : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT {isa}\n"
+            f"  ShortRun : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT {isa}\n")
 
 
 class CheckPerfBaselineTests(unittest.TestCase):
@@ -276,6 +300,105 @@ class CheckPerfBaselineTests(unittest.TestCase):
         self.assertIn("::notice::", result.stdout)
         self.assertIn("Gamma", result.stdout)
 
+    # ---- bytes decide, time informs -------------------------------------
+    def _bytes_fixture(self, alpha_bytes=168, gamma_bytes=525994, isa="x86-64-v3", log=True,
+                       alpha_memory=True):
+        self._write_baseline(_BYTES_BASELINE)
+        self._write_report([_entry(_ALPHA, 1010.0, allocated=alpha_bytes, memory=alpha_memory),
+                            _entry(_GAMMA, 287000.0, allocated=gamma_bytes)])
+        if log:
+            with open(os.path.join(self.root, "fake", "FakeBenchmark-20261029.log"), "w",
+                      encoding="utf-8") as handle:
+                handle.write(_bdn_log(isa))
+
+    def test_Main_ShouldPass_WhenBytesAreExactAndInsideTheirBound(self):
+        self._bytes_fixture(gamma_bytes=525994 + 1024)   # the bound is inclusive
+        result = self._run("--enforce")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("inside their bands and bounds", result.stdout)
+
+    def test_Main_ShouldBreach_WhenAnExactRowAllocatesOneByteMore(self):
+        # The regression this column exists for: deterministic, and blind to runner and ISA.
+        self._bytes_fixture(alpha_bytes=169)
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("MORE-BYTES", result.stdout)
+        self.assertIn("+1 B", result.stdout)
+
+    def test_Main_ShouldBreach_WhenABoundedRowLeavesItsBound(self):
+        self._bytes_fixture(gamma_bytes=769620)   # the pump's 24-byte slot: +50 %
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("MORE-BYTES", result.stdout)
+        self.assertIn(_GAMMA, result.stdout)
+
+    def test_Main_ShouldReportFewerBytes_WhenARowAllocatesLessThanItsBaseline(self):
+        # Two-sided, like time: fewer bytes is a stale baseline or work that went away.
+        self._bytes_fixture(alpha_bytes=96)
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("FEWER-BYTES", result.stdout)
+
+    def test_Main_ShouldReportBytesBreachWithoutFailing_WhenObserving(self):
+        self._bytes_fixture(alpha_bytes=656)
+        result = self._run()
+        self.assertEqual(0, result.returncode)
+        self.assertEqual("breach", self._outputs().get("status"))
+        self.assertIn("::warning::", result.stdout)
+
+    def test_Main_ShouldBreach_WhenABytesRowCarriesNoMemoryDiagnoserOutput(self):
+        # A removed [MemoryDiagnoser] would otherwise switch the bytes gate off in silence.
+        self._bytes_fixture(alpha_memory=False)
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("BytesAllocatedPerOperation", result.stdout)
+
+    def test_Main_ShouldGateBytesOnly_WhenTheEntryHasNoTimeBand(self):
+        # Gamma has no mean_ns: a time 100x off its (absent) band is not a breach.
+        self._write_baseline(_BYTES_BASELINE)
+        self._write_report([_entry(_ALPHA, 1010.0, allocated=168),
+                            _entry(_GAMMA, 28_700_000.0, allocated=525994)])
+        with open(os.path.join(self.root, "fake", "x.log"), "w", encoding="utf-8") as handle:
+            handle.write(_bdn_log("x86-64-v3"))
+        result = self._run("--enforce")
+        self.assertEqual(0, result.returncode, result.stdout)
+
+    def test_Main_ShouldWriteBytesColumns_WhenRenderingMarkdown(self):
+        self._bytes_fixture()
+        self._run()
+        with open(self.markdown, encoding="utf-8") as handle:
+            body = handle.read()
+        self.assertIn("observed (B)", body)
+        self.assertIn("| 168 | 168 | +0 | ±0 |", body)
+
+    def test_Main_ShouldListUnbaselinedBytes_WhenRenderingMarkdown(self):
+        self._both_in_band()
+        self._write_report([_entry(_ALPHA, 1010.0), _entry(_BETA, 52.0),
+                            _entry(_GAMMA, 7.0, allocated=176)])
+        self._run()
+        with open(self.markdown, encoding="utf-8") as handle:
+            body = handle.read()
+        self.assertIn(f"| `{_GAMMA}` | 7.00 | 176 |", body)
+
+    # ---- the ISA pin -----------------------------------------------------
+    def test_Main_ShouldBreach_WhenTheJitTargetedAnotherIsa(self):
+        # The pin fell off (or its variable was misspelled): the times are not comparable.
+        self._bytes_fixture(isa="x86-64-v4")
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("ISA pin did not take", result.stdout)
+
+    def test_Main_ShouldBreach_WhenNoLogConfirmsThePinnedIsa(self):
+        self._bytes_fixture(log=False)
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("cannot be confirmed", result.stdout)
+
+    def test_Main_ShouldSkipTheIsaCheck_WhenTheBaselineDeclaresNoIsa(self):
+        self._both_in_band()   # _BASELINE has no jit_isa and the fixture writes no log
+        result = self._run("--enforce")
+        self.assertEqual(0, result.returncode, result.stdout)
+
     # ---- exit 2: the guard itself is broken ------------------------------
     def test_Main_ShouldExitTwo_WhenBaselineIsMissing(self):
         result = self._run("--enforce", baseline=os.path.join(self._tmp, "nope.json"))
@@ -303,6 +426,25 @@ class CheckPerfBaselineTests(unittest.TestCase):
     def test_Main_ShouldExitTwo_WhenAnEntryHasNoTolerance(self):
         self._write_baseline({"sources": {"fake": _TYPE},
                               "benchmarks": {_ALPHA: {"mean_ns": 1000.0}}})
+        self.assertEqual(2, self._run().returncode)
+
+    def test_Main_ShouldExitTwo_WhenAnEntryGatesNothing(self):
+        self._write_baseline({"sources": {"fake": _TYPE}, "benchmarks": {_ALPHA: {}}})
+        self.assertEqual(2, self._run().returncode)
+
+    def test_Main_ShouldExitTwo_WhenBytesAreNegative(self):
+        self._write_baseline({"sources": {"fake": _TYPE},
+                              "benchmarks": {_ALPHA: {"bytes": -1}}})
+        self.assertEqual(2, self._run().returncode)
+
+    def test_Main_ShouldExitTwo_WhenBytesToleranceIsNotANumber(self):
+        self._write_baseline({"sources": {"fake": _TYPE},
+                              "benchmarks": {_ALPHA: {"bytes": 168, "bytes_tolerance": "1 KB"}}})
+        self.assertEqual(2, self._run().returncode)
+
+    def test_Main_ShouldExitTwo_WhenJitIsaIsEmpty(self):
+        doc = dict(_BASELINE, jit_isa="")
+        self._write_baseline(doc)
         self.assertEqual(2, self._run().returncode)
 
     def test_Main_ShouldExitTwo_WhenABaselinedTypeHasNoSourcesRow(self):
@@ -346,10 +488,31 @@ class CommittedBaselineContractTests(unittest.TestCase):
         for full_name, entry in self.doc["benchmarks"].items():
             owner = full_name.rsplit(".", 1)[0]
             self.assertIn(owner, types, f"{full_name} has no sources row")
-            self.assertIsInstance(entry["mean_ns"], (int, float))
-            self.assertGreater(entry["mean_ns"], 0)
-            self.assertIsInstance(entry["tolerance_pct"], (int, float))
-            self.assertGreater(entry["tolerance_pct"], 0)
+            self.assertTrue("mean_ns" in entry or "bytes" in entry, f"{full_name} gates nothing")
+            if "mean_ns" in entry:
+                self.assertIsInstance(entry["mean_ns"], (int, float))
+                self.assertGreater(entry["mean_ns"], 0)
+                self.assertIsInstance(entry["tolerance_pct"], (int, float))
+                self.assertGreater(entry["tolerance_pct"], 0)
+            if "bytes" in entry:
+                self.assertIsInstance(entry["bytes"], int)
+                self.assertGreaterEqual(entry["bytes"], 0)
+                self.assertGreaterEqual(entry.get("bytes_tolerance", 0), 0)
+
+    def test_Baseline_ShouldPinTheIsaTheWorkflowSets(self):
+        # The comparator checks the logs against jit_isa; the workflow must set the variable that
+        # really moves the JIT there. On .NET 10 `DOTNET_EnableAVX512F` is accepted and ignored.
+        self.assertEqual("x86-64-v3", self.doc.get("jit_isa"))
+        code = "\n".join(line for line in self.workflow.splitlines()
+                         if not line.lstrip().startswith("#"))
+        self.assertRegex(code, r"(?m)^\s+DOTNET_EnableAVX512: '0'$")
+        self.assertNotRegex(code, r"DOTNET_EnableAVX512F")
+
+    def test_Baseline_ShouldGateTheEventPumpOnBytesButNotItsBimodalRow(self):
+        pump = "Verbara.Sdk.Benchmarks.AsyncEventPumpBenchmark"
+        for row in ("EnqueueOnly10000Events", "Prefill10000ThenConsume"):
+            self.assertIn("bytes", self.doc["benchmarks"][f"{pump}.{row}"])
+        self.assertNotIn(f"{pump}.EnqueueAndConsume1000Events", self.doc["benchmarks"])
 
     def test_Baseline_ShouldRecordHowItWasCalibrated(self):
         # ADR-0042 D6: a baseline whose provenance is not written down cannot be re-derived, and a

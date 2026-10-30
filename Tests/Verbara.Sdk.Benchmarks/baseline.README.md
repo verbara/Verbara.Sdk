@@ -23,6 +23,9 @@ ENFORCING guard behind the AMI-throughput claim and the rest of `README.md`'s Pe
 |---|---|
 | `mean_ns` | mean-of-means across 13 real runs of `perf-regression.yml`, on **github-hosted `ubuntu-latest`**, in **nanoseconds** |
 | `tolerance_pct` | a **two-sided** band, in percent, calibrated to cover the observed across-run spread with headroom |
+| `bytes` | BenchmarkDotNet's `Memory.BytesAllocatedPerOperation` — allocated bytes per operation, **independent of the runner** |
+| `bytes_tolerance` | a **two-sided** absolute bound in bytes; `0` (the default) means exact |
+| `jit_isa` (top level) | the instruction-set level every BenchmarkDotNet log must report (`x86-64-v3`) |
 | **not** | the workstation figures published in `README.md` / `docs/README-technical.md` |
 
 The published figures were measured on an AMD Ryzen 9 9900X (12C/24T) and are **1.97×–2.35×
@@ -50,6 +53,38 @@ The trap this avoids, stated once so nobody re-derives it:
 
 Under the committed bands: **0 breaches across all 13 calibration runs; tightest headroom 5.8
 percentage points.**
+
+## Bytes decide, time informs
+
+Time on a shared runner depends on the host; allocated bytes do not. Two local runs of the whole
+suite on .NET 10.0.14, one with the JIT at x86-64-v3 and one at x86-64-v4, gave **identical bytes on
+every synchronous row**; on that host an interleaved run moved time by at most about 5%, and the spread across
+hosted runners is what a re-calibration under the ISA pin measures. So a
+row whose allocation is deterministic carries `bytes`, gated exactly (`bytes_tolerance: 0`) or
+within a stated bound, and the bytes are calibrated where they are measured — any machine, one run,
+then confirmed by the next. A row may carry `bytes` alone, without `mean_ns`/`tolerance_pct`, until
+two weekly runs give its time band: it is then gated on bytes and reports its time.
+
+A row whose allocation is **not** deterministic gets no `bytes` entry: a bimodal row (for example
+`AsyncEventPumpBenchmark.EnqueueAndConsume1000Events`, about 32 KB or about 50 KB by a
+writer/consumer race) is reported, never gated on bytes. A row with a fixed but small
+non-deterministic part carries a bound and says why in `_bytes_note`.
+
+A bytes breach is reported as `MORE-BYTES` (the regression) or `FEWER-BYTES` (a stale baseline, or
+work that went away — a human looks, as for `FASTER`). It needs no re-calibration argument: no
+runner, fleet or ISA moves it, so a bytes breach is the code.
+
+## The pinned ISA
+
+`ubuntu-latest` mixes CPUs with and without AVX-512, and .NET 10 targets AVX-512 wherever it
+exists, so before the pin the same code read faster or slower by host. The workflow sets
+`DOTNET_EnableAVX512=0` for the whole job, which holds the JIT at x86-64-v3 on every host. **The
+variable name matters:** on .NET 10.0.14 `DOTNET_EnableAVX512F=0` is accepted and ignored — the JIT
+still reported x86-64-v4 under it. `jit_isa` makes the comparison check every source's
+BenchmarkDotNet log; a log that names another ISA, or no log at all, is a structural failure.
+
+The time bands were calibrated **before** the pin, pooled across both CPUs; a re-calibration under
+the pin is its own PR, from observed runs, with the protocol below.
 
 ## Two-sided, on purpose
 
@@ -91,7 +126,8 @@ Three edits, in one PR:
 2. a `sources` row in `baseline.json` mapping that step's `--artifacts` subdirectory to the
    BenchmarkDotNet type whose report will land there;
 3. one `benchmarks` entry per `[Benchmark]` method, keyed by **`FullName`**
-   (`Namespace.Type.Method`).
+   (`Namespace.Type.Method`) — `bytes` from one run wherever the row's allocation is deterministic,
+   and `mean_ns` + `tolerance_pct` once its hosted-runner spread has been observed.
 
 Until step 3 exists the comparison reports the benchmark as *measured but not baselined* — a notice,
 never a failure, so the PR that adds a benchmark is not blocked by the absence of a band it cannot
@@ -104,9 +140,11 @@ unnoticed.
 Measured but not baselined today, on purpose:
 
 - `TurnDetectionBenchmark` — `sources._turn_detection_note`.
-- `ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber` — the state-change row with one
-  subscribed handler; `_channel_manager_one_subscriber_note`. Its band comes from two weekly runs;
-  until then its bytes are gated by `ChannelManagerAllocationTests` in `Verbara.Sdk.Live.Tests`.
+- Time only, bytes gated: `ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber`
+  (`_channel_manager_one_subscriber_note`), the two deterministic `AsyncEventPumpBenchmark` rows and
+  every `QueueManagerBenchmark` and `MeetMeManagerBenchmark` row. Their time bands come from two
+  weekly runs.
+- `AsyncEventPumpBenchmark.EnqueueAndConsume1000Events` — neither: bimodal bytes, `_bytes_note`.
 
 ## Removing a band without removing the benchmark
 
@@ -139,7 +177,10 @@ green. `check-perf-baseline.py` treats each of these as a **breach**, not a skip
 - the `…-report-full-compressed.json` report is absent or unparseable;
 - the report's `Benchmarks` array is empty or missing;
 - a `FullName` listed in `baseline.json` never appears in the parsed set;
-- `Statistics.Mean` is missing, non-numeric, or not positive.
+- `Statistics.Mean` is missing, non-numeric, or not positive;
+- a row baselined on `bytes` has no numeric `Memory.BytesAllocatedPerOperation` (the memory
+  diagnoser was removed);
+- a source's BenchmarkDotNet log names a JIT ISA other than `jit_isa`, or no log names one.
 
 Separately, exit code **2** means the *guard* is broken (bad arguments, unreadable or invalid
 `baseline.json`) and fails the job in **both** modes — a misconfigured guard reading green is the
