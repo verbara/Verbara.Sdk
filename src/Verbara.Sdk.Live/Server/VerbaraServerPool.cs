@@ -156,8 +156,7 @@ public sealed class VerbaraServerPool : IAsyncDisposable
         {
             takenIn = _servers.TryAdd(serverId, server);
             if (takenIn)
-                server.PoolId = serverId;
-            TrackAgentRouting(serverId, server);
+                TrackAgentRouting(serverId, server);
         }
         if (!takenIn)
         {
