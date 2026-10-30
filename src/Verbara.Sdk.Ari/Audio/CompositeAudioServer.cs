@@ -6,9 +6,9 @@ namespace Verbara.Sdk.Ari.Audio;
 /// Aggregates multiple audio servers (AudioSocket + WebSocket) into a single IAudioServer view.
 /// </summary>
 /// <remarks>
-/// <see cref="ActiveStreams"/> and <see cref="ActiveStreamCount"/> only merge, and are safe to read
-/// as an aggregate. <see cref="GetStream(string)"/> is the member to read carefully: it hands one
-/// string to every server in turn, and the servers do not agree on what that string means.
+/// <see cref="ActiveStreams"/> and <see cref="ActiveStreamCount"/> only merge: the list holds every
+/// server's streams and the count is their sum. <see cref="GetStream(string)"/> hands one string to
+/// every server in turn and returns the first stream any of them holds under it.
 /// </remarks>
 public sealed class CompositeAudioServer : IAudioServer
 {
@@ -27,15 +27,21 @@ public sealed class CompositeAudioServer : IAudioServer
     /// under <paramref name="channelId"/>.
     /// </summary>
     /// <remarks>
-    /// <b>One string, two meanings.</b> The aggregated servers key their tables on different
-    /// things: <see cref="AudioSocketServer"/> on the UUID Asterisk sends in its AudioSocket
-    /// identification frame — canonical lowercase hyphenated, compared ordinally — and
-    /// <see cref="WebSocketAudioServer"/> on the last path segment of the HTTP upgrade request URL.
-    /// Nothing arranges for one identifier to mean the same thing to both, so a value meant for one
-    /// server is simply a miss in the other, and this method reports a miss and a key in the wrong
-    /// form the same way: <see langword="null"/>. A caller that knows which transport it uses gets
-    /// a narrower answer from that server directly. See
-    /// <see cref="IAudioServer.GetStream(string)"/> for the full description of each key.
+    /// <para>
+    /// A <see langword="null"/> means that no aggregated server holds a live stream under
+    /// <paramref name="channelId"/>. A found stream says its transport by its type: a WebSocket stream
+    /// is an <see cref="IChanWebSocketSession"/>, an AudioSocket stream is not.
+    /// </para>
+    /// <para>
+    /// Each server compares the string with its own keys, ordinally and as given: no server holds a
+    /// notion of a key "of another form", so this method cannot tell a miss from a value meant for
+    /// another transport, and does not try. <see cref="AudioSocketServer"/> keys on the canonical UUID
+    /// of Asterisk's identification frame (the <c>data</c> of the create);
+    /// <see cref="WebSocketAudioServer"/> on the literal <c>channel_id</c> of the connection's
+    /// <c>MEDIA_START</c> (the ARI channel id of an <c>externalMedia</c> create), or the upgrade path's
+    /// last segment for a connection that names no call. See
+    /// <see cref="IAudioServer.GetStream(string)"/> for each key in full.
+    /// </para>
     /// </remarks>
     public IAudioStream? GetStream(string channelId)
     {

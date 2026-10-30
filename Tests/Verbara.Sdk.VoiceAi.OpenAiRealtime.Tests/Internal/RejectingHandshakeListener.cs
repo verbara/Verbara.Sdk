@@ -61,12 +61,18 @@ internal sealed class RejectingHandshakeListener : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Cancel first, stop last, as StalledHandshakeListener does: an accept loop that has not
+        // reached its accept yet must find the listener open and end on the cancelled token, not
+        // throw "Not listening" out of a listener stopped under it.
         await _cts.CancelAsync().ConfigureAwait(false);
-        _listener.Stop();
-        if (_acceptLoop is not null)
+        try
         {
-            try { await _acceptLoop.ConfigureAwait(false); }
-            catch (OperationCanceledException) { /* expected */ }
+            if (_acceptLoop is not null)
+                await _acceptLoop.ConfigureAwait(false);
+        }
+        finally
+        {
+            _listener.Stop();
         }
 
         _cts.Dispose();

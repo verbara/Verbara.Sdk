@@ -4,9 +4,248 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: OpenTelemetry 1.20.1 (#501)
+
+`Verbara.Sdk.OpenTelemetry` now requires `OpenTelemetry`, `OpenTelemetry.Extensions.Hosting`,
+`OpenTelemetry.Exporter.Console` and `OpenTelemetry.Exporter.OpenTelemetryProtocol` 1.20.1 or later (was 1.19.1), and
+`OpenTelemetry.Exporter.Prometheus.AspNetCore` 1.20.1-beta.1 or later (was 1.19.1-beta.1). Every instrument of the 15
+meters and every span of the 9 activity sources exports with the same name, unit, description, type, temporality,
+histogram buckets and attributes as in 2.9.0, through the in-memory, console, OTLP and Prometheus exporters; the only
+difference is the resource's `telemetry.sdk.version`. The packages must move together: the OTLP exporter 1.19.1 cannot
+serialize a histogram on OpenTelemetry 1.20.x, so an application that raises only `OpenTelemetry` exports traces and no
+metrics over OTLP, with the error only in OpenTelemetry's self-diagnostics log. This already applies to 2.9.0, whose
+floors allow that pair: an application on 2.9.0 that takes `OpenTelemetry` 1.20.x must also take
+`OpenTelemetry.Exporter.OpenTelemetryProtocol` 1.20.x. A new test exports a histogram through `WithOtlpExporter` to a
+loopback receiver, and Dependabot now proposes every OpenTelemetry package in a single pull request. Upstream changes
+an application can see in its own telemetry: an `HttpClient` the OTLP exporter creates no longer follows redirects (a
+3xx is a failed export); `byte[]` attributes are truncated to `OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT`; event and link
+attribute counts fall back to `OTEL_ATTRIBUTE_COUNT_LIMIT`; scope attributes from `ActivitySource.Tags` count against
+`OTEL_ATTRIBUTE_COUNT_LIMIT`; blobs that an earlier version wrote to the experimental disk-retry storage are not resent.
+The SDK's own telemetry triggers none of these. No public API change.
+
+### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.5 (#474)
+
+`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.5` instead of `>= 3.3.1`; its
+`Microsoft.Extensions.*` dependencies stay at `>= 10.0.5`. Since 3.4.0, StackExchange.Redis opens a separate
+subscription connection under RESP3, as it always did under RESP2, so the interactive connection is no longer subject
+to the server's much tighter `client-output-buffer-limit pubsub`. Measured against Redis 7 with default settings, a
+store registered with `UseRedis(o => o.ConfigurationString = ...)` now holds two client connections per server
+instead of one; the second carries only the library's configuration channel. Allow for it in `maxclients` and in
+connection-count alerts. To keep one connection, add `sharedSubscriptionConnection=true` to the configuration string,
+after checking the server's pub/sub output-buffer limit against your largest replies. A store given its own
+`IConnectionMultiplexer` follows the application's StackExchange.Redis version. No public API change.
+
+
+## [2.9.0] - 2026-10-28
+
+### Fixed: a buffered AMI event costs what it did in 2.8.0, and its dispatch takes no lock (#496)
+
+Since the connection started numbering its events for the reconnect's reload barrier (#457, #463, #466), each slot of
+the event buffer carried the event, its ordinal and the lost-event count — 24 bytes instead of 2.8.0's 16 — and the
+consumer took the progress lock twice per event and read the buffer's count once more through the buffer's own lock,
+the one the reader writes through. The buffer grows by doubling and never shrinks, so a buffer that had held 10,000
+events retained 787 KB instead of 525 KB, a full default buffer 768 KiB instead of 512 KiB, and draining 10,000
+buffered events took about 0.72 ms where 2.8.0 took 0.41 ms. A slot is 16 bytes again (the event and its ordinal; the
+lost-event count is rebuilt from a log of refusal runs the reader keeps only while the buffer overflows, at no cost per
+refusal), and the consumer takes the lock only when it finds the buffer empty and for a caller waiting on the barrier:
+the buffer's bytes are 2.8.0's, and draining 10,000 events takes about 0.42 ms. On the wire-to-handler path the
+connection allocates about 1.85 KB and spends about 1.65 µs per event, as 2.8.0 did. The rules of #457, #463 and #466
+are unchanged: a reload waits for every event received before its snapshot completed, a redial does not wait for the
+lost session's delivery, a refused copy an action had already received is not a loss, one Warning per overflow
+episode, and a handler that throws still lets the barrier pass the events refused behind it. No public signature
+changes.
+
+### Fixed: a Live event nobody hears costs its manager nothing, and one a handler hears costs one entry (#493, #494)
+
+Since the channel, queue and conference events moved out of their managers' locks (#457, #462), every change queued a
+notification and walked the queue whether or not a handler was subscribed, and a state change for a channel the table
+did not hold did the same. Measured against 2.8.0 on the same machine, a channel state change with no subscriber went
+from 0 bytes and about 31 ns to 688 bytes and about 230 ns, counting the benchmark's own id string, and a queue
+member's status, a `QUEUESTATUS`, a `QueueCallerAbandon` or a conference participant's mute or talking change cost
+272–280 bytes and 100–145 ns each. A change no handler is subscribed to now queues nothing and allocates nothing, in
+`ChannelManager`, `QueueManager` and `MeetMeManager` alike: the channel figures are 2.8.0's again. A change a handler
+hears costs one queue entry, 176 bytes, against 656 bytes (channel) and 272–280 bytes (queue, conference) in the
+unreleased tree. A call arriving and hanging up in the session engine allocates about 3.65 KB and 541 bytes instead of
+4.14 KB and 1,029 bytes. A notification posted by a task that a finishing handler started is now raised by that task's
+own call, instead of waiting for its next call or another caller's one-second turn. The rules of #457 and #462 are
+unchanged: no lock is held while a handler runs, each manager's events keep the order of their changes, an event waits
+up to one second for the earlier ones, and a handler's failure reaches the call that caused it. A handler subscribed
+after a change was made does not receive that change, as in 2.8.0. No public signature changes.
+
+### Fixed: ARI delivers `ChannelDestroyed` and `ChannelHangupRequest` when Asterisk sends `tech_cause` as a number (#490)
+
+Asterisk sends `tech_cause` as a JSON number (for example `486` for a PJSIP callee that answered Busy), while the SDK
+read it as a string, so either event failed to parse and was dropped whole: a subscriber never saw the channel end.
+Captured off Asterisk 20.20.1, 22.10.1, 22.11.0, 23.4.1 and 23.5.0, every `tech_cause` was a number, as Asterisk's
+source and its ARI schema type it. `TechCause` keeps its `string?` type and now carries the number's text (`"486"`); a
+string is still read as before, and an absent field reads null. The warning logged for an event that fails to parse
+now names its event type. No public signature changes.
+
+### Changed: CI runs the Asterisk 22 and 23 suites on 22.11.0 and 23.5.0 (#488)
+
+`docker/asterisk-base-images.txt` pins the 22 line to 22.11.0 and the 23 line to 23.5.0, the newest generally
+available build of each (andrius build `c6e8a0e`, by index digest), instead of 22.10.1 and 23.4.1. They are the first
+builds with Asterisk's rewritten AMI event delivery; the Functional and Integration suites pass on both. The Dockerfile
+default and the 23 compose file follow the table. `docs/guides/asterisk-version-matrix.md` and the migration guide say
+which builds 2.9.0 was tested and measured on, and three sentences of the chan_websocket entry below say "every version
+measured" instead of "every supported version". No package changes.
+
+### Documentation: the public figures and the Asterisk support policy agree with the tree (#487)
+
+The README, the technical and commercial overviews and CONTRIBUTING now say 29 packages, 25 examples and more than
+7,400 unit tests. The `AddVerbara` reference sets `options.Ami.EventPumpCapacity`, whose default is 20,000, not 10,000.
+The Voice AI telemetry note names the three packages that publish an `ActivitySource` instead of claiming all of them
+do, and the Push section lists all four packages. The version matrix states the support policy once: Asterisk 22 LTS
+primary, 23 Standard secondary until its end of life on 2027-10-15, 24 LTS primary once it is generally available and
+in CI, 20 and earlier not supported. It gives upstream's lifecycle dates and what CI runs against each version. No
+code, package or API changes.
+
+### Fixed — BREAKING: chan_websocket commands are written as Asterisk acts on them, in the format the connection negotiated (#485)
+
+Up to 2.8.x `ChanWebSocketControlMessageSerializer` wrote every command as a `kind` JSON object, which no supported
+Asterisk acts on: measured on 22.10.1, 23.4.1, 22.12.0, 23.6.0 and 24.0.0 (release candidates for the last three),
+in both control-message formats, a mark sent with `SendMarkAsync` was never answered. The session now writes the two
+commands Asterisk acts on, in the format its first `MEDIA_START` arrived in: `MARK_MEDIA` in plain text or JSON, and
+`SET_MEDIA_DIRECTION` in JSON, the only format Asterisk accepts it in. `SendSetMediaDirectionAsync` throws
+`InvalidOperationException` on a plain-text connection instead of writing JSON Asterisk ignored. Before the
+connection's `MEDIA_START` has been read (`MediaStart` is `null`: a stream announced under
+`MediaStartTimeout = TimeSpan.Zero`, or before a late first frame) `SendMarkAsync` and `SendSetMediaDirectionAsync`
+throw `InvalidOperationException` instead of writing a command in a guessed format — a plain-text command on a JSON
+connection was answered `ERROR Unable to parse JSON command` and dropped on every version measured, and a JSON one on
+a plain-text connection was ignored without a reply. `SendMarkAsync` refuses, with `ArgumentOutOfRangeException`
+before anything is written, a mark whose command would exceed the 128 bytes Asterisk reads from a text frame
+(`ChanWebSocketControlMessageSerializer.MaxCommandBytes`; 117 bytes of mark in plain text, 84 in JSON before escaping)
+— such a frame was dropped without a reply on every version measured in both formats, so every mark that is written
+is answered: by `MEDIA_MARK_PROCESSED` when it reaches playback, or by the typed `ERROR` in passthrough mode
+(22.10.1, 23.4.1) or while the media direction is `in`. The serializer writes through `Serialize(message, format)` /
+`SerializeToUtf8Bytes(message, format)`; the format-less overloads write the JSON form. It throws
+`NotSupportedException` for a record Asterisk sends (`ChanWebSocketDtmf`, `ChanWebSocketMediaXon`, …) and for
+`ChanWebSocketSetMediaDirection` in plain text; to log a received record, use its `ToString()`. `Deserialize` reads a
+text frame as Asterisk sends it, in either format, into the typed record or the generic record, and no longer reads
+2.8.x's `kind` JSON (that input is now the generic record). Labelled breaking because the serializer's output
+changes and three calls now throw where 2.8.x wrote a command Asterisk ignored. The migration guide has the section
+([chan_websocket control messages are read and written as Asterisk sends them](docs/guides/migration-2.9.0.md#chan_websocket-control-messages-are-read-and-written-as-asterisk-sends-them)).
+
+### Fixed — BREAKING: `SendXonAsync`, `SendXoffAsync` and three chan_websocket members Asterisk never sends warn `VSDK0004` (#485)
+
+Five members of the chan_websocket surface have no counterpart on the wire, so each is now `[Obsolete]` with
+diagnostic id `VSDK0004`, a warning whose message names what to use instead: `IChanWebSocketSession.SendXonAsync` and
+`SendXoffAsync` (Asterisk has no XON/XOFF command in any spelling; flow control is Asterisk's to send, as
+`ChanWebSocketMediaXoff` / `ChanWebSocketMediaXon` on `ControlMessages`), `ChanWebSocketHangup` (never published:
+Asterisk ends a call with a WebSocket close frame, read the ending on `IAudioStream.StateChanges`),
+`ChanWebSocketMediaBuffering` (never published: no message reports a buffer fill) and `ChanWebSocketDtmf.DurationMs`
+(always 0: `DTMF_END` carries the digit and the channel id only; the duration is on the bridged peer's ARI
+`ChannelDtmfReceivedEvent` or AMI `DtmfEndEvent`). Nothing is removed and a binary built against an earlier release
+keeps running. `SendXonAsync` and `SendXoffAsync` throw `NotSupportedException` when called, where 2.8.x wrote
+`{"kind":"media_xon"}` / `{"kind":"media_xoff"}` that every version measured answered `command unknown`. The
+`asterisk.dtmf.duration_ms` trace tag, always 0, is gone. Labelled breaking because a build with
+`TreatWarningsAsErrors` that uses one of the five fails with `error VSDK0004`; move to the replacement, or add
+`VSDK0004` to `NoWarn` to silence this deprecation alone. A `JsonSerializerContext` of your own that lists
+`ChanWebSocketDtmf`, `ChanWebSocketHangup` or `ChanWebSocketMediaBuffering` gets `VSDK0004` in its generated metadata
+too, where no pragma can go; `<NoWarn>$(NoWarn);VSDK0004</NoWarn>` is the remedy there. The migration guide has the
+section
+([`SendXonAsync`, `SendXoffAsync` and three chan_websocket members warn `VSDK0004`](docs/guides/migration-2.9.0.md#sendxonasync-sendxoffasync-and-three-chan_websocket-members-warn-vsdk0004)).
+
+### Fixed: `ControlMessages` delivers the chan_websocket messages it documents, in the format Asterisk sends them (#485)
+
+`IChanWebSocketSession.ControlMessages` read only a JSON shape no Asterisk sends, so it stayed silent. It now reads
+each control message in the format the connection uses — plain-text lines, Asterisk's default, or JSON objects with
+`f(json)` or `control_message_format = json` — and publishes `ChanWebSocketDtmf`, `ChanWebSocketMediaXoff`,
+`ChanWebSocketMediaXon` and `ChanWebSocketMediaMarkProcessed` with the values Asterisk sent, the new
+`ChanWebSocketError` for an `ERROR` reply, and `ChanWebSocketUnknownMessage` for a message the SDK does not model. A
+JSON value the reader cannot read is published as the generic record and the call goes on. The connection's
+`MEDIA_START` is stream state, never a control message: it fills `IChanWebSocketSession.MediaStart` before the stream
+is announced, and a later one changes nothing. `asterisk.media.started` is traced once, for the `MEDIA_START` that
+fills `MediaStart`, tagged `channel.id`, `media.codec` and `media.sample_rate`; the 1.13.0 entry promised it, and it
+never fired for a frame Asterisk sent. Its `media.channels` tag, always 1, is gone. Verified against frames captured
+from Asterisk 22.10.1, 23.4.1, 22.12.0, 23.6.0 and 24.0.0 (release candidates for the last three).
+
+### Added: chan_websocket's `MEDIA_START` fields, the call on each inbound record, and the format commands are written in (#485)
+
+`IChanWebSocketSession.MediaStart` (a default interface member, `null` until the connection's first `MEDIA_START` is
+read); the wire's fields as `init` members of `ChanWebSocketMediaStart` — `ChannelId`, `ConnectionId`, `Channel`,
+`OptimalFrameSize`, `Ptime`, `Passthrough`, `Unbuffered`, `ChannelVariables` (JSON only: the channel's variables,
+including those inherited from the dialplan, `null` in plain text) and `ControlMessageFormat`, the format the
+connection's first `MEDIA_START` arrived in and the one every command is written in; `ChannelId` on
+`ChanWebSocketDtmf`, `ChanWebSocketMediaXoff`, `ChanWebSocketMediaXon` and `ChanWebSocketMediaMarkProcessed` (`null`
+on a plain-text connection); `ChanWebSocketUnknownMessage`; `ChanWebSocketError`;
+`ChanWebSocketControlMessageFormat` (`PlainText`, `Json`) and the `ChanWebSocketControlMessageSerializer.Serialize` /
+`SerializeToUtf8Bytes` overloads that take it; and `ChanWebSocketControlMessageSerializer.MaxCommandBytes` (128).
+
+### Fixed — BREAKING: a Deepgram message the recognizer cannot read no longer ends the recognition (#482)
+
+`SpeechRecognizer.StreamAsync` documents three exceptions — `SpeechProviderFailureException`,
+`SpeechProviderEmptyResultException` and `OperationCanceledException` — and the Deepgram recognizer let a fourth
+escape: it parsed each WebSocket read as a whole message, so a message Deepgram sent in fragments, one larger than the
+64 KiB receive buffer, or one it could not read ended the recognition with a `JsonException`. Behind `VoiceAiPipeline`
+that was a failed transcription and the caller's turn left unanswered. The recognizer now assembles each message
+before it reads it, so a fragmented or large transcript arrives whole. A message it still cannot read whose top-level
+`type` is `"Error"` ends the recognition with `SpeechProviderFailureException` (`Signal` = `ErrorFrame`, `Code` null),
+as a readable error message does, carrying the raw text Deepgram sent; any other unreadable message is skipped and
+counted on `stt.frames.unparseable` (meter `Verbara.Sdk.VoiceAi.Stt`, tagged `voiceai.provider`), and the results
+around it are delivered. A partial message left behind by a close, a fault, a cancellation or the end-of-input bound is
+discarded. Request serialization is unchanged and no signature changes. Labelled breaking because code that caught
+`JsonException` from `StreamAsync` no longer receives one; catch `SpeechProviderFailureException`. The migration guide
+has the section
+([A Deepgram message the recognizer cannot read no longer ends the recognition](docs/guides/migration-2.9.0.md#a-deepgram-message-the-recognizer-cannot-read-no-longer-ends-the-recognition)).
+
+### Changed — BREAKING: an OpenAI Realtime event whose JSON the bridge cannot decode no longer ends the call (#482)
+
+The OpenAI Realtime bridge decoded each vendor event with nothing around the decode, so one event whose JSON it could
+not decode (a member of the wrong type) ended the conversation while the caller was on the line: the session counted
+in `openai_realtime.sessions.failed`, and under the session broker the caller was hung up. The call now goes on. An
+`error` event whose JSON cannot be decoded is published as one `RealtimeErrorEvent` whose `Message` is the raw frame,
+with the same Error-level log line a decoded one gets, and is not counted as a failure. Any other such event is
+skipped, logged once at Warning and counted on `openai_realtime.frames.unparseable` (meter
+`Verbara.Sdk.VoiceAi.OpenAiRealtime`, tagged `voiceai.provider`); an undecodable function call runs no function and
+sends no answer. An event that decodes but whose handling fails — an `Events` subscriber that throws, or an audio
+delta whose `delta` is not valid base64 — still ends the session. Request serialization is unchanged and no signature
+changes. Labelled breaking because `openai_realtime.sessions.failed` stops counting sessions that ended on an
+undecodable event, and `RealtimeErrorEvent.Message` can now be the whole frame rather than OpenAI's `error.message`.
+The bridge's README (*When the conversation ends*) and the migration guide have the section
+([An OpenAI Realtime event whose JSON the bridge cannot decode no longer ends the call](docs/guides/migration-2.9.0.md#an-openai-realtime-event-whose-json-the-bridge-cannot-decode-no-longer-ends-the-call)).
+
+### Changed — BREAKING: a WebSocket audio stream is keyed by the call its `MEDIA_START` names (#481)
+
+`WebSocketAudioServer` now keys each stream by the `channel_id` of the `MEDIA_START` text frame Asterisk's
+chan_websocket sends first, instead of by the last segment of the upgrade path. Every call through one
+`websocket_client` connection upgrades on the same path, so up to 2.8.x concurrent calls shared one key and
+`GetStream(channel.Id)` found none of them. Measured on Asterisk 22.10.1, 23.4.1, 22.12.0, 23.6.0 and 24.0.0
+(release candidates for the last three): `MEDIA_START` is the first frame and carries the WebSocket channel's id on
+every connection. A connection whose first frame is not a `MEDIA_START`, or that sends nothing within
+`MediaStartTimeout`, is announced under its path segment as before; a connection that names its call holds the key
+over one that only presents the same value as its path segment. For `Dial(WebSocket/…)` the key is the WebSocket
+channel's id, not the caller's. The [migration guide](docs/guides/migration-2.9.0.md#a-websocket-stream-is-found-by-the-call-it-names)
+has the section.
+
+### Added: `AudioServerOptions.MediaStartTimeout` (#481)
+
+How long a WebSocket connection may take to send its first frame before it is announced under its path segment.
+Default 2 s (with up to 500 calls starting at once, the slowest `MEDIA_START` measured arrived 21.6 ms after the upgrade request). `TimeSpan.Zero` waits
+for nothing and keeps 2.8.x's path-segment key. `StartAsync` throws `ArgumentOutOfRangeException` for a negative or
+infinite value, or one longer than a timer can be armed for.
+
+### Fixed: the WebSocket upgrade selects the `media` subprotocol, and the lookup contract says what keys a stream (#481)
+
+The 101 response now carries `Sec-WebSocket-Protocol: media` when the client offers it; a client that offers nothing
+gets no header, as before (every Asterisk version measured accepted either). The doc comments of
+`IAudioServer.GetStream`, `IAudioStream.ChannelId`, `CompositeAudioServer` and `ExternalMediaActivity`, and the
+[externalMedia migration guide](docs/guides/externalmedia-channel-id-migration.md), now say what keys a WebSocket stream
+(the literal `channel_id`, compared ordinally) and that the aggregate's `null` means no server holds that key.
+`WebSocketMediaExample` configures a `websocket_client` entry and reaches it with `Dial(WebSocket/…)` or
+`externalMedia`, instead of the nonexistent `WebSocket()` application.
+
+### Documentation: the README licence section opens with the canonical sentence, and names open-core only with its commercial overlays (#478)
+
+The licence section of `README.md`, which nuget.org shows, now opens with the sentence "Verbara is omnichannel
+contact-center software, licensed for each company to install and operate on its own infrastructure.", followed by
+"Open-core: auditable engine and commercial overlays, no per-minute fees." and "This repository is its open-source
+base SDK (MIT)." The word "open-core" no longer precedes the sentence without the commercial overlays beside it.
+No code, package or API changes.
+
 ### Documentation: the READMEs say Verbara is software each company installs and operates itself (#468)
 
-Verbara runs no hosted service (verbara-meta/PDR-0006). The licence section of `README.md`, which nuget.org shows, and
+Verbara runs no hosted service. The licence section of `README.md`, which nuget.org shows, and
 the Enterprise Extension section of `docs/README-commercial.md` now carry the sentence "Verbara is omnichannel
 contact-center software, licensed for each company to install and operate on its own infrastructure.", and
 `docs/README-commercial.md` addresses "ISVs and software vendors" instead of "ISVs and SaaS providers". No code,
@@ -164,6 +403,34 @@ waits up to one second for the earlier ones of its manager; a handler that runs 
 threads go alongside it. A handler that throws no longer keeps the events queued behind it from being raised; the first
 exception is rethrown from the call that made the change. A handler must not block on another event of the same manager caused by
 its own calls. The full rules are in the troubleshooting guide.
+
+### Added: the server pool announces each server that joins or leaves it (#477)
+
+`VerbaraServerPool` gains `ServerAdded` and `ServerRemoved`, both `Action<string, VerbaraServer>`. `ServerAdded` is
+raised once a server has started and is still the instance the pool holds under its id. `ServerRemoved` is raised for
+every server that leaves the pool, including one whose start failed, before it is disposed; for one id, the old
+instance's removal is raised before its replacement's addition. Both are raised synchronously, one at a time, under the
+pool's membership lock, and disposal runs outside it. A handler that calls `AddServerAsync`, `AddExistingServer`,
+`RemoveServerAsync` or `DisposeAsync` gets `InvalidOperationException` and the pool does not change: schedule such a
+change off the notifying thread. A handler that throws is logged once at Warning with its exception, and the other
+handlers still run. `docs/guides/follow-server-pool.md` shows how to follow a pool that already has servers: subscribe
+under your own lock, walk `Servers`, and install for an instance only while the pool still holds it.
+
+### Changed — BREAKING: a server pool refuses an empty or reserved server id (#477)
+
+`VerbaraServerPool.AddServerAsync` and `AddExistingServer` throw `ArgumentException` for a null, empty or white-space
+id and for the reserved id `status-refused`. `AddServerAsync` throws before it connects. These ids used to be accepted.
+See the 2.9.0 migration guide.
+
+### Added: the sessions registrations bind a `Sessions` configuration section (#477)
+
+`AddVerbaraSessions`, `AddVerbaraSessionsBuilder`, `AddVerbaraSessionsMultiServer` and
+`AddVerbaraSessionsMultiServerBuilder` each gain an overload taking an `IConfiguration`, plus an optional
+`Action<SessionOptions>` that runs after binding. The overload binds the `Sessions` section with the configuration
+binding source generator, so it is safe under Native AOT. A configured context list replaces its default; an absent
+list or section keeps the defaults. A malformed value throws `InvalidOperationException` naming its key when the
+options are resolved, and the existing start-up validation still applies. Existing calls, with a delegate or a literal
+`null`, keep binding to the old overloads.
 
 ### Fixed: a call that rings before it is dialed records its ring (#475)
 
@@ -728,6 +995,12 @@ resolved 10.0.12 before. Pin the patch you want to run; NuGetAudit still warns a
 through a floor. Not breaking: no public API, behaviour or assembly contents change — the code the
 `Microsoft.Extensions.*` source generators emit into the shipped assemblies is the same at 10.0.0 and 10.0.12, the
 packages compile against 10.0.0, and the AOT canary publishes and runs at 10.0.0.
+
+### Changed: `Verbara.Sdk.Push.Nats` declares `NATS.Client.Core >= 3.3.1` (#456)
+
+`Verbara.Sdk.Push.Nats` declared `NATS.Client.Core >= 3.3.0` in 2.8.0 and now declares `>= 3.3.1`. An application
+that pins `NATS.Client.Core` below 3.3.1 raises its pin to restore without a package-downgrade warning. No public
+API or behaviour of the bridge changes.
 
 ### Changed: a public member added to a shipped package fails the build unless its record declares it (#406)
 

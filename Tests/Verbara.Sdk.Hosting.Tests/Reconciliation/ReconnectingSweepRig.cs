@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Verbara.Sdk.Ami.Connection;
@@ -113,6 +114,25 @@ internal sealed class ReconnectingSweepRig : IAsyncDisposable
 
     /// <summary>Completes once the connection has logged in <paramref name="sessions"/> sessions.</summary>
     public Task LoggedIn(int sessions) => ConnectionLog.Logged("[AMI] Connected", sessions);
+
+    /// <summary>
+    /// Completes once the server reads as the sweep reads it after a handled reconnect: no session waits for its
+    /// <c>Reconnected</c> handlers to return, and no load is running. "[LIVE] State loaded" is logged before either is
+    /// true — the reload is started by an <c>async void</c> handler, so it can log on another thread while the
+    /// notification queue has not yet left the handler loop, and the load leaves <c>IsLoadInFlight</c> in a
+    /// <c>finally</c> after it logs — so a test that awaited only the log can see the sweep skip. Bounded by
+    /// <see cref="SweepRig.Bound"/>; when that runs out it returns, and the sweep's own assertion reports what it saw.
+    /// </summary>
+    public async Task ReconnectHandled()
+    {
+        var deadline = DateTime.UtcNow + SweepRig.Bound;
+        while ((Flag(Server, "IsReconnectPending") || Flag(Server, "IsLoadInFlight")) && DateTime.UtcNow < deadline)
+            await Task.Delay(TimeSpan.FromMilliseconds(1)); // fence-allow: LOOP-DRIVER — polls the two flags the sweep reads; SweepRig.Bound bounds the loop
+    }
+
+    private static bool Flag(VerbaraServer server, string name) =>
+        (bool)(typeof(VerbaraServer).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"VerbaraServer has no property {name}.")).GetValue(server)!;
 
     /// <summary>Builds the sweep over this rig's manager and server. Disposed with the rig.</summary>
     public SessionReconciliationService BuildSweep()

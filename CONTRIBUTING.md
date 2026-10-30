@@ -8,7 +8,7 @@ Thank you for your interest in contributing to Verbara.Sdk! This document provid
 
 - [.NET 10.0.100+](https://dotnet.microsoft.com/download) (pinned in `global.json`)
 - Docker (for running Asterisk containers in integration/functional tests)
-- An Asterisk 18-23 instance with AMI enabled (for manual testing)
+- An Asterisk 22 or 23 instance with AMI enabled (for manual testing; see `docs/guides/asterisk-version-matrix.md`)
 
 ### Setup
 
@@ -27,11 +27,12 @@ dotnet test Verbara.Sdk.slnx
 ### Project Structure
 
 ```
-src/                    # 28 SDK packages: 9 core + 8 VoiceAi + 4 Push + 2 Sessions backends
+src/                    # 29 SDK packages: 9 core + 8 VoiceAi + 4 Push + 2 Sessions backends
                         # + 2 Cluster (Primitives + Postgres) + 1 Data.Npgsql + 1 Resilience
                         # + 1 OpenTelemetry meta + 1 SourceGenerators analyzer
-Examples/               # 26 example applications (BasicAmi, FastAGI, ARI, Sessions, VoiceAi, ...)
-Tests/                  # 33 test projects — Unit, Functional, Integration (Testcontainers)
+Examples/               # 25 example applications (BasicAmi, FastAGI, ARI, Sessions, VoiceAi, ...)
+Tests/                  # 34 test projects — Unit, Functional, Integration (Testcontainers) —
+                        # plus 3 shared test-infrastructure libraries and the benchmarks
 docker/                 # Docker Compose stacks for development and testing
 docs/                   # Architecture (specs + decisions + research) and guides
 ```

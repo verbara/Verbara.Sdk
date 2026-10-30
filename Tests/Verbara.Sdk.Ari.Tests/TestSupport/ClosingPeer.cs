@@ -63,6 +63,7 @@ internal sealed class ClosingPeer : IAsyncDisposable
     {
         private WebSocket? _ws;
         private Task _read = Task.CompletedTask;
+        private int _closeInitiated;
         private readonly TaskCompletionSource<bool> _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal Task<bool> Ended => _ended.Task;
         private readonly TaskCompletionSource _closeObservationPending = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -77,7 +78,11 @@ internal sealed class ClosingPeer : IAsyncDisposable
             _read = ReadAsync();
         }
         internal Task SendAsync(string value, bool end = true) => _ws!.SendAsync(Encoding.UTF8.GetBytes(value).AsMemory(), WebSocketMessageType.Text, end, owner._stop.Token).AsTask();
-        internal Task CloseAsync() => _ws!.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "peer close", owner._stop.Token);
+        internal Task CloseAsync()
+        {
+            Volatile.Write(ref _closeInitiated, 1);
+            return _ws!.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "peer close", owner._stop.Token);
+        }
         internal void Drop() => tcp.Client.Close(0);
         private async Task ReadAsync()
         {
@@ -89,7 +94,10 @@ internal sealed class ClosingPeer : IAsyncDisposable
                     var result = await _ws!.ReceiveAsync(buffer.AsMemory(), owner._stop.Token);
                     if (result.MessageType != WebSocketMessageType.Close) continue;
                     // Pause only publication: ReceiveAsync has read the actual close bytes already.
-                    if (owner.HoldCloseObservation && _ws.State == WebSocketState.Closed)
+                    // Hold only the answer to this side's own close. Not read from State == Closed:
+                    // ManagedWebSocket publishes CloseSent only after its close write returns, so an
+                    // answer that arrives first still reads CloseReceived and would skip the hold.
+                    if (owner.HoldCloseObservation && Volatile.Read(ref _closeInitiated) == 1)
                     {
                         _closeObservationPending.TrySetResult();
                         await _releaseCloseObservation.Task.WaitAsync(owner._stop.Token);
@@ -101,7 +109,8 @@ internal sealed class ClosingPeer : IAsyncDisposable
                         await SendAsync("{\"type\":\"StasisStart\",\"application\":\"test-app\"}");
                         await SendAsync("{\"type\":\"StasisStart\",\"application\":\"test-app\"}");
                     }
-                    if (owner.AnswerClose && _ws.State == WebSocketState.CloseReceived)
+                    // A close this side started is not answered, even while its own write is still in flight.
+                    if (owner.AnswerClose && _ws.State == WebSocketState.CloseReceived && Volatile.Read(ref _closeInitiated) == 0)
                         await _ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "answer", owner._stop.Token);
                     if (_ws.State == WebSocketState.Closed) tcp.Dispose();
                     _ended.TrySetResult(true);

@@ -59,6 +59,15 @@ updates:
           - "Meziantou.*"
           - "IDisposableAnalyzers"
           - "Microsoft.VisualStudio.Threading.Analyzers"
+      # Move every OpenTelemetry package in one PR, majors included. The
+      # exporters call internals of the core package, so a core bump without
+      # the matching exporter bump can compile, pass CI and still drop
+      # telemetry at run time: OTLP exporter 1.19.1 on core 1.20.x dropped
+      # every metrics batch that held a histogram. One PR per package made
+      # that half-bump the default.
+      opentelemetry:
+        patterns:
+          - "OpenTelemetry*"
       # Collapse all CVE-driven security updates into a single PR. Groups
       # default to version-updates only, so this needs an explicit applies-to.
       nuget-security:

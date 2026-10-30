@@ -42,6 +42,8 @@ public sealed class AmiEventsDroppedGroup
 /// <para>
 /// The test holds the dispatch of one <c>PeerStatus</c> in an <c>OnEvent</c> handler and fills the buffer behind it, so
 /// every later event is refused (<see cref="KeyExitRig"/>). Whatever the peer writes is read before a Ping is answered, so the Ping is the fence.
+/// Outside the hold, the rig writes an event only once the one before it was dispatched, so no event the test does not
+/// mean to drop meets a full buffer.
 /// No wall clock is read except <see cref="Bound"/>, a hang bound every wait ends long before.
 /// </para>
 /// </remarks>
@@ -74,7 +76,7 @@ public sealed class KeyExitAfterDroppedAnswerCopiesTests
         await rig.FenceAsync();
 
         await rig.ReleaseAsync();
-        await rig.Peer.WriteEventAsync("StatusComplete", [new("ActionID", id), new("EventList", "Complete"), new("ListItems", "3")]);
+        await rig.EndListAsync("StatusComplete", id, [new("ListItems", "3")]);
         var received = await read.WaitAsync(Bound);
         await rig.LeaveByKeyAndHangUpAsync();
 
@@ -176,6 +178,12 @@ public sealed class KeyExitAfterDroppedAnswerCopiesTests
 /// <see cref="StatusAsked"/>. An <c>OnEvent</c> handler records each dispatched event and holds the dispatch of
 /// <see cref="HeldPeer"/>'s <c>PeerStatus</c> until <see cref="ReleaseAsync"/>.
 /// </summary>
+/// <remarks>
+/// The buffer holds <see cref="Capacity"/> events and frees a slot only when the pump takes the next one, so an event
+/// written while an earlier copy still waits there can be refused. Every method but <see cref="HoldAndFillAsync"/>
+/// therefore waits for each event's dispatch before it writes the next, and <see cref="StartAsync"/> returns once the
+/// first load's last list, which the server does not wait for, was dispatched.
+/// </remarks>
 internal sealed class KeyExitRig : IAsyncDisposable
 {
     /// <summary>A hang bound. Every wait ends on its signal long before it; only a defect reaches it.</summary>
@@ -196,6 +204,7 @@ internal sealed class KeyExitRig : IAsyncDisposable
     private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _loadDispatched = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ConcurrentDictionary<string, TaskCompletionSource> _seen = new(StringComparer.Ordinal);
     private readonly IDisposable _endings;
     private volatile bool _loaded;
@@ -242,6 +251,7 @@ internal sealed class KeyExitRig : IAsyncDisposable
             await rig.Connection.ConnectAsync().AsTask().WaitAsync(Bound);
             rig.Peer = await socket.Task.WaitAsync(Bound);
             await rig.Server.StartAsync().WaitAsync(Bound);
+            await rig._loadDispatched.Task.WaitAsync(Bound);
             rig._loaded = true;
             return rig;
         }
@@ -255,6 +265,7 @@ internal sealed class KeyExitRig : IAsyncDisposable
     /// <summary>The caller's channel appears and joins <see cref="Queue"/>; returns once both were dispatched.</summary>
     public async Task JoinQueueAsync()
     {
+        var appeared = Seen("Newchannel", CallerUid);
         var joined = Seen("QueueCallerJoin", CallerUid);
         await Peer.WriteEventAsync("Newchannel",
         [
@@ -262,6 +273,7 @@ internal sealed class KeyExitRig : IAsyncDisposable
             new("CallerIDNum", "5552101"), new("Context", "from-pstn"), new("Exten", "4021"), new("Priority", "1"),
             new("Uniqueid", CallerUid), new("Linkedid", CallerUid),
         ]);
+        await appeared.WaitAsync(Bound);
         await Peer.WriteEventAsync("QueueCallerJoin", QueueCaller(position: 1, count: 1));
         await joined.WaitAsync(Bound);
     }
@@ -285,13 +297,28 @@ internal sealed class KeyExitRig : IAsyncDisposable
     }
 
     /// <summary>
+    /// The peer ends the list of the action <paramref name="actionId"/> with <paramref name="eventType"/>; returns once
+    /// that event was dispatched. The action's sequence ends when the connection reads the event, before the pump
+    /// dispatches its copy, which holds a slot of the buffer until then.
+    /// </summary>
+    public async Task EndListAsync(string eventType, string actionId, KeyValuePair<string, string>[] fields)
+    {
+        var ended = Seen(eventType, actionId);
+        (await Peer.WriteEventAsync(eventType, [new("ActionID", actionId), new("EventList", "Complete"), .. fields]))
+            .Should().BeTrue();
+        await ended.WaitAsync(Bound);
+    }
+
+    /// <summary>
     /// Asterisk reports the caller's leave with no abandon (a key exit), then the caller hangs up in the dialplan;
     /// returns once the call's ending was published and the <c>Hangup</c> dispatched.
     /// </summary>
     public async Task LeaveByKeyAndHangUpAsync()
     {
+        var left = Seen("QueueCallerLeave", CallerUid);
         var hungUp = Seen("Hangup", CallerUid);
         await Peer.WriteEventAsync("QueueCallerLeave", QueueCaller(position: 1, count: 0));
+        await left.WaitAsync(Bound);
         await Peer.WriteEventAsync("Hangup",
         [
             new("Channel", CallerChannel), new("ChannelState", "4"), new("ChannelStateDesc", "Ring"),
@@ -332,9 +359,12 @@ internal sealed class KeyExitRig : IAsyncDisposable
     private async ValueTask OnEventAsync(ManagerEvent evt)
     {
         var fields = evt.RawFields;
-        var key = fields?.GetValueOrDefault("Peer") ?? fields?.GetValueOrDefault("Uniqueid") ?? "";
+        var key = fields?.GetValueOrDefault("Peer") ?? fields?.GetValueOrDefault("Uniqueid")
+            ?? fields?.GetValueOrDefault("ActionID") ?? "";
         _seen.GetOrAdd((evt.EventType ?? "") + "|" + key,
             static _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
+        if (!_loaded && evt.EventType == "AgentsComplete")
+            _loadDispatched.TrySetResult();
         if (key == HeldPeer)
         {
             _held.TrySetResult();

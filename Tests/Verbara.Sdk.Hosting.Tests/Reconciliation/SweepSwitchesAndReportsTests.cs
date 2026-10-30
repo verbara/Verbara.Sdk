@@ -172,6 +172,7 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
         await rig.LoggedIn(2).WaitAsync(SweepRig.Bound);
         rig.ReleaseLoss();
         await rig.ServerLog.Logged("[LIVE] State loaded", 2).WaitAsync(SweepRig.Bound);
+        await rig.ReconnectHandled();
         var tags = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
 
         new { Verification = tags["verification"], Status = rig.Peers[1].Asked("Status") }.Should().BeEquivalentTo(
@@ -198,6 +199,7 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
 
         rig.ReleaseLoss();
         await rig.ServerLog.Logged("[LIVE] State loaded", 2).WaitAsync(SweepRig.Bound);
+        await rig.ReconnectHandled();
         var after = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
         after["verification"].Should().Be("run", "once the third session's Reconnected handlers have returned the sweep verifies");
     }

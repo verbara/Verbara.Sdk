@@ -16,6 +16,8 @@ public class ChannelManagerBenchmark
 {
     private ChannelManager _sut = null!;
     private ChannelManager _preloaded = null!;
+    private ChannelManager _preloadedObserved = null!;
+    private int _observed;
 
     [GlobalSetup]
     public void Setup()
@@ -34,7 +36,18 @@ public class ChannelManagerBenchmark
                 context: "default",
                 exten: "100");
         }
+
+        // The same table with one subscriber, the shape of every production host: a change someone hears is queued
+        // and raised, where one nobody hears is not.
+        _preloadedObserved = new ChannelManager(NullLogger.Instance);
+        for (int i = 0; i < 10_000; i++)
+        {
+            _preloadedObserved.OnNewChannel($"{i}.1", $"PJSIP/{2000 + i}-{i:D8}", ChannelState.Up);
+        }
+        _preloadedObserved.ChannelStateChanged += OnObserved;
     }
+
+    private void OnObserved(AsteriskChannel channel) => _observed++;
 
     [Benchmark(Baseline = true)]
     public void Create1000Channels()
@@ -52,6 +65,15 @@ public class ChannelManagerBenchmark
         for (int i = 0; i < 1000; i++)
         {
             _preloaded.OnNewState($"{i}.1", ChannelState.Up);
+        }
+    }
+
+    [Benchmark]
+    public void Update1000ChannelStates_OneSubscriber()
+    {
+        for (int i = 0; i < 1000; i++)
+        {
+            _preloadedObserved.OnNewState($"{i}.1", ChannelState.Up);
         }
     }
 

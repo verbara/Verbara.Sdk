@@ -23,7 +23,8 @@ ValueTask<AriChannel> CreateExternalMediaAsync(string app, string externalHost, 
 
 Optional parameters are compile-time sugar. The nine-parameter member is gone from both assemblies,
 which is why this is a break and not an addition: `CP0002` in both packages, plus `CP0006` on the
-interface. Those three are declared in each package's `CompatibilitySuppressions.xml`.
+interface. Those three were declared in each package's `CompatibilitySuppressions.xml` until the package
+validation baseline moved to 2.6.0, which ships the new signature.
 
 ## Why a parameter is worth a break
 
@@ -158,9 +159,58 @@ reports the symptom one layer away from the cause. If you hit this, either set `
 
 Callers with **no** audio server, or with a WebSocket server only, take an unchanged path.
 
-## What this does not cover
+## The WebSocket transport
 
-The WebSocket transport. `WebSocketAudioServer` keys its table on the last segment of the request
-path, not on an identification frame, so `channelId` does not make its lookups work. What
-`externalMedia` with `transport=websocket` actually puts in the request path has not been measured,
-and is tracked separately rather than designed from a reading of the code.
+`WebSocketAudioServer` is keyed by the call too, by another route. Every call through one
+`websocket_client` connection upgrades on the same fixed URI, so the request path names no call;
+what names it is the first frame chan_websocket sends, `MEDIA_START`, whose `channel_id` is the
+channel's id. For `externalMedia` with `transport=websocket` that is the `Channel.Id` the create
+returned, whether the creator passed `channelId` or let Asterisk mint one, so
+`GetStream(Channel.Id)` finds the stream once it is announced. This was measured off the wire on
+Asterisk 20.20.1, 22.9.0, 22.10.1 and 23.4.1, and on the 22.12.0, 23.6.0 and 24.0.0 release
+candidates.
+
+For a call that reaches the server through `Dial(WebSocket/<connection>)`, the key is the uniqueid
+of the WebSocket channel Asterisk creates, not the caller's, and the plain-text `MEDIA_START`
+carries no variable that correlates it with the caller.
+
+A connection whose first frame is not `MEDIA_START`, or that sends no frame within
+`AudioServerOptions.MediaStartTimeout` (default 2 seconds), keeps the earlier key, the last segment
+of its request path. Set `MediaStartTimeout` to `TimeSpan.Zero` to key every connection that way,
+for a client that never sends `MEDIA_START`.
+
+`WebSocketAudioServer` accepts the connections that Asterisk's `websocket_client` opens
+(`Dial(WebSocket/<connection>)`, or ARI `externalMedia` with `transport=websocket` and the default
+`connection_type=client`). With `Dial(WebSocket/INCOMING/…)` or `connection_type=server`, Asterisk is
+the server and the application must connect to Asterisk at `/media/<MEDIA_WEBSOCKET_CONNECTION_ID>`;
+this server is not involved. (Read in Asterisk's documentation and source, not measured.)
+
+### Control messages and commands
+
+The session reads Asterisk's control messages in the format the connection uses: plain-text lines,
+Asterisk's default, or JSON objects with `f(json)` in the dial string or `control_message_format = json`
+in `chan_websocket.conf`. The connection's first `MEDIA_START` is not a control message: it is
+`IChanWebSocketSession.MediaStart`, and its `ControlMessageFormat` is the format every command is
+written in.
+
+To pass data to the stream, set an inherited variable before `Dial(WebSocket/…)`, or `variables` on
+an ARI `externalMedia` you create outside the SDK; read it from `MediaStart.ChannelVariables` on a
+JSON connection.
+
+A command is written only once the connection's `MEDIA_START` has been read; with
+`MediaStartTimeout = TimeSpan.Zero` call `SendMarkAsync` and `SendSetMediaDirectionAsync` only once
+`MediaStart` is set, or they throw `InvalidOperationException`.
+
+`SendSetMediaDirectionAsync` writes only on a JSON connection, the one format Asterisk accepts the
+command in, and throws `InvalidOperationException` on a plain-text one: for a channel the SDK creates,
+set `control_message_format = json` in `chan_websocket.conf` (read in Asterisk's source, not
+measured); add `f(json)` only to a dial string you write yourself. Read
+`MediaStart.ControlMessageFormat` before calling it.
+
+### A reader that stalls
+
+On Asterisk 22.12 and later, chan_websocket ends the call (close 1011, no control message) when a
+write cannot complete within `write_timeout` (default 100 ms). That clock starts only once the TCP
+buffers are full. On the measured host, slin16 needed a reader stall of about 6.3 s (about 7.2 s with
+`write_timeout = 1000`), and stalls up to 6 s lost no frame. Before 22.12, a stalled reader only
+delays Asterisk's writes.

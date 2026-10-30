@@ -200,7 +200,7 @@ Observed live: the `Info` and `RecognitionStarted` frames. The session-opening `
 `burst_rate`, `burst_limit`, `sustained_rate`, `sustained_limit`, `rate_limiting_enabled`,
 `last_updated`, `region`) against a DTO that declares `{message, results}`. That is **not** a parse
 failure — the receive loop skips every non-transcript message by design — so it is recorded as a field
-inventory for whoever models it, and the modelling itself belongs to `provider-dto-robustness-fences`.
+inventory for whoever models it; modelling it is future work on the provider DTO contract and is not scheduled here.
 `RecognitionStarted`'s live top-level set was exactly `{message, orchestrator_version, id,
 language_pack_info}` with `word_delimiter` nested **inside** `language_pack_info`, which is precisely
 what the committed fixture already held: the fixture was right, and its sidecar is upgraded from

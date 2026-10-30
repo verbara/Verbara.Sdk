@@ -1736,24 +1736,6 @@ Verbara.Sdk.Ami.Events.BridgeEnterEvent.LinkedId.get -> string?
 Verbara.Sdk.Ami.Events.BridgeEnterEvent.LinkedId.set -> void
 Verbara.Sdk.Ami.Events.BridgeEnterEvent.Swapuniqueid.get -> string?
 Verbara.Sdk.Ami.Events.BridgeEnterEvent.Swapuniqueid.set -> void
-Verbara.Sdk.Ami.Events.BridgeEvent
-Verbara.Sdk.Ami.Events.BridgeEvent.BridgeEvent() -> void
-Verbara.Sdk.Ami.Events.BridgeEvent.BridgeState.get -> string?
-Verbara.Sdk.Ami.Events.BridgeEvent.BridgeState.set -> void
-Verbara.Sdk.Ami.Events.BridgeEvent.BridgeType.get -> string?
-Verbara.Sdk.Ami.Events.BridgeEvent.BridgeType.set -> void
-Verbara.Sdk.Ami.Events.BridgeEvent.CallerId1.get -> string?
-Verbara.Sdk.Ami.Events.BridgeEvent.CallerId1.set -> void
-Verbara.Sdk.Ami.Events.BridgeEvent.CallerId2.get -> string?
-Verbara.Sdk.Ami.Events.BridgeEvent.CallerId2.set -> void
-Verbara.Sdk.Ami.Events.BridgeEvent.Channel1.get -> string?
-Verbara.Sdk.Ami.Events.BridgeEvent.Channel1.set -> void
-Verbara.Sdk.Ami.Events.BridgeEvent.Channel2.get -> string?
-Verbara.Sdk.Ami.Events.BridgeEvent.Channel2.set -> void
-Verbara.Sdk.Ami.Events.BridgeEvent.UniqueId1.get -> string?
-Verbara.Sdk.Ami.Events.BridgeEvent.UniqueId1.set -> void
-Verbara.Sdk.Ami.Events.BridgeEvent.UniqueId2.get -> string?
-Verbara.Sdk.Ami.Events.BridgeEvent.UniqueId2.set -> void
 Verbara.Sdk.Ami.Events.BridgeExecEvent
 Verbara.Sdk.Ami.Events.BridgeExecEvent.BridgeExecEvent() -> void
 Verbara.Sdk.Ami.Events.BridgeExecEvent.Channel1.get -> string?
@@ -2536,46 +2518,6 @@ Verbara.Sdk.Ami.Events.DialEndEvent.Linkedid.get -> string?
 Verbara.Sdk.Ami.Events.DialEndEvent.Linkedid.set -> void
 Verbara.Sdk.Ami.Events.DialEndEvent.Priority.get -> int?
 Verbara.Sdk.Ami.Events.DialEndEvent.Priority.set -> void
-Verbara.Sdk.Ami.Events.DialEvent
-Verbara.Sdk.Ami.Events.DialEvent.CallerId.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.CallerId.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.Channel.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.Channel.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DestCallerIdName.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.DestCallerIdName.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DestCallerIdNum.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.DestCallerIdNum.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DestChannel.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.DestChannel.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DestChannelStateDesc.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.DestChannelStateDesc.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DestChannelState.get -> int?
-Verbara.Sdk.Ami.Events.DialEvent.DestChannelState.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DestConnectedLineName.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.DestConnectedLineName.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DestConnectedLineNum.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.DestConnectedLineNum.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DestContext.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.DestContext.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DestExten.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.DestExten.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.Destination.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.Destination.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DestPriority.get -> int?
-Verbara.Sdk.Ami.Events.DialEvent.DestPriority.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DestUniqueId.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.DestUniqueId.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DialEvent() -> void
-Verbara.Sdk.Ami.Events.DialEvent.DialStatus.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.DialStatus.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.DialString.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.DialString.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.Src.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.Src.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.SrcUniqueId.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.SrcUniqueId.set -> void
-Verbara.Sdk.Ami.Events.DialEvent.SubEvent.get -> string?
-Verbara.Sdk.Ami.Events.DialEvent.SubEvent.set -> void
 Verbara.Sdk.Ami.Events.DialStateEvent
 Verbara.Sdk.Ami.Events.DialStateEvent.AccountCode.get -> string?
 Verbara.Sdk.Ami.Events.DialStateEvent.AccountCode.set -> void
@@ -3386,18 +3328,6 @@ Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteReceived.get -> int?
 Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteReceived.set -> void
 Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteTotalLost.get -> int?
 Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteTotalLost.set -> void
-Verbara.Sdk.Ami.Events.JoinEvent
-Verbara.Sdk.Ami.Events.JoinEvent.CallerId.get -> string?
-Verbara.Sdk.Ami.Events.JoinEvent.CallerId.set -> void
-Verbara.Sdk.Ami.Events.JoinEvent.JoinEvent() -> void
-Verbara.Sdk.Ami.Events.JoinEvent.Position.get -> int?
-Verbara.Sdk.Ami.Events.JoinEvent.Position.set -> void
-Verbara.Sdk.Ami.Events.LeaveEvent
-Verbara.Sdk.Ami.Events.LeaveEvent.LeaveEvent() -> void
-Verbara.Sdk.Ami.Events.LeaveEvent.Position.get -> int?
-Verbara.Sdk.Ami.Events.LeaveEvent.Position.set -> void
-Verbara.Sdk.Ami.Events.LinkEvent
-Verbara.Sdk.Ami.Events.LinkEvent.LinkEvent() -> void
 Verbara.Sdk.Ami.Events.ListDialplanEvent
 Verbara.Sdk.Ami.Events.ListDialplanEvent.AppData.get -> string?
 Verbara.Sdk.Ami.Events.ListDialplanEvent.AppData.set -> void
@@ -3690,38 +3620,6 @@ Verbara.Sdk.Ami.Events.MCIDEvent.MCallerIDNumValid.set -> void
 Verbara.Sdk.Ami.Events.MCIDEvent.MCallerIDton.get -> string?
 Verbara.Sdk.Ami.Events.MCIDEvent.MCallerIDton.set -> void
 Verbara.Sdk.Ami.Events.MCIDEvent.MCIDEvent() -> void
-Verbara.Sdk.Ami.Events.MeetMeEndEvent
-Verbara.Sdk.Ami.Events.MeetMeEndEvent.MeetMeEndEvent() -> void
-Verbara.Sdk.Ami.Events.MeetMeEndEvent.MeetMe.get -> string?
-Verbara.Sdk.Ami.Events.MeetMeEndEvent.MeetMe.set -> void
-Verbara.Sdk.Ami.Events.MeetMeJoinEvent
-Verbara.Sdk.Ami.Events.MeetMeJoinEvent.Duration.get -> int?
-Verbara.Sdk.Ami.Events.MeetMeJoinEvent.Duration.set -> void
-Verbara.Sdk.Ami.Events.MeetMeJoinEvent.MeetMeJoinEvent() -> void
-Verbara.Sdk.Ami.Events.MeetMeLeaveEvent
-Verbara.Sdk.Ami.Events.MeetMeLeaveEvent.Duration.get -> long?
-Verbara.Sdk.Ami.Events.MeetMeLeaveEvent.Duration.set -> void
-Verbara.Sdk.Ami.Events.MeetMeLeaveEvent.MeetMeLeaveEvent() -> void
-Verbara.Sdk.Ami.Events.MeetMeMuteEvent
-Verbara.Sdk.Ami.Events.MeetMeMuteEvent.Duration.get -> int?
-Verbara.Sdk.Ami.Events.MeetMeMuteEvent.Duration.set -> void
-Verbara.Sdk.Ami.Events.MeetMeMuteEvent.MeetMeMuteEvent() -> void
-Verbara.Sdk.Ami.Events.MeetMeMuteEvent.Status.get -> bool?
-Verbara.Sdk.Ami.Events.MeetMeMuteEvent.Status.set -> void
-Verbara.Sdk.Ami.Events.MeetMeStopTalkingEvent
-Verbara.Sdk.Ami.Events.MeetMeStopTalkingEvent.MeetMeStopTalkingEvent() -> void
-Verbara.Sdk.Ami.Events.MeetMeTalkingEvent
-Verbara.Sdk.Ami.Events.MeetMeTalkingEvent.Duration.get -> int?
-Verbara.Sdk.Ami.Events.MeetMeTalkingEvent.Duration.set -> void
-Verbara.Sdk.Ami.Events.MeetMeTalkingEvent.MeetMeTalkingEvent() -> void
-Verbara.Sdk.Ami.Events.MeetMeTalkingEvent.Status.get -> bool?
-Verbara.Sdk.Ami.Events.MeetMeTalkingEvent.Status.set -> void
-Verbara.Sdk.Ami.Events.MeetMeTalkingRequestEvent
-Verbara.Sdk.Ami.Events.MeetMeTalkingRequestEvent.Duration.get -> int?
-Verbara.Sdk.Ami.Events.MeetMeTalkingRequestEvent.Duration.set -> void
-Verbara.Sdk.Ami.Events.MeetMeTalkingRequestEvent.MeetMeTalkingRequestEvent() -> void
-Verbara.Sdk.Ami.Events.MeetMeTalkingRequestEvent.Status.get -> bool?
-Verbara.Sdk.Ami.Events.MeetMeTalkingRequestEvent.Status.set -> void
 Verbara.Sdk.Ami.Events.MemoryLimitEvent
 Verbara.Sdk.Ami.Events.MemoryLimitEvent.MemoryLimitEvent() -> void
 Verbara.Sdk.Ami.Events.MessageWaitingEvent
@@ -3762,10 +3660,6 @@ Verbara.Sdk.Ami.Events.ModuleLoadReportEvent.ModuleLoadStatus.get -> string?
 Verbara.Sdk.Ami.Events.ModuleLoadReportEvent.ModuleLoadStatus.set -> void
 Verbara.Sdk.Ami.Events.ModuleLoadReportEvent.ModuleSelection.get -> string?
 Verbara.Sdk.Ami.Events.ModuleLoadReportEvent.ModuleSelection.set -> void
-Verbara.Sdk.Ami.Events.MonitorStartEvent
-Verbara.Sdk.Ami.Events.MonitorStartEvent.MonitorStartEvent() -> void
-Verbara.Sdk.Ami.Events.MonitorStopEvent
-Verbara.Sdk.Ami.Events.MonitorStopEvent.MonitorStopEvent() -> void
 Verbara.Sdk.Ami.Events.MusicOnHoldEvent
 Verbara.Sdk.Ami.Events.MusicOnHoldEvent.AccountCode.get -> string?
 Verbara.Sdk.Ami.Events.MusicOnHoldEvent.AccountCode.set -> void
@@ -3908,12 +3802,6 @@ Verbara.Sdk.Ami.Events.ParkedCallSwapEvent.ParkingTimeout.get -> string?
 Verbara.Sdk.Ami.Events.ParkedCallSwapEvent.ParkingTimeout.set -> void
 Verbara.Sdk.Ami.Events.ParkedCallTimeOutEvent
 Verbara.Sdk.Ami.Events.ParkedCallTimeOutEvent.ParkedCallTimeOutEvent() -> void
-Verbara.Sdk.Ami.Events.PausedEvent
-Verbara.Sdk.Ami.Events.PausedEvent.Extension.get -> string?
-Verbara.Sdk.Ami.Events.PausedEvent.Extension.set -> void
-Verbara.Sdk.Ami.Events.PausedEvent.Header.get -> string?
-Verbara.Sdk.Ami.Events.PausedEvent.Header.set -> void
-Verbara.Sdk.Ami.Events.PausedEvent.PausedEvent() -> void
 Verbara.Sdk.Ami.Events.PeerEntryEvent
 Verbara.Sdk.Ami.Events.PeerEntryEvent.Accountcode.get -> string?
 Verbara.Sdk.Ami.Events.PeerEntryEvent.Accountcode.set -> void
@@ -4624,58 +4512,6 @@ Verbara.Sdk.Ami.Events.ShutdownEvent.Restart.set -> void
 Verbara.Sdk.Ami.Events.ShutdownEvent.ShutdownEvent() -> void
 Verbara.Sdk.Ami.Events.ShutdownEvent.Shutdown.get -> string?
 Verbara.Sdk.Ami.Events.ShutdownEvent.Shutdown.set -> void
-Verbara.Sdk.Ami.Events.SkypeAccountStatusEvent
-Verbara.Sdk.Ami.Events.SkypeAccountStatusEvent.SkypeAccountStatusEvent() -> void
-Verbara.Sdk.Ami.Events.SkypeAccountStatusEvent.Status.get -> string?
-Verbara.Sdk.Ami.Events.SkypeAccountStatusEvent.Status.set -> void
-Verbara.Sdk.Ami.Events.SkypeAccountStatusEvent.Username.get -> string?
-Verbara.Sdk.Ami.Events.SkypeAccountStatusEvent.Username.set -> void
-Verbara.Sdk.Ami.Events.SkypeBuddyEntryEvent
-Verbara.Sdk.Ami.Events.SkypeBuddyEntryEvent.Buddy.get -> string?
-Verbara.Sdk.Ami.Events.SkypeBuddyEntryEvent.Buddy.set -> void
-Verbara.Sdk.Ami.Events.SkypeBuddyEntryEvent.Fullname.get -> string?
-Verbara.Sdk.Ami.Events.SkypeBuddyEntryEvent.Fullname.set -> void
-Verbara.Sdk.Ami.Events.SkypeBuddyEntryEvent.SkypeBuddyEntryEvent() -> void
-Verbara.Sdk.Ami.Events.SkypeBuddyEntryEvent.Status.get -> string?
-Verbara.Sdk.Ami.Events.SkypeBuddyEntryEvent.Status.set -> void
-Verbara.Sdk.Ami.Events.SkypeBuddyListCompleteEvent
-Verbara.Sdk.Ami.Events.SkypeBuddyListCompleteEvent.ListItems.get -> int?
-Verbara.Sdk.Ami.Events.SkypeBuddyListCompleteEvent.ListItems.set -> void
-Verbara.Sdk.Ami.Events.SkypeBuddyListCompleteEvent.SkypeBuddyListCompleteEvent() -> void
-Verbara.Sdk.Ami.Events.SkypeBuddyStatusEvent
-Verbara.Sdk.Ami.Events.SkypeBuddyStatusEvent.Buddy.get -> string?
-Verbara.Sdk.Ami.Events.SkypeBuddyStatusEvent.Buddy.set -> void
-Verbara.Sdk.Ami.Events.SkypeBuddyStatusEvent.BuddySkypename.get -> string?
-Verbara.Sdk.Ami.Events.SkypeBuddyStatusEvent.BuddySkypename.set -> void
-Verbara.Sdk.Ami.Events.SkypeBuddyStatusEvent.BuddyStatus.get -> string?
-Verbara.Sdk.Ami.Events.SkypeBuddyStatusEvent.BuddyStatus.set -> void
-Verbara.Sdk.Ami.Events.SkypeBuddyStatusEvent.SkypeBuddyStatusEvent() -> void
-Verbara.Sdk.Ami.Events.SkypeBuddyStatusEvent.User.get -> string?
-Verbara.Sdk.Ami.Events.SkypeBuddyStatusEvent.User.set -> void
-Verbara.Sdk.Ami.Events.SkypeChatMessageEvent
-Verbara.Sdk.Ami.Events.SkypeChatMessageEvent.DecodedMessage.get -> string?
-Verbara.Sdk.Ami.Events.SkypeChatMessageEvent.DecodedMessage.set -> void
-Verbara.Sdk.Ami.Events.SkypeChatMessageEvent.From.get -> string?
-Verbara.Sdk.Ami.Events.SkypeChatMessageEvent.From.set -> void
-Verbara.Sdk.Ami.Events.SkypeChatMessageEvent.Message.get -> string?
-Verbara.Sdk.Ami.Events.SkypeChatMessageEvent.Message.set -> void
-Verbara.Sdk.Ami.Events.SkypeChatMessageEvent.SkypeChatMessageEvent() -> void
-Verbara.Sdk.Ami.Events.SkypeChatMessageEvent.To.get -> string?
-Verbara.Sdk.Ami.Events.SkypeChatMessageEvent.To.set -> void
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent.Channels.get -> int?
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent.Channels.set -> void
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent.Expires.get -> string?
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent.Expires.set -> void
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent.HostId.get -> string?
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent.HostId.set -> void
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent.Key.get -> string?
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent.Key.set -> void
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent.SkypeLicenseEvent() -> void
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent.Status.get -> string?
-Verbara.Sdk.Ami.Events.SkypeLicenseEvent.Status.set -> void
-Verbara.Sdk.Ami.Events.SkypeLicenseListCompleteEvent
-Verbara.Sdk.Ami.Events.SkypeLicenseListCompleteEvent.SkypeLicenseListCompleteEvent() -> void
 Verbara.Sdk.Ami.Events.SoftHangupRequestEvent
 Verbara.Sdk.Ami.Events.SoftHangupRequestEvent.Cause.get -> int?
 Verbara.Sdk.Ami.Events.SoftHangupRequestEvent.Cause.set -> void
@@ -4912,8 +4748,6 @@ Verbara.Sdk.Ami.Events.UnexpectedAddressEvent.ExpectedAddress.set -> void
 Verbara.Sdk.Ami.Events.UnexpectedAddressEvent.UnexpectedAddressEvent() -> void
 Verbara.Sdk.Ami.Events.UnholdEvent
 Verbara.Sdk.Ami.Events.UnholdEvent.UnholdEvent() -> void
-Verbara.Sdk.Ami.Events.UnlinkEvent
-Verbara.Sdk.Ami.Events.UnlinkEvent.UnlinkEvent() -> void
 Verbara.Sdk.Ami.Events.UnloadEvent
 Verbara.Sdk.Ami.Events.UnloadEvent.Module.get -> string?
 Verbara.Sdk.Ami.Events.UnloadEvent.Module.set -> void
@@ -4946,12 +4780,6 @@ Verbara.Sdk.Ami.Events.UnparkedCallEvent.RetrieverPriority.set -> void
 Verbara.Sdk.Ami.Events.UnparkedCallEvent.RetrieverUniqueid.get -> string?
 Verbara.Sdk.Ami.Events.UnparkedCallEvent.RetrieverUniqueid.set -> void
 Verbara.Sdk.Ami.Events.UnparkedCallEvent.UnparkedCallEvent() -> void
-Verbara.Sdk.Ami.Events.UnpausedEvent
-Verbara.Sdk.Ami.Events.UnpausedEvent.Extension.get -> string?
-Verbara.Sdk.Ami.Events.UnpausedEvent.Extension.set -> void
-Verbara.Sdk.Ami.Events.UnpausedEvent.Header.get -> string?
-Verbara.Sdk.Ami.Events.UnpausedEvent.Header.set -> void
-Verbara.Sdk.Ami.Events.UnpausedEvent.UnpausedEvent() -> void
 Verbara.Sdk.Ami.Events.UserEventEvent
 Verbara.Sdk.Ami.Events.UserEventEvent.Channel.get -> string?
 Verbara.Sdk.Ami.Events.UserEventEvent.Channel.set -> void
@@ -5062,18 +4890,6 @@ Verbara.Sdk.Ami.Events.WinkEvent
 Verbara.Sdk.Ami.Events.WinkEvent.LinkedId.get -> string?
 Verbara.Sdk.Ami.Events.WinkEvent.LinkedId.set -> void
 Verbara.Sdk.Ami.Events.WinkEvent.WinkEvent() -> void
-Verbara.Sdk.Ami.Events.ZapShowChannelsCompleteEvent
-Verbara.Sdk.Ami.Events.ZapShowChannelsCompleteEvent.ZapShowChannelsCompleteEvent() -> void
-Verbara.Sdk.Ami.Events.ZapShowChannelsEvent
-Verbara.Sdk.Ami.Events.ZapShowChannelsEvent.Alarm.get -> string?
-Verbara.Sdk.Ami.Events.ZapShowChannelsEvent.Alarm.set -> void
-Verbara.Sdk.Ami.Events.ZapShowChannelsEvent.Channel.get -> int?
-Verbara.Sdk.Ami.Events.ZapShowChannelsEvent.Channel.set -> void
-Verbara.Sdk.Ami.Events.ZapShowChannelsEvent.Dnd.get -> bool?
-Verbara.Sdk.Ami.Events.ZapShowChannelsEvent.Dnd.set -> void
-Verbara.Sdk.Ami.Events.ZapShowChannelsEvent.Signalling.get -> string?
-Verbara.Sdk.Ami.Events.ZapShowChannelsEvent.Signalling.set -> void
-Verbara.Sdk.Ami.Events.ZapShowChannelsEvent.ZapShowChannelsEvent() -> void
 Verbara.Sdk.Ami.Internal.ActiveBridgeTracker
 Verbara.Sdk.Ami.Internal.ActiveBridgeTracker.ActiveBridges.get -> System.Collections.Generic.IReadOnlyCollection<Verbara.Sdk.Ami.Internal.BridgeInfo!>!
 Verbara.Sdk.Ami.Internal.ActiveBridgeTracker.ActiveBridgeTracker() -> void
@@ -5123,7 +4939,6 @@ Verbara.Sdk.Ami.Internal.BridgeInfo.BridgeType.init -> void
 Verbara.Sdk.Ami.Internal.BridgeInfo.BridgeUniqueId.get -> string!
 Verbara.Sdk.Ami.Internal.BridgeInfo.BridgeUniqueId.init -> void
 Verbara.Sdk.Ami.Internal.BridgeInfo.Channels.get -> System.Collections.Generic.HashSet<string!>!
-Verbara.Sdk.Ami.Internal.LegacyEventAdapter
 Verbara.Sdk.Ami.Internal.MeetmeCompatibility
 Verbara.Sdk.Ami.Responses.ChallengeResponse
 Verbara.Sdk.Ami.Responses.ChallengeResponse.Challenge.get -> string?
@@ -5421,7 +5236,6 @@ Verbara.Sdk.Ami.Transport.PipelineSocketConnection.IsConnected.get -> bool
 Verbara.Sdk.Ami.Transport.PipelineSocketConnection.Output.get -> System.IO.Pipelines.PipeWriter!
 Verbara.Sdk.Ami.Transport.PipelineSocketConnection.PipelineSocketConnection() -> void
 const Verbara.Sdk.Ami.Internal.AsyncEventPump.DefaultCapacity = 20000 -> int
-static Verbara.Sdk.Ami.Internal.LegacyEventAdapter.CreateLegacyEvent(Verbara.Sdk.Ami.Internal.AmiMessage! message) -> Verbara.Sdk.ManagerEvent?
 static Verbara.Sdk.Ami.Internal.MeetmeCompatibility.GetMeetMeEquivalent(string! confBridgeEventType) -> string?
 static Verbara.Sdk.Ami.Transport.PipelineSocketConnection.FromStream(System.IO.Stream! stream) -> Verbara.Sdk.Ami.Transport.PipelineSocketConnection!
 static readonly Verbara.Sdk.Ami.Diagnostics.AmiActivitySource.Source -> System.Diagnostics.ActivitySource!
@@ -5443,3 +5257,22 @@ override Verbara.Sdk.Ami.Responses.ConfigCategory.GetHashCode() -> int
 override Verbara.Sdk.Ami.Responses.ConfigCategory.ToString() -> string!
 static Verbara.Sdk.Ami.Responses.ConfigCategory.operator !=(Verbara.Sdk.Ami.Responses.ConfigCategory? left, Verbara.Sdk.Ami.Responses.ConfigCategory? right) -> bool
 static Verbara.Sdk.Ami.Responses.ConfigCategory.operator ==(Verbara.Sdk.Ami.Responses.ConfigCategory? left, Verbara.Sdk.Ami.Responses.ConfigCategory? right) -> bool
+Verbara.Sdk.Ami.AmiBoolean
+Verbara.Sdk.Ami.Connection.AmiConnection.ReportsEventActionOutcome.get -> bool
+Verbara.Sdk.Ami.Connection.AmiConnection.SendEventGeneratingActionAsync(Verbara.Sdk.ManagerAction! action, Verbara.Sdk.Ami.Connection.EventActionOutcome? outcome, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Verbara.Sdk.ManagerEvent!>!
+Verbara.Sdk.Ami.Connection.AmiConnection.StateChanged -> System.Action<Verbara.Sdk.AmiConnectionStateChange!>?
+Verbara.Sdk.Ami.Connection.AmiConnection.Subscribe(System.Func<Verbara.Sdk.ManagerEvent!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! handler) -> System.IDisposable!
+Verbara.Sdk.Ami.Connection.EventActionOutcome (forwarded, contained in Verbara.Sdk)
+Verbara.Sdk.Ami.Connection.EventActionOutcome.EventActionOutcome() -> void (forwarded, contained in Verbara.Sdk)
+Verbara.Sdk.Ami.Connection.EventActionOutcome.Rejection.get -> string? (forwarded, contained in Verbara.Sdk)
+Verbara.Sdk.Ami.Connection.EventActionOutcome.Reported.get -> bool (forwarded, contained in Verbara.Sdk)
+Verbara.Sdk.Ami.Connection.EventActionOutcome.SessionEnded.get -> bool (forwarded, contained in Verbara.Sdk)
+Verbara.Sdk.Ami.Events.StatusEvent.CallerIdName.get -> string?
+Verbara.Sdk.Ami.Events.StatusEvent.CallerIdName.set -> void
+Verbara.Sdk.Ami.Events.StatusEvent.CallerIdNum.get -> string?
+Verbara.Sdk.Ami.Events.StatusEvent.CallerIdNum.set -> void
+Verbara.Sdk.Ami.Events.StatusEvent.ChannelState.get -> string?
+Verbara.Sdk.Ami.Events.StatusEvent.ChannelState.set -> void
+Verbara.Sdk.Ami.Events.StatusEvent.ChannelStateDesc.get -> string?
+Verbara.Sdk.Ami.Events.StatusEvent.ChannelStateDesc.set -> void
+static Verbara.Sdk.Ami.AmiBoolean.Parse(string? value) -> bool?

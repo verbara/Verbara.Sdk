@@ -21,7 +21,7 @@
        property values, and a central pin, transitive pins included, below a dependency's minimum is
        NU1109 in this build. -->
   <PropertyGroup>
-    <MicrosoftExtensionsVersion>10.0.13</MicrosoftExtensionsVersion>
+    <MicrosoftExtensionsVersion>10.0.14</MicrosoftExtensionsVersion>
     <MicrosoftExtensionsFloorVersion>$([System.Version]::Parse('$(MicrosoftExtensionsVersion)').ToString(2)).0</MicrosoftExtensionsFloorVersion>
   </PropertyGroup>
   <ItemGroup>
@@ -61,7 +61,7 @@
 
   <!-- Redis (spike validation) -->
   <ItemGroup>
-    <PackageVersion Include="StackExchange.Redis" Version="3.3.1" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.4.5" />
   </ItemGroup>
 
   <!-- NATS (Verbara.Sdk.Push.Nats bridge) -->
@@ -76,11 +76,11 @@
 
   <!-- OpenTelemetry (Verbara.Sdk.OpenTelemetry batteries-included package) -->
   <ItemGroup>
-    <PackageVersion Include="OpenTelemetry" Version="1.19.1" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
-    <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.19.1" />
-    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.19.1-beta.1" />
+    <PackageVersion Include="OpenTelemetry" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.20.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.20.1-beta.1" />
   </ItemGroup>
 
   <!-- Source generators -->
@@ -102,9 +102,9 @@
 
   <!-- Analyzers — Layer 2: Compile-Time Bug Detection -->
   <ItemGroup>
-    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.302" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.316" />
     <PackageVersion Include="IDisposableAnalyzers" Version="4.0.8" />
-    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23" />
+    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.12.1" />
     <PackageVersion Include="xunit.analyzers" Version="2.2.0" />
     <PackageVersion Include="NSubstitute.Analyzers.CSharp" Version="1.0.17" />
   </ItemGroup>

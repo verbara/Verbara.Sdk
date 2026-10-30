@@ -542,8 +542,21 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             RealtimeMetrics.MessagesReceived.Add(1);
             var json = Encoding.UTF8.GetString(messageBuffer.WrittenSpan);
 
-            // Two-pass decode: first read type, then deserialize to specific DTO
-            var baseEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ServerEventBase);
+            // Two-pass decode: first read type, then deserialize to specific DTO. One event the bridge cannot
+            // read costs that event, not the call: each decode below is guarded alone, so nothing that runs
+            // after a successful decode (a write to the caller, a subscriber, a function) is absorbed here.
+            ServerEventBase? baseEvt;
+            try
+            {
+                baseEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ServerEventBase);
+            }
+            catch (JsonException ex)
+            {
+                // This pass reads the type alone, so it fails only on a frame that is not JSON or whose type
+                // is not a string: neither says "error", the test the error branch below applies.
+                SkipUnreadable(channelId, ex, eventType: "(type unreadable)");
+                continue;
+            }
             if (baseEvt is null) continue;
 
             switch (baseEvt.Type)
@@ -555,7 +568,12 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 case RealtimeProtocol.ResponseAudioDelta:
                 {
                     if (callerAudioEnded) break;
-                    var audioEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioDeltaEvent);
+                    ResponseAudioDeltaEvent? audioEvt;
+                    try
+                    {
+                        audioEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioDeltaEvent);
+                    }
+                    catch (JsonException ex) { SkipUnreadable(channelId, ex, baseEvt.Type); break; }
                     if (audioEvt is null) break;
                     var pcm16Bytes = Convert.FromBase64String(audioEvt.Delta);
                     ReadOnlyMemory<byte> pcm;
@@ -583,7 +601,12 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
                 case RealtimeProtocol.ResponseAudioTranscriptDelta:
                 {
-                    var tEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioTranscriptDeltaEvent);
+                    ResponseAudioTranscriptDeltaEvent? tEvt;
+                    try
+                    {
+                        tEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioTranscriptDeltaEvent);
+                    }
+                    catch (JsonException ex) { SkipUnreadable(channelId, ex, baseEvt.Type); break; }
                     if (tEvt is not null)
                         Publish(new RealtimeTranscriptEvent(channelId, DateTimeOffset.UtcNow, tEvt.Delta, IsFinal: false));
                     break;
@@ -591,7 +614,12 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
                 case RealtimeProtocol.ResponseAudioTranscriptDone:
                 {
-                    var tEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioTranscriptDoneEvent);
+                    ResponseAudioTranscriptDoneEvent? tEvt;
+                    try
+                    {
+                        tEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioTranscriptDoneEvent);
+                    }
+                    catch (JsonException ex) { SkipUnreadable(channelId, ex, baseEvt.Type); break; }
                     if (tEvt is not null)
                         Publish(new RealtimeTranscriptEvent(channelId, DateTimeOffset.UtcNow, tEvt.Transcript, IsFinal: true));
                     break;
@@ -650,7 +678,12 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
 
                 case RealtimeProtocol.Error:
                 {
-                    var errEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ServerErrorEvent);
+                    ServerErrorEvent? errEvt;
+                    try
+                    {
+                        errEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ServerErrorEvent);
+                    }
+                    catch (JsonException) { ReportUnreadableError(channelId, json); break; }
                     var msg = errEvt?.Error?.Message ?? "unknown error";
                     RealtimeLog.OpenAiError(_logger, channelId, msg);
                     Publish(new RealtimeErrorEvent(channelId, DateTimeOffset.UtcNow, msg));
@@ -667,6 +700,28 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         return silence.Expired;
     }
 
+    /// <summary>
+    /// An <c>error</c> event the bridge could not read is reported exactly as a readable one is: logged as
+    /// the vendor's error and published as one <see cref="RealtimeErrorEvent"/>, which carries the raw frame
+    /// because the member that failed may be the one holding the vendor's message. The call goes on and
+    /// nothing is counted, as for a readable error.
+    /// </summary>
+    private void ReportUnreadableError(Guid channelId, string json)
+    {
+        RealtimeLog.OpenAiError(_logger, channelId, json);
+        Publish(new RealtimeErrorEvent(channelId, DateTimeOffset.UtcNow, json));
+    }
+
+    /// <summary>
+    /// An event that names no failure and could not be read is skipped: counted on
+    /// <c>openai_realtime.frames.unparseable</c> and logged once at Warning. The call goes on.
+    /// </summary>
+    private void SkipUnreadable(Guid channelId, JsonException exception, string eventType)
+    {
+        RealtimeMetrics.CountUnparseable(ProviderName);
+        RealtimeLog.UnreadableEventSkipped(_logger, exception, channelId, eventType);
+    }
+
     private async Task HandleFunctionCallAsync(
         string json,
         Guid channelId,
@@ -674,7 +729,17 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         SemaphoreSlim wsWriteLock,
         CancellationToken ct)
     {
-        var fnEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.FunctionCallArgumentsDoneEvent);
+        FunctionCallArgumentsDoneEvent? fnEvt;
+        try
+        {
+            fnEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.FunctionCallArgumentsDoneEvent);
+        }
+        catch (JsonException ex)
+        {
+            // Nothing is called and nothing is answered for a call the bridge cannot read.
+            SkipUnreadable(channelId, ex, RealtimeProtocol.ResponseFunctionCallArgumentsDone);
+            return;
+        }
         if (fnEvt is null) return;
 
         // Checked again before each call, naming the option: the options object is held by reference, and an

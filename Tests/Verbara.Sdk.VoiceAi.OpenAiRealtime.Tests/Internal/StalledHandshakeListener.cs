@@ -74,13 +74,21 @@ internal sealed class StalledHandshakeListener : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Cancel first, stop last, as WebSocketTestServer does. The accept loop is queued by Start
+        // and may not have reached its accept yet: when no client ever dials (a token cancelled
+        // before the connect), disposal can run first. Stopping the listener then would make that
+        // late accept throw "Not listening"; with the listener still open it sees the cancelled
+        // token instead and ends. Stop runs only once the loop has, when nothing can accept again.
         _released.TrySetResult();
         await _cts.CancelAsync().ConfigureAwait(false);
-        _listener.Stop();
-        if (_acceptLoop is not null)
+        try
         {
-            try { await _acceptLoop.ConfigureAwait(false); }
-            catch (OperationCanceledException) { /* expected */ }
+            if (_acceptLoop is not null)
+                await _acceptLoop.ConfigureAwait(false);
+        }
+        finally
+        {
+            _listener.Stop();
         }
 
         _cts.Dispose();

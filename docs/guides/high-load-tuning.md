@@ -86,7 +86,7 @@ Use `dotnet-counters`, OpenTelemetry, or Prometheus to track these metrics.
 
 ### VoiceAi Telemetry (v1.9.0+)
 
-All five VoiceAi packages publish a `Meter` + `ActivitySource` + `IHealthCheck`. Auto-registered by `AddVoiceAiPipeline<THandler>()` in `Verbara.Sdk.VoiceAi` and the `AddStt*` / `AddTts*` / `AddAudioSocketServer()` / `AddOpenAiRealtime*` DI helpers.
+Five VoiceAi packages ship an `IHealthCheck`: `VoiceAi`, `VoiceAi.AudioSocket`, `VoiceAi.Stt`, `VoiceAi.Tts` and `VoiceAi.OpenAiRealtime`. The five meters below cover them (`Verbara.Sdk.VoiceAi` publishes the `.Stt` and `.Tts` meters for every provider), and three of them also publish an `ActivitySource`: `Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.AudioSocket` and `Verbara.Sdk.VoiceAi.OpenAiRealtime`; the STT and TTS packages publish none. Auto-registered by `AddVoiceAiPipeline<THandler>()` in `Verbara.Sdk.VoiceAi` and the `AddStt*` / `AddTts*` / `AddAudioSocketServer()` / `AddOpenAiRealtime*` DI helpers.
 
 | Meter | Key Instruments |
 |-------|-----------------|

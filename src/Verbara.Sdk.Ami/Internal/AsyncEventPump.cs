@@ -28,15 +28,33 @@ public sealed class AsyncEventPump : IAsyncDisposable
 
     // Event ordinals. The one writer numbers each event it hands to TryEnqueue, and publishes _lastReceived only after
     // that event was written or dropped. _dispatchedThrough is the largest d such that every event numbered d or less
-    // has been dispatched (its handler returned) or dropped. Both move under _progressLock, which the consumer takes
-    // around each read and after each handler, and the writer only on a drop: a drop happens only with the buffer full,
-    // so the writer pays for the lock only under overflow.
+    // has been dispatched (its handler returned) or dropped.
+    //
+    // _progressLock is taken by the consumer only when it leaves idle (the read that finds an event), when it returns to
+    // idle (the read that finds the buffer empty) and when a caller waits on the barrier; by the writer only on a drop,
+    // which happens only with the buffer full; and by a caller registering a wait. Between its two transitions the busy
+    // consumer publishes d without the lock (MarkDispatchedBusy), and is the only one that moves it then: the writer
+    // advances d only while the consumer is idle.
     private long _lastReceived;
     private long _dispatchedThrough;
+
+    // Busy: true from the locked read that takes the consumer out of idle to the locked empty read that returns it there.
+    // It flips only under _progressLock.
     private bool _dispatching;
     private bool _ended;
     private readonly Lock _progressLock = new();
     private readonly List<(long Ordinal, TaskCompletionSource<bool> Waiter)> _waiters = [];
+
+    // How many waiters _waiters holds, readable without the lock: the busy consumer takes the lock after an event only
+    // when a waiter is registered. It moves with _waiters, under the lock, by Interlocked operations (full fences).
+    private int _waiterCount;
+
+    // The refusals not yet passed by the consumer, kept as runs of consecutive ordinals. The writer adds to it under the
+    // lock on a drop; the consumer reads it under the lock, and only when it is not empty.
+    private readonly RefusalRuns _refusals = new();
+
+    // The consumer's running total of the uncollected refusals it has passed: the stamp of the event it dispatches.
+    private long _uncollectedSeen;
 
     /// <summary>Maximum events that can be buffered before backpressure is applied.</summary>
     public const int DefaultCapacity = 20_000;
@@ -192,17 +210,49 @@ public sealed class AsyncEventPump : IAsyncDisposable
             // buffer is non-empty, so without it the consumer would spin.
             while (!Stopped && await reader.WaitToReadAsync(_cts.Token).ConfigureAwait(false))
             {
-                while (!Stopped && TryReadForDispatch(reader, out var buffered))
+                // Idle to busy: the one read taken under the progress lock, so that "not dispatching and the buffer
+                // empty", as the drop path reads it, means every event written so far has been read and its handler
+                // has returned.
+                BufferedEvent buffered;
+                lock (_progressLock)
                 {
+                    _dispatching = reader.TryRead(out buffered);
+                    if (!_dispatching)
+                        continue;
+                }
+
+                while (true)
+                {
+                    if (_refusals.Any)
+                    {
+                        lock (_progressLock)
+                            _uncollectedSeen += _refusals.TakeBefore(buffered.Ordinal);
+                    }
+
+                    var ordinal = buffered.Ordinal;
                     Interlocked.Increment(ref _processedEvents);
-                    Volatile.Write(ref _droppedBeforeCurrent, buffered.DroppedBefore);
+                    Volatile.Write(ref _droppedBeforeCurrent, _uncollectedSeen);
+                    var returned = false;
                     try
                     {
                         await handler(buffered.Event).ConfigureAwait(false);
+                        returned = true;
                     }
                     finally
                     {
-                        MarkDispatched(reader, buffered.Ordinal);
+                        // A handler that throws ends the consumer: it goes idle here, so the drop path and a trailing
+                        // drop see it idle, as they would after the last buffered event's handler returned.
+                        if (returned)
+                            MarkDispatchedBusy(ordinal);
+                        else
+                            MarkIdle(reader, ordinal);
+                    }
+
+                    // Busy to idle, or a stop: nothing is read after the event in progress once the pump is stopped.
+                    if (Stopped || !reader.TryRead(out buffered))
+                    {
+                        MarkIdle(reader, ordinal);
+                        break;
                     }
                 }
             }
@@ -219,18 +269,27 @@ public sealed class AsyncEventPump : IAsyncDisposable
         }
     }
 
-    // The read is taken under the progress lock, so that "not dispatching and the buffer empty", as the drop path reads
-    // it, means every event written so far has been read and its handler has returned.
-    private bool TryReadForDispatch(ChannelReader<BufferedEvent> reader, out BufferedEvent buffered)
+    // The busy consumer's progress: every event numbered ordinal or less has been dispatched or dropped. No lock unless a
+    // waiter is registered. The exchange is a full fence, and the waiter count is read after it, while a registrant
+    // increments the count (a full fence) before it reads d: of the two, at least one sees the other's store. Either the
+    // registrant finds d reached and returns at once, or this consumer finds the count non-zero and takes the waiter out
+    // under the lock. A plain volatile write would let the store sit behind the load (a store followed by a load may be
+    // reordered even on x86), and a waiter registered in that window would wait for the next handler to return.
+    private void MarkDispatchedBusy(long ordinal)
     {
+        Interlocked.Exchange(ref _dispatchedThrough, ordinal);
+        if (Volatile.Read(ref _waiterCount) == 0)
+            return;
+
+        List<TaskCompletionSource<bool>>? met;
         lock (_progressLock)
-        {
-            _dispatching = reader.TryRead(out buffered);
-            return _dispatching;
-        }
+            met = TakeMetLocked(Volatile.Read(ref _dispatchedThrough));
+
+        Release(met, reached: true);
     }
 
-    private void MarkDispatched(ChannelReader<BufferedEvent> reader, long ordinal)
+    // Busy to idle, under the lock: a trailing drop is passed once the buffer is empty.
+    private void MarkIdle(ChannelReader<BufferedEvent> reader, long ordinal)
     {
         List<TaskCompletionSource<bool>>? met;
         lock (_progressLock)
@@ -254,6 +313,12 @@ public sealed class AsyncEventPump : IAsyncDisposable
             return null;
 
         Volatile.Write(ref _dispatchedThrough, through);
+        return TakeMetLocked(through);
+    }
+
+    // Called with _progressLock held. Takes out the waiters for an ordinal d has reached.
+    private List<TaskCompletionSource<bool>>? TakeMetLocked(long through)
+    {
         List<TaskCompletionSource<bool>>? met = null;
         for (var i = _waiters.Count - 1; i >= 0; i--)
         {
@@ -261,6 +326,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
             {
                 (met ??= []).Add(_waiters[i].Waiter);
                 _waiters.RemoveAt(i);
+                Interlocked.Decrement(ref _waiterCount);
             }
         }
 
@@ -286,7 +352,10 @@ public sealed class AsyncEventPump : IAsyncDisposable
                 return;
 
             _ended = true;
-            ended = [.. _waiters.Select(w => w.Waiter)];
+            ended = new List<TaskCompletionSource<bool>>(_waiters.Count);
+            foreach (var (_, waiter) in _waiters)
+                ended.Add(waiter);
+            Interlocked.Add(ref _waiterCount, -_waiters.Count);
             _waiters.Clear();
         }
 
@@ -310,10 +379,19 @@ public sealed class AsyncEventPump : IAsyncDisposable
         TaskCompletionSource<bool> waiter;
         lock (_progressLock)
         {
-            if (_dispatchedThrough >= ordinal)
+            // The count is raised before d is read: the other half of the pair MarkDispatchedBusy describes.
+            Interlocked.Increment(ref _waiterCount);
+            if (Volatile.Read(ref _dispatchedThrough) >= ordinal)
+            {
+                Interlocked.Decrement(ref _waiterCount);
                 return DispatchBarrierOutcome.Reached;
+            }
+
             if (_ended)
+            {
+                Interlocked.Decrement(ref _waiterCount);
                 return DispatchBarrierOutcome.Ended;
+            }
 
             waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _waiters.Add((ordinal, waiter));
@@ -332,7 +410,8 @@ public sealed class AsyncEventPump : IAsyncDisposable
         {
             lock (_progressLock)
             {
-                _waiters.RemoveAll(w => ReferenceEquals(w.Waiter, waiter));
+                if (_waiters.RemoveAll(w => ReferenceEquals(w.Waiter, waiter)) != 0)
+                    Interlocked.Decrement(ref _waiterCount);
             }
         }
     }
@@ -350,20 +429,23 @@ public sealed class AsyncEventPump : IAsyncDisposable
     internal bool TryEnqueue(ManagerEvent evt, bool collected)
     {
         // The pump has one writer, so this is the ordinal the event carries (NextOrdinal, read by the writer before this
-        // call, is the same number), and no drop can be counted between this read and the write: the stamp is exact.
+        // call, is the same number).
         var ordinal = _lastReceived + 1;
-        if (!_channel.Writer.TryWrite(new BufferedEvent(evt, Volatile.Read(ref _droppedUncollected), ordinal)))
+        if (!_channel.Writer.TryWrite(new BufferedEvent(evt, ordinal)))
         {
             Interlocked.Increment(ref _droppedEvents);
             if (!collected)
                 Interlocked.Increment(ref _droppedUncollected);
-            Volatile.Write(ref _lastReceived, ordinal);
 
-            // With the consumer idle and the buffer empty, every earlier event has been dispatched, so d passes the drop
-            // now. Otherwise the consumer passes it after the handler that finds the buffer empty.
+            // The refusal is logged, and _lastReceived published, under the lock, so the consumer returning to idle
+            // either sees this drop or is seen idle here. With the consumer idle and the buffer empty, every earlier
+            // event has been dispatched, so d passes the drop now. Otherwise the consumer passes it after the handler
+            // that finds the buffer empty.
             List<TaskCompletionSource<bool>>? met = null;
             lock (_progressLock)
             {
+                _refusals.Add(ordinal, collected);
+                Volatile.Write(ref _lastReceived, ordinal);
                 if (!_dispatching && _channel.Reader.Count == 0)
                     met = AdvanceLocked(ordinal);
             }
@@ -449,8 +531,76 @@ public sealed class AsyncEventPump : IAsyncDisposable
         _cts.Dispose();
     }
 
-    /// <summary>An event in the buffer, with the pump's lost-event count when it was enqueued, and its ordinal.</summary>
-    private readonly record struct BufferedEvent(ManagerEvent Event, long DroppedBefore, long Ordinal);
+    /// <summary>
+    /// An event in the buffer and its ordinal: two words per slot. The ordinal travels with the event, so the dispatch
+    /// barrier never depends on a reconstruction; the lost-event count does not, and is rebuilt from <see cref="RefusalRuns"/>.
+    /// </summary>
+    private readonly record struct BufferedEvent(ManagerEvent Event, long Ordinal);
+
+    /// <summary>
+    /// The refusals the consumer has not yet passed, as runs of consecutive ordinals with how many of each run were lost
+    /// (refused uncollected). Both sides call it with the pump's progress lock held; <see cref="Any"/> is read without it.
+    /// </summary>
+    /// <remarks>
+    /// A run cannot straddle an accepted ordinal: an accepted event between two refusals breaks their consecutiveness,
+    /// so the next refusal opens a new run. The runs that end before an event's ordinal are therefore exactly the
+    /// refusals that preceded that event, and their lost total is the count the event's handler reads. A refusal costs
+    /// O(1) and allocates nothing while it extends the open run; the closed runs are queued only when an accepted event
+    /// separates them, so they never outnumber the buffered events plus one, whatever the length of an overflow.
+    /// Visibility: the writer's <see cref="Add"/> precedes, in program order, its next write into the buffer, and the
+    /// consumer's read of that event acquires the buffer's lock that write released.
+    /// </remarks>
+    private sealed class RefusalRuns
+    {
+        private readonly Queue<(long Last, long Lost)> _closed = new();
+        private long _openLast;
+        private long _openLost;
+        private bool _hasOpen;
+        private int _count;
+
+        /// <summary>Whether any run is waiting to be passed; read by the consumer without the lock.</summary>
+        public bool Any => Volatile.Read(ref _count) != 0;
+
+        /// <summary>The writer, under the lock: logs a refusal.</summary>
+        public void Add(long ordinal, bool collected)
+        {
+            var lost = collected ? 0 : 1;
+            if (_hasOpen && ordinal == _openLast + 1)
+            {
+                _openLast = ordinal;
+                _openLost += lost;
+                return;
+            }
+
+            if (_hasOpen)
+                _closed.Enqueue((_openLast, _openLost));
+
+            _openLast = ordinal;
+            _openLost = lost;
+            _hasOpen = true;
+            Volatile.Write(ref _count, _closed.Count + 1);
+        }
+
+        /// <summary>The consumer, under the lock: takes every run that ends before <paramref name="ordinal"/> and returns how many of them were lost.</summary>
+        public long TakeBefore(long ordinal)
+        {
+            long lost = 0;
+            while (_closed.TryPeek(out var run) && run.Last < ordinal)
+            {
+                _closed.Dequeue();
+                lost += run.Lost;
+            }
+
+            if (_hasOpen && _openLast < ordinal)
+            {
+                lost += _openLost;
+                _hasOpen = false;
+            }
+
+            Volatile.Write(ref _count, _closed.Count + (_hasOpen ? 1 : 0));
+            return lost;
+        }
+    }
 }
 
 /// <summary>How a wait on <see cref="AsyncEventPump.WaitDispatchedThroughAsync"/> ended.</summary>

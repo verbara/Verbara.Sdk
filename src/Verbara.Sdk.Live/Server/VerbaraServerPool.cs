@@ -156,7 +156,8 @@ public sealed class VerbaraServerPool : IAsyncDisposable
         {
             takenIn = _servers.TryAdd(serverId, server);
             if (takenIn)
-                TrackAgentRouting(serverId, server);
+                server.PoolId = serverId;
+            TrackAgentRouting(serverId, server);
         }
         if (!takenIn)
         {
@@ -345,7 +346,7 @@ public sealed class VerbaraServerPool : IAsyncDisposable
             {
                 handler(serverId, server);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 VerbaraServerPoolLog.MembershipSubscriberFailed(_logger, notification, serverId, ex);
             }

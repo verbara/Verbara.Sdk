@@ -3,6 +3,12 @@
 This is the one migration guide for 2.9.0. It has one section per breaking entry of the release, says who each
 one reaches and what to do, and links to the longer guide where one exists. The [CHANGELOG](../../CHANGELOG.md) has the full entry for each.
 
+2.9.0's CI runs the Functional and Integration suites on Asterisk 22.11.0 and 23.5.0, the newest generally
+available build of each supported line on the day it was tagged; its chan_websocket, ARI WebSocket and AMI
+reload behaviour was also measured on 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2 by image digest. 22.12.0, 23.6.0
+and 24.0.0 were still release candidates (rc3, 2026-10-22) at the tag, so 2.9.0 claims no support for
+Asterisk 24; the 2.9.x release that pins a 24 GA build in CI will say so here.
+
 ## Before you start: move every package at once
 
 Every `Verbara.Sdk.*` package moves to 2.9.0 together. Do not mix versions: `Verbara.Sdk.Live` 2.8.0 names two
@@ -22,10 +28,11 @@ says:
 - **What to do**: the code change, or the exact warning suppression, and a link to the guide for the change when
   one exists.
 
-Four entries only add warnings (`VSDK0005`, `VSDK0003`, `VSDK0002` and `VSDK0006`). They break nothing unless you build with
-`TreatWarningsAsErrors`. Two stop compiling where you use them. The other fourteen change no existing signature, but
-change behaviour a program can branch on, a published metric, or a health status; one of them also refuses some
-configuration values at start-up.
+Four entries are breaking only for the warnings they add (`VSDK0005`, `VSDK0003`, `VSDK0002` and `VSDK0006`). They break
+nothing unless you build with `TreatWarningsAsErrors`; `VSDK0002`'s entry also fills `StatusEvent.Extension`, which read
+null before. Two stop compiling where you use them. The other twenty change no existing signature, but
+change behaviour a program can branch on, a published metric, or a health status; two of them also refuse some
+configuration values at start-up, and one, `VSDK0004`, also adds warnings.
 
 | Package | Change | Kind |
 |---|---|---|
@@ -37,6 +44,7 @@ configuration values at start-up.
 | `Verbara.Sdk.Live` | [A conference counts every caller](#a-conference-counts-every-caller) | does not compile |
 | `Verbara.Sdk.Live` | [A conference participant shows whether it is muted and talking](#a-conference-participant-shows-muted-and-talking) | behaviour |
 | `Verbara.Sdk.Live` | [A start cut short by your own connect throws](#a-start-cut-short-by-your-own-connect-throws) | behaviour |
+| `Verbara.Sdk.Live` | [A server pool refuses an empty or reserved server id](#a-server-pool-refuses-an-empty-or-reserved-server-id) | behaviour |
 | `Verbara.Sdk.Live` | [Live's queue counters across a reconnect](#lives-counters-across-a-reconnect) | metric meaning |
 | `Verbara.Sdk.Live` | [`BridgeCount` counts the bridges inserted since the start](#lives-counters-across-a-reconnect) | metric meaning |
 | `Verbara.Sdk.Live` | [A reload announces the callers and participants it finds gone](#a-reload-announces-the-callers-and-participants-it-finds-gone) | behaviour |
@@ -44,10 +52,15 @@ configuration values at start-up.
 | `Verbara.Sdk.Sessions` | [`sessions.timed_out` and `sessions.orphaned` warn `VSDK0006`](#sessionstimed_out-and-sessionsorphaned-warn-vsdk0006) | warning |
 | `Verbara.Sdk.Activities` | [An activity ends `Cancelled` only when someone asked it to stop](#an-activity-ends-cancelled-only-when-asked-to-stop) | behaviour |
 | `Verbara.Sdk.Activities` | [An attended transfer Asterisk refuses ends `Failed`](#a-refused-attended-transfer-ends-failed) | behaviour |
+| `Verbara.Sdk.Ari` | [A WebSocket stream is found by the call it names](#a-websocket-stream-is-found-by-the-call-it-names) | behaviour, start-up validation |
+| `Verbara.Sdk.Ari` | [chan_websocket control messages are read and written as Asterisk sends them](#chan_websocket-control-messages-are-read-and-written-as-asterisk-sends-them) | behaviour |
+| `Verbara.Sdk.Ari` | [`SendXonAsync`, `SendXoffAsync` and three chan_websocket members warn `VSDK0004`](#sendxonasync-sendxoffasync-and-three-chan_websocket-members-warn-vsdk0004) | behaviour, warning |
 | `Verbara.Sdk.Ari` | [`AudioStreamMetrics.BufferUnderruns` warns `VSDK0003`](#audiostreammetricsbufferunderruns-warns-vsdk0003) | warning |
 | `Verbara.Sdk.VoiceAi`, `VoiceAi.OpenAiRealtime` | [A cancelled voice session is counted cancelled](#a-cancelled-voice-session-is-counted-cancelled) | metric meaning |
+| `Verbara.Sdk.VoiceAi.Stt` | [A Deepgram message the recognizer cannot read no longer ends the recognition](#a-deepgram-message-the-recognizer-cannot-read-no-longer-ends-the-recognition) | behaviour |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [The `openai-realtime` health entry reports `Degraded`](#the-openai-realtime-health-entry-reports-degraded) | health status |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [A vendor failure close after a hangup counts failed; a host cancellation from a send counts cancelled](#realtime-sessions-move-between-completed-failed-and-cancelled) | metric meaning |
+| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An OpenAI Realtime event whose JSON the bridge cannot decode no longer ends the call](#an-openai-realtime-event-whose-json-the-bridge-cannot-decode-no-longer-ends-the-call) | behaviour, metric meaning |
 | `Verbara.Sdk.Push.Webhooks` | [A webhook receives a topic-less event its event type matches](#a-webhook-receives-a-topic-less-event) | behaviour |
 
 ## Ami
@@ -236,6 +249,17 @@ runs still returns and logs a Warning.
 
 Guide: [With a `VerbaraServer` on the connection, reload it yourself](ami-connection-state-and-health-migration.md#connecting-again-after-a-loss).
 
+### A server pool refuses an empty or reserved server id
+
+**What changed.** `VerbaraServerPool.AddServerAsync` and `AddExistingServer` throw `ArgumentException` for a null,
+empty or white-space id and for the reserved id `status-refused`. `AddServerAsync` throws before it connects.
+
+**Who is affected.** Code that adds a server under one of those ids, for example from configuration that can leave the
+id blank.
+
+**What to do.** Give every server a non-empty id other than `status-refused`, and validate ids you read from
+configuration before you add the server.
+
 ### Live's counters across a reconnect
 
 **What changed.** A reload reconciles Live's tables instead of clearing them, so three published numbers change
@@ -422,6 +446,110 @@ Guide: [Activity endings, What you have to do](activity-ending-migration.md#what
 
 ## Ari audio
 
+### A WebSocket stream is found by the call it names
+
+**What changed.** `WebSocketAudioServer` keys each stream by the `channel_id` in the `MEDIA_START` frame Asterisk
+sends first, not by the last segment of the upgrade path. A connection that sends no `MEDIA_START` first keeps its
+path-segment key, after waiting up to `AudioServerOptions.MediaStartTimeout` (2 s by default) for its first frame.
+
+**Who is affected.** Code that looks a WebSocket stream up, or reads `IAudioStream.ChannelId`, expecting the path
+segment of a chan_websocket connection (for example the `external_host` name of a `websocket_client` entry). A
+WebSocket client of your own that sends nothing after the upgrade is announced up to 2 s later than before; one
+that sends audio first is announced at its first frame, under its path segment.
+
+**What to do.** Look the stream up by the ARI channel id: `GetStream(channel.Id)` for an `externalMedia` channel,
+or the WebSocket channel's id for `Dial(WebSocket/…)` (not the caller's). To keep 2.8.x's keys and timing for a
+client that never sends `MEDIA_START`, set:
+
+```csharp
+var options = new Verbara.Sdk.Ari.Audio.AudioServerOptions { MediaStartTimeout = TimeSpan.Zero };
+```
+
+See [the externalMedia channel id guide](externalmedia-channel-id-migration.md).
+
+### chan_websocket control messages are read and written as Asterisk sends them
+
+**What changed.** A chan_websocket session reads the control messages Asterisk sends in the format the connection
+uses: plain-text lines, Asterisk's default, or JSON objects with `f(json)` or `control_message_format = json`. 2.8.x
+read only a JSON shape no Asterisk sends, so `ControlMessages` stayed silent; it now publishes `ChanWebSocketDtmf`,
+`ChanWebSocketMediaXoff`, `ChanWebSocketMediaXon`, `ChanWebSocketMediaMarkProcessed`, the new `ChanWebSocketError`,
+and `ChanWebSocketUnknownMessage` for a message the SDK does not model. The connection's `MEDIA_START` is never
+published: it is `IChanWebSocketSession.MediaStart`, and its `ControlMessageFormat` is the format the connection
+negotiated. The commands follow it:
+
+- `SendMarkAsync` writes `MARK_MEDIA` in the connection's format, which Asterisk acts on; 2.8.x wrote a JSON object
+  Asterisk ignored. A mark whose command would exceed 128 bytes (117 bytes of mark in plain text, 84 in JSON) now
+  throws `ArgumentOutOfRangeException` instead of being written and dropped; shorten the mark — no Asterisk version
+  acted on the longer one.
+- Before the connection's `MEDIA_START` has been read (`MediaStart` is `null`: a stream announced under
+  `MediaStartTimeout = TimeSpan.Zero`, or before a late first frame) `SendMarkAsync` and `SendSetMediaDirectionAsync`
+  now throw `InvalidOperationException` instead of writing a command in a guessed format; keep the default
+  `MediaStartTimeout`, or call once `MediaStart` is set.
+- `SendSetMediaDirectionAsync` writes only on a JSON connection, the one format Asterisk accepts the command in, and
+  throws `InvalidOperationException` on a plain-text one, where 2.8.x wrote JSON Asterisk ignored: set
+  `control_message_format = json` in `chan_websocket.conf` for a channel the SDK creates (read in Asterisk's source,
+  not measured), or add `f(json)` to a dial string you write.
+- `ChanWebSocketControlMessageSerializer.Serialize` / `SerializeToUtf8Bytes` now take the connection's format
+  (`ChanWebSocketControlMessageFormat.PlainText` or `.Json`, read from `MediaStart.ControlMessageFormat`) and write the
+  command Asterisk acts on; the format-less overloads write the JSON form. They throw `NotSupportedException` for a
+  record Asterisk sends (`ChanWebSocketDtmf`, `ChanWebSocketMediaXon`, …) and for `ChanWebSocketSetMediaDirection` in
+  plain text — to log a received record, use its `ToString()`. `Deserialize` reads a frame as Asterisk sends it, in
+  either format, and no longer reads the `kind` JSON of 2.8.x: that input now reads as the generic record.
+
+**Who is affected.** Code that subscribes to `ControlMessages` (it starts receiving messages), matches
+`ChanWebSocketMediaStart` there (read `MediaStart` instead), calls `SendMarkAsync` or `SendSetMediaDirectionAsync`, or
+calls `ChanWebSocketControlMessageSerializer` directly.
+
+**What to do.** Read the connection's format from `MediaStart` before a command that exists only in JSON:
+
+```csharp
+using Verbara.Sdk.Ari.Audio;
+
+static async Task SetBothWaysAsync(IChanWebSocketSession ws)
+{
+    // Set once the connection's MEDIA_START has been read; Json is the only format with SET_MEDIA_DIRECTION.
+    if (ws.MediaStart?.ControlMessageFormat == ChanWebSocketControlMessageFormat.Json)
+        await ws.SendSetMediaDirectionAsync(ChanWebSocketMediaDirection.Both);
+}
+```
+
+A serializer call names the format: `ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, format)`.
+
+No separate guide; the chan_websocket section of
+[the externalMedia channel id guide](externalmedia-channel-id-migration.md#the-websocket-transport) has the rest.
+
+### `SendXonAsync`, `SendXoffAsync` and three chan_websocket members warn `VSDK0004`
+
+**What changed.** Five members of the chan_websocket surface have no counterpart on the wire, so each is now
+`[Obsolete]` with diagnostic id `VSDK0004`. Nothing is removed. `SendXonAsync` and `SendXoffAsync` now throw
+`NotSupportedException`: Asterisk has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2,
+23.6.0-rc2 and 24.0.0-rc2; `command unknown`, no reply). The other three hold what they held in practice:
+
+| Member | Why | Read instead |
+|---|---|---|
+| `ChanWebSocketHangup` | Never published: Asterisk ends a call with a WebSocket close frame | the ending on `IAudioStream.StateChanges` |
+| `ChanWebSocketMediaBuffering` | Never published: no message reports a buffer fill | `ChanWebSocketMediaXoff` / `ChanWebSocketMediaXon` on `ControlMessages` |
+| `ChanWebSocketDtmf.DurationMs` | Always 0: `DTMF_END` carries the digit and the channel id only | `ChannelDtmfReceivedEvent.DurationMs` (ARI, of the bridged peer channel; seen when the peer is in Stasis or the application subscribes to all) or `DtmfEndEvent.DurationMs` (AMI, on the peer) |
+
+**Who is affected.** Code that uses any of the five (for `DurationMs`, a read of the property; its constructor
+parameter does not warn, and neither does a positional pattern or deconstruction that reads it, which C# does not
+check for `[Obsolete]`) and builds with `TreatWarningsAsErrors`: it gets `error VSDK0004`. Code that calls `SendXonAsync` or `SendXoffAsync` gets `NotSupportedException` at run time.
+
+**What to do.** Remove the call; flow control arrives from Asterisk as `ChanWebSocketMediaXoff` /
+`ChanWebSocketMediaXon` on `ControlMessages`. Move the other three to what the table names. Until then, silence this
+deprecation alone:
+
+```xml
+<PropertyGroup>
+  <NoWarn>$(NoWarn);VSDK0004</NoWarn>
+</PropertyGroup>
+```
+
+A `JsonSerializerContext` of your own that lists `ChanWebSocketDtmf`, `ChanWebSocketHangup` or
+`ChanWebSocketMediaBuffering` in a `[JsonSerializable]` row gets `VSDK0004` in its generated metadata as well, where no
+pragma can go; the `NoWarn` above is the remedy there. The SDK's own context keeps its rows and silences the id only in
+the generator's output, never for hand-written code.
+
 ### `AudioStreamMetrics.BufferUnderruns` warns `VSDK0003`
 
 **What changed.** `audio.buffer.underruns` describes a write pump the SDK does not have, so nothing ever recorded
@@ -465,6 +593,33 @@ old openai_realtime.sessions.completed = openai_realtime.sessions.completed + op
 ```
 
 Guide: [A cancelled session is counted `cancelled`, not `completed`](voice-session-ending-migration.md#a-cancelled-session-is-counted-cancelled-not-completed).
+
+### A Deepgram message the recognizer cannot read no longer ends the recognition
+
+**What changed.** `DeepgramSpeechRecognizer.StreamAsync` read each WebSocket read as a whole message and parsed it
+with nothing around the parse, so a message it could not read ended the recognition with a `JsonException` out of
+the caller's enumeration, a type `StreamAsync` does not document. Behind `VoiceAiPipeline` that was a failed
+transcription and the caller's turn left unanswered. Now:
+
+- A message the vendor sends in fragments, or one larger than the 64 KiB receive buffer, is assembled and read
+  whole.
+- A message that cannot be read and whose top-level `type` is `"Error"` ends the recognition with
+  `SpeechProviderFailureException` (`Signal` = `ErrorFrame`, `Code` null), the failure a readable error message
+  raises; its message carries the raw text of what Deepgram sent.
+- Any other message that cannot be read, JSON or not, is skipped and counted on `stt.frames.unparseable` (meter
+  `Verbara.Sdk.VoiceAi.Stt`, tagged `voiceai.provider` = `Deepgram`). The results before and after it are
+  delivered, and a session whose every message was skipped completes with no results.
+
+No signature changes.
+
+**Who is affected.** Code that catches `JsonException` from `StreamAsync` on the Deepgram recognizer: it no longer
+receives one. A dashboard or alert on `stt.transcriptions.failed` behind `VoiceAiPipeline`: an unreadable Deepgram
+message no longer fails the transcription.
+
+**What to do.** Catch `SpeechProviderFailureException`, which `StreamAsync` documents, instead of `JsonException`.
+To see the messages the recognizer skipped, watch `stt.frames.unparseable`.
+
+No separate guide.
 
 ### The `openai-realtime` health entry reports `Degraded`
 
@@ -511,6 +666,32 @@ rejection also when the caller had left first.
 **What to do.** Nothing in code. Expect `.failed` to rise by the vendor failures that used to hide behind hangups,
 and `.failed` to stop moving during host shutdowns; `started - completed - failed - cancelled` is still what is in
 flight. See the bridge's README, *When the conversation ends*.
+
+### An OpenAI Realtime event whose JSON the bridge cannot decode no longer ends the call
+
+**What changed.** The OpenAI Realtime bridge decoded each vendor event with nothing around the decode, so one event
+whose JSON it could not decode (a member of the wrong type, say) ended the conversation while the caller was on the
+line: the session was counted in `openai_realtime.sessions.failed`, and under the session broker the caller was hung up.
+Now the call goes on:
+
+- An `error` event whose JSON cannot be decoded is reported as a decoded one is: one `RealtimeErrorEvent` on `Events`,
+  whose `Message` is the raw text of what OpenAI sent, and the same Error-level log line. It is not counted as a
+  failure.
+- Any other event whose JSON cannot be decoded is skipped, logged once at Warning and counted on
+  `openai_realtime.frames.unparseable` (meter `Verbara.Sdk.VoiceAi.OpenAiRealtime`, tagged `voiceai.provider` =
+  `OpenAiRealtime`). A function call that cannot be decoded runs no function and sends no answer to OpenAI. The
+  transcript and audio that follow it reach the caller.
+
+No signature changes. An event that is decoded but whose handling fails, such as an `Events` subscriber that throws or
+an audio delta whose `delta` is not valid base64, still ends the session as before.
+
+**Who is affected.** A dashboard or alert on `openai_realtime.sessions.failed`: an event whose JSON cannot be decoded no
+longer counts there. Code that reads `RealtimeErrorEvent.Message` as OpenAI's `error.message`: for an `error` event
+whose JSON the bridge could not decode, it is the whole frame.
+
+**What to do.** To see the events the bridge skipped, watch `openai_realtime.frames.unparseable`. Treat a
+`RealtimeErrorEvent.Message` as text to log, not as a fixed shape. See the bridge's README, *When the conversation
+ends*.
 
 ## Push webhooks
 

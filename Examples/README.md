@@ -6,7 +6,7 @@ Every example is a self-contained project you can build and run individually.
 ## Prerequisites
 
 - .NET 10 SDK (10.0.100+)
-- Asterisk 18+ for examples that connect to a live PBX (AMI, AGI, ARI, Live, Sessions)
+- Asterisk 22 LTS or 23 Standard (see `docs/guides/asterisk-version-matrix.md`) for examples that connect to a live PBX (AMI, AGI, ARI, Live, Sessions)
 - Provider API keys for VoiceAi examples (AssemblyAI, Cartesia, Speechmatics, OpenAI)
 - Docker for Redis/PostgreSQL session store examples
 - NATS server for the NatsBridge example
@@ -40,7 +40,7 @@ dotnet run --project Examples/{ExampleName}/
 | [AriStasisExample](AriStasisExample/) | ARI WebSocket connection and Stasis event handling |
 | [AriChannelControlExample](AriChannelControlExample/) | ARI channel origination and bridge management |
 | [AriOutboundExample](AriOutboundExample/) | ARI outbound WebSocket listener (Asterisk connects to your app) |
-| [WebSocketMediaExample](WebSocketMediaExample/) | chan_websocket audio streaming and JSON control protocol (Asterisk 22.8+/23.2+) |
+| [WebSocketMediaExample](WebSocketMediaExample/) | chan_websocket audio streaming and control messages, plain text or JSON (Asterisk 22.8+/23.2+) |
 
 ### Live API
 

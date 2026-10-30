@@ -6,7 +6,7 @@
 #     --build-arg ASTERISK_BASE_IMAGE="$(awk '$1 == "23" { print $2 }' docker/asterisk-base-images.txt)" ...
 ARG ASTERISK_VERSION=22
 ARG CODEC_OPUS_VERSION=22.0_1.3.0
-ARG ASTERISK_BASE_IMAGE=andrius/asterisk:22.10.1_debian-trixie-6bb254a@sha256:212326bd3f973a597be9e4747be5d6653802e4950159e95aa7d728e394de2012
+ARG ASTERISK_BASE_IMAGE=andrius/asterisk:22.11.0_debian-trixie-c6e8a0e@sha256:d6333b8b331563c5887b98b12da9371ef48317e657d17d81770fe085f335041d
 
 FROM ${ASTERISK_BASE_IMAGE}
 

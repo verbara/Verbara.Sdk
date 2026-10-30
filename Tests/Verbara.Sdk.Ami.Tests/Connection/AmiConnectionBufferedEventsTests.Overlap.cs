@@ -392,10 +392,16 @@ public sealed partial class AmiConnectionBufferedEventsTests
             return peer;
         }, PeerCts.Token);
 
+        /// <summary>
+        /// Registers the hold of <see cref="HeldPeer"/>, then has the peer send it and waits until its dispatch is held.
+        /// The hold is registered before the write: the reader can read and dispatch the event before this method resumes
+        /// from the write, and a dispatch that finds no hold registered runs straight through.
+        /// </summary>
         public async Task HoldFirstDispatchAsync(PipedSocket socket)
         {
+            var entered = Recorder.Entered(HeldPeer);
             (await socket.WriteEventAsync("PeerStatus", [new("Peer", HeldPeer)])).Should().BeTrue("the peer sends the first event");
-            (await CompletesWithinBoundAsync(Recorder.Entered(HeldPeer))).Should().BeTrue(
+            (await CompletesWithinBoundAsync(entered)).Should().BeTrue(
                 "the handler receives the first event and holds its dispatch");
         }
 

@@ -21,12 +21,14 @@ Because the example does not `AddVerbara(...)` itself, no spans or metrics will 
 
 ## OpenTelemetry equivalent
 
-Add the three OpenTelemetry packages to `Directory.Packages.props`:
+Reference the three OpenTelemetry packages from the project. The repository's `Directory.Packages.props` pins their
+versions; outside this repository, give the core `OpenTelemetry` package and every exporter the same version, because
+an exporter older than the core package can drop telemetry without an error:
 
 ```xml
-<PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.10.0" />
-<PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.10.0" />
-<PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.10.0" />
+<PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+<PackageReference Include="OpenTelemetry.Exporter.Console" />
+<PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
 ```
 
 Then replace the listeners with:

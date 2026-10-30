@@ -8,7 +8,7 @@
 ## Prerequisites
 
 - **.NET 10.0.100+** (pinned in `global.json`)
-- **Asterisk 18+** with AMI enabled (tested with Asterisk 18, 20, 22, and 23)
+- **Asterisk 22 LTS or 23 Standard** with AMI enabled (CI runs both; 20 and earlier are not supported — see the [version support matrix](guides/asterisk-version-matrix.md))
 - For ARI: Asterisk HTTP and WebSocket enabled
 - For Voice AI: API keys for your chosen providers (Deepgram, ElevenLabs, OpenAI, Azure, Google)
 
@@ -213,14 +213,16 @@ public class MyConversationHandler : IConversationHandler
 | `Verbara.Sdk.VoiceAi.TurnDetection` | ML-based turn detector (Pipecat smart-turn-v3.2 ONNX) — drop-in replacement for `SilenceTurnDetector` |
 | `Verbara.Sdk.VoiceAi.Testing` | Fakes for unit testing Voice AI pipelines (STT/TTS/handler/turn-detector) |
 
-> All Voice AI packages expose a `Meter`, `ActivitySource` and `IHealthCheck` — discoverable at runtime through `VerbaraTelemetry.ActivitySourceNames` and `VerbaraTelemetry.MeterNames` (see `Verbara.Sdk.Hosting`).
+> Five Voice AI packages ship an `IHealthCheck`: `VoiceAi`, `VoiceAi.AudioSocket`, `VoiceAi.Stt`, `VoiceAi.Tts` and `VoiceAi.OpenAiRealtime`. Three publish an `ActivitySource` (`Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.AudioSocket`, `Verbara.Sdk.VoiceAi.OpenAiRealtime`), and five meters cover the stack (those three names plus `Verbara.Sdk.VoiceAi.Stt` and `Verbara.Sdk.VoiceAi.Tts`, which `Verbara.Sdk.VoiceAi` publishes for the STT and TTS providers). `Audio`, `VoiceAi.TurnDetection` and `VoiceAi.Testing` publish none. All names are listed at runtime in `VerbaraTelemetry.ActivitySourceNames` and `VerbaraTelemetry.MeterNames` (see `Verbara.Sdk.Hosting`).
 
-### Push (2 packages)
+### Push (4 packages)
 
 | Package | Description |
 |---------|-------------|
 | `Verbara.Sdk.Push` | Domain-layer push event bus: `IPushEventBus`, hierarchical topic routing (`TopicPattern` with `*` / `**` / `{self}`), `ISubscriptionAuthorizer` |
 | `Verbara.Sdk.Push.AspNetCore` | Server-Sent Events delivery endpoints on top of `IPushEventBus`: `MapPushEndpoints(prefix)` |
+| `Verbara.Sdk.Push.Nats` | Publishes Push bus events to a NATS subject hierarchy that mirrors the Push topic tree |
+| `Verbara.Sdk.Push.Webhooks` | Outbound HTTP webhook delivery from the Push bus: topic-pattern subscriptions, HMAC-SHA256 signature, exponential retry/backoff |
 
 ### Source Generators (1 analyzer)
 
@@ -437,45 +439,13 @@ All projects enforce `TreatWarningsAsErrors`. The build must produce zero warnin
 
 ```
 Verbara.Sdk/
-|-- Verbara.Sdk/
-|-- Verbara.Sdk.Ami/
-|-- Verbara.Sdk.Ami.SourceGenerators/
-|-- Verbara.Sdk.Agi/
-|-- Verbara.Sdk.Ari/
-|-- Verbara.Sdk.Live/
-|-- Verbara.Sdk.Activities/
-|-- Verbara.Sdk.Sessions/
-|-- Verbara.Sdk.Config/
-|-- Verbara.Sdk.Hosting/
-|-- Verbara.Sdk.Audio/
-|-- Verbara.Sdk.VoiceAi/
-|-- Verbara.Sdk.VoiceAi.AudioSocket/
-|-- Verbara.Sdk.VoiceAi.Stt/
-|-- Verbara.Sdk.VoiceAi.Tts/
-|-- Verbara.Sdk.VoiceAi.OpenAiRealtime/
-|-- Verbara.Sdk.VoiceAi.Testing/
-|-- Examples/
-|   |-- BasicAmiExample/
-|   |-- AmiAdvancedExample/
-|   |-- FastAgiServerExample/
-|   |-- AriChannelControlExample/
-|   |-- AriStasisExample/
-|   |-- LiveApiExample/
-|   |-- MultiServerExample/
-|   |-- PbxActivitiesExample/
-|   |-- SessionExample/
-|   |-- SessionExtensionsExample/
-|   |-- VoiceAiExample/
-|   |-- OpenAiRealtimeExample/
-|   +-- AgiIvrExample/
-|-- Tests/
-|   |-- Verbara.Sdk.Ami.Tests/
-|   |-- Verbara.Sdk.Agi.Tests/
-|   |-- Verbara.Sdk.Live.Tests/
-|   |-- Verbara.Sdk.Benchmarks/
-|   +-- ...
-+-- docker/
-    +-- docker-compose.test.yml
+|-- src/          # 29 packages: 9 core, 8 Voice AI, 4 Push, 2 Sessions stores (Redis, Postgres),
+|                 # 2 Cluster (Primitives, Postgres), Data.Npgsql, Resilience, OpenTelemetry,
+|                 # and the Ami.SourceGenerators analyzer
+|-- Examples/     # 25 runnable example applications (see Examples/README.md)
+|-- Tests/        # unit, functional and integration test projects, plus the benchmarks
+|-- tools/        # AOT canary and repository scripts
++-- docker/       # Asterisk test image and Docker Compose stacks for 22 and 23
 ```
 
 ---
@@ -500,7 +470,7 @@ services.AddVerbara(options =>
     options.AgiMappingStrategy = new SimpleMappingStrategy();
 
     // Event pump tuning (optional)
-    options.EventPumpCapacity = 10_000; // default
+    options.Ami.EventPumpCapacity = 20_000; // default
 });
 
 // Or from IConfiguration

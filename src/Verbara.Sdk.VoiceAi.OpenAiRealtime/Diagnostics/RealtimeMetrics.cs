@@ -87,6 +87,21 @@ public static class RealtimeMetrics
         Meter.CreateCounter<long>("openai_realtime.sessions.close_unanswered", "sessions",
             "OpenAI Realtime sessions whose close OpenAI did not answer within 10 s after the caller hung up; each is also counted as completed");
 
+    /// <summary>
+    /// Whole OpenAI Realtime events the bridge could not read and skipped while it kept serving the call: an
+    /// event that failed to deserialize and is not an <c>error</c> event. Tagged <c>voiceai.provider</c>. An
+    /// unreadable <c>error</c> event is published as an error event instead and is not counted here.
+    /// Internal: the instrument is named on the meter, which is how a host reads it, and adding it moves no
+    /// public API.
+    /// </summary>
+    internal static readonly Counter<long> FramesUnparseable =
+        Meter.CreateCounter<long>("openai_realtime.frames.unparseable", "events",
+            "OpenAI Realtime events the bridge could not read and skipped");
+
+    /// <summary>Counts one skipped event from <paramref name="provider"/>.</summary>
+    internal static void CountUnparseable(string provider) =>
+        FramesUnparseable.Add(1, new KeyValuePair<string, object?>("voiceai.provider", provider));
+
     // --- Histograms ---
 
     /// <summary>

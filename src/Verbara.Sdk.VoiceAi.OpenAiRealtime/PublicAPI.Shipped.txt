@@ -153,3 +153,8 @@ static Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeTranscriptEvent.operator ==(Ve
 virtual Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.EqualityContract.get -> System.Type!
 virtual Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.Equals(Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent? other) -> bool
 virtual Verbara.Sdk.VoiceAi.OpenAiRealtime.RealtimeEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.FunctionCallTimeout.get -> System.TimeSpan
+Verbara.Sdk.VoiceAi.OpenAiRealtime.OpenAiRealtimeOptions.FunctionCallTimeout.set -> void
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.FunctionCallsTimedOut -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsCancelled -> System.Diagnostics.Metrics.Counter<long>!
+static readonly Verbara.Sdk.VoiceAi.OpenAiRealtime.Diagnostics.RealtimeMetrics.SessionsCloseUnanswered -> System.Diagnostics.Metrics.Counter<long>!
