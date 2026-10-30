@@ -33,7 +33,7 @@ attribute counts fall back to `OTEL_ATTRIBUTE_COUNT_LIMIT`; scope attributes fro
 `OTEL_ATTRIBUTE_COUNT_LIMIT`; blobs that an earlier version wrote to the experimental disk-retry storage are not resent.
 The SDK's own telemetry triggers none of these. No public API change.
 
-### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.20 (#474, #NNN)
+### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.20 (#474, #508)
 
 `Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.20` instead of `>= 3.3.1`, and its
 `Microsoft.Extensions.*` dependencies rise from `>= 10.0.5` to `>= 10.0.13`, the floor 3.4.20 sets. Since 3.4.0, StackExchange.Redis opens a separate
