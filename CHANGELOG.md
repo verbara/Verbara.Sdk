@@ -33,18 +33,17 @@ attribute counts fall back to `OTEL_ATTRIBUTE_COUNT_LIMIT`; scope attributes fro
 `OTEL_ATTRIBUTE_COUNT_LIMIT`; blobs that an earlier version wrote to the experimental disk-retry storage are not resent.
 The SDK's own telemetry triggers none of these. No public API change.
 
-### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.5 (#474)
+### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.20 (#474, #NNN)
 
-`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.5` instead of `>= 3.3.1`; its
-`Microsoft.Extensions.*` dependencies stay at `>= 10.0.5`. Since 3.4.0, StackExchange.Redis opens a separate
+`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.20` instead of `>= 3.3.1`, and its
+`Microsoft.Extensions.*` dependencies rise from `>= 10.0.5` to `>= 10.0.13`, the floor 3.4.20 sets. Since 3.4.0, StackExchange.Redis opens a separate
 subscription connection under RESP3, as it always did under RESP2, so the interactive connection is no longer subject
-to the server's much tighter `client-output-buffer-limit pubsub`. Measured against Redis 7 with default settings, a
+to the server's much tighter `client-output-buffer-limit pubsub`. Measured on 3.4.5 against Redis 7 with default settings, a
 store registered with `UseRedis(o => o.ConfigurationString = ...)` now holds two client connections per server
 instead of one; the second carries only the library's configuration channel. Allow for it in `maxclients` and in
 connection-count alerts. To keep one connection, add `sharedSubscriptionConnection=true` to the configuration string,
 after checking the server's pub/sub output-buffer limit against your largest replies. A store given its own
 `IConnectionMultiplexer` follows the application's StackExchange.Redis version. No public API change.
-
 
 ## [2.9.0] - 2026-10-28
 
