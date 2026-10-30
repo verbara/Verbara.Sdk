@@ -538,12 +538,192 @@ def _bridges_and_conference(tap: Tap):
     return steps
 
 
+_PARKING_EXTENSIONS = """[general]
+static = yes
+writeprotect = no
+
+[capture]
+; the parking spaces (701-720) are extensions of the lot's context
+include => parkedcalls
+; a caller ID change in mid-call, then a jump into another context
+exten => callerid,1,Answer()
+ same => n,Wait(1)
+ same => n,Set(CALLERID(num)=7105)
+ same => n,Set(CALLERID(name)=Capture Changed)
+ same => n,Goto(capture-hop,hop,1)
+; a call that waits until the tap redirects it to `redirected`
+exten => hold,1,Answer()
+ same => n,Wait(8)
+ same => n,Hangup()
+exten => redirected,1,NoOp(redirected)
+ same => n,Wait(1)
+ same => n,Hangup()
+; parks itself in the default lot, silently: picked up, or given up by its caller
+exten => park,1,Answer()
+ same => n,Park(default,s)
+ same => n,Hangup()
+; the same, with a 3 s parking timeout instead of the lot's 20 s
+exten => park-short,1,Answer()
+ same => n,Park(default,st(3))
+ same => n,Hangup()
+
+[capture-hop]
+exten => hop,1,NoOp(hop)
+ same => n,Wait(1)
+ same => n,Hangup()
+
+[capture-flash]
+; the answering leg of the PJSIP loopback call
+exten => flash-in,1,Answer()
+ same => n,Wait(3)
+ same => n,Hangup()
+
+[capture-parked-timeout]
+; where a timed-out parkee goes (comebacktoorigin = no): the parker's flattened name, else s
+exten => s,1,Hangup()
+exten => _[A-Za-z0-9].,1,Hangup()
+"""
+
+_PARKING_RES_PARKING = """[general]
+
+[default]
+parkext = 700
+parkpos = 701-720
+context = parkedcalls
+parkingtime = 20
+comebacktoorigin = no
+comebackcontext = capture-parked-timeout
+"""
+
+# A PJSIP channel without leaving the container: the endpoint's contact is the PBX itself, and the
+# INVITE that comes back in is identified by its source address and answered in `capture-flash`.
+_PARKING_PJSIP = """[transport-loopback]
+type = transport
+protocol = udp
+bind = 127.0.0.1:5060
+
+[flash]
+type = aor
+contact = sip:flash-in@127.0.0.1:5060
+
+[flash]
+type = endpoint
+transport = transport-loopback
+context = capture-flash
+disallow = all
+allow = ulaw
+aors = flash
+direct_media = no
+
+[flash]
+type = identify
+endpoint = flash
+match = 127.0.0.1
+"""
+
+
+def _dialplan_and_parking(tap: Tap):
+    """A mid-call caller ID change and a context jump (NewCallerid, Newexten); a Redirect of a
+    waiting channel; a call parked with Park(), listed with ParkedCalls and Parkinglots and picked
+    up by dialling its space; one whose caller gives up while it is parked; one that times out; the
+    SendFlash help text, then SendFlash with Receive, without it, and to a channel that does not
+    exist, on a PJSIP loopback call; and the empty parked-call listing."""
+    steps = []
+
+    def step(name):
+        steps.append(name)
+        tap.marker(name)
+        return len(tap.frames)
+
+    def originate(channel, wait, cid):
+        tap.send([("Action", "Originate"), ("Channel", channel), ("Application", "Wait"),
+                  ("Data", str(wait)), ("CallerID", f"Capture <{cid}>"), ("Async", "true")])
+
+    mark = step("dialplan")
+    originate("Local/callerid@capture/n", 8, "7100")
+    tap.wait_for(_is("NewCallerid", Channel="Local/callerid@capture", CallerIDNum="7105"), 20, mark,
+                 "the NewCallerid of 7105")
+    tap.wait_count(_is("Hangup", Channel="Local/callerid@capture"), 2, 20, mark, "caller ID hangups")
+    tap.pump(1.0)
+
+    mark = step("redirect")
+    originate("Local/hold@capture/n", 12, "7101")
+    held = tap.wait_for(lambda f: f.get("Event") == "Newexten" and f.get("Exten") == "hold"
+                        and f.get("Application") == "Wait", 20, mark, "the hold extension's Wait")
+    tap.action([("Action", "Redirect"), ("Channel", held["Channel"]), ("Context", "capture"),
+                ("Exten", "redirected"), ("Priority", "1")])
+    tap.wait_for(_is("Newexten", Channel=held["Channel"], Exten="redirected"), 20, mark,
+                 "the Newexten of the redirect")
+    tap.wait_count(_is("Hangup", Channel="Local/hold@capture"), 2, 20, mark, "the held call's hangups")
+    tap.pump(1.0)
+
+    mark = step("park")
+    originate("Local/park@capture/n", 12, "7102")
+    parked = tap.wait_for(_is("ParkedCall", ParkeeChannel="Local/park@capture"), 20, mark,
+                          "the ParkedCall")
+    space = parked["ParkingSpace"]
+    tap.pump(0.5)
+    step("parked-list")
+    tap.list_action([("Action", "ParkedCalls")])
+    tap.list_action([("Action", "Parkinglots")])
+    mark = step("unpark")
+    originate(f"Local/{space}@capture/n", 2, "7103")
+    tap.wait_for(lambda f: f.get("Event") == "UnParkedCall" and f.get("ParkingSpace") == space, 20, mark,
+                 f"the UnParkedCall of space {space}")
+    tap.wait_count(_is("Hangup", Channel="Local/park@capture"), 2, 20, mark, "the parkee's hangups")
+    tap.wait_count(_is("Hangup", Channel=f"Local/{space}@capture"), 2, 20, mark, "the retriever's hangups")
+    tap.pump(1.0)
+
+    mark = step("giveup")
+    originate("Local/park@capture/n", 2, "7104")
+    tap.wait_for(_is("ParkedCallGiveUp", ParkeeChannel="Local/park@capture"), 20, mark,
+                 "the ParkedCallGiveUp")
+    tap.wait_count(_is("Hangup", Channel="Local/park@capture"), 2, 20, mark, "the given-up call's hangups")
+    tap.pump(1.0)
+
+    mark = step("timeout")
+    originate("Local/park-short@capture/n", 15, "7106")
+    tap.wait_for(_is("ParkedCallTimeOut", ParkeeChannel="Local/park-short@capture"), 20, mark,
+                 "the ParkedCallTimeOut")
+    tap.wait_count(_is("Hangup", Channel="Local/park-short@capture"), 2, 20, mark,
+                   "the timed-out call's hangups")
+    tap.pump(1.0)
+
+    step("send-flash-help")
+    tap.action([("Action", "Command"), ("Command", "manager show command SendFlash")])
+
+    mark = step("send-flash")
+    originate("PJSIP/flash", 10, "7107")
+    tap.wait_count(_is("Newstate", Channel="PJSIP/flash-", ChannelStateDesc="Up"), 2, 20, mark,
+                   "both PJSIP legs up")
+    outbound = tap.wait_for(_is("Newchannel", Channel="PJSIP/flash-"), 1, mark, "the PJSIP Newchannel")
+    tap.action([("Action", "SendFlash"), ("Channel", outbound["Channel"]), ("Receive", "true")])
+    tap.action([("Action", "SendFlash"), ("Channel", outbound["Channel"])])
+    tap.action([("Action", "SendFlash"), ("Channel", "PJSIP/capture-no-such-channel")])
+    tap.wait_count(_is("Hangup", Channel="PJSIP/flash-"), 2, 20, mark, "the PJSIP legs' hangups")
+    tap.pump(1.0)
+
+    step("parked-empty")
+    tap.list_action([("Action", "ParkedCalls")])
+    tap.pump(0.5)
+    step("done")
+    return steps
+
+
 WORKLOADS = {
     "bridges-and-conference": {
         "description": "Local call; two-party bridge + BridgeList/BridgeInfo/Status; two-participant "
                        "ConfBridge + ConfbridgeListRooms/ConfbridgeList/BridgeList; empty listings.",
         "files": {"extensions.conf": _BRIDGES_EXTENSIONS, "confbridge.conf": _BRIDGES_CONFBRIDGE},
         "run": _bridges_and_conference,
+    },
+    "dialplan-and-parking": {
+        "description": "Mid-call CALLERID change + Goto (NewCallerid, Newexten); Redirect; Park() picked "
+                       "up by its space, given up and timed out + ParkedCalls/Parkinglots; SendFlash "
+                       "help, with Receive, without, and to a missing channel on a PJSIP loopback call.",
+        "files": {"extensions.conf": _PARKING_EXTENSIONS, "res_parking.conf": _PARKING_RES_PARKING,
+                  "pjsip.conf": _PARKING_PJSIP},
+        "run": _dialplan_and_parking,
     },
 }
 

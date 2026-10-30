@@ -255,13 +255,19 @@ class ImageAndNameTests(unittest.TestCase):
 
 
 class _FakePbx(threading.Thread):
-    """Answers each action from a script: {Action: [frames to send after it]} with ActionID filled."""
+    """Answers each action from a script: {Action: [frames to send after it]} with ActionID filled.
+
+    A script value may also be a callable that takes the action's headers and returns the frames,
+    so a fake can answer the same action differently by its arguments. Every action received is
+    kept in `received`, in order.
+    """
 
     def __init__(self, sock, script):
         super().__init__(daemon=True)
         self.sock = sock
         self.script = script
         self.sent = bytearray()
+        self.received = []
 
     def _send(self, data):
         self.sent += data
@@ -279,7 +285,9 @@ class _FakePbx(threading.Thread):
                 while b"\r\n\r\n" in buf:
                     raw, buf = buf.split(b"\r\n\r\n", 1)
                     h = cap.headers(raw + b"\r\n\r\n")
-                    for template in self.script.get(h.get("Action"), []):
+                    self.received.append(h)
+                    entry = self.script.get(h.get("Action"), [])
+                    for template in (entry(h) if callable(entry) else entry):
                         self._send(template.replace(b"{id}", h["ActionID"].encode()))
         except OSError:
             return
@@ -344,6 +352,177 @@ class TapTests(unittest.TestCase):
             pbx.join(2)
 
         self.assertIn("a frame that never comes", str(caught.exception))
+
+
+def _ev(*pairs):
+    return frame(*pairs)
+
+
+def _hangups(*channels):
+    return [_ev(("Event", "Hangup"), ("Channel", c), ("Cause", "16")) for c in channels]
+
+
+class _ParkingPbx:
+    """The answers a PBX gives the dialplan-and-parking workload, in a fake's script shape.
+
+    The parking space is 705, not the first one of the lot, so a workload that hard-codes the
+    space it picks up from fails here.
+    """
+
+    SPACE = "705"
+    FLASH_OUT = "PJSIP/flash-00000007"
+    FLASH_IN = "PJSIP/flash-00000008"
+    HOLD = "Local/hold@capture-00000003;2"
+
+    def __init__(self):
+        self.parks = 0
+
+    def ok(self, message="Success"):
+        return b"Response: Success\r\nActionID: {id}\r\nMessage: " + message.encode() + b"\r\n\r\n"
+
+    def script(self):
+        return {
+            "Login": [self.ok("Authentication accepted")],
+            "UserEvent": lambda h: [self.ok("Event Sent"),
+                                    _ev(("Event", "UserEvent"), ("UserEvent", h["UserEvent"]),
+                                        ("Step", h.get("Step", "")), ("ActionID", h["ActionID"]))],
+            "Originate": self.originate,
+            "Redirect": lambda h: [self.ok("Redirect successful"),
+                                   _ev(("Event", "Newexten"), ("Channel", self.HOLD), ("Context", "capture"),
+                                       ("Exten", "redirected"), ("Priority", "1"), ("Application", "NoOp")),
+                                   *_hangups(self.HOLD, "Local/hold@capture-00000003;1")],
+            "ParkedCalls": [b"Response: Success\r\nActionID: {id}\r\nEventList: start\r\n\r\n",
+                            b"Event: ParkedCallsComplete\r\nActionID: {id}\r\nEventList: Complete\r\n\r\n"],
+            "Parkinglots": [b"Response: Success\r\nActionID: {id}\r\nEventList: start\r\n\r\n",
+                            b"Event: ParkinglotsComplete\r\nActionID: {id}\r\nEventList: Complete\r\n\r\n"],
+            "Command": [self.ok("Command output follows")],
+            "SendFlash": lambda h: [self.ok() if h.get("Channel") == self.FLASH_OUT else
+                                    b"Response: Error\r\nActionID: {id}\r\nMessage: No such channel\r\n\r\n"],
+            "Logoff": [b"Response: Goodbye\r\nActionID: {id}\r\n\r\n"],
+        }
+
+    def originate(self, h):
+        channel = h["Channel"]
+        queued = [self.ok("Originate successfully queued")]
+        if channel == "Local/callerid@capture/n":
+            return queued + [
+                _ev(("Event", "Newexten"), ("Channel", "Local/callerid@capture-00000001;2"),
+                    ("Context", "capture"), ("Exten", "callerid"), ("Priority", "1"), ("Application", "Answer")),
+                _ev(("Event", "NewCallerid"), ("Channel", "Local/callerid@capture-00000001;2"),
+                    ("CallerIDNum", "7105"), ("CID-CallingPres", "0 (Presentation Allowed, Not Screened)")),
+                *_hangups("Local/callerid@capture-00000001;2", "Local/callerid@capture-00000001;1")]
+        if channel == "Local/hold@capture/n":
+            return queued + [_ev(("Event", "Newexten"), ("Channel", self.HOLD), ("Context", "capture"),
+                                 ("Exten", "hold"), ("Priority", "2"), ("Application", "Wait"))]
+        if channel in ("Local/park@capture/n", "Local/park-short@capture/n"):
+            self.parks += 1
+            n = f"{self.parks:08d}"
+            stem = channel[: -len("/n")].replace("@capture", "@capture-" + n)
+            parked = queued + [_ev(("Event", "ParkedCall"), ("ParkeeChannel", stem + ";2"),
+                                   ("ParkingSpace", self.SPACE), ("ParkingLot", "default"))]
+            if channel.startswith("Local/park-short"):
+                return parked + [_ev(("Event", "ParkedCallTimeOut"), ("ParkeeChannel", stem + ";2"),
+                                     ("ParkingSpace", self.SPACE))] + _hangups(stem + ";2", stem + ";1")
+            if self.parks == 2:  # the give-up park: its caller leaves while it is parked
+                return parked + [_ev(("Event", "ParkedCallGiveUp"), ("ParkeeChannel", stem + ";2"),
+                                     ("ParkingSpace", self.SPACE))] + _hangups(stem + ";1", stem + ";2")
+            return parked
+        if channel == f"Local/{self.SPACE}@capture/n":
+            return queued + [_ev(("Event", "UnParkedCall"), ("ParkeeChannel", "Local/park@capture-00000001;2"),
+                                 ("ParkingSpace", self.SPACE))] + _hangups(
+                f"Local/{self.SPACE}@capture-00000009;2", f"Local/{self.SPACE}@capture-00000009;1",
+                "Local/park@capture-00000001;2", "Local/park@capture-00000001;1")
+        if channel == "PJSIP/flash":
+            return queued + [
+                _ev(("Event", "Newchannel"), ("Channel", self.FLASH_OUT), ("ChannelStateDesc", "Down")),
+                _ev(("Event", "Newchannel"), ("Channel", self.FLASH_IN), ("ChannelStateDesc", "Ring")),
+                _ev(("Event", "Newstate"), ("Channel", self.FLASH_IN), ("ChannelStateDesc", "Up")),
+                _ev(("Event", "Newstate"), ("Channel", self.FLASH_OUT), ("ChannelStateDesc", "Up")),
+                *_hangups(self.FLASH_IN, self.FLASH_OUT)]
+        return [b"Response: Error\r\nActionID: {id}\r\nMessage: Originate failed\r\n\r\n"]
+
+
+class DialplanAndParkingWorkloadTests(unittest.TestCase):
+    _NAME = "dialplan-and-parking"
+
+    def _run(self):
+        pbx_state = _ParkingPbx()
+        ours, theirs = socket.socketpair()
+        pbx = _FakePbx(theirs, pbx_state.script())
+        pbx.start()
+        try:
+            tap = cap.Tap(ours)
+            tap.pump = lambda seconds: cap.Tap.pump(tap, min(seconds, 0.02))
+            tap.login("capture", "secret")
+            steps = cap.WORKLOADS[self._NAME]["run"](tap)
+            tap.logoff()
+        finally:
+            ours.close()
+            theirs.close()
+            pbx.join(2)
+        return steps, pbx.received, tap
+
+    def test_workloads_ShouldOfferDialplanAndParking_NextToBridgesAndConference(self):
+        self.assertIn("bridges-and-conference", cap.WORKLOADS)
+        self.assertIn(self._NAME, cap.WORKLOADS)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(0, cap.main(["workloads"]))
+
+        self.assertIn(self._NAME + ":", out.getvalue())
+
+    def test_files_ShouldConfigureParkingCallerIdChangeAndALoopbackPjsipChannel(self):
+        files = cap.WORKLOADS[self._NAME]["files"]
+
+        self.assertEqual({"extensions.conf", "res_parking.conf", "pjsip.conf"}, set(files))
+        extensions = files["extensions.conf"]
+        self.assertIn("include => parkedcalls", extensions)
+        self.assertIn("Park(default,s)", extensions)
+        self.assertIn("Park(default,st(3))", extensions)
+        self.assertIn("Set(CALLERID(num)=7105)", extensions)
+        parking = files["res_parking.conf"]
+        self.assertIn("comebacktoorigin = no", parking, "a timed-out parkee must not be dialled back")
+        self.assertIn("context = parkedcalls", parking)
+        pjsip = files["pjsip.conf"]
+        self.assertIn("bind = 127.0.0.1:5060", pjsip, "SIP stays inside the container")
+        self.assertNotIn("0.0.0.0", pjsip)
+        for text in files.values():
+            text.encode("ascii")  # capture() writes them as ascii
+
+    def test_run_ShouldWalkEveryStepInOrder_WhenThePbxAnswersEachShape(self):
+        steps, _received, _tap = self._run()
+
+        self.assertEqual(["dialplan", "redirect", "park", "parked-list", "unpark", "giveup", "timeout",
+                          "send-flash-help", "send-flash", "parked-empty", "done"], steps)
+
+    def test_run_ShouldPickUpTheSpaceTheParkedCallEventNamed(self):
+        _steps, received, _tap = self._run()
+
+        originated = [h["Channel"] for h in received if h.get("Action") == "Originate"]
+        self.assertIn(f"Local/{_ParkingPbx.SPACE}@capture/n", originated)
+        self.assertNotIn("Local/701@capture/n", originated)
+
+    def test_run_ShouldRedirectTheChannelThatRunsTheHoldExtension(self):
+        _steps, received, _tap = self._run()
+
+        redirect = [h for h in received if h.get("Action") == "Redirect"]
+        self.assertEqual(1, len(redirect))
+        self.assertEqual(_ParkingPbx.HOLD, redirect[0]["Channel"])
+        self.assertEqual(("capture", "redirected", "1"),
+                         (redirect[0]["Context"], redirect[0]["Exten"], redirect[0]["Priority"]))
+
+    def test_run_ShouldSendFlashWithReceiveToTheOriginatedPjsipLeg_AndOnceWithoutReceive(self):
+        _steps, received, tap = self._run()
+
+        flashes = [h for h in received if h.get("Action") == "SendFlash"]
+        self.assertEqual([(_ParkingPbx.FLASH_OUT, "true"), (_ParkingPbx.FLASH_OUT, None)],
+                         [(h["Channel"], h.get("Receive")) for h in flashes[:2]])
+        self.assertEqual(3, len(flashes), "the third targets a channel that does not exist")
+        self.assertNotEqual(_ParkingPbx.FLASH_OUT, flashes[2]["Channel"])
+        commands = [h.get("Command") for h in received if h.get("Action") == "Command"]
+        self.assertEqual(["manager show command SendFlash"], commands)
+        errors = [f for f in tap.frames if f.get("Response") == "Error"]
+        self.assertEqual(1, len(errors))
 
 
 if __name__ == "__main__":
