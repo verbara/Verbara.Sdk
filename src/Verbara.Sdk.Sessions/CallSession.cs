@@ -77,6 +77,14 @@ public sealed class CallSession
     // Timestamps
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? DialingAt { get; set; }
+    /// <summary>
+    /// When the SDK first observed the call ringing. It is set when the call enters
+    /// <see cref="CallSessionState.Ringing"/>, or when a leg rings while the call is still
+    /// <see cref="CallSessionState.Created"/> (an originated call rings before any dial names it); in
+    /// that case the ring is recorded and the state does not change. Only the first ring is kept, and
+    /// it is never back-dated, so it can be earlier than <see cref="DialingAt"/>. It is <c>null</c> when
+    /// no ring was observed, including for a call opened from a reload whose ring the SDK never observed.
+    /// </summary>
     public DateTimeOffset? RingingAt { get; set; }
     public DateTimeOffset? QueuedAt { get; set; }
 
@@ -254,6 +262,22 @@ public sealed class CallSession
             return;
 
         State = state;
+    }
+
+    /// <summary>
+    /// Records a ring observed while the session is still in its initial state
+    /// (<see cref="CallSessionState.Created"/>), where the transition table does not let a ring move it.
+    /// It records and never transitions: it stamps <see cref="RingingAt"/> and returns <c>true</c> only for
+    /// a session that is <see cref="CallSessionState.Created"/> with no ring recorded yet; otherwise it
+    /// changes nothing and returns <c>false</c>. Called under <see cref="SyncRoot"/>.
+    /// </summary>
+    internal bool TryRecordRingInInitialState(DateTimeOffset ringingAt)
+    {
+        if (State != CallSessionState.Created || RingingAt is not null)
+            return false;
+
+        RingingAt = ringingAt;
+        return true;
     }
 
     /// <summary>
