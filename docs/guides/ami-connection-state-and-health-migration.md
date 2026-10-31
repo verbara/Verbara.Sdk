@@ -220,9 +220,9 @@ before. An agent that `AgentLogin`, `AgentLogoff`, `AgentConnect` or `AgentCompl
 list was asked for stays as that event left it, because the list is older: a row that reports it
 logged in is not announced once the event has logged it off, and an agent the list omits stays. A
 list cut short or refused leaves the table as it was, where a reload used to leave it empty or
-partial, so a reload that is interrupted or fails no longer costs you the agents. A connection other
-than `AmiConnection` cannot say that a list completed: there the list it delivered replaces the
-table.
+partial, so a reload that is interrupted or fails no longer costs you the agents. That needs an
+`AmiConnection`: over any other connection, a wrapper that forwards to one included, the load does
+not ask how the list ended, so the list as delivered replaces the table.
 
 Only an `AmiConnection` reloads this way. Over an `IAmiConnection` of your own, including a wrapper
 that forwards to an `AmiConnection`, only `Reconnected` reloads: keep the explicit call below.

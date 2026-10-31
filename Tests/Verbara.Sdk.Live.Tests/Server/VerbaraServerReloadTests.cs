@@ -44,6 +44,7 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
     private IReadOnlyList<StatusEvent> _statusReply = [];
     private SnapshotEnding _ending = SnapshotEnding.Completes;
     private CancellationTokenSource? _cancelAfterFirstEntry;
+    private IReadOnlyList<AgentsEvent> _agentsReply = [];
 
     private enum SnapshotEnding
     {
@@ -80,7 +81,13 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
         if (action is not StatusAction)
         {
             if (action is AgentsAction)
+            {
+                foreach (var agent in _agentsReply)
+                    yield return agent;
+
                 _log.ReloadFinished.TrySetResult();
+            }
+
             yield break;
         }
 
@@ -633,6 +640,24 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
         admitted.Should().NotBeNull($"Measured: {Describe()}");
         admitted!.Extension.Should().Be("",
             "an empty Exten passes through as empty, as a live NewChannel's does; it is not turned into null");
+    }
+
+    [Fact]
+    public async Task OnReconnected_ShouldReplaceTheAgentsWithTheListAsDelivered_WhenTheConnectionIsNotAnAmiConnection()
+    {
+        const string Held = "1001";
+        const string Listed = "2001";
+        await GivenAStartedServerHolding();
+        _sut.Agents.OnAgentLogin(Held);
+        _agentsReply = [new AgentsEvent { Agent = Listed, Status = "AGENT_IDLE" }];
+        var replaced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _sut.Agents.AgentLoggedIn += _ => replaced.TrySetResult();
+
+        await WhenTheConnectionReconnects();
+        await replaced.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        _sut.Agents.Agents.Select(a => a.AgentId).Should().Equal(
+            [Listed], "no session says how the list ended here, so what it delivered replaces the table");
     }
 
     [Fact]

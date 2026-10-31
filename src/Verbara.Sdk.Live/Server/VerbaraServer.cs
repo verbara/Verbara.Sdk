@@ -501,9 +501,10 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <para>
     /// The agents are applied last, from a completed <c>Agents</c> list, behind the same wait as the other lists. This
     /// load adds what the list reports and leaves an agent the list omits; only the reload after a reconnect replaces
-    /// the table, in one step, so that until then it reads what it held. A list cut short or refused changes nothing, and
-    /// no load raises <see cref="AgentManager.AgentLoggedOff"/> for an agent it finds gone. An agent an event named after
-    /// the list was asked for stays as that event left it: its row is older.
+    /// the table, in one step, so that until then it reads what it held. Over an <see cref="AmiConnection"/> a list cut
+    /// short or refused changes nothing; over any other connection, a wrapper included, the list counts as delivered. No
+    /// load raises <see cref="AgentManager.AgentLoggedOff"/> for an agent it finds gone. An agent an event named after the
+    /// list was asked for stays as that event left it: its row is older.
     /// </para>
     /// <para>
     /// When Asterisk refuses the <c>Status</c> request, as it does for an AMI user whose write classes allow none of
@@ -1393,9 +1394,11 @@ public sealed class VerbaraServer : IVerbaraServer
             : 1;
 
     /// <summary>
-    /// Reads the <c>Agents</c> list to completion and applies it behind the same fence as the other lists. A list cut
-    /// short or refused changes nothing. A completed one replaces the table on a reload after a reconnect, in one step;
-    /// on any other load, and on a reload whose fence ran out, it only adds, and the reload that wait scheduled replaces.
+    /// Reads the <c>Agents</c> list to completion and applies it behind the same fence as the other lists. Over an
+    /// <see cref="AmiConnection"/> a list cut short or refused changes nothing; over any other connection there is no
+    /// session to ask, so the list counts as delivered. A completed one replaces the table on a reload after a reconnect,
+    /// in one step; on any other load, and on a reload whose fence ran out, it only adds, and the reload that wait
+    /// scheduled replaces.
     /// Each logged-in row is announced as it is applied, and the session is read before each, since a handler can
     /// outlive it: a load stops announcing once its session is gone, and an adding load stops adding.
     /// The fence delivers every event received up to the list's end before the list is applied, and more can follow, so
