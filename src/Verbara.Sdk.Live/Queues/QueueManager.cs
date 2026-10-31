@@ -913,7 +913,7 @@ public sealed class QueueManager
 
     /// <summary>Empties the queue table, without raising or counting anything.</summary>
     /// <remarks>
-    /// Each queue leaves the table and each caller leaves its queue, so a queue a consumer retained reads empty and no
+    /// Each queue leaves the table and each caller leaves its queue, so the <c>Entries</c> of a queue a consumer retained read empty and no
     /// later join lands in it. No <see cref="CallerLeft"/> is raised and <c>live.queue.calls.left</c> does not advance;
     /// the instance the table held for each caller reads <see cref="AsteriskQueueEntry.LeaveNotObserved"/> as
     /// <see langword="true"/>. A reload does not call it: it reconciles the table against Asterisk's snapshot instead.

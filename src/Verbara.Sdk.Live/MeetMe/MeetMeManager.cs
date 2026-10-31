@@ -156,7 +156,7 @@ public sealed class MeetMeManager
     /// <param name="roomNumber">The conference name. A missing or empty value is not applied.</param>
     /// <param name="userNum">The user number Asterisk sent, stored only; <c>0</c> for ConfBridge, which sends none.</param>
     /// <param name="channel">The participant's channel name, which is its key. A missing or empty value is not applied.</param>
-    /// <param name="uniqueId">The join's <c>Uniqueid</c>, stored as data only.</param>
+    /// <param name="uniqueId">The join's <c>Uniqueid</c>, stored, and compared with the held participant's to tell a replacement.</param>
     /// <param name="muted">The muted value the join carried.</param>
     internal void OnUserJoined(string roomNumber, int userNum, string channel, string? uniqueId, bool muted)
     {

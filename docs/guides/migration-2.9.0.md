@@ -302,8 +302,8 @@ instead: the leaves now cover what ended during the outage.
 
 On 2.9.0 a handler cannot tell a leave the reload found from one Asterisk reported. From 2.10.0
 `AsteriskQueueEntry.LeaveNotObserved` and `MeetMeUser.LeaveNotObserved` say what Live observed: `true` when Live removed
-the caller or participant without having observed a report of a leave for its channel name, or of the end of its room,
-and `false` when it observed one. Consumers cannot set them.
+the caller or participant without having observed, before the removal, a report of a leave for its channel name or of
+the end of its room, and `false` when it had. Consumers cannot set them.
 
 ```csharp
 using Verbara.Sdk.Live.Queues;
@@ -322,8 +322,9 @@ Four rules for a consumer:
 
 - An inferred leave carries no Asterisk timestamp or reason. Do not read the moment it was raised as the moment the
   caller or participant left: on a reload it is when Live found them gone.
-- `true` means Live did not see the report; it does not mean Asterisk sent none: a leave Live could not match to a held
-  caller (a renamed channel, a reused name) is not observed, and the next reconciliation reads `true`.
+- `true` means Live had not applied the report when it removed the caller; it does not mean Asterisk sent none: a report
+  can arrive after the removal, and a leave Live could not match to a held caller (a renamed channel, a reused name) is
+  not observed, so the next reconciliation reads `true`.
 - Leaves are matched by channel name: a report that names a reused channel is applied to the caller held under that name,
   which then reads `false` although it did not leave.
 - `RemoveQueue` still raises no `CallerLeft`. Its callers reach no handler; from 2.10.0 `true` reads on the entry the table

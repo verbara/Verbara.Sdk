@@ -135,7 +135,8 @@ static void Watch(VerbaraServer server)
 - A second join for a channel already held in the room replaces that participant and raises
   `UserJoined` again; it does not add a second entry. From 2.10.0, when both joins carry a
   `Uniqueid` and they differ, the participant it replaced reads `Left` and `LeaveNotObserved` as
-  `true`, with no `UserLeft`. Otherwise it is the same participant and reads as it did.
+  `true`, with no `UserLeft`. Otherwise it is the same participant and reads as it did: the
+  instance that join replaced keeps reading `Joined`, so hold the latest one.
 
 ## A participant whose leave names another channel
 
@@ -185,8 +186,9 @@ way.
 On 2.9.0 the two look the same to a `UserLeft` handler: a participant the reload found gone and
 one Asterisk reported leaving. From 2.10.0 `MeetMeUser.LeaveNotObserved` says what Live observed:
 `true` when a completed listing no longer reported the participant, whether it omitted the
-participant or the room, `No active conferences.` included, and `false` when Live observed a
-`ConfbridgeLeave` for its channel name or the `ConfbridgeEnd` of its room. Consumers cannot set it.
+participant or the room, `No active conferences.` included, and `false` when Live had observed a
+`ConfbridgeLeave` for its channel name or the `ConfbridgeEnd` of its room before the removal.
+Consumers cannot set it.
 
 ```csharp
 using Verbara.Sdk.Live.MeetMe;
@@ -204,9 +206,10 @@ static void WatchLeaves(MeetMeManager conferences)
 An inferred leave carries no Asterisk timestamp or reason: the moment `UserLeft` is raised is when
 Live found the participant gone, not when the participant left.
 
-`true` means Live did not see the report; it does not mean Asterisk sent none: a leave Live could
-not match to a held participant (a renamed channel, a reused name) is not observed, and the next
-reconciliation reads `true`. Leaves are matched by channel name: a report that names a reused
+`true` means Live had not applied the report when it removed the participant; it does not mean
+Asterisk sent none: a report can arrive after the removal, and a leave Live could not match to a held
+participant (a renamed channel, a reused name) is not observed, so the next reconciliation reads
+`true`. Leaves are matched by channel name: a report that names a reused
 channel is applied to the participant held under that name, which then reads `false` although it
 did not leave.
 
