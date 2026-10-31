@@ -502,7 +502,8 @@ public sealed class VerbaraServer : IVerbaraServer
     /// The agents are applied last, from a completed <c>Agents</c> list, behind the same wait as the other lists. This
     /// load adds what the list reports and leaves an agent the list omits; only the reload after a reconnect replaces
     /// the table, in one step, so that until then it reads what it held. A list cut short or refused changes nothing, and
-    /// no load raises <see cref="AgentManager.AgentLoggedOff"/> for an agent it finds gone.
+    /// no load raises <see cref="AgentManager.AgentLoggedOff"/> for an agent it finds gone. An agent an event named after
+    /// the list was asked for stays as that event left it: its row is older.
     /// </para>
     /// <para>
     /// When Asterisk refuses the <c>Status</c> request, as it does for an AMI user whose write classes allow none of
@@ -1397,6 +1398,8 @@ public sealed class VerbaraServer : IVerbaraServer
     /// on any other load, and on a reload whose fence ran out, it only adds, and the reload that wait scheduled replaces.
     /// Each logged-in row is announced as it is applied, and the session is read before each, since a handler can
     /// outlive it: a load stops announcing once its session is gone, and an adding load stops adding.
+    /// The fence delivers every event received up to the list's end before the list is applied, and more can follow, so
+    /// neither path applies a row over an event that named its agent after the ask: the row is the older of the two.
     /// </summary>
     private async ValueTask PopulateAgentsAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
         Barriers barriers, CancellationToken cancellationToken)
@@ -1404,9 +1407,14 @@ public sealed class VerbaraServer : IVerbaraServer
         var rows = new List<AgentSnapshotRow>();
         var asked = new AskOutcome();
         var mark = session is not null ? new ListSnapshotMark() : null;
+        var listedFrom = 0L;
         await foreach (var evt in AskWhileAsteriskStartsAsync(
             "Agents", static () => new AgentsAction(), session, states, cancellationToken, asked, mark,
-            onAttempt: rows.Clear))
+            onAttempt: () =>
+            {
+                rows.Clear();
+                listedFrom = Agents.LiveEventMark();
+            }))
         {
             if (evt is AgentsEvent { Agent: { } agent } row)
             {
@@ -1424,7 +1432,7 @@ public sealed class VerbaraServer : IVerbaraServer
         cancellationToken.ThrowIfCancellationRequested();
         if (full && barriers.ReplacesAgents)
         {
-            foreach (var agent in Agents.ReplaceWithSnapshot(rows))
+            foreach (var agent in Agents.ReplaceWithSnapshot(rows, listedFrom))
             {
                 StopIfSessionIsGone(session, states);
                 Agents.AnnounceLogin(agent);
@@ -1436,6 +1444,9 @@ public sealed class VerbaraServer : IVerbaraServer
         foreach (var row in rows)
         {
             StopIfSessionIsGone(session, states);
+            if (Agents.HasLiveEventSince(row.AgentId, listedFrom))
+                continue;
+
             if (!row.LoggedIn)
             {
                 Agents.RegisterAgent(row.AgentId, row.Name);
@@ -1955,14 +1966,17 @@ public sealed class VerbaraServer : IVerbaraServer
 
                 // Agent events
                 case AgentLoginEvent ale:
+                    server.Agents.NoteLiveEvent(ale.Agent ?? "");
                     server.Agents.OnAgentLogin(ale.Agent ?? "", ale.Channel);
                     break;
 
                 case AgentLogoffEvent alo:
+                    server.Agents.NoteLiveEvent(alo.Agent ?? "");
                     server.Agents.OnAgentLogoff(alo.Agent ?? "");
                     break;
 
                 case AgentConnectEvent ace:
+                    server.Agents.NoteLiveEvent(ace.Agent ?? "");
                     server.Agents.OnAgentConnect(ace.Agent ?? "", ace.Channel,
                         ace.LinkedId, ace.Interface);
                     // app_queue's own report that it connected the caller, agent or not. Raised
@@ -1973,6 +1987,7 @@ public sealed class VerbaraServer : IVerbaraServer
                     break;
 
                 case AgentCompleteEvent acoe:
+                    server.Agents.NoteLiveEvent(acoe.Agent ?? "");
                     server.Agents.OnAgentComplete(
                         acoe.Agent ?? "",
                         acoe.TalkTime ?? 0,

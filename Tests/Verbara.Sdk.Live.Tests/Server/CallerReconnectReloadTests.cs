@@ -1334,11 +1334,13 @@ public sealed class CallerReconnectReloadTests
         const string ListedOffLoggedIn = "3002";
         const string UnlistedLoggedIn = "3003";
         const string ListedInUntouched = "3004";
+        const string UnheldLoggedOff = "3005";
         var live = new[]
         {
             ("AgentLogoff", Headers(("Agent", ListedInLoggedOff))),
             ("AgentLogin", Headers(("Agent", ListedOffLoggedIn), ("Channel", "PJSIP/3002-00000001"))),
             ("AgentLogin", Headers(("Agent", UnlistedLoggedIn), ("Channel", "PJSIP/3003-00000002"))),
+            ("AgentLogoff", Headers(("Agent", UnheldLoggedOff))),
         };
         var before = PeerBefore();
         before.Agents = [new ListedAgent(ListedInLoggedOff)];
@@ -1346,6 +1348,7 @@ public sealed class CallerReconnectReloadTests
         after.Agents =
         [
             new ListedAgent(ListedInLoggedOff), new ListedAgent(ListedOffLoggedIn, LoggedIn: false), new ListedAgent(ListedInUntouched),
+            new ListedAgent(UnheldLoggedOff),
         ];
         if (moment == LiveEventMoment.InsideTheList)
             after.EventsInsideAgents = live;
@@ -1389,7 +1392,8 @@ public sealed class CallerReconnectReloadTests
                     $"{ListedInLoggedOff}:{Live.Agents.AgentState.LoggedOff}",
                     $"{ListedOffLoggedIn}:{Live.Agents.AgentState.Available}",
                     $"{UnlistedLoggedIn}:{Live.Agents.AgentState.Available}",
-                    $"{ListedInUntouched}:{Live.Agents.AgentState.Available}"),
+                    $"{ListedInUntouched}:{Live.Agents.AgentState.Available}",
+                    $"{UnheldLoggedOff}:{Live.Agents.AgentState.LoggedOff}"),
                 AgentLogoffs = new[] { ListedInLoggedOff },
                 Logins = Sorted(ListedOffLoggedIn, UnlistedLoggedIn, ListedInUntouched),
             },
