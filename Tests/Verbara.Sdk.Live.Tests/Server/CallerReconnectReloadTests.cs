@@ -1339,8 +1339,8 @@ public sealed class CallerReconnectReloadTests
         {
             ("AgentLogoff", Headers(("Agent", ListedInLoggedOff))),
             ("AgentLogin", Headers(("Agent", ListedOffLoggedIn), ("Channel", "PJSIP/3002-00000001"))),
-            ("AgentLogin", Headers(("Agent", UnlistedLoggedIn), ("Channel", "PJSIP/3003-00000002"))),
             ("AgentLogoff", Headers(("Agent", UnheldLoggedOff))),
+            ("AgentLogin", Headers(("Agent", UnlistedLoggedIn), ("Channel", "PJSIP/3003-00000002"))),
         };
         var before = PeerBefore();
         before.Agents = [new ListedAgent(ListedInLoggedOff)];
@@ -1355,8 +1355,14 @@ public sealed class CallerReconnectReloadTests
 
         await using var rig = await Rig.StartAsync(before, after, route);
         using var fence = new HandlerHold();
+        var lastDelivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         if (moment == LiveEventMoment.BeforeItIsApplied)
         {
+            rig.Run.Server.Agents.AgentLoggedIn += a =>
+            {
+                if (a.AgentId == UnlistedLoggedIn)
+                    lastDelivered.TrySetResult();
+            };
             rig.Run.Server.FenceWaitObserved = (name, _) =>
             {
                 if (name == "Agents")
@@ -1371,7 +1377,7 @@ public sealed class CallerReconnectReloadTests
             foreach (var (eventType, fields) in live)
                 await after.SendEventAsync(eventType, fields);
 
-            await rig.PingAsync();
+            await lastDelivered.Task.WaitAsync(Run.Bound);
             fence.Release();
         }
 
@@ -1413,8 +1419,10 @@ public sealed class CallerReconnectReloadTests
             peer.EventsInsideAgents = [("AgentLogoff", logoff)];
 
         using var fence = new HandlerHold();
+        var delivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         if (moment == LiveEventMoment.BeforeItIsApplied)
         {
+            rig.Run.Server.Agents.AgentLoggedOff += _ => delivered.TrySetResult();
             rig.Run.Server.FenceWaitObserved = (name, _) =>
             {
                 if (name == "Agents")
@@ -1427,7 +1435,7 @@ public sealed class CallerReconnectReloadTests
         {
             await fence.Held.WaitAsync(Run.Bound);
             await peer.SendEventAsync("AgentLogoff", logoff);
-            await rig.PingAsync();
+            await delivered.Task.WaitAsync(Run.Bound);
             fence.Release();
         }
 
