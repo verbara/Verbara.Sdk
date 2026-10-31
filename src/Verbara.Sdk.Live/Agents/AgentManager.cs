@@ -31,7 +31,8 @@ internal static partial class AgentManagerLog
 /// </summary>
 public sealed class AgentManager
 {
-    private readonly ConcurrentDictionary<string, AsteriskAgent> _agents = new();
+    // Replaced whole by ReplaceWithSnapshot, so that a reader sees the table before a reload or after it, never between.
+    private volatile ConcurrentDictionary<string, AsteriskAgent> _agents = new();
     private readonly ILogger _logger;
 
     public event Action<AsteriskAgent>? AgentLoggedIn;
@@ -201,7 +202,49 @@ public sealed class AgentManager
         _agents.Values.Where(predicate);
 
     public void Clear() => _agents.Clear();
+
+    /// <summary>
+    /// Replaces the table, in one step, with what a completed <c>Agents</c> list reports after a reconnect, and returns
+    /// the agents it reports logged in, in the list's order, for <see cref="AnnounceLogin"/>: a new <see cref="AsteriskAgent"/>
+    /// each, with its counters at zero, as the load that clears the table and logs each one in leaves them. An agent the
+    /// list omits leaves the table, and one it reports logged off is held logged off; neither raises
+    /// <see cref="AgentLoggedOff"/>, since no logoff was observed. A row after the first for an agent is ignored.
+    /// </summary>
+    internal IReadOnlyList<AsteriskAgent> ReplaceWithSnapshot(IReadOnlyList<AgentSnapshotRow> rows)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var table = new ConcurrentDictionary<string, AsteriskAgent>();
+        var loggedIn = new List<AsteriskAgent>();
+        foreach (var row in rows)
+        {
+            var agent = new AsteriskAgent { AgentId = row.AgentId, Name = row.Name };
+            if (!table.TryAdd(row.AgentId, agent) || !row.LoggedIn)
+                continue;
+
+            agent.State = AgentState.Available;
+            agent.Channel = row.Channel;
+            agent.LoggedInAt = now;
+            agent.LastStateChangeAt = now;
+            loggedIn.Add(agent);
+        }
+
+        _agents = table;
+        return loggedIn;
+    }
+
+    /// <summary>Logs and raises <see cref="AgentLoggedIn"/> for an agent <see cref="ReplaceWithSnapshot"/> reported logged in.</summary>
+    internal void AnnounceLogin(AsteriskAgent agent)
+    {
+        AgentManagerLog.Login(_logger, agent.AgentId, agent.Channel);
+        AgentLoggedIn?.Invoke(agent);
+    }
 }
+
+/// <summary>
+/// One row of a completed <c>Agents</c> list, copied out of its event: the <c>Agent</c>, <c>Name</c> and
+/// <c>LoggedInChan</c> headers, and whether its <c>Status</c> says the agent is logged in.
+/// </summary>
+internal readonly record struct AgentSnapshotRow(string AgentId, string? Name, string? Channel, bool LoggedIn);
 
 /// <summary>Represents a live Asterisk agent.</summary>
 public sealed class AsteriskAgent : LiveObjectBase

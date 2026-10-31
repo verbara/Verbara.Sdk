@@ -448,8 +448,8 @@ public sealed class VerbaraServer : IVerbaraServer
             // The queue table is not cleared either: the load's completed QueueStatus reconciles it,
             // keeping each caller still waiting with its join time, and counting left each one gone.
             // Nor are the bridge and conference tables: the load's completed bridge and conference
-            // listings reconcile them. The agents table still clears and reloads.
-            Agents.Clear();
+            // listings reconcile them. Nor is the agents table: the load replaces it, in one step, with its
+            // completed Agents list, so that a reload cut short leaves it as it was.
 
             // Re-subscribe observer (the connection is new after reconnect)
             _subscription?.Dispose();
@@ -457,7 +457,7 @@ public sealed class VerbaraServer : IVerbaraServer
 
             // Reload fresh state from Asterisk
             states = new LoadConnectionStates(_connection);
-            await LoadAsync(states, cancellationToken);
+            await LoadAsync(states, cancellationToken, replaceAgents: true);
         }
         catch (AmiNotConnectedException ex)
         {
@@ -492,10 +492,17 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </para>
     /// <para>
     /// When the AMI session ends before the load completes, the load stops and throws, whether or not the connection
-    /// is reconnecting: it sends nothing more, even when the connection is already on a newer session, it reconciles no
-    /// list it read on the session that ended, so it ends no call, and it never returns as if the state it holds were
-    /// complete. The queues and agents it had read stay until the next load. <see cref="StartAsync"/>, by contrast,
-    /// returns when the reconnect loop's reload will follow.
+    /// is reconnecting. It reads its session before each request and each list it applies, so from there it sends
+    /// nothing more, even when the connection is already on a newer session, and it applies no further list, so it ends
+    /// no call on what it read last. What it had applied while the session was up stays until the next load, and it
+    /// never returns as if the state it holds were complete. <see cref="StartAsync"/>, by contrast, returns when the
+    /// reconnect loop's reload will follow.
+    /// </para>
+    /// <para>
+    /// The agents are applied last, from a completed <c>Agents</c> list, behind the same wait as the other lists. This
+    /// load adds what the list reports and leaves an agent the list omits; only the reload after a reconnect replaces
+    /// the table, in one step, so that until then it reads what it held. A list cut short or refused changes nothing, and
+    /// no load raises <see cref="AgentManager.AgentLoggedOff"/> for an agent it finds gone.
     /// </para>
     /// <para>
     /// When Asterisk refuses the <c>Status</c> request, as it does for an AMI user whose write classes allow none of
@@ -568,7 +575,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </remarks>
     /// <param name="cancellationToken">Cancels the read; a cancelled read reconciles nothing.</param>
     /// <exception cref="AmiNotConnectedException">
-    /// The connection is not established, or its AMI session ended before the snapshot completed.
+    /// The connection is not established, or its AMI session ended before the snapshot could be reconciled: while it was
+    /// being read, or while the reconciliation waited for the delivery of a snapshot read to its end. A session replaced
+    /// during that wait counts, although the connection is up by then.
     /// </exception>
     public async ValueTask ReconcileChannelsAsync(CancellationToken cancellationToken = default)
     {
@@ -642,6 +651,9 @@ public sealed class VerbaraServer : IVerbaraServer
 
         /// <summary>The list whose wait ran out first, or <see langword="null"/>.</summary>
         public ListSnapshotMark? DeferredOn { get; set; }
+
+        /// <summary>Whether a completed <c>Agents</c> list replaces the table, as a reload after a reconnect's does.</summary>
+        public bool ReplacesAgents { get; init; }
 
         public LoadSession? Session { get; set; }
         public DeferredQueueReports? QueueReports { get; set; }
@@ -763,9 +775,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// session ends first, it does not run: the reconnect's reload, if one follows, loads the state.
     /// </remarks>
     private async ValueTask LoadAsync(LoadConnectionStates states, CancellationToken cancellationToken,
-        bool scheduledAfterDeferral = false)
+        bool scheduledAfterDeferral = false, bool replaceAgents = false)
     {
-        var barriers = new Barriers();
+        var barriers = new Barriers { ReplacesAgents = replaceAgents };
         var transferred = false;
         Interlocked.Increment(ref _loadsInFlight);
         try
@@ -843,7 +855,8 @@ public sealed class VerbaraServer : IVerbaraServer
                 }
             }
             if (reload && !ending.IsCancellationRequested && barriers.Session is not { IsCurrent: false })
-                await LoadAsync(new LoadConnectionStates(_connection), ending, scheduledAfterDeferral: true);
+                await LoadAsync(new LoadConnectionStates(_connection), ending, scheduledAfterDeferral: true,
+                    replaceAgents: barriers.ReplacesAgents);
         }
         catch (OperationCanceledException) when (ending.IsCancellationRequested)
         {
@@ -926,7 +939,7 @@ public sealed class VerbaraServer : IVerbaraServer
             await LoadQueuesAsync(session, states, activity, barriers, cancellationToken);
 
             request = "Agents";
-            await PopulateAgentsAsync(session, states, cancellationToken);
+            await PopulateAgentsAsync(session, states, activity, barriers, cancellationToken);
         }
         catch (AmiNotConnectedException) when (states.AtStop is null && states.BeganOnASession)
         {
@@ -1176,6 +1189,10 @@ public sealed class VerbaraServer : IVerbaraServer
     {
         ListingRequested?.Invoke(actionName);
 
+        // Not on the session that replaced the one this load began on: that one loads itself.
+        if (session is { IsCurrent: false })
+            throw states.Stop($"the live state load could not send {actionName}, because its AMI session had ended");
+
         var outcome = session is not null || _connection.ReportsEventActionOutcome ? new EventActionOutcome() : null;
         var source = session is not null
             ? mark is not null
@@ -1374,25 +1391,66 @@ public sealed class VerbaraServer : IVerbaraServer
             ? priority
             : 1;
 
-    private async ValueTask PopulateAgentsAsync(
-        LoadSession? session, LoadConnectionStates states, CancellationToken cancellationToken)
+    /// <summary>
+    /// Reads the <c>Agents</c> list to completion and applies it behind the same fence as the other lists. A list cut
+    /// short or refused changes nothing. A completed one replaces the table on a reload after a reconnect, in one step;
+    /// on any other load, and on a reload whose fence ran out, it only adds, and the reload that wait scheduled replaces.
+    /// Each logged-in row is announced as it is applied, and the session is read before each, since a handler can
+    /// outlive it: a load stops announcing once its session is gone, and an adding load stops adding.
+    /// </summary>
+    private async ValueTask PopulateAgentsAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
+        Barriers barriers, CancellationToken cancellationToken)
     {
+        var rows = new List<AgentSnapshotRow>();
+        var asked = new AskOutcome();
+        var mark = session is not null ? new ListSnapshotMark() : null;
         await foreach (var evt in AskWhileAsteriskStartsAsync(
-            "Agents", static () => new AgentsAction(), session, states, cancellationToken))
+            "Agents", static () => new AgentsAction(), session, states, cancellationToken, asked, mark,
+            onAttempt: rows.Clear))
         {
-            if (evt is not AgentsEvent ae || ae.Agent is null)
-                continue;
-
-            var isLoggedOff = string.Equals(ae.Status, "AGENT_LOGGEDOFF", StringComparison.OrdinalIgnoreCase);
-            if (isLoggedOff)
+            if (evt is AgentsEvent { Agent: { } agent } row)
             {
-                Agents.RegisterAgent(ae.Agent, ae.Name);
+                rows.Add(new AgentSnapshotRow(agent, row.Name, row.LoggedInChan,
+                    LoggedIn: !string.Equals(row.Status, "AGENT_LOGGEDOFF", StringComparison.OrdinalIgnoreCase)));
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (asked.Refused)
+            return;
+
+        var full = await AwaitBarrierAsync(session, mark, "Agents", states, ChannelReader.Load.Name, activity, barriers,
+            cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (full && barriers.ReplacesAgents)
+        {
+            foreach (var agent in Agents.ReplaceWithSnapshot(rows))
+            {
+                StopIfSessionIsGone(session, states);
+                Agents.AnnounceLogin(agent);
+            }
+
+            return;
+        }
+
+        foreach (var row in rows)
+        {
+            StopIfSessionIsGone(session, states);
+            if (!row.LoggedIn)
+            {
+                Agents.RegisterAgent(row.AgentId, row.Name);
                 continue;
             }
 
-            Agents.OnAgentLogin(ae.Agent, ae.LoggedInChan);
-            if (ae.Name is not null)
-                Agents.GetById(ae.Agent)?.SetName(ae.Name);
+            Agents.OnAgentLogin(row.AgentId, row.Channel);
+            if (row.Name is not null)
+                Agents.GetById(row.AgentId)?.SetName(row.Name);
+        }
+
+        static void StopIfSessionIsGone(LoadSession? session, LoadConnectionStates states)
+        {
+            if (session is { IsCurrent: false })
+                throw states.Stop("the AMI session ended while the live state load was applying Agents");
         }
     }
 
