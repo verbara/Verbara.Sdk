@@ -83,5 +83,101 @@ public sealed class ConferenceLeaveNotObservedTests
         _left.Should().Equal(new ReadInHandler(Room, ChannelA, LeaveNotObserved: false));
     }
 
+    [Fact]
+    public void Clear_ShouldMarkTheParticipantAConsumerHolds_WhenTheHostEmptiesTheTable()
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA, "a");
+        var held = _sut.GetRoom(Room)!.Users[ChannelA];
+
+        _sut.Clear();
+
+        new { Raised = _left.Count, held.LeaveNotObserved, held.State }.Should().BeEquivalentTo(
+            new { Raised = 0, LeaveNotObserved = true, State = MeetMeUserState.Left },
+            "Clear raises nothing, so the mark is readable only on the instance the table held");
+    }
+
+    [Fact]
+    public void OnUserJoined_ShouldMarkTheReplacedParticipant_WhenAnotherUniqueidTakesTheChannel()
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA, "a");
+        var replaced = _sut.GetRoom(Room)!.Users[ChannelA];
+        var readInHandler = new List<object>();
+        _sut.UserJoined += (_, user) => readInHandler.Add(new
+        {
+            Replaced = new { replaced.LeaveNotObserved, replaced.State },
+            Joined = new { user.UniqueId, user.LeaveNotObserved, user.State },
+        });
+
+        _sut.OnUserJoined(Room, 0, ChannelA, "b");
+
+        new { Left = _left.Count, Joins = readInHandler }.Should().BeEquivalentTo(new
+        {
+            Left = 0,
+            Joins = new object[]
+            {
+                new
+                {
+                    Replaced = new { LeaveNotObserved = true, State = MeetMeUserState.Left },
+                    Joined = new { UniqueId = "b", LeaveNotObserved = false, State = MeetMeUserState.Joined },
+                },
+            },
+        });
+    }
+
+    [Theory]
+    [InlineData("a", "a")]
+    [InlineData(null, "b")]
+    [InlineData("a", null)]
+    [InlineData("", "b")]
+    [InlineData("a", "")]
+    public void OnUserJoined_ShouldLeaveTheReplacedInstanceUnmarked_WhenTheJoinRepeatsTheParticipant(string? held, string? joining)
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA, held);
+        var repeated = _sut.GetRoom(Room)!.Users[ChannelA];
+
+        _sut.OnUserJoined(Room, 0, ChannelA, joining);
+
+        new { Left = _left.Count, repeated.LeaveNotObserved, repeated.State }.Should().BeEquivalentTo(
+            new { Left = 0, LeaveNotObserved = false, State = MeetMeUserState.Joined },
+            "the same Uniqueid, or a side without one, is the same participant, who did not leave");
+    }
+
+    [Fact]
+    public void OnUserLeft_ShouldLeaveTheParticipantToReadTrue_WhenTheReportNamesAChannelLiveDoesNotHold()
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA, "a");
+
+        _sut.OnUserLeft(Room, ChannelB);
+        using var window = _sut.OpenSnapshotWindow();
+        _sut.ReconcileWithSnapshot(window, [], NoRows, removeOmitted: true);
+
+        _left.Should().Equal(new ReadInHandler(Room, ChannelA, LeaveNotObserved: true));
+    }
+
+    [Fact]
+    public void OnUserLeft_ShouldLetTheHandlerReadFalse_WhenALateReportNamesAReusedChannel()
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA, "a");
+        _sut.OnUserJoined(Room, 0, ChannelA, "b");
+
+        // The earlier participant's late report: leaves are matched by channel name, so it removes whoever holds the name.
+        _sut.OnUserLeft(Room, ChannelA);
+
+        _left.Should().Equal(new ReadInHandler(Room, ChannelA, LeaveNotObserved: false));
+    }
+
+    [Fact]
+    public void ReconcileWithSnapshot_ShouldHaveTheMarkFinal_WhenTheLeaveIsPosted()
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA, "a");
+        var readWhenPosted = new List<bool>();
+        _sut.Events.Posted = (_, user) => readWhenPosted.Add(((MeetMeUser)user!).LeaveNotObserved);
+        using var window = _sut.OpenSnapshotWindow();
+
+        _sut.ReconcileWithSnapshot(window, [], NoRows, removeOmitted: true);
+
+        readWhenPosted.Should().Equal([true], "a mark written after the post could reach a handler on another thread late");
+    }
+
     private sealed record ReadInHandler(string Room, string Channel, bool LeaveNotObserved);
 }

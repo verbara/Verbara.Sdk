@@ -75,6 +75,9 @@ public sealed class QueueManager
     // threw between its post and its drain leaves notifications the next drain raises.
     private readonly LiveEventOutbox _events;
 
+    /// <summary>The outbox of this manager's events, exposed for deterministic tests.</summary>
+    internal LiveEventOutbox Events => _events;
+
     // Raises what the outbox holds, unless this thread still holds the window gate: the outermost frame raises then.
     private void RaisePending()
     {
@@ -539,7 +542,7 @@ public sealed class QueueManager
     /// <summary>
     /// A caller removed from the table without an observed leave: counted left with no wait sample, and marked
     /// (<see cref="AsteriskQueueEntry.LeaveNotObserved"/>). <see cref="CallerLeft"/> is raised when
-    /// <paramref name="announce"/> is set; <see cref="CallerLeaveReported"/> never is, since Asterisk sent no leave.
+    /// <paramref name="announce"/> is set; <see cref="CallerLeaveReported"/> never is, since no report was observed.
     /// </summary>
     private void LeftUnobserved(string queueName, AsteriskQueueEntry entry, string reason, bool announce)
     {
@@ -908,10 +911,34 @@ public sealed class QueueManager
             _queuesByMember.GetValueOrDefault(iface)?.TryRemove(queue.Name, out _);
     }
 
+    /// <summary>Empties the queue table, without raising or counting anything.</summary>
+    /// <remarks>
+    /// Each queue leaves the table and each caller leaves its queue, so a queue a consumer retained reads empty and no
+    /// later join lands in it. No <see cref="CallerLeft"/> is raised and <c>live.queue.calls.left</c> does not advance;
+    /// the instance the table held for each caller reads <see cref="AsteriskQueueEntry.LeaveNotObserved"/> as
+    /// <see langword="true"/>. A reload does not call it: it reconciles the table against Asterisk's snapshot instead.
+    /// </remarks>
     public void Clear()
     {
-        _queues.Clear();
-        _queuesByMember.Clear();
+        lock (_windowsLock)
+        {
+            foreach (var (name, queue) in _queues)
+            {
+                lock (queue.SyncRoot)
+                {
+                    if (!_queues.TryRemove(new KeyValuePair<string, AsteriskQueue>(name, queue)))
+                        continue;
+                    queue.RemovedFromTable = true;
+                    foreach (var (key, entry) in queue.Entries)
+                    {
+                        if (queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
+                            entry.MarkLeaveNotObserved();
+                    }
+                }
+            }
+
+            _queuesByMember.Clear();
+        }
     }
 }
 
@@ -1008,23 +1035,35 @@ public sealed class AsteriskQueueEntry
     internal long JoinOrdinal { get; set; }
 
     /// <summary>
-    /// <c>true</c> once Live took this entry out of the table without Asterisk reporting the leave; <c>false</c> for a
-    /// leave Asterisk reported with <c>QueueCallerLeave</c>. Final before <see cref="QueueManager.CallerLeft"/> is raised
-    /// for the entry, and never cleared. Four paths set it:
+    /// What Live observed of this caller's leave, which is not a statement of what Asterisk did: <c>true</c> exactly when
+    /// Live took this entry out of the table without having observed a report of a leave for its channel name before the
+    /// removal; <c>false</c> otherwise. Final before <see cref="QueueManager.CallerLeft"/> is raised for the entry, and
+    /// never cleared. These paths set it:
     /// <list type="bullet">
     /// <item>A completed queue snapshot no longer listed the caller in its queue, or no longer listed the queue.</item>
     /// <item>A channel reconciliation removed the caller's channel.</item>
     /// <item>A join took the channel name the caller was held under: another <c>Uniqueid</c> on that name, or a held
     /// caller re-keyed onto it by a rename.</item>
-    /// <item><see cref="QueueManager.RemoveQueue(string)"/> removed its queue. That raises no
-    /// <see cref="QueueManager.CallerLeft"/>, so this case is readable only on an entry the consumer already holds.</item>
+    /// <item><see cref="QueueManager.RemoveQueue(string)"/> removed its queue.</item>
+    /// <item><see cref="QueueManager.Clear"/> emptied the table.</item>
     /// </list>
+    /// <para>
+    /// Leaves are matched by channel name, so <c>true</c> does not prove Asterisk sent no leave: a report Live could not
+    /// match to a held caller (a renamed channel, a reused name) is not observed, and the next reconciliation reads
+    /// <c>true</c>. A report that names a reused channel is applied to the caller held under that name, which reads
+    /// <c>false</c> although it did not leave.
+    /// </para>
     /// <para>
     /// A leave with this set has no Asterisk timestamp or reason, and records no <c>live.queue.wait_time</c> sample.
     /// </para>
     /// <para>
-    /// <see cref="QueueManager.Clear"/> sets nothing. A rename replaces the entry in the table, so an instance kept from
-    /// before it no longer follows the caller; the instance <see cref="QueueManager.CallerLeft"/> passes always does.
+    /// <see cref="QueueManager.RemoveQueue(string)"/> and <see cref="QueueManager.Clear"/> raise no
+    /// <see cref="QueueManager.CallerLeft"/>, so those two cases are readable only on the instance the table held: the one
+    /// read from <see cref="AsteriskQueue.Entries"/> or passed by the <see cref="QueueManager.CallerJoined"/> that inserted
+    /// the caller, while no rename has re-keyed it. A rename replaces the entry in the table, so an instance kept from
+    /// before it no longer follows the caller, and a <see cref="QueueManager.CallerJoined"/> over a caller already held
+    /// passes the join as reported, an instance no removal marks. The instance
+    /// <see cref="QueueManager.CallerLeft"/> passes is always the one the table held.
     /// </para>
     /// </summary>
     public bool LeaveNotObserved { get; private set; }

@@ -74,6 +74,13 @@ internal sealed class LiveEventOutbox
     /// </summary>
     internal Action? FrameExiting { get; set; }
 
+    /// <summary>
+    /// Null outside deterministic tests; runs on the publishing thread, with the lock that orders the transition still
+    /// held, once a notification is queued, with its first two values. A test reads there what a notification carries
+    /// at the moment it was posted, which no handler can: the outbox raises after the publisher moved on.
+    /// </summary>
+    internal Action<object?, object?>? Posted { get; set; }
+
     /// <summary>Queues a notification. Call it under the lock that orders the transition it reports.</summary>
     internal void Post(Action raise) => Post(InvokeAction, raise, null, null);
 
@@ -107,6 +114,8 @@ internal sealed class LiveEventOutbox
             _tail = entry;
             Volatile.Write(ref _count, _count + 1);
         }
+
+        Posted?.Invoke(arg1, arg2);
     }
 
     /// <summary>

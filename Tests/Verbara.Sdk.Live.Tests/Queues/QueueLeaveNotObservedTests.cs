@@ -102,5 +102,67 @@ public sealed class QueueLeaveNotObservedTests
             "RemoveQueue raises no CallerLeft by its contract, so the mark is readable only on an entry already held");
     }
 
+    [Fact]
+    public void Clear_ShouldMarkTheEntryAConsumerHolds_WhenTheHostEmptiesTheTable()
+    {
+        _queues.OnCallerJoined(Queue, "PJSIP/a-1", "100", 1, "u1", Epoch);
+        var held = _queues.GetByName(Queue)!.Entries["PJSIP/a-1"];
+
+        _queues.Clear();
+
+        new { Raised = _left.Count, held.LeaveNotObserved }.Should().BeEquivalentTo(
+            new { Raised = 0, LeaveNotObserved = true },
+            "Clear raises nothing, so the mark is readable only on the instance the table held");
+    }
+
+    [Fact]
+    public void Clear_ShouldTakeTheEntriesOutOfARetainedQueue_WhenTheHostEmptiesTheTable()
+    {
+        _queues.OnCallerJoined(Queue, "PJSIP/a-1", "100", 1, "u1", Epoch);
+        var retained = _queues.GetByName(Queue)!;
+
+        _queues.Clear();
+
+        new { retained.RemovedFromTable, retained.EntryCount }.Should().BeEquivalentTo(
+            new { RemovedFromTable = true, EntryCount = 0 },
+            "a join in flight must not land in the orphaned queue, and a leave in flight must not find a marked entry");
+    }
+
+    [Fact]
+    public void OnCallerLeft_ShouldLeaveTheCallerToReadTrue_WhenTheReportNamesAChannelLiveDoesNotHold()
+    {
+        _queues.OnCallerJoined(Queue, "PJSIP/a-1", "100", 1, "u1", Epoch);
+
+        _queues.OnCallerLeft(Queue, "PJSIP/renamed-1");
+        _queues.OnChannelRemovedByReconciliation("u1", "PJSIP/a-1");
+
+        _left.Should().Equal(new ReadInHandler(Queue, "u1", LeaveNotObserved: true));
+    }
+
+    [Fact]
+    public void OnCallerLeft_ShouldLetTheHandlerReadFalse_WhenALateReportNamesAReusedChannel()
+    {
+        _queues.OnCallerJoined(Queue, "PJSIP/a-1", "100", 1, "u1", Epoch);
+        _queues.OnCallerJoined(Queue, "PJSIP/a-1", "200", 1, "u2", Epoch);
+        _left.Clear();
+
+        // The earlier caller's late report: leaves are matched by channel name, so it removes whoever holds the name.
+        _queues.OnCallerLeft(Queue, "PJSIP/a-1");
+
+        _left.Should().Equal(new ReadInHandler(Queue, "u2", LeaveNotObserved: false));
+    }
+
+    [Fact]
+    public void OnChannelRemovedByReconciliation_ShouldHaveTheMarkFinal_WhenTheLeaveIsPosted()
+    {
+        _queues.OnCallerJoined(Queue, "PJSIP/a-1", "100", 1, "u1", Epoch);
+        var readWhenPosted = new List<bool>();
+        _queues.Events.Posted = (_, entry) => readWhenPosted.Add(((AsteriskQueueEntry)entry!).LeaveNotObserved);
+
+        _queues.OnChannelRemovedByReconciliation("u1", "PJSIP/a-1");
+
+        readWhenPosted.Should().Equal([true], "a mark written after the post could reach a handler on another thread late");
+    }
+
     private sealed record ReadInHandler(string Queue, string? UniqueId, bool LeaveNotObserved);
 }

@@ -66,6 +66,9 @@ public sealed class MeetMeManager
     // between its post and its drain leaves notifications the next drain raises.
     private readonly LiveEventOutbox _events;
 
+    /// <summary>The outbox of this manager's events, exposed for deterministic tests.</summary>
+    internal LiveEventOutbox Events => _events;
+
     private void RaisePending()
     {
         if (!_windowGate.IsHeldByCurrentThread)
@@ -117,7 +120,9 @@ public sealed class MeetMeManager
     /// Records a participant's join, keyed by <paramref name="channel"/>. The room is created if it
     /// is not held. A join for a channel already held in the room replaces that participant and
     /// raises <see cref="UserJoined"/> again. The participant's <see cref="MeetMeUser.UniqueId"/>
-    /// stays <see langword="null"/>; use the overload that takes the join's unique id to set it.
+    /// stays <see langword="null"/>; use the overload that takes the join's unique id to set it. A
+    /// join without one is taken for the participant it replaces, which keeps its
+    /// <see cref="MeetMeUser.State"/> and <see cref="MeetMeUser.LeaveNotObserved"/>.
     /// </summary>
     /// <param name="roomNumber">The conference name. A missing or empty value is not applied.</param>
     /// <param name="userNum">The user number Asterisk sent, stored only; <c>0</c> for ConfBridge, which sends none.</param>
@@ -129,12 +134,16 @@ public sealed class MeetMeManager
     /// Records a participant's join, keyed by <paramref name="channel"/>, and stores the join's
     /// unique id on <see cref="MeetMeUser.UniqueId"/> as data. The room is created if it is not
     /// held. A join for a channel already held in the room replaces that participant and raises
-    /// <see cref="UserJoined"/> again.
+    /// <see cref="UserJoined"/> again, whatever the unique ids. The ids decide no replacement and no
+    /// removal, only what the replaced instance reads: when both are present and differ, that
+    /// participant has gone, so it reads <see cref="MeetMeUserState.Left"/> and
+    /// <see cref="MeetMeUser.LeaveNotObserved"/> <see langword="true"/>, with no
+    /// <see cref="UserLeft"/>; otherwise it is the same participant and reads as it did.
     /// </summary>
     /// <param name="roomNumber">The conference name. A missing or empty value is not applied.</param>
     /// <param name="userNum">The user number Asterisk sent, stored only; <c>0</c> for ConfBridge, which sends none.</param>
     /// <param name="channel">The participant's channel name, which is its key. A missing or empty value is not applied.</param>
-    /// <param name="uniqueId">The join's <c>Uniqueid</c>, stored as data only; it never identifies, replaces or removes a participant.</param>
+    /// <param name="uniqueId">The join's <c>Uniqueid</c>. It decides no replacement and no removal.</param>
     public void OnUserJoined(string roomNumber, int userNum, string channel, string? uniqueId) =>
         OnUserJoined(roomNumber, userNum, channel, uniqueId, muted: false);
 
@@ -176,6 +185,8 @@ public sealed class MeetMeManager
             var room = _rooms.GetOrAdd(roomNumber, static rn => new MeetMeRoom { RoomNumber = rn });
             lock (room.SyncRoot)
             {
+                if (room.Users.TryGetValue(channel, out var replaced) && IsAnotherParticipant(replaced, uniqueId))
+                    MarkGone(replaced);
                 room.Users[channel] = user;
                 MeetMeManagerLog.UserJoined(_logger, roomNumber, channel, userNum);
                 if (UserJoined is not null)
@@ -186,6 +197,18 @@ public sealed class MeetMeManager
             }
         }
         RaisePending();
+    }
+
+    // The queue side's rule for a caller: the same Uniqueid, or a side without one, is the same participant.
+    private static bool IsAnotherParticipant(MeetMeUser held, string? uniqueId) =>
+        !string.IsNullOrEmpty(held.UniqueId) && !string.IsNullOrEmpty(uniqueId)
+        && !string.Equals(held.UniqueId, uniqueId, StringComparison.Ordinal);
+
+    // Under the room lock. For a participant taken out of the table with no event: nothing raises, nothing counts.
+    private static void MarkGone(MeetMeUser user)
+    {
+        user.State = MeetMeUserState.Left;
+        user.MarkLeaveNotObserved();
     }
 
     /// <summary>
@@ -592,8 +615,10 @@ public sealed class MeetMeManager
     }
 
     /// <summary>
-    /// Empties the conference table without raising anything. A reload no longer calls it: it reconciles the table
-    /// against Asterisk's conference listing instead.
+    /// Empties the conference table without raising anything. Each participant the table held reads
+    /// <see cref="MeetMeUserState.Left"/> and <see cref="MeetMeUser.LeaveNotObserved"/> <see langword="true"/>, with no
+    /// <see cref="UserLeft"/>. A reload no longer calls it: it reconciles the table against Asterisk's conference listing
+    /// instead.
     /// </summary>
     public void Clear()
     {
@@ -602,7 +627,11 @@ public sealed class MeetMeManager
             foreach (var room in _rooms.Values)
             {
                 lock (room.SyncRoot)
+                {
                     room.RemovedFromTable = true;
+                    foreach (var user in room.Users.Values)
+                        MarkGone(user);
+                }
             }
             _rooms.Clear();
             foreach (var window in _openWindows)
@@ -704,8 +733,11 @@ public sealed class MeetMeUser
 
     /// <summary>
     /// The <c>Uniqueid</c> of the participant's join as Asterisk sent it, or <see langword="null"/>
-    /// when the join carried none or was recorded without it. Data only: it never identifies,
-    /// replaces or removes a participant.
+    /// when the join carried none or was recorded without it. It decides no replacement and no
+    /// removal: the key is <see cref="Channel"/>, and a leave is matched by it. It tells one thing
+    /// apart: a join for a held channel with another <c>Uniqueid</c> leaves the replaced participant
+    /// reading <see cref="MeetMeUserState.Left"/> and <see cref="LeaveNotObserved"/>
+    /// <see langword="true"/>, where the same <c>Uniqueid</c>, or a side without one, leaves it as it was.
     /// </summary>
     public string? UniqueId { get; init; }
 
@@ -739,20 +771,26 @@ public sealed class MeetMeUser
     public bool Talking { get; set; }
 
     /// <summary>
-    /// Whether this participant's leave was inferred rather than reported by Asterisk. Set before
-    /// <see cref="MeetMeManager.UserLeft"/> is raised and never cleared, so a handler reads the final value.
-    /// <see langword="false"/> while the participant is held, and on a leave Asterisk reported (<c>ConfbridgeLeave</c>,
-    /// or <c>ConfbridgeEnd</c> for a participant still held). <see langword="true"/> when a reload's completed conference
-    /// listing no longer reported the participant:
+    /// What Live observed of this participant's leave, which is not a statement of what Asterisk did:
+    /// <see langword="true"/> exactly when Live took the participant out of the table without having observed a report
+    /// of a leave for its channel name, or of the end of its room, before the removal; <see langword="false"/> otherwise.
+    /// Set before <see cref="MeetMeManager.UserLeft"/> is raised and never cleared, so a handler reads the final value.
+    /// These paths set it:
     /// <list type="bullet">
-    /// <item>its room was listed and the room's participant listing omitted it;</item>
-    /// <item>its room was not listed, including the answer <c>No active conferences.</c>.</item>
+    /// <item>a reload's completed conference listing listed its room and the room's participant listing omitted it;</item>
+    /// <item>that listing did not list its room, including the answer <c>No active conferences.</c>;</item>
+    /// <item>a join with another <c>Uniqueid</c> replaced it under its channel name, which raises no
+    /// <see cref="MeetMeManager.UserLeft"/>;</item>
+    /// <item><see cref="MeetMeManager.Clear"/> emptied the table, which raises none either.</item>
     /// </list>
     /// <para>
-    /// A leave with this set has no Asterisk timestamp or reason.
+    /// Leaves are matched by channel name, so <see langword="true"/> does not prove Asterisk sent no leave: a report Live
+    /// could not match to a held participant (a renamed channel, a reused name) is not observed, and the next
+    /// reconciliation reads <see langword="true"/>. A report that names a reused channel is applied to the participant
+    /// held under that name, which reads <see langword="false"/> although it did not leave.
     /// </para>
     /// <para>
-    /// <see cref="MeetMeManager.Clear"/> sets nothing and raises nothing.
+    /// A leave with this set has no Asterisk timestamp or reason.
     /// </para>
     /// </summary>
     public bool LeaveNotObserved { get; private set; }
