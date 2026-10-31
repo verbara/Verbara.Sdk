@@ -87,7 +87,6 @@ public sealed class CallerReconnectReloadTests
     private static readonly Leg RoomStayed = new("1790700000.4", "Local/conf@capture-00000004;2");
     private static readonly Leg RoomGone = new("1790700000.5", "Local/conf@capture-00000005;2");
     private static readonly Leg RoomStarted = new("1790700000.6", "Local/conf@capture-00000006;2");
-    private static readonly Leg Sentinel = new("1790700000.7", "PJSIP/sentinel-00000007");
     private static readonly Leg Ghost = new("1790700000.8", "PJSIP/ghost-00000008");
     private static readonly Leg RoomGhost = new("1790700000.9", "Local/conf@capture-00000009;2");
 
@@ -148,7 +147,7 @@ public sealed class CallerReconnectReloadTests
                     Tables = AfterTables,
                     Joined = 1L,
                     Left = 1L,
-                    Removed = new[] { Gone.Uid, RoomGone.Uid, Sentinel.Uid },
+                    Removed = new[] { Gone.Uid, RoomGone.Uid, Rig.Sentinel.Uid },
                     GoneEnding = new Ending("reload", null, 1),
                     State = AmiConnectionState.Connected,
                     ReconnectedRaised = route == Route.Loop,
@@ -746,7 +745,7 @@ public sealed class CallerReconnectReloadTests
         var joinedBefore = rig.Counters.Joined;
 
         // A caller this load's list alone would admit. The handler holds the dispatch, so the load skips the fence.
-        retired.QueueEntries = [.. retired.QueueEntries, new QueueCaller(Sentinel.Channel, Sentinel.Uid, 4)];
+        retired.QueueEntries = [.. retired.QueueEntries, new QueueCaller(Rig.Sentinel.Channel, Rig.Sentinel.Uid, 4)];
         using var hold = new HandlerHold();
         rig.Run.Server.QueueRowBuffered = hold.Block;
         var stopped = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -760,7 +759,7 @@ public sealed class CallerReconnectReloadTests
             }
         }));
 
-        await retired.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Sentinel.Uid, Sentinel.Channel, Sentinel.Uid));
+        await retired.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Rig.Sentinel.Uid, Rig.Sentinel.Channel, Rig.Sentinel.Uid));
         var held = await CompletesWithinBoundAsync(hold.Held);
         if (held)
         {
@@ -962,7 +961,7 @@ public sealed class CallerReconnectReloadTests
                 Tables = AfterTables,
                 Joined = 1L,
                 Left = 1L,
-                Removed = new[] { Gone.Uid, RoomGone.Uid, Sentinel.Uid },
+                Removed = new[] { Gone.Uid, RoomGone.Uid, Rig.Sentinel.Uid },
                 GoneEnding = new Ending("reload", null, 1),
             },
             "the host's request costs one more load, and nothing else: each call and visit is held once, each join and "
@@ -1702,6 +1701,8 @@ public sealed class CallerReconnectReloadTests
     /// </summary>
     private sealed class Rig : IAsyncDisposable
     {
+        internal static readonly Leg Sentinel = new("1790700000.7", "PJSIP/sentinel-00000007");
+
         private readonly CallSessionManager _manager = new(
             Options.Create(new SessionOptions()), NullLogger<CallSessionManager>.Instance, new NullStore());
         private readonly ConcurrentQueue<string> _removed = new();
