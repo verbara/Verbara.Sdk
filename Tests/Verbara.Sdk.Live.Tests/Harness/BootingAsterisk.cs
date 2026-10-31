@@ -153,6 +153,9 @@ internal sealed class BootingAsterisk
     /// </summary>
     public bool SendsFullyBooted { get; init; } = true;
 
+    /// <summary>Whether the peer answers the login with <c>Authentication failed</c>, which fails the connect.</summary>
+    public bool RefusesLogin { get; init; }
+
     /// <summary>Where a peer booted at the login sends <c>FullyBooted</c> during the connect.</summary>
     public FullyBootedPlacement FullyBootedAt { get; init; } = FullyBootedPlacement.AfterConnect;
 
@@ -393,6 +396,12 @@ internal sealed class BootingAsterisk
 
         if (await ReadCountedAsync(socket, cancellationToken) is not { } login)
             return false;
+
+        if (RefusesLogin)
+        {
+            await socket.RespondAsync("Error", PipedSocket.ActionIdOf(login), [new("Message", "Authentication failed")]);
+            return false;
+        }
 
         if (reportsAtLogin && FullyBootedAt == FullyBootedPlacement.BeforeLoginResponse)
             await WriteFullyBootedAsync(socket);

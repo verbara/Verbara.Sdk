@@ -13,8 +13,8 @@ namespace Verbara.Sdk.Live.Tests.Harness;
 /// The first peer serves the connect. When the session ends and <c>AutoReconnect</c> is on, the reconnect loop
 /// creates a second socket; the second peer serves it only once the test calls <see cref="ReleaseSecondPeer"/>.
 /// Until then the connect attempt waits for its banner, so the connection stays <c>Reconnecting</c> or
-/// <c>Connecting</c> for as long as the test holds it. A socket beyond the second, or the second one when there is
-/// no second peer, is never served.
+/// <c>Connecting</c> for as long as the test holds it. Sockets beyond the second are served in turn by the later peers a
+/// test passes, each once the one before it has ended; a socket with no peer is never served.
 /// </para>
 /// <para>
 /// Nothing here waits on the wall clock. Every wait is bounded by <see cref="Bound"/>, a hang bound that a healthy
@@ -36,10 +36,13 @@ internal sealed class Run : IAsyncDisposable
     private readonly TaskCompletionSource _secondSocketCreated = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task _peers = Task.CompletedTask;
     private Task _firstServed = Task.CompletedTask;
+    private readonly IReadOnlyList<BootingAsterisk> _laterPeers;
 
     private Run(BootingAsterisk firstPeer, BootingAsterisk? secondPeer, bool autoReconnect, TimeSpan reconnectInitialDelay,
-        TimeSpan eventTimeout, TimeProvider? barrierClock)
+        TimeSpan eventTimeout, TimeProvider? barrierClock, int maxReconnectAttempts = 0,
+        IReadOnlyList<BootingAsterisk>? laterPeers = null)
     {
+        _laterPeers = laterPeers ?? [];
         FirstPeer = firstPeer;
         SecondPeer = secondPeer;
         Connection = new AmiConnection(
@@ -50,6 +53,7 @@ internal sealed class Run : IAsyncDisposable
                 Password = "secret",
                 EnableHeartbeat = false,
                 AutoReconnect = autoReconnect,
+                MaxReconnectAttempts = maxReconnectAttempts,
                 ReconnectInitialDelay = reconnectInitialDelay,
                 // A limit, never a wait: a connect attempt the test holds must not give up while the test holds it.
                 ConnectionTimeout = TimeSpan.FromMinutes(1),
@@ -102,13 +106,14 @@ internal sealed class Run : IAsyncDisposable
     /// <see cref="Clock"/>. A test that counts every timer on <see cref="Clock"/> as one of the load's waits for a starting
     /// Asterisk gives it another.
     /// </param>
+    /// <param name="maxReconnectAttempts">The connection's <c>MaxReconnectAttempts</c>; 0, the default, never gives up.</param>
+    /// <param name="laterPeers">The peers of the sockets after the second, in order.</param>
     public static async Task<Run> ConnectAsync(BootingAsterisk firstPeer, BootingAsterisk? secondPeer = null,
         bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null, TimeSpan? eventTimeout = null,
-        TimeProvider? barrierClock = null)
+        TimeProvider? barrierClock = null, int maxReconnectAttempts = 0, IReadOnlyList<BootingAsterisk>? laterPeers = null)
     {
-        var run = new Run(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay ?? TimeSpan.FromMilliseconds(1),
-            eventTimeout ?? TimeSpan.Zero, barrierClock);
-        run._peers = run.ServePeersAsync(run._peerCts.Token);
+        var run = Unconnected(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay, eventTimeout, barrierClock,
+            maxReconnectAttempts, laterPeers);
         try
         {
             await run.Connection.ConnectAsync().AsTask().WaitAsync(Bound);
@@ -120,6 +125,20 @@ internal sealed class Run : IAsyncDisposable
             await run.DisposeAsync();
             throw;
         }
+    }
+
+    /// <summary>
+    /// The run with its peers serving and nothing connected: <see cref="ConnectAsync"/> without its connect, for a test
+    /// whose first connect is the case under test. The caller disposes it.
+    /// </summary>
+    public static Run Unconnected(BootingAsterisk firstPeer, BootingAsterisk? secondPeer = null,
+        bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null, TimeSpan? eventTimeout = null,
+        TimeProvider? barrierClock = null, int maxReconnectAttempts = 0, IReadOnlyList<BootingAsterisk>? laterPeers = null)
+    {
+        var run = new Run(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay ?? TimeSpan.FromMilliseconds(1),
+            eventTimeout ?? TimeSpan.Zero, barrierClock, maxReconnectAttempts, laterPeers);
+        run._peers = run.ServePeersAsync(run._peerCts.Token);
+        return run;
     }
 
     /// <summary>
@@ -184,6 +203,9 @@ internal sealed class Run : IAsyncDisposable
                 await _secondPeerReleased.Task.WaitAsync(cancellationToken);
                 await SecondPeer.ServeAsync(second, cancellationToken);
             }
+
+            foreach (var peer in _laterPeers)
+                await peer.ServeAsync(await _sockets.NextAsync(cancellationToken), cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
