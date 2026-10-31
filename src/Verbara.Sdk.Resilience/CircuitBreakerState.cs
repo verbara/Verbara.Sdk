@@ -1,3 +1,5 @@
+using Verbara.Sdk.Resilience.Diagnostics;
+
 namespace Verbara.Sdk.Resilience;
 
 /// <summary>
@@ -75,9 +77,7 @@ public sealed class CircuitBreakerState
         if (openedAtTicks == NullTicksSentinel)
             return true;
 
-        var openedAt = new DateTimeOffset(openedAtTicks, TimeSpan.Zero);
-        var elapsed = time.GetUtcNow() - openedAt;
-        if (elapsed >= openDuration)
+        if (OpenWindowHasElapsed(openedAtTicks, openDuration, time))
         {
             // Auto-transition to half-open: clear state so the caller can probe.
             // Idempotent under concurrency — multiple threads may race here but the
@@ -89,6 +89,38 @@ public sealed class CircuitBreakerState
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Reads the state of the circuit now, without changing it: <see cref="ResilienceMetrics.CircuitStateValue.Closed"/>
+    /// when it is not open, <see cref="ResilienceMetrics.CircuitStateValue.Open"/> while
+    /// <see cref="ShouldAllow"/> would return <see langword="false"/>, and
+    /// <see cref="ResilienceMetrics.CircuitStateValue.HalfOpen"/> otherwise.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ShouldAllow"/> keeps its behaviour: it is the call that admits, and the one that resets
+    /// the circuit once the window has elapsed. This read only reports what that call would find, so
+    /// any number of reads leaves the failure count, <see cref="IsOpen"/> and <see cref="OpenedAt"/> as they were.
+    /// </remarks>
+    internal ResilienceMetrics.CircuitStateValue ReadState(TimeSpan openDuration, TimeProvider time)
+    {
+        ArgumentNullException.ThrowIfNull(time);
+
+        if (Volatile.Read(ref _isOpen) == 0)
+            return ResilienceMetrics.CircuitStateValue.Closed;
+
+        var openedAtTicks = Interlocked.Read(ref _openedAtTicks);
+        if (openedAtTicks == NullTicksSentinel || OpenWindowHasElapsed(openedAtTicks, openDuration, time))
+            return ResilienceMetrics.CircuitStateValue.HalfOpen;
+
+        return ResilienceMetrics.CircuitStateValue.Open;
+    }
+
+    // The one window test: ShouldAllow and ReadState must agree at the boundary.
+    private static bool OpenWindowHasElapsed(long openedAtTicks, TimeSpan openDuration, TimeProvider time)
+    {
+        var openedAt = new DateTimeOffset(openedAtTicks, TimeSpan.Zero);
+        return time.GetUtcNow() - openedAt >= openDuration;
     }
 
     /// <summary>Resets the failure counter and closes the circuit.</summary>

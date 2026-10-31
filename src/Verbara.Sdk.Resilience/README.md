@@ -76,7 +76,11 @@ Instruments emitted:
 | `circuit.opened` | Counter<long> | `key` |
 | `circuit.closed` | Counter<long> | `key` |
 | `timeout.fired` | Counter<long> | `key` |
-| `circuit.state` | ObservableGauge<int> (0=closed, 1=half-open, 2=open) | `key` |
+| `circuit.state` | ObservableGauge<int> (0=closed, 1=half-open, 2=open), the current state when observed | `key` |
+
+`circuit.state` reports the state a key's circuit is in when the gauge is observed, from its policy's open window and clock, with no later call needed. `2` (open): a call now is rejected with `CircuitBreakerOpenException`. `1` (half-open): the open window has elapsed and no call has been admitted since, so the next call is admitted. `0` (closed): anything else, including failures below the threshold. The next call resets a half-open circuit, so `1` lasts until that call; if the call fails the gauge reads `0`, or `2` when that failure reaches the threshold again. Under a failing dependency with traffic the circuit cycles through all three, so an unbroken `2` does not measure an outage: `circuit.opened` counts trips. A key is reported from its first success, rejection or trip; where two policies share a key, the gauge follows the one that reported it last.
+
+`ResiliencePolicy.GetCircuitState(key)` returns the same reading as a `ResilienceMetrics.CircuitStateValue` for that policy's own circuit, so a health check needs no `MeterListener`. A key with no circuit in the policy, and any key of a policy without a circuit breaker, reads `Closed`, because its next call is admitted. Neither the read nor the gauge changes the circuit, and the read does not make a key appear on the gauge.
 
 ## Testing
 

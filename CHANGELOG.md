@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed — BREAKING: the `circuit.state` gauge reports the breaker's current state (#509)
+
+The gauge documented as the current circuit state per key replayed the last value a call wrote, so an idle tripped circuit
+read `2` forever and a failed probe below the threshold left `2` over a circuit that admits the next call (#420). It now
+reports the state when observed: `2` only while a call would be rejected, `1` once the open window has elapsed and no call
+has been admitted since, `0` otherwise, with no later call needed.
+
+What breaks: an alert, a dashboard or a health check that needs an unbroken `2`. That run was unbroken only because it was
+stale: under traffic the circuit cycles, so a rule such as "`circuit.state` is 2 for five minutes" may not fire during the
+outage it was written for, and a timer started at the last state change is reset the same way. Move it to `circuit.opened`,
+which counts trips; see the [migration guide](docs/guides/migration-2.10.0.md).
+
+### Added: `ResiliencePolicy.GetCircuitState` (#509)
+
+`ResiliencePolicy.GetCircuitState(key)` is a side-effect-free read of a key's circuit state, so a health check needs no
+`MeterListener`.
+
 ### Documentation: published figures match the code and a measurement (#505)
 
 The README's performance row named `ChannelManager.GetById`, which does not exist; it is `GetByUniqueId`, on the

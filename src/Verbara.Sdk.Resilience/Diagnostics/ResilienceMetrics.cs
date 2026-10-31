@@ -38,14 +38,16 @@ public static class ResilienceMetrics
         "timeout.fired",
         description: "Per-attempt timeouts fired by ResiliencePolicy, tagged by key.");
 
-    // Per-key circuit state snapshot for the observable gauge. We store a numeric encoding:
-    // 0 = closed, 1 = half-open (transition in progress — set briefly on successful probe),
-    // 2 = open.
-    private static readonly ConcurrentDictionary<string, int> _circuitStates = new();
+    // Per-key source of the observable gauge: the live breaker of the policy that reported the key
+    // last, or a value SetCircuitState wrote. The gauge asks it at each observation, so an idle key
+    // reports the state it is in now. Numeric encoding: 0 = closed, 1 = half-open (the open window
+    // has elapsed and no call has been admitted since), 2 = open.
+    private static readonly ConcurrentDictionary<string, CircuitSource> _circuitStates = new();
 
     /// <summary>
     /// Observable gauge tagged by <c>key</c> emitting <c>0 = closed</c>, <c>1 = half-open</c>,
-    /// <c>2 = open</c>. Values are reported for every key that has been observed at least once.
+    /// <c>2 = open</c>: the state the key's circuit is in when observed, with no later call needed.
+    /// A key is reported from its first success, rejection or trip.
     /// </summary>
     public static readonly ObservableGauge<int> CircuitStateGauge = Meter.CreateObservableGauge(
         "circuit.state",
@@ -58,7 +60,7 @@ public static class ResilienceMetrics
         /// <summary>Circuit is closed; traffic flows normally.</summary>
         Closed = 0,
 
-        /// <summary>Circuit is in a half-open probe window.</summary>
+        /// <summary>The open window has elapsed and no call has been admitted since.</summary>
         HalfOpen = 1,
 
         /// <summary>Circuit is open; traffic is rejected.</summary>
@@ -66,13 +68,27 @@ public static class ResilienceMetrics
     }
 
     /// <summary>
-    /// Updates the reported circuit state for <paramref name="key"/>. Called by
-    /// <see cref="ResiliencePolicy"/> whenever state transitions; safe to invoke from any thread.
+    /// Stores a fixed value as the reported circuit state for <paramref name="key"/>, which the gauge
+    /// reports until a <see cref="ResiliencePolicy"/> reports that key; safe to invoke from any thread.
     /// </summary>
     public static void SetCircuitState(string key, CircuitStateValue value)
     {
         ArgumentNullException.ThrowIfNull(key);
-        _circuitStates[key] = (int)value;
+        _circuitStates[key] = new FixedCircuitValue(value);
+    }
+
+    // One dictionary read and no allocation once the key follows this breaker: the success path of
+    // every call comes through here.
+    internal static void TrackCircuit(CircuitBreakerState state, TimeSpan openDuration, TimeProvider time)
+    {
+        if (_circuitStates.TryGetValue(state.Key, out var source)
+            && source is TrackedCircuit tracked
+            && ReferenceEquals(tracked.State, state))
+        {
+            return;
+        }
+
+        _circuitStates[state.Key] = new TrackedCircuit(state, openDuration, time);
     }
 
     private static IEnumerable<Measurement<int>> ObserveCircuitStates()
@@ -80,8 +96,26 @@ public static class ResilienceMetrics
         foreach (var kvp in _circuitStates)
         {
             yield return new Measurement<int>(
-                kvp.Value,
+                (int)kvp.Value.Read(),
                 new KeyValuePair<string, object?>("key", kvp.Key));
         }
+    }
+
+    private abstract class CircuitSource
+    {
+        public abstract CircuitStateValue Read();
+    }
+
+    private sealed class TrackedCircuit(CircuitBreakerState state, TimeSpan openDuration, TimeProvider time)
+        : CircuitSource
+    {
+        public CircuitBreakerState State { get; } = state;
+
+        public override CircuitStateValue Read() => State.ReadState(openDuration, time);
+    }
+
+    private sealed class FixedCircuitValue(CircuitStateValue value) : CircuitSource
+    {
+        public override CircuitStateValue Read() => value;
     }
 }
