@@ -5,7 +5,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 
 | Package | Change | Kind |
 |---|---|---|
-| `Verbara.Sdk.Resilience` | [`circuit.state` reports the breaker's current state](#circuitstate-reports-the-breakers-current-state) | metric meaning |
+| `Verbara.Sdk.Resilience` | [`circuit.state` reports the breaker's current state](#circuitstate-reports-the-breakers-current-state) | metric meaning, BREAKING |
 
 ## Resilience
 
@@ -15,6 +15,9 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 value a call wrote. A tripped circuit that sees no more calls used to read `2` (open) forever; it now reads `2` until its
 open window has elapsed and `1` (half-open) after that, with no call needed. The instrument keeps its name, meter, `key`
 tag and encoding (`0` closed, `1` half-open, `2` open), and a key still appears from its first success, rejection or trip.
+
+The CHANGELOG labels this `Fixed — BREAKING`: the gauge was documented as the current state and did not deliver it, and
+restoring that breaks what was built on the old reading.
 
 The values now mean:
 
@@ -32,9 +35,21 @@ open for the window, then closed until `threshold` failures trip it again, so a 
 rule such as "`circuit.state` is `2` for five minutes" restarts its timer on such a sample and may not fire during the
 outage it was written for, and a timer started when the state last changed is reset the same way.
 
-**What to do.** Move an alert that needs an unbroken `2` to `circuit.opened`, which counts every re-trip: its increase
-over a window says that a key keeps tripping, whether or not a sample lands in the gap. Keep `circuit.state` for what it
-now answers, which is whether a call to that key would be rejected right now.
+**What to do.** Keep `circuit.state` for what it now answers, which is whether a call to that key would be rejected right
+now: `circuit_state == 2`, under the name Prometheus exports.
+
+Move an alert that needs an unbroken `2` to `circuit.opened`, exported as `circuit_opened_total`, which counts every
+re-trip: its increase over a window says that a key keeps tripping, whether or not a sample lands in the gap. It is not a
+drop-in replacement, so choose the threshold for your window:
+
+- A rule with a five-minute `for` ignored a lone trip, and `increase(circuit_opened_total[5m]) > 0` fires on one.
+- `increase(circuit_opened_total[5m]) >= 2` is the analogue of a sustained outage: the key tripped again after its open
+  window.
+- The threshold is yours, a function of the window and of the circuit's open duration: a window shorter than the open
+  duration cannot hold two trips.
+
+An escalation that waits on a threshold measured from the last state change may never reach it under a real cycle,
+because every change restarts the measure. Count trips, or measure from the first trip of the window.
 
 A health check that observes the gauge through a `MeterListener` can call
 `ResiliencePolicy.GetCircuitState(key)` instead. It returns the same reading as a
