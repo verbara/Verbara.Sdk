@@ -489,9 +489,10 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </para>
     /// <para>
     /// When the AMI session ends before the load completes, the load stops and throws, whether or not the connection
-    /// is reconnecting: it sends nothing more, it reconciles no channel snapshot it did not finish reading, so it ends
-    /// no call, and it never returns as if the state it holds were complete. The queues and agents it had read stay
-    /// until the next load. <see cref="StartAsync"/>, by contrast, returns when the reconnect loop's reload will follow.
+    /// is reconnecting: it sends nothing more, even when the connection is already on a newer session, it reconciles no
+    /// list it read on the session that ended, so it ends no call, and it never returns as if the state it holds were
+    /// complete. The queues and agents it had read stay until the next load. <see cref="StartAsync"/>, by contrast,
+    /// returns when the reconnect loop's reload will follow.
     /// </para>
     /// <para>
     /// When Asterisk refuses the <c>Status</c> request, as it does for an AMI user whose write classes allow none of
@@ -655,7 +656,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// Without a mark — a connection other than <see cref="AmiConnection"/>, or a list that did not complete — there is
     /// nothing to wait for. From inside an event handler the wait is skipped and logged at <c>Debug</c>: the pump is held
     /// by that same handler, so it could never be met. A session that ends during the wait stops the reconciliation, as
-    /// an ending under the read does; a server disposed during it stops it with <see cref="OperationCanceledException"/>.
+    /// an ending under the read does, even when its pump went on to dispatch the list's last event: a list read on a
+    /// session that is gone is never applied. A server disposed during it stops it with
+    /// <see cref="OperationCanceledException"/>.
     /// A wait that begins on a server already disposed is not stopped: a load the caller asks of it still runs.
     /// </remarks>
     private async ValueTask<bool> AwaitBarrierAsync(LoadSession? session, ListSnapshotMark? mark, string list,
@@ -667,6 +670,7 @@ public sealed class VerbaraServer : IVerbaraServer
 
         if (session.Connection.InDispatch)
         {
+            StopIfRetired(session, states, readerName, list);
             VerbaraServerLog.BarrierSkippedInDispatch(_logger, list);
             return true;
         }
@@ -705,6 +709,10 @@ public sealed class VerbaraServer : IVerbaraServer
             _ => "ended",
         });
 
+        // The lost session's pump drains its buffer, so a reached mark does not say the session is still there.
+        if (outcome != DispatchBarrierOutcome.Ended)
+            StopIfRetired(session, states, readerName, list);
+
         switch (outcome)
         {
             case DispatchBarrierOutcome.Reached:
@@ -726,6 +734,16 @@ public sealed class VerbaraServer : IVerbaraServer
             default:
                 throw states.Stop($"the AMI session ended while the {readerName} waited for the event pump after {list}");
         }
+    }
+
+    /// <summary>
+    /// Stops a reader whose session is no longer the connection's, before it applies the list it read: that list describes
+    /// a session that is gone, and the session that replaced it loads itself.
+    /// </summary>
+    private static void StopIfRetired(LoadSession session, LoadConnectionStates states, string readerName, string list)
+    {
+        if (!session.IsCurrent)
+            throw states.Stop($"the AMI session ended while the {readerName} waited for the event pump after {list}");
     }
 
     /// <summary>
@@ -1432,6 +1450,10 @@ public sealed class VerbaraServer : IVerbaraServer
         var toldWaiting = false;
         while (true)
         {
+            // Not on the session that replaced the one this load began on: that one loads itself.
+            if (!session.IsCurrent)
+                throw states.Stop($"the live state load could not send {actionName}, because its AMI session had ended");
+
             // Read before the ask, never once its answer is in: a report that lands between the two says nothing about
             // the module at the moment it was asked, and taking that refusal as final would drop a module still loading.
             var reportedBeforeAsk = session.FullyBooted.IsCompletedSuccessfully;

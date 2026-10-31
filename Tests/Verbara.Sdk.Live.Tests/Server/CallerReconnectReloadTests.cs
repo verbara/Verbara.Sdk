@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Verbara.Sdk.Ami;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Connection;
+using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Tests.Harness;
 using Verbara.Sdk.Live.Tests.Queues;
@@ -55,6 +56,8 @@ public sealed class CallerReconnectReloadTests
     private const string Connected = "[AMI] Connected";
     private const string Room = "capture-room";
     private const string RoomBridge = "22222222-2222-2222-2222-222222222222";
+    private const string GhostBridge = "33333333-3333-3333-3333-333333333333";
+    private const string ReloadFailed = "[LIVE] Reconnect reload failed";
 
     private static readonly Leg Stayed = new("1790700000.1", "PJSIP/stayed-00000001");
     private static readonly Leg Gone = new("1790700000.2", "PJSIP/gone-00000002");
@@ -63,6 +66,8 @@ public sealed class CallerReconnectReloadTests
     private static readonly Leg RoomGone = new("1790700000.5", "Local/conf@capture-00000005;2");
     private static readonly Leg RoomStarted = new("1790700000.6", "Local/conf@capture-00000006;2");
     private static readonly Leg Sentinel = new("1790700000.7", "PJSIP/sentinel-00000007");
+    private static readonly Leg Ghost = new("1790700000.8", "PJSIP/ghost-00000008");
+    private static readonly Leg RoomGhost = new("1790700000.9", "Local/conf@capture-00000009;2");
 
     /// <summary>What Live holds before the outage.</summary>
     private static readonly Tables BeforeTables = new(
@@ -582,6 +587,221 @@ public sealed class CallerReconnectReloadTests
             "the load of a lost session finishes nothing: what it had read never lands on the session that replaced it");
     }
 
+    /// <summary>Every fence a load passes, by both routes, for the automatic reload and for a host's explicit load.</summary>
+    public static TheoryData<Route, string, bool> RetiredFences()
+    {
+        var data = new TheoryData<Route, string, bool>();
+        foreach (var route in new[] { Route.Caller, Route.Loop })
+        {
+            foreach (var list in new[] { "Status", "BridgeList", "ConfbridgeList", "QueueStatus" })
+            {
+                data.Add(route, list, false);
+                data.Add(route, list, true);
+            }
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(RetiredFences))]
+    public async Task RetiredLoad_ShouldApplyAndAskNothingMore_WhenItsSessionIsLostAtAFence(Route route, string list,
+        bool explicitLoad)
+    {
+        var retired = PeerRetired();
+        var third = PeerAfter();
+        await using var rig = await Rig.StartAsync(PeerBefore(), retired, route, laterPeers: [third]);
+        using var hold = new HandlerHold();
+        var loadedAtTheLoss = 1;
+        if (explicitLoad)
+        {
+            await rig.LoseAndComeBackAsync(route);
+            await rig.Run.ServerLog.Logged(StateLoaded, 2).WaitAsync(Run.Bound);
+            await rig.SettleAsync();
+            loadedAtTheLoss = 2;
+        }
+
+        // The list was read to its end on the session; what stands before applying it is the fence, and here the loss.
+        rig.Run.Server.FenceWaitObserved = (name, _) =>
+        {
+            if (name == list)
+                hold.Block();
+        };
+        var load = explicitLoad ? rig.Run.Server.RequestInitialStateAsync().AsTask() : Task.CompletedTask;
+        if (!explicitLoad)
+            await rig.LoseAndComeBackAsync(route);
+
+        var held = await CompletesWithinBoundAsync(hold.Held);
+        if (held)
+        {
+            retired.CloseSession();
+            if (route == Route.Caller)
+                await rig.CallerConnectsAsync();
+
+            await rig.Run.ServerLog.Logged(StateLoaded, loadedAtTheLoss + 1).WaitAsync(Run.Bound);
+        }
+
+        hold.Release();
+        var stopped = await Record.ExceptionAsync(() => load.WaitAsync(Run.Bound));
+        await rig.SettleAsync();
+
+        new
+        {
+            Held = held,
+            Loaded = Lines(rig.Run, StateLoaded),
+            Stopped = stopped?.GetType(),
+            StatusAsked = third.Asked("Status"),
+            BridgeListAsked = third.Asked("BridgeList"),
+            RoomsAsked = third.Asked("ConfbridgeListRooms"),
+            QueueStatusAsked = third.Asked("QueueStatus"),
+            AgentsAsked = third.Asked("Agents"),
+            Tables = rig.Tables(),
+            GhostBridgeLive = rig.Run.Server.Bridges.GetById(GhostBridge) is { DestroyedAt: null },
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Held = true,
+                Loaded = loadedAtTheLoss + 1,
+                Stopped = explicitLoad ? typeof(AmiNotConnectedException) : null,
+                StatusAsked = 1,
+                BridgeListAsked = 1,
+                RoomsAsked = 1,
+                QueueStatusAsked = 1,
+                AgentsAsked = 1,
+                Tables = AfterTables,
+                GhostBridgeLive = false,
+            },
+            "a list read to its end on a lost session describes a session that is gone: the load stops there, applies it to "
+            + "nothing and asks nothing of the session that replaced it, which has already loaded itself");
+    }
+
+    [Fact]
+    public async Task RetiredLoad_ShouldAskNothingOfItsSuccessor_WhenItsQueueStatusWasRefusedAsItsSessionEnded()
+    {
+        var retired = PeerRetired();
+        retired.QueueStatusRefusalAfterRows = "Refused";
+        var third = PeerAfter();
+        await using var rig = await Rig.StartAsync(PeerBefore(), retired, Route.Caller, laterPeers: [third]);
+        using var hold = new HandlerHold();
+        rig.Run.Server.QueueRowBuffered = hold.Block;
+
+        // A refused list passes no fence: the request after it is the first thing that can see the session is gone.
+        await rig.LoseAndComeBackAsync(Route.Caller);
+        var held = await CompletesWithinBoundAsync(hold.Held);
+        if (held)
+        {
+            retired.CloseSession();
+            await rig.CallerConnectsAsync();
+            await rig.Run.ServerLog.Logged(StateLoaded, 2).WaitAsync(Run.Bound);
+        }
+
+        hold.Release();
+        await rig.SettleAsync();
+
+        new { Held = held, Loaded = Lines(rig.Run, StateLoaded), AgentsAsked = third.Asked("Agents") }.Should().BeEquivalentTo(
+            new { Held = true, Loaded = 2, AgentsAsked = 1 },
+            "the load of a lost session sends nothing on the session that replaced it");
+    }
+
+    [Fact]
+    public async Task RetiredLoad_ShouldApplyNothing_WhenItRunsInsideAHandlerOfItsLostSession()
+    {
+        var retired = PeerRetired();
+        var third = PeerAfter();
+        await using var rig = await Rig.StartAsync(PeerBefore(), retired, Route.Loop, laterPeers: [third]);
+        await rig.LoseAndComeBackAsync(Route.Loop);
+        await rig.Run.ServerLog.Logged(StateLoaded, 2).WaitAsync(Run.Bound);
+        await rig.SettleAsync();
+        var joinedBefore = rig.Counters.Joined;
+
+        // A caller this load's list alone would admit. The handler holds the dispatch, so the load skips the fence.
+        retired.QueueEntries = [.. retired.QueueEntries, new QueueCaller(Sentinel.Channel, Sentinel.Uid, 4)];
+        using var hold = new HandlerHold();
+        rig.Run.Server.QueueRowBuffered = hold.Block;
+        var stopped = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var inHandler = rig.Run.Connection.Subscribe(new OnNext<ManagerEvent>(e =>
+        {
+            if (e is NewChannelEvent)
+            {
+#pragma warning disable VSTHRD002 // a handler that holds its dispatch is the case under test
+                stopped.TrySetResult(Record.Exception(() => rig.Run.Server.RequestInitialStateAsync().AsTask().Wait(Run.Bound)));
+#pragma warning restore VSTHRD002
+            }
+        }));
+
+        await retired.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Sentinel.Uid, Sentinel.Channel, Sentinel.Uid));
+        var held = await CompletesWithinBoundAsync(hold.Held);
+        if (held)
+        {
+            retired.CloseSession();
+            await rig.Run.ConnectionLog.Logged(Connected, 3).WaitAsync(Run.Bound);
+        }
+
+        hold.Release();
+        var ended = await stopped.Task.WaitAsync(Run.Bound);
+        await rig.Run.ServerLog.Logged(StateLoaded, 3).WaitAsync(Run.Bound);
+        await rig.SettleAsync();
+
+        new
+        {
+            Held = held,
+            Stopped = (ended as AggregateException)?.InnerException?.GetType(),
+            Joined = rig.Counters.Joined - joinedBefore,
+            AgentsAsked = third.Asked("Agents"),
+        }.Should().BeEquivalentTo(
+            new { Held = true, Stopped = typeof(AmiNotConnectedException), Joined = 0L, AgentsAsked = 1 },
+            "with no fence to pass the session is still read before the list is applied");
+    }
+
+    [Fact]
+    public async Task Reload_ShouldReportItsFailureAndNoRecovery_WhenItsLoadThrows()
+    {
+        var failing = PeerAfter();
+        var third = PeerAfter();
+        await using var rig = await Rig.StartAsync(PeerBefore(), failing, Route.Caller, laterPeers: [third]);
+        var thrown = 0;
+        rig.Run.Server.QueueRowBuffered = () =>
+        {
+            if (Interlocked.Exchange(ref thrown, 1) == 0)
+                throw new InvalidOperationException("the load failed for a reason of its own");
+        };
+
+        await rig.LoseAndComeBackAsync(Route.Caller);
+        var reported = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(ReloadFailed, 1));
+        await rig.SettleAsync();
+        var afterFailure = new
+        {
+            Reported = reported,
+            Loaded = Lines(rig.Run, StateLoaded),
+            QueueCallers = rig.Tables().QueueCallers,
+            rig.Run.Connection.State,
+        };
+
+        failing.CloseSession();
+        await rig.CallerConnectsAsync();
+        var reloaded = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(StateLoaded, 2));
+        await rig.SettleAsync();
+
+        new { AfterFailure = afterFailure, Reloaded = reloaded, StatusAsked = third.Asked("Status"), Tables = rig.Tables() }
+            .Should().BeEquivalentTo(
+                new
+                {
+                    AfterFailure = new
+                    {
+                        Reported = true,
+                        Loaded = 1,
+                        // The completed Status ended the call that left; the queue list it never finished admits nobody.
+                        QueueCallers = Sorted(Stayed.Channel),
+                        State = AmiConnectionState.Connected,
+                    },
+                    Reloaded = true,
+                    StatusAsked = 1,
+                    Tables = AfterTables,
+                },
+                "a reload that fails says so and reports no state loaded, the list it did not finish applies nothing, and the "
+                + "failure spends only its own session: the next one reloads");
+    }
+
     [Fact]
     public async Task Reload_ShouldNotStart_WhenTheServerIsDisposedAfterItsHandlerWasRead()
     {
@@ -651,36 +871,71 @@ public sealed class CallerReconnectReloadTests
         await rig.SettleAsync();
         await rig.ObservedCallAsync(second);
 
-        using (new AssertionScope())
+        AssertOverlapLeftOneOfEach(rig, second, overlapped, bothEnded);
+        rig.Entry(Stayed).Should().BeSameAs(stayedEntry, "neither load replaces the visit that survived the outage");
+    }
+
+    [Fact]
+    public async Task ExplicitLoad_ShouldRepresentEachCallAndVisitOnce_WhenItBeganBeforeTheAutomaticReloadAndEndsAfterIt()
+    {
+        var first = PeerBefore();
+        var second = PeerAfter();
+        await using var rig = await Rig.StartAsync(first, second, Route.Caller);
+        var stayedEntry = rig.Entry(Stayed);
+        using var notice = new HandlerHold();
+        using var rows = new HandlerHold();
+        rig.Run.Server.ConnectionLost += _ => notice.Block();
+
+        // The host's connect returned, and its request runs, while a slow handler still keeps the reload's notice queued.
+        first.CloseSession();
+        await notice.Held.WaitAsync(Run.Bound);
+        rig.Run.ReleaseSecondPeer();
+        await rig.CallerConnectsAsync();
+        rig.Run.Server.QueueRowBuffered = rows.Block;
+        var explicitLoad = rig.Run.Server.RequestInitialStateAsync().AsTask();
+        var explicitHeld = await CompletesWithinBoundAsync(rows.Held);
+
+        // So the reload reads its snapshots after the request read its own, and applies them first.
+        notice.Release();
+        var reloaded = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(StateLoaded, 2));
+        rows.Release();
+        await explicitLoad.WaitAsync(Run.Bound);
+        var bothEnded = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(StateLoaded, 3));
+        await rig.SettleAsync();
+        await rig.ObservedCallAsync(second);
+
+        AssertOverlapLeftOneOfEach(rig, second, explicitHeld && reloaded, bothEnded);
+        rig.Entry(Stayed).Should().BeSameAs(stayedEntry, "neither load replaces the visit that survived the outage");
+    }
+
+    private static void AssertOverlapLeftOneOfEach(Rig rig, BootingAsterisk second, bool overlapped, bool bothEnded)
+    {
+        new
         {
+            Overlapped = overlapped,
+            BothEnded = bothEnded,
+            StatusAsked = second.Asked("Status"),
+            QueueStatusAsked = second.Asked("QueueStatus"),
+            Tables = rig.Tables(),
+            rig.Counters.Joined,
+            rig.Counters.Left,
+            Removed = rig.Removed,
+            GoneEnding = rig.Ending(Gone),
+        }.Should().BeEquivalentTo(
             new
             {
-                Overlapped = overlapped,
-                BothEnded = bothEnded,
-                StatusAsked = second.Asked("Status"),
-                QueueStatusAsked = second.Asked("QueueStatus"),
-                Tables = rig.Tables(),
-                rig.Counters.Joined,
-                rig.Counters.Left,
-                Removed = rig.Removed,
-                GoneEnding = rig.Ending(Gone),
-            }.Should().BeEquivalentTo(
-                new
-                {
-                    Overlapped = true,
-                    BothEnded = true,
-                    StatusAsked = 2,
-                    QueueStatusAsked = 2,
-                    Tables = AfterTables,
-                    Joined = 1L,
-                    Left = 1L,
-                    Removed = new[] { Gone.Uid, RoomGone.Uid, Sentinel.Uid },
-                    GoneEnding = new Ending("reload", null, 1),
-                },
-                "the host's request costs one more load, and nothing else: each call and visit is held once, each join and "
-                + "leave is counted once, and each ending is announced once");
-            rig.Entry(Stayed).Should().BeSameAs(stayedEntry, "neither load replaces the visit that survived the outage");
-        }
+                Overlapped = true,
+                BothEnded = true,
+                StatusAsked = 2,
+                QueueStatusAsked = 2,
+                Tables = AfterTables,
+                Joined = 1L,
+                Left = 1L,
+                Removed = new[] { Gone.Uid, RoomGone.Uid, Sentinel.Uid },
+                GoneEnding = new Ending("reload", null, 1),
+            },
+            "the host's request costs one more load, and nothing else: each call and visit is held once, each join and "
+            + "leave is counted once, and each ending is announced once");
     }
 
     // ---- The rig ----
@@ -714,6 +969,24 @@ public sealed class CallerReconnectReloadTests
         QueueEntries = [new QueueCaller(Stayed.Channel, Stayed.Uid, 1), new QueueCaller(Started.Channel, Started.Uid, 2)],
         Bridges = [RoomBridgeOf(2)],
         Rooms = [ListedRoomOf(RoomStayed, RoomStarted)],
+    };
+
+    /// <summary>A session that is lost in its turn: it lists what the session after it no longer does.</summary>
+    private static BootingAsterisk PeerRetired() => new()
+    {
+        BootedAtLogin = true,
+        StatusChannels =
+        [
+            Status(Stayed), Status(Started), Status(Ghost), Status(RoomStayed, RoomBridge), Status(RoomStarted, RoomBridge),
+            Status(RoomGhost, RoomBridge),
+        ],
+        QueueEntries =
+        [
+            new QueueCaller(Stayed.Channel, Stayed.Uid, 1), new QueueCaller(Started.Channel, Started.Uid, 2),
+            new QueueCaller(Ghost.Channel, Ghost.Uid, 3),
+        ],
+        Bridges = [RoomBridgeOf(3), new ListedBridge(GhostBridge, 0)],
+        Rooms = [ListedRoomOf(RoomStayed, RoomStarted, RoomGhost)],
     };
 
     private static int Lines(Run run, string fragment) =>
@@ -780,7 +1053,7 @@ public sealed class CallerReconnectReloadTests
         private Rig(Run run)
         {
             Run = run;
-            _subscription = _manager.Events.Subscribe(new OnNext(e =>
+            _subscription = _manager.Events.Subscribe(new OnNext<SessionDomainEvent>(e =>
             {
                 if (e is CallEndedEvent ended && _manager.GetById(ended.SessionId) is { LinkedId: { } linkedId })
                     _callEnded.AddOrUpdate(linkedId, 1, static (_, count) => count + 1);
@@ -897,19 +1170,19 @@ public sealed class CallerReconnectReloadTests
         }
     }
 
-    /// <summary>A session subscriber that runs <c>onNext</c> on each notification.</summary>
-    private sealed class OnNext(Action<SessionDomainEvent> onNext) : IObserver<SessionDomainEvent>
+    /// <summary>A subscriber that runs <c>onNext</c> on each notification.</summary>
+    private sealed class OnNext<T>(Action<T> onNext) : IObserver<T>
     {
-        void IObserver<SessionDomainEvent>.OnNext(SessionDomainEvent value) => onNext(value);
+        void IObserver<T>.OnNext(T value) => onNext(value);
 
         public void OnError(Exception error)
         {
-            // The manager's stream never faults; nothing to do.
+            // Neither stream faults in these tests; nothing to do.
         }
 
         public void OnCompleted()
         {
-            // Completed when the manager is disposed; nothing to do.
+            // Completed when its source is disposed; nothing to do.
         }
     }
 
