@@ -180,6 +180,12 @@ per AMI session. If you reset per-participant state when the connection came bac
 you can follow `UserJoined` and `UserLeft` instead. A start of the server loads the rooms the same
 way.
 
+On 2.9.0 the two look the same to a `UserLeft` handler: a participant the reload found gone and
+one Asterisk reported leaving. From 2.10.0 `MeetMeUser.LeaveNotObserved` says which: `true` when
+a completed listing no longer reported the participant, whether it omitted the participant or the
+room, `No active conferences.` included, and `false` for `ConfbridgeLeave` and for `ConfbridgeEnd`.
+Consumers cannot set it.
+
 ```csharp
 using Verbara.Sdk.Live.MeetMe;
 
@@ -192,6 +198,11 @@ static void WatchLeaves(MeetMeManager conferences)
     };
 }
 ```
+
+An inferred leave carries no Asterisk timestamp or reason: the moment `UserLeft` is raised is when
+Live found the participant gone, not when the participant left. On the queue side the same property
+exists on `AsteriskQueueEntry`, and `RemoveQueue` still raises no `CallerLeft`: see
+[A reload announces the callers and participants it finds gone](migration-2.9.0.md#a-reload-announces-the-callers-and-participants-it-finds-gone).
 
 ## Package validation against 2.8.0
 

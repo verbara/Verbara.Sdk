@@ -298,8 +298,11 @@ as 2.8.0 needed. That reset now throws away the callers and participants that su
 raises their joins again.
 
 **What to do.** Stop resetting on reconnect and follow `CallerJoined`/`CallerLeft` and `UserJoined`/`UserLeft`
-instead: the leaves now cover what ended during the outage. A handler cannot tell a leave the reload found from one
-Asterisk reported. `RemoveQueue` still raises no `CallerLeft`.
+instead: the leaves now cover what ended during the outage.
+
+On 2.9.0 a handler cannot tell a leave the reload found from one Asterisk reported. From 2.10.0
+`AsteriskQueueEntry.LeaveNotObserved` and `MeetMeUser.LeaveNotObserved` say which: `true` when Live removed the caller
+or participant without Asterisk reporting the leave, `false` when Asterisk reported it. Consumers cannot set them.
 
 ```csharp
 using Verbara.Sdk.Live.Queues;
@@ -313,6 +316,16 @@ static void WatchLeaves(QueueManager queues)
     };
 }
 ```
+
+Two rules for a consumer:
+
+- An inferred leave carries no Asterisk timestamp or reason. Do not read the moment it was raised as the moment the
+  caller or participant left: on a reload it is when Live found them gone.
+- `RemoveQueue` still raises no `CallerLeft`. Its callers reach no handler; from 2.10.0 an entry you already hold reads
+  `LeaveNotObserved` as `true`.
+
+The reload is not the only way a caller reads `true`. A channel reconciliation that removes the caller's channel raises
+the same inferred `CallerLeft`, and so does a join that takes the channel name the caller was held under.
 
 Guide: [Reconnect](conference-participants-migration.md#reconnect).
 
