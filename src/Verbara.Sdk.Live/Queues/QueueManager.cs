@@ -1008,12 +1008,26 @@ public sealed class AsteriskQueueEntry
     internal long JoinOrdinal { get; set; }
 
     /// <summary>
-    /// True once the entry left the table without an observed <c>QueueCallerLeave</c>: a completed queue snapshot no
-    /// longer listed it, its queue was removed, or a channel reconciliation removed its channel. Set before
-    /// <see cref="QueueManager.CallerLeft"/> is raised for it; such a removal records no <c>live.queue.wait_time</c>
-    /// sample.
+    /// <c>true</c> once Live took this entry out of the table without Asterisk reporting the leave; <c>false</c> for a
+    /// leave Asterisk reported with <c>QueueCallerLeave</c>. Final before <see cref="QueueManager.CallerLeft"/> is raised
+    /// for the entry, and never cleared. Four paths set it:
+    /// <list type="bullet">
+    /// <item>A completed queue snapshot no longer listed the caller in its queue, or no longer listed the queue.</item>
+    /// <item>A channel reconciliation removed the caller's channel.</item>
+    /// <item>A join took the channel name the caller was held under: another <c>Uniqueid</c> on that name, or a held
+    /// caller re-keyed onto it by a rename.</item>
+    /// <item><see cref="QueueManager.RemoveQueue(string)"/> removed its queue. That raises no
+    /// <see cref="QueueManager.CallerLeft"/>, so this case is readable only on an entry the consumer already holds.</item>
+    /// </list>
+    /// <para>
+    /// A leave with this set has no Asterisk timestamp or reason, and records no <c>live.queue.wait_time</c> sample.
+    /// </para>
+    /// <para>
+    /// <see cref="QueueManager.Clear"/> sets nothing. A rename replaces the entry in the table, so an instance kept from
+    /// before it no longer follows the caller; the instance <see cref="QueueManager.CallerLeft"/> passes always does.
+    /// </para>
     /// </summary>
-    internal bool LeaveNotObserved { get; private set; }
+    public bool LeaveNotObserved { get; private set; }
 
     internal void MarkLeaveNotObserved() => LeaveNotObserved = true;
 

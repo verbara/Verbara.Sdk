@@ -71,6 +71,18 @@ public sealed class DocSnippetCompilationTests
         errors.Should().Equal("CS1061");
     }
 
+    [Fact]
+    public void LeaveNotObserved_ShouldNotCompile_WhenAConsumerAssignsItOnAQueueEntry()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk.Live.Queues;
+
+            new AsteriskQueueEntry().LeaveNotObserved = true;
+            """);
+
+        errors.Should().Equal("CS0200");
+    }
+
     /// <summary>
     /// Compiles <paramref name="source"/> as a consumer does, under an assembly name no SDK package grants friend
     /// access to, and returns the ids of its errors.

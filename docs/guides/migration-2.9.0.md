@@ -301,6 +301,19 @@ raises their joins again.
 instead: the leaves now cover what ended during the outage. A handler cannot tell a leave the reload found from one
 Asterisk reported. `RemoveQueue` still raises no `CallerLeft`.
 
+```csharp
+using Verbara.Sdk.Live.Queues;
+
+static void WatchLeaves(QueueManager queues)
+{
+    queues.CallerLeft += (queue, entry) =>
+    {
+        var source = entry.LeaveNotObserved ? "found gone by Live" : "reported by Asterisk";
+        Console.WriteLine($"{entry.Channel} left {queue}: {source}");
+    };
+}
+```
+
 Guide: [Reconnect](conference-participants-migration.md#reconnect).
 
 ## Sessions

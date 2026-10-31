@@ -1,1 +1,2 @@
 #nullable enable
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.LeaveNotObserved.get -> bool
