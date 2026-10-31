@@ -51,6 +51,16 @@ public sealed class CallerReconnectReloadTests
         Loop,
     }
 
+    /// <summary>When Asterisk reports the agents' events, against the reload's <c>Agents</c> list.</summary>
+    public enum LiveEventMoment
+    {
+        /// <summary>Between its last row and <c>AgentsComplete</c>, so the fence delivers them before the list is applied.</summary>
+        InsideTheList,
+
+        /// <summary>After <c>AgentsComplete</c>, delivered while the load is at the fence.</summary>
+        BeforeItIsApplied,
+    }
+
     /// <summary>Which of two overlapping loads read the older snapshot, and so applies it last.</summary>
     public enum OlderLoad
     {
@@ -1312,6 +1322,128 @@ public sealed class CallerReconnectReloadTests
                 },
                 "a list whose wait ran out only adds, as every table's does, and the reload it schedules replaces");
     }
+
+    [Theory]
+    [InlineData(Route.Caller, LiveEventMoment.InsideTheList)]
+    [InlineData(Route.Caller, LiveEventMoment.BeforeItIsApplied)]
+    [InlineData(Route.Loop, LiveEventMoment.InsideTheList)]
+    [InlineData(Route.Loop, LiveEventMoment.BeforeItIsApplied)]
+    public async Task Reload_ShouldKeepWhatALiveEventSaid_WhenItReachesAnAgentBeforeTheListIsApplied(Route route, LiveEventMoment moment)
+    {
+        const string ListedInLoggedOff = "3001";
+        const string ListedOffLoggedIn = "3002";
+        const string UnlistedLoggedIn = "3003";
+        const string ListedInUntouched = "3004";
+        var live = new[]
+        {
+            ("AgentLogoff", Headers(("Agent", ListedInLoggedOff))),
+            ("AgentLogin", Headers(("Agent", ListedOffLoggedIn), ("Channel", "PJSIP/3002-00000001"))),
+            ("AgentLogin", Headers(("Agent", UnlistedLoggedIn), ("Channel", "PJSIP/3003-00000002"))),
+        };
+        var before = PeerBefore();
+        before.Agents = [new ListedAgent(ListedInLoggedOff)];
+        var after = PeerAfter();
+        after.Agents =
+        [
+            new ListedAgent(ListedInLoggedOff), new ListedAgent(ListedOffLoggedIn, LoggedIn: false), new ListedAgent(ListedInUntouched),
+        ];
+        if (moment == LiveEventMoment.InsideTheList)
+            after.EventsInsideAgents = live;
+
+        await using var rig = await Rig.StartAsync(before, after, route);
+        using var fence = new HandlerHold();
+        if (moment == LiveEventMoment.BeforeItIsApplied)
+        {
+            rig.Run.Server.FenceWaitObserved = (name, _) =>
+            {
+                if (name == "Agents")
+                    fence.Block();
+            };
+        }
+
+        await rig.LoseAndComeBackAsync(route);
+        if (moment == LiveEventMoment.BeforeItIsApplied)
+        {
+            await fence.Held.WaitAsync(Run.Bound);
+            foreach (var (eventType, fields) in live)
+                await after.SendEventAsync(eventType, fields);
+
+            await rig.PingAsync();
+            fence.Release();
+        }
+
+        var reloaded = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(StateLoaded, 2));
+        await rig.SettleAsync();
+
+        new
+        {
+            Reloaded = reloaded,
+            Agents = rig.AgentStates(),
+            rig.AgentLogoffs,
+            Logins = Sorted(rig.AgentLogins),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Reloaded = true,
+                Agents = Sorted(
+                    $"{ListedInLoggedOff}:{Live.Agents.AgentState.LoggedOff}",
+                    $"{ListedOffLoggedIn}:{Live.Agents.AgentState.Available}",
+                    $"{UnlistedLoggedIn}:{Live.Agents.AgentState.Available}",
+                    $"{ListedInUntouched}:{Live.Agents.AgentState.Available}"),
+                AgentLogoffs = new[] { ListedInLoggedOff },
+                Logins = Sorted(ListedOffLoggedIn, UnlistedLoggedIn, ListedInUntouched),
+            },
+            "an event the list has not seen is newer than its row: a logoff, a login or a new agent Asterisk reported around "
+            + "the list stays as it was reported, and is not undone until the next reconnect");
+    }
+
+    [Theory]
+    [InlineData(LiveEventMoment.InsideTheList)]
+    [InlineData(LiveEventMoment.BeforeItIsApplied)]
+    public async Task RequestInitialStateAsync_ShouldNotUndoALiveEvent_WhenItReachesAnAgentBeforeTheListIsApplied(LiveEventMoment moment)
+    {
+        var peer = PeerHoldingAgents();
+        await using var rig = await Rig.StartAsync(peer, PeerAfter(), Route.Caller);
+        var logoff = Headers(("Agent", HeldAgents[0]));
+        if (moment == LiveEventMoment.InsideTheList)
+            peer.EventsInsideAgents = [("AgentLogoff", logoff)];
+
+        using var fence = new HandlerHold();
+        if (moment == LiveEventMoment.BeforeItIsApplied)
+        {
+            rig.Run.Server.FenceWaitObserved = (name, _) =>
+            {
+                if (name == "Agents")
+                    fence.Block();
+            };
+        }
+
+        var load = rig.Run.Server.RequestInitialStateAsync().AsTask();
+        if (moment == LiveEventMoment.BeforeItIsApplied)
+        {
+            await fence.Held.WaitAsync(Run.Bound);
+            await peer.SendEventAsync("AgentLogoff", logoff);
+            await rig.PingAsync();
+            fence.Release();
+        }
+
+        await load.WaitAsync(Run.Bound);
+        await rig.SettleAsync();
+
+        new { Agents = rig.AgentStates(), rig.AgentLogoffs, rig.AgentLogins }.Should().BeEquivalentTo(
+            new
+            {
+                Agents = Sorted(
+                    $"{HeldAgents[0]}:{Live.Agents.AgentState.LoggedOff}",
+                    $"{HeldAgents[1]}:{Live.Agents.AgentState.Available}"),
+                AgentLogoffs = new[] { HeldAgents[0] },
+                AgentLogins = new[] { HeldAgents[1] },
+            },
+            "a load that only adds does not log an agent back in on a row older than the logoff it has already delivered");
+    }
+
+    private static IReadOnlyList<KeyValuePair<string, string>> Headers(params (string Name, string Value)[] headers) =>
+        [.. headers.Select(static h => new KeyValuePair<string, string>(h.Name, h.Value))];
 
     [Fact]
     public async Task RequestInitialStateAsync_ShouldLeaveHeldAgentsTheListOmits_WhenAHostAsksForIt()

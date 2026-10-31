@@ -244,6 +244,12 @@ internal sealed class BootingAsterisk
     /// </summary>
     public IReadOnlyList<ListedAgent> Agents { get; set; } = [new ListedAgent(AgentId, LoggedIn: false)];
 
+    /// <summary>
+    /// Events the peer writes after the last row of an <c>Agents</c> list, before <c>AgentsComplete</c>: what Asterisk
+    /// reports live while it lists. Settable between two loads.
+    /// </summary>
+    public IReadOnlyList<(string EventType, IReadOnlyList<KeyValuePair<string, string>> Fields)> EventsInsideAgents { get; set; } = [];
+
     /// <summary>How the peer answers both conference listings. Settable between two loads.</summary>
     public ConferenceListing ConferenceListing { get; set; } = ConferenceListing.Listed;
 
@@ -782,6 +788,9 @@ internal sealed class BootingAsterisk
                 new("Status", agent.LoggedIn ? "AGENT_IDLE" : "AGENT_LOGGEDOFF"),
             ]);
         }
+
+        foreach (var (eventType, fields) in EventsInsideAgents)
+            await socket.WriteEventAsync(eventType, fields);
 
         await socket.WriteEventAsync("AgentsComplete",
             [new("ActionID", id), new("EventList", "Complete"), new("ListItems", agents.Count.ToString(CultureInfo.InvariantCulture))]);
