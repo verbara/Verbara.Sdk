@@ -216,10 +216,13 @@ The agents are the one table a reload replaces rather than reconciles. Since 2.1
 route, the table reads what it held until the `Agents` list has completed and then what the list
 says, in one step. `AgentLoggedIn` is raised once for each agent the list reports logged in, after
 the replacement; an agent the list drops or reports logged off raises no `AgentLoggedOff`, as
-before. A list cut short or refused leaves the table as it was, where a reload used to leave it
-empty or partial, so a reload that is interrupted or fails no longer costs you the agents. A
-connection other than `AmiConnection` cannot say that a list completed: there the list it delivered
-replaces the table.
+before. An agent that `AgentLogin`, `AgentLogoff`, `AgentConnect` or `AgentComplete` named after the
+list was asked for stays as that event left it, because the list is older: a row that reports it
+logged in is not announced once the event has logged it off, and an agent the list omits stays. A
+list cut short or refused leaves the table as it was, where a reload used to leave it empty or
+partial, so a reload that is interrupted or fails no longer costs you the agents. A connection other
+than `AmiConnection` cannot say that a list completed: there the list it delivered replaces the
+table.
 
 Only an `AmiConnection` reloads this way. Over an `IAmiConnection` of your own, including a wrapper
 that forwards to an `AmiConnection`, only `Reconnected` reloads: keep the explicit call below.
@@ -247,7 +250,8 @@ the queue counters count each join and leave once, and each ending is announced 
 read before the other load's applied last brings back no call or caller it saw leave and removes
 none that came after it. What it costs is the second load's AMI traffic, so remove the call when
 you can. The explicit call adds to the agents table and removes nobody from it, as it always did,
-so a reload's replacement is what drops an agent. It throws
+so a reload's replacement is what drops an agent; it skips a row older than an event that named the
+agent, as a reload does. It throws
 `AmiNotConnectedException` when its session ends before it completes, even if the connection is
 already on a newer session: that session reloads itself, so nothing is lost and there is nothing to
 retry.
