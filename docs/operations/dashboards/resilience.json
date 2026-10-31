@@ -69,7 +69,7 @@
       "targets": [
         { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "asterisk_sdk_resilience_circuit_state", "legendFormat": "{{key}}", "refId": "A" }
       ],
-      "title": "Circuit state (last — 0 Closed / 1 Half-Open / 2 Open)",
+      "title": "Circuit state (current — 0 Closed / 1 Half-Open / 2 Open)",
       "type": "stat"
     }
   ],
