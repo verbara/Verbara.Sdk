@@ -208,9 +208,18 @@ connection made itself.
 |---|---|
 | Your first `ConnectAsync` | Nothing: the load is `StartAsync`'s. Start the server once the connect has returned |
 | A `ConnectAsync` that fails | Nothing: no table changes and no recovery is reported. The next one that succeeds reloads |
-| The new session ends before the reload completes | The reload stops, applies no list it read on that session and logs `[LIVE] Reconnect reload interrupted` at Warning. It reports no `State loaded`, and the session that comes next reloads |
-| The reload fails for any other reason | `[LIVE] Reconnect reload failed` at Error, no `State loaded`. Call `RequestInitialStateAsync` to try again; the next session reloads on its own |
+| The new session ends before the reload completes | The reload stops and logs `[LIVE] Reconnect reload interrupted` at Warning. A list it had not applied when the session ended is not applied, even one read to its end, and it asks the next session for nothing; the tables it had already reconciled stay, and the agents keep what they held. It reports no `State loaded`, and the session that comes next reloads |
+| The reload fails for any other reason | `[LIVE] Reconnect reload failed` at Error, no `State loaded`. The tables it had not reached keep what they held. Call `RequestInitialStateAsync` to try again; the next session reloads on its own |
 | The server is disposed | The reload stops and applies nothing more |
+
+The agents are the one table a reload replaces rather than reconciles. Since 2.10.0, on either
+route, the table reads what it held until the `Agents` list has completed and then what the list
+says, in one step. `AgentLoggedIn` is raised once for each agent the list reports logged in, after
+the replacement; an agent the list drops or reports logged off raises no `AgentLoggedOff`, as
+before. A list cut short or refused leaves the table as it was, where a reload used to leave it
+empty or partial, so a reload that is interrupted or fails no longer costs you the agents. A
+connection other than `AmiConnection` cannot say that a list completed: there the list it delivered
+replaces the table.
 
 Only an `AmiConnection` reloads this way. Over an `IAmiConnection` of your own, including a wrapper
 that forwards to an `AmiConnection`, only `Reconnected` reloads: keep the explicit call below.
@@ -234,8 +243,11 @@ static void ReconnectAndReload(IAmiConnection connection, IVerbaraServer server,
 ```
 
 The two loads may overlap, in either order. Each held call and queue visit stays represented once,
-the queue counters count each join and leave once, and each ending is announced once. What it costs
-is the second load's AMI traffic, so remove the call when you can. It throws
+the queue counters count each join and leave once, and each ending is announced once. A snapshot
+read before the other load's applied last brings back no call or caller it saw leave and removes
+none that came after it. What it costs is the second load's AMI traffic, so remove the call when
+you can. The explicit call adds to the agents table and removes nobody from it, as it always did,
+so a reload's replacement is what drops an agent. It throws
 `AmiNotConnectedException` when its session ends before it completes, even if the connection is
 already on a newer session: that session reloads itself, so nothing is lost and there is nothing to
 retry.
