@@ -137,6 +137,22 @@ public sealed class CircuitGaugeReadsRealStateTests
         ReadGauge(key).Should().Be(Closed);
     }
 
+    [Fact]
+    public async Task CircuitStateGauge_ShouldFollowTheRejectingPolicy_WhenAnotherPolicyReportedTheKeyLast()
+    {
+        var tripped = NewPolicy(new FakeTimeProvider(), threshold: 1);
+        var healthy = NewPolicy(new FakeTimeProvider(), threshold: 1);
+        var key = NewKey();
+        await FailAsync(tripped, key);
+        await SucceedAsync(healthy, key);
+        ReadGauge(key).Should().Be(Closed);
+
+        var act = async () => await tripped.ExecuteAsync(key, _ => ValueTask.FromResult(1), CancellationToken.None);
+
+        await act.Should().ThrowAsync<CircuitBreakerOpenException>();
+        ReadGauge(key).Should().Be(Open);
+    }
+
     internal static string NewKey() => $"gauge-{Guid.NewGuid()}";
 
     internal static ResiliencePolicy NewPolicy(TimeProvider clock, int threshold) =>
