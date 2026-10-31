@@ -252,8 +252,8 @@ public sealed class AmiConnection : IAmiConnection
     // Every pump a cleanup detached whose release has not finished yet: what the pending gauge adds to the current pump.
     private readonly ConcurrentDictionary<AsyncEventPump, byte> _releasingPumps = new();
 
-    // The session the reconnect loop logged in whose Reconnected handlers have not returned yet; 0 for none. Written
-    // under _endingLock by StartSession and by the Reconnected delivery.
+    // The session whose Reconnected or CallerReconnected handlers have not returned yet; 0 for none. Written under
+    // _endingLock by StartSession and by that delivery.
     private long _reconnectPendingFor;
 
     // Whether Asterisk has reported FullyBooted on the current session. Every connect attempt replaces it before it
@@ -279,9 +279,9 @@ public sealed class AmiConnection : IAmiConnection
     /// <see cref="State"/> and whether the caller wrote it, read together and synchronously: <see langword="true"/> when
     /// the caller's own <c>ConnectAsync</c>, <c>DisconnectAsync</c> or <c>DisposeAsync</c> made the last change, and
     /// <see langword="false"/> when the reader, the heartbeat or the reconnect loop did (or nothing changed it yet). Read
-    /// by Verbara.Sdk.Live: a load cut short by the end of its session tells from it whether a reload will follow, since
-    /// a caller's connect raises no <see cref="Reconnected"/>. Unlike <see cref="StateChanged"/>, whose handlers run on a
-    /// queue, it is true at the moment it is read.
+    /// by Verbara.Sdk.Live: a load cut short by the end of its session tells from it whether the reconnect loop will bring
+    /// the connection back and reload it, which a caller's connect does not promise. Unlike <see cref="StateChanged"/>,
+    /// whose handlers run on a queue, it is true at the moment it is read.
     /// </summary>
     internal (AmiConnectionState State, bool WrittenByCaller) StateAndWriter
     {
@@ -316,11 +316,11 @@ public sealed class AmiConnection : IAmiConnection
     internal Task FullyBooted => _fullyBooted.Task;
 
     /// <summary>
-    /// Whether a session the reconnect loop logged in is still waiting for its <see cref="Reconnected"/> handlers to return:
-    /// true from that login — while the lost session's buffered events may still be delivered — until the handlers of that
-    /// session's <see cref="Reconnected"/> have returned; false after a caller's connect, which raises none. A
-    /// <see cref="Reconnected"/> that reaches delivery for a session no longer current clears nothing. Read by
-    /// Verbara.Sdk.Live.
+    /// Whether a session the reconnect loop logged in is still waiting for its <see cref="Reconnected"/> handlers to return,
+    /// or one the caller logged in for its <see cref="CallerReconnected"/> handlers: true from that login — while the lost
+    /// session's buffered events may still be delivered, for the loop's — until those handlers have returned; false after
+    /// a caller's connect that queued no notice. A notice that reaches delivery for a session no longer current clears
+    /// nothing. Read by Verbara.Sdk.Live.
     /// </summary>
     internal bool ReconnectPending => Volatile.Read(ref _reconnectPendingFor) != 0;
 
@@ -365,6 +365,28 @@ public sealed class AmiConnection : IAmiConnection
     /// </para>
     /// </remarks>
     internal event Action<Exception?>? Lost;
+
+    /// <summary>
+    /// Raised for a session the caller's own <see cref="ConnectAsync"/> logged in after an earlier session ended, with
+    /// that session's ordinal: what <see cref="Reconnected"/> is to a session of the reconnect loop, which raises this
+    /// never. The first session raises it never either, and neither does a connect that failed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Delivered on the same ordered queue, behind the <see cref="Lost"/> of the session before: every handler of that
+    /// loss has returned first, and the lost session's buffered events have been delivered before the connect could
+    /// start. Whether it is delivered is decided at delivery, as for <see cref="Reconnected"/>: not for a session no
+    /// longer current, nor once the caller has ended the connection. Whether it is queued is decided at the login:
+    /// nothing is queued while the event has no handler, so a live server started after the connect does not hear it
+    /// and its start loads that session. A handler that throws is logged and the ones after it still run.
+    /// </para>
+    /// <para>
+    /// It stays internal because the public <see cref="Reconnected"/> keeps its meaning, a reconnect the connection made
+    /// on its own. Called by Verbara.Sdk.Live, which reloads from it; kept with this signature until 3.0, because a Live
+    /// package of the 2.x line runs on any newer Ami.
+    /// </para>
+    /// </remarks>
+    internal event Action<long>? CallerReconnected;
 
     /// <summary>
     /// The tail of the queue <see cref="StateChanged"/>, <see cref="Lost"/> and <see cref="Reconnected"/> are delivered
@@ -776,11 +798,14 @@ public sealed class AmiConnection : IAmiConnection
             ThrowIfEndingRecordedLocked(byLoop);
             var ordinal = Interlocked.Increment(ref _sessionOrdinal);
 
-            // A redialled session is pending from this login until its Reconnected handlers return; a caller's connect
-            // raises no Reconnected, so nothing is pending after it. Written before Connected: a reader that sees
-            // Connected without the lock (the sweep reads State, then the pending reconnect) never sees the redialled
-            // session as connected and not pending.
-            Volatile.Write(ref _reconnectPendingFor, byLoop ? ordinal : 0);
+            // Decided once, at the login: the connect that follows a loss owes its handlers a notice, and only a notice
+            // queued can clear the pending session. The first session follows nothing, and the loop has Reconnected.
+            var callerReturned = !byLoop && ordinal > 1 && CallerReconnected is not null;
+
+            // A session that comes back is pending from this login until its handlers return. Written before Connected:
+            // a reader that sees Connected without the lock (the sweep reads State, then the pending reconnect) never
+            // sees such a session as connected and not pending.
+            Volatile.Write(ref _reconnectPendingFor, byLoop || callerReturned ? ordinal : 0);
             SetStateLocked(AmiConnectionState.Connected, cause: null, byCaller: !byLoop);
 
             // The pump observes the caller's ending from its creation, before Start: once _lifetime is cancelled it
@@ -811,6 +836,11 @@ public sealed class AmiConnection : IAmiConnection
 
             if (_options.EnableHeartbeat && _options.HeartbeatInterval > TimeSpan.Zero)
                 _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(socket, sessionToken), CancellationToken.None);
+
+            // Nothing else stands before the notice: a connect cannot get here while the lost session's release runs, and
+            // that release delivers its buffer. Under the lock, which the delivery takes first, so the session is whole.
+            if (callerReturned)
+                OnCallerReconnected(ordinal);
 
             return ordinal;
         }
@@ -1829,13 +1859,27 @@ public sealed class AmiConnection : IAmiConnection
     /// handler by handler, so one that throws does not keep the handlers after it (the live server's reload among
     /// them) from hearing the reconnect.
     /// </summary>
-    private void OnReconnected(long session)
-    {
+    private void OnReconnected(long session) =>
         // Queued even with no handler: its delivery is what ends the session's pending reconnect.
-        Notify(nameof(Reconnected), () =>
+        NotifySessionReturned(nameof(Reconnected), session, () => Reconnected, static (handler, _) => ((Action)handler).Invoke());
+
+    /// <summary>
+    /// Queues <see cref="CallerReconnected"/> the same way, for the session the caller's connect logged in.
+    /// </summary>
+    private void OnCallerReconnected(long session) =>
+        NotifySessionReturned(nameof(CallerReconnected), session, () => CallerReconnected,
+            static (handler, returned) => ((Action<long>)handler).Invoke(returned));
+
+    /// <summary>
+    /// Queues the notice of a session that came back: at delivery it reaches the handlers of <paramref name="handlers"/>,
+    /// read then, unless the caller has ended the connection or the session is no longer current.
+    /// </summary>
+    private void NotifySessionReturned(string eventName, long session, Func<Delegate?> handlers, Action<Delegate, long> invoke)
+    {
+        Notify(eventName, () =>
         {
             // Decided at delivery, not at queueing: a session lost while this notification waited is no longer current,
-            // and the newer session's own loop reports its Reconnected.
+            // and the newer session reports its own return.
             bool closedByCaller;
             bool current;
             lock (_endingLock)
@@ -1861,15 +1905,15 @@ public sealed class AmiConnection : IAmiConnection
             try
             {
                 // Read at delivery time: a handler removed while this notification waited is not called.
-                var handlers = Reconnected;
-                if (handlers is null)
+                var subscribed = handlers();
+                if (subscribed is null)
                     return;
 
-                foreach (var handler in handlers.GetInvocationList())
+                foreach (var handler in subscribed.GetInvocationList())
                 {
                     try
                     {
-                        ((Action)handler).Invoke();
+                        invoke(handler, session);
                     }
                     catch (Exception ex) when (ex is not OutOfMemoryException)
                     {

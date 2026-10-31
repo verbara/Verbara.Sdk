@@ -9,8 +9,9 @@ namespace Verbara.Sdk.Live.Tests.Server;
 /// <summary>
 /// With automatic reconnection off, a start whose load is cut short by the end of its AMI session throws the SDK's
 /// not-connected exception even when the caller is already connecting the connection again: the state the load stops in,
-/// <c>Connecting</c> or <c>Connected</c>, was written by the caller's own <c>ConnectAsync</c>, which raises no
-/// <c>Reconnected</c>, so no reload will follow and a start that returned would leave the table stale with no signal.
+/// <c>Connecting</c> or <c>Connected</c>, was written by the caller's own <c>ConnectAsync</c>, which nothing retries, so
+/// the start does not vouch for it and tells its host that the load did not complete. A session that connect logs in
+/// reloads all the same, once the start has thrown: the server stays subscribed.
 /// With automatic reconnection on, the same <c>Connecting</c> or <c>Connected</c> written by the reconnect loop is not
 /// the caller's: the loop raises <c>Reconnected</c> and its reload loads the state, so the start returns and logs that
 /// it was interrupted.
@@ -42,8 +43,8 @@ public sealed class StartWhileTheCallerReconnectsTests
         measured.Should().BeEquivalentTo(
             new Measured(typeof(AmiNotConnectedException), Interrupted: false, StateAtThrow: AmiConnectionState.Connecting,
                 PeerFault: null),
-            "the load stopped in the Connecting the caller's own ConnectAsync wrote, which raises no Reconnected: no reload "
-            + "will follow, so the start throws, as it does when it stops in Disconnecting or Disconnected, and does not "
+            "the load stopped in the Connecting the caller's own ConnectAsync wrote, which nothing retries: the start cannot "
+            + "vouch for it, so it throws, as it does when it stops in Disconnecting or Disconnected, and does not "
             + $"log that the reconnect will load the state. Measured: {measured}");
     }
 
@@ -55,8 +56,8 @@ public sealed class StartWhileTheCallerReconnectsTests
         measured.Should().BeEquivalentTo(
             new Measured(typeof(AmiNotConnectedException), Interrupted: false, StateAtThrow: AmiConnectionState.Connected,
                 PeerFault: null),
-            "the load stopped in the Connected the caller's own ConnectAsync reached, which raises no Reconnected either: "
-            + "no reload will follow, so the start throws, and does not log that the reconnect will load the state. "
+            "the load stopped in the Connected the caller's own ConnectAsync reached, and its own load did not complete: "
+            + "the start tells its host so by throwing, and does not log that the reconnect will load the state. "
             + $"Measured: {measured}");
     }
 

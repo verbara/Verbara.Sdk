@@ -183,14 +183,16 @@ public sealed class VerbaraServer : IVerbaraServer
     /// ended it: <see langword="null"/> when the connection's stream ended (Asterisk closed it, or it was reset: the
     /// socket transport reports both as an end of stream), a <see cref="TimeoutException"/> when the heartbeat's Ping
     /// went unanswered, or the reader's exception when the AMI stream could not be read. It is raised whether automatic
-    /// reconnection is on or off. From that moment until the connection's <see cref="IAmiConnection.Reconnected"/> and
-    /// the reload that follows it, the channels, queues and agents this server holds are not being updated.
+    /// reconnection is on or off. From that moment until the connection's <see cref="IAmiConnection.Reconnected"/>, or
+    /// the caller's own successful <c>ConnectAsync</c>, and the reload that follows it, the channels, queues and agents
+    /// this server holds are not being updated.
     /// </para>
     /// <para>
     /// It is raised after <see cref="IAmiConnection.State"/> has left <see cref="AmiConnectionState.Connected"/>,
     /// and before the <see cref="IAmiConnection.Reconnected"/> of the same outage, which is delivered behind it on the
-    /// same ordered queue. It is not raised for the caller's own <c>DisconnectAsync</c> or <c>DisposeAsync</c>, nor a
-    /// second time when the reconnect loop gives up at <c>MaxReconnectAttempts</c>: a connection that gave up reads
+    /// same ordered queue, as this server's reload after a caller's connect is. It is not raised for the caller's own
+    /// <c>DisconnectAsync</c> or <c>DisposeAsync</c>, nor a second time when the reconnect loop gives up at
+    /// <c>MaxReconnectAttempts</c>: a connection that gave up reads
     /// <see cref="AmiConnectionState.Disconnected"/>. Handlers run on a thread-pool thread, one after the other; they
     /// never hold the connection's reader, heartbeat or reconnect, but this server's reload after the reconnect waits
     /// for them, so a slow one delays it: keep them short. A handler that throws is logged and the others still run.
@@ -243,6 +245,10 @@ public sealed class VerbaraServer : IVerbaraServer
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
 
+    // The last session a caller's connect brought back that this server reloaded: a host that started the server
+    // twice is subscribed twice, and the session still has one automatic reload.
+    private long _callerSessionReloaded;
+
     // How many loads of this server are running: the start's, a reconnect's reload, RequestInitialStateAsync's. A
     // channel reconciliation alone is not counted.
     private int _loadsInFlight;
@@ -255,9 +261,9 @@ public sealed class VerbaraServer : IVerbaraServer
     internal bool IsLoadInFlight => Volatile.Read(ref _loadsInFlight) > 0;
 
     /// <summary>
-    /// Whether this server's connection has logged in again after a loss and the handlers of that session's
-    /// <c>Reconnected</c> — this server's reload among them — have not returned yet: the lost session's buffered events
-    /// may still be in delivery, and the reload has not started. Read by a caller that would rather not reconcile the
+    /// Whether this server's connection has logged in again after a loss and the handlers of that session's return —
+    /// this server's reload among them — have not returned yet: the reload has not started, and over the reconnect loop
+    /// the lost session's buffered events may still be in delivery. Read by a caller that would rather not reconcile the
     /// channels before the reload; nothing waits on it. Always <see langword="false"/> on a connection other than the
     /// SDK's own.
     /// </summary>
@@ -331,8 +337,16 @@ public sealed class VerbaraServer : IVerbaraServer
     /// without an exception and logs a warning: the reload that follows the reconnect loads the state, and until then
     /// the managers hold what the load had read. Whether the connection is reconnecting is read from its state when
     /// the load stops, so a reconnect that gives up after the start has returned is not reported by the start. A
-    /// <c>Connecting</c> or <c>Connected</c> written by the caller's own <c>ConnectAsync</c> is not reconnecting: a
-    /// caller's connect raises no <see cref="IAmiConnection.Reconnected"/>, so no reload follows it, and the start throws.
+    /// <c>Connecting</c> or <c>Connected</c> written by the caller's own <c>ConnectAsync</c> is not reconnecting: nothing
+    /// retries that connect, so the start throws. The server stays subscribed all the same: once a session of the
+    /// caller's has replaced a lost one, it reloads over an <see cref="AmiConnection"/>, whether the start returned or threw.
+    /// </para>
+    /// <para>
+    /// Over an <see cref="AmiConnection"/> a session that comes back after a loss reloads this server whoever brought it
+    /// back: the reconnect loop, which raises <see cref="IAmiConnection.Reconnected"/>, or the caller's own
+    /// <c>ConnectAsync</c>, which does not. Over any other <see cref="IAmiConnection"/> only
+    /// <see cref="IAmiConnection.Reconnected"/> does. Neither takes a second start, and a session the connection logged
+    /// in before this start is the start's to load.
     /// </para>
     /// </remarks>
     /// <exception cref="AmiNotConnectedException">
@@ -346,7 +360,10 @@ public sealed class VerbaraServer : IVerbaraServer
         _connection.Reconnected += OnReconnected;
         // Subscribed before the load, so that a loss which cuts the load short is announced too.
         if (_connection is AmiConnection amiConnection)
+        {
             amiConnection.Lost += OnConnectionLost;
+            amiConnection.CallerReconnected += OnCallerReconnected;
+        }
 
         // Register observable gauges for live state (all typed as long for consistent metric reporting)
         _instanceMeter.CreateObservableGauge<long>("live.channels.active",
@@ -384,10 +401,28 @@ public sealed class VerbaraServer : IVerbaraServer
         }
     }
 
-    // Justification: event handler for Action delegate requires async void.
+    private void OnReconnected() => ReloadNewSession(CancellationToken.None);
+
+    /// <summary>
+    /// The session a caller's own connect brought back after a loss. The connection delivers it behind that loss, for
+    /// its current session only, and raises it at most once for a session; a server subscribed twice hears it twice.
+    /// </summary>
+    private void OnCallerReconnected(long session)
+    {
+        // The delivery reads its handlers once, so a disposal that began after that read does not unhook this one.
+        if (_disposing.IsCancellationRequested)
+            return;
+
+        if (Interlocked.Exchange(ref _callerSessionReloaded, session) == session)
+            return;
+
+        ReloadNewSession(_disposing.Token);
+    }
+
+    // Justification: called from the two event handlers above, which are synchronous up to the first await on purpose.
     // All exceptions are caught in the try/catch below — no unobserved exceptions.
 #pragma warning disable VSTHRD100 // Avoid async void — required by Action event delegate
-    private async void OnReconnected()
+    private async void ReloadNewSession(CancellationToken cancellationToken)
 #pragma warning restore VSTHRD100
     {
         // First, before anything is reloaded or delivered: every event the outage swallowed lies before it.
@@ -419,7 +454,7 @@ public sealed class VerbaraServer : IVerbaraServer
 
             // Reload fresh state from Asterisk
             states = new LoadConnectionStates(_connection);
-            await LoadAsync(states, CancellationToken.None);
+            await LoadAsync(states, cancellationToken);
         }
         catch (AmiNotConnectedException ex)
         {
@@ -456,7 +491,7 @@ public sealed class VerbaraServer : IVerbaraServer
     /// When the AMI session ends before the load completes, the load stops and throws, whether or not the connection
     /// is reconnecting: it sends nothing more, it reconciles no channel snapshot it did not finish reading, so it ends
     /// no call, and it never returns as if the state it holds were complete. The queues and agents it had read stay
-    /// until the next load. <see cref="StartAsync"/>, by contrast, returns when the reconnect's reload will follow.
+    /// until the next load. <see cref="StartAsync"/>, by contrast, returns when the reconnect loop's reload will follow.
     /// </para>
     /// <para>
     /// When Asterisk refuses the <c>Status</c> request, as it does for an AMI user whose write classes allow none of
@@ -1519,15 +1554,15 @@ public sealed class VerbaraServer : IVerbaraServer
         public bool BeganOnASession => AtStart is AmiConnectionState.Connected or AmiConnectionState.Reconnecting;
 
         /// <summary>
-        /// Whether a reload will follow a load that stopped because its session ended: the connection was reconnecting
-        /// when the load began, or it was connected then and the reconnect loop owned it when the load stopped.
-        /// <c>Disconnecting</c> and <c>Disconnected</c> mean that automatic reconnection is off, that the reconnect gave
-        /// up, or that the caller ended the connection. A load that began in any other state reads as never connected,
+        /// Whether the reconnect loop will bring back a load that stopped because its session ended, and reload it: the
+        /// connection was reconnecting when the load began, or it was connected then and the loop owned it when the load
+        /// stopped. <c>Disconnecting</c> and <c>Disconnected</c> mean that automatic reconnection is off, that the reconnect
+        /// gave up, or that the caller ended the connection. A load that began in any other state reads as never connected,
         /// including one that began in <c>Connecting</c>: the state cannot tell a caller's first connect still running
-        /// from the reconnect loop's attempt, and a caller's connect raises no reload. For the same reason a
-        /// <c>Connecting</c> or <c>Connected</c> the caller's own connect wrote when the load stopped reads as no reload:
-        /// over an <see cref="AmiConnection"/> the stop reads who wrote the state with it; over any other connection it
-        /// cannot tell.
+        /// from the reconnect loop's attempt, and a first connect reloads nothing. A <c>Connecting</c> or <c>Connected</c>
+        /// the caller's own connect wrote when the load stopped reads as false too, because nothing retries that connect
+        /// and the start does not vouch for it, although a session it logs in does reload: over an
+        /// <see cref="AmiConnection"/> the stop reads who wrote the state with it; over any other connection it cannot tell.
         /// </summary>
         public bool ReconnectWillReload => AtStop is { } stop
             && !(AtStopWrittenByCaller && stop is AmiConnectionState.Connecting or AmiConnectionState.Connected)
@@ -1635,7 +1670,10 @@ public sealed class VerbaraServer : IVerbaraServer
         await Task.WhenAll(deferred);
         _connection.Reconnected -= OnReconnected;
         if (_connection is AmiConnection amiConnection)
+        {
             amiConnection.Lost -= OnConnectionLost;
+            amiConnection.CallerReconnected -= OnCallerReconnected;
+        }
 
         List<Exception>? failures = null;
         try

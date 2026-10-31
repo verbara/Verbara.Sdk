@@ -213,11 +213,14 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
         rig.Peers[0].CloseSession();
         await rig.ConnectionLog.Logged("[AMI] Disconnected").WaitAsync(SweepRig.Bound);
         await rig.Connection.ConnectAsync().AsTask().WaitAsync(SweepRig.Bound);
+        await rig.ServerLog.Logged("[LIVE] State loaded", 2).WaitAsync(SweepRig.Bound);
+        await rig.ReconnectHandled();
         var tags = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
 
         new { Verification = tags["verification"], Status = rig.Peers[1].Asked("Status") }.Should().BeEquivalentTo(
-            new { Verification = "run", Status = 1 },
-            "a caller's connect raises no Reconnected, so no reconnect is pending: the sweep verifies");
+            new { Verification = "run", Status = 2 },
+            "a session the caller brought back reloads as the loop's does, and once that reload is over the sweep verifies, "
+            + "asking on its own after the reload did");
     }
 
     /// <summary>The tags of the one <c>session reconciliation</c> span <paramref name="sweep"/> opens.</summary>

@@ -157,16 +157,23 @@ public sealed class CallerReconnectReloadTests
         await rig.CallerConnectsAsync();
         await rig.PingAsync();
         var statusAskedWhileHeld = second.Asked("Status");
+        var pendingWhileHeld = rig.Run.Server.IsReconnectPending;
 
         hold.Release();
         var reloaded = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(StateLoaded, 2));
         await rig.SettleAsync();
 
-        new { StatusAskedWhileHeld = statusAskedWhileHeld, Reloaded = reloaded, StatusAsked = second.Asked("Status") }
-            .Should().BeEquivalentTo(
-                new { StatusAskedWhileHeld = 0, Reloaded = true, StatusAsked = 1 },
-                "a loss's handlers have returned before the reload of the session that follows it, on this route as on the "
-                + "loop's, and the reload that waited for them still runs, once");
+        new
+        {
+            StatusAskedWhileHeld = statusAskedWhileHeld,
+            PendingWhileHeld = pendingWhileHeld,
+            Reloaded = reloaded,
+            StatusAsked = second.Asked("Status"),
+            PendingAfter = rig.Run.Server.IsReconnectPending,
+        }.Should().BeEquivalentTo(
+            new { StatusAskedWhileHeld = 0, PendingWhileHeld = true, Reloaded = true, StatusAsked = 1, PendingAfter = false },
+            "a loss's handlers have returned before the reload of the session that follows it, on this route as on the "
+            + "loop's, the sweep stands back from the moment of the login, and the reload that waited for them still runs, once");
     }
 
     [Fact]
@@ -573,6 +580,52 @@ public sealed class CallerReconnectReloadTests
         }.Should().BeEquivalentTo(
             new { Held = true, Loaded = 2, LatestAsked = 1, MemberPaused = false, Tables = AfterTables },
             "the load of a lost session finishes nothing: what it had read never lands on the session that replaced it");
+    }
+
+    [Fact]
+    public async Task Reload_ShouldNotStart_WhenTheServerIsDisposedAfterItsHandlerWasRead()
+    {
+        var first = PeerBefore();
+        var second = PeerAfter();
+        await using var run = await Run.ConnectAsync(first, second);
+        // Ahead of the server's handler in the list the delivery reads once, so the disposal cannot unhook it in time.
+        // Internal to the connection, and read the way SettleAsync reads its queue.
+#pragma warning disable VSTHRD002 // a handler that blocks is the case under test
+        Action<long> disposes = _ => run.Server.DisposeAsync().AsTask().Wait(Run.Bound);
+#pragma warning restore VSTHRD002
+        typeof(AmiConnection).GetEvent("CallerReconnected", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .AddMethod!.Invoke(run.Connection, [disposes]);
+        await run.StartServerAsync();
+
+        first.CloseSession();
+        AwaitState(run, s => s != AmiConnectionState.Connected);
+        run.ReleaseSecondPeer();
+        await run.Connection.ConnectAsync().AsTask().WaitAsync(Run.Bound);
+        await SettleAsync(run);
+
+        new { StatusAsked = second.Asked("Status"), ReloadsStarted = Lines(run, ReloadStarted) }.Should().BeEquivalentTo(
+            new { StatusAsked = 0, ReloadsStarted = 0 },
+            "the disposal came first, so the handler the delivery still calls starts nothing");
+    }
+
+    // ---- One automatic reload per session ----
+
+    [Fact]
+    public async Task Reload_ShouldRunOncePerSession_WhenAHostStartedTheServerTwice()
+    {
+        var first = PeerBefore();
+        var second = PeerAfter();
+        await using var rig = await Rig.StartAsync(first, second, Route.Caller);
+        await rig.Run.StartServerAsync();
+
+        await rig.LoseAndComeBackAsync(Route.Caller);
+        var reloaded = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(StateLoaded, 3));
+        await rig.SettleAsync();
+
+        new { Reloaded = reloaded, StatusAsked = second.Asked("Status"), ReloadsStarted = Lines(rig.Run, ReloadStarted) }
+            .Should().BeEquivalentTo(
+                new { Reloaded = true, StatusAsked = 1, ReloadsStarted = 1 },
+                "a host that retries its start subscribes the server again, and the session still owes one automatic reload");
     }
 
     // ---- A host that keeps its explicit request ----
