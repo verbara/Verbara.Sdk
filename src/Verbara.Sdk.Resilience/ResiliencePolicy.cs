@@ -174,6 +174,28 @@ public sealed class ResiliencePolicy
         throw lastException!;
     }
 
+    /// <summary>
+    /// Reads this policy's circuit state for <paramref name="key"/> now, by the rule of the
+    /// <c>circuit.state</c> gauge, without changing it: no number of reads alters the circuit or the
+    /// admission of the next call.
+    /// </summary>
+    /// <param name="key">Logical key identifying the circuit bucket, as passed to <see cref="ExecuteAsync{T}"/>.</param>
+    /// <returns>
+    /// The state of this policy's circuit for <paramref name="key"/>. A key with no circuit here, including
+    /// any key of a policy without a circuit breaker, reads
+    /// <see cref="ResilienceMetrics.CircuitStateValue.Closed"/>: its next call is admitted. The read
+    /// creates no circuit and does not make the key appear on the gauge.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
+    public ResilienceMetrics.CircuitStateValue GetCircuitState(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        return _circuits.TryGetValue(key, out var state)
+            ? state.ReadState(_circuitOpenDuration, _time)
+            : ResilienceMetrics.CircuitStateValue.Closed;
+    }
+
     private TimeSpan ComputeBackoff(int attempt)
     {
         if (_retryBaseDelay <= TimeSpan.Zero)
