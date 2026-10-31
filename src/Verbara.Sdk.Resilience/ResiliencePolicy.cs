@@ -83,7 +83,7 @@ public sealed class ResiliencePolicy
             // Circuit check ahead of every attempt; retries don't bypass a tripped circuit.
             if (state is not null && !state.ShouldAllow(_circuitOpenDuration, _time))
             {
-                ResilienceMetrics.SetCircuitState(key, ResilienceMetrics.CircuitStateValue.Open);
+                ResilienceMetrics.TrackCircuit(state, _circuitOpenDuration, _time);
                 throw new CircuitBreakerOpenException(key);
             }
 
@@ -126,7 +126,7 @@ public sealed class ResiliencePolicy
                             1,
                             new KeyValuePair<string, object?>("key", key));
                     }
-                    ResilienceMetrics.SetCircuitState(key, ResilienceMetrics.CircuitStateValue.Closed);
+                    ResilienceMetrics.TrackCircuit(state, _circuitOpenDuration, _time);
                 }
 
                 return result;
@@ -149,7 +149,7 @@ public sealed class ResiliencePolicy
                         ResilienceMetrics.CircuitOpened.Add(
                             1,
                             new KeyValuePair<string, object?>("key", key));
-                        ResilienceMetrics.SetCircuitState(key, ResilienceMetrics.CircuitStateValue.Open);
+                        ResilienceMetrics.TrackCircuit(state, _circuitOpenDuration, _time);
                     }
                 }
 
