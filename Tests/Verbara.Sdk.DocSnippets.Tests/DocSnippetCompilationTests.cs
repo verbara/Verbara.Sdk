@@ -83,6 +83,18 @@ public sealed class DocSnippetCompilationTests
         errors.Should().Equal("CS0200");
     }
 
+    [Fact]
+    public void LeaveNotObserved_ShouldNotCompile_WhenAConsumerAssignsItOnAParticipant()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk.Live.MeetMe;
+
+            new MeetMeUser().LeaveNotObserved = true;
+            """);
+
+        errors.Should().Equal("CS0200");
+    }
+
     /// <summary>
     /// Compiles <paramref name="source"/> as a consumer does, under an assembly name no SDK package grants friend
     /// access to, and returns the ids of its errors.

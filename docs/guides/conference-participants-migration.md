@@ -180,6 +180,19 @@ per AMI session. If you reset per-participant state when the connection came bac
 you can follow `UserJoined` and `UserLeft` instead. A start of the server loads the rooms the same
 way.
 
+```csharp
+using Verbara.Sdk.Live.MeetMe;
+
+static void WatchLeaves(MeetMeManager conferences)
+{
+    conferences.UserLeft += (room, user) =>
+    {
+        var source = user.LeaveNotObserved ? "found gone by Live" : "reported by Asterisk";
+        Console.WriteLine($"{user.Channel} left {room.RoomNumber}: {source}");
+    };
+}
+```
+
 ## Package validation against 2.8.0
 
 If you run package validation with 2.8.0 as the baseline, `Verbara.Sdk.Live` reports two `CP0002`:

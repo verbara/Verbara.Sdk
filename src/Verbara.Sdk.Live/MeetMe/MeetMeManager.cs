@@ -511,6 +511,7 @@ public sealed class MeetMeManager
                             RecordLeave(room.RoomNumber, held.Channel);
                             room.Users.TryRemove(new KeyValuePair<string, MeetMeUser>(held.Channel, held));
                             held.State = MeetMeUserState.Left;
+                            held.MarkLeaveNotObserved();
                             RemoveIfEmpty(room);
                             MeetMeManagerLog.UserRemovedBySnapshot(_logger, room.RoomNumber, held.Channel);
                             removed++;
@@ -736,6 +737,27 @@ public sealed class MeetMeUser
     /// <see langword="false"/>.
     /// </remarks>
     public bool Talking { get; set; }
+
+    /// <summary>
+    /// Whether this participant's leave was inferred rather than reported by Asterisk. Set before
+    /// <see cref="MeetMeManager.UserLeft"/> is raised and never cleared, so a handler reads the final value.
+    /// <see langword="false"/> while the participant is held, and on a leave Asterisk reported (<c>ConfbridgeLeave</c>,
+    /// or <c>ConfbridgeEnd</c> for a participant still held). <see langword="true"/> when a reload's completed conference
+    /// listing no longer reported the participant:
+    /// <list type="bullet">
+    /// <item>its room was listed and the room's participant listing omitted it;</item>
+    /// <item>its room was not listed, including the answer <c>No active conferences.</c>.</item>
+    /// </list>
+    /// <para>
+    /// A leave with this set has no Asterisk timestamp or reason.
+    /// </para>
+    /// <para>
+    /// <see cref="MeetMeManager.Clear"/> sets nothing and raises nothing.
+    /// </para>
+    /// </summary>
+    public bool LeaveNotObserved { get; private set; }
+
+    internal void MarkLeaveNotObserved() => LeaveNotObserved = true;
 
     // When the manager took this participant in, on its change ordinal: a listing requested before it cannot report it.
     internal long JoinMark { get; init; }
