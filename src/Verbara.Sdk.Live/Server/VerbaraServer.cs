@@ -242,6 +242,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>Null in production; observes collection of a queue row without publishing a queue event.</summary>
     internal Action? QueueRowBuffered { get; set; }
 
+    /// <summary>Null in production; observes a listing a load is about to request, by its AMI action name.</summary>
+    internal Action<string>? ListingRequested { get; set; }
+
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
 
@@ -1171,6 +1174,8 @@ public sealed class VerbaraServer : IVerbaraServer
     private async ValueTask<Listing> ReadListingAsync(ManagerAction action, string actionName, LoadSession? session,
         LoadConnectionStates states, ListSnapshotMark? mark, CancellationToken cancellationToken)
     {
+        ListingRequested?.Invoke(actionName);
+
         var outcome = session is not null || _connection.ReportsEventActionOutcome ? new EventActionOutcome() : null;
         var source = session is not null
             ? mark is not null

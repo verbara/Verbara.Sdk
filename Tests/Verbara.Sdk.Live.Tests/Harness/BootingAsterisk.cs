@@ -42,6 +42,12 @@ public enum PeerClose
     /// channels, before <c>StatusComplete</c>.
     /// </summary>
     DuringStatus,
+
+    /// <summary>
+    /// In the middle of an <c>Agents</c> list: after <see cref="BootingAsterisk.AgentsBeforeClose"/> of its rows, before
+    /// <c>AgentsComplete</c>.
+    /// </summary>
+    DuringAgents,
 }
 
 /// <summary>A channel the peer lists on <c>Status</c>, with the headers Asterisk sends for it.</summary>
@@ -67,6 +73,11 @@ internal sealed record ListedParticipant(string Channel, string UniqueId, string
 
 /// <summary>A ConfBridge room the peer lists on <c>ConfbridgeListRooms</c>, with its participants.</summary>
 internal sealed record ListedRoom(string Conference, IReadOnlyList<ListedParticipant> Participants);
+
+/// <summary>An agent the peer lists on <c>Agents</c>.</summary>
+/// <param name="Id">The <c>Agent</c> header.</param>
+/// <param name="LoggedIn">Whether the row says the agent is logged in; otherwise <c>AGENT_LOGGEDOFF</c>.</param>
+internal sealed record ListedAgent(string Id, bool LoggedIn = true);
 
 /// <summary>How the peer answers the two conference listings.</summary>
 public enum ConferenceListing
@@ -180,6 +191,9 @@ internal sealed class BootingAsterisk
     /// <summary>How many channels a <c>Status</c> list holds before the close under <see cref="PeerClose.DuringStatus"/>.</summary>
     public int StatusChannelsBeforeClose { get; set; }
 
+    /// <summary>How many rows an <c>Agents</c> list holds before the close under <see cref="PeerClose.DuringAgents"/>.</summary>
+    public int AgentsBeforeClose { get; set; }
+
     /// <summary>
     /// From which <c>Status</c> ask on this session, counting from 1, the peer refuses it with <c>Response: Error</c> and
     /// <c>Message: Permission denied</c>, as Asterisk does for an AMI user whose write classes allow none of
@@ -224,6 +238,11 @@ internal sealed class BootingAsterisk
     /// <c>No Conference by that name found.</c>, as Asterisk does. Settable between two loads.
     /// </summary>
     public IReadOnlyList<ListedRoom> Rooms { get; set; } = [];
+
+    /// <summary>
+    /// The agents the peer lists on <c>Agents</c>; by default <see cref="AgentId"/>, logged off. Settable between two loads.
+    /// </summary>
+    public IReadOnlyList<ListedAgent> Agents { get; set; } = [new ListedAgent(AgentId, LoggedIn: false)];
 
     /// <summary>How the peer answers both conference listings. Settable between two loads.</summary>
     public ConferenceListing ConferenceListing { get; set; } = ConferenceListing.Listed;
@@ -476,8 +495,7 @@ internal sealed class BootingAsterisk
             if (!IsBooted || !HasAgentPool)
                 return await RefuseAsync(socket, id, name);
 
-            await AnswerAgentsAsync(socket, id);
-            return true;
+            return await AnswerAgentsAsync(socket, id);
         }
 
         if (string.Equals(name, "BridgeList", StringComparison.OrdinalIgnoreCase))
@@ -744,14 +762,30 @@ internal sealed class BootingAsterisk
         ]);
     }
 
-    private static async Task AnswerAgentsAsync(PipedSocket socket, string id)
+    private async Task<bool> AnswerAgentsAsync(PipedSocket socket, string id)
     {
+        var agents = Agents;
         await socket.RespondAsync("Success", id,
             [new("EventList", "start"), new("Message", "Agents will follow")]);
-        await socket.WriteEventAsync("Agents",
-            [new("ActionID", id), new("Agent", AgentId), new("Name", "Agent 1001"), new("Status", "AGENT_LOGGEDOFF")]);
+        for (var i = 0; i < agents.Count; i++)
+        {
+            if (Close == PeerClose.DuringAgents && i == AgentsBeforeClose)
+            {
+                socket.CloseFromPeer();
+                return false;
+            }
+
+            var agent = agents[i];
+            await socket.WriteEventAsync("Agents",
+            [
+                new("ActionID", id), new("Agent", agent.Id), new("Name", "Agent " + agent.Id),
+                new("Status", agent.LoggedIn ? "AGENT_IDLE" : "AGENT_LOGGEDOFF"),
+            ]);
+        }
+
         await socket.WriteEventAsync("AgentsComplete",
-            [new("ActionID", id), new("EventList", "Complete"), new("ListItems", "1")]);
+            [new("ActionID", id), new("EventList", "Complete"), new("ListItems", agents.Count.ToString(CultureInfo.InvariantCulture))]);
+        return true;
     }
 
     private static Task<bool> WriteFullyBootedAsync(PipedSocket socket) =>

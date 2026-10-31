@@ -51,6 +51,16 @@ public sealed class CallerReconnectReloadTests
         Loop,
     }
 
+    /// <summary>Which of two overlapping loads read the older snapshot, and so applies it last.</summary>
+    public enum OlderLoad
+    {
+        /// <summary>The host's explicit request read first.</summary>
+        Explicit,
+
+        /// <summary>The automatic reload read first.</summary>
+        Automatic,
+    }
+
     private const string StateLoaded = "[LIVE] State loaded";
     private const string ReloadStarted = "[LIVE] Reconnected: reloading state";
     private const string Connected = "[AMI] Connected";
@@ -58,6 +68,8 @@ public sealed class CallerReconnectReloadTests
     private const string RoomBridge = "22222222-2222-2222-2222-222222222222";
     private const string GhostBridge = "33333333-3333-3333-3333-333333333333";
     private const string ReloadFailed = "[LIVE] Reconnect reload failed";
+    private const string GhostAgent = "2001";
+    private const string SecondGhostAgent = "2002";
 
     private static readonly Leg Stayed = new("1790700000.1", "PJSIP/stayed-00000001");
     private static readonly Leg Gone = new("1790700000.2", "PJSIP/gone-00000002");
@@ -68,6 +80,13 @@ public sealed class CallerReconnectReloadTests
     private static readonly Leg Sentinel = new("1790700000.7", "PJSIP/sentinel-00000007");
     private static readonly Leg Ghost = new("1790700000.8", "PJSIP/ghost-00000008");
     private static readonly Leg RoomGhost = new("1790700000.9", "Local/conf@capture-00000009;2");
+
+    private static readonly Leg Late = new("1790700000.10", "PJSIP/late-0000000a");
+    private static readonly Leg RoomLate = new("1790700000.11", "Local/conf@capture-0000000b;2");
+    private static readonly Leg Fresh = new("1790700000.12", "PJSIP/fresh-0000000c");
+
+    /// <summary>The agents of <see cref="PeerHoldingAgents"/>.</summary>
+    private static readonly string[] HeldAgents = Sorted("3001", "3002");
 
     /// <summary>What Live holds before the outage.</summary>
     private static readonly Tables BeforeTables = new(
@@ -593,7 +612,7 @@ public sealed class CallerReconnectReloadTests
         var data = new TheoryData<Route, string, bool>();
         foreach (var route in new[] { Route.Caller, Route.Loop })
         {
-            foreach (var list in new[] { "Status", "BridgeList", "ConfbridgeList", "QueueStatus" })
+            foreach (var list in new[] { "Status", "BridgeList", "ConfbridgeList", "QueueStatus", "Agents" })
             {
                 data.Add(route, list, false);
                 data.Add(route, list, true);
@@ -656,6 +675,7 @@ public sealed class CallerReconnectReloadTests
             QueueStatusAsked = third.Asked("QueueStatus"),
             AgentsAsked = third.Asked("Agents"),
             Tables = rig.Tables(),
+            Agents = rig.AgentIds(),
             GhostBridgeLive = rig.Run.Server.Bridges.GetById(GhostBridge) is { DestroyedAt: null },
         }.Should().BeEquivalentTo(
             new
@@ -669,6 +689,7 @@ public sealed class CallerReconnectReloadTests
                 QueueStatusAsked = 1,
                 AgentsAsked = 1,
                 Tables = AfterTables,
+                Agents = Sorted(BootingAsterisk.AgentId),
                 GhostBridgeLive = false,
             },
             "a list read to its end on a lost session describes a session that is gone: the load stops there, applies it to "
@@ -938,6 +959,490 @@ public sealed class CallerReconnectReloadTests
             + "leave is counted once, and each ending is announced once");
     }
 
+    /// <summary>What Asterisk reports while the two loads overlap: a call and a room participant that end before the newer read.</summary>
+    private static BootingAsterisk PeerWithALateCall()
+    {
+        var peer = PeerAfter();
+        peer.StatusChannels = [.. peer.StatusChannels, Status(Late), Status(RoomLate, RoomBridge)];
+        peer.QueueEntries = [.. peer.QueueEntries, new QueueCaller(Late.Channel, Late.Uid, 3)];
+        peer.Bridges = [RoomBridgeOf(3)];
+        peer.Rooms = [ListedRoomOf(RoomStayed, RoomStarted, RoomLate)];
+        return peer;
+    }
+
+    [Theory]
+    [InlineData(OlderLoad.Explicit, "Status")]
+    [InlineData(OlderLoad.Explicit, "QueueStatus")]
+    [InlineData(OlderLoad.Explicit, "ConfbridgeList")]
+    [InlineData(OlderLoad.Automatic, "Status")]
+    [InlineData(OlderLoad.Automatic, "QueueStatus")]
+    [InlineData(OlderLoad.Automatic, "ConfbridgeList")]
+    public async Task Overlap_ShouldEndOnTheNewerTruth_WhenTheOlderSnapshotIsAppliedLast(OlderLoad older, string list)
+    {
+        var first = PeerBefore();
+        var second = PeerWithALateCall();
+        await using var rig = await Rig.StartAsync(first, second, Route.Caller);
+        var stayedEntry = rig.Entry(Stayed);
+        using var notice = new HandlerHold();
+        using var fence = new HandlerHold();
+        Task explicitLoad;
+        if (older == OlderLoad.Explicit)
+        {
+            // The host's request reads first, and stays at its fence, while a slow handler keeps the reload's notice queued.
+            rig.Run.Server.ConnectionLost += _ => notice.Block();
+            first.CloseSession();
+            await notice.Held.WaitAsync(Run.Bound);
+            rig.Run.ReleaseSecondPeer();
+            await rig.CallerConnectsAsync();
+            rig.Run.Server.FenceWaitObserved = (name, _) =>
+            {
+                if (name == list)
+                    fence.Block();
+            };
+            explicitLoad = rig.Run.Server.RequestInitialStateAsync().AsTask();
+        }
+        else
+        {
+            rig.Run.Server.FenceWaitObserved = (name, _) =>
+            {
+                if (name == list)
+                    fence.Block();
+            };
+            await rig.LoseAndComeBackAsync(Route.Caller);
+            explicitLoad = Task.CompletedTask;
+        }
+
+        var held = await CompletesWithinBoundAsync(fence.Held);
+
+        // Truth moves on, the way Asterisk reports it: the late call ends in front of the session, and a new one is up.
+        await second.SendEventAsync("QueueCallerLeave", AsteriskFrames.QueueCallerLeave(Late.Uid, Late.Channel, BootingAsterisk.QueueName, 3, 2));
+        await second.SendEventAsync("ConfbridgeLeave",
+            AsteriskFrames.ConfbridgeLeave(Room, RoomBridge, 2, RoomLate.Uid, RoomLate.Channel, RoomLate.Uid));
+        await second.SendEventAsync("Hangup", AsteriskFrames.Hangup(Late.Uid, Late.Channel, Late.Uid));
+        await second.SendEventAsync("Hangup", AsteriskFrames.Hangup(RoomLate.Uid, RoomLate.Channel, RoomLate.Uid));
+        second.StatusChannels = [.. PeerAfter().StatusChannels, Status(Fresh)];
+        second.QueueEntries = [.. PeerAfter().QueueEntries, new QueueCaller(Fresh.Channel, Fresh.Uid, 3)];
+        second.Bridges = [RoomBridgeOf(2)];
+        second.Rooms = [ListedRoomOf(RoomStayed, RoomStarted)];
+        await rig.PingAsync();
+
+        if (older == OlderLoad.Explicit)
+        {
+            notice.Release();
+            await rig.Run.ServerLog.Logged(StateLoaded, 2).WaitAsync(Run.Bound);
+        }
+        else
+        {
+            await rig.Run.Server.RequestInitialStateAsync().AsTask().WaitAsync(Run.Bound);
+        }
+
+        fence.Release();
+        await explicitLoad.WaitAsync(Run.Bound);
+        var bothEnded = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(StateLoaded, 3));
+        await rig.SettleAsync();
+        await rig.ObservedCallAsync(second);
+
+        using (new AssertionScope())
+        {
+            new
+            {
+                Held = held,
+                BothEnded = bothEnded,
+                Tables = rig.Tables(),
+                GoneEnding = rig.Ending(Gone),
+                rig.Counters.Left,
+            }.Should().BeEquivalentTo(
+                new
+                {
+                    Held = true,
+                    BothEnded = true,
+                    Tables = new Tables(
+                        Sorted(Stayed.Uid, Started.Uid, Fresh.Uid, RoomStayed.Uid, RoomStarted.Uid),
+                        Sorted(Stayed.Channel, Started.Channel, Fresh.Channel),
+                        Sorted(RoomStayed.Channel, RoomStarted.Channel)),
+                    GoneEnding = new Ending("reload", null, 1),
+                    // The late caller left in front of every queue list applied, so only the one the outage took is counted.
+                    Left = 1L,
+                },
+                "a snapshot read before the truth moved brings back nothing that left in front of it and removes nothing "
+                + "that came after it, whichever of the two loads read it, and however late it is applied");
+            rig.Removed.Should().OnlyHaveUniqueItems("each call ends once, whichever load saw it go first");
+            rig.Entry(Stayed).Should().BeSameAs(stayedEntry, "neither load replaces the visit that survived the outage");
+        }
+    }
+
+    // ---- The agents ----
+
+    [Theory]
+    [InlineData(Route.Caller, PeerClose.DuringStatus)]
+    [InlineData(Route.Caller, PeerClose.DuringAgents)]
+    [InlineData(Route.Loop, PeerClose.DuringStatus)]
+    [InlineData(Route.Loop, PeerClose.DuringAgents)]
+    public async Task Reload_ShouldKeepTheAgentsItHeld_WhenTheNewSessionEndsDuringIt(Route route, PeerClose close)
+    {
+        var ending = PeerAfter();
+        ending.Agents = [new ListedAgent("4001"), new ListedAgent("4002")];
+        ending.Close = close;
+        ending.StatusChannelsBeforeClose = 1;
+        ending.AgentsBeforeClose = 1;
+        await using var rig = await Rig.StartAsync(PeerHoldingAgents(), ending, route, maxReconnectAttempts: 1,
+            laterPeers: [new BootingAsterisk { RefusesLogin = true }]);
+
+        await rig.LoseAndComeBackAsync(route);
+        var asked = await CompletesWithinBoundAsync(ending.AskedAtLeast(close == PeerClose.DuringStatus ? "Status" : "Agents", 1));
+        AwaitState(rig.Run, s => s == AmiConnectionState.Disconnected, asked);
+        await rig.SettleAsync();
+
+        new { Asked = asked, Agents = rig.AgentIds(), Loaded = Lines(rig.Run, StateLoaded), rig.AgentLogins, rig.AgentLogoffs }
+            .Should().BeEquivalentTo(
+                new { Asked = true, Agents = HeldAgents, Loaded = 1, AgentLogins = Array.Empty<string>(), AgentLogoffs = Array.Empty<string>() },
+                "a list cut short is no evidence that any agent is gone, and what it had listed is not announced");
+    }
+
+    [Theory]
+    [InlineData(Route.Caller)]
+    [InlineData(Route.Loop)]
+    public async Task Reload_ShouldKeepTheAgentsItHeld_WhenItsLoadFails(Route route)
+    {
+        var failing = PeerAfter();
+        failing.Agents = [new ListedAgent("4001")];
+        await using var rig = await Rig.StartAsync(PeerHoldingAgents(), failing, route);
+        var thrown = 0;
+        rig.Run.Server.QueueRowBuffered = () =>
+        {
+            if (Interlocked.Exchange(ref thrown, 1) == 0)
+                throw new InvalidOperationException("the load failed for a reason of its own");
+        };
+
+        await rig.LoseAndComeBackAsync(route);
+        var reported = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(ReloadFailed, 1));
+        await rig.SettleAsync();
+
+        new { Reported = reported, Agents = rig.AgentIds(), State = rig.Run.Connection.State }.Should().BeEquivalentTo(
+            new { Reported = true, Agents = HeldAgents, State = AmiConnectionState.Connected },
+            "the guide tells a host whose reload failed to ask again: until it does, Live keeps what it held");
+    }
+
+    [Theory]
+    [InlineData(Route.Caller)]
+    [InlineData(Route.Loop)]
+    public async Task Reload_ShouldKeepTheAgentsItHeld_WhenAsteriskRefusesItsAgentsList(Route route)
+    {
+        var refusing = new BootingAsterisk { BootedAtLogin = true, HasAgentPool = false };
+        await using var rig = await Rig.StartAsync(PeerHoldingAgents(), refusing, route);
+
+        await rig.LoseAndComeBackAsync(route);
+        var reloaded = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(StateLoaded, 2));
+        await rig.SettleAsync();
+
+        new { Reloaded = reloaded, Asked = refusing.Asked("Agents"), Agents = rig.AgentIds() }.Should().BeEquivalentTo(
+            new { Reloaded = true, Asked = 1, Agents = HeldAgents },
+            "a refusal lists nothing, as it does for the queues: it is no evidence that an agent is gone");
+    }
+
+    [Theory]
+    [InlineData(Route.Caller)]
+    [InlineData(Route.Loop)]
+    public async Task Reload_ShouldReplaceTheAgentsInOneStepAndAnnounceNoLogoff_WhenItsListCompletes(Route route)
+    {
+        const string Stays = "3001";
+        const string LogsOff = "3002";
+        const string IsGone = "3003";
+        const string Arrives = "3004";
+        var before = PeerBefore();
+        before.Agents = [new ListedAgent(Stays), new ListedAgent(LogsOff), new ListedAgent(IsGone)];
+        var after = PeerAfter();
+        after.Agents = [new ListedAgent(Stays), new ListedAgent(LogsOff, LoggedIn: false), new ListedAgent(Arrives)];
+        await using var rig = await Rig.StartAsync(before, after, route);
+        int? heldWhileReading = null;
+        rig.Run.Server.QueueRowBuffered = () => heldWhileReading ??= rig.Run.Server.Agents.AgentCount;
+        string[]? heldAtTheFirstLogin = null;
+        rig.Run.Server.Agents.AgentLoggedIn += _ => heldAtTheFirstLogin ??= rig.AgentIds();
+
+        await rig.LoseAndComeBackAsync(route);
+        var reloaded = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(StateLoaded, 2));
+        await rig.SettleAsync();
+
+        new
+        {
+            Reloaded = reloaded,
+            HeldWhileReading = heldWhileReading,
+            HeldAtTheFirstLogin = heldAtTheFirstLogin,
+            Agents = rig.AgentStates(),
+            rig.AgentLogins,
+            rig.AgentLogoffs,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Reloaded = true,
+                HeldWhileReading = (int?)3,
+                HeldAtTheFirstLogin = Sorted(Stays, LogsOff, Arrives),
+                Agents = new[]
+                {
+                    $"{Stays}:{Live.Agents.AgentState.Available}", $"{LogsOff}:{Live.Agents.AgentState.LoggedOff}",
+                    $"{Arrives}:{Live.Agents.AgentState.Available}",
+                },
+                AgentLogins = new[] { Stays, Arrives },
+                AgentLogoffs = Array.Empty<string>(),
+            },
+            "the table reads what it held until the list has completed, then what the list says, in one step; each logged-in "
+            + "row is announced as it always was, and an agent the list drops or reports logged off raises no AgentLoggedOff");
+    }
+
+    [Theory]
+    [InlineData(Route.Caller, false)]
+    [InlineData(Route.Caller, true)]
+    [InlineData(Route.Loop, false)]
+    [InlineData(Route.Loop, true)]
+    public async Task RetiredLoad_ShouldLeaveNoGhostAgent_WhenItsHandlerOutlivesTheSuccessorsLoad(Route route, bool explicitLoad)
+    {
+        var retired = PeerAfter();
+        retired.Agents = [new ListedAgent(GhostAgent), new ListedAgent(SecondGhostAgent)];
+        var third = PeerAfter();
+        await using var rig = await Rig.StartAsync(PeerBefore(), retired, route, laterPeers: [third]);
+        using var hold = new HandlerHold();
+        var loadedAtTheLoss = 1;
+        if (explicitLoad)
+        {
+            await rig.LoseAndComeBackAsync(route);
+            await rig.Run.ServerLog.Logged(StateLoaded, 2).WaitAsync(Run.Bound);
+            await rig.SettleAsync();
+            loadedAtTheLoss = 2;
+        }
+
+        // The load's own flow is held inside the login handler of the first row.
+        rig.Run.Server.Agents.AgentLoggedIn += _ => hold.Block();
+        var load = explicitLoad ? rig.Run.Server.RequestInitialStateAsync().AsTask() : Task.CompletedTask;
+        if (!explicitLoad)
+            await rig.LoseAndComeBackAsync(route);
+
+        var held = await CompletesWithinBoundAsync(hold.Held);
+        if (held)
+        {
+            retired.CloseSession();
+            if (route == Route.Caller)
+                await rig.CallerConnectsAsync();
+
+            await rig.Run.ServerLog.Logged(StateLoaded, loadedAtTheLoss + 1).WaitAsync(Run.Bound);
+        }
+
+        var loginsAtTheRelease = rig.AgentLogins.Length;
+        hold.Release();
+        var stopped = await Record.ExceptionAsync(() => load.WaitAsync(Run.Bound));
+        await rig.SettleAsync();
+
+        new
+        {
+            Held = held,
+            Loaded = Lines(rig.Run, StateLoaded),
+            Stopped = stopped?.GetType(),
+            Agents = rig.AgentIds(),
+            LoginsAfterTheRelease = rig.AgentLogins.Length - loginsAtTheRelease,
+            AgentsAsked = third.Asked("Agents"),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Held = true,
+                Loaded = loadedAtTheLoss + 1,
+                Stopped = explicitLoad ? typeof(AmiNotConnectedException) : null,
+                Agents = Sorted(BootingAsterisk.AgentId),
+                LoginsAfterTheRelease = 0,
+                AgentsAsked = 1,
+            },
+            "the rows of a lost session's list stop at the loss, wherever the load stood in them: no ghost agent on the "
+            + "session that replaced it, and no login announced for one");
+    }
+
+    [Fact]
+    public async Task Reload_ShouldReplaceTheAgents_WhenItsFenceRanOutAndItsScheduledReloadRuns()
+    {
+        const string Stays = "3001";
+        const string IsGone = "3002";
+        const string Arrives = "3004";
+        var before = PeerBefore();
+        before.Agents = [new ListedAgent(Stays), new ListedAgent(IsGone)];
+        var second = PeerAfter();
+        second.Agents = [new ListedAgent(Stays), new ListedAgent(Arrives)];
+        await using var rig = await Rig.StartAsync(before, second, Route.Caller);
+        var barrierClock = new FakeTimeProvider(rig.Run.Clock.GetUtcNow());
+        rig.Run.Server.BarrierClock = barrierClock;
+        using var gate = new DispatchGate();
+        using var gated = rig.Run.Connection.Subscribe(gate);
+        var agentsFence = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        rig.Run.Server.FenceWaitObserved = (name, _) =>
+        {
+            // Past the queues' fence, so that only the Agents list has events behind the held dispatch.
+            if (name == "QueueStatus")
+            {
+#pragma warning disable VSTHRD002 // the load waits here so the hold is in place before it asks for the agents
+                second.SendEventAsync("UserEvent", DispatchGate.Frame()).Wait(Run.Bound);
+                gate.Held.Wait(Run.Bound);
+#pragma warning restore VSTHRD002
+            }
+            else if (name == "Agents")
+            {
+                agentsFence.TrySetResult();
+            }
+        };
+
+        await rig.LoseAndComeBackAsync(Route.Caller);
+        var fenced = await CompletesWithinBoundAsync(agentsFence.Task);
+        var firstLoaded = rig.Run.ServerLog.Logged(StateLoaded, 2);
+        while (fenced && !firstLoaded.IsCompleted)
+        {
+            var timer = await barrierClock.TimersCreated.ReadAsync().AsTask().WaitAsync(Run.Bound);
+            barrierClock.Advance(timer.DueTime);
+        }
+
+        await firstLoaded.WaitAsync(Run.Bound);
+        var afterTheDeferredLoad = rig.AgentIds();
+        gate.Release();
+        await rig.Run.Server.ScheduledReload.WaitAsync(Run.Bound);
+        await rig.Run.ServerLog.Logged(StateLoaded, 3).WaitAsync(Run.Bound);
+        await rig.SettleAsync();
+
+        new { Fenced = fenced, AfterTheDeferredLoad = afterTheDeferredLoad, Agents = rig.AgentIds(), rig.AgentLogoffs }
+            .Should().BeEquivalentTo(
+                new
+                {
+                    Fenced = true,
+                    AfterTheDeferredLoad = Sorted(Stays, IsGone, Arrives),
+                    Agents = Sorted(Stays, Arrives),
+                    AgentLogoffs = Array.Empty<string>(),
+                },
+                "a list whose wait ran out only adds, as every table's does, and the reload it schedules replaces");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldLeaveHeldAgentsTheListOmits_WhenAHostAsksForIt()
+    {
+        var peer = PeerHoldingAgents();
+        await using var rig = await Rig.StartAsync(peer, PeerAfter(), Route.Caller);
+        peer.Agents = [new ListedAgent("4001")];
+
+        await rig.Run.Server.RequestInitialStateAsync().AsTask().WaitAsync(Run.Bound);
+
+        rig.AgentIds().Should().Equal(Sorted([.. HeldAgents, "4001"]),
+            "only a reload after a reconnect replaces the table: an explicit load adds to it, as it always did");
+    }
+
+    [Fact]
+    public async Task RequestInitialStateAsync_ShouldApplyNoRow_WhenItsAgentsListIsCutShort()
+    {
+        var peer = PeerHoldingAgents();
+        await using var rig = await Rig.StartAsync(peer, PeerAfter(), Route.Caller);
+        peer.Agents = [new ListedAgent("4001"), new ListedAgent("4002")];
+        peer.Close = PeerClose.DuringAgents;
+        peer.AgentsBeforeClose = 1;
+
+        var stopped = await Record.ExceptionAsync(() => rig.Run.Server.RequestInitialStateAsync().AsTask().WaitAsync(Run.Bound));
+
+        new { Stopped = stopped?.GetType(), Agents = rig.AgentIds(), rig.AgentLogins }.Should().BeEquivalentTo(
+            new { Stopped = typeof(AmiNotConnectedException), Agents = HeldAgents, AgentLogins = Array.Empty<string>() },
+            "a load cut short applies nothing of the list it was reading, as it does for every other table");
+    }
+
+    // ---- A retired load asks nothing of its successor ----
+
+    /// <summary>Every listing a load requests through its one reader: the name, and which ask of it the loss precedes.</summary>
+    public static TheoryData<Route, string, int> RetiredSends()
+    {
+        var data = new TheoryData<Route, string, int>();
+        foreach (var route in new[] { Route.Caller, Route.Loop })
+        {
+            data.Add(route, "BridgeList", 1);
+            data.Add(route, "ConfbridgeListRooms", 1);
+            data.Add(route, "ConfbridgeList", 1);
+            data.Add(route, "ConfbridgeList", 2);
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(RetiredSends))]
+    public async Task RetiredLoad_ShouldAskNothingOfItsSuccessor_WhenItsSessionIsLostBeforeAListing(Route route, string list, int ask)
+    {
+        var retired = PeerRetired();
+        retired.Rooms = [ListedRoomOf(RoomStayed, RoomStarted, RoomGhost), new ListedRoom("second-room", [])];
+        var third = PeerAfter();
+        await using var rig = await Rig.StartAsync(PeerBefore(), retired, route, laterPeers: [third]);
+        using var hold = new HandlerHold();
+        var asks = 0;
+        rig.Run.Server.ListingRequested = name =>
+        {
+            if (name == list && Interlocked.Increment(ref asks) == ask)
+                hold.Block();
+        };
+
+        await rig.LoseAndComeBackAsync(route);
+        var held = await CompletesWithinBoundAsync(hold.Held);
+        if (held)
+        {
+            retired.CloseSession();
+            if (route == Route.Caller)
+                await rig.CallerConnectsAsync();
+
+            await rig.Run.ServerLog.Logged(StateLoaded, 2).WaitAsync(Run.Bound);
+        }
+
+        hold.Release();
+        await rig.SettleAsync();
+
+        new
+        {
+            Held = held,
+            Loaded = Lines(rig.Run, StateLoaded),
+            BridgeListAsked = third.Asked("BridgeList"),
+            RoomsAsked = third.Asked("ConfbridgeListRooms"),
+            ParticipantsAsked = third.Asked("ConfbridgeList"),
+            QueueStatusAsked = third.Asked("QueueStatus"),
+            AgentsAsked = third.Asked("Agents"),
+            Tables = rig.Tables(),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Held = true,
+                Loaded = 2,
+                BridgeListAsked = 1,
+                RoomsAsked = 1,
+                ParticipantsAsked = 1,
+                QueueStatusAsked = 1,
+                AgentsAsked = 1,
+                Tables = AfterTables,
+            },
+            "the session that replaced the lost one has loaded itself: the load that belongs to the lost one sends it nothing");
+    }
+
+    // ---- A disposal unhooks the route ----
+
+    [Fact]
+    public async Task DisposeAsync_ShouldLeaveTheConnectionOwingNoNotice_WhenTheCallerReconnectsAfterIt()
+    {
+        var first = PeerBefore();
+        var second = PeerAfter();
+        await using var rig = await Rig.StartAsync(first, second, Route.Caller);
+        using var hold = new HandlerHold();
+        rig.Run.Connection.StateChanged += change =>
+        {
+            if (change.IsLoss)
+                hold.Block();
+        };
+        await rig.Run.Server.DisposeAsync().AsTask().WaitAsync(Run.Bound);
+
+        first.CloseSession();
+        await hold.Held.WaitAsync(Run.Bound);
+        rig.Run.ReleaseSecondPeer();
+        await rig.CallerConnectsAsync();
+        var pendingAfterTheLogin = rig.Run.Server.IsReconnectPending;
+        hold.Release();
+        await rig.SettleAsync();
+
+        new { PendingAfterTheLogin = pendingAfterTheLogin, StatusAsked = second.Asked("Status") }.Should().BeEquivalentTo(
+            new { PendingAfterTheLogin = false, StatusAsked = 0 },
+            "a disposed server has unhooked the caller's route, so a login after it queues no notice for anyone");
+    }
+
     // ---- The rig ----
 
     private static string[] Sorted(params string[] values) => [.. values.Order(StringComparer.Ordinal)];
@@ -987,7 +1492,16 @@ public sealed class CallerReconnectReloadTests
         ],
         Bridges = [RoomBridgeOf(3), new ListedBridge(GhostBridge, 0)],
         Rooms = [ListedRoomOf(RoomStayed, RoomStarted, RoomGhost)],
+        Agents = [new ListedAgent(BootingAsterisk.AgentId, LoggedIn: false), new ListedAgent(GhostAgent)],
     };
+
+    /// <summary><see cref="PeerBefore"/>, with two agents logged in.</summary>
+    private static BootingAsterisk PeerHoldingAgents()
+    {
+        var peer = PeerBefore();
+        peer.Agents = [.. HeldAgents.Select(static id => new ListedAgent(id))];
+        return peer;
+    }
 
     private static int Lines(Run run, string fragment) =>
         run.ServerLog.Entries.Count(e => e.Line.Contains(fragment, StringComparison.Ordinal));
@@ -1048,6 +1562,8 @@ public sealed class CallerReconnectReloadTests
             Options.Create(new SessionOptions()), NullLogger<CallSessionManager>.Instance, new NullStore());
         private readonly ConcurrentQueue<string> _removed = new();
         private readonly ConcurrentDictionary<string, int> _callEnded = new(StringComparer.Ordinal);
+        private readonly ConcurrentQueue<string> _agentLogins = new();
+        private readonly ConcurrentQueue<string> _agentLogoffs = new();
         private readonly IDisposable _subscription;
 
         private Rig(Run run)
@@ -1070,6 +1586,12 @@ public sealed class CallerReconnectReloadTests
         /// <summary>The channels removed, in order, as <c>ChannelRemoved</c> announced them.</summary>
         public string[] Removed => [.. _removed];
 
+        /// <summary>The agents <c>AgentLoggedIn</c> announced since the start returned, in order.</summary>
+        public string[] AgentLogins => [.. _agentLogins];
+
+        /// <summary>The agents <c>AgentLoggedOff</c> announced since the start returned, in order.</summary>
+        public string[] AgentLogoffs => [.. _agentLogoffs];
+
         public static async Task<Rig> StartAsync(BootingAsterisk first, BootingAsterisk second, Route route,
             int maxReconnectAttempts = 0, IReadOnlyList<BootingAsterisk>? laterPeers = null)
         {
@@ -1081,6 +1603,8 @@ public sealed class CallerReconnectReloadTests
                 await run.StartServerAsync();
                 await run.ServerLog.Logged(StateLoaded, 1).WaitAsync(Run.Bound);
                 rig.Counters = new LiveCounters();
+                run.Server.Agents.AgentLoggedIn += a => rig._agentLogins.Enqueue(a.AgentId);
+                run.Server.Agents.AgentLoggedOff += a => rig._agentLogoffs.Enqueue(a.AgentId);
                 return rig;
             }
             catch
@@ -1150,6 +1674,11 @@ public sealed class CallerReconnectReloadTests
                 Sorted([.. server.Queues.GetByName(BootingAsterisk.QueueName)?.Entries.Keys ?? []]),
                 Sorted([.. server.MeetMe.GetRoom(Room)?.Users.Keys ?? []]));
         }
+
+        public string[] AgentIds() => Sorted([.. Run.Server.Agents.Agents.Select(a => a.AgentId)]);
+
+        public string[] AgentStates() =>
+            Sorted([.. Run.Server.Agents.Agents.Select(a => $"{a.AgentId}:{a.State}")]);
 
         public Live.Queues.AsteriskQueueEntry? Entry(Leg leg) =>
             Run.Server.Queues.GetByName(BootingAsterisk.QueueName)?.Entries.GetValueOrDefault(leg.Channel);
