@@ -38,19 +38,19 @@ outage it was written for, and a timer started when the state last changed is re
 **What to do.** Keep `circuit.state` for what it now answers, which is whether a call to that key would be rejected right
 now: `circuit_state == 2`, under the name Prometheus exports.
 
-Move an alert that needs an unbroken `2` to `circuit.opened`, exported as `circuit_opened_total`, which counts every
-re-trip: its increase over a window says that a key keeps tripping, whether or not a sample lands in the gap. It is not a
-drop-in replacement. The threshold and the window are yours to choose, with these in mind:
+Move an alert that needs an unbroken `2` to `circuit.opened`, exported as `circuit_opened_total`, which counts
+trips: an increase over a window says that a key tripped, whether or not a sample lands in the gap. It is not a drop-in
+replacement. The threshold and the window are yours to choose, with these in mind:
 
 - A rule with a five-minute `for` ignored a lone trip, and an alert on any increase can page on one.
-- The counter can count one trip more than once. Failures that land together around a trip can each add 1, so a short
-  pause with requests in flight can read 2 or more, and a count above 1 does not prove that the key tripped again.
-- A key's first trip since the process started does not appear in `increase()`. Nothing adds 0 before it, so the key's
-  series starts at `1` with no earlier sample to compare, and each key's count over the window reads one trip short after
-  a restart.
-- The window depends on each policy's open duration. Under a steady outage a key trips about once per open duration, so
-  a window that holds only one open duration has little to count, and a policy that stays open for ten minutes needs a
-  window well past ten minutes.
+- The count is approximate under concurrency. Failures that land together around a trip can each add 1, so a short pause
+  with requests in flight can read 2 or more, and a count above 1 does not prove that the key tripped again. A racing
+  call can also leave a trip uncounted.
+- A key's first trip since the process started may not appear in `increase()`. Nothing adds 0 before it, so a new series
+  starts at `1`, and unless the window holds an earlier, higher sample of that series there is no increase to read.
+- The window depends on each policy and on its traffic. Under a steady outage, the time between trips is the open duration
+  plus however long the threshold's failures take to arrive. A key called once an hour trips far less often than once per
+  open duration, so size the window from the key's call rate as well as its open duration.
 
 An escalation that waits on a threshold measured from the last state change may never reach it under a real cycle,
 because every change restarts the measure. Count trips, or measure from the first trip of the window.
