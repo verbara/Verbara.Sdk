@@ -126,9 +126,11 @@ public sealed class CircuitBreakerState
     /// <summary>Resets the failure counter and closes the circuit.</summary>
     public void RecordSuccess()
     {
+        // _isOpen is written last, as in ShouldAllow's reset, so an opening time is never erased after
+        // a trip it belongs to. Sequential tests cannot see this order: keep it.
+        Interlocked.Exchange(ref _openedAtTicks, NullTicksSentinel);
         Interlocked.Exchange(ref _consecutiveFailures, 0);
         Interlocked.Exchange(ref _isOpen, 0);
-        Interlocked.Exchange(ref _openedAtTicks, NullTicksSentinel);
     }
 
     /// <summary>
