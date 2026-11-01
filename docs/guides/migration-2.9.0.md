@@ -291,8 +291,9 @@ Guide: [Counters and tables across a reconnect](troubleshooting.md#counters-and-
 ### A reload announces the callers and participants it finds gone
 
 **What changed.** A reconnect no longer empties the queue and conference tables. The reload keeps what Asterisk
-still lists, without raising `CallerJoined` or `UserJoined` again, and raises `QueueManager.CallerLeft` or
-`MeetMeManager.UserLeft` once for each caller or participant it finds gone. Before, the tables were cleared with no
+still lists, without raising `UserJoined` again, and raises `QueueManager.CallerLeft` or `MeetMeManager.UserLeft` once
+for each caller or participant it finds gone. It raises `CallerJoined` once for each caller still waiting, on an object
+that is not the one in `AsteriskQueue.Entries`: match it by `Channel` or `UniqueId`, not by reference. Before, the tables were cleared with no
 event at all.
 
 **Who is affected.** Code that resets its own per-caller or per-participant state when the connection comes back,

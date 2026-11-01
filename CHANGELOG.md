@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a reconnect you make yourself reloads Live (#NNN)
+
+With `AutoReconnect` off, a successful `ConnectAsync` on an `AmiConnection` after a lost AMI session runs Live's full
+state reload on the new session, with no second `StartAsync` and no explicit `RequestInitialStateAsync`. A connect that
+fails, or a session that ends before its load completes, reports no recovery. A host that keeps the explicit call stays
+supported: each held call and queue visit is represented once, at the cost of the extra AMI load.
+
+A load whose AMI session is lost stops there, over either route: a list it has not applied is not applied, even one read
+to its end, and it reads its session before each request, so it asks nothing of the session that replaced it.
+`RequestInitialStateAsync` now throws `AmiNotConnectedException` in that case, where it used to finish on the newer
+session.
+
+A reload no longer empties the agents table first, whichever route brought the session back: the table reads what it held
+until the `Agents` list completes, and is then replaced in one step. Over an `AmiConnection` a list cut short or refused
+leaves the table as it was, so a reload that is interrupted or fails keeps the agents; over any other connection the list
+as delivered replaces the table. Every load now applies the agents after the list has
+completed and after the delivery of the events received before it, so `AgentLoggedIn` is raised after that, and not for a
+row of a list cut short, nor for an agent a live logoff has reached since. An agent an event named after the list was asked for stays as that event left it, because the
+list is older. An agent the list drops still raises no `AgentLoggedOff`, and `RequestInitialStateAsync` still only adds.
+
+A reconnect you make yourself raises what a reload raises: one `CallerJoined` for each caller still waiting, on an object
+that is not the one in `AsteriskQueue.Entries`, so match it by `Channel` or `UniqueId`.
+
 ### Fixed — BREAKING: the `circuit.state` gauge reports the breaker's current state (#509)
 
 The gauge documented as the current circuit state per key replayed the last value a call wrote, so an idle tripped circuit
