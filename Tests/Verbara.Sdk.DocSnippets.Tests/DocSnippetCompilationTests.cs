@@ -123,6 +123,7 @@ public sealed class DocSnippetCompilationTests
         {
             "README.md",
             "docs/README-technical.md",
+            "docs/guides/ami-connection-state-and-health-migration.md",
             "docs/guides/asterisk-version-compatibility.md",
             "docs/guides/conference-participants-migration.md",
             "docs/guides/high-load-tuning.md",

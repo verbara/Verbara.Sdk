@@ -244,10 +244,12 @@ reload Live, but a connect you make yourself raises no `Reconnected`, so nothing
 can start the server while that connect is under way. A start interrupted while the connection's own reconnect loop
 runs still returns and logs a Warning.
 
-**What to do.** Start the server after your `ConnectAsync` has returned. After every connect you make yourself, call
-`RequestInitialStateAsync`: it is the only thing that reloads Live in that setup, at start-up and after a loss.
+**What to do.** Start the server after your `ConnectAsync` has returned. On 2.9.0, after every connect you make
+yourself following a loss, call `RequestInitialStateAsync`: it is the only thing that reloads Live in that setup.
+From 2.10.0 that session reloads Live on its own, and the call stays supported at the cost of a second load. A start
+that throws still throws.
 
-Guide: [With a `VerbaraServer` on the connection, reload it yourself](ami-connection-state-and-health-migration.md#connecting-again-after-a-loss).
+Guide: [With a `VerbaraServer` on the connection, there is nothing more to do](ami-connection-state-and-health-migration.md#connecting-again-after-a-loss).
 
 ### A server pool refuses an empty or reserved server id
 
@@ -289,8 +291,9 @@ Guide: [Counters and tables across a reconnect](troubleshooting.md#counters-and-
 ### A reload announces the callers and participants it finds gone
 
 **What changed.** A reconnect no longer empties the queue and conference tables. The reload keeps what Asterisk
-still lists, without raising `CallerJoined` or `UserJoined` again, and raises `QueueManager.CallerLeft` or
-`MeetMeManager.UserLeft` once for each caller or participant it finds gone. Before, the tables were cleared with no
+still lists, without raising `UserJoined` again, and raises `QueueManager.CallerLeft` or `MeetMeManager.UserLeft` once
+for each caller or participant it finds gone. It raises `CallerJoined` once for each caller still waiting, on an object
+that is not the one in `AsteriskQueue.Entries`: match it by `Channel` or `UniqueId`, not by reference. Before, the tables were cleared with no
 event at all.
 
 **Who is affected.** Code that resets its own per-caller or per-participant state when the connection comes back,

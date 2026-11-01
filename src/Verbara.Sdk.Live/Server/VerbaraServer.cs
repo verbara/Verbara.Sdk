@@ -183,14 +183,16 @@ public sealed class VerbaraServer : IVerbaraServer
     /// ended it: <see langword="null"/> when the connection's stream ended (Asterisk closed it, or it was reset: the
     /// socket transport reports both as an end of stream), a <see cref="TimeoutException"/> when the heartbeat's Ping
     /// went unanswered, or the reader's exception when the AMI stream could not be read. It is raised whether automatic
-    /// reconnection is on or off. From that moment until the connection's <see cref="IAmiConnection.Reconnected"/> and
-    /// the reload that follows it, the channels, queues and agents this server holds are not being updated.
+    /// reconnection is on or off. From that moment until the connection's <see cref="IAmiConnection.Reconnected"/>, or
+    /// the caller's own successful <c>ConnectAsync</c>, and the reload that follows it, the channels, queues and agents
+    /// this server holds are not being updated.
     /// </para>
     /// <para>
     /// It is raised after <see cref="IAmiConnection.State"/> has left <see cref="AmiConnectionState.Connected"/>,
     /// and before the <see cref="IAmiConnection.Reconnected"/> of the same outage, which is delivered behind it on the
-    /// same ordered queue. It is not raised for the caller's own <c>DisconnectAsync</c> or <c>DisposeAsync</c>, nor a
-    /// second time when the reconnect loop gives up at <c>MaxReconnectAttempts</c>: a connection that gave up reads
+    /// same ordered queue, as this server's reload after a caller's connect is. It is not raised for the caller's own
+    /// <c>DisconnectAsync</c> or <c>DisposeAsync</c>, nor a second time when the reconnect loop gives up at
+    /// <c>MaxReconnectAttempts</c>: a connection that gave up reads
     /// <see cref="AmiConnectionState.Disconnected"/>. Handlers run on a thread-pool thread, one after the other; they
     /// never hold the connection's reader, heartbeat or reconnect, but this server's reload after the reconnect waits
     /// for them, so a slow one delays it: keep them short. A handler that throws is logged and the others still run.
@@ -240,8 +242,18 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>Null in production; observes collection of a queue row without publishing a queue event.</summary>
     internal Action? QueueRowBuffered { get; set; }
 
+    /// <summary>Null in production; observes a listing a load is about to request, by its AMI action name.</summary>
+    internal Action<string>? ListingRequested { get; set; }
+
+    /// <summary>Null in production; observes a load whose <c>Agents</c> list has passed its fence, before it is applied.</summary>
+    internal Action? AgentsListFenced { get; set; }
+
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
+
+    // The last session a caller's connect brought back that this server reloaded: a host that started the server
+    // twice is subscribed twice, and the session still has one automatic reload.
+    private long _callerSessionReloaded;
 
     // How many loads of this server are running: the start's, a reconnect's reload, RequestInitialStateAsync's. A
     // channel reconciliation alone is not counted.
@@ -255,9 +267,9 @@ public sealed class VerbaraServer : IVerbaraServer
     internal bool IsLoadInFlight => Volatile.Read(ref _loadsInFlight) > 0;
 
     /// <summary>
-    /// Whether this server's connection has logged in again after a loss and the handlers of that session's
-    /// <c>Reconnected</c> — this server's reload among them — have not returned yet: the lost session's buffered events
-    /// may still be in delivery, and the reload has not started. Read by a caller that would rather not reconcile the
+    /// Whether this server's connection has logged in again after a loss and the handlers of that session's return —
+    /// this server's reload among them — have not returned yet: the reload has not started, and over the reconnect loop
+    /// the lost session's buffered events may still be in delivery. Read by a caller that would rather not reconcile the
     /// channels before the reload; nothing waits on it. Always <see langword="false"/> on a connection other than the
     /// SDK's own.
     /// </summary>
@@ -331,8 +343,16 @@ public sealed class VerbaraServer : IVerbaraServer
     /// without an exception and logs a warning: the reload that follows the reconnect loads the state, and until then
     /// the managers hold what the load had read. Whether the connection is reconnecting is read from its state when
     /// the load stops, so a reconnect that gives up after the start has returned is not reported by the start. A
-    /// <c>Connecting</c> or <c>Connected</c> written by the caller's own <c>ConnectAsync</c> is not reconnecting: a
-    /// caller's connect raises no <see cref="IAmiConnection.Reconnected"/>, so no reload follows it, and the start throws.
+    /// <c>Connecting</c> or <c>Connected</c> written by the caller's own <c>ConnectAsync</c> is not reconnecting: nothing
+    /// retries that connect, so the start throws. The server stays subscribed all the same: once a session of the
+    /// caller's has replaced a lost one, it reloads over an <see cref="AmiConnection"/>, whether the start returned or threw.
+    /// </para>
+    /// <para>
+    /// Over an <see cref="AmiConnection"/> a session that comes back after a loss reloads this server whoever brought it
+    /// back: the reconnect loop, which raises <see cref="IAmiConnection.Reconnected"/>, or the caller's own
+    /// <c>ConnectAsync</c>, which does not. Over any other <see cref="IAmiConnection"/> only
+    /// <see cref="IAmiConnection.Reconnected"/> does. Neither takes a second start, and a session the connection logged
+    /// in before this start is the start's to load.
     /// </para>
     /// </remarks>
     /// <exception cref="AmiNotConnectedException">
@@ -346,7 +366,10 @@ public sealed class VerbaraServer : IVerbaraServer
         _connection.Reconnected += OnReconnected;
         // Subscribed before the load, so that a loss which cuts the load short is announced too.
         if (_connection is AmiConnection amiConnection)
+        {
             amiConnection.Lost += OnConnectionLost;
+            amiConnection.CallerReconnected += OnCallerReconnected;
+        }
 
         // Register observable gauges for live state (all typed as long for consistent metric reporting)
         _instanceMeter.CreateObservableGauge<long>("live.channels.active",
@@ -384,10 +407,28 @@ public sealed class VerbaraServer : IVerbaraServer
         }
     }
 
-    // Justification: event handler for Action delegate requires async void.
+    private void OnReconnected() => ReloadNewSession(CancellationToken.None);
+
+    /// <summary>
+    /// The session a caller's own connect brought back after a loss. The connection delivers it behind that loss, for
+    /// its current session only, and raises it at most once for a session; a server subscribed twice hears it twice.
+    /// </summary>
+    private void OnCallerReconnected(long session)
+    {
+        // The delivery reads its handlers once, so a disposal that began after that read does not unhook this one.
+        if (_disposing.IsCancellationRequested)
+            return;
+
+        if (Interlocked.Exchange(ref _callerSessionReloaded, session) == session)
+            return;
+
+        ReloadNewSession(_disposing.Token);
+    }
+
+    // Justification: called from the two event handlers above, which are synchronous up to the first await on purpose.
     // All exceptions are caught in the try/catch below — no unobserved exceptions.
 #pragma warning disable VSTHRD100 // Avoid async void — required by Action event delegate
-    private async void OnReconnected()
+    private async void ReloadNewSession(CancellationToken cancellationToken)
 #pragma warning restore VSTHRD100
     {
         // First, before anything is reloaded or delivered: every event the outage swallowed lies before it.
@@ -410,8 +451,8 @@ public sealed class VerbaraServer : IVerbaraServer
             // The queue table is not cleared either: the load's completed QueueStatus reconciles it,
             // keeping each caller still waiting with its join time, and counting left each one gone.
             // Nor are the bridge and conference tables: the load's completed bridge and conference
-            // listings reconcile them. The agents table still clears and reloads.
-            Agents.Clear();
+            // listings reconcile them. Nor is the agents table: the load replaces it, in one step, with its
+            // completed Agents list, so that a reload cut short leaves it as it was.
 
             // Re-subscribe observer (the connection is new after reconnect)
             _subscription?.Dispose();
@@ -419,7 +460,7 @@ public sealed class VerbaraServer : IVerbaraServer
 
             // Reload fresh state from Asterisk
             states = new LoadConnectionStates(_connection);
-            await LoadAsync(states, CancellationToken.None);
+            await LoadAsync(states, cancellationToken, replaceAgents: true);
         }
         catch (AmiNotConnectedException ex)
         {
@@ -454,9 +495,19 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </para>
     /// <para>
     /// When the AMI session ends before the load completes, the load stops and throws, whether or not the connection
-    /// is reconnecting: it sends nothing more, it reconciles no channel snapshot it did not finish reading, so it ends
-    /// no call, and it never returns as if the state it holds were complete. The queues and agents it had read stay
-    /// until the next load. <see cref="StartAsync"/>, by contrast, returns when the reconnect's reload will follow.
+    /// is reconnecting. It reads its session before each request and each list it applies, so from there it sends
+    /// nothing more, even when the connection is already on a newer session, and it applies no further list, so it ends
+    /// no call on what it read last. What it had applied while the session was up stays until the next load, and it
+    /// never returns as if the state it holds were complete. <see cref="StartAsync"/>, by contrast, returns when the
+    /// reconnect loop's reload will follow.
+    /// </para>
+    /// <para>
+    /// The agents are applied last, from a completed <c>Agents</c> list, behind the same wait as the other lists. This
+    /// load adds what the list reports and leaves an agent the list omits; only the reload after a reconnect replaces
+    /// the table, in one step, so that until then it reads what it held. Over an <see cref="AmiConnection"/> a list cut
+    /// short or refused changes nothing; over any other connection, a wrapper included, the list counts as delivered. No
+    /// load raises <see cref="AgentManager.AgentLoggedOff"/> for an agent it finds gone. An agent an event named after the
+    /// list was asked for stays as that event left it: its row is older.
     /// </para>
     /// <para>
     /// When Asterisk refuses the <c>Status</c> request, as it does for an AMI user whose write classes allow none of
@@ -529,7 +580,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </remarks>
     /// <param name="cancellationToken">Cancels the read; a cancelled read reconciles nothing.</param>
     /// <exception cref="AmiNotConnectedException">
-    /// The connection is not established, or its AMI session ended before the snapshot completed.
+    /// The connection is not established, or its AMI session ended before the snapshot could be reconciled: while it was
+    /// being read, or while the reconciliation waited for the delivery of a snapshot read to its end. A session replaced
+    /// during that wait counts, although the connection is up by then.
     /// </exception>
     public async ValueTask ReconcileChannelsAsync(CancellationToken cancellationToken = default)
     {
@@ -604,6 +657,9 @@ public sealed class VerbaraServer : IVerbaraServer
         /// <summary>The list whose wait ran out first, or <see langword="null"/>.</summary>
         public ListSnapshotMark? DeferredOn { get; set; }
 
+        /// <summary>Whether a completed <c>Agents</c> list replaces the table, as a reload after a reconnect's does.</summary>
+        public bool ReplacesAgents { get; init; }
+
         public LoadSession? Session { get; set; }
         public DeferredQueueReports? QueueReports { get; set; }
     }
@@ -620,7 +676,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// Without a mark — a connection other than <see cref="AmiConnection"/>, or a list that did not complete — there is
     /// nothing to wait for. From inside an event handler the wait is skipped and logged at <c>Debug</c>: the pump is held
     /// by that same handler, so it could never be met. A session that ends during the wait stops the reconciliation, as
-    /// an ending under the read does; a server disposed during it stops it with <see cref="OperationCanceledException"/>.
+    /// an ending under the read does, even when its pump went on to dispatch the list's last event: a list read on a
+    /// session that is gone is never applied. A server disposed during it stops it with
+    /// <see cref="OperationCanceledException"/>.
     /// A wait that begins on a server already disposed is not stopped: a load the caller asks of it still runs.
     /// </remarks>
     private async ValueTask<bool> AwaitBarrierAsync(LoadSession? session, ListSnapshotMark? mark, string list,
@@ -632,6 +690,7 @@ public sealed class VerbaraServer : IVerbaraServer
 
         if (session.Connection.InDispatch)
         {
+            StopIfRetired(session, states, readerName, list);
             VerbaraServerLog.BarrierSkippedInDispatch(_logger, list);
             return true;
         }
@@ -670,6 +729,10 @@ public sealed class VerbaraServer : IVerbaraServer
             _ => "ended",
         });
 
+        // The lost session's pump drains its buffer, so a reached mark does not say the session is still there.
+        if (outcome != DispatchBarrierOutcome.Ended)
+            StopIfRetired(session, states, readerName, list);
+
         switch (outcome)
         {
             case DispatchBarrierOutcome.Reached:
@@ -694,6 +757,16 @@ public sealed class VerbaraServer : IVerbaraServer
     }
 
     /// <summary>
+    /// Stops a reader whose session is no longer the connection's, before it applies the list it read: that list describes
+    /// a session that is gone, and the session that replaced it loads itself.
+    /// </summary>
+    private static void StopIfRetired(LoadSession session, LoadConnectionStates states, string readerName, string list)
+    {
+        if (!session.IsCurrent)
+            throw states.Stop($"the AMI session ended while the {readerName} waited for the event pump after {list}");
+    }
+
+    /// <summary>
     /// The load behind <see cref="RequestInitialStateAsync"/>, <see cref="StartAsync"/> and the reload after a
     /// reconnect. It records in <paramref name="states"/> the connection's state when it began and, when it stops
     /// because its AMI session ended, the state then: what the start reads to tell whether a reload will follow.
@@ -707,9 +780,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// session ends first, it does not run: the reconnect's reload, if one follows, loads the state.
     /// </remarks>
     private async ValueTask LoadAsync(LoadConnectionStates states, CancellationToken cancellationToken,
-        bool scheduledAfterDeferral = false)
+        bool scheduledAfterDeferral = false, bool replaceAgents = false)
     {
-        var barriers = new Barriers();
+        var barriers = new Barriers { ReplacesAgents = replaceAgents };
         var transferred = false;
         Interlocked.Increment(ref _loadsInFlight);
         try
@@ -787,7 +860,8 @@ public sealed class VerbaraServer : IVerbaraServer
                 }
             }
             if (reload && !ending.IsCancellationRequested && barriers.Session is not { IsCurrent: false })
-                await LoadAsync(new LoadConnectionStates(_connection), ending, scheduledAfterDeferral: true);
+                await LoadAsync(new LoadConnectionStates(_connection), ending, scheduledAfterDeferral: true,
+                    replaceAgents: barriers.ReplacesAgents);
         }
         catch (OperationCanceledException) when (ending.IsCancellationRequested)
         {
@@ -870,7 +944,7 @@ public sealed class VerbaraServer : IVerbaraServer
             await LoadQueuesAsync(session, states, activity, barriers, cancellationToken);
 
             request = "Agents";
-            await PopulateAgentsAsync(session, states, cancellationToken);
+            await PopulateAgentsAsync(session, states, activity, barriers, cancellationToken);
         }
         catch (AmiNotConnectedException) when (states.AtStop is null && states.BeganOnASession)
         {
@@ -1118,6 +1192,12 @@ public sealed class VerbaraServer : IVerbaraServer
     private async ValueTask<Listing> ReadListingAsync(ManagerAction action, string actionName, LoadSession? session,
         LoadConnectionStates states, ListSnapshotMark? mark, CancellationToken cancellationToken)
     {
+        ListingRequested?.Invoke(actionName);
+
+        // Not on the session that replaced the one this load began on: that one loads itself.
+        if (session is { IsCurrent: false })
+            throw states.Stop($"the live state load could not send {actionName}, because its AMI session had ended");
+
         var outcome = session is not null || _connection.ReportsEventActionOutcome ? new EventActionOutcome() : null;
         var source = session is not null
             ? mark is not null
@@ -1316,25 +1396,81 @@ public sealed class VerbaraServer : IVerbaraServer
             ? priority
             : 1;
 
-    private async ValueTask PopulateAgentsAsync(
-        LoadSession? session, LoadConnectionStates states, CancellationToken cancellationToken)
+    /// <summary>
+    /// Reads the <c>Agents</c> list to completion and applies it behind the same fence as the other lists. Over an
+    /// <see cref="AmiConnection"/> a list cut short or refused changes nothing; over any other connection there is no
+    /// session to ask, so the list counts as delivered. A completed one replaces the table on a reload after a reconnect,
+    /// in one step; on any other load, and on a reload whose fence ran out, it only adds, and the reload that wait
+    /// scheduled replaces.
+    /// Each logged-in row is announced as it is applied, and the session is read before the replacement and before each
+    /// announce, since a handler can outlive it: a load stops announcing once its session is gone, and an adding load stops
+    /// adding. A replaced agent a live logoff has reached since the replacement is not announced.
+    /// The fence delivers every event received up to the list's end before the list is applied, and more can follow, so
+    /// neither path applies a row over an event that named its agent after the ask: the row is the older of the two.
+    /// </summary>
+    private async ValueTask PopulateAgentsAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
+        Barriers barriers, CancellationToken cancellationToken)
     {
+        var rows = new List<AgentSnapshotRow>();
+        var asked = new AskOutcome();
+        var mark = session is not null ? new ListSnapshotMark() : null;
+        var listedFrom = 0L;
         await foreach (var evt in AskWhileAsteriskStartsAsync(
-            "Agents", static () => new AgentsAction(), session, states, cancellationToken))
+            "Agents", static () => new AgentsAction(), session, states, cancellationToken, asked, mark,
+            onAttempt: () =>
+            {
+                rows.Clear();
+                listedFrom = Agents.LiveEventMark();
+            }))
         {
-            if (evt is not AgentsEvent ae || ae.Agent is null)
+            if (evt is AgentsEvent { Agent: { } agent } row)
+            {
+                rows.Add(new AgentSnapshotRow(agent, row.Name, row.LoggedInChan,
+                    LoggedIn: !string.Equals(row.Status, "AGENT_LOGGEDOFF", StringComparison.OrdinalIgnoreCase)));
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (asked.Refused)
+            return;
+
+        var full = await AwaitBarrierAsync(session, mark, "Agents", states, ChannelReader.Load.Name, activity, barriers,
+            cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        AgentsListFenced?.Invoke();
+        if (full && barriers.ReplacesAgents)
+        {
+            StopIfSessionIsGone(session, states);
+            foreach (var agent in Agents.ReplaceWithSnapshot(rows, listedFrom))
+            {
+                StopIfSessionIsGone(session, states);
+                Agents.AnnounceLogin(agent);
+            }
+
+            return;
+        }
+
+        foreach (var row in rows)
+        {
+            StopIfSessionIsGone(session, states);
+            if (Agents.HasLiveEventSince(row.AgentId, listedFrom))
                 continue;
 
-            var isLoggedOff = string.Equals(ae.Status, "AGENT_LOGGEDOFF", StringComparison.OrdinalIgnoreCase);
-            if (isLoggedOff)
+            if (!row.LoggedIn)
             {
-                Agents.RegisterAgent(ae.Agent, ae.Name);
+                Agents.RegisterAgent(row.AgentId, row.Name);
                 continue;
             }
 
-            Agents.OnAgentLogin(ae.Agent, ae.LoggedInChan);
-            if (ae.Name is not null)
-                Agents.GetById(ae.Agent)?.SetName(ae.Name);
+            Agents.OnAgentLogin(row.AgentId, row.Channel);
+            if (row.Name is not null)
+                Agents.GetById(row.AgentId)?.SetName(row.Name);
+        }
+
+        static void StopIfSessionIsGone(LoadSession? session, LoadConnectionStates states)
+        {
+            if (session is { IsCurrent: false })
+                throw states.Stop("the AMI session ended while the live state load was applying Agents");
         }
     }
 
@@ -1397,6 +1533,10 @@ public sealed class VerbaraServer : IVerbaraServer
         var toldWaiting = false;
         while (true)
         {
+            // Not on the session that replaced the one this load began on: that one loads itself.
+            if (!session.IsCurrent)
+                throw states.Stop($"the live state load could not send {actionName}, because its AMI session had ended");
+
             // Read before the ask, never once its answer is in: a report that lands between the two says nothing about
             // the module at the moment it was asked, and taking that refusal as final would drop a module still loading.
             var reportedBeforeAsk = session.FullyBooted.IsCompletedSuccessfully;
@@ -1519,15 +1659,15 @@ public sealed class VerbaraServer : IVerbaraServer
         public bool BeganOnASession => AtStart is AmiConnectionState.Connected or AmiConnectionState.Reconnecting;
 
         /// <summary>
-        /// Whether a reload will follow a load that stopped because its session ended: the connection was reconnecting
-        /// when the load began, or it was connected then and the reconnect loop owned it when the load stopped.
-        /// <c>Disconnecting</c> and <c>Disconnected</c> mean that automatic reconnection is off, that the reconnect gave
-        /// up, or that the caller ended the connection. A load that began in any other state reads as never connected,
+        /// Whether the reconnect loop will bring back a load that stopped because its session ended, and reload it: the
+        /// connection was reconnecting when the load began, or it was connected then and the loop owned it when the load
+        /// stopped. <c>Disconnecting</c> and <c>Disconnected</c> mean that automatic reconnection is off, that the reconnect
+        /// gave up, or that the caller ended the connection. A load that began in any other state reads as never connected,
         /// including one that began in <c>Connecting</c>: the state cannot tell a caller's first connect still running
-        /// from the reconnect loop's attempt, and a caller's connect raises no reload. For the same reason a
-        /// <c>Connecting</c> or <c>Connected</c> the caller's own connect wrote when the load stopped reads as no reload:
-        /// over an <see cref="AmiConnection"/> the stop reads who wrote the state with it; over any other connection it
-        /// cannot tell.
+        /// from the reconnect loop's attempt, and a first connect reloads nothing. A <c>Connecting</c> or <c>Connected</c>
+        /// the caller's own connect wrote when the load stopped reads as false too, because nothing retries that connect
+        /// and the start does not vouch for it, although a session it logs in does reload: over an
+        /// <see cref="AmiConnection"/> the stop reads who wrote the state with it; over any other connection it cannot tell.
         /// </summary>
         public bool ReconnectWillReload => AtStop is { } stop
             && !(AtStopWrittenByCaller && stop is AmiConnectionState.Connecting or AmiConnectionState.Connected)
@@ -1635,7 +1775,10 @@ public sealed class VerbaraServer : IVerbaraServer
         await Task.WhenAll(deferred);
         _connection.Reconnected -= OnReconnected;
         if (_connection is AmiConnection amiConnection)
+        {
             amiConnection.Lost -= OnConnectionLost;
+            amiConnection.CallerReconnected -= OnCallerReconnected;
+        }
 
         List<Exception>? failures = null;
         try
@@ -1832,14 +1975,17 @@ public sealed class VerbaraServer : IVerbaraServer
 
                 // Agent events
                 case AgentLoginEvent ale:
+                    server.Agents.NoteLiveEvent(ale.Agent ?? "");
                     server.Agents.OnAgentLogin(ale.Agent ?? "", ale.Channel);
                     break;
 
                 case AgentLogoffEvent alo:
+                    server.Agents.NoteLiveEvent(alo.Agent ?? "");
                     server.Agents.OnAgentLogoff(alo.Agent ?? "");
                     break;
 
                 case AgentConnectEvent ace:
+                    server.Agents.NoteLiveEvent(ace.Agent ?? "");
                     server.Agents.OnAgentConnect(ace.Agent ?? "", ace.Channel,
                         ace.LinkedId, ace.Interface);
                     // app_queue's own report that it connected the caller, agent or not. Raised
@@ -1850,6 +1996,7 @@ public sealed class VerbaraServer : IVerbaraServer
                     break;
 
                 case AgentCompleteEvent acoe:
+                    server.Agents.NoteLiveEvent(acoe.Agent ?? "");
                     server.Agents.OnAgentComplete(
                         acoe.Agent ?? "",
                         acoe.TalkTime ?? 0,

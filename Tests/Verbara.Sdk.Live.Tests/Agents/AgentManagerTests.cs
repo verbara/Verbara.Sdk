@@ -1,3 +1,4 @@
+using System.Globalization;
 using Verbara.Sdk.Live.Agents;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -79,5 +80,31 @@ public class AgentManagerTests
         _sut.OnAgentLogoff("1001");
         loggedOff.Should().NotBeNull();
         _sut.GetById("1001")!.State.Should().Be(AgentState.LoggedOff);
+    }
+
+    [Fact]
+    public async Task ReplaceWithSnapshot_ShouldKeepAnAgentALiveEventAdds_WhenTheTwoRace()
+    {
+        var manager = new AgentManager(NullLogger.Instance);
+        using var start = new Barrier(2);
+        for (var i = 0; i < 2000; i++)
+        {
+            var agentId = "race-" + i.ToString(CultureInfo.InvariantCulture);
+            var listedFrom = manager.LiveEventMark();
+            var live = Task.Run(() =>
+            {
+                start.SignalAndWait();
+                manager.NoteLiveEvent(agentId);
+                manager.OnAgentLogin(agentId);
+            });
+            var replacement = Task.Run(() =>
+            {
+                start.SignalAndWait();
+                manager.ReplaceWithSnapshot([], listedFrom);
+            });
+            await Task.WhenAll(live, replacement);
+
+            manager.GetById(agentId).Should().NotBeNull("the event that added it is newer than the list, whichever ran first");
+        }
     }
 }

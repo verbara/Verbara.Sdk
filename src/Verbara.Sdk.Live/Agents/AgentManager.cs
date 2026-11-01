@@ -31,8 +31,15 @@ internal static partial class AgentManagerLog
 /// </summary>
 public sealed class AgentManager
 {
-    private readonly ConcurrentDictionary<string, AsteriskAgent> _agents = new();
+    // Replaced whole by ReplaceWithSnapshot, so that a reader sees the table before a reload or after it, never between.
+    private volatile ConcurrentDictionary<string, AsteriskAgent> _agents = new();
     private readonly ILogger _logger;
+
+    // The ordinal of the last live event that named each agent, and the gate a replacement shares with them: a list is
+    // older than what was delivered after it was asked for, and the replacement must not slip between an event and its add.
+    private readonly Lock _liveEvents = new();
+    private readonly Dictionary<string, long> _lastLiveEvent = new(StringComparer.Ordinal);
+    private long _liveEventCount;
 
     public event Action<AsteriskAgent>? AgentLoggedIn;
     public event Action<AsteriskAgent>? AgentLoggedOff;
@@ -72,7 +79,7 @@ public sealed class AgentManager
     /// <summary>Handle AgentLogin event.</summary>
     public void OnAgentLogin(string agentId, string? channel = null)
     {
-        var agent = _agents.GetOrAdd(agentId, _ => new AsteriskAgent { AgentId = agentId });
+        var agent = GetOrAddAgent(agentId);
         lock (agent.SyncRoot)
         {
             agent.State = AgentState.Available;
@@ -182,7 +189,7 @@ public sealed class AgentManager
     /// <summary>Register an agent definition without logging it in (appears as LoggedOff).</summary>
     public void RegisterAgent(string agentId, string? name = null)
     {
-        var agent = _agents.GetOrAdd(agentId, id => new AsteriskAgent { AgentId = id });
+        var agent = GetOrAddAgent(agentId);
         lock (agent.SyncRoot)
         {
             agent.Name = name ?? agent.Name;
@@ -201,7 +208,124 @@ public sealed class AgentManager
         _agents.Values.Where(predicate);
 
     public void Clear() => _agents.Clear();
+
+    private AsteriskAgent GetOrAddAgent(string agentId)
+    {
+        lock (_liveEvents)
+            return _agents.GetOrAdd(agentId, static id => new AsteriskAgent { AgentId = id });
+    }
+
+    /// <summary>
+    /// Records that an event Asterisk reported live names <paramref name="agentId"/>. The server calls it before it applies
+    /// the event; a row of a list is not one, so a load never counts as a live event of its own.
+    /// </summary>
+    internal void NoteLiveEvent(string agentId)
+    {
+        lock (_liveEvents)
+            _lastLiveEvent[agentId] = ++_liveEventCount;
+    }
+
+    /// <summary>Where the live events stand, read before an <c>Agents</c> list is asked for.</summary>
+    internal long LiveEventMark()
+    {
+        lock (_liveEvents)
+            return _liveEventCount;
+    }
+
+    /// <summary>Whether a live event named <paramref name="agentId"/> after <paramref name="mark"/>, so that a list asked for there is older.</summary>
+    internal bool HasLiveEventSince(string agentId, long mark)
+    {
+        lock (_liveEvents)
+            return IsNewerThanTheList(agentId, mark);
+    }
+
+    private bool IsNewerThanTheList(string agentId, long mark) =>
+        _lastLiveEvent.TryGetValue(agentId, out var last) && last > mark;
+
+    /// <summary>
+    /// Replaces the table, in one step, with what a completed <c>Agents</c> list reports after a reconnect, and returns
+    /// the agents to announce, in the list's order, for <see cref="AnnounceLogin"/>: a new <see cref="AsteriskAgent"/>
+    /// each, with its counters at zero, as the load that clears the table and logs each one in leaves them. An agent the
+    /// list omits leaves the table, and one it reports logged off is held logged off; neither raises
+    /// <see cref="AgentLoggedOff"/>, since no logoff was observed. A row after the first for an agent is ignored.
+    /// An agent a live event named after <paramref name="listedFrom"/> stays as that event left it, listed or not, since
+    /// the list is older: its row is announced only while it reads logged in, and it is never announced as new.
+    /// </summary>
+    /// <param name="rows">The list, read to its end.</param>
+    /// <param name="listedFrom">The <see cref="LiveEventMark"/> read before the list was asked for.</param>
+    internal IReadOnlyList<AsteriskAgent> ReplaceWithSnapshot(IReadOnlyList<AgentSnapshotRow> rows, long listedFrom)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var table = new ConcurrentDictionary<string, AsteriskAgent>();
+        var loggedIn = new List<AsteriskAgent>();
+        lock (_liveEvents)
+        {
+            var held = _agents;
+            foreach (var row in rows)
+            {
+                var newer = IsNewerThanTheList(row.AgentId, listedFrom);
+                if (newer && held.TryGetValue(row.AgentId, out var kept))
+                {
+                    if (table.TryAdd(row.AgentId, kept) && row.LoggedIn && !IsLoggedOff(kept))
+                        loggedIn.Add(kept);
+
+                    continue;
+                }
+
+                var agent = new AsteriskAgent { AgentId = row.AgentId, Name = row.Name };
+                if (!table.TryAdd(row.AgentId, agent) || !row.LoggedIn || newer)
+                    continue;
+
+                agent.State = AgentState.Available;
+                agent.Channel = row.Channel;
+                agent.LoggedInAt = now;
+                agent.LastStateChangeAt = now;
+                loggedIn.Add(agent);
+            }
+
+            // The agents the list could not have seen: an event after it is the only word on them.
+            foreach (var (agentId, last) in _lastLiveEvent)
+            {
+                if (last > listedFrom && held.TryGetValue(agentId, out var unlisted))
+                    table.TryAdd(agentId, unlisted);
+            }
+
+            _agents = table;
+        }
+
+        return loggedIn;
+    }
+
+    /// <summary>
+    /// Logs and raises <see cref="AgentLoggedIn"/> for an agent <see cref="ReplaceWithSnapshot"/> reported logged in, unless
+    /// a live logoff has been applied to it since: that logoff is newer than the list, and its <see cref="AgentLoggedOff"/>
+    /// may already have been raised, so a login announced after it would leave subscribers holding the agent logged in.
+    /// The state is read under the agent's lock, which the logoff's change holds: a logoff applied before the read skips
+    /// the login, and one applied after it is raised after it, except in the instant between the read and the raise.
+    /// </summary>
+    internal void AnnounceLogin(AsteriskAgent agent)
+    {
+        if (IsLoggedOff(agent))
+            return;
+
+        AgentManagerLog.Login(_logger, agent.AgentId, agent.Channel);
+        AgentLoggedIn?.Invoke(agent);
+    }
+
+    // Read under the agent's lock, so that a live change in progress is read before it or after it. _liveEvents may be
+    // held around it; nothing takes _liveEvents inside an agent's lock, and the event pump never holds both.
+    private static bool IsLoggedOff(AsteriskAgent agent)
+    {
+        lock (agent.SyncRoot)
+            return agent.State == AgentState.LoggedOff;
+    }
 }
+
+/// <summary>
+/// One row of a completed <c>Agents</c> list, copied out of its event: the <c>Agent</c>, <c>Name</c> and
+/// <c>LoggedInChan</c> headers, and whether its <c>Status</c> says the agent is logged in.
+/// </summary>
+internal readonly record struct AgentSnapshotRow(string AgentId, string? Name, string? Channel, bool LoggedIn);
 
 /// <summary>Represents a live Asterisk agent.</summary>
 public sealed class AsteriskAgent : LiveObjectBase
