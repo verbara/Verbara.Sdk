@@ -142,9 +142,7 @@ public sealed class ResiliencePolicy
 
                 if (state is not null && _circuitThreshold is int threshold)
                 {
-                    var wasOpen = state.IsOpen;
-                    state.RecordFailure(threshold, _time);
-                    if (!wasOpen && state.IsOpen)
+                    if (state.RecordFailureReportingTrip(threshold, _time))
                     {
                         ResilienceMetrics.CircuitOpened.Add(
                             1,

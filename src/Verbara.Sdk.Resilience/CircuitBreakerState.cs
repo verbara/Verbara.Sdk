@@ -138,7 +138,13 @@ public sealed class CircuitBreakerState
     /// <paramref name="threshold"/> and the circuit is not already open, transitions
     /// to the open state and stores <see cref="OpenedAt"/> via the provided clock.
     /// </summary>
-    public void RecordFailure(int threshold, TimeProvider time)
+    public void RecordFailure(int threshold, TimeProvider time) => RecordFailureReportingTrip(threshold, time);
+
+    /// <summary>
+    /// Does what <see cref="RecordFailure"/> does, and returns <see langword="true"/> only for the one
+    /// call that won the change from closed to open, so that a trip can be counted once.
+    /// </summary>
+    internal bool RecordFailureReportingTrip(int threshold, TimeProvider time)
     {
         ArgumentNullException.ThrowIfNull(time);
         if (threshold < 1)
@@ -146,13 +152,14 @@ public sealed class CircuitBreakerState
 
         var failures = Interlocked.Increment(ref _consecutiveFailures);
         if (failures < threshold)
-            return;
+            return false;
 
         // Try to flip from closed (0) → open (1). Only the thread that wins records OpenedAt —
         // preventing a spurious re-open from overwriting the original timestamp.
-        if (Interlocked.CompareExchange(ref _isOpen, 1, 0) == 0)
-        {
-            Interlocked.Exchange(ref _openedAtTicks, time.GetUtcNow().UtcTicks);
-        }
+        if (Interlocked.CompareExchange(ref _isOpen, 1, 0) != 0)
+            return false;
+
+        Interlocked.Exchange(ref _openedAtTicks, time.GetUtcNow().UtcTicks);
+        return true;
     }
 }
