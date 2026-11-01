@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: a reconnect you make yourself reloads Live (#NNN)
+### Fixed: a reconnect you make yourself reloads Live (#511)
 
 With `AutoReconnect` off, a successful `ConnectAsync` on an `AmiConnection` after a lost AMI session runs Live's full
 state reload on the new session, with no second `StartAsync` and no explicit `RequestInitialStateAsync`. A connect that
