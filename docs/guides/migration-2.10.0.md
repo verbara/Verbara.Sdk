@@ -43,9 +43,6 @@ trips: an increase over a window says that a key tripped, whether or not a sampl
 replacement. The threshold and the window are yours to choose, with these in mind:
 
 - A rule with a five-minute `for` ignored a lone trip, and an alert on any increase can page on one.
-- The count is approximate under concurrency. Failures that land together around a trip can each add 1, so a short pause
-  with requests in flight can read 2 or more, and a count above 1 does not prove that the key tripped again. A racing
-  call can also leave a trip uncounted.
 - A key's first trip since the process started may not appear in `increase()`. Nothing adds 0 before it, so a new series
   starts at `1`, and unless the window holds an earlier, higher sample of that series there is no increase to read.
 - The window depends on each policy and on its traffic. Under a steady outage, the time between trips is the open duration
