@@ -154,12 +154,15 @@ public sealed class CircuitBreakerState
         if (failures < threshold)
             return false;
 
+        // Read the clock before anything changes: a clock that throws here leaves the circuit as it was.
+        var openedAtTicks = time.GetUtcNow().UtcTicks;
+
         // Try to flip from closed (0) → open (1). Only the thread that wins records OpenedAt —
         // preventing a spurious re-open from overwriting the original timestamp.
         if (Interlocked.CompareExchange(ref _isOpen, 1, 0) != 0)
             return false;
 
-        Interlocked.Exchange(ref _openedAtTicks, time.GetUtcNow().UtcTicks);
+        Interlocked.Exchange(ref _openedAtTicks, openedAtTicks);
         return true;
     }
 }

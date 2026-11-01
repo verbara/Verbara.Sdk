@@ -8,7 +8,7 @@ namespace Verbara.Sdk.Resilience.Tests;
 
 /// <summary>
 /// Two threads released on the same instant, once per round, against one breaker. The clock is a constant:
-/// a real clock's read inside the trip narrows the race enough to lose the red.
+/// a real clock's read in the trip's path pulls the two threads apart enough to lose the race.
 /// </summary>
 public sealed class CircuitBreakerRaceTests
 {
@@ -98,7 +98,7 @@ public sealed class CircuitBreakerRaceTests
     }
 
     [Fact]
-    public void RecordFailure_ShouldTripAgain_WhenASuccessLandedInsideTheLastTrip()
+    public void RecordFailure_ShouldOvertakeASuccess_WhenTheSuccessLandsJustBeforeTheTrip()
     {
         var state = new CircuitBreakerState("race");
         var clock = new FixedClock();
@@ -106,12 +106,7 @@ public sealed class CircuitBreakerRaceTests
 
         state.RecordFailure(1, clock);
 
-        state.IsOpen.Should().BeFalse("the success that landed inside the trip closes the circuit");
-        state.ShouldAllow(OpenWindow, clock).Should().BeTrue();
-
-        state.RecordFailure(1, clock);
-
-        state.IsOpen.Should().BeTrue();
+        state.IsOpen.Should().BeTrue("the clock is read before the trip, so the trip comes after that success");
         state.OpenedAt.Should().NotBeNull();
         state.ShouldAllow(OpenWindow, clock).Should().BeFalse();
     }

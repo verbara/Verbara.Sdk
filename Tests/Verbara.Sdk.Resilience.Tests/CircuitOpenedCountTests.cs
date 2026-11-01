@@ -8,9 +8,21 @@ using static Verbara.Sdk.Resilience.Tests.CircuitGaugeReadsRealStateTests;
 namespace Verbara.Sdk.Resilience.Tests;
 
 /// <summary>
+/// The tests that read a policy's clock through a hook never run alongside another test class: a trip tracks its key in the
+/// process-wide gauge map, so a class observing the gauge reads that same clock, takes the hook, and leaves the trip's own
+/// read with nothing to wait for.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class CircuitOpenedCountGroup
+{
+    public const string Name = "Circuit opened count";
+}
+
+/// <summary>
 /// One trip is one <c>circuit.opened</c>. A barrier holds every caller inside the call, so all of them read the circuit
 /// closed before the first one fails. No success runs and the clock stands still, so each round holds exactly one trip.
 /// </summary>
+[Collection(CircuitOpenedCountGroup.Name)]
 public sealed class CircuitOpenedCountTests
 {
     private const int Rounds = 300;
@@ -59,17 +71,31 @@ public sealed class CircuitOpenedCountTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ShouldAddOneToCircuitOpened_WhenASuccessLandsBetweenTheTripAndItsCount()
+    public async Task ExecuteAsync_ShouldAddOneToCircuitOpened_WhenASuccessClosesTheCircuitBetweenAStaleReadAndTheTrip()
     {
         using var opened = new OpenedCounter();
         var clock = new HookedClock();
         var policy = NewPolicy(clock, threshold: 1);
         var key = NewKey();
-        clock.OnNextRead = () => SucceedAsync(policy, key).GetAwaiter().GetResult();
+        var releaseSuccess = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFailure = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var success = policy.ExecuteAsync(key, async _ => await releaseSuccess.Task.ConfigureAwait(false), CancellationToken.None).AsTask();
+        var failure = policy.ExecuteAsync(key, async _ => await releaseFailure.Task.ConfigureAwait(false), CancellationToken.None).AsTask();
 
         await FailAsync(policy, key);
+        opened.Read(key).Should().Be(1, "the first failure tripped the circuit while both calls were in flight");
 
-        opened.Read(key).Should().Be(1, "the failure won the change to open, whatever closed the circuit after it");
+        clock.OnNextRead = () =>
+        {
+            releaseSuccess.SetResult(1);
+            success.WaitAsync(BarrierLimit).GetAwaiter().GetResult();
+        };
+        releaseFailure.SetException(new TimeoutException("dependency down"));
+        var act = async () => await failure;
+        await act.Should().ThrowAsync<TimeoutException>();
+
+        opened.Read(key).Should().Be(2, "the failure read the circuit open, and a success closed it before this real second trip");
+        policy.GetCircuitState(key).Should().Be(ResilienceMetrics.CircuitStateValue.Open);
     }
 
     private static async Task FailTogetherAsync(ResiliencePolicy policy, string key, Barrier barrier)
