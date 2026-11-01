@@ -55,6 +55,65 @@ public sealed class DocSnippetCompilationTests
             because: $"snippet at {filePath}:{lineNumber} must compile against the current SDK\n--- snippet ---\n{snippet}\n--- end ---");
     }
 
+    /// <summary>
+    /// The control for <see cref="ConsumerCompilationErrors"/>. This call compiles in any assembly Live grants
+    /// friend access to, so this error proves the helper compiles as a stranger.
+    /// </summary>
+    [Fact]
+    public void ConsumerCompilation_ShouldFailWithCS1061_WhenItCallsAnInternalMark()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk.Live.Queues;
+
+            new AsteriskQueueEntry().MarkLeaveNotObserved();
+            """);
+
+        errors.Should().Equal("CS1061");
+    }
+
+    [Fact]
+    public void LeaveNotObserved_ShouldNotCompile_WhenAConsumerAssignsItOnAQueueEntry()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk.Live.Queues;
+
+            new AsteriskQueueEntry().LeaveNotObserved = true;
+            """);
+
+        errors.Should().Equal("CS0200");
+    }
+
+    [Fact]
+    public void LeaveNotObserved_ShouldNotCompile_WhenAConsumerAssignsItOnAParticipant()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk.Live.MeetMe;
+
+            new MeetMeUser().LeaveNotObserved = true;
+            """);
+
+        errors.Should().Equal("CS0200");
+    }
+
+    /// <summary>
+    /// Compiles <paramref name="source"/> as a consumer does, under an assembly name no SDK package grants friend
+    /// access to, and returns the ids of its errors.
+    /// </summary>
+    private static List<string> ConsumerCompilationErrors(string source)
+    {
+        var tree = CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Latest, kind: SourceCodeKind.Regular));
+        var compilation = CSharpCompilation.Create(
+            assemblyName: "DocSnippetConsumer",
+            syntaxTrees: [tree],
+            references: GetCompilationReferences(),
+            options: new CSharpCompilationOptions(OutputKind.ConsoleApplication));
+
+        return compilation.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Select(d => d.Id)
+            .ToList();
+    }
+
     public static TheoryData<string, int, string> GetSnippets()
     {
         var data = new TheoryData<string, int, string>();

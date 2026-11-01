@@ -31,6 +31,19 @@ buffer is derived from the 16-byte slot and a measured ≈ 1.9 KB per 18-header 
 buffer of 20,000, where it said 5 MB. The Sessions README now says that `Events` replays nothing, so a subscriber added
 after the host starts does not see the first load's `CallStartedEvent`. No code, package or API changes.
 
+### Added: a leave says whether Live observed Asterisk's report of it (#510)
+
+`AsteriskQueueEntry.LeaveNotObserved` and `MeetMeUser.LeaveNotObserved` are public and read-only, and report what Live
+observed. A `QueueManager.CallerLeft` or `MeetMeManager.UserLeft` handler reads `true` when Live removed the caller or
+participant without having observed, before the removal, a report of a leave for its channel name or of the end of its
+room, and `false` when it had. `true` does not prove Asterisk sent no leave, and leaves are matched by channel name, so a
+report that names a reused channel reads `false` on the caller or participant held under that name. An inferred leave has
+no Asterisk timestamp or reason. Events and their signatures are unchanged, and no new leave is raised or counted.
+
+`QueueManager.RemoveQueue` and `Clear` on either manager raise no leave; the entry or participant the table held reads
+`true`. A `MeetMeUser` that `MeetMeManager.Clear` empties, or that a join with another `Uniqueid` replaces, now also reads
+`State == Left` where it read `Joined`, and `QueueManager.Clear` now empties the `Entries` of a queue you retained.
+
 ### Changed: OpenTelemetry 1.20.1 (#501)
 
 `Verbara.Sdk.OpenTelemetry` now requires `OpenTelemetry`, `OpenTelemetry.Extensions.Hosting`,
