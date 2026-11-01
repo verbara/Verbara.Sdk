@@ -1262,6 +1262,106 @@ public sealed class CallerReconnectReloadTests
             + "session that replaced it, and no login announced for one");
     }
 
+    [Theory]
+    [InlineData(Route.Caller)]
+    [InlineData(Route.Loop)]
+    public async Task RetiredLoad_ShouldLeaveItsSuccessorsAgents_WhenItsSessionIsLostBetweenItsAgentsFenceAndTheReplacement(Route route)
+    {
+        var retired = PeerAfter();
+        retired.Agents = [new ListedAgent(GhostAgent), new ListedAgent(SecondGhostAgent)];
+        var third = PeerAfter();
+        await using var rig = await Rig.StartAsync(PeerBefore(), retired, route, laterPeers: [third]);
+        using var hold = new HandlerHold();
+
+        // The reload is held after its Agents fence returned and before the table is replaced; the successor's whole load
+        // completes inside that gap.
+        rig.Run.Server.AgentsListFenced = hold.Block;
+        await rig.LoseAndComeBackAsync(route);
+        var held = await CompletesWithinBoundAsync(hold.Held);
+        if (held)
+        {
+            retired.CloseSession();
+            if (route == Route.Caller)
+                await rig.CallerConnectsAsync();
+
+            await rig.Run.ServerLog.Logged(StateLoaded, 2).WaitAsync(Run.Bound);
+        }
+
+        var loginsAtTheRelease = rig.AgentLogins.Length;
+        hold.Release();
+        await rig.SettleAsync();
+
+        new
+        {
+            Held = held,
+            Loaded = Lines(rig.Run, StateLoaded),
+            Agents = rig.AgentIds(),
+            LoginsAfterTheRelease = rig.AgentLogins.Length - loginsAtTheRelease,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Held = true,
+                Loaded = 2,
+                Agents = Sorted(BootingAsterisk.AgentId),
+                LoginsAfterTheRelease = 0,
+            },
+            "a load whose session ended after its Agents list passed the fence applies nothing: its list does not replace the "
+            + "table its successor's load left");
+    }
+
+    [Theory]
+    [InlineData(Route.Caller)]
+    [InlineData(Route.Loop)]
+    public async Task Reload_ShouldAnnounceNoLogin_WhenALiveLogoffOfThatAgentIsDeliveredWhileAnEarlierLoginIsAnnounced(Route route)
+    {
+        const string First = "3001";
+        const string LogsOff = "3002";
+        var before = PeerBefore();
+        before.Agents = [new ListedAgent(First)];
+        var after = PeerAfter();
+        after.Agents = [new ListedAgent(First), new ListedAgent(LogsOff)];
+        await using var rig = await Rig.StartAsync(before, after, route);
+        using var hold = new HandlerHold();
+        var seen = new ConcurrentQueue<string>();
+        var loggedOff = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        rig.Run.Server.Agents.AgentLoggedIn += a =>
+        {
+            seen.Enqueue($"in:{a.AgentId}:{a.State}");
+            if (a.AgentId == First)
+                hold.Block();
+        };
+        rig.Run.Server.Agents.AgentLoggedOff += a =>
+        {
+            seen.Enqueue($"off:{a.AgentId}:{a.State}");
+            if (a.AgentId == LogsOff)
+                loggedOff.TrySetResult();
+        };
+
+        // The reload is held in the subscriber's login handler of the first agent, after the replacement; Asterisk then
+        // reports the second agent logged off, and the event pump delivers it before the reload announces that agent.
+        await rig.LoseAndComeBackAsync(route);
+        var held = await CompletesWithinBoundAsync(hold.Held);
+        await after.SendEventAsync("AgentLogoff", Headers(("Agent", LogsOff)));
+        var delivered = await CompletesWithinBoundAsync(loggedOff.Task);
+        hold.Release();
+        var reloaded = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(StateLoaded, 2));
+        await rig.SettleAsync();
+
+        new { Held = held, Delivered = delivered, Reloaded = reloaded, Seen = seen.ToArray(), Agents = rig.AgentStates() }
+            .Should().BeEquivalentTo(
+                new
+                {
+                    Held = true,
+                    Delivered = true,
+                    Reloaded = true,
+                    Seen = new[] { $"in:{First}:{Live.Agents.AgentState.Available}", $"off:{LogsOff}:{Live.Agents.AgentState.LoggedOff}" },
+                    Agents = Sorted($"{First}:{Live.Agents.AgentState.Available}", $"{LogsOff}:{Live.Agents.AgentState.LoggedOff}"),
+                },
+                options => options.WithStrictOrdering(),
+                "a live logoff the subscribers have already seen is newer than the list: the reload does not announce that "
+                + "agent logged in after it, so the last event they saw for it agrees with the table");
+    }
+
     [Fact]
     public async Task Reload_ShouldReplaceTheAgents_WhenItsFenceRanOutAndItsScheduledReloadRuns()
     {

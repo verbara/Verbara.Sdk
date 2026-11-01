@@ -245,6 +245,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>Null in production; observes a listing a load is about to request, by its AMI action name.</summary>
     internal Action<string>? ListingRequested { get; set; }
 
+    /// <summary>Null in production; observes a load whose <c>Agents</c> list has passed its fence, before it is applied.</summary>
+    internal Action? AgentsListFenced { get; set; }
+
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
 
@@ -1399,8 +1402,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// session to ask, so the list counts as delivered. A completed one replaces the table on a reload after a reconnect,
     /// in one step; on any other load, and on a reload whose fence ran out, it only adds, and the reload that wait
     /// scheduled replaces.
-    /// Each logged-in row is announced as it is applied, and the session is read before each, since a handler can
-    /// outlive it: a load stops announcing once its session is gone, and an adding load stops adding.
+    /// Each logged-in row is announced as it is applied, and the session is read before the replacement and before each
+    /// announce, since a handler can outlive it: a load stops announcing once its session is gone, and an adding load stops
+    /// adding. A replaced agent a live logoff has reached since the replacement is not announced.
     /// The fence delivers every event received up to the list's end before the list is applied, and more can follow, so
     /// neither path applies a row over an event that named its agent after the ask: the row is the older of the two.
     /// </summary>
@@ -1433,8 +1437,10 @@ public sealed class VerbaraServer : IVerbaraServer
         var full = await AwaitBarrierAsync(session, mark, "Agents", states, ChannelReader.Load.Name, activity, barriers,
             cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
+        AgentsListFenced?.Invoke();
         if (full && barriers.ReplacesAgents)
         {
+            StopIfSessionIsGone(session, states);
             foreach (var agent in Agents.ReplaceWithSnapshot(rows, listedFrom))
             {
                 StopIfSessionIsGone(session, states);

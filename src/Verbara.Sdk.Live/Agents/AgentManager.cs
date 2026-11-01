@@ -266,7 +266,7 @@ public sealed class AgentManager
                 var newer = IsNewerThanTheList(row.AgentId, listedFrom);
                 if (newer && held.TryGetValue(row.AgentId, out var kept))
                 {
-                    if (table.TryAdd(row.AgentId, kept) && row.LoggedIn && kept.State != AgentState.LoggedOff)
+                    if (table.TryAdd(row.AgentId, kept) && row.LoggedIn && !IsLoggedOff(kept))
                         loggedIn.Add(kept);
 
                     continue;
@@ -296,11 +296,28 @@ public sealed class AgentManager
         return loggedIn;
     }
 
-    /// <summary>Logs and raises <see cref="AgentLoggedIn"/> for an agent <see cref="ReplaceWithSnapshot"/> reported logged in.</summary>
+    /// <summary>
+    /// Logs and raises <see cref="AgentLoggedIn"/> for an agent <see cref="ReplaceWithSnapshot"/> reported logged in, unless
+    /// a live logoff has been applied to it since: that logoff is newer than the list, and its <see cref="AgentLoggedOff"/>
+    /// may already have been raised, so a login announced after it would leave subscribers holding the agent logged in.
+    /// The state is read under the agent's lock, which the logoff's change holds: a logoff applied before the read skips
+    /// the login, and one applied after it is raised after it, except in the instant between the read and the raise.
+    /// </summary>
     internal void AnnounceLogin(AsteriskAgent agent)
     {
+        if (IsLoggedOff(agent))
+            return;
+
         AgentManagerLog.Login(_logger, agent.AgentId, agent.Channel);
         AgentLoggedIn?.Invoke(agent);
+    }
+
+    // Read under the agent's lock, so that a live change in progress is read before it or after it. _liveEvents may be
+    // held around it; nothing takes _liveEvents inside an agent's lock, and the event pump never holds both.
+    private static bool IsLoggedOff(AsteriskAgent agent)
+    {
+        lock (agent.SyncRoot)
+            return agent.State == AgentState.LoggedOff;
     }
 }
 

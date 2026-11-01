@@ -204,6 +204,10 @@ started during it appears. The reload waits behind the `ConnectionLost` handlers
 slow one delays it. `Reconnected` keeps its meaning and is still raised only for a reconnect the
 connection made itself.
 
+That reload also raises `CallerJoined` once for each caller still waiting, as a reload after a
+reconnect the connection made always has. The entry it carries is the one Asterisk reported, not the
+instance `AsteriskQueue.Entries` holds, so match callers by `Channel`, never by reference.
+
 | What happens | What Live does |
 |---|---|
 | Your first `ConnectAsync` | Nothing: the load is `StartAsync`'s. Start the server once the connect has returned |
@@ -217,8 +221,10 @@ route, the table reads what it held until the `Agents` list has completed and th
 says, in one step. `AgentLoggedIn` is raised once for each agent the list reports logged in, after
 the replacement; an agent the list drops or reports logged off raises no `AgentLoggedOff`, as
 before. An agent that `AgentLogin`, `AgentLogoff`, `AgentConnect` or `AgentComplete` named after the
-list was asked for stays as that event left it, because the list is older: a row that reports it
-logged in is not announced once the event has logged it off, and an agent the list omits stays. A
+list was asked for stays as that event left it, because the list is older, and an agent the list
+omits stays. `AgentLoggedIn` is not raised for an agent a live `AgentLogoff` has logged off by the
+time the reload reaches it, also one Asterisk reported while your handler for an earlier agent was
+running, so the last of the two events you saw for an agent agrees with the table. A
 list cut short or refused leaves the table as it was, where a reload used to leave it empty or
 partial, so a reload that is interrupted or fails no longer costs you the agents. That needs an
 `AmiConnection`: over any other connection, a wrapper that forwards to one included, the load does
