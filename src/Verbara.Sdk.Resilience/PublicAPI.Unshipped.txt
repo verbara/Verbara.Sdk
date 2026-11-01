@@ -1,1 +1,2 @@
 #nullable enable
+Verbara.Sdk.Resilience.ResiliencePolicy.GetCircuitState(string! key) -> Verbara.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateValue
