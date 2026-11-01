@@ -1,1 +1,3 @@
 #nullable enable
+Verbara.Sdk.Live.MeetMe.MeetMeUser.LeaveNotObserved.get -> bool
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.LeaveNotObserved.get -> bool

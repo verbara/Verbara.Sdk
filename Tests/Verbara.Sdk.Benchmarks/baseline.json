@@ -205,6 +205,14 @@
     "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark.Mute_OneSubscriber": {
       "bytes": 176,
       "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark.JoinLeave": {
+      "bytes": 104,
+      "bytes_tolerance": 0
+    },
+    "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark.Reconcile_RemovesParticipants": {
+      "bytes": 276,
+      "bytes_tolerance": 0
     }
   }
 }
