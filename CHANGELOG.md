@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: a Live server is disposed once and never against a reconnect (#NNN)
+### Fixed: a Live server is disposed once and never against a reconnect (#514)
 
 `VerbaraServer.DisposeAsync` is idempotent and no longer races a reconnect. A second or concurrent call releases nothing
 again and returns once the first has finished, and only the call that ran the releases sees their failure; a disposal
