@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a Live server is disposed once and never against a reconnect (#NNN)
+
+`VerbaraServer.DisposeAsync` is idempotent and no longer races a reconnect. A second or concurrent call releases nothing
+again and returns once the first has finished, and only the call that ran the releases sees their failure; a disposal
+called from inside a reload, such as from a `ChannelRemoved` handler, does not wait for that reload, and any other call
+returns only after it has ended. A `remove` accessor that throws no longer stops the releases. A reconnect delivered once
+the disposal has begun does nothing, over either route, and a reload in flight ends before the disposal returns, so a
+disposed server leaks no subscription and takes no further state.
+
 ### Fixed: a reconnect you make yourself reloads Live (#511)
 
 With `AutoReconnect` off, a successful `ConnectAsync` on an `AmiConnection` after a lost AMI session runs Live's full
