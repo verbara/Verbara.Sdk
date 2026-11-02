@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added: a client that only makes REST calls can turn its ARI events off (#NNN)
+### Added: a client that only makes REST calls can turn its ARI events off (#513)
 
 `AriClientOptions.EventsEnabled` (default `true`, which behaves as before; `Asterisk:Ari:EventsEnabled` from
 configuration). With `false` the client opens no events WebSocket and registers no Stasis application, and its REST
@@ -17,7 +17,7 @@ registered and the channel dies, which neither `State` nor the check can see. A 
 AMI at start. Closes #461. See the [package README](src/Verbara.Sdk.Ari/README.md#rest-only-clients) and the
 [migration guide](docs/guides/migration-2.10.0.md).
 
-### Fixed: an ARI observer that throws no longer stops delivery (#NNN)
+### Fixed: an ARI observer that throws no longer stops delivery (#513)
 
 An exception from an observer's `OnNext` ended delivery to every observer for the rest of the connection, reconnects
 included, while the client still read `Connected` and nothing was logged; one from `OnCompleted` left `DisposeAsync`
@@ -28,7 +28,7 @@ on. Code that relied on a throw to stop receiving should dispose its subscriptio
 operator is still ended by that operator on its first failure, and only what throws on the delivering thread is caught.
 Measured cost per event against 2.9.0: 0 bytes, time within noise.
 
-### Fixed: `OriginateAsync` with an extension runs the dialplan (#NNN)
+### Fixed: `OriginateAsync` with an extension runs the dialplan (#513)
 
 `Channels.OriginateAsync` with an extension no longer sends `app`. Asterisk reads the two as exclusive with `app`
 winning: on all six images measured, 18/18, the channel entered Stasis and never ran the dialplan, or died at once if
