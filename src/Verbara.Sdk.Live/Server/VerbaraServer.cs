@@ -231,7 +231,15 @@ public sealed class VerbaraServer : IVerbaraServer
     private readonly CancellationTokenSource _disposing = new();
 
     // The disposal's completion, set by the first DisposeAsync: every later call awaits it instead of releasing again.
+    // Completed once the releases have ended and so has the reconnect's reload the first call left out of its wait.
     private TaskCompletionSource? _disposal;
+
+    // The reconnect's reload this flow runs inside, set before its load: a disposal called from it does not wait for it.
+    private readonly AsyncLocal<Task?> _ownReload = new();
+
+    // The last reconnect's reload that entered the gate; it never throws. Read by tests (via InternalsVisibleTo) to tell
+    // when it has ended.
+    internal Task ReconnectReload { get; private set; } = Task.CompletedTask;
 
     // The last full reload a load whose barrier ran out scheduled; it never throws. Read by tests (via
     // InternalsVisibleTo) to tell when it has ended.
@@ -443,6 +451,7 @@ public sealed class VerbaraServer : IVerbaraServer
             if (_disposing.IsCancellationRequested)
                 return;
             _deferredLoads.Add(reload.Task);
+            ReconnectReload = reload.Task;
         }
 
         // First, before anything is reloaded or delivered: every event the outage swallowed lies before it.
@@ -474,6 +483,9 @@ public sealed class VerbaraServer : IVerbaraServer
 
             // Reload fresh state from Asterisk
             states = new LoadConnectionStates(_connection);
+            // What the load raises runs in this flow: a handler there that disposes the server must not wait for this
+            // reload, which waits for that handler.
+            _ownReload.Value = reload.Task;
             await LoadAsync(states, cancellationToken, replaceAgents: true);
         }
         catch (AmiNotConnectedException ex)
@@ -1788,31 +1800,49 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </exception>
     public ValueTask DisposeAsync()
     {
+        // Read once, here, in the synchronous part: the reconnect's reload this call runs inside, if it has not ended.
+        var own = _ownReload.Value is { IsCompleted: false } running ? running : null;
         var mine = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var earlier = Interlocked.CompareExchange(ref _disposal, mine, null);
-        return earlier is null ? ReleaseAsync(mine) : new ValueTask(earlier.Task);
+        if (earlier is null)
+            return ReleaseAsync(mine, excludedReload: own);
+
+        // From inside a reload that has not ended, joining would wait for that reload, which waits for this caller.
+        return own is not null ? ValueTask.CompletedTask : new ValueTask(earlier.Task);
     }
 
-    /// <summary>The first disposal's run of the releases, which completes <paramref name="finished"/> once they have ended.</summary>
-    private async ValueTask ReleaseAsync(TaskCompletionSource finished)
+    /// <summary>
+    /// The first disposal's run of the releases. <paramref name="finished"/> is completed once they have ended and so has
+    /// <paramref name="excludedReload"/>, the reload this call runs inside and so does not wait for.
+    /// </summary>
+    private async ValueTask ReleaseAsync(TaskCompletionSource finished, Task? excludedReload)
     {
         try
         {
-            await ReleaseCoreAsync();
+            await ReleaseCoreAsync(excludedReload);
         }
         finally
         {
-            // Always with success: a failure reaches only the call that ran the releases.
-            finished.SetResult();
+            // Always with success: a failure reaches only the call that ran the releases. A caller that joins returns only
+            // once the reload left out of this call's wait has ended too.
+            if (excludedReload is null)
+            {
+                finished.SetResult();
+            }
+            else
+            {
+                _ = excludedReload.ContinueWith(static (_, state) => ((TaskCompletionSource)state!).SetResult(), finished,
+                    CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
         }
     }
 
-    private async ValueTask ReleaseCoreAsync()
+    private async ValueTask ReleaseCoreAsync(Task? excludedReload)
     {
         await _disposing.CancelAsync();
         Task[] deferred;
         lock (_deferredLoadsGate)
-            deferred = [.. _deferredLoads];
+            deferred = [.. _deferredLoads.Where(t => t != excludedReload)];
         await Task.WhenAll(deferred);
 
         // A remove accessor of a consumer's connection is foreign code: an attempt like the releases after it.

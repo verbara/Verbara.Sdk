@@ -400,6 +400,123 @@ public sealed class ServerDisposedOnceTests
         }
     }
 
+    /// <summary>
+    /// A <c>ChannelRemoved</c> handler inside the reload disposes the server, which runs the releases without waiting for
+    /// that reload, and starts a task that disposes again once the reload has ended. That task carries the reload's flow,
+    /// yet is an ordinary caller by then: it joins the first disposal, still in its ARI release.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_ShouldJoinTheFirstDisposal_WhenATaskAHandlerOfTheReloadStartedCallsItOnceTheReloadEnded()
+    {
+        var first = new BootingAsterisk
+        {
+            BootedAtLogin = true,
+            StatusChannels = [new StatusChannel(ListedUid, ListedChannel, ListedUid)],
+        };
+        var second = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+        var ari = Substitute.For<IAriClient>();
+        var ariEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ariHold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+#pragma warning disable CA2012 // NSubstitute setup requires evaluating the ValueTask
+        ari.DisposeAsync().Returns(_ =>
+        {
+            ariEntered.TrySetResult();
+            return new ValueTask(ariHold.Task);
+        });
+#pragma warning restore CA2012
+        run.Server.SetAriClient(ari);
+        var inside = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var outlives = new TaskCompletionSource<Task<Task>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        run.Server.Channels.ChannelRemoved += _ =>
+        {
+            inside.TrySetResult(run.Server.DisposeAsync().AsTask());
+            var reload = run.Server.ReconnectReload;
+            outlives.TrySetResult(Task.Run(async () =>
+            {
+                await reload;
+                return run.Server.DisposeAsync().AsTask();
+            }));
+        };
+
+        try
+        {
+            first.CloseSession();
+            run.ReleaseSecondPeer();
+            var insideDisposal = await inside.Task.WaitAsync(Run.Bound);
+            await ariEntered.Task.WaitAsync(Run.Bound);
+            var joined = await (await outlives.Task.WaitAsync(Run.Bound)).WaitAsync(Run.Bound);
+            // The ARI release is held, so the first disposal has not ended: a call that joined it cannot have returned.
+            var returnedDuringTheRelease = joined.IsCompleted;
+            ariHold.SetResult();
+            await Task.WhenAll(insideDisposal, joined).WaitAsync(Run.Bound);
+
+            using (new AssertionScope())
+            {
+                returnedDuringTheRelease.Should().BeFalse("a call from a task that outlives the reload joins the first disposal");
+                DisposeCalls(ari).Should().Be(1, "the ARI client is released once");
+            }
+        }
+        finally
+        {
+            ariHold.TrySetResult();
+        }
+    }
+
+    /// <summary>
+    /// The first disposal is the handler's, inside the reload, and leaves that reload out of its wait. A disposal from outside
+    /// the reload joins it and still returns only after the reload has ended.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_ShouldReturnAfterTheReloadEnded_WhenItJoinsADisposalCalledInsideThatReload()
+    {
+        var first = new BootingAsterisk
+        {
+            BootedAtLogin = true,
+            StatusChannels = [new StatusChannel(ListedUid, ListedChannel, ListedUid)],
+        };
+        var second = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+        var innerReturned = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        run.Server.Channels.ChannelRemoved += _ =>
+        {
+#pragma warning disable VSTHRD002 // a handler that blocks on the disposal, then holds the reload, is the case under test
+            // The first disposal, inside the reload: it returns here, without waiting for this reload.
+            innerReturned.TrySetResult(run.Server.DisposeAsync().AsTask().Wait(InsideBound));
+            // Then hold the reload: its reconciliation has not ended while this handler has not returned.
+            hold.Task.Wait(Run.Bound);
+#pragma warning restore VSTHRD002
+        };
+
+        try
+        {
+            first.CloseSession();
+            run.ReleaseSecondPeer();
+            (await innerReturned.Task.WaitAsync(Run.Bound)).Should().BeTrue("the disposal called inside the reload returns inside the handler");
+
+            // The second disposal, from the test's own flow: no reload in its flow, so it joins the first.
+            var outer = run.Server.DisposeAsync().AsTask();
+            // The reload cannot end while the handler is held, so completing here is the defect, not a timing accident; the
+            // delay only bounds how long the test looks.
+            var returnedWhileTheReloadRan = await Task.WhenAny(outer, Task.Delay(TimeSpan.FromMilliseconds(500))) == outer;
+            hold.SetResult();
+            await outer.WaitAsync(Run.Bound);
+            var loadStillInFlight = run.Server.IsLoadInFlight;
+
+            using (new AssertionScope())
+            {
+                returnedWhileTheReloadRan.Should().BeFalse("a disposal from outside the reload returns only after the reload has ended");
+                loadStillInFlight.Should().BeFalse("the reload had ended when the joined disposal returned");
+                second.Asked("QueueStatus").Should().Be(0, "nothing more is asked of Asterisk once the server is disposed");
+            }
+        }
+        finally
+        {
+            hold.TrySetResult();
+        }
+    }
+
     private sealed class AmiObserver(Action<ManagerEvent> onNext) : IObserver<ManagerEvent>
     {
         public void OnNext(ManagerEvent value) => onNext(value);
