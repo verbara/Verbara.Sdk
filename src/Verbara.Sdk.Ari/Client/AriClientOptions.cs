@@ -27,7 +27,7 @@ public sealed class AriClientOptions
     /// <summary>Stasis application name.</summary>
     /// <remarks>
     /// A client with events registers this application. With <see cref="EventsEnabled"/> off the client registers nothing,
-    /// and this is only the name <c>Channels.CreateAsync</c> and <c>Channels.OriginateAsync</c> send.
+    /// and this is only the name <c>Channels.CreateAsync</c> and <c>Channels.OriginateAsync</c> without an extension send.
     /// </remarks>
     [Required]
     public string Application { get; set; } = string.Empty;

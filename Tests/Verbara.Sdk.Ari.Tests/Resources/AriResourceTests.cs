@@ -110,6 +110,34 @@ public class AriResourceTests
     }
 
     [Fact]
+    public async Task Channels_OriginateAsync_ShouldSendNoApp_WhenAnExtensionIsGiven()
+    {
+        var json = JsonSerializer.Serialize(new AriChannel { Id = "ch-orig", Name = "PJSIP/4000" }, AriJsonContext.Default.AriChannel);
+        using var handler = new FakeHttpHandler(json);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.OriginateAsync("PJSIP/4000", extension: "100", context: "default");
+
+        new Uri(handler.LastRequestUri!).Query.Should().Be(
+            "?endpoint=PJSIP%2F4000&extension=100&context=default",
+            "with app in the same request Asterisk puts the channel in Stasis and never runs the dialplan");
+    }
+
+    [Fact]
+    public async Task Channels_OriginateAsync_ShouldSendTheApplication_WhenNoExtensionIsGiven()
+    {
+        var json = JsonSerializer.Serialize(new AriChannel { Id = "ch-orig", Name = "PJSIP/4000" }, AriJsonContext.Default.AriChannel);
+        using var handler = new FakeHttpHandler(json);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.OriginateAsync("PJSIP/4000");
+
+        new Uri(handler.LastRequestUri!).Query.Should().Be($"?endpoint=PJSIP%2F4000&app={DefaultOptions.Application}");
+    }
+
+    [Fact]
     public async Task Channels_RingAsync_ShouldPostRing()
     {
         using var handler = new FakeHttpHandler("");

@@ -104,6 +104,13 @@ public interface IAriChannelsResource
     ValueTask<AriChannel> CreateAsync(string endpoint, string? app = null, CancellationToken cancellationToken = default);
     ValueTask<AriChannel> GetAsync(string channelId, CancellationToken cancellationToken = default);
     ValueTask HangupAsync(string channelId, CancellationToken cancellationToken = default);
+    /// <summary>Originate a channel.</summary>
+    /// <remarks>
+    /// With <paramref name="extension"/> the channel runs the dialplan, at <paramref name="extension"/> in
+    /// <paramref name="context"/>, and the client's application is not sent. Without it the channel enters the client's
+    /// application in Stasis. Asterisk answers <c>200</c> to an originate into an application nobody registered, and the
+    /// channel is gone at once.
+    /// </remarks>
     ValueTask<AriChannel> OriginateAsync(string endpoint, string? extension = null, string? context = null, CancellationToken cancellationToken = default);
 
     /// <summary>Indicate ringing to a channel. POST /channels/{channelId}/ring</summary>
