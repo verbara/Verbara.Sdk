@@ -56,6 +56,12 @@ internal static partial class AriClientLog
     // buffer, whose action (a larger buffer or a faster observer) is the wrong one for a caller's close.
     [LoggerMessage(Level = LogLevel.Warning, Message = "[ARI] Discarded on caller ending: count={Count}")]
     public static partial void EventsDiscardedOnCallerEnding(ILogger logger, long count);
+
+    // An observer's failure is the observer's: event_type is the event it threw on, or "completion" or "error" at the
+    // end of the stream. EventId fixed so that an alert can match it across releases.
+    [LoggerMessage(EventId = 1101, Level = LogLevel.Warning,
+        Message = "[ARI] An observer threw: event_type={EventType}; the other observers and later events are unaffected")]
+    public static partial void ObserverFault(ILogger logger, Exception exception, string? eventType);
 }
 
 /// <summary>
@@ -590,7 +596,8 @@ public sealed class AriClient : IAriClient
         }
     }
 
-    public IDisposable Subscribe(IObserver<AriEvent> observer) => _eventSubject.Subscribe(observer);
+    public IDisposable Subscribe(IObserver<AriEvent> observer) =>
+        _eventSubject.Subscribe(new AriObserverGuard(observer, _logger));
 
     public async ValueTask DisconnectAsync(CancellationToken cancellationToken = default)
     {
