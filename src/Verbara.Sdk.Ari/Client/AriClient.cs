@@ -60,7 +60,7 @@ internal static partial class AriClientLog
     // An observer's failure is the observer's: event_type is the event it threw on, or "completion" or "error" at the
     // end of the stream. EventId fixed so that an alert can match it across releases.
     [LoggerMessage(EventId = 1101, Level = LogLevel.Warning,
-        Message = "[ARI] An observer threw: event_type={EventType}; the other observers and later events are unaffected")]
+        Message = "[ARI] Observer threw on {EventType}; the other observers and later events are unaffected")]
     public static partial void ObserverFault(ILogger logger, Exception exception, string? eventType);
 
     // Instead of "[ARI] Connected", which a client that connected nothing must not write.
