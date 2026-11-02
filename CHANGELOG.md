@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a trip racing a success no longer leaves the circuit breaker stuck (#NNN)
+
+A trip that landed inside a `RecordSuccess` could leave the breaker open with no opening time: it then admitted every call
+and could not trip again until a call succeeded. `RecordSuccess` now clears the open flag last, so a racing trip either
+stands with its opening time or is undone whole.
+
+### Fixed: one circuit trip adds one to `circuit.opened` (#NNN)
+
+Calls of a `ResiliencePolicy` that failed together around one trip could each add 1 to `circuit.opened`, so one short
+outage could read as several trips, and a trip that raced a success or a reset could go uncounted. The call whose failure
+trips the circuit now counts it, once. The count covers `ResiliencePolicy`; the webhook delivery service's own counter is
+unchanged in this release.
+
+### Fixed: a clock that throws inside a trip no longer disables the circuit breaker (#NNN)
+
+A `TimeProvider` that threw while a failure tripped the breaker left it open with no opening time, admitting every call. A
+failure now reads the clock before it changes the circuit, so a throw leaves the circuit as it was, with that failure
+counted. On a circuit that is already open, a failure now reads the clock too, so a throwing clock surfaces there as well.
+
 ### Fixed: a reconnect you make yourself reloads Live (#511)
 
 With `AutoReconnect` off, a successful `ConnectAsync` on an `AmiConnection` after a lost AMI session runs Live's full
