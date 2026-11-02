@@ -407,7 +407,7 @@ public sealed class VerbaraServer : IVerbaraServer
         }
     }
 
-    private void OnReconnected() => ReloadNewSession(CancellationToken.None);
+    private void OnReconnected() => ReloadNewSession(_disposing.Token);
 
     /// <summary>
     /// The session a caller's own connect brought back after a loss. The connection delivers it behind that loss, for
@@ -431,6 +431,17 @@ public sealed class VerbaraServer : IVerbaraServer
     private async void ReloadNewSession(CancellationToken cancellationToken)
 #pragma warning restore VSTHRD100
     {
+        // The gate the disposal takes once it has cancelled: a reconnect either sees that cancellation and does nothing, or
+        // is in what the disposal waits for, so the disposal reads the subscription only after this swap has ended. The
+        // connection reads its handlers at delivery, so unhooking alone cannot keep a reconnect out of a disposed server.
+        var reload = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_deferredLoadsGate)
+        {
+            if (_disposing.IsCancellationRequested)
+                return;
+            _deferredLoads.Add(reload.Task);
+        }
+
         // First, before anything is reloaded or delivered: every event the outage swallowed lies before it.
         Interlocked.Increment(ref _reconnects);
 
@@ -475,6 +486,12 @@ public sealed class VerbaraServer : IVerbaraServer
         catch (Exception ex)
         {
             VerbaraServerLog.ReconnectReloadFailed(_logger, ex);
+        }
+        finally
+        {
+            lock (_deferredLoadsGate)
+                _deferredLoads.Remove(reload.Task);
+            reload.SetResult();
         }
     }
 
