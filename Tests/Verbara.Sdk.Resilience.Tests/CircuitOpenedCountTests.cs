@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Verbara.Sdk.Resilience.Diagnostics;
 using Xunit;
 using static Verbara.Sdk.Resilience.Tests.CircuitGaugeReadsRealStateTests;
@@ -109,6 +110,9 @@ public sealed class CircuitOpenedCountTests
         var offset = 0;
         long counted = 0;
         long uncounted = 0;
+        long failed = 0;
+        long admitted = 0;
+        long rejected = 0;
 
         // Each round starts closed with no failures, so the failing call always wins the one trip of the round. The success
         // starts a little later each round, sweeping across the failure's path until it lands right after the trip.
@@ -121,6 +125,7 @@ public sealed class CircuitOpenedCountTests
                 }
                 catch (TimeoutException)
                 {
+                    failed++;
                 }
             },
             () =>
@@ -130,9 +135,11 @@ public sealed class CircuitOpenedCountTests
                 try
                 {
                     policy.ExecuteAsync(key, static _ => ValueTask.FromResult(1), CancellationToken.None).AsTask().GetAwaiter().GetResult();
+                    admitted++;
                 }
                 catch (CircuitBreakerOpenException)
                 {
+                    rejected++;
                 }
             },
             () =>
@@ -153,7 +160,12 @@ public sealed class CircuitOpenedCountTests
             });
 
         rounds.Should().BeGreaterThan(0);
-        uncounted.Should().Be(0, "each of {0} rounds holds one trip, and a success after it does not erase its count", rounds);
+        using (new AssertionScope())
+        {
+            failed.Should().Be(rounds, "the failing call is admitted every round, since each round starts closed");
+            (admitted + rejected).Should().Be(rounds);
+            uncounted.Should().Be(0, "each of {0} rounds holds one trip, and a success after it does not erase its count", rounds);
+        }
     }
 
     private const int SuccessOffsets = 256;
