@@ -227,7 +227,8 @@ public sealed class VerbaraServer : IVerbaraServer
     internal TimeProvider? BarrierClock { get; set; }
 
     // Cancelled once DisposeAsync has begun: a full reload scheduled before it stops waiting and does not start after it,
-    // and a list reconciliation waiting for the event pump stops. Never disposed, so either may read its token at any time.
+    // a reconnect's reload stops reading and does not start after it, and a list reconciliation waiting for the event pump
+    // stops. Never disposed, so any of them may read its token at any time.
     private readonly CancellationTokenSource _disposing = new();
 
     // The disposal's completion, set by the first DisposeAsync: every later call awaits it instead of releasing again.
@@ -1785,18 +1786,34 @@ public sealed class VerbaraServer : IVerbaraServer
     /// disposed: it stays its owner's.
     /// </summary>
     /// <remarks>
-    /// Releases, in this order and each in its own attempt, the server's subscription to the AMI connection, the ARI
-    /// client attached with <see cref="SetAriClient"/>, and the instruments the server published for its live state.
-    /// A release that throws does not stop the ones after it. Once all of them have run, a failure is thrown to the
-    /// caller.
+    /// <para>
+    /// The server is disposed once. The first call runs the releases; a second or concurrent call releases nothing again,
+    /// waits for the first to finish and returns normally, so a release's failure reaches only the call that ran it.
+    /// </para>
+    /// <para>
+    /// The first call ends what is in flight before it releases anything: a full reload a load scheduled, and the reload
+    /// of a reconnected session, whose reads end with the disposal. A reconnect delivered once the disposal has begun
+    /// does nothing, so a disposed server neither subscribes to the connection again nor takes any further state. It
+    /// then stops listening to the connection and releases, in this order and each in its own attempt, the server's
+    /// subscription to the AMI connection, the ARI client attached with <see cref="SetAriClient"/>, and the
+    /// instruments the server published for its live state. An attempt that throws does not stop the ones after it.
+    /// Once all of them have run, a failure is thrown to the caller.
+    /// </para>
+    /// <para>
+    /// No call returns while a reconnect's reload is running, with one exception: a call from inside that reload, such as
+    /// a handler of an event it raises, does not wait for it, since the reload waits for that handler. Such a call
+    /// returns once the releases have ended, or at once if a disposal has already begun; a call that joins it from
+    /// anywhere else returns only after the reload has ended too. A handler of the reload that never returns therefore
+    /// holds every other call, and a release that calls back into this method and waits for it never returns.
+    /// </para>
     /// </remarks>
     /// <exception cref="Exception">
-    /// One release threw: its own exception, unchanged. Only foreign code throws here, such as a consumer's ARI client,
-    /// the subscription of a consumer's AMI connection, or a <see cref="MeterListener"/> whose completion callback
-    /// throws when the instruments are released.
+    /// One attempt threw: its own exception, unchanged. Only foreign code throws here, such as the remove accessor of a
+    /// consumer's AMI connection, a consumer's ARI client, the subscription of a consumer's AMI connection, or a
+    /// <see cref="MeterListener"/> whose completion callback throws when the instruments are released.
     /// </exception>
     /// <exception cref="AggregateException">
-    /// More than one release threw: their exceptions, in release order.
+    /// More than one attempt threw: their exceptions, in release order.
     /// </exception>
     public ValueTask DisposeAsync()
     {
