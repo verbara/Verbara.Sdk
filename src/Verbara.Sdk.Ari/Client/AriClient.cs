@@ -56,6 +56,17 @@ internal static partial class AriClientLog
     // buffer, whose action (a larger buffer or a faster observer) is the wrong one for a caller's close.
     [LoggerMessage(Level = LogLevel.Warning, Message = "[ARI] Discarded on caller ending: count={Count}")]
     public static partial void EventsDiscardedOnCallerEnding(ILogger logger, long count);
+
+    // An observer's failure is the observer's: event_type is the event it threw on, or "completion" or "error" at the
+    // end of the stream. EventId fixed so that an alert can match it across releases.
+    [LoggerMessage(EventId = 1101, Level = LogLevel.Warning,
+        Message = "[ARI] Observer threw on {EventType}; the other observers and later events are unaffected")]
+    public static partial void ObserverFault(ILogger logger, Exception exception, string? eventType);
+
+    // Instead of "[ARI] Connected", which a client that connected nothing must not write.
+    [LoggerMessage(EventId = 1102, Level = LogLevel.Information,
+        Message = "[ARI] REST only: EventsEnabled is off, no events connection: base_url={BaseUrl} app={Application}")]
+    public static partial void RestOnly(ILogger logger, string baseUrl, string application);
 }
 
 /// <summary>
@@ -66,6 +77,10 @@ public sealed class AriClient : IAriClient
     private readonly AriClientOptions _options;
     private readonly ILogger<AriClient> _logger;
     private readonly HttpClient _httpClient;
+
+    // Read once, in the constructor. The options object is held by reference and can change afterwards, and a client
+    // that changed shape after construction has no meaning.
+    private readonly bool _eventsEnabled;
     private ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cts;
     private Task? _eventLoop;
@@ -151,6 +166,9 @@ public sealed class AriClient : IAriClient
         // in a loop after a loss. Checked before the HttpClient exists, so a rejected client leaves nothing to dispose.
         ReconnectRule.ThrowIfUnusable(_options);
         _logger = logger;
+        _eventsEnabled = _options.EventsEnabled;
+        if (!_eventsEnabled)
+            _state = (int)AriConnectionState.RestOnly;
 
         // The HttpClient disposes the logging handler, and the logging handler its inner handler.
         var handler = new AriLoggingHandler(logger);
@@ -175,6 +193,15 @@ public sealed class AriClient : IAriClient
 
     public async ValueTask ConnectAsync(CancellationToken cancellationToken = default)
     {
+        // No socket, no token source, no pump, no loop and no network: the token has no dial to bound, so it is not
+        // read. A probe here would make a host's start depend on Asterisk, with no loop to recover it; reachability is
+        // the health check's.
+        if (!_eventsEnabled)
+        {
+            AriClientLog.RestOnly(_logger, _options.BaseUrl, _options.Application);
+            return;
+        }
+
         Volatile.Write(ref _disconnectRequested, 0);
         SetState(AriConnectionState.Connecting);
 
@@ -590,10 +617,25 @@ public sealed class AriClient : IAriClient
         }
     }
 
-    public IDisposable Subscribe(IObserver<AriEvent> observer) => _eventSubject.Subscribe(observer);
+    /// <inheritdoc />
+    public IDisposable Subscribe(IObserver<AriEvent> observer)
+    {
+        // A subscription that never delivers would leave whoever waits for an event waiting forever.
+        if (!_eventsEnabled)
+        {
+            throw new InvalidOperationException(
+                "This ARI client was built with EventsEnabled = false: it opens no events connection and delivers no events.");
+        }
+
+        return _eventSubject.Subscribe(new AriObserverGuard(observer, _logger));
+    }
 
     public async ValueTask DisconnectAsync(CancellationToken cancellationToken = default)
     {
+        // There is no close to send or wait for, and the REST resources stay usable.
+        if (!_eventsEnabled)
+            return;
+
         // Suppress reconnect before the sole reader can observe the answering close. Its token stays live
         // until the frame has gone out and the answer, bound or caller ends the wait.
         Volatile.Write(ref _disconnectRequested, 1);

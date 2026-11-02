@@ -91,6 +91,70 @@ framework also found one TCP connection for a wrong password or direct refusal, 
 and closed while Asterisk was stopped. Additional starts matched HTTP transport retry events; no extra SDK retry layer
 was observed. The client does not suppress or replace the runtime's transport retries.
 
+## REST-only clients
+
+A client you use only for REST calls can stay off the events WebSocket:
+
+```csharp
+var client = new AriClient(Options.Create(new AriClientOptions
+{
+    BaseUrl = "http://pbx.example.com:8088",
+    Username = "admin",
+    Password = "secret",
+    Application = "myapp",
+    EventsEnabled = false
+}), logger);
+```
+
+With `EventsEnabled = false`, or `Asterisk:Ari:EventsEnabled` set to `false` through `AddVerbara`, the client opens no
+events WebSocket, registers no Stasis application, runs no reconnect loop and keeps no event buffer, so it cannot replace
+another client's application. The client reads the option once, when it is built. On such a client:
+
+- `State` reads `RestOnly` until the client is disposed, and `IsConnected` reads `false`.
+- `ConnectAsync` and `DisconnectAsync` do nothing and need no Asterisk, also through
+  `IAriClientFactory.CreateAndConnectAsync`.
+- `Subscribe` throws `InvalidOperationException` naming the option, so code that waits for events fails where the
+  mistake is.
+- The `ari` health check asks. Each run sends one `GET /ari/asterisk/ping`, bounded at 5 s: an answer reads `Healthy`
+  and anything else reads `Unhealthy`, on that run. A client with events sends nothing from this check.
+
+The option's name says less than it takes away. Measured with no WebSocket open, on Asterisk 20.20.1, 22.11.0, 22.12.0-rc2,
+23.5.0, 23.6.0-rc2 and 24.0.0-rc2, 18 times per operation:
+
+| What you do | What Asterisk does |
+|---|---|
+| `hold`/unhold a channel in **another** client's Stasis application | `204` 18/18, with `ChannelHold` seen on the other leg |
+| `hold` a channel in the dialplan, in no Stasis application | `409 Channel not in Stasis application` 18/18, `AriConflictException` here |
+| Originate, `GET`, a variable and `DELETE` on a dialplan channel | 2xx 18/18 |
+| Originate into an application nobody registered | `200` with state `Down` 18/18, then the channel is gone within 2 ms |
+
+- So this client controls channels another client registered, and dialplan channels only for those four operations. The
+  `409` is ARI's own rule and not the missing socket: the same client, in the same state, gets `204` on a channel in
+  Stasis.
+- `hold` was measured with this client only: a `hold` outside Stasis from a client with a WebSocket was not. `mute` and
+  `moh` were not measured with it.
+- The `200` cannot tell whether anyone registered the application, so neither `State` nor the health check can.
+  `Application` stays required, and on this client it has to name an application **someone else** registers, or the
+  caller has to pass one to `Channels.CreateAsync`. Nothing checks it.
+- `Channels.OriginateAsync` with an extension runs the dialplan and sends no application, on any client. Without one it
+  sends `Application`.
+- The client, its hosted service and its health check need no reachable Asterisk for a host to start. A host built by
+  `AddVerbara` still needs AMI at start: the AMI connection dials then, and a failed dial stops the host.
+
+## Observers
+
+An observer that throws stops neither the other observers nor the client. The event goes on to the next observer, later
+events keep arriving, on that connection and after a reconnect, and `DisposeAsync` still releases everything. Each failure
+logs one Warning, `[ARI] Observer threw on <EventType>` (or `completion` or `error` at the end of the stream), with the
+exception, and adds one to `ari.events.subscriber_faults`. It is not a dropped event.
+
+What this cannot do for you:
+
+- An observer subscribed directly stays subscribed. One composed through an Rx operator (`Where`, `Select`, `OfType`, …) is
+  ended by that operator on its first failure: the failure is reported, and that subscription gets nothing more.
+- Only what throws on the delivering thread is caught. An `async void` handler or a task nobody awaits fails outside it.
+- An observer that blocks still holds every later event, and `OutOfMemoryException` is not caught.
+
 ## Documentation
 
 - [High-Load Tuning Guide](../../docs/guides/high-load-tuning.md)

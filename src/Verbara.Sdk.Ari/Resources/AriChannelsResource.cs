@@ -50,8 +50,11 @@ public sealed class AriChannelsResource : IAriChannelsResource
 
     public async ValueTask<AriChannel> OriginateAsync(string endpoint, string? extension = null, string? context = null, CancellationToken cancellationToken = default)
     {
-        var url = $"channels?endpoint={Uri.EscapeDataString(endpoint)}&app={Uri.EscapeDataString(_options.Application)}";
-        if (extension is not null) url += $"&extension={Uri.EscapeDataString(extension)}";
+        // Asterisk reads app and extension as exclusive, and app wins: with both, the channel enters Stasis and never runs
+        // the dialplan (measured on six images, 18/18 each). So a caller who names an extension gets the dialplan.
+        var url = $"channels?endpoint={Uri.EscapeDataString(endpoint)}";
+        if (extension is null) url += $"&app={Uri.EscapeDataString(_options.Application)}";
+        else url += $"&extension={Uri.EscapeDataString(extension)}";
         if (context is not null) url += $"&context={Uri.EscapeDataString(context)}";
 
         var response = await _http.PostAsync(url, null, cancellationToken);

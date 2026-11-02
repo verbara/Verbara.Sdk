@@ -31,10 +31,19 @@ public static class AriMetrics
         Meter.CreateCounter<long>("ari.events.dropped", "events",
             "ARI events dropped by a full event buffer (reason=buffer_full) or discarded by a caller's ending (reason=caller_ending)");
 
-    /// <summary>ARI events dispatched to observers.</summary>
+    /// <summary>ARI events dispatched to observers, including an event an observer threw on.</summary>
     public static readonly Counter<long> EventsDispatched =
         Meter.CreateCounter<long>("ari.events.dispatched", "events",
             "ARI events dispatched to observers");
+
+    /// <summary>
+    /// Observer failures: an observer of an ARI client that threw from <c>OnNext</c>, <c>OnCompleted</c> or
+    /// <c>OnError</c>, one per failure. Each is also logged at Warning; the other observers and the client go on, and
+    /// an observer subscribed directly stays subscribed. Not a dropped event: every other observer received it.
+    /// </summary>
+    internal static readonly Counter<long> SubscriberFaults =
+        Meter.CreateCounter<long>("ari.events.subscriber_faults", "faults",
+            "ARI observer failures (an observer threw); delivery goes on");
 
     /// <summary>
     /// Total ARI REST requests sent to Asterisk. Incremented by one for every request the ARI client issues, when
