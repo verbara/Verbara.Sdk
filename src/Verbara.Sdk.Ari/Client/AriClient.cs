@@ -617,8 +617,18 @@ public sealed class AriClient : IAriClient
         }
     }
 
-    public IDisposable Subscribe(IObserver<AriEvent> observer) =>
-        _eventSubject.Subscribe(new AriObserverGuard(observer, _logger));
+    /// <inheritdoc />
+    public IDisposable Subscribe(IObserver<AriEvent> observer)
+    {
+        // A subscription that never delivers would leave whoever waits for an event waiting forever.
+        if (!_eventsEnabled)
+        {
+            throw new InvalidOperationException(
+                "This ARI client was built with EventsEnabled = false: it opens no events connection and delivers no events.");
+        }
+
+        return _eventSubject.Subscribe(new AriObserverGuard(observer, _logger));
+    }
 
     public async ValueTask DisconnectAsync(CancellationToken cancellationToken = default)
     {

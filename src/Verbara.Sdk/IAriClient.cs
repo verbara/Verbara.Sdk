@@ -30,6 +30,15 @@ public interface IAriClient : IAsyncDisposable
     ValueTask DisconnectAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Subscribe to ARI events via IObservable.</summary>
+    /// <remarks>
+    /// What an observer throws stops neither the other observers nor the client: it is logged at Warning and counted,
+    /// the event goes on to the next observer, and an observer subscribed directly stays subscribed. Only what throws on
+    /// the delivering thread is caught, and a subscription composed through an Rx operator ends on its first failure.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// The client was built with its events turned off (<see cref="State"/> reads
+    /// <see cref="AriConnectionState.RestOnly"/>): it delivers no events, and the message names the option.
+    /// </exception>
     IDisposable Subscribe(IObserver<AriEvent> observer);
 
     /// <summary>Access channel operations.</summary>

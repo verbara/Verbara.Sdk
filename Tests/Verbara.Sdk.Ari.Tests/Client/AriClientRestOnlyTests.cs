@@ -308,6 +308,25 @@ public sealed class AriClientRestOnlyTests
         }
     }
 
+    // ── Subscribe ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Subscribe_ShouldThrowNamingTheOptionAndLeaveNoSubscription_WhenEventsAreOff()
+    {
+        var sut = new AriClient(Options.Create(RestOnly("http://127.0.0.1:1")), NullLogger<AriClient>.Instance);
+        var observer = new CompletionProbe();
+
+        var subscribe = () => sut.Subscribe(observer);
+
+        using (new AssertionScope())
+        {
+            subscribe.Should().Throw<InvalidOperationException>().WithMessage("*EventsEnabled*");
+            var dispose = async () => await sut.DisposeAsync();
+            await dispose.Should().NotThrowAsync("a refused subscription leaves nothing to clean up");
+            observer.Completed.Should().BeFalse("no subscription exists, so the end of the stream reaches nobody");
+        }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private static AriClientOptions RestOnly(string baseUrl) => new()
@@ -325,6 +344,21 @@ public sealed class AriClientRestOnlyTests
         using var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
         probe.Start();
         return $"http://127.0.0.1:{((System.Net.IPEndPoint)probe.LocalEndpoint).Port}";
+    }
+
+    private sealed class CompletionProbe : IObserver<AriEvent>
+    {
+        public bool Completed { get; private set; }
+
+        public void OnNext(AriEvent value)
+        {
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void OnCompleted() => Completed = true;
     }
 
     private sealed class FirstEvent(TaskCompletionSource<AriEvent> received) : IObserver<AriEvent>
