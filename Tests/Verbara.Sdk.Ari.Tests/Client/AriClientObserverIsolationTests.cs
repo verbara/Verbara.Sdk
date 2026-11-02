@@ -348,7 +348,7 @@ public sealed class AriClientObserverIsolationTests
         var sut = Client(farEnd);
         var gone = new Recorder();
         var stays = new Recorder();
-        var subscription = sut.Subscribe(gone);
+        using var subscription = sut.Subscribe(gone);
         using var staysSubscription = sut.Subscribe(stays);
         try
         {
@@ -384,18 +384,7 @@ public sealed class AriClientObserverIsolationTests
             ReconnectMaxDelay = TimeSpan.FromMilliseconds(10),
         });
 
-    private static async Task<Exception?> Record(Func<Task> action)
-    {
-        try
-        {
-            await action();
-            return null;
-        }
-        catch (Exception ex)
-        {
-            return ex;
-        }
-    }
+    private static async Task<Exception?> Record(Func<Task> action) => await Xunit.Record.ExceptionAsync(action);
 
     // A test's cleanup: on a tree where the disposal throws, the assertions report it, not the finally.
     private static async Task QuietDisposeAsync(AriClient client)
