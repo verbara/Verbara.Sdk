@@ -63,7 +63,29 @@ public sealed class CircuitBreakerClockTests
         clock.ThrowOnNextRead.Should().BeTrue("the trip read the clock once, so the read that throws has not happened");
     }
 
+    [Fact]
+    public void RecordFailure_ShouldOpenAlreadyHalfOpen_WhenTheClockPassesTheWindowBeforeTheTrip()
+    {
+        var state = new CircuitBreakerState("clock");
+        var clock = new WindowAtTripClock(state, OpenWindow);
+
+        state.RecordFailure(1, clock);
+
+        state.IsOpen.Should().BeTrue();
+        state.OpenedAt.Should().Be(WindowAtTripClock.T0, "a trip opens at the time it read before its compare-and-swap");
+        state.ShouldAllow(OpenWindow, clock).Should().BeTrue("the window counted from that opening time has elapsed");
+    }
+
     private sealed class ClockFailedException : Exception;
+
+    // Stands at T0 while the circuit is closed and at T0 + window from the moment a compare-and-swap opens it, so the
+    // clock passes the window after a trip's read of it and before that trip's compare-and-swap.
+    private sealed class WindowAtTripClock(CircuitBreakerState state, TimeSpan window) : TimeProvider
+    {
+        public static readonly DateTimeOffset T0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        public override DateTimeOffset GetUtcNow() => state.IsOpen ? T0 + window : T0;
+    }
 
     private sealed class ThrowOnceClock : TimeProvider
     {
