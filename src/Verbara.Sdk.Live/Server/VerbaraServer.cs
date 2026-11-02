@@ -230,6 +230,9 @@ public sealed class VerbaraServer : IVerbaraServer
     // and a list reconciliation waiting for the event pump stops. Never disposed, so either may read its token at any time.
     private readonly CancellationTokenSource _disposing = new();
 
+    // The disposal's completion, set by the first DisposeAsync: every later call awaits it instead of releasing again.
+    private TaskCompletionSource? _disposal;
+
     // The last full reload a load whose barrier ran out scheduled; it never throws. Read by tests (via
     // InternalsVisibleTo) to tell when it has ended.
     internal Task ScheduledReload { get; private set; } = Task.CompletedTask;
@@ -1783,21 +1786,51 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <exception cref="AggregateException">
     /// More than one release threw: their exceptions, in release order.
     /// </exception>
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
+    {
+        var mine = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var earlier = Interlocked.CompareExchange(ref _disposal, mine, null);
+        return earlier is null ? ReleaseAsync(mine) : new ValueTask(earlier.Task);
+    }
+
+    /// <summary>The first disposal's run of the releases, which completes <paramref name="finished"/> once they have ended.</summary>
+    private async ValueTask ReleaseAsync(TaskCompletionSource finished)
+    {
+        try
+        {
+            await ReleaseCoreAsync();
+        }
+        finally
+        {
+            // Always with success: a failure reaches only the call that ran the releases.
+            finished.SetResult();
+        }
+    }
+
+    private async ValueTask ReleaseCoreAsync()
     {
         await _disposing.CancelAsync();
         Task[] deferred;
         lock (_deferredLoadsGate)
             deferred = [.. _deferredLoads];
         await Task.WhenAll(deferred);
-        _connection.Reconnected -= OnReconnected;
-        if (_connection is AmiConnection amiConnection)
+
+        // A remove accessor of a consumer's connection is foreign code: an attempt like the releases after it.
+        List<Exception>? failures = null;
+        try
         {
-            amiConnection.Lost -= OnConnectionLost;
-            amiConnection.CallerReconnected -= OnCallerReconnected;
+            _connection.Reconnected -= OnReconnected;
+            if (_connection is AmiConnection amiConnection)
+            {
+                amiConnection.Lost -= OnConnectionLost;
+                amiConnection.CallerReconnected -= OnCallerReconnected;
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            (failures ??= []).Add(ex);
         }
 
-        List<Exception>? failures = null;
         try
         {
             _subscription?.Dispose();
