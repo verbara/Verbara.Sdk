@@ -140,6 +140,7 @@ public sealed class ResiliencePolicy
             {
                 lastException = ex;
 
+                // Count on the win alone: a success may close the circuit right after it, and the trip still happened.
                 if (state is not null
                     && _circuitThreshold is int threshold
                     && state.RecordFailureReportingTrip(threshold, _time))

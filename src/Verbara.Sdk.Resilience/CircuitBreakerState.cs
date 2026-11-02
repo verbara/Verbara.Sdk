@@ -81,7 +81,8 @@ public sealed class CircuitBreakerState
         {
             // Auto-transition to half-open: clear state so the caller can probe.
             // Idempotent under concurrency — multiple threads may race here but the
-            // outcome (closed state + 0 failures) is the same.
+            // outcome (closed state + 0 failures) is the same. _isOpen is written last, as in RecordSuccess, so a trip
+            // that wins after this reset keeps its opening time. Sequential tests cannot see this order: keep it.
             Interlocked.Exchange(ref _openedAtTicks, NullTicksSentinel);
             Interlocked.Exchange(ref _consecutiveFailures, 0);
             Interlocked.Exchange(ref _isOpen, 0);

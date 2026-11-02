@@ -111,8 +111,33 @@ public sealed class CircuitBreakerRaceTests
         state.ShouldAllow(OpenWindow, clock).Should().BeFalse();
     }
 
+    [Fact]
+    public void ShouldAllow_ShouldNotLeaveAnOpenCircuitWithoutAnOpeningTime_WhenATripRacesItsReset()
+    {
+        var state = new CircuitBreakerState("race");
+        var opened = new FixedClock();
+        var windowElapsed = new LateClock();
+        state.RecordFailure(1, opened);
+        long dead = 0;
+
+        var rounds = Lockstep(
+            () => state.ShouldAllow(OpenWindow, windowElapsed),
+            () => state.RecordFailure(1, windowElapsed),
+            () =>
+            {
+                if (state.IsOpen && state.OpenedAt is null)
+                    dead++;
+
+                state.RecordSuccess();
+                state.RecordFailure(1, opened);
+            });
+
+        rounds.Should().BeGreaterThan(0);
+        dead.Should().Be(0, "of {0} rounds, a reset past the window may not leave a circuit open with no opening time", rounds);
+    }
+
     // Runs one and two together, then after with both done, until Rounds or Budget, and returns the rounds run.
-    private static long Lockstep(Action one, Action two, Action after)
+    internal static long Lockstep(Action one, Action two, Action after)
     {
         var go = 0;
         var stop = 0;
@@ -170,5 +195,11 @@ public sealed class CircuitBreakerRaceTests
             hook?.Invoke();
             return new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
         }
+    }
+
+    // A full open window after FixedClock's time.
+    private sealed class LateClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero) + OpenWindow;
     }
 }

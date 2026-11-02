@@ -98,6 +98,66 @@ public sealed class CircuitOpenedCountTests
         policy.GetCircuitState(key).Should().Be(ResilienceMetrics.CircuitStateValue.Open);
     }
 
+    [Fact]
+    public void ExecuteAsync_ShouldCountATrip_WhenASuccessClosesTheCircuitRightAfterIt()
+    {
+        using var opened = new OpenedCounter();
+        var clock = new FakeTimeProvider();
+        var policy = NewPolicy(clock, threshold: 1);
+        var key = NewKey();
+        var down = new TimeoutException("dependency down");
+        var offset = 0;
+        long counted = 0;
+        long uncounted = 0;
+
+        // Each round starts closed with no failures, so the failing call always wins the one trip of the round. The success
+        // starts a little later each round, sweeping across the failure's path until it lands right after the trip.
+        var rounds = CircuitBreakerRaceTests.Lockstep(
+            () =>
+            {
+                try
+                {
+                    policy.ExecuteAsync<int>(key, _ => throw down, CancellationToken.None).AsTask().GetAwaiter().GetResult();
+                }
+                catch (TimeoutException)
+                {
+                }
+            },
+            () =>
+            {
+                for (var i = offset++ % SuccessOffsets; i > 0; i--)
+                    Thread.SpinWait(1); // fence-allow: SIMULATED-WORK — staggers the success across the failure's path, not a wait
+                try
+                {
+                    policy.ExecuteAsync(key, static _ => ValueTask.FromResult(1), CancellationToken.None).AsTask().GetAwaiter().GetResult();
+                }
+                catch (CircuitBreakerOpenException)
+                {
+                }
+            },
+            () =>
+            {
+                counted++;
+                var read = opened.Read(key);
+                if (read != counted)
+                {
+                    uncounted += counted - read;
+                    counted = read;
+                }
+
+                if (policy.GetCircuitState(key) != ResilienceMetrics.CircuitStateValue.Closed)
+                {
+                    clock.Advance(CircuitGaugeReadsRealStateTests.OpenWindow);
+                    policy.ExecuteAsync(key, static _ => ValueTask.FromResult(1), CancellationToken.None).AsTask().GetAwaiter().GetResult();
+                }
+            });
+
+        rounds.Should().BeGreaterThan(0);
+        uncounted.Should().Be(0, "each of {0} rounds holds one trip, and a success after it does not erase its count", rounds);
+    }
+
+    private const int SuccessOffsets = 256;
+
     private static async Task FailTogetherAsync(ResiliencePolicy policy, string key, Barrier barrier)
     {
         var act = async () => await policy.ExecuteAsync<int>(

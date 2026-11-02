@@ -49,6 +49,20 @@ public sealed class CircuitBreakerClockTests
         state.ShouldAllow(OpenWindow, clock).Should().BeFalse();
     }
 
+    [Fact]
+    public void RecordFailure_ShouldOpenAtTheTimeItReadBeforeTheTrip_WhenTheClockWouldThrowOnALaterRead()
+    {
+        var state = new CircuitBreakerState("clock");
+        var clock = new ThrowOnceClock();
+        clock.ThrowOnReadAfterNext = true;
+
+        state.RecordFailure(1, clock);
+
+        state.IsOpen.Should().BeTrue();
+        state.OpenedAt.Should().Be(ThrowOnceClock.Now, "a trip reads the clock once, before it opens the circuit");
+        clock.ThrowOnNextRead.Should().BeTrue("the trip read the clock once, so the read that throws has not happened");
+    }
+
     private sealed class ClockFailedException : Exception;
 
     private sealed class ThrowOnceClock : TimeProvider
@@ -57,8 +71,18 @@ public sealed class CircuitBreakerClockTests
 
         public bool ThrowOnNextRead { get; set; }
 
+        // Arms ThrowOnNextRead on the next read, so the read after that one throws.
+        public bool ThrowOnReadAfterNext { get; set; }
+
         public override DateTimeOffset GetUtcNow()
         {
+            if (ThrowOnReadAfterNext && !ThrowOnNextRead)
+            {
+                ThrowOnReadAfterNext = false;
+                ThrowOnNextRead = true;
+                return Now;
+            }
+
             if (!ThrowOnNextRead)
                 return Now;
 
