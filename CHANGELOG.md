@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: a client that only makes REST calls can turn its ARI events off (#NNN)
+
+`AriClientOptions.EventsEnabled` (default `true`, which behaves as before; `Asterisk:Ari:EventsEnabled` from
+configuration). With `false` the client opens no events WebSocket and registers no Stasis application, and its REST
+resources work as on any client. It reads the new `AriConnectionState.RestOnly`, appended after `Faulted` so no existing
+value changes its number, from construction until disposal; `ConnectAsync` and `DisconnectAsync` do nothing, and
+`Subscribe` throws `InvalidOperationException` naming the option. Its `ari` health check asks Asterisk once per run, one
+`GET /ari/asterisk/ping` bounded at 5 s: an answer is `Healthy`, anything else `Unhealthy`. `Application` stays required
+and names an application someone else registers: Asterisk answers `200` to an originate into an application nobody
+registered and the channel dies, which neither `State` nor the check can see. A host built by `AddVerbara` still needs
+AMI at start. Closes #461. See the [package README](src/Verbara.Sdk.Ari/README.md#rest-only-clients) and the
+[migration guide](docs/guides/migration-2.10.0.md).
+
+### Fixed: an ARI observer that throws no longer stops delivery (#NNN)
+
+An exception from an observer's `OnNext` ended delivery to every observer for the rest of the connection, reconnects
+included, while the client still read `Connected` and nothing was logged; one from `OnCompleted` left `DisposeAsync`
+before it released the HTTP client. Now the event goes on to the next observer, later events keep arriving, and a direct
+subscriber stays subscribed. Each failure logs one Warning, `[ARI] Observer threw on <EventType>`, and adds one to
+`ari.events.subscriber_faults`; `ari.events.dispatched` and `ari.event.dispatch` also record an event an observer threw
+on. Code that relied on a throw to stop receiving should dispose its subscription. An observer composed through an Rx
+operator is still ended by that operator on its first failure, and only what throws on the delivering thread is caught.
+Measured cost per event against 2.9.0: 0 bytes, time within noise.
+
+### Fixed: `OriginateAsync` with an extension runs the dialplan (#NNN)
+
+`Channels.OriginateAsync` with an extension no longer sends `app`. Asterisk reads the two as exclusive with `app`
+winning: on all six images measured, 18/18, the channel entered Stasis and never ran the dialplan, or died at once if
+nobody registered the application. A call with no extension sends `Application` as before. To put a channel in Stasis,
+originate with no extension, or use `Channels.CreateAsync`.
+
 ### Fixed: a reconnect you make yourself reloads Live (#511)
 
 With `AutoReconnect` off, a successful `ConnectAsync` on an `AmiConnection` after a lost AMI session runs Live's full
