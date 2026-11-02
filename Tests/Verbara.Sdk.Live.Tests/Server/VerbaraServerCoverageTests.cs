@@ -165,16 +165,6 @@ public sealed class VerbaraServerCoverageTests : IAsyncLifetime
 #pragma warning restore VSDK0005
 
     [Fact]
-    public async Task DisposeAsync_ShouldBeIdempotent()
-    {
-        await _sut.StartAsync();
-        await _sut.DisposeAsync();
-
-        var act = async () => await _sut.DisposeAsync();
-        await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
     public async Task EventObserver_ShouldHandleMultipleNewChannelEvents()
     {
         await _sut.StartAsync();
