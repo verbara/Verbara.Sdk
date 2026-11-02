@@ -216,7 +216,7 @@ public sealed class ServerDisposedOnceTests
             .Should().BeTrue("the second session is live");
         await seen.Task.WaitAsync(Run.Bound);
         // The reload, had one run, ends on the agents it replaced; give it no chance to be read half done.
-        SpinWait.SpinUntil(() => !run.Server.IsLoadInFlight, Run.Bound).Should().BeTrue();
+        SpinWait.SpinUntil(() => !run.Server.IsLoadInFlight, Run.Bound).Should().BeTrue(); // fence-allow: GUARD-TIMEOUT — failure bound on the end of a load, never the winning arm of a green run
 
         using (new AssertionScope())
         {
@@ -246,10 +246,10 @@ public sealed class ServerDisposedOnceTests
         // Bounded under Run.Bound, past which the peer gives up on the answer, and the answer released either way: a
         // reload that ignores the disposal must fail here, not hang here or in the run's own disposal.
         var disposal = run.Server.DisposeAsync().AsTask();
-        var returnedWithoutTheAnswer = await Task.WhenAny(disposal, Task.Delay(TimeSpan.FromSeconds(3))) == disposal;
+        var returnedWithoutTheAnswer = await Task.WhenAny(disposal, Task.Delay(TimeSpan.FromSeconds(3))) == disposal; // fence-allow: GUARD-TIMEOUT — failure bound: a green run wins on the disposal, the delay only turns a hang into a red
         hold.SetResult();
         await disposal.WaitAsync(Run.Bound);
-        SpinWait.SpinUntil(() => !run.Server.IsLoadInFlight, Run.Bound).Should().BeTrue();
+        SpinWait.SpinUntil(() => !run.Server.IsLoadInFlight, Run.Bound).Should().BeTrue(); // fence-allow: GUARD-TIMEOUT — failure bound on the end of a load, never the winning arm of a green run
 
         using (new AssertionScope())
         {
@@ -499,7 +499,7 @@ public sealed class ServerDisposedOnceTests
             var outer = run.Server.DisposeAsync().AsTask();
             // The reload cannot end while the handler is held, so completing here is the defect, not a timing accident; the
             // delay only bounds how long the test looks.
-            var returnedWhileTheReloadRan = await Task.WhenAny(outer, Task.Delay(TimeSpan.FromMilliseconds(500))) == outer;
+            var returnedWhileTheReloadRan = await Task.WhenAny(outer, Task.Delay(TimeSpan.FromMilliseconds(500))) == outer; // fence-allow: SETTLE — the negative "has not returned while the reload is held" needs a bounded window; the hold below decides the positive
             hold.SetResult();
             await outer.WaitAsync(Run.Bound);
             var loadStillInFlight = run.Server.IsLoadInFlight;
