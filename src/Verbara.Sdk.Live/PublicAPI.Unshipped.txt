@@ -1,1 +1,8 @@
 #nullable enable
+Verbara.Sdk.Live.Server.StatusRefusal
+Verbara.Sdk.Live.Server.StatusRefusal.Message.get -> string!
+Verbara.Sdk.Live.Server.StatusRefusal.OccurredAt.get -> System.DateTimeOffset
+Verbara.Sdk.Live.Server.VerbaraServer.LastStatusRefusal.get -> Verbara.Sdk.Live.Server.StatusRefusal?
+static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.StatusRefused -> System.Diagnostics.Metrics.Counter<long>!
+Verbara.Sdk.Live.MeetMe.MeetMeUser.LeaveNotObserved.get -> bool
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.LeaveNotObserved.get -> bool

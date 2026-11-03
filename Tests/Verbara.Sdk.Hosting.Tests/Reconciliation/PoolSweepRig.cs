@@ -7,6 +7,7 @@ using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Sessions;
 using Verbara.Sdk.Sessions.Manager;
+using Verbara.Sdk.Sessions.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -54,11 +55,13 @@ internal sealed class PoolSweepRig : IAsyncDisposable
     /// <see cref="DiServer"/>.
     /// </param>
     /// <param name="configure">Applied to the session options after the rig's own interval.</param>
+    /// <param name="store">An optional recording store; absent, the public registrations supply their usual store.</param>
     public PoolSweepRig(
         bool pool = true,
         int multiServerRegistrations = 1,
         bool singleServer = false,
-        Action<SessionOptions>? configure = null)
+        Action<SessionOptions>? configure = null,
+        SessionStoreBase? store = null)
     {
         Log.Written = Pulse.Fire;
         var services = new ServiceCollection();
@@ -83,6 +86,9 @@ internal sealed class PoolSweepRig : IAsyncDisposable
 
         for (var i = 0; i < multiServerRegistrations; i++)
             services.AddVerbaraSessionsMultiServer(Configure);
+
+        if (store is not null)
+            services.AddSingleton(store);
 
         _provider = services.BuildServiceProvider();
         Manager = (CallSessionManager)_provider.GetRequiredService<ICallSessionManager>();

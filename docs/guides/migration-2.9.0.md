@@ -244,10 +244,12 @@ reload Live, but a connect you make yourself raises no `Reconnected`, so nothing
 can start the server while that connect is under way. A start interrupted while the connection's own reconnect loop
 runs still returns and logs a Warning.
 
-**What to do.** Start the server after your `ConnectAsync` has returned. After every connect you make yourself, call
-`RequestInitialStateAsync`: it is the only thing that reloads Live in that setup, at start-up and after a loss.
+**What to do.** Start the server after your `ConnectAsync` has returned. On 2.9.0, after every connect you make
+yourself following a loss, call `RequestInitialStateAsync`: it is the only thing that reloads Live in that setup.
+From 2.10.0 that session reloads Live on its own, and the call stays supported at the cost of a second load. A start
+that throws still throws.
 
-Guide: [With a `VerbaraServer` on the connection, reload it yourself](ami-connection-state-and-health-migration.md#connecting-again-after-a-loss).
+Guide: [With a `VerbaraServer` on the connection, there is nothing more to do](ami-connection-state-and-health-migration.md#connecting-again-after-a-loss).
 
 ### A server pool refuses an empty or reserved server id
 
@@ -289,8 +291,9 @@ Guide: [Counters and tables across a reconnect](troubleshooting.md#counters-and-
 ### A reload announces the callers and participants it finds gone
 
 **What changed.** A reconnect no longer empties the queue and conference tables. The reload keeps what Asterisk
-still lists, without raising `CallerJoined` or `UserJoined` again, and raises `QueueManager.CallerLeft` or
-`MeetMeManager.UserLeft` once for each caller or participant it finds gone. Before, the tables were cleared with no
+still lists, without raising `UserJoined` again, and raises `QueueManager.CallerLeft` or `MeetMeManager.UserLeft` once
+for each caller or participant it finds gone. It raises `CallerJoined` once for each caller still waiting, on an object
+that is not the one in `AsteriskQueue.Entries`: match it by `Channel` or `UniqueId`, not by reference. Before, the tables were cleared with no
 event at all.
 
 **Who is affected.** Code that resets its own per-caller or per-participant state when the connection comes back,
@@ -298,8 +301,44 @@ as 2.8.0 needed. That reset now throws away the callers and participants that su
 raises their joins again.
 
 **What to do.** Stop resetting on reconnect and follow `CallerJoined`/`CallerLeft` and `UserJoined`/`UserLeft`
-instead: the leaves now cover what ended during the outage. A handler cannot tell a leave the reload found from one
-Asterisk reported. `RemoveQueue` still raises no `CallerLeft`.
+instead: the leaves now cover what ended during the outage.
+
+On 2.9.0 a handler cannot tell a leave the reload found from one Asterisk reported. From 2.10.0
+`AsteriskQueueEntry.LeaveNotObserved` and `MeetMeUser.LeaveNotObserved` say what Live observed: `true` when Live removed
+the caller or participant without having observed, before the removal, a report of a leave for its channel name or of
+the end of its room, and `false` when it had. Consumers cannot set them.
+
+```csharp
+using Verbara.Sdk.Live.Queues;
+
+static void WatchLeaves(QueueManager queues)
+{
+    queues.CallerLeft += (queue, entry) =>
+    {
+        var source = entry.LeaveNotObserved ? "found gone by Live" : "reported by Asterisk";
+        Console.WriteLine($"{entry.Channel} left {queue}: {source}");
+    };
+}
+```
+
+Four rules for a consumer:
+
+- An inferred leave carries no Asterisk timestamp or reason. Do not read the moment it was raised as the moment the
+  caller or participant left: on a reload it is when Live found them gone.
+- `true` means Live had not applied the report when it removed the caller; it does not mean Asterisk sent none: a report
+  can arrive after the removal, and a leave Live could not match to a held caller (a renamed channel, a reused name) is
+  not observed, so the next reconciliation reads `true`.
+- Leaves are matched by channel name: a report that names a reused channel is applied to the caller held under that name,
+  which then reads `false` although it did not leave.
+- `RemoveQueue` still raises no `CallerLeft`. Its callers reach no handler; from 2.10.0 `true` reads on the entry the table
+  held, the one `GetByName(q).Entries` returns or the one `CallerJoined` passed when it inserted the caller, while no
+  rename has re-keyed it. A `CallerJoined` over a caller already held passes the join as reported, which no removal marks.
+
+`Clear` on either manager raises nothing and counts nothing, and from 2.10.0 marks the same way: the entry or participant
+the table held reads `true`. `QueueManager.Clear` also empties the `Entries` of a queue you retained.
+
+The reload is not the only way a caller reads `true`. A channel reconciliation that removes the caller's channel raises
+the same inferred `CallerLeft`, and so does a join that takes the channel name the caller was held under.
 
 Guide: [Reconnect](conference-participants-migration.md#reconnect).
 

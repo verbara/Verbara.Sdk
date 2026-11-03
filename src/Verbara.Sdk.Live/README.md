@@ -54,6 +54,14 @@ await server.ReconcileChannelsAsync(cancellationToken);
   whose AMI session ended, or a connection that is not established, throws `AmiNotConnectedException`.
 - A `Status` that Asterisk refuses (an AMI user whose `write` has none of `system`, `call` or `reporting`) reconciles
   nothing and does not throw. It is logged at Warning the first time in an AMI session and at Debug after that.
+- Every refusal on a load, reload or reconciliation increments `live.status.refused`, tagged with
+  `live.status.reader` (`load` or `reconciliation`) and `server.id` when the pool id is known. A refusal before the
+  server enters a pool is counted without that id and is never counted again when it joins.
+- `server.LastStatusRefusal` exposes an immutable `Message` and UTC `OccurredAt`, or `null`. A later Status read in
+  full clears it even if its reconciliation is deferred; a cancelled read or one cut short by its AMI session does not.
+  The pool health check reports an otherwise healthy pool as `Degraded` while any server has a refusal. Its data adds
+  one `status-refused` string entry (`serverId: message` per refusal, separated by `; ` in ordinal server-id order),
+  while each server's own entry remains its connection state's name.
 - Each run is traced as a `live channel-reconcile` activity, tagged `live.channels` and, on a refusal,
   `live.status.refused`, and logged at Debug. It is not reported as a state load.
 

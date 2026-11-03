@@ -26,6 +26,10 @@ public static class LiveMetrics
 
     // --- Counters ---
 
+    /// <summary>Total Status requests refused by Asterisk, tagged with the reader and the pool id when known.</summary>
+    public static readonly Counter<long> StatusRefused =
+        Meter.CreateCounter<long>("live.status.refused", "refusals", "Total Status requests refused by Asterisk");
+
     /// <summary>Total channels created.</summary>
     public static readonly Counter<long> ChannelsCreated =
         Meter.CreateCounter<long>("live.channels.created", "channels",

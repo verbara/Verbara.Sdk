@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Tests.Shared.Sessions;
 using Xunit.Abstractions;
 
 namespace Verbara.Sdk.Hosting.Tests.Reconciliation;
@@ -87,14 +88,33 @@ public sealed class DetachedMixedLegEndingTests(ITestOutputHelper output)
         server.Server.Channels.OnNewChannel("X", "PJSIP/X", ChannelState.Up, linkedId: "L");
         server.Server.Channels.OnNewChannel("Y", "PJSIP/Y", ChannelState.Up, linkedId: "L");
         var call = rig.Manager.GetByLinkedId("L")!;
+        server.Server.Bridges.OnBridgeCreated("B", "mixing", "simple_bridge", null, null);
+        server.Server.Bridges.OnChannelEntered("B", "X");
+        server.Server.Bridges.OnChannelEntered("B", "Y");
         rig.Manager.DetachFromServer("server");
         server.Server.Channels.OnHangup("X", HangupCause.UserBusy);
         rig.Manager.AttachToServer(server.Server, "server");
         await UnjoinedLegBaseline.ReconcileAsync(server, "Y");
+        call.Participants.Single(p => p.UniqueId == "X").LeftAt.Should().NotBeNull();
+        call.Participants.Single(p => p.UniqueId == "X").HangupCause.Should().BeNull();
+        call.Participants.Single(p => p.UniqueId == "Y").LeftAt.Should().BeNull();
+        call.Events.Count(e => e.Type == CallSessionEventType.ParticipantLeft && e.Detail == "reload").Should().Be(1);
+        rig.Manager.GetByChannelId("server", "X").Should().BeNull();
+        rig.Manager.GetByChannelId("server", "Y").Should().BeSameAs(call);
+        rig.Manager.GetByBridgeId("server", "B").Should().BeSameAs(call);
+        rig.EndingsOf(call).Should().Be(0);
+        SessionIndexInvariant.Assert(rig.Manager);
+        await UnjoinedLegBaseline.ReconcileAsync(server, "Y");
+        call.Events.Count(e => e.Type == CallSessionEventType.ParticipantLeft && e.Detail == "reload").Should().Be(1);
         server.Server.Channels.OnHangup("Y", HangupCause.NormalClearing);
         var unverifiable = await UnjoinedLegBaseline.SweepAsync(rig, server);
         output.WriteLine(UnjoinedLegBaseline.Describe(rig, call, unverifiable));
         UnjoinedLegBaseline.AssertEnded(rig, call, unverifiable, reload: false);
+        rig.Manager.GetByChannelId("server", "Y").Should().BeNull();
+        rig.Manager.GetByBridgeId("server", "B").Should().BeNull();
+        rig.Manager.InspectIndexes().ChannelIds.Should().NotContain(e => ReferenceEquals(e.Value, call));
+        rig.Manager.InspectIndexes().Bridges.Should().NotContain(e => e.Value == call.SessionId);
+        SessionIndexInvariant.Assert(rig.Manager);
     }
 }
 

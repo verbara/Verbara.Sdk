@@ -13,7 +13,7 @@
       "id": 1,
       "options": { "legend": { "displayMode": "table", "placement": "right" }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (key) (rate(asterisk_sdk_resilience_retry_attempts_total[5m]))", "legendFormat": "{{key}}", "refId": "A" }
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (key) (rate(retry_attempts_total[5m]))", "legendFormat": "{{key}}", "refId": "A" }
       ],
       "title": "Retry attempts /s (by key)",
       "type": "timeseries"
@@ -25,8 +25,8 @@
       "id": 2,
       "options": { "legend": { "displayMode": "table", "placement": "right" }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (key) (increase(asterisk_sdk_resilience_circuit_opened_total[15m]))", "legendFormat": "opened — {{key}}", "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (key) (increase(asterisk_sdk_resilience_circuit_closed_total[15m]))", "legendFormat": "closed — {{key}}", "refId": "B" }
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (key) (increase(circuit_opened_total[15m]))", "legendFormat": "opened — {{key}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (key) (increase(circuit_closed_total[15m]))", "legendFormat": "closed — {{key}}", "refId": "B" }
       ],
       "title": "Circuit transitions (opened / closed, 15m)",
       "type": "timeseries"
@@ -38,7 +38,7 @@
       "id": 3,
       "options": { "legend": { "displayMode": "table", "placement": "right" }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (key) (rate(asterisk_sdk_resilience_timeout_fired_total[5m]))", "legendFormat": "{{key}}", "refId": "A" }
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (key) (rate(timeout_fired_total[5m]))", "legendFormat": "{{key}}", "refId": "A" }
       ],
       "title": "Timeouts fired /s (by key)",
       "type": "timeseries"
@@ -67,9 +67,9 @@
         "textMode": "auto"
       },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "asterisk_sdk_resilience_circuit_state", "legendFormat": "{{key}}", "refId": "A" }
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "circuit_state", "legendFormat": "{{key}}", "refId": "A" }
       ],
-      "title": "Circuit state (last — 0 Closed / 1 Half-Open / 2 Open)",
+      "title": "Circuit state (current — 0 Closed / 1 Half-Open / 2 Open)",
       "type": "stat"
     }
   ],

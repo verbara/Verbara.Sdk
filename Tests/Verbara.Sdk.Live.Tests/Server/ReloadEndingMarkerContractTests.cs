@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Reactive.Linq;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -29,7 +30,7 @@ namespace Verbara.Sdk.Live.Tests.Server;
 /// lists; the observed call is opened and hung up by the peer's own <c>Newchannel</c> and <c>Hangup</c>.
 /// </para>
 /// </remarks>
-public sealed class ReloadEndingMarkerContractTests
+public sealed partial class ReloadEndingMarkerContractTests
 {
     private const string ServerId = "srv-1";
     private const string StateLoaded = "[LIVE] State loaded";
@@ -98,6 +99,92 @@ public sealed class ReloadEndingMarkerContractTests
         rig.Measured().Should().BeEquivalentTo(MarkerRig.Contract, MarkerRig.Because("ReconcileChannelsAsync"));
     }
 
+    public enum LeftEndingRoute { Attach, Completion, Registration, AdmissionClose }
+
+    [Theory]
+    [InlineData(LeftEndingRoute.Attach)]
+    [InlineData(LeftEndingRoute.Completion)]
+    [InlineData(LeftEndingRoute.Registration)]
+    [InlineData(LeftEndingRoute.AdmissionClose)]
+    public async Task Decision_ShouldWriteTheSameMarker_WhenItsUnobservedEndingUsesANewRoute(LeftEndingRoute route)
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await (route == LeftEndingRoute.Completion ? Run.ConnectAsync(peer) : Run.StartAsync(peer));
+        await using var rig = new MarkerRig(run);
+        if (route == LeftEndingRoute.Registration)
+        {
+            var call = new CallSession("restored-marker", GoneUid, ServerId, CallDirection.Inbound);
+            rig.Manager.RegisterReconstructedSession(call).Should().BeTrue();
+            call.EndingDelivered.Should().BeTrue("the complete table decides the accepted legless registration itself");
+        }
+        else if (route == LeftEndingRoute.AdmissionClose)
+        {
+            await using var replacement = await Run.StartAsync(new BootingAsterisk { BootedAtLogin = true });
+            await PreparePendingReplacement(run, rig, replacement);
+            var asked = replacement.FirstPeer.Asked("Status");
+            await rig.Manager.AdmitExistingCalls(ServerId);
+            rig.Manager.GetByLinkedId(GoneUid)!.EndingDelivered.Should().BeTrue();
+            replacement.FirstPeer.Asked("Status").Should().Be(asked);
+            await rig.ObservedCallAsync(replacement.FirstPeer, replacement);
+            rig.Measured().Should().BeEquivalentTo(MarkerRig.Contract, MarkerRig.Because("admission close"));
+            rig.EndingsOf(GoneUid).Should().Be(1);
+            rig.EndingsOf(ObservedUid).Should().Be(1);
+            return;
+        }
+        else
+        {
+            run.Server.Channels.OnNewChannel(GoneUid, GoneChannel, ChannelState.Up, linkedId: GoneUid);
+            rig.Manager.DetachFromServer(ServerId);
+            run.Server.Channels.OnHangup(GoneUid, HangupCause.UserBusy);
+            var asked = peer.Asked("Status");
+            rig.Manager.AttachToServer(run.Server, ServerId);
+            if (route == LeftEndingRoute.Completion)
+            {
+                rig.Manager.GetByLinkedId(GoneUid)!.EndingDelivered.Should().BeFalse();
+                await run.Server.ReconcileChannelsAsync();
+                rig.Manager.GetByLinkedId(GoneUid)!.EndingDelivered.Should().BeTrue();
+                await run.StartServerAsync();
+            }
+            else
+            {
+                rig.Manager.GetByLinkedId(GoneUid)!.EndingDelivered.Should().BeTrue();
+                peer.Asked("Status").Should().Be(asked, "the already complete table needs no new Status at attach");
+            }
+        }
+        await rig.ObservedCallAsync(peer);
+        rig.Measured().Should().BeEquivalentTo(MarkerRig.Contract, MarkerRig.Because(route.ToString()));
+        rig.EndingsOf(GoneUid).Should().Be(1);
+        rig.EndingsOf(ObservedUid).Should().Be(1);
+    }
+
+    private static async Task PreparePendingReplacement(Run first, MarkerRig rig, Run replacement)
+    {
+        first.Server.Channels.OnNewChannel(GoneUid, GoneChannel, ChannelState.Up, linkedId: GoneUid);
+        var call = rig.Manager.GetByLinkedId(GoneUid)!;
+        call.State = CallSessionState.Connected;
+        using var release = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var expired = false;
+        using var subscription = rig.Manager.Events.OfType<CallHeldEvent>().Subscribe(_ =>
+        {
+            entered.TrySetResult();
+            // fence-allow: GUARD-TIMEOUT — bounded owned subscriber hold; the helper releases and drains in finally
+            if (!release.Wait(Run.Bound * 3)) expired = true;
+        });
+        var holder = Task.Run(() => first.Server.Channels.OnHold(GoneUid, null));
+        try
+        {
+            await entered.Task.WaitAsync(Run.Bound);
+            rig.Manager.DetachFromServer(ServerId);
+            await Task.Run(() => rig.Manager.AttachToServer(replacement.Server, ServerId)).WaitAsync(Run.Bound);
+            call.EndingDelivered.Should().BeFalse("iii actually skipped the call whose lock this subscriber holds");
+        }
+        finally { release.Set(); await holder.WaitAsync(Run.Bound); }
+        expired.Should().BeFalse();
+        rig.Manager.IsPendingDecision(call).Should().BeTrue();
+    }
+
+
     /// <summary>
     /// A session manager attached to the run's server, and a <see cref="CallEndedEvent"/> handler that looks up each ended
     /// session and reads its <c>cause</c> metadata at that moment.
@@ -108,7 +195,11 @@ public sealed class ReloadEndingMarkerContractTests
         private readonly CallSessionManager _manager = new(
             Options.Create(new SessionOptions()), NullLogger<CallSessionManager>.Instance, new NullStore());
         private readonly ConcurrentDictionary<string, string?> _causeAtCallEnded = new(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, int> _endingCounts = new(StringComparer.Ordinal);
         private readonly IDisposable _subscription;
+
+        public CallSessionManager Manager => _manager;
+        public int EndingsOf(string linkedId) => _endingCounts.GetValueOrDefault(linkedId);
 
         public MarkerRig(Run run)
         {
@@ -118,6 +209,7 @@ public sealed class ReloadEndingMarkerContractTests
                 if (e is CallEndedEvent ended)
                 {
                     var session = _manager.GetById(ended.SessionId);
+                    _endingCounts.AddOrUpdate(session?.LinkedId ?? $"(no session {ended.SessionId})", 1, static (_, count) => count + 1);
                     _causeAtCallEnded[session?.LinkedId ?? $"(no session {ended.SessionId})"] =
                         session?.Metadata.GetValueOrDefault("cause");
                 }
@@ -126,10 +218,11 @@ public sealed class ReloadEndingMarkerContractTests
         }
 
         /// <summary>Opens a call with the peer's <c>Newchannel</c> and ends it with its <c>Hangup</c> (16, normal).</summary>
-        public async Task ObservedCallAsync(BootingAsterisk peer)
+        public async Task ObservedCallAsync(BootingAsterisk peer, Run? observedRun = null)
         {
+            var source = observedRun ?? _run;
             var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            _run.Server.Channels.ChannelRemoved += c =>
+            source.Server.Channels.ChannelRemoved += c =>
             {
                 if (c.UniqueId == ObservedUid)
                     removed.TrySetResult();

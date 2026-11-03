@@ -7,23 +7,23 @@ using Microsoft.Extensions.Options;
 namespace Verbara.Sdk.Hosting;
 
 /// <summary>
-/// The session engine's periodic reconciliation sweep. Its clock only decides when to ask Asterisk: at each tick,
-/// when a held call is older than <see cref="SessionOptions.DialingTimeout"/> and the channel table holds one of its
-/// channels, the sweep reconciles the server's channels against Asterisk's <c>Status</c> snapshot
-/// (<see cref="VerbaraServer.ReconcileChannelsAsync"/>), once for all such calls. A call whose channels the completed
-/// snapshot omits ends as a reload ends it; the sweep itself changes no session.
+/// The session engine's periodic reconciliation. A complete current channel table first decides pending held calls
+/// without Status, regardless of their age or connection state, except while a reconnect is pending. Status then
+/// verifies old calls whose participant channel ids or linkedid are held, and pending calls on an incomplete table.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The sweep asks nothing when no call qualifies, when the connection does not report how an action ended (it could
-/// not tell a refused <c>Status</c> from an empty one), when the connection is not established, or while a load of the
-/// same server is running; it does not wait for that load. A held call none of whose channels the table holds cannot
-/// be proved gone by a snapshot: it is left alone and reported as unverifiable.
+/// Status is requested at most once per tick, and skipped without candidates, without event-action outcome reporting,
+/// while disconnected, reconnecting, or loading. These skips do not suppress the independent complete-table decision.
+/// Pending calls waiting without a held participant/linkedid are counted on each tick while actual Status refusal
+/// persists; a successful read clears that state even when application is deferred. Older observed channel-less
+/// calls retain their count, as do detached/custom legacy calls under their participant classification. Ended or
+/// released calls are excluded. Instance checks use each call's server id; detached historical ownership supplies
+/// legacy counting only, without a live table oracle.
 /// </para>
 /// <para>
 /// <see cref="SessionOptions.ReconciliationInterval"/> set to <see cref="Timeout.InfiniteTimeSpan"/> switches the
-/// sweep off: no timer is started and nothing is sent. Any other interval of zero or less fails the start with
-/// <see cref="ArgumentOutOfRangeException"/>.
+/// sweep off. Any other interval of zero or less fails the start with <see cref="ArgumentOutOfRangeException"/>.
 /// </para>
 /// </remarks>
 internal sealed partial class SessionReconciliationService : IHostedService, IDisposable

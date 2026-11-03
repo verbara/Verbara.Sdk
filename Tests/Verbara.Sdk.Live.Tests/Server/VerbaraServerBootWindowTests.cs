@@ -327,7 +327,7 @@ public sealed class VerbaraServerBootWindowTests
         using (new AssertionScope())
         {
             outcome.Should().BeOfType<AmiNotConnectedException>(
-                "the connection will not come back, so nothing will ever reload what the load did not finish");
+                "the connection will not come back on its own, so the start has no reload to vouch for what the load did not finish");
             Lines(run.ServerLog, StateLoaded).Should().Be(0, "a load cut short by its session is not reported as loaded");
             peer.Asked("Status").Should().Be(1, "the channels were answered before the session ended");
             peer.Asked("QueueStatus").Should().Be(1, "the queues were answered before the session ended");
@@ -436,7 +436,7 @@ public sealed class VerbaraServerBootWindowTests
         using (new AssertionScope())
         {
             outcome.Should().BeOfType<AmiNotConnectedException>(
-                "the connection will not come back, so nothing will ever reload what the load did not finish");
+                "the connection will not come back on its own, so the start has no reload to vouch for what the load did not finish");
             Lines(run.ServerLog, StateLoaded).Should().Be(0, "a load cut short by its session is not reported as loaded");
             peer.Asked("QueueStatus").Should().Be(1, "the session ended while the queues were pending");
             sentAfterClose.Should().BeEmpty("nothing more is sent on a session that has ended");
@@ -519,7 +519,7 @@ public sealed class VerbaraServerBootWindowTests
         using (new AssertionScope())
         {
             outcome.Should().BeOfType<AmiNotConnectedException>(
-                "the connection will not come back, so nothing will ever reload what the load did not finish")
+                "the connection will not come back on its own, so the start has no reload to vouch for what the load did not finish")
                 .Which.Message.Should().Contain(EndedDuringTheWait,
                     "the load stopped at its wait, and asked nothing on the ended session");
             Warnings(run).Should().BeEmpty("a start that throws is not an interrupted load");

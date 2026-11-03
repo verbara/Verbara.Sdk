@@ -129,11 +129,14 @@ static void Watch(VerbaraServer server)
 - **`UserNum` is `0` for every ConfBridge participant.** `ConfbridgeJoin` carries no user number
   (no `Usernum` header on Asterisk 20, 22 or 23), so there is nothing else to store. It is kept as
   what Asterisk sent and never identifies a participant. The key is the channel.
-- **`UniqueId` is the join's `Uniqueid`, as data only.** It never identifies, replaces or removes a
-  participant: a leave is matched by channel. It is null when the join carried none, or when the
-  participant was recorded through the three-argument `OnUserJoined`.
+- **`UniqueId` is the join's `Uniqueid`.** It decides no replacement and no removal: a leave is
+  matched by channel. It is null when the join carried none, or when the participant was recorded
+  through the three-argument `OnUserJoined`.
 - A second join for a channel already held in the room replaces that participant and raises
-  `UserJoined` again; it does not add a second entry.
+  `UserJoined` again; it does not add a second entry. From 2.10.0, when both joins carry a
+  `Uniqueid` and they differ, the participant it replaced reads `Left` and `LeaveNotObserved` as
+  `true`, with no `UserLeft`. Otherwise it is the same participant and reads as it did: the
+  instance that join replaced keeps reading `Joined`, so hold the latest one.
 
 ## A participant whose leave names another channel
 
@@ -180,6 +183,40 @@ per AMI session. If you reset per-participant state when the connection came bac
 you can follow `UserJoined` and `UserLeft` instead. A start of the server loads the rooms the same
 way.
 
+On 2.9.0 the two look the same to a `UserLeft` handler: a participant the reload found gone and
+one Asterisk reported leaving. From 2.10.0 `MeetMeUser.LeaveNotObserved` says what Live observed:
+`true` when a completed listing no longer reported the participant, whether it omitted the
+participant or the room, `No active conferences.` included, and `false` when Live had observed a
+`ConfbridgeLeave` for its channel name or the `ConfbridgeEnd` of its room before the removal.
+Consumers cannot set it.
+
+```csharp
+using Verbara.Sdk.Live.MeetMe;
+
+static void WatchLeaves(MeetMeManager conferences)
+{
+    conferences.UserLeft += (room, user) =>
+    {
+        var source = user.LeaveNotObserved ? "found gone by Live" : "reported by Asterisk";
+        Console.WriteLine($"{user.Channel} left {room.RoomNumber}: {source}");
+    };
+}
+```
+
+An inferred leave carries no Asterisk timestamp or reason: the moment `UserLeft` is raised is when
+Live found the participant gone, not when the participant left.
+
+`true` means Live had not applied the report when it removed the participant; it does not mean
+Asterisk sent none: a report can arrive after the removal, and a leave Live could not match to a held
+participant (a renamed channel, a reused name) is not observed, so the next reconciliation reads
+`true`. Leaves are matched by channel name: a report that names a reused
+channel is applied to the participant held under that name, which then reads `false` although it
+did not leave.
+
+On the queue side the same property exists on `AsteriskQueueEntry`, and `RemoveQueue` still raises
+no `CallerLeft`: see
+[A reload announces the callers and participants it finds gone](migration-2.9.0.md#a-reload-announces-the-callers-and-participants-it-finds-gone).
+
 ## Package validation against 2.8.0
 
 If you run package validation with 2.8.0 as the baseline, `Verbara.Sdk.Live` reports two `CP0002`:
@@ -213,5 +250,7 @@ you can read the participant instead.
 ## What did not change
 
 - `Rooms`, `GetRoom`, `UserCount`, `Clear`, `UserJoined` and `UserLeft` keep their signatures.
-  `Clear` still raises nothing.
+  `Clear` still raises nothing. From 2.10.0 it sets `Left` and marks `LeaveNotObserved` on each
+  participant the table held, as a join with another `Uniqueid` does for the participant it
+  replaces, with no `UserLeft`.
 - The type names stay `MeetMe*`: they track ConfBridge conferences.

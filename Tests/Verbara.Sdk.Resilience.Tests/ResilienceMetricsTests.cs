@@ -109,8 +109,16 @@ public sealed class ResilienceMetricsTests
         observed.Should().ContainKey(key);
         observed[key].Should().Be((int)ResilienceMetrics.CircuitStateValue.Open);
 
-        // Advance past open duration and probe successfully → gauge should flip to Closed.
+        // Past the open window, with no call since: the gauge reads what the breaker would do now.
         clock.Advance(TimeSpan.FromSeconds(31));
+
+        observed.Clear();
+        listener.RecordObservableInstruments();
+
+        observed.Should().ContainKey(key);
+        observed[key].Should().Be((int)ResilienceMetrics.CircuitStateValue.HalfOpen);
+
+        // Probe successfully → gauge should flip to Closed.
         await policy.ExecuteAsync(
             key,
             _ => ValueTask.FromResult(1),

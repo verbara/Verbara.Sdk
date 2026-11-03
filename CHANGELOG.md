@@ -4,6 +4,69 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a reconnect you make yourself reloads Live (#511)
+
+With `AutoReconnect` off, a successful `ConnectAsync` on an `AmiConnection` after a lost AMI session runs Live's full
+state reload on the new session, with no second `StartAsync` and no explicit `RequestInitialStateAsync`. A connect that
+fails, or a session that ends before its load completes, reports no recovery. A host that keeps the explicit call stays
+supported: each held call and queue visit is represented once, at the cost of the extra AMI load.
+
+A load whose AMI session is lost stops there, over either route: a list it has not applied is not applied, even one read
+to its end, and it reads its session before each request, so it asks nothing of the session that replaced it.
+`RequestInitialStateAsync` now throws `AmiNotConnectedException` in that case, where it used to finish on the newer
+session.
+
+A reload no longer empties the agents table first, whichever route brought the session back: the table reads what it held
+until the `Agents` list completes, and is then replaced in one step. Over an `AmiConnection` a list cut short or refused
+leaves the table as it was, so a reload that is interrupted or fails keeps the agents; over any other connection the list
+as delivered replaces the table. Every load now applies the agents after the list has
+completed and after the delivery of the events received before it, so `AgentLoggedIn` is raised after that, and not for a
+row of a list cut short, nor for an agent a live logoff has reached since. An agent an event named after the list was asked for stays as that event left it, because the
+list is older. An agent the list drops still raises no `AgentLoggedOff`, and `RequestInitialStateAsync` still only adds.
+
+A reconnect you make yourself raises what a reload raises: one `CallerJoined` for each caller still waiting, on an object
+that is not the one in `AsteriskQueue.Entries`, so match it by `Channel` or `UniqueId`.
+
+### Fixed — BREAKING: the `circuit.state` gauge reports the breaker's current state (#509)
+
+The gauge documented as the current circuit state per key replayed the last value a call wrote, so an idle tripped circuit
+read `2` forever and a failed probe below the threshold left `2` over a circuit that admits the next call (#420). It now
+reports the state when observed: `2` only while a call would be rejected, `1` once the open window has elapsed and no call
+has been admitted since, `0` otherwise, with no later call needed.
+
+What breaks: an alert, a dashboard or a health check that needs an unbroken `2`. That run was unbroken only because it was
+stale: under traffic the circuit cycles, so a rule such as "`circuit.state` is 2 for five minutes" may not fire during the
+outage it was written for, and a timer started at the last state change is reset the same way. Move it to `circuit.opened`,
+which counts trips; see the [migration guide](docs/guides/migration-2.10.0.md).
+
+### Added: `ResiliencePolicy.GetCircuitState` (#509)
+
+`ResiliencePolicy.GetCircuitState(key)` is a side-effect-free read of a key's circuit state, so a health check needs no
+`MeterListener`.
+
+### Documentation: published figures match the code and a measurement (#505)
+
+The README's performance row named `ChannelManager.GetById`, which does not exist; it is `GetByUniqueId`, on the
+unique-id index (figures unchanged). The README's API coverage is recounted against what Asterisk 22.12 and the 24.0
+release candidate document: 115 of 154 AMI actions, 92 of 109 ARI REST operations and 42 of 45 ARI event types; the
+old 148/152, 94/98, 46/46 and 27/27 described no current Asterisk. The high-load tuning guide's RAM per AMI event
+buffer is derived from the 16-byte slot and a measured ≈ 1.9 KB per 18-header event: about 39 MB for a full default
+buffer of 20,000, where it said 5 MB. The Sessions README now says that `Events` replays nothing, so a subscriber added
+after the host starts does not see the first load's `CallStartedEvent`. No code, package or API changes.
+
+### Added: a leave says whether Live observed Asterisk's report of it (#510)
+
+`AsteriskQueueEntry.LeaveNotObserved` and `MeetMeUser.LeaveNotObserved` are public and read-only, and report what Live
+observed. A `QueueManager.CallerLeft` or `MeetMeManager.UserLeft` handler reads `true` when Live removed the caller or
+participant without having observed, before the removal, a report of a leave for its channel name or of the end of its
+room, and `false` when it had. `true` does not prove Asterisk sent no leave, and leaves are matched by channel name, so a
+report that names a reused channel reads `false` on the caller or participant held under that name. An inferred leave has
+no Asterisk timestamp or reason. Events and their signatures are unchanged, and no new leave is raised or counted.
+
+`QueueManager.RemoveQueue` and `Clear` on either manager raise no leave; the entry or participant the table held reads
+`true`. A `MeetMeUser` that `MeetMeManager.Clear` empties, or that a join with another `Uniqueid` replaces, now also reads
+`State == Left` where it read `Joined`, and `QueueManager.Clear` now empties the `Entries` of a queue you retained.
+
 ### Changed: OpenTelemetry 1.20.1 (#501)
 
 `Verbara.Sdk.OpenTelemetry` now requires `OpenTelemetry`, `OpenTelemetry.Extensions.Hosting`,
@@ -23,18 +86,17 @@ attribute counts fall back to `OTEL_ATTRIBUTE_COUNT_LIMIT`; scope attributes fro
 `OTEL_ATTRIBUTE_COUNT_LIMIT`; blobs that an earlier version wrote to the experimental disk-retry storage are not resent.
 The SDK's own telemetry triggers none of these. No public API change.
 
-### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.5 (#474)
+### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.20 (#474, #508)
 
-`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.5` instead of `>= 3.3.1`; its
-`Microsoft.Extensions.*` dependencies stay at `>= 10.0.5`. Since 3.4.0, StackExchange.Redis opens a separate
+`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.20` instead of `>= 3.3.1`, and its
+`Microsoft.Extensions.*` dependencies rise from `>= 10.0.5` to `>= 10.0.13`, the floor 3.4.20 sets. Since 3.4.0, StackExchange.Redis opens a separate
 subscription connection under RESP3, as it always did under RESP2, so the interactive connection is no longer subject
-to the server's much tighter `client-output-buffer-limit pubsub`. Measured against Redis 7 with default settings, a
+to the server's much tighter `client-output-buffer-limit pubsub`. Measured on 3.4.5 against Redis 7 with default settings, a
 store registered with `UseRedis(o => o.ConfigurationString = ...)` now holds two client connections per server
 instead of one; the second carries only the library's configuration channel. Allow for it in `maxclients` and in
 connection-count alerts. To keep one connection, add `sharedSubscriptionConnection=true` to the configuration string,
 after checking the server's pub/sub output-buffer limit against your largest replies. A store given its own
 `IConnectionMultiplexer` follows the application's StackExchange.Redis version. No public API change.
-
 
 ## [2.9.0] - 2026-10-28
 

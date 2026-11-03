@@ -3,6 +3,7 @@ using System.Reactive.Linq;
 using FluentAssertions;
 using Verbara.Sdk.Sessions;
 using Verbara.Sdk.Sessions.Manager;
+using Verbara.Sdk.Tests.Shared.Sessions;
 
 namespace Verbara.Sdk.Hosting.Tests.Reconciliation;
 
@@ -55,7 +56,13 @@ public sealed class ServerScopedSessionBaselineTests : IAsyncLifetime
     public async Task Reattach_ShouldEndTheLeftCallOnce_WhenAnExplicitReconciliationCompletesItsEmptyTable()
     {
         var left = _rig.Open(_rig.A, "left", "x");
-        _rig.Open(_rig.B, "other", "y");
+        var other = _rig.Open(_rig.B, "other", "x");
+        foreach (var server in new[] { _rig.A, _rig.B })
+        {
+            server.Server.Bridges.OnBridgeCreated("B", "mixing", "simple_bridge", null, null);
+            server.Server.Bridges.OnChannelEntered("B", "x");
+        }
+        var beforeOther = SweepRig.Look(other);
         _rig.Manager.DetachFromServer("a", DetachedCalls.Keep);
         _rig.A.Server.Channels.OnHangup("x");
         left.EndingDelivered.Should().BeFalse("the manager missed the hangup while detached");
@@ -69,6 +76,12 @@ public sealed class ServerScopedSessionBaselineTests : IAsyncLifetime
         left.EndingDelivered.Should().BeTrue("a complete returning table proves that the left call has no channel");
         _rig.Pool.EndingsOf(left).Should().Be(1);
         _rig.Manager.InspectIndexes().ChannelIds.Should().NotContain(e => ReferenceEquals(e.Value, left));
+        _rig.Manager.GetByBridgeId("a", "B").Should().BeNull();
+        _rig.Manager.InspectIndexes().Bridges.Should().NotContain(e => e.Value == left.SessionId);
+        _rig.Manager.GetByChannelId("b", "x").Should().BeSameAs(other);
+        _rig.Manager.GetByBridgeId("b", "B").Should().BeSameAs(other);
+        SweepRig.Look(other).Should().BeEquivalentTo(beforeOther);
+        SessionIndexInvariant.Assert(_rig.Manager);
     }
 
     [Fact]

@@ -9,18 +9,22 @@ namespace Verbara.Sdk.Live.Diagnostics;
 /// Health check over a <see cref="VerbaraServerPool"/>. Each time it runs it reads the state of the AMI connection of
 /// every server the pool holds, and aggregates them the way <see cref="LiveHealthCheck"/> reads a single connection:
 /// <list type="bullet">
-///   <item><description>every server <see cref="AmiConnectionState.Connected"/>, or a pool that holds no servers yet:
+///   <item><description>every server <see cref="AmiConnectionState.Connected"/> with no last Status refusal, or a pool that holds no servers yet:
 ///   <see cref="HealthStatus.Healthy"/>.</description></item>
 ///   <item><description>every server <see cref="AmiConnectionState.Disconnecting"/> or
 ///   <see cref="AmiConnectionState.Disconnected"/>: <see cref="HealthStatus.Unhealthy"/> — nothing reconnects them
 ///   on its own.</description></item>
+///   <item><description>every server connected, but at least one has a last Status refusal:
+///   <see cref="HealthStatus.Degraded"/>.</description></item>
 ///   <item><description>anything else — at least one server not connected, and at least one connected or still
 ///   recovering (<see cref="AmiConnectionState.Initial"/>, <see cref="AmiConnectionState.Connecting"/>,
 ///   <see cref="AmiConnectionState.Reconnecting"/>): <see cref="HealthStatus.Degraded"/>. A pool whose only server is
 ///   reconnecting is therefore <see cref="HealthStatus.Degraded"/>, not <see cref="HealthStatus.Unhealthy"/>.</description></item>
 /// </list>
 /// The result's data holds one entry per server id, whose value is the name of that server's AMI connection state
-/// (a string).
+/// (a string). Last Status refusals make an otherwise healthy pool Degraded and add one reserved <c>status-refused</c>
+/// entry: <c>{serverId}: {message}</c> per refused server, joined by <c>; </c> in ordinal server-id order. Every value
+/// remains a string, and each server's own entry remains its connection state.
 /// </summary>
 /// <remarks>
 /// <c>AddVerbaraMultiServer</c> registers this check once, under the name <c>verbara-pool</c> and with no tags.
@@ -32,6 +36,7 @@ public sealed class VerbaraServerPoolHealthCheck(VerbaraServerPool pool) : IHeal
         HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         var data = new Dictionary<string, object>(StringComparer.Ordinal);
+        var refusals = new SortedDictionary<string, string>(StringComparer.Ordinal);
         var total = 0;
         var connected = 0;
         var ended = 0;
@@ -41,12 +46,17 @@ public sealed class VerbaraServerPoolHealthCheck(VerbaraServerPool pool) : IHeal
             var state = server.Connection.State;
             // A string, never the boxed enum: a reflection-free JSON writer cannot serialize an arbitrary enum.
             data[serverId] = state.ToString();
+            if (server.LastStatusRefusal is { } refusal)
+                refusals.Add(serverId, refusal.Message);
             total++;
             if (state == AmiConnectionState.Connected)
                 connected++;
             else if (state is AmiConnectionState.Disconnecting or AmiConnectionState.Disconnected)
                 ended++;
         }
+
+        if (refusals.Count > 0)
+            data["status-refused"] = string.Join("; ", refusals.Select(static entry => $"{entry.Key}: {entry.Value}"));
 
         HealthCheckResult result;
         if (total == 0)
@@ -55,8 +65,11 @@ public sealed class VerbaraServerPoolHealthCheck(VerbaraServerPool pool) : IHeal
         }
         else if (connected == total)
         {
-            result = HealthCheckResult.Healthy(
-                string.Create(CultureInfo.InvariantCulture, $"All {total} servers connected"), data);
+            result = refusals.Count == 0
+                ? HealthCheckResult.Healthy(
+                    string.Create(CultureInfo.InvariantCulture, $"All {total} servers connected"), data)
+                : HealthCheckResult.Degraded(
+                    string.Create(CultureInfo.InvariantCulture, $"Status refused by {refusals.Count} of {total} connected servers"), data: data);
         }
         else if (ended == total)
         {

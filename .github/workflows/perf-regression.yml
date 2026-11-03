@@ -27,7 +27,7 @@ name: Perf Regression
 # on a missing/empty/unparseable result — because every benchmark step below is
 # suffixed `|| true`, so a benchmark that NEVER RAN would otherwise read green.
 # That is the hole this closes. The `|| true` stays: it is what lets one broken
-# filter still leave the other four benchmarks measurable, and the comparison
+# filter still leave the other benchmarks measurable, and the comparison
 # step is now what notices.
 #
 # Manual run: gh workflow run "Perf Regression"
@@ -64,6 +64,14 @@ jobs:
       # │  arms check-perf-baseline.py and report-perf-breach.sh together.    │
       # └─────────────────────────────────────────────────────────────────────┘
       PERF_GATE_ENFORCE: 'false'
+      # ISA pin. ubuntu-latest mixes CPUs with and without AVX-512, and .NET 10 targets AVX-512
+      # wherever it exists, so the same code read faster or slower by host: time "breaches" in both
+      # directions on weeks when nothing here changed. This holds the JIT at x86-64-v3 on every
+      # host, for the build and for every BenchmarkDotNet child process (they inherit the job env).
+      # The name matters: on .NET 10 `DOTNET_EnableAVX512F=0` is accepted and ignored — measured
+      # on 10.0.14, the JIT still reported x86-64-v4 under it and x86-64-v3 under this one.
+      # baseline.json `jit_isa` makes the comparison fail closed if a log names any other ISA.
+      DOTNET_EnableAVX512: '0'
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -75,7 +83,7 @@ jobs:
       - name: Build benchmarks (Release)
         run: dotnet build Tests/Verbara.Sdk.Benchmarks/ -c Release --nologo
 
-      # Each `--filter` argument runs ONE benchmark class. We run the five
+      # Each `--filter` argument runs ONE benchmark class. We run the
       # README-cited hot paths in series so a single failure (timeout, missing
       # type) doesn't kill the whole job before the rest produce data.
       #
@@ -99,7 +107,7 @@ jobs:
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*AriParseEvent*' --exporters json --artifacts ../../artifacts/ari-event || true
-      - name: ChannelManager.GetById
+      - name: ChannelManager lookups
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*ChannelManager*' --exporters json --artifacts ../../artifacts/channel-manager || true
@@ -117,9 +125,30 @@ jobs:
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*TurnDetection*' --exporters json --artifacts ../../artifacts/turn-detection || true
+      # The event pump between the AMI reader and every handler. Its two deterministic rows are
+      # gated on bytes (bytes decide, time informs); EnqueueAndConsume1000Events is bimodal by a
+      # writer/consumer race and is reported, never gated. Time bands follow two weekly runs.
+      - name: AMI event pump
+        run: |
+          cd Tests/Verbara.Sdk.Benchmarks
+          dotnet run -c Release --no-build -- --filter '*AsyncEventPump*' --exporters json --artifacts ../../artifacts/async-event-pump || true
+      # Queue and conference managers: the same publication path as ChannelManager, each event with
+      # and without one subscriber, because only the subscribed row shows what a change a handler
+      # hears costs. Gated on bytes per event; time bands follow two weekly runs.
+      - name: QueueManager event paths
+        run: |
+          cd Tests/Verbara.Sdk.Benchmarks
+          dotnet run -c Release --no-build -- --filter '*QueueManager*' --exporters json --artifacts ../../artifacts/queue-manager || true
+      - name: MeetMeManager event paths
+        run: |
+          cd Tests/Verbara.Sdk.Benchmarks
+          dotnet run -c Release --no-build -- --filter '*MeetMeManager*' --exporters json --artifacts ../../artifacts/meetme-manager || true
 
       # ── The gate itself (ADR-0042 D4) ────────────────────────────────────────
-      # Relative-regression only: observed mean vs the committed HOSTED-RUNNER
+      # Bytes decide, time informs: rows with a `bytes` entry are gated on
+      # Memory.BytesAllocatedPerOperation (exact or a stated bound), which no
+      # runner, fleet or ISA moves.
+      # Time is relative-regression only: observed mean vs the committed HOSTED-RUNNER
       # mean, inside a per-benchmark band calibrated from 13 real runs of this
       # workflow. It does not compare against README.md's workstation figures
       # (1.97x-2.35x faster — an absolute comparison would be permanently red).

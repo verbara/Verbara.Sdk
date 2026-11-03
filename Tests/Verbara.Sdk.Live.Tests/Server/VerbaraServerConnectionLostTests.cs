@@ -343,7 +343,7 @@ public sealed partial class VerbaraServerConnectionLostTests
         using (new AssertionScope())
         {
             outcome.Should().BeOfType<AmiNotConnectedException>(
-                "the connection will not come back, so nothing will ever reload what the load did not finish");
+                "the connection will not come back on its own, so the start has no reload to vouch for what the load did not finish");
             raised.Should().BeTrue("a loss that cuts the start's load short is announced whether the start returns or throws");
             (raised ? await lost.Task : null).Should().BeNull("a peer's close carries no exception");
         }

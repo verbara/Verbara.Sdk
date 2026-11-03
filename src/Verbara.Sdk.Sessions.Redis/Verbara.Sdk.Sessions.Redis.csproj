@@ -2,10 +2,10 @@
   <PropertyGroup>
     <Description>Verbara.Sdk.Sessions.Redis - Redis-backed SessionStoreBase for horizontal scale-out. Ships RedisSessionStore + fluent UseRedis(...) registration for Verbara.Sdk.Sessions. AOT-safe (source-generated JSON only).</Description>
     <PackageTags>asterisk;sessions;redis;cluster;state-store;sdk</PackageTags>
-    <!-- StackExchange.Redis 3.4.5 requires Microsoft.Extensions.Logging.Abstractions >= 10.0.5 (and
-         through it DependencyInjection.Abstractions >= 10.0.5), so this package's Microsoft.Extensions.*
-         floor is 10.0.5, not the band floor Directory.Packages.props derives. -->
-    <MicrosoftExtensionsFloorVersion>10.0.5</MicrosoftExtensionsFloorVersion>
+    <!-- StackExchange.Redis 3.4.20 requires Microsoft.Extensions.Logging.Abstractions >= 10.0.13 (and
+         through it DependencyInjection.Abstractions >= 10.0.13), so this package's Microsoft.Extensions.*
+         floor is 10.0.13, not the band floor Directory.Packages.props derives. -->
+    <MicrosoftExtensionsFloorVersion>10.0.13</MicrosoftExtensionsFloorVersion>
   </PropertyGroup>
 
   <ItemGroup>

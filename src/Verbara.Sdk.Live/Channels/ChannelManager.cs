@@ -95,6 +95,7 @@ public sealed class ChannelManager
     internal LinkedChannelSnapshot ChannelsOfLinkedId(string linkedId) => new(_linkedChannels.GetValueOrDefault(linkedId));
     internal bool HoldsLinkedId(string linkedId) => _linkedChannels.ContainsKey(linkedId);
     internal static bool IsDeparting(AsteriskChannel channel) => channel.IsOutsideTable;
+    internal bool IsDeparting(string id) => _departingChannels.ContainsKey(id);
     internal bool IsHeldOrDeparting(string id) => _channelsByUniqueId.ContainsKey(id) || _departingChannels.ContainsKey(id);
     // A single-channel group reuses that channel object; multi-channel groups keep immutable arrays.
     // Readers retain the same lock-free snapshot semantics without allocating the common singleton array.
@@ -115,8 +116,12 @@ public sealed class ChannelManager
         }
     }
 
+    /// <summary>A test seam at the publication boundary; null in production.</summary>
+    internal Action<AsteriskChannel>? BeforeDeparturePublished { get; set; }
+
     private void BeginDepartureLocked(AsteriskChannel channel)
     {
+        BeforeDeparturePublished?.Invoke(channel);
         channel.MarkOutsideTable();
         {
             // All writers already hold _readWindowGate: only an existing incarnation needs a count read.
@@ -463,10 +468,11 @@ public sealed class ChannelManager
         lock (_readWindowGate)
         {
             RecordDepartureLocked(uniqueId);
-            if (!_channelsByUniqueId.TryRemove(uniqueId, out channel))
+            if (!_channelsByUniqueId.TryGetValue(uniqueId, out channel))
                 return;
-            _channelsByName.TryRemove(channel.Name, out _);
             BeginDepartureLocked(channel);
+            _channelsByUniqueId.TryRemove(uniqueId, out _);
+            _channelsByName.TryRemove(channel.Name, out _);
         }
 
         // Taken after the manager lock is released. Admission posted under this same channel lock,
@@ -753,9 +759,10 @@ public sealed class ChannelManager
         lock (_readWindowGate)
         {
             RecordDepartureLocked(channel.UniqueId);
-            if (!_channelsByUniqueId.TryRemove(channel.UniqueId, out gone))
+            if (!_channelsByUniqueId.TryGetValue(channel.UniqueId, out gone))
                 return false;
             BeginDepartureLocked(gone);
+            _channelsByUniqueId.TryRemove(channel.UniqueId, out _);
         }
 
         string name;

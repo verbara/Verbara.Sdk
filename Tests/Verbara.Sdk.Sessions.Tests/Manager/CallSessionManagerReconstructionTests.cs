@@ -5,6 +5,7 @@ using Verbara.Sdk.Sessions.Manager;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Verbara.Sdk.Tests.Shared.Sessions;
 
 namespace Verbara.Sdk.Sessions.Tests.Manager;
 
@@ -84,30 +85,49 @@ public sealed class CallSessionManagerReconstructionTests : IAsyncLifetime
     }
 
     [Fact]
-    public void RegisterReconstructedSession_ShouldNotOverwriteExistingSession()
+    public void RegisterReconstructedSession_ShouldRefuseTheSameServersCall_WhenItsLinkedIdIsAlreadyHeld()
     {
-        var original = new CallSession("sess-orig", "linked-dup", "srv-1", CallDirection.Inbound);
-        original.AddParticipant(new SessionParticipant
-        {
-            UniqueId = "uid-orig",
-            Channel = "PJSIP/100-001",
-            Technology = "PJSIP",
-            Role = ParticipantRole.Caller
-        });
-
-        var duplicate = new CallSession("sess-dup", "linked-dup", "srv-2", CallDirection.Outbound);
-        duplicate.AddParticipant(new SessionParticipant
-        {
-            UniqueId = "uid-dup",
-            Channel = "PJSIP/200-001",
-            Technology = "PJSIP",
-            Role = ParticipantRole.Caller
-        });
-
+        var original = Reconstructed("sess-orig", "srv-1", "uid-orig");
+        var duplicate = Reconstructed("sess-dup", "srv-1", "uid-dup");
         _sut.RegisterReconstructedSession(original).Should().BeTrue();
+        var before = _sut.InspectIndexes();
+
         _sut.RegisterReconstructedSession(duplicate).Should().BeFalse();
 
-        _sut.GetByLinkedId("linked-dup").Should().BeSameAs(original);
-        _sut.GetById("sess-dup").Should().BeNull("duplicate session should not be registered");
+        _sut.GetByLinkedId("srv-1", "linked-dup").Should().BeSameAs(original);
+        _sut.GetById("sess-dup").Should().BeNull();
+        _sut.InspectIndexes().Should().BeEquivalentTo(before);
+        SessionIndexInvariant.Assert(_sut);
     }
+
+    [Fact]
+    public void RegisterReconstructedSession_ShouldAcceptTheOtherServersCall_WhenBothHoldTheSameLinkedId()
+    {
+        var a = Reconstructed("sess-a", "srv-a", "shared-leg");
+        var b = Reconstructed("sess-b", "srv-b", "shared-leg");
+
+        _sut.RegisterReconstructedSession(a).Should().BeTrue();
+        _sut.RegisterReconstructedSession(b).Should().BeTrue();
+
+        _sut.GetById(a.SessionId).Should().BeSameAs(a);
+        _sut.GetById(b.SessionId).Should().BeSameAs(b);
+        _sut.GetByLinkedId("srv-a", "linked-dup").Should().BeSameAs(a);
+        _sut.GetByLinkedId("srv-b", "linked-dup").Should().BeSameAs(b);
+        _sut.GetByChannelId("srv-a", "shared-leg").Should().BeSameAs(a);
+        _sut.GetByChannelId("srv-b", "shared-leg").Should().BeSameAs(b);
+        _sut.GetByLinkedId("linked-dup").Should().BeNull();
+        _sut.GetByChannelId("shared-leg").Should().BeNull();
+        SessionIndexInvariant.Assert(_sut);
+    }
+
+    private static CallSession Reconstructed(string id, string serverId, string leg)
+    {
+        var call = new CallSession(id, "linked-dup", serverId, CallDirection.Inbound);
+        call.AddParticipant(new SessionParticipant
+        {
+            UniqueId = leg, Channel = $"PJSIP/{leg}", Technology = "PJSIP", Role = ParticipantRole.Caller,
+        });
+        return call;
+    }
+
 }

@@ -125,6 +125,8 @@ public sealed class CallSession
     private const byte HasDepartureCauseFlag = 16;
     private const byte DepartureProvenanceFlags = HasLastDepartureFlag | ReloadDepartureFlag | HasDepartureCauseFlag;
     private byte _endingFlags;
+    /// <summary>The delivering or joined attachment's generation; internal and never persisted.</summary>
+    internal long AttachmentGeneration { get; set; }
     private int _lastDepartureCause;
     private long _firstParticipantMark;
     private EndingOverflow? _endingOverflow;

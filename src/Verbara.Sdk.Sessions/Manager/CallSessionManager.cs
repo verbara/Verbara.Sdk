@@ -25,6 +25,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         public ConcurrentDictionary<string, CallSession> ByLinkedId { get; } = new(StringComparer.Ordinal);
         public ConcurrentDictionary<string, CallSession> ByChannelId { get; } = new(StringComparer.Ordinal);
         public ConcurrentDictionary<string, string> BridgeToSession { get; } = new(StringComparer.Ordinal);
+        // Written under _attachLock; detaches never change either value.
+        public long Generation;
+        public ServerSubscriptions? LatestAttachment;
     }
 
     private ServerIndex IndexOf(string serverId) =>
@@ -303,12 +306,16 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     public void AttachToServer(VerbaraServer server, string serverId)
     {
+        if (t_notificationDepth > 0)
+            throw AttachRefused(serverId);
+
         var index = IndexOf(serverId);
         // Every handler runs through this attachment's gate, which only a release closes; the typed delegates are kept
         // so they can be unsubscribed later.
         var gate = new AttachmentGate();
-        var onAdded = Gated<AsteriskChannel>(gate, ch => OnChannelAdded(ch, serverId, index));
-        var onRemoved = Gated<AsteriskChannel>(gate, ch => OnChannelRemoved(ch, serverId, index, server, gate));
+        ServerSubscriptions attachment = null!;
+        var onAdded = Gated<AsteriskChannel>(gate, ch => OnChannelAdded(ch, serverId, index, attachment));
+        var onRemoved = Gated<AsteriskChannel>(gate, ch => OnChannelRemoved(ch, serverId, index, attachment));
         var onStateChanged = Gated<AsteriskChannel>(gate, arg => OnChannelStateChanged(arg, serverId, index));
         var onDialBegin = Gated<AsteriskChannel>(gate, arg => OnChannelDialBegin(arg, serverId, index));
         var onDialEnd = Gated<AsteriskChannel>(gate, arg => OnChannelDialEnd(arg, serverId, index));
@@ -341,11 +348,17 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             finally { gate.Exit(); }
         };
 
-        Subscribe(serverId, new ServerSubscriptions(gate, server,
+        attachment = new ServerSubscriptions(gate, server,
             onAdded, onRemoved, onStateChanged, onDialBegin, onDialEnd,
             onHeld, onUnheld, onBridgeEntered, onBridgeDestroyed, onTransfer, onCallerJoined,
             onCallerLeft, onAbandonReported, onQueueStatus, onSnapshotCompleted, onAgentConnected, onQueueCallerConnected,
-            onQueueCallerCompleted, onChannelSnapshotCompleted));
+            onQueueCallerCompleted, onChannelSnapshotCompleted);
+        if (Subscribe(serverId, attachment))
+        {
+            Step(HandlerStep.AttachmentReadyToDecide, serverId, string.Empty);
+            if (server.ChannelTableComplete)
+                DecideCompleteTable(serverId, attachment, bounded: true);
+        }
     }
 
     public void DetachFromServer(string serverId)
@@ -428,7 +441,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// watching the same channel — adds nothing: no participant, no audit entry, no save.
     /// </para>
     /// </summary>
-    private void OnChannelAdded(AsteriskChannel channel, string serverId, ServerIndex index)
+    private void OnChannelAdded(AsteriskChannel channel, string serverId, ServerIndex index, ServerSubscriptions delivery)
     {
         // Release rides arrivals as well as endings, so a process that keeps accepting calls but has
         // stopped completing them still lets go of what it holds past retention. It runs before the
@@ -439,31 +452,17 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         var linkedId = channel.LinkedId;
         if (string.IsNullOrEmpty(linkedId)) linkedId = channel.UniqueId;
 
-        // Correlation is local; collision diagnostics still compare the other servers before publishing.
-        if (_serverSubs.Count > 1)
-        {
-            foreach (var other in _serverIndexes)
-            {
-                if (string.Equals(other.Key, serverId, StringComparison.Ordinal)) continue;
-                if (other.Value.ByChannelId.ContainsKey(channel.UniqueId))
-                {
-                    ReportCrossServerCollision(serverId, other.Key, ChannelIdKind, channel.UniqueId);
-                    break;
-                }
-                if (other.Value.ByLinkedId.ContainsKey(linkedId))
-                {
-                    ReportCrossServerCollision(serverId, other.Key, LinkedIdKind, linkedId);
-                    break;
-                }
-            }
-        }
+        ReportArrivalCollision(serverId, channel.UniqueId, linkedId);
 
         // The session this leg opens if it finds no live call to join. Built once, fully, before it can
         // be published, so whoever finds it through the linkedid index sees a complete session.
         var direction = _correlator.InferDirection(channel.Context, channel.Extension);
         var session = new CallSession(Guid.NewGuid().ToString("N"), linkedId, serverId, direction);
 
-        session.Unverified = channel.AdmittedFromSnapshot;
+        // An arrival subscribed before installation can lose its removal before that subscription is ready.
+        // Keep it pending until iii or completion, without borrowing a newer attachment for its birth stamp.
+        session.Unverified = channel.AdmittedFromSnapshot || !delivery.HasBeenInstalled;
+        session.AttachmentGeneration = delivery.Generation;
         session.SetParticipantMark(channel.UniqueId, channel.AdmissionMark);
         session.Context = channel.Context;
         session.Extension = channel.Extension;
@@ -517,19 +516,48 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         while (true)
         {
+            // Correlation never replaces a held call's present leg. Claims that lose below retry here.
+            if (index.ByChannelId.TryGetValue(channel.UniqueId, out var owner))
+            {
+                lock (owner.SyncRoot)
+                {
+                    if (!index.ByChannelId.TryGetValue(channel.UniqueId, out var confirmed)
+                        || !ReferenceEquals(confirmed, owner))
+                        continue;
+                    if (IsHeld(owner) && !HasEnded(owner) && !owner.EndingDelivered)
+                    {
+                        var installed = _serverSubs.TryGetValue(serverId, out var current)
+                            && ReferenceEquals(current, delivery);
+                        if (installed) ApplyPendingDemotion(owner, delivery);
+                        if (FindPresentParticipant(owner, channel.UniqueId) is not null)
+                        {
+                            if (installed) owner.SetParticipantMark(channel.UniqueId, channel.AdmissionMark);
+                            LogArrivalKeptByOwner(serverId, channel.UniqueId, owner.SessionId,
+                                delivery.Generation, owner.AttachmentGeneration);
+                            return;
+                        }
+                    }
+                    index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(channel.UniqueId, owner));
+                }
+                continue;
+            }
             var found = index.ByLinkedId.TryGetValue(linkedId, out var existing);
             if (found)
             {
                 Step(HandlerStep.JoinFound, serverId, channel.UniqueId);
 
                 // Outside the new session's lock, so no thread ever holds two calls' locks.
-                if (TryJoin(existing!, channel, index))
+                var join = TryJoin(existing!, channel, index, delivery);
+                if (join is JoinResult.Joined or JoinResult.Refused)
                     return;
+                if (join is JoinResult.Owned)
+                    continue;
             }
 
             // No live call to join (the one this leg's linkedid names has ended, or is no longer held): the leg
             // opens its own call, in place of the ended one provided the index still names it.
-            if (TryPublishArrival(session, linkedId, found ? existing : null, serverId, channel.UniqueId, index))
+            if (TryPublishArrival(session, linkedId, found ? existing : null, serverId, channel.UniqueId, index)
+                is ArrivalResult.Published)
                 break;
         }
 
@@ -543,7 +571,6 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (!IsHeld(session))
                 return;
 
-            index.ByChannelId[channel.UniqueId] = session;
             SessionMetrics.SessionsCreated.Add(1);
 
             Publish(new CallStartedEvent(session.SessionId, serverId,
@@ -553,36 +580,76 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         _ = PersistAsync(session);
     }
 
+    private enum ArrivalResult
+    {
+        NotPublished,
+        Published,
+        Owned,
+    }
+
     /// <summary>
     /// One attempt to publish an arriving leg's new <paramref name="session"/>: by session id, then by
-    /// <paramref name="linkedId"/> — replacing <paramref name="existing"/>, the ended call the index named, or added
-    /// when the index named none. An attempt another arrival won is withdrawn before it returns false. The whole
+    /// its channel id, then by <paramref name="linkedId"/> — replacing <paramref name="existing"/>, the ended call the index named, or added
+    /// when the index named none. A lost claim withdraws only this attempt's entries before returning. The whole
     /// attempt runs in one hold of the session's lock: the session-id write is what makes it held, so a release
     /// that selects it in between waits for the lock and finds it published by both ids, or withdrawn.
     /// </summary>
-    private bool TryPublishArrival(CallSession session, string linkedId, CallSession? existing, string serverId,
+    private ArrivalResult TryPublishArrival(CallSession session, string linkedId, CallSession? existing, string serverId,
         string uniqueId, ServerIndex index)
     {
         lock (session.SyncRoot)
         {
             _sessions[session.SessionId] = session;
             Step(HandlerStep.ArrivalHeldById, serverId, uniqueId);
+            if (!index.ByChannelId.TryAdd(uniqueId, session))
+            {
+                _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
+                return ArrivalResult.Owned;
+            }
 
             var published = existing is not null
                 ? index.ByLinkedId.TryUpdate(linkedId, session, existing)
                 : index.ByLinkedId.TryAdd(linkedId, session);
             if (published)
-                return true;
+                return ArrivalResult.Published;
 
             // Another arrival published a call for this linkedid first, or the release walk let go of the ended
             // one. This session was never announced, counted or saved; withdraw it and look again.
+            index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(uniqueId, session));
             _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
-            return false;
+            return ArrivalResult.NotPublished;
         }
     }
 
+    [LoggerMessage(EventId = 20, EventName = nameof(LogArrivalKeptByOwner), Level = LogLevel.Debug,
+        Message = "Server {ServerId} channel {ChannelId} arrived from attachment generation {DeliveryGeneration}; "
+            + "held owner {OwnerSessionId} at generation {OwnerGeneration} keeps its present leg")]
+    private partial void LogArrivalKeptByOwner(string serverId, string channelId, string ownerSessionId,
+        long deliveryGeneration, long ownerGeneration);
+
     private const string ChannelIdKind = "channel id";
     private const string LinkedIdKind = "linkedid";
+
+    // Both live arrivals and cold visits compare before they publish their own channel/linkedid entries.
+    // The count gate keeps the single-server path cheap; retained indexes remain part of the comparison.
+    private void ReportArrivalCollision(string serverId, string uniqueId, string linkedId)
+    {
+        if (_serverSubs.Count <= 1) return;
+        foreach (var other in _serverIndexes)
+        {
+            if (string.Equals(other.Key, serverId, StringComparison.Ordinal)) continue;
+            if (other.Value.ByChannelId.ContainsKey(uniqueId))
+            {
+                ReportCrossServerCollision(serverId, other.Key, ChannelIdKind, uniqueId);
+                return;
+            }
+            if (other.Value.ByLinkedId.ContainsKey(linkedId))
+            {
+                ReportCrossServerCollision(serverId, other.Key, LinkedIdKind, linkedId);
+                return;
+            }
+        }
+    }
 
     /// <summary>
     /// Logs that <paramref name="serverId"/> reported <paramref name="id"/> while the session indexes hold
@@ -606,9 +673,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     [LoggerMessage(EventId = 1, EventName = nameof(LogCrossServerCollision), Level = LogLevel.Warning,
         Message = "Server {ServerId} reported {IdKind} {Id}, which the session indexes already hold for a call of "
-            + "server {OtherServerId}. The session manager shares one index across servers, so calls of these two "
-            + "servers can be correlated together. Asterisk channel ids are unique across servers only when each "
-            + "Asterisk has its own 'systemname' in asterisk.conf; if both server ids watch the same Asterisk, "
+            + "server {OtherServerId}. The calls are kept apart, but a lookup naming no server and a consumer keyed "
+            + "only by linkedid cannot tell them apart. Give each Asterisk its own 'systemname' in asterisk.conf; "
+            + "if both server ids watch the same Asterisk, "
             + "attach it once. Later collisions between these two servers are logged at Debug")]
     private partial void LogCrossServerCollision(string serverId, string idKind, string id, string otherServerId);
 
@@ -617,31 +684,46 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             + "collision between these servers already reported at Warning")]
     private partial void LogCrossServerCollisionAgain(string serverId, string idKind, string id, string otherServerId);
 
+    private enum JoinResult
+    {
+        NotJoined,
+        Joined,
+        Refused,
+        Owned,
+    }
+
     /// <summary>
     /// Adds <paramref name="channel"/> to <paramref name="call"/> unless the call has ended or this manager no longer
-    /// holds it, and answers whether the leg now belongs to it. A leg already present in the call is not added again.
+    /// holds it, and distinguishes a stale delivery's refusal from a call that cannot be joined.
+    /// A leg already present in the call is not added again.
     /// The leg is indexed under the call's lock, so a call let go of meanwhile is never indexed again.
     /// </summary>
-    private bool TryJoin(CallSession call, AsteriskChannel channel, ServerIndex index, bool preserveOwnership = false)
+    private JoinResult TryJoin(CallSession call, AsteriskChannel channel, ServerIndex index, ServerSubscriptions oracle, bool registrationJoin = false)
     {
         lock (call.SyncRoot)
         {
             if (!IsHeld(call) || HasEnded(call) || call.EndingDelivered)
-                return false;
+                return JoinResult.NotJoined;
+            if (oracle.Generation < call.AttachmentGeneration)
+            {
+                LogStaleJoinRefused(call.ServerId, channel.UniqueId, oracle.Generation, call.AttachmentGeneration);
+                return JoinResult.Refused;
+            }
+            if (_serverSubs.TryGetValue(call.ServerId, out var installed) && ReferenceEquals(installed, oracle))
+                ApplyPendingDemotion(call, oracle);
 
-            // The registration join cannot replace an owner that claimed the channel after its lookup.
-            // Claim before every mutation, including marks; the live arrival route retains its existing protocol.
-            if (preserveOwnership && !index.ByChannelId.TryAdd(channel.UniqueId, call)
+            // Every join claims before participant mutations; a precheck cannot arbitrate a racing registration.
+            if (!index.ByChannelId.TryAdd(channel.UniqueId, call)
                 && (!index.ByChannelId.TryGetValue(channel.UniqueId, out var owner) || !ReferenceEquals(owner, call)))
             {
-                LogRegistrationJoinSkipped(call.SessionId, channel.UniqueId);
-                return false;
+                if (registrationJoin) LogRegistrationJoinSkipped(call.SessionId, channel.UniqueId);
+                return JoinResult.Owned;
             }
 
             if (FindPresentParticipant(call, channel.UniqueId) is not null)
             {
                 call.SetParticipantMark(channel.UniqueId, channel.AdmissionMark);
-                return true;
+                return JoinResult.Joined;
             }
 
             call.SetParticipantMark(channel.UniqueId, channel.AdmissionMark);
@@ -659,12 +741,16 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             });
             call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.ParticipantJoined, channel.Name, null, role.ToString()));
-            index.ByChannelId[channel.UniqueId] = call;
         }
 
         _ = PersistAsync(call);
-        return true;
+        return JoinResult.Joined;
     }
+
+    [LoggerMessage(EventId = 19, EventName = nameof(LogStaleJoinRefused), Level = LogLevel.Debug,
+        Message = "Server {ServerId} channel {ChannelId} arrived from attachment generation {DeliveryGeneration}, "
+            + "older than its call's generation {CallGeneration}; stale join refused")]
+    private partial void LogStaleJoinRefused(string serverId, string channelId, long deliveryGeneration, long callGeneration);
 
     /// <summary>
     /// The metadata key under which the SDK records how a session ended when it did <em>not</em>
@@ -696,9 +782,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// (<c>ADR-0062</c>, design D3).
     /// </para>
     /// </summary>
-    private void OnChannelRemoved(AsteriskChannel channel, string serverId, ServerIndex index, VerbaraServer sourceServer, AttachmentGate sourceGate)
+    private void OnChannelRemoved(AsteriskChannel channel, string serverId, ServerIndex index, ServerSubscriptions source)
     {
-        if (!_serverSubs.TryGetValue(serverId, out var source) || (!ReferenceEquals(source.Server, sourceServer) || !ReferenceEquals(source.Gate, sourceGate))) return;
         index.ByChannelId.TryGetValue(channel.UniqueId, out var byChannel);
         if (byChannel is not null)
         {
@@ -710,19 +795,65 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             && !ReferenceEquals(byLinked, byChannel)) DecideCall(byLinked, channel, source: source, sourceId: serverId);
     }
 
-    private void MarkUnverified(string serverId)
+    private static bool IsPendingDecision(CallSession call, ServerSubscriptions attachment) =>
+        call.Unverified || call.AttachmentGeneration < attachment.Generation;
+
+    /// <summary>The common pending test, confirmed under the call's lock.</summary>
+    internal bool IsPendingDecision(CallSession call)
     {
-        foreach (var call in _sessions.Values.Where(c => string.Equals(c.ServerId, serverId, StringComparison.Ordinal)))
+        lock (call.SyncRoot)
+            return IsHeld(call) && !HasEnded(call) && !call.EndingDelivered
+                && _serverSubs.TryGetValue(call.ServerId, out var attachment)
+                && IsPendingDecision(call, attachment);
+    }
+
+    /// <summary>
+    /// Reads this call's sweep scope and pending state under its lock. A detached latest attachment establishes
+    /// historical ownership for legacy counting only; it never supplies an installed decision oracle.
+    /// </summary>
+    internal bool TryGetSweepState(CallSession call, VerbaraServer expectedServer, bool allowUnknownId, out bool pending, out bool attached)
+    {
+        lock (call.SyncRoot)
         {
-            lock (call.SyncRoot)
+            pending = false;
+            attached = false;
+            if (!IsHeld(call) || HasEnded(call) || call.EndingDelivered) return false;
+            if (_serverSubs.TryGetValue(call.ServerId, out var installed))
             {
-                if (!IsHeld(call) || HasEnded(call) || call.EndingDelivered) continue;
-                call.Unverified = true;
-                call.ClearRecordedDepartures();
-                call.LastDeparture = null;
-                call.ClearParticipantMarks();
+                if (!MatchesSweepInstance(installed, expectedServer)) return false;
+                attached = true;
+                pending = IsPendingDecision(call, installed);
+                return true;
             }
+            if (_serverIndexes.TryGetValue(call.ServerId, out var index)
+                && Volatile.Read(ref index.LatestAttachment) is { } latest)
+                return MatchesSweepInstance(latest, expectedServer);
+            // An explicit pool id can retain its old count without inventing an instance oracle. The single DI
+            // server cannot claim a never-attached id merely because it is the server passed to that service.
+            return allowUnknownId;
         }
+    }
+
+    // Reject another instance before taking its calls' locks; positive matches are checked again under the lock.
+    internal bool IsSweepServer(string serverId, VerbaraServer expectedServer, bool allowUnknownId)
+    {
+        if (_serverSubs.TryGetValue(serverId, out var attached)) return MatchesSweepInstance(attached, expectedServer);
+        if (_serverIndexes.TryGetValue(serverId, out var index)
+            && Volatile.Read(ref index.LatestAttachment) is { } latest) return MatchesSweepInstance(latest, expectedServer);
+        return allowUnknownId;
+    }
+
+    private static bool MatchesSweepInstance(ServerSubscriptions attachment, VerbaraServer expectedServer) =>
+        ReferenceEquals(attachment.Server, expectedServer);
+
+    private static void ApplyPendingDemotion(CallSession call, ServerSubscriptions oracle)
+    {
+        if (call.AttachmentGeneration >= oracle.Generation) return;
+        call.Unverified = true;
+        call.ClearRecordedDepartures();
+        call.LastDeparture = null;
+        call.ClearParticipantMarks();
+        call.AttachmentGeneration = oracle.Generation;
     }
 
     internal void DecideCompleteTable(string serverId, VerbaraServer? expectedServer = null)
@@ -733,11 +864,21 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         DecideCompleteTable(serverId, subs);
     }
 
-    private void DecideCompleteTable(string serverId, ServerSubscriptions attachment)
+    private void DecideCompleteTable(string serverId, ServerSubscriptions attachment, bool bounded = false)
     {
-        foreach (var call in _sessions.Values.Where(c => c.Unverified && string.Equals(c.ServerId, serverId, StringComparison.Ordinal)))
-            DecideCall(call, expected: attachment);
+        foreach (var call in _sessions.Values)
+        {
+            if (!string.Equals(call.ServerId, serverId, StringComparison.Ordinal)
+                || !IsHeld(call) || HasEnded(call) || call.EndingDelivered
+                || !IsPendingDecision(call, attachment)) continue;
+            DecideCall(call, expected: attachment, bounded: bounded);
+        }
     }
+
+    [LoggerMessage(EventId = 14, EventName = nameof(LogAttachLockExpired), Level = LogLevel.Error,
+        Message = "Attaching server {ServerId} could not obtain call {SessionId}'s lock within the walk limit; "
+            + "the call remains pending for the next decision")]
+    private partial void LogAttachLockExpired(string serverId, string sessionId);
 
     private static SessionParticipant? FindPresentParticipant(CallSession call, string uniqueId)
     {
@@ -758,23 +899,53 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         return false;
     }
 
-    private void DecideCall(CallSession call, AsteriskChannel? departure = null, ServerSubscriptions? expected = null, ServerSubscriptions? source = null, string? sourceId = null)
+    private void DecideCall(CallSession call, AsteriskChannel? departure = null, ServerSubscriptions? expected = null, ServerSubscriptions? source = null, string? sourceId = null, bool bounded = false)
     {
-        lock (call.SyncRoot)
+        if (bounded)
+        {
+            if (!call.SyncRoot.TryEnter(WalkLockBound))
+            {
+                if (IsHeld(call) && !HasEnded(call) && !call.EndingDelivered
+                    && expected is not null && IsPendingDecision(call, expected)
+                    && _serverSubs.TryGetValue(call.ServerId, out var stillAttached)
+                    && ReferenceEquals(stillAttached, expected))
+                    LogAttachLockExpired(call.ServerId, call.SessionId);
+                return;
+            }
+        }
+        else call.SyncRoot.Enter();
+        try
         {
             if (!IsHeld(call) || HasEnded(call) || call.EndingDelivered) return;
-            if (source is not null && (sourceId is null || !_serverSubs.TryGetValue(sourceId, out var currentSource) || !ReferenceEquals(source, currentSource))) return;
+            var index = IndexOf(call.ServerId);
             ServerSubscriptions subs;
-            // The source attachment was dynamically rechecked just above, under this call's lock.
-            // Reuse that object only for the same server; cross-server base collisions still resolve their own.
-            if (source is not null && string.Equals(call.ServerId, sourceId, StringComparison.Ordinal)) subs = source;
+            bool installed;
+            if (source is not null)
+            {
+                if (sourceId != call.ServerId) return;
+                if (_serverSubs.TryGetValue(call.ServerId, out var active))
+                {
+                    if (!ReferenceEquals(active, source)) return;
+                    installed = true;
+                }
+                else
+                {
+                    if (!source.HasBeenInstalled
+                        || !ReferenceEquals(Volatile.Read(ref index.LatestAttachment), source)) return;
+                    installed = false;
+                }
+                subs = source;
+            }
             else
             {
                 if (!_serverSubs.TryGetValue(call.ServerId, out var attached)) return;
                 subs = attached;
+                installed = true;
             }
             if (expected is not null && !ReferenceEquals(expected, subs)) return;
-            var index = IndexOf(call.ServerId);
+            Step(HandlerStep.DecisionOracleCaptured, call.ServerId, call.SessionId);
+            if (installed) ApplyPendingDemotion(call, subs);
+            if (source is null && !IsPendingDecision(call, subs)) return;
             var table = subs.Server.Channels;
             var complete = subs.Server.ChannelTableComplete;
             var changed = false;
@@ -785,7 +956,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 for (var i = 0; i < participants.Count; i++)
                 {
                     var participant = participants[i];
-                    if (participant.LeftAt.HasValue || table.IsHeldOrDeparting(participant.UniqueId)) continue;
+                    if (participant.LeftAt.HasValue) continue;
+                    var held = table.GetByUniqueId(participant.UniqueId) is not null;
+                    var departing = table.IsDeparting(participant.UniqueId);
+                    if (held || departing) continue;
                     changed = true;
                     participant.LeftAt = DateTimeOffset.UtcNow;
                     participant.HangupCause = null;
@@ -816,28 +990,50 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                     removedDepartureId = departure.UniqueId;
             }
             // Read the same immutable linked-channel snapshot and predicate without per-departure iterators/delegates.
+            // Check present rows after recording this decision's departure, including rows under another linkedid.
+            var presentDeparting = false;
+            if (complete && call.Unverified)
+            {
+                var participants = call.ParticipantStorage;
+                for (var i = 0; i < participants.Count; i++)
+                {
+                    var participant = participants[i];
+                    if (participant.LeftAt.HasValue) continue;
+                    var held = table.GetByUniqueId(participant.UniqueId);
+                    var departing = table.IsDeparting(participant.UniqueId);
+                    var mark = call.GetParticipantMark(participant.UniqueId);
+                    // A held current incarnation is distinct from an older same-id departure still being delivered.
+                    if (held is not null && held.AdmissionMark == mark && !ChannelManager.IsDeparting(held)) continue;
+                    if (departing && !call.HasRecordedDeparture(participant.UniqueId, mark)) presentDeparting = true;
+                }
+            }
             var channels = table.ChannelsOfLinkedId(call.LinkedId);
             var remaining = false;
             var allRemainingPresent = true;
+            var departingUnrecorded = false;
             for (var i = 0; i < channels.Length; i++)
             {
                 var channel = channels[i];
-                if (ChannelManager.IsDeparting(channel)
-                    && call.HasRecordedDeparture(channel.UniqueId, channel.AdmissionMark)) continue;
+                if (ChannelManager.IsDeparting(channel))
+                {
+                    if (call.HasRecordedDeparture(channel.UniqueId, channel.AdmissionMark)) continue;
+                    departingUnrecorded = true;
+                }
                 remaining = true;
                 if (complete && call.Unverified && FindPresentParticipant(call, channel.UniqueId) is null)
                     allRemainingPresent = false;
             }
-            if (!HasPresentParticipant(call) && !remaining && (complete || !call.Unverified))
+            if (!HasPresentParticipant(call) && !remaining && (complete || !call.Unverified || !installed))
             {
                 var provenance = call.LastDeparture ?? (Reload: true, Cause: (HangupCause?)null);
                 FinishCall(call, provenance.Reload, provenance.Cause, removedDepartureId);
                 call.ClearRecordedDepartures();
             }
-            else if (complete && call.Unverified && allRemainingPresent)
+            else if (complete && call.Unverified && allRemainingPresent && !presentDeparting && !departingUnrecorded)
                 call.Unverified = false;
             if (changed && !HasEnded(call)) _ = PersistAsync(call);
         }
+        finally { call.SyncRoot.Exit(); }
     }
 
     private void FinishCall(CallSession session, bool byReload, HangupCause? observedCause, string? removedDepartureId)
@@ -1024,9 +1220,15 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         lock (session.SyncRoot)
         {
-            if (!IsHeld(session))
+            if (!IsHeld(session) || HasEnded(session) || session.EndingDelivered)
                 return;
 
+            if (session.BridgeId is { } previousBridge
+                && !string.Equals(previousBridge, bridge.BridgeUniqueid, StringComparison.Ordinal))
+            {
+                index.BridgeToSession.TryRemove(
+                    new KeyValuePair<string, string>(previousBridge, session.SessionId));
+            }
             session.BridgeId = bridge.BridgeUniqueid;
             index.BridgeToSession[bridge.BridgeUniqueid] = session.SessionId;
 
@@ -1585,43 +1787,93 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         public bool EndedWithin(DateTimeOffset cutoff) => CompletedAt >= cutoff;
     }
 
-    /// <summary>Registers a reconstructed call, joins its attached server's held legs and decides it.</summary>
-    /// <remarks>Do not call this member synchronously from a session-event subscriber: the join takes channel locks,
-    /// while session events are published under a call lock. Schedule the registration outside that callback.</remarks>
+    /// <summary>Registers a reconstructed call within its server, joins its attached server's held legs and decides it.</summary>
+    /// <remarks>
+    /// <para>A held session id, a null or empty linkedid, a linkedid already held on the same server, or a leg that
+    /// server maps to another call refuses the registration. A refusal is logged at Information and leaves existing
+    /// entries unchanged; the refused call is neither joined, persisted nor announced. Registering the same instance
+    /// again returns false without changing its indexes, notifications or store. A bridge already mapped on that
+    /// server is kept and logged at Debug. An accepted registration announces no new call start.</para>
+    /// <para>Do not call this member synchronously from a session-event subscriber: the join takes channel locks,
+    /// while session events are published under a call lock. Schedule the registration outside that callback.</para>
+    /// </remarks>
     public bool RegisterReconstructedSession(CallSession session)
     {
         var index = IndexOf(session.ServerId);
-        // Every index write runs in one hold of the session's lock, taken before the first: the session-id write
-        // makes it held, so a release that selects it meanwhile waits for the lock and then finds it indexed
-        // everywhere, or withdrawn. Held by id before it is published by linkedid, as a session opened by an
-        // arriving leg is, so a leg that finds it by linkedid never indexes or saves a session the manager does not
-        // hold.
+        _serverSubs.TryGetValue(session.ServerId, out var attachment);
+        // Keep the registration's index writes under its own call lock, held by id before linkedid.
         lock (session.SyncRoot)
         {
             var added = _sessions.TryAdd(session.SessionId, session);
             Step(HandlerStep.RegistrationHeldById, session.ServerId, session.SessionId);
-
-            // A session id another call holds refuses the registration whatever its linkedid: that call's bridge
-            // entries name the same id, and a release of it removes them by that id.
             if (!IsHeld(session))
-                return false;
-
-            if (!index.ByLinkedId.TryAdd(session.LinkedId, session))
             {
-                if (added)
-                    _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
+                LogRegistrationRefused(session.ServerId, session.LinkedId, session.SessionId,
+                    "session id is already held by another instance", session.SessionId);
+                return false;
+            }
+            if (!added)
+            {
+                LogRegistrationRefused(session.ServerId, session.LinkedId, session.SessionId,
+                    "the same instance is already registered", session.SessionId);
+                return false;
+            }
+            if (string.IsNullOrEmpty(session.LinkedId))
+            {
+                WithdrawRefusedRegistration(session, index);
+                LogRegistrationRefused(session.ServerId, session.LinkedId, session.SessionId,
+                    "linkedid is null or empty", null);
                 return false;
             }
 
-            session.Unverified = true;
+            // Cheap early rejection only; each later TryAdd still decides the atomic ownership claim.
             foreach (var participant in session.Participants)
-                index.ByChannelId.TryAdd(participant.UniqueId, session);
+            {
+                if (index.ByChannelId.TryGetValue(participant.UniqueId, out var owner)
+                    && !ReferenceEquals(owner, session))
+                {
+                    WithdrawRefusedRegistration(session, index);
+                    LogRegistrationLegRefused(session.ServerId, session.LinkedId, session.SessionId,
+                        participant.UniqueId, owner.SessionId);
+                    return false;
+                }
+            }
+            Step(HandlerStep.RegistrationClaimsReady, session.ServerId, session.SessionId);
 
-            if (session.BridgeId is not null)
-                index.BridgeToSession.TryAdd(session.BridgeId, session.SessionId);
+            if (!index.ByLinkedId.TryAdd(session.LinkedId, session))
+            {
+                index.ByLinkedId.TryGetValue(session.LinkedId, out var owner);
+                WithdrawRefusedRegistration(session, index);
+                LogRegistrationRefused(session.ServerId, session.LinkedId, session.SessionId,
+                    "linkedid is already held on this server", owner?.SessionId);
+                return false;
+            }
+            foreach (var participant in session.Participants)
+            {
+                if (!index.ByChannelId.TryAdd(participant.UniqueId, session))
+                {
+                    index.ByChannelId.TryGetValue(participant.UniqueId, out var owner);
+                    WithdrawRefusedRegistration(session, index);
+                    LogRegistrationLegRefused(session.ServerId, session.LinkedId, session.SessionId,
+                        participant.UniqueId, owner?.SessionId);
+                    return false;
+                }
+                Step(HandlerStep.RegistrationLegClaimed, session.ServerId, participant.UniqueId);
+            }
+
+            // The call becomes an accepted registration only after every leg claim has succeeded.
+            session.Unverified = true;
+            session.AttachmentGeneration = attachment?.Generation ?? 0;
+            if (session.BridgeId is not null
+                && !index.BridgeToSession.TryAdd(session.BridgeId, session.SessionId))
+            {
+                index.BridgeToSession.TryGetValue(session.BridgeId, out var ownerId);
+                LogRegistrationBridgeSkipped(session.ServerId, session.LinkedId, session.SessionId,
+                    session.BridgeId, ownerId);
+            }
         }
 
-        if (_serverSubs.TryGetValue(session.ServerId, out var attachment))
+        if (attachment is not null)
         {
             attachment.Server.Channels.VisitHeld(session.LinkedId, channel =>
             {
@@ -1638,7 +1890,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                         return;
                     }
                     Step(HandlerStep.RegistrationJoinReady, session.ServerId, channel.UniqueId);
-                    TryJoin(session, channel, index, preserveOwnership: true);
+                    TryJoin(session, channel, index, attachment, registrationJoin: true);
                 }
             });
             DecideCall(session, expected: attachment);
@@ -1647,6 +1899,35 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         return true;
     }
+
+    // Called only for this registration's new held-id claim, before any bridge is written. A live handler
+    // that found the provisional linkedid waits for this lock, then rechecks IsHeld after withdrawal.
+    private void WithdrawRefusedRegistration(CallSession session, ServerIndex index)
+    {
+        foreach (var participant in session.Participants)
+            index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(participant.UniqueId, session));
+        if (!string.IsNullOrEmpty(session.LinkedId))
+            index.ByLinkedId.TryRemove(new KeyValuePair<string, CallSession>(session.LinkedId, session));
+        _sessions.TryRemove(new KeyValuePair<string, CallSession>(session.SessionId, session));
+    }
+
+    [LoggerMessage(EventId = 16, EventName = nameof(LogRegistrationRefused), Level = LogLevel.Information,
+        Message = "Reconstructed session {SessionId} of server {ServerId} with linkedid {LinkedId} was refused: "
+            + "{Reason}; held session {HolderSessionId}")]
+    private partial void LogRegistrationRefused(string serverId, string? linkedId, string sessionId,
+        string reason, string? holderSessionId);
+
+    [LoggerMessage(EventId = 17, EventName = nameof(LogRegistrationLegRefused), Level = LogLevel.Information,
+        Message = "Reconstructed session {SessionId} of server {ServerId} with linkedid {LinkedId} was refused: "
+            + "channel {ChannelId} is already mapped to session {HolderSessionId}")]
+    private partial void LogRegistrationLegRefused(string serverId, string linkedId, string sessionId,
+        string channelId, string? holderSessionId);
+
+    [LoggerMessage(EventId = 18, EventName = nameof(LogRegistrationBridgeSkipped), Level = LogLevel.Debug,
+        Message = "Reconstructed session {SessionId} of server {ServerId} with linkedid {LinkedId} skipped "
+            + "bridge {BridgeId}: already mapped to session {HolderSessionId}")]
+    private partial void LogRegistrationBridgeSkipped(string serverId, string linkedId, string sessionId,
+        string bridgeId, string? holderSessionId);
 
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "Reconstructed session {SessionId} did not join channel {ChannelId}: another call owns it")]
@@ -1868,11 +2149,19 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         /// <summary>The gate every handler of this attachment runs through.</summary>
         public AttachmentGate Gate { get; } = gate;
         public VerbaraServer Server { get; } = server;
+        // Assigned once under _attachLock before this attachment can deliver a notification.
+        public long Generation { get; private set; }
+        public void InitializeGeneration(long generation) => Generation = generation;
+        private int _hasBeenInstalled;
+        // Monotonic history, separate from current membership: a captured old arrival still owns its birth stamp.
+        public bool HasBeenInstalled => Volatile.Read(ref _hasBeenInstalled) != 0;
+        public void MarkInstalled() => Volatile.Write(ref _hasBeenInstalled, 1);
 
-        public void Attach()
+        public void Attach(CallSessionManager manager, string serverId)
         {
             Server.ChannelSnapshotCompleted += onChannelSnapshotCompleted;
             Server.Channels.ChannelAdded += onAdded;
+            manager.Step(HandlerStep.AttachmentArrivalSubscribed, serverId, string.Empty);
             Server.Channels.ChannelRemoved += onRemoved;
             Server.Channels.ChannelStateChanged += onStateChanged;
             Server.Channels.ChannelDialBegin += onDialBegin;
@@ -1892,8 +2181,13 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             Server.Agents.QueueCallerCompleted += onQueueCallerCompleted;
         }
 
+        // A one-way lifetime notification for admission waits. Keep leaves the handler gate open.
+        private readonly TaskCompletionSource _detached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task Detached => _detached.Task;
+
         public void Detach()
         {
+            _detached.TrySetResult();
             Server.ChannelSnapshotCompleted -= onChannelSnapshotCompleted;
             Server.Channels.ChannelAdded -= onAdded;
             Server.Channels.ChannelRemoved -= onRemoved;

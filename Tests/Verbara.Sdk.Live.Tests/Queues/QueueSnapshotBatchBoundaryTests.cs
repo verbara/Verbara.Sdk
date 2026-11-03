@@ -133,11 +133,12 @@ public sealed class QueueSnapshotBatchBoundaryTests
             await connect.WaitAsync(Run.Bound);
             releaseOwner.TrySetResult();
             await run.Server.ScheduledReload.WaitAsync(Run.Bound);
+            await run.ServerLog.Logged("[LIVE] State loaded", 2).WaitAsync(Run.Bound);
 
             using var scope = new AssertionScope();
             run.Connection.State.Should().Be(AmiConnectionState.Connected);
             reports.Should().Be(0, "a reached old fence must not publish an old-session report into the new session");
-            second.Asked("Status").Should().Be(0, "the old owner must not reload the new session");
+            second.Asked("Status").Should().Be(1, "the new session has its own reload, and the old owner must not add one");
             run.Server.Queues.ActiveSnapshotWindowCount.Should().Be(0);
             run.ServerLog.Entries.Should().NotContain(e => e.Line.Contains("[LIVE] The full reload scheduled after", StringComparison.Ordinal),
                 "cancellation follows the session identity, not a hidden observer/worker failure");

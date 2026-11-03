@@ -185,37 +185,87 @@ counts as inside the dispatch until the dispatch returns, so a connect it makes 
 runs after the handler has returned.
 
 ```csharp
-connection.StateChanged += change =>
+static void ReconnectOnLoss(IAmiConnection connection, CancellationToken shutdownToken)
 {
-    // AutoReconnect off: reconnect on the loss without blocking the notification queue.
-    if (change.IsLoss)
-        _ = Task.Run(() => connection.ConnectAsync(shutdownToken).AsTask());
-};
+    connection.StateChanged += change =>
+    {
+        // AutoReconnect off: reconnect on the loss without blocking the notification queue.
+        if (change.IsLoss)
+            _ = Task.Run(() => connection.ConnectAsync(shutdownToken).AsTask());
+    };
+}
 ```
 
-**With a `VerbaraServer` on the connection, reload it yourself.** Live reloads its state only after
-a reconnect the connection made itself (`AutoReconnect` on), because only that raises `Reconnected`.
-Your own `ConnectAsync` raises nothing, so with `AutoReconnect` off Live keeps the tables it held at
-the loss: calls that ended during the outage stay held, and what started during it is missing. Call
-`RequestInitialStateAsync` once your `ConnectAsync` has returned:
+**With a `VerbaraServer` on the connection, there is nothing more to do (since 2.10.0).** A session
+your own `ConnectAsync` brings back after a loss runs Live's full reload on that session, as a
+reconnect the connection made itself does, with no second `StartAsync` and no call of yours. It
+reconciles every table against what Asterisk reports: calls that ended during the outage end, what
+started during it appears. The reload waits behind the `ConnectionLost` handlers of that loss, so a
+slow one delays it. `Reconnected` keeps its meaning and is still raised only for a reconnect the
+connection made itself.
+
+That reload also raises `CallerJoined` once for each caller still waiting, as a reload after a
+reconnect the connection made always has. The entry it carries is the one Asterisk reported, not the
+instance `AsteriskQueue.Entries` holds, so match callers by `Channel`, never by reference.
+
+| What happens | What Live does |
+|---|---|
+| Your first `ConnectAsync` | Nothing: the load is `StartAsync`'s. Start the server once the connect has returned |
+| A `ConnectAsync` that fails | Nothing: no table changes and no recovery is reported. The next one that succeeds reloads |
+| The new session ends before the reload completes | The reload stops and logs `[LIVE] Reconnect reload interrupted` at Warning. A list it had not applied when the session ended is not applied, even one read to its end, and it asks the next session for nothing; the tables it had already reconciled stay, and the agents keep what they held. It reports no `State loaded`, and the session that comes next reloads |
+| The reload fails for any other reason | `[LIVE] Reconnect reload failed` at Error, no `State loaded`. The tables it had not reached keep what they held. Call `RequestInitialStateAsync` to try again; the next session reloads on its own |
+| The server is disposed | The reload stops and applies nothing more |
+
+The agents are the one table a reload replaces rather than reconciles. Since 2.10.0, on either
+route, the table reads what it held until the `Agents` list has completed and then what the list
+says, in one step. `AgentLoggedIn` is raised once for each agent the list reports logged in, after
+the replacement; an agent the list drops or reports logged off raises no `AgentLoggedOff`, as
+before. An agent that `AgentLogin`, `AgentLogoff`, `AgentConnect` or `AgentComplete` named after the
+list was asked for stays as that event left it, because the list is older, and an agent the list
+omits stays. `AgentLoggedIn` is not raised for an agent a live `AgentLogoff` has logged off by the
+time the reload reaches it, also one Asterisk reported while your handler for an earlier agent was
+running, so the last of the two events you saw for an agent agrees with the table. A
+list cut short or refused leaves the table as it was, where a reload used to leave it empty or
+partial, so a reload that is interrupted or fails no longer costs you the agents. That needs an
+`AmiConnection`: over any other connection, a wrapper that forwards to one included, the load does
+not ask how the list ended, so the list as delivered replaces the table.
+
+Only an `AmiConnection` reloads this way. Over an `IAmiConnection` of your own, including a wrapper
+that forwards to an `AmiConnection`, only `Reconnected` reloads: keep the explicit call below.
+
+**A host that keeps its explicit call stays supported:**
 
 ```csharp
-connection.StateChanged += change =>
+static void ReconnectAndReload(IAmiConnection connection, IVerbaraServer server, CancellationToken shutdownToken)
 {
-    // AutoReconnect off: reconnect on the loss, then reload Live from Asterisk.
-    if (change.IsLoss)
-        _ = Task.Run(async () =>
-        {
-            await connection.ConnectAsync(shutdownToken);
-            await server.RequestInitialStateAsync(shutdownToken);
-        });
-};
+    connection.StateChanged += change =>
+    {
+        // AutoReconnect off: reconnect on the loss. Since 2.10.0 the second await is optional.
+        if (change.IsLoss)
+            _ = Task.Run(async () =>
+            {
+                await connection.ConnectAsync(shutdownToken);
+                await server.RequestInitialStateAsync(shutdownToken);
+            });
+    };
+}
 ```
 
-The reload reconciles every table against what Asterisk reports, as the reconnect's own reload
-does. A `VerbaraServer.StartAsync` whose load was cut short while your connect was under way throws
-`AmiNotConnectedException` (it used to return, and nothing reloaded), and the state is not reported
-as loaded: here too, call `RequestInitialStateAsync` once your connect has returned.
+The two loads may overlap, in either order. Each held call and queue visit stays represented once,
+the queue counters count each join and leave once, and each ending is announced once. A snapshot
+read before the other load's applied last brings back no call or caller it saw leave and removes
+none that came after it. What it costs is the second load's AMI traffic, so remove the call when
+you can. The explicit call adds to the agents table and removes nobody from it, as it always did,
+so a reload's replacement is what drops an agent; it skips a row older than an event that named the
+agent, as a reload does. It throws
+`AmiNotConnectedException` when its session ends before it completes, even if the connection is
+already on a newer session: that session reloads itself, so nothing is lost and there is nothing to
+retry.
+
+A `VerbaraServer.StartAsync` whose load was cut short while your connect was under way still throws
+`AmiNotConnectedException` (it used to return), because nothing retries your connect and the start
+cannot vouch for it. The server stays subscribed all the same: when that connect logs in, the reload
+runs, so catching the exception and waiting for `[LIVE] State loaded` is enough.
 
 ### What this means for code you may have written
 
@@ -241,11 +291,16 @@ starting where the one before it ended. A change carries `Previous`, `Current`, 
   last attempt's exception (`AmiAuthenticationException` when the credentials were rejected).
 
 ```csharp
-connection.StateChanged += change =>
+using Microsoft.Extensions.Logging;
+
+static void LogTheEnd(IAmiConnection connection, ILogger logger)
 {
-    if (change.IsFinal)
-        logger.LogError(change.Cause, "AMI connection ended for good: {Previous} -> {Current}", change.Previous, change.Current);
-};
+    connection.StateChanged += change =>
+    {
+        if (change.IsFinal)
+            logger.LogError(change.Cause, "AMI connection ended for good: {Previous} -> {Current}", change.Previous, change.Current);
+    };
+}
 ```
 
 Handlers run one at a time on the thread pool, on the same queue as `ConnectionLost` and
@@ -293,14 +348,17 @@ progress, as any other caller's does.
 Point an `AmiConnectionOptions` at a port with nothing listening and read `State` in your `catch`:
 
 ```csharp
-try
+static async Task ShowStateAfterAFailedConnect(IAmiConnection connection, CancellationToken cancellationToken)
 {
-    await connection.ConnectAsync(cancellationToken);
-}
-catch (Exception)
-{
-    // 2.6.1 and earlier: Connecting
-    // this release:      Disconnected
-    Console.WriteLine(connection.State);
+    try
+    {
+        await connection.ConnectAsync(cancellationToken);
+    }
+    catch (Exception)
+    {
+        // 2.6.1 and earlier: Connecting
+        // this release:      Disconnected
+        Console.WriteLine(connection.State);
+    }
 }
 ```

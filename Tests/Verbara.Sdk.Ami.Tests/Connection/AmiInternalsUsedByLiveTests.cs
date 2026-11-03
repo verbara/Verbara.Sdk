@@ -47,6 +47,10 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// <c>AmiConnection.Lost</c>, an event of <see cref="Action{T}"/> of a nullable <see cref="Exception"/>, which Live
 /// subscribes to and unsubscribes from;
 /// </description></item>
+/// <item><description>
+/// <c>AmiConnection.CallerReconnected</c>, an event of <see cref="Action{T}"/> of a <see cref="long"/>, which Live
+/// subscribes to and unsubscribes from (since 2.10.0);
+/// </description></item>
 /// <item><description><c>AmiConnection.InDispatch</c>, a <see cref="bool"/>;</description></item>
 /// <item><description>
 /// <c>AmiConnection.StateAndWriter</c>, a tuple of <see cref="AmiConnectionState"/> and <see cref="bool"/>;
@@ -99,6 +103,11 @@ public sealed class AmiInternalsUsedByLiveTests
         connection.Lost += onLost;
         connection.Lost -= onLost;
 
+        // AmiConnection.CallerReconnected: the same, with a handler declared exactly as Live's is.
+        Action<long> onCallerReconnected = _ => { };
+        connection.CallerReconnected += onCallerReconnected;
+        connection.CallerReconnected -= onCallerReconnected;
+
         // AmiConnection.InDispatch and AmiConnection.StateAndWriter: their getters, by their exact types.
         var inDispatch = connection.InDispatch;
         Exactly<bool>(ref inDispatch);
@@ -149,6 +158,7 @@ public sealed class AmiInternalsUsedByLiveTests
             send.Should().NotBeNull("the overload binds to the delegate Live's call site needs");
             sendWithin.Should().NotBeNull("the overload binds to the delegate OriginateAsync's call site needs");
             onLost.Should().NotBeNull("the event takes the handler type Live's call site declares");
+            onCallerReconnected.Should().NotBeNull("the event takes the handler type Live's call site declares");
             wait.Should().NotBeNull("the mark's wait binds to the delegate Live's call site needs");
             sendMarked.Should().NotBeNull("the overload binds to the delegate Live's load needs");
             outcomes.Should().HaveCount(2, "Live reads both outcomes by name");

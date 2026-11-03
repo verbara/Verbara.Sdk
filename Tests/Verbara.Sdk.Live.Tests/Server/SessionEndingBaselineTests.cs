@@ -219,6 +219,7 @@ public sealed class ConcurrentDepartureEndingTests(ITestOutputHelper output)
     }
 }
 
+[Trait("Category", "Spike")]
 public sealed class DelayedArrivalEndingResidualTests(ITestOutputHelper output)
 {
     [Fact]

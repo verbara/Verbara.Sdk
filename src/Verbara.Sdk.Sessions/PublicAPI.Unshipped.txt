@@ -2,4 +2,8 @@
 Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByLinkedId(string! serverId, string! linkedId) -> Verbara.Sdk.Sessions.CallSession?
 Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByChannelId(string! serverId, string! uniqueId) -> Verbara.Sdk.Sessions.CallSession?
 Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByBridgeId(string! serverId, string! bridgeId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetByLinkedId(string! serverId, string! linkedId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetByChannelId(string! serverId, string! uniqueId) -> Verbara.Sdk.Sessions.CallSession?
 Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetByBridgeId(string! serverId, string! bridgeId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.CallSessionManager.AdmitExistingCalls(string! serverId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.AdmitExistingCalls(string! serverId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
