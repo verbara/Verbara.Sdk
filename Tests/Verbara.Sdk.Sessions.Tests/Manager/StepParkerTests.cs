@@ -141,25 +141,17 @@ public sealed class StepParkerTests : IAsyncLifetime
         };
         throwing.Install(_manager);
 
-        Exception? escaped = null;
-        try
-        {
-            a.Channels.OnNewChannel("1700000000.4", "PJSIP/trunk-4", ChannelState.Up, context: "from-trunk",
-                linkedId: "1700000000.4");
-        }
-        catch (InvalidOperationException ex)
-        {
-            escaped = ex;
-        }
+        var escaped = Record.Exception(() => a.Channels.OnNewChannel("1700000000.4", "PJSIP/trunk-4", ChannelState.Up,
+            context: "from-trunk", linkedId: "1700000000.4"));
 
         var dispose = throwing.Dispose;
         dispose.Should().Throw<InvalidOperationException>().WithMessage("*ArrivalBuilt*hook fault*",
             "a hook that throws inside the engine is recorded and surfaces when the parker is disposed");
-        new { Escaped = escaped?.Message, Opened = _manager.GetByChannelId("1700000000.4") is not null }
-            .Should().BeEquivalentTo(new { Escaped = (string?)null, Opened = false },
-                "the hook's exception leaves the engine's handler as an exception at that point would, so the arrival it "
-                + "interrupted opened no call; the channel table keeps a subscriber's failure to that subscriber, so it "
-                + "reaches no call into the table, and the parker's dispose is what makes it red");
+        _manager.GetByChannelId("1700000000.4").Should().BeNull(
+            "the hook's exception leaves the engine's handler as an exception at that point would, so the arrival it "
+            + "interrupted opened no call");
+        escaped.Should().BeNull("the channel table keeps a subscriber's failure to that subscriber, so it reaches no call "
+            + "into the table; the parker's dispose is what makes it red");
     }
 
     [Theory]
