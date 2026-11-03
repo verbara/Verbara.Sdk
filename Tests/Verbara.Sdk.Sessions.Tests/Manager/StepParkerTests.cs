@@ -156,9 +156,10 @@ public sealed class StepParkerTests : IAsyncLifetime
         dispose.Should().Throw<InvalidOperationException>().WithMessage("*ArrivalBuilt*hook fault*",
             "a hook that throws inside the engine is recorded and surfaces when the parker is disposed");
         new { Escaped = escaped?.Message, Opened = _manager.GetByChannelId("1700000000.4") is not null }
-            .Should().BeEquivalentTo(new { Escaped = "hook fault", Opened = false },
-                "the hook's exception propagates out of the handler as an exception at that point would, so the "
-                + "arrival it interrupted opened no call");
+            .Should().BeEquivalentTo(new { Escaped = (string?)null, Opened = false },
+                "the hook's exception leaves the engine's handler as an exception at that point would, so the arrival it "
+                + "interrupted opened no call; the channel table keeps a subscriber's failure to that subscriber, so it "
+                + "reaches no call into the table, and the parker's dispose is what makes it red");
     }
 
     [Theory]

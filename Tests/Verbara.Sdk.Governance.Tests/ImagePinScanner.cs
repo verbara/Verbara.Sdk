@@ -20,6 +20,12 @@ namespace Verbara.Sdk.Governance.Tests;
 /// skipped, and so are files that are not text (larger than 1 MiB, or holding a NUL byte).
 /// </para>
 /// <para>
+/// A captured AMI recording (<c>Recordings/**/*.raw</c> under <c>Tests/</c>) names, in its own bytes, the image the
+/// capture ran. That reference must carry a digest like any other, but it need not be a line of the table: it records
+/// what was measured, not a base the lane builds on, and a capture may run a build the lane does not (a release
+/// candidate, for one).
+/// </para>
+/// <para>
 /// The image names are assembled from parts, so this file and its tests never hold a reference the walk would find.
 /// </para>
 /// </remarks>
@@ -99,13 +105,20 @@ internal static partial class ImagePinScanner
         {
             var pinnedBases = new HashSet<string>(table.Values, StringComparer.Ordinal);
             foreach (var reference in references.Where(r =>
-                         r.Image == AsteriskImage && r.IsPinned && r.Path != TablePath && !pinnedBases.Contains(r.Text)))
+                         r.Image == AsteriskImage && r.IsPinned && r.Path != TablePath && !IsRecording(r.Path)
+                         && !pinnedBases.Contains(r.Text)))
                 violations.Add($"{reference}: a pinned Asterisk base that is not a line of {TablePath}");
         }
 
         CheckDockerfile(repoRoot, table, violations);
         return new Report(references, violations);
     }
+
+    /// <summary>Whether <paramref name="path"/> (relative, forward slashes) is a captured AMI recording under <c>Tests/</c>.</summary>
+    public static bool IsRecording(string path) =>
+        path.StartsWith("Tests/", StringComparison.Ordinal)
+        && path.Contains("/Recordings/", StringComparison.Ordinal)
+        && path.EndsWith(".raw", StringComparison.Ordinal);
 
     /// <summary>Every reference to either image in <paramref name="text"/>, with its 1-based line.</summary>
     public static IEnumerable<Reference> FindReferences(string text, string path)
