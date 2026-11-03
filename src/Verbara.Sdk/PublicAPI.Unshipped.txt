@@ -1,1 +1,2 @@
 #nullable enable
+Verbara.Sdk.Enums.AriConnectionState.RestOnly = 7 -> Verbara.Sdk.Enums.AriConnectionState

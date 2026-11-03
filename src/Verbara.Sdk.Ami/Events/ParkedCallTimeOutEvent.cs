@@ -5,7 +5,7 @@ using Verbara.Sdk.Ami.Events.Base;
 namespace Verbara.Sdk.Ami.Events;
 
 [VerbaraMapping("ParkedCallTimeOut")]
-public sealed class ParkedCallTimeOutEvent : ChannelEventBase
+public sealed class ParkedCallTimeOutEvent : ParkingEventBase
 {
 }
 

@@ -6,7 +6,7 @@ namespace Verbara.Sdk.Governance.Tests;
 /// The functional lane's Asterisk and SIPp images are pinned by digest: no reference under <c>docker/</c>,
 /// <c>.github/workflows/</c> or <c>Tests/</c> names one by a tag alone, every pinned Asterisk base is a line of
 /// <c>docker/asterisk-base-images.txt</c>, and <c>docker/Dockerfile.asterisk</c> defaults to the table's 22 line and
-/// refuses a base of another version. The fixtures build their image references from parts so the tree walk never
+/// refuses a base of another version, and no workflow names the prebuilt-image variable. The fixtures build their image references from parts so the tree walk never
 /// reads one in this file.
 /// </summary>
 public sealed class ImagePinGuardTests(ITestOutputHelper output)
@@ -87,6 +87,43 @@ public sealed class ImagePinGuardTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Scan_ShouldAcceptAPinnedImageOutsideTheTable_WhenItIsTheProvenanceOfACapturedRecording()
+    {
+        using var tree = GreenTree();
+        var candidate = Asterisk + ":24.0.0-rc2_debian-trixie@sha256:" + new string('7', 64);
+        tree.Write("Tests/Some/Recordings/asterisk-ami/workload-asterisk-24.0.0-rc2.raw", $"Event: UserEvent\r\nImage: {candidate}\r\n\r\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.IsClean.Should().BeTrue("a recording names the image it captured, not a base the lane builds on: " + report);
+    }
+
+    [Fact]
+    public void Scan_ShouldStillRequireADigest_WhenAReferenceIsInACapturedRecording()
+    {
+        using var tree = GreenTree();
+        tree.Write("Tests/Some/Recordings/asterisk-ami/workload-asterisk-24.raw", $"Event: UserEvent\r\nImage: {Asterisk}:24\r\n\r\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.Violations.Should().ContainSingle(v => v.StartsWith("Tests/Some/Recordings/asterisk-ami/workload-asterisk-24.raw:2: ", StringComparison.Ordinal)
+            && v.Contains("no @sha256 digest", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Scan_ShouldReportAPinnedBaseOutsideTheTable_WhenTheFileIsNotARecording()
+    {
+        using var tree = GreenTree();
+        var candidate = Asterisk + ":24.0.0-rc2_debian-trixie@sha256:" + new string('7', 64);
+        tree.Write("Tests/Some/Recordings/asterisk-ami/notes.md", $"Image: {candidate}\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.Violations.Should().ContainSingle(v => v.StartsWith("Tests/Some/Recordings/asterisk-ami/notes.md:1: ", StringComparison.Ordinal)
+            && v.Contains("not a line of", StringComparison.Ordinal), "only a captured .raw recording is exempt from the table");
+    }
+
+    [Fact]
     public void Scan_ShouldReportEverySippReference_WhenTwoCarryDifferentDigests()
     {
         using var tree = GreenTree();
@@ -161,6 +198,31 @@ public sealed class ImagePinGuardTests(ITestOutputHelper output)
 
         report.Violations.Should().Contain(v => v.StartsWith(ImagePinScanner.TablePath + ":1: ", StringComparison.Ordinal)
             && v.Contains(expected, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Scan_ShouldNameFileAndLine_WhenAWorkflowNamesThePrebuiltImageVariable()
+    {
+        using var tree = GreenTree();
+        tree.Write(".github/workflows/ci.yml", $"jobs:\n  x:\n    env:\n      {ImagePinScanner.PrebuiltImageVariable}: local/asterisk-test:23\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.Violations.Should().ContainSingle(v => v.StartsWith(".github/workflows/ci.yml:4: ", StringComparison.Ordinal)
+            && v.Contains("names " + ImagePinScanner.PrebuiltImageVariable, StringComparison.Ordinal),
+            "a workflow that set it would run CI's functional lane on an image no line of the table pins");
+    }
+
+    [Fact]
+    public void Scan_ShouldPass_WhenThePrebuiltImageVariableIsNamedOutsideTheWorkflows()
+    {
+        using var tree = GreenTree();
+        tree.Write("Tests/Some/Prebuilt.cs", $"const string V = \"{ImagePinScanner.PrebuiltImageVariable}\";\n");
+        tree.Write("docker/README.md", $"Set {ImagePinScanner.PrebuiltImageVariable} to run a local build.\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.IsClean.Should().BeTrue(report.ToString());
     }
 
     [Fact]

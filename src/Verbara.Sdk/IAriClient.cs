@@ -30,6 +30,15 @@ public interface IAriClient : IAsyncDisposable
     ValueTask DisconnectAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Subscribe to ARI events via IObservable.</summary>
+    /// <remarks>
+    /// What an observer throws stops neither the other observers nor the client: it is logged at Warning and counted,
+    /// the event goes on to the next observer, and an observer subscribed directly stays subscribed. Only what throws on
+    /// the delivering thread is caught, and a subscription composed through an Rx operator ends on its first failure.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// The client was built with its events turned off (<see cref="State"/> reads
+    /// <see cref="AriConnectionState.RestOnly"/>): it delivers no events, and the message names the option.
+    /// </exception>
     IDisposable Subscribe(IObserver<AriEvent> observer);
 
     /// <summary>Access channel operations.</summary>
@@ -95,6 +104,13 @@ public interface IAriChannelsResource
     ValueTask<AriChannel> CreateAsync(string endpoint, string? app = null, CancellationToken cancellationToken = default);
     ValueTask<AriChannel> GetAsync(string channelId, CancellationToken cancellationToken = default);
     ValueTask HangupAsync(string channelId, CancellationToken cancellationToken = default);
+    /// <summary>Originate a channel.</summary>
+    /// <remarks>
+    /// With <paramref name="extension"/> the channel runs the dialplan, at <paramref name="extension"/> in
+    /// <paramref name="context"/>, and the client's application is not sent. Without it the channel enters the client's
+    /// application in Stasis. Asterisk answers <c>200</c> to an originate into an application nobody registered, and the
+    /// channel is gone at once.
+    /// </remarks>
     ValueTask<AriChannel> OriginateAsync(string endpoint, string? extension = null, string? context = null, CancellationToken cancellationToken = default);
 
     /// <summary>Indicate ringing to a channel. POST /channels/{channelId}/ring</summary>

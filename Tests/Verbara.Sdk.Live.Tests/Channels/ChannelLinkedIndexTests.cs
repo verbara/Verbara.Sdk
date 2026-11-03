@@ -303,9 +303,15 @@ public sealed class ChannelLinkedIndexTests
     {
         var manager = NewManager();
         Add(manager, "x", "call");
-        manager.ChannelRemoved += _ => throw new InvalidOperationException("subscriber");
+        var heard = false;
+        manager.ChannelRemoved += _ =>
+        {
+            heard = true;
+            throw new InvalidOperationException("subscriber");
+        };
         var act = () => manager.OnHangup("x");
-        act.Should().Throw<InvalidOperationException>().WithMessage("subscriber");
+        act.Should().NotThrow("the channel table isolates each subscriber's failure");
+        heard.Should().BeTrue("the cleanup is exercised after the throwing handler actually ran");
         manager.HoldsLinkedId("call").Should().BeFalse();
         manager.IsHeldOrDeparting("x").Should().BeFalse();
     }

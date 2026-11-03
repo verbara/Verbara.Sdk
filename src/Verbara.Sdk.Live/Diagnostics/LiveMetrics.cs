@@ -55,6 +55,14 @@ public static class LiveMetrics
         Meter.CreateCounter<long>("live.agents.state_changes", "changes",
             "Total agent state changes");
 
+    /// <summary>
+    /// Channel subscriber failures: a handler of a <c>ChannelManager</c> event that threw, one per failure. Each is also
+    /// logged at Warning; the later subscribers and the table's work go on.
+    /// </summary>
+    internal static readonly Counter<long> ChannelSubscriberFaults =
+        Meter.CreateCounter<long>("live.channels.subscriber_faults", "faults",
+            "Channel subscriber failures (a channel event handler threw); delivery goes on");
+
     // --- Histograms ---
 
     /// <summary>Time a caller waited in queue before being answered.</summary>

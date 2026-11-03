@@ -16,5 +16,10 @@ public enum AriConnectionState
     /// <summary>Cleanly disconnected.</summary>
     Disconnected,
     /// <summary>Unrecoverable error (auth failure, DNS, max retries).</summary>
-    Faulted
+    Faulted,
+    /// <summary>
+    /// The client was built with its events turned off: it has no event connection and will never open one, and its REST
+    /// calls work. It reads this from construction until disposal. It says nothing about whether Asterisk is reachable.
+    /// </summary>
+    RestOnly
 }

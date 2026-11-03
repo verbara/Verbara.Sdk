@@ -17,6 +17,11 @@ namespace Verbara.Sdk.TestInfrastructure.Containers;
 /// a version with no line fails before any build. <c>CODEC_OPUS_VERSION</c> defaults
 /// to <c>{ASTERISK_VERSION}.0_1.3.0</c>; override only if a non-default Digium codec
 /// build is required.
+/// <para>
+/// With <c>ASTERISK_TEST_IMAGE</c> set, <see cref="CreateImageAsync"/> builds nothing and returns that image, which must
+/// already exist on the Docker host (<see cref="PrebuiltAsteriskImage"/>); the image then decides the Asterisk version,
+/// so <c>ASTERISK_VERSION</c> should name the same one.
+/// </para>
 /// </summary>
 public sealed class AsteriskContainer : IAsyncDisposable
 {
@@ -86,6 +91,14 @@ public sealed class AsteriskContainer : IAsyncDisposable
         try
         {
             if (_cachedImage is not null) return _cachedImage;
+
+            // An image the operator built already runs as it is: Testcontainers' build pre-pulls the Dockerfile's base
+            // by tag, which fails for a base that exists only on this host (see PrebuiltAsteriskImage).
+            if (PrebuiltAsteriskImage.Configured() is { } prebuilt)
+            {
+                _cachedImage = await PrebuiltAsteriskImage.ResolveAsync(prebuilt, ct).ConfigureAwait(false);
+                return _cachedImage;
+            }
 
             var asteriskVersion = Environment.GetEnvironmentVariable("ASTERISK_VERSION") ?? "22";
             var codecOpusVersion = Environment.GetEnvironmentVariable("CODEC_OPUS_VERSION")

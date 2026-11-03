@@ -140,17 +140,15 @@ public sealed class ResiliencePolicy
             {
                 lastException = ex;
 
-                if (state is not null && _circuitThreshold is int threshold)
+                // Count on the win alone: a success may close the circuit right after it, and the trip still happened.
+                if (state is not null
+                    && _circuitThreshold is int threshold
+                    && state.RecordFailureReportingTrip(threshold, _time))
                 {
-                    var wasOpen = state.IsOpen;
-                    state.RecordFailure(threshold, _time);
-                    if (!wasOpen && state.IsOpen)
-                    {
-                        ResilienceMetrics.CircuitOpened.Add(
-                            1,
-                            new KeyValuePair<string, object?>("key", key));
-                        ResilienceMetrics.TrackCircuit(state, _circuitOpenDuration, _time);
-                    }
+                    ResilienceMetrics.CircuitOpened.Add(
+                        1,
+                        new KeyValuePair<string, object?>("key", key));
+                    ResilienceMetrics.TrackCircuit(state, _circuitOpenDuration, _time);
                 }
 
                 // If there are retries left, count this attempt and back off; otherwise rethrow below.

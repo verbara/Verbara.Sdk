@@ -22,6 +22,14 @@ public sealed class AriClientOptionsTests
     }
 
     [Fact]
+    public void EventsEnabled_ShouldBeTrue_WhenNotSet()
+    {
+        var options = new AriClientOptions();
+
+        options.EventsEnabled.Should().BeTrue();
+    }
+
+    [Fact]
     public void ReconnectProperties_ShouldBeSettable()
     {
         var options = new AriClientOptions

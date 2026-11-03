@@ -185,6 +185,7 @@ public static class ServiceCollectionExtensions
         target.Username = source.Username;
         target.Password = source.Password;
         target.Application = source.Application;
+        target.EventsEnabled = source.EventsEnabled;
         target.AutoReconnect = source.AutoReconnect;
         target.ReconnectInitialDelay = source.ReconnectInitialDelay;
         target.ReconnectMaxDelay = source.ReconnectMaxDelay;

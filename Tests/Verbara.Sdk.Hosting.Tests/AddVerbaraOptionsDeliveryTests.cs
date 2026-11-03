@@ -54,6 +54,7 @@ public sealed partial class AddVerbaraOptionsDeliveryTests
         [nameof(AriClientOptions.Username)] = ("h91-ari-user", o => o.Username = "h91-ari-user", o => o.Username),
         [nameof(AriClientOptions.Password)] = ("h91-ari-secret", o => o.Password = "h91-ari-secret", o => o.Password),
         [nameof(AriClientOptions.Application)] = ("h91-app", o => o.Application = "h91-app", o => o.Application),
+        [nameof(AriClientOptions.EventsEnabled)] = ("false", o => o.EventsEnabled = false, o => o.EventsEnabled),
         [nameof(AriClientOptions.AutoReconnect)] = ("false", o => o.AutoReconnect = false, o => o.AutoReconnect),
         [nameof(AriClientOptions.ReconnectInitialDelay)] = ("00:00:03", o => o.ReconnectInitialDelay = TimeSpan.FromSeconds(3), o => o.ReconnectInitialDelay),
         [nameof(AriClientOptions.ReconnectMaxDelay)] = ("00:00:45", o => o.ReconnectMaxDelay = TimeSpan.FromSeconds(45), o => o.ReconnectMaxDelay),

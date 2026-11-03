@@ -25,7 +25,7 @@ public sealed class ParkingTests : FunctionalTestBase
     /// Originate a call to ext 100 (Answer+Wait), then redirect it to ext 750 (Park).
     /// ParkedCallEvent must fire with a parking space in the 751-770 range.
     /// </summary>
-    [Fact(Skip = "Measured on Asterisk 23 and 22: the redirect to 750 parks the call and a ParkedCall event arrives, but ParkedCallEvent.Channel is null; Asterisk names the parked channel ParkeeChannel, which ParkedCallEvent does not map")]
+    [Fact]
     public async Task Park_ShouldFireParkedCallEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -80,10 +80,10 @@ public sealed class ParkingTests : FunctionalTestBase
         var parked = await parkedTcs.Task;
         parked.Channel.Should().NotBeNullOrEmpty("ParkedCallEvent must include the parked channel");
 
-        // Parking space is conveyed in the Exten field (751-770 range per res_parking.conf)
-        parked.Exten.Should().NotBeNull("ParkedCallEvent must convey the parking space");
-        int.TryParse(parked.Exten, NumberStyles.Integer, CultureInfo.InvariantCulture, out var space)
-            .Should().BeTrue("the parking space '{0}' must be a number", parked.Exten);
+        // The space is ParkingSpace (751-770 per res_parking.conf); Exten is the parked channel's own extension.
+        parked.ParkingSpace.Should().NotBeNull("ParkedCallEvent must convey the parking space");
+        int.TryParse(parked.ParkingSpace, NumberStyles.Integer, CultureInfo.InvariantCulture, out var space)
+            .Should().BeTrue("the parking space '{0}' must be a number", parked.ParkingSpace);
         space.Should().BeInRange(751, 770,
             "parking space must be within the configured parkpos range 751-770");
     }
@@ -92,7 +92,7 @@ public sealed class ParkingTests : FunctionalTestBase
     /// Park a call, then originate a second call to the parked slot.
     /// UnParkedCallEvent must fire.
     /// </summary>
-    [Fact(Skip = "Measured on Asterisk 23 and 22: the parked call is unparked and an UnParkedCall event arrives, but UnParkedCallEvent.Channel is null; Asterisk names the channel ParkeeChannel, which the event does not map")]
+    [Fact]
     public async Task Unpark_ShouldFireUnParkedCallEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -145,8 +145,9 @@ public sealed class ParkingTests : FunctionalTestBase
 
         var parked = await parkedTcs.Task;
 
-        // Determine the parking slot (Exten field carries the slot number)
-        var parkSlot = parked.Exten ?? "751";
+        // The parking slot is ParkingSpace; there is no fallback, so a missing space fails here instead of dialing a wrong slot.
+        parked.ParkingSpace.Should().NotBeNullOrEmpty("ParkedCallEvent must convey the parking space");
+        var parkSlot = parked.ParkingSpace!;
 
         // Step 2: Originate a second call to the parking slot to unpark
         await connection.SendActionAsync(new OriginateAction
@@ -172,7 +173,7 @@ public sealed class ParkingTests : FunctionalTestBase
     /// ParkedCallTimeOutEvent must fire after the parking timer expires.
     /// Note: this test has a longer wait to allow the parking timer to fire.
     /// </summary>
-    [Fact(Skip = "Measured on Asterisk 23 and 22: the parked call times out and a ParkedCallTimeOut event arrives, but ParkedCallTimeOutEvent.Channel is null; Asterisk names the channel ParkeeChannel, which the event does not map")]
+    [Fact]
     public async Task ParkTimeout_ShouldFireTimeOutEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -237,7 +238,7 @@ public sealed class ParkingTests : FunctionalTestBase
     /// Park a call, then hang up the parked channel directly via HangupAction.
     /// ParkedCallGiveUpEvent must fire.
     /// </summary>
-    [Fact(Skip = "Measured on Asterisk 23 and 22: a ParkedCall event arrives with Channel null (Asterisk names it ParkeeChannel, which ParkedCallEvent does not map), so the test has no channel to hang up and cannot reach the GiveUp event")]
+    [Fact]
     public async Task ParkGiveUp_ShouldFireGiveUpEvent()
     {
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>

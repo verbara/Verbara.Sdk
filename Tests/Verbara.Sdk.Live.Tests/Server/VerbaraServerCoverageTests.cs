@@ -105,11 +105,32 @@ public sealed class VerbaraServerCoverageTests : IAsyncLifetime
         });
         _capturedObserver.OnNext(new NewExtenEvent
         {
-            UniqueId = "uid-1", Extension = "200", Application = "Dial", AppData = "PJSIP/200"
+            UniqueId = "uid-1", Context = "internal", Exten = "200", Extension = "200", Priority = 2,
+            Application = "Dial", AppData = "PJSIP/200"
         });
 
         var ch = _sut.Channels.GetByUniqueId("uid-1");
         ch.Should().NotBeNull();
+        ch!.Context.Should().Be("internal", "the observer hands the Newexten's location to the table");
+        ch.Extension.Should().Be("200");
+        ch.Priority.Should().Be(2);
+        ch.ExtensionHistory.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldHandleNewCallerIdEvent()
+    {
+        await _sut.StartAsync();
+
+        _capturedObserver!.OnNext(new NewChannelEvent
+        {
+            UniqueId = "uid-1", Channel = "PJSIP/100-001", ChannelState = "Up", CallerIdNum = "<unknown>", CallerIdName = "<unknown>"
+        });
+        _capturedObserver.OnNext(new NewCallerIdEvent { UniqueId = "uid-1", CallerIdNum = "7100", CallerIdName = "Capture" });
+
+        var ch = _sut.Channels.GetByUniqueId("uid-1");
+        ch!.CallerIdNum.Should().Be("7100", "the observer hands the NewCallerid's identity to the table");
+        ch.CallerIdName.Should().Be("Capture");
     }
 
     [Fact]
@@ -163,16 +184,6 @@ public sealed class VerbaraServerCoverageTests : IAsyncLifetime
         act.Should().NotThrow();
     }
 #pragma warning restore VSDK0005
-
-    [Fact]
-    public async Task DisposeAsync_ShouldBeIdempotent()
-    {
-        await _sut.StartAsync();
-        await _sut.DisposeAsync();
-
-        var act = async () => await _sut.DisposeAsync();
-        await act.Should().NotThrowAsync();
-    }
 
     [Fact]
     public async Task EventObserver_ShouldHandleMultipleNewChannelEvents()

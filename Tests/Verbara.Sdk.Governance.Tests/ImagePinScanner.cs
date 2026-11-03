@@ -5,8 +5,8 @@ namespace Verbara.Sdk.Governance.Tests;
 /// <summary>
 /// Detector for the functional lane's image pins: every reference to the Asterisk base image or the SIPp image under
 /// <c>docker/</c>, <c>.github/workflows/</c> and <c>Tests/</c> carries a registry digest, every pinned Asterisk base is
-/// a line of <c>docker/asterisk-base-images.txt</c>, every SIPp reference carries the same digest, and <c>docker/Dockerfile.asterisk</c> defaults to that table's
-/// 22 line and refuses a base of another version.
+/// a line of <c>docker/asterisk-base-images.txt</c>, every SIPp reference carries the same digest, <c>docker/Dockerfile.asterisk</c> defaults to that table's
+/// 22 line and refuses a base of another version, and no workflow names the prebuilt-image variable.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,6 +18,17 @@ namespace Verbara.Sdk.Governance.Tests;
 /// The walk reads the file system rather than asking git, so a file a contributor has just created and not yet added
 /// is read too. Build output (<c>bin</c>, <c>obj</c>, <c>TestResults</c>), nested checkouts and symbolic links are
 /// skipped, and so are files that are not text (larger than 1 MiB, or holding a NUL byte).
+/// </para>
+/// <para>
+/// A captured AMI recording (<c>Recordings/**/*.raw</c> under <c>Tests/</c>) names, in its own bytes, the image the
+/// capture ran. That reference must carry a digest like any other, but it need not be a line of the table: it records
+/// what was measured, not a base the lane builds on, and a capture may run a build the lane does not (a release
+/// candidate, for one).
+/// </para>
+/// <para>
+/// The prebuilt-image variable lets a local run use an image built outside the table, by design; a workflow that set it
+/// would run CI's functional lane on an image nothing here pins, so the variable may not appear under
+/// <c>.github/workflows/</c> at all.
 /// </para>
 /// <para>
 /// The image names are assembled from parts, so this file and its tests never hold a reference the walk would find.
@@ -40,8 +51,14 @@ internal static partial class ImagePinScanner
     /// <summary>The version whose line the Dockerfile's default base must be.</summary>
     public const string DefaultVersion = "22";
 
+    /// <summary>The environment variable naming a prebuilt Asterisk test image, which no workflow may set.</summary>
+    public const string PrebuiltImageVariable = "ASTERISK_TEST_IMAGE";
+
+    /// <summary>The workflow directory, relative to the repository root.</summary>
+    public const string WorkflowDirectory = ".github/workflows";
+
     /// <summary>The directories scanned, relative to the repository root.</summary>
-    public static readonly IReadOnlyList<string> ScannedDirectories = ["docker", ".github/workflows", "Tests"];
+    public static readonly IReadOnlyList<string> ScannedDirectories = ["docker", WorkflowDirectory, "Tests"];
 
     private const long MaximumFileBytes = 1024 * 1024;
 
@@ -71,10 +88,16 @@ internal static partial class ImagePinScanner
             throw new DirectoryNotFoundException($"The repository root '{repoRoot}' does not exist.");
 
         var references = new List<Reference>();
-        foreach (var file in EnumerateFiles(repoRoot))
-            references.AddRange(FindReferences(File.ReadAllText(file), ToRelative(repoRoot, file)));
-
         var violations = new List<string>();
+        foreach (var file in EnumerateFiles(repoRoot))
+        {
+            var text = File.ReadAllText(file);
+            var relative = ToRelative(repoRoot, file);
+            references.AddRange(FindReferences(text, relative));
+            if (relative.StartsWith(WorkflowDirectory + "/", StringComparison.Ordinal))
+                violations.AddRange(FindPrebuiltImageVariable(text, relative));
+        }
+
         foreach (var image in new[] { AsteriskImage, SippImage }.Where(i => !references.Any(r => r.Image == i)))
             violations.Add($"found no reference to {image} under {string.Join(", ", ScannedDirectories)}: the walk read nothing, so it proves nothing");
 
@@ -99,13 +122,20 @@ internal static partial class ImagePinScanner
         {
             var pinnedBases = new HashSet<string>(table.Values, StringComparer.Ordinal);
             foreach (var reference in references.Where(r =>
-                         r.Image == AsteriskImage && r.IsPinned && r.Path != TablePath && !pinnedBases.Contains(r.Text)))
+                         r.Image == AsteriskImage && r.IsPinned && r.Path != TablePath && !IsRecording(r.Path)
+                         && !pinnedBases.Contains(r.Text)))
                 violations.Add($"{reference}: a pinned Asterisk base that is not a line of {TablePath}");
         }
 
         CheckDockerfile(repoRoot, table, violations);
         return new Report(references, violations);
     }
+
+    /// <summary>Whether <paramref name="path"/> (relative, forward slashes) is a captured AMI recording under <c>Tests/</c>.</summary>
+    public static bool IsRecording(string path) =>
+        path.StartsWith("Tests/", StringComparison.Ordinal)
+        && path.Contains("/Recordings/", StringComparison.Ordinal)
+        && path.EndsWith(".raw", StringComparison.Ordinal);
 
     /// <summary>Every reference to either image in <paramref name="text"/>, with its 1-based line.</summary>
     public static IEnumerable<Reference> FindReferences(string text, string path)
@@ -125,6 +155,17 @@ internal static partial class ImagePinScanner
                     at = end;
                 }
             }
+        }
+    }
+
+    /// <summary>A violation for every line of <paramref name="text"/> that names the prebuilt-image variable.</summary>
+    public static IEnumerable<string> FindPrebuiltImageVariable(string text, string path)
+    {
+        var lines = text.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Contains(PrebuiltImageVariable, StringComparison.Ordinal))
+                yield return $"{path}:{i + 1}: names {PrebuiltImageVariable} — CI's functional lane must build its image from {TablePath}, not run one built elsewhere";
         }
     }
 

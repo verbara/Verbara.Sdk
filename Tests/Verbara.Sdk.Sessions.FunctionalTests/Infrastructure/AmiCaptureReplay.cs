@@ -629,6 +629,38 @@ internal static class AmiCaptureReplay
     }
 
     /// <summary>
+    /// Replays <paramref name="fixture"/> (a file name in <c>Recordings/asterisk-ami/</c>) into a fresh server and
+    /// session manager, and lets the caller read both around every frame: <paramref name="beforeEach"/> runs just before
+    /// a frame is delivered and <paramref name="afterEach"/> just after, so a test can read a channel the table holds
+    /// between two frames, before its <c>Hangup</c> removes it.
+    /// </summary>
+    /// <param name="fixture">The capture's file name.</param>
+    /// <param name="afterEach">Called with each delivered frame and the rig, after the server's observer handled it.</param>
+    /// <param name="drop">Optional. A frame for which it returns <see langword="true"/> is read but not delivered.</param>
+    /// <param name="beforeEach">Optional. Called with each frame about to be delivered and the rig.</param>
+    /// <returns>Every exception the server's observer threw, in delivery order.</returns>
+    public static async Task<IReadOnlyList<SwallowedObserverException>> ReplayFrameByFrameAsync(
+        string fixture, Action<ManagerEvent, ReplayProbe> afterEach, Func<ManagerEvent, bool>? drop = null,
+        Action<ManagerEvent, ReplayProbe>? beforeEach = null)
+    {
+        await using var rig = await ReplayRig.StartAsync(new SessionOptions());
+        var probe = new ReplayProbe(rig.Server, rig.Manager);
+        var swallowed = new List<SwallowedObserverException>();
+        await foreach (var evt in ReadEventsAsync(FixturePath(fixture)))
+        {
+            if (drop?.Invoke(evt) == true)
+                continue;
+
+            beforeEach?.Invoke(evt, probe);
+            if (rig.Deliver(evt) is { } thrown)
+                swallowed.Add(new SwallowedObserverException(fixture, evt.EventType ?? "", thrown));
+            afterEach(evt, probe);
+        }
+
+        return swallowed;
+    }
+
+    /// <summary>
     /// The events of <paramref name="fixture"/> (a file name in <c>Recordings/asterisk-ami/</c>), in order,
     /// parsed as a live connection parses them: live events, markers and the answers to the tap's actions
     /// alike.
@@ -862,6 +894,9 @@ internal static class AmiCaptureReplay
         }
 
         public CallSessionManager Manager { get; }
+
+        /// <summary>The started server whose observer the frames are delivered to.</summary>
+        public VerbaraServer Server => _server;
 
         /// <summary>Starts a rig whose manager is built with its public constructor, on the system clock.</summary>
         public static Task<ReplayRig> StartAsync(SessionOptions options) => StartOnAsync(options, clock: null);
@@ -1472,3 +1507,6 @@ internal sealed class QueueExitReplay(
         + $"{Environment.NewLine}  waiting after each leave: "
         + string.Join(", ", WaitingAfterLeaves.Select(w => $"{w.Queue}={w.Waiting}"));
 }
+
+/// <summary>The server and the session manager of a frame-by-frame replay, read between two frames.</summary>
+internal sealed record ReplayProbe(VerbaraServer Server, CallSessionManager Manager);

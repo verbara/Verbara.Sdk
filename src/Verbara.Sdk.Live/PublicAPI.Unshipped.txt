@@ -6,3 +6,5 @@ Verbara.Sdk.Live.Server.VerbaraServer.LastStatusRefusal.get -> Verbara.Sdk.Live.
 static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.StatusRefused -> System.Diagnostics.Metrics.Counter<long>!
 Verbara.Sdk.Live.MeetMe.MeetMeUser.LeaveNotObserved.get -> bool
 Verbara.Sdk.Live.Queues.AsteriskQueueEntry.LeaveNotObserved.get -> bool
+Verbara.Sdk.Live.Channels.ChannelManager.OnNewCallerId(string! uniqueId, string? callerIdNum, string? callerIdName) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.OnNewExten(string! uniqueId, string? context, string? exten, int? priority) -> void

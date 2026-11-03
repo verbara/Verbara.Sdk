@@ -25,8 +25,26 @@ public sealed class AriClientOptions
     public string Password { get; set; } = string.Empty;
 
     /// <summary>Stasis application name.</summary>
+    /// <remarks>
+    /// A client with events registers this application. With <see cref="EventsEnabled"/> off the client registers nothing,
+    /// and this is only the name <c>Channels.CreateAsync</c> and <c>Channels.OriginateAsync</c> without an extension send.
+    /// </remarks>
     [Required]
     public string Application { get; set; } = string.Empty;
+
+    /// <summary>Open the events WebSocket and register <see cref="Application"/>. Default: true.</summary>
+    /// <remarks>
+    /// With <c>false</c> the client opens no events WebSocket, registers no Stasis application, runs no reconnect loop and
+    /// keeps no event buffer. Its REST resources work without any connection, its state reads
+    /// <see cref="Verbara.Sdk.Enums.AriConnectionState.RestOnly"/>, and <c>Subscribe</c> throws.
+    /// <para>
+    /// <see cref="Application"/> stays required, and on such a client it names an application someone else has to register.
+    /// Nothing checks that anyone does, and nothing can: Asterisk answers <c>200</c> to an originate into an application
+    /// with no registrant and the channel is gone at once.
+    /// </para>
+    /// The client reads this once, when it is constructed; changing it afterwards changes nothing.
+    /// </remarks>
+    public bool EventsEnabled { get; set; } = true;
 
     /// <summary>Auto-reconnect WebSocket on disconnect. Default: true.</summary>
     public bool AutoReconnect { get; set; } = true;
