@@ -6,6 +6,71 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | Package | Change | Kind |
 |---|---|---|
 | `Verbara.Sdk.Resilience` | [`circuit.state` reports the breaker's current state](#circuitstate-reports-the-breakers-current-state) | metric meaning, BREAKING |
+| `Verbara.Sdk.Ari` | [A client that only makes REST calls can turn its events off](#a-client-that-only-makes-rest-calls-can-turn-its-events-off) | new option, new state |
+| `Verbara.Sdk.Ari` | [An observer that throws no longer stops delivery](#an-observer-that-throws-no-longer-stops-delivery) | behaviour |
+| `Verbara.Sdk.Ari` | [`OriginateAsync` with an extension runs the dialplan](#originateasync-with-an-extension-runs-the-dialplan) | fix, behaviour |
+
+## ARI
+
+### A client that only makes REST calls can turn its events off
+
+**What changed.** `AriClientOptions.EventsEnabled` is new and defaults to `true`, which behaves as before. With `false`,
+or `Asterisk:Ari:EventsEnabled` set to `false`, the client opens no events WebSocket and registers no Stasis application.
+Its REST resources work as on any client. `AriConnectionState.RestOnly` is new, appended after `Faulted`, so no existing
+value changes its number: such a client reads it from construction until disposal. `ConnectAsync` and `DisconnectAsync`
+do nothing, `Subscribe` throws `InvalidOperationException` naming the option, and the `ari` health check asks Asterisk once
+per run: one `GET /ari/asterisk/ping`, bounded at 5 s, an answer `Healthy` and anything else `Unhealthy`.
+
+**Who is affected.** Nobody who does not set the option. A `switch` over `AriConnectionState` with no default arm sees one
+more value only on a client that opted in.
+
+**What to do, if you turn it on.** The [package README](../../src/Verbara.Sdk.Ari/README.md#rest-only-clients) lists what
+such a client cannot do. Before you switch a client over:
+
+- `Application` stays required, and now names an application **someone else** registers. Asterisk answers `200` to an
+  originate into an application nobody registered and the channel is gone within 2 ms, so neither `State` nor the health
+  check can tell.
+- A host built by `AddVerbara` still needs AMI at start, because the AMI connection dials then and a failed dial stops the
+  host. What needs no Asterisk is the ARI client, its hosted service and its check. A host that composes its own services
+  is not affected.
+- A health endpoint that reads `ari` now sends one request per run, counted on `ari.rest.requests.sent`, and reads
+  `Unhealthy` while Asterisk is down.
+
+**A host that keeps one client per Asterisk node for REST calls** is who this option is for. Turning events off on that
+client removes a WebSocket nobody reads, and stops its replicas from replacing each other on it. Check two things first.
+If the client names an application of its own so that it does not take the dialplan's, nothing registers that name any
+more, so an originate into it dies: point `Application` at an application your consumer client registers, or originate
+with an extension. And a boot check that the two names differ guards against something that can no longer happen once
+this client registers nothing, so decide whether it stays.
+
+### An observer that throws no longer stops delivery
+
+**What changed.** An exception from an observer's `OnNext` used to end delivery to every observer for the rest of the
+connection, reconnects included, with the client still reading `Connected` and nothing logged. One from `OnCompleted` left
+`DisposeAsync` before it released the HTTP client. Now a failure reaches neither the other observers nor the client: the
+event goes on to the next observer, later events keep arriving, and a direct subscriber stays subscribed. Each failure logs
+one Warning, `[ARI] Observer threw on <EventType>`, and adds one to `ari.events.subscriber_faults`. This holds for every ARI
+client, whatever `EventsEnabled` says.
+
+`ari.events.dispatched` and `ari.event.dispatch` now also record an event an observer threw on.
+
+**Who is affected.** Code that relied on a throw to stop receiving: the observer now keeps being called. `DisposeAsync` no
+longer throws what an observer threw.
+
+**What to do.** To stop receiving, dispose the subscription. Add `ari.events.subscriber_faults > 0` to your alerts. An
+observer composed through an Rx operator is still ended by that operator on its first failure, and only what throws on the
+delivering thread is caught.
+
+### `OriginateAsync` with an extension runs the dialplan
+
+**What changed.** `Channels.OriginateAsync` with an extension no longer sends `app`. It always did, and Asterisk reads the
+two as exclusive with `app` winning: on all six images measured, 18/18, the channel entered Stasis and never ran the
+dialplan, or died at once if nobody registered the application. A caller who passed `extension` and `context` now gets the
+dialplan. A call with no extension sends `Application` as before.
+
+**Who is affected.** A caller who passes an extension and came to rely on the channel entering Stasis.
+
+**What to do.** To put a channel in Stasis, call `OriginateAsync` with no extension, or `Channels.CreateAsync`.
 
 ## Resilience
 

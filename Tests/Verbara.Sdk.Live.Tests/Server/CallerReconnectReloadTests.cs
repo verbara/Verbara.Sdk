@@ -112,6 +112,30 @@ public sealed class CallerReconnectReloadTests
     [Theory]
     [InlineData(Route.Caller)]
     [InlineData(Route.Loop)]
+    public async Task Reload_ShouldNotRun_WhenTheServerWasDisposedBeforeTheLostSessionCameBack(Route route)
+    {
+        var second = PeerAfter();
+        await using var rig = await Rig.StartAsync(PeerBefore(), second, route);
+        var tablesBefore = rig.Tables();
+        await rig.Run.Server.DisposeAsync();
+
+        await rig.LoseAndComeBackAsync(route);
+        await rig.SettleAsync();
+
+        new
+        {
+            ReloadsStarted = Lines(rig.Run, ReloadStarted),
+            Loaded = Lines(rig.Run, StateLoaded),
+            StatusAsked = second.Asked("Status"),
+            Tables = rig.Tables(),
+        }.Should().BeEquivalentTo(
+            new { ReloadsStarted = 0, Loaded = 1, StatusAsked = 0, Tables = tablesBefore },
+            "a session that comes back to a disposed server reloads nothing into it, on either route");
+    }
+
+    [Theory]
+    [InlineData(Route.Caller)]
+    [InlineData(Route.Loop)]
     public async Task Reload_ShouldMatchWhatAsteriskReportsAndEndWhatIsGoneOnce_WhenALostSessionComesBack(Route route)
     {
         var second = PeerAfter();

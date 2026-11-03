@@ -227,8 +227,20 @@ public sealed class VerbaraServer : IVerbaraServer
     internal TimeProvider? BarrierClock { get; set; }
 
     // Cancelled once DisposeAsync has begun: a full reload scheduled before it stops waiting and does not start after it,
-    // and a list reconciliation waiting for the event pump stops. Never disposed, so either may read its token at any time.
+    // a reconnect's reload stops reading and does not start after it, and a list reconciliation waiting for the event pump
+    // stops. Never disposed, so any of them may read its token at any time.
     private readonly CancellationTokenSource _disposing = new();
+
+    // The disposal's completion, set by the first DisposeAsync: every later call awaits it instead of releasing again.
+    // Completed once the releases have ended and so has the reconnect's reload the first call left out of its wait.
+    private TaskCompletionSource? _disposal;
+
+    // The reconnect's reload this flow runs inside, set before its load: a disposal called from it does not wait for it.
+    private readonly AsyncLocal<Task?> _ownReload = new();
+
+    // The last reconnect's reload that entered the gate; it never throws. Read by tests (via InternalsVisibleTo) to tell
+    // when it has ended.
+    internal Task ReconnectReload { get; private set; } = Task.CompletedTask;
 
     // The last full reload a load whose barrier ran out scheduled; it never throws. Read by tests (via
     // InternalsVisibleTo) to tell when it has ended.
@@ -407,7 +419,7 @@ public sealed class VerbaraServer : IVerbaraServer
         }
     }
 
-    private void OnReconnected() => ReloadNewSession(CancellationToken.None);
+    private void OnReconnected() => ReloadNewSession(_disposing.Token);
 
     /// <summary>
     /// The session a caller's own connect brought back after a loss. The connection delivers it behind that loss, for
@@ -431,6 +443,18 @@ public sealed class VerbaraServer : IVerbaraServer
     private async void ReloadNewSession(CancellationToken cancellationToken)
 #pragma warning restore VSTHRD100
     {
+        // The gate the disposal takes once it has cancelled: a reconnect either sees that cancellation and does nothing, or
+        // is in what the disposal waits for, so the disposal reads the subscription only after this swap has ended. The
+        // connection reads its handlers at delivery, so unhooking alone cannot keep a reconnect out of a disposed server.
+        var reload = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_deferredLoadsGate)
+        {
+            if (_disposing.IsCancellationRequested)
+                return;
+            _deferredLoads.Add(reload.Task);
+            ReconnectReload = reload.Task;
+        }
+
         // First, before anything is reloaded or delivered: every event the outage swallowed lies before it.
         Interlocked.Increment(ref _reconnects);
 
@@ -460,6 +484,9 @@ public sealed class VerbaraServer : IVerbaraServer
 
             // Reload fresh state from Asterisk
             states = new LoadConnectionStates(_connection);
+            // What the load raises runs in this flow: a handler there that disposes the server must not wait for this
+            // reload, which waits for that handler.
+            _ownReload.Value = reload.Task;
             await LoadAsync(states, cancellationToken, replaceAgents: true);
         }
         catch (AmiNotConnectedException ex)
@@ -475,6 +502,12 @@ public sealed class VerbaraServer : IVerbaraServer
         catch (Exception ex)
         {
             VerbaraServerLog.ReconnectReloadFailed(_logger, ex);
+        }
+        finally
+        {
+            lock (_deferredLoadsGate)
+                _deferredLoads.Remove(reload.Task);
+            reload.SetResult();
         }
     }
 
@@ -1753,34 +1786,98 @@ public sealed class VerbaraServer : IVerbaraServer
     /// disposed: it stays its owner's.
     /// </summary>
     /// <remarks>
-    /// Releases, in this order and each in its own attempt, the server's subscription to the AMI connection, the ARI
-    /// client attached with <see cref="SetAriClient"/>, and the instruments the server published for its live state.
-    /// A release that throws does not stop the ones after it. Once all of them have run, a failure is thrown to the
-    /// caller.
+    /// <para>
+    /// The server is disposed once. The first call runs the releases; a second or concurrent call releases nothing again,
+    /// waits for the first to finish and returns normally, so a release's failure reaches only the call that ran it.
+    /// </para>
+    /// <para>
+    /// The first call ends what is in flight before it releases anything: a full reload a load scheduled, and the reload
+    /// of a reconnected session, whose reads end with the disposal. A reconnect delivered once the disposal has begun
+    /// does nothing, so a disposed server neither subscribes to the connection again nor takes any further state. It
+    /// then stops listening to the connection and releases, in this order and each in its own attempt, the server's
+    /// subscription to the AMI connection, the ARI client attached with <see cref="SetAriClient"/>, and the
+    /// instruments the server published for its live state. An attempt that throws does not stop the ones after it.
+    /// Once all of them have run, a failure is thrown to the caller.
+    /// </para>
+    /// <para>
+    /// No call returns while a reconnect's reload is running, with one exception: a call from inside that reload, such as
+    /// a handler of an event it raises, does not wait for it, since the reload waits for that handler. Such a call
+    /// returns once the releases have ended, or at once if a disposal has already begun; a call that joins it from
+    /// anywhere else returns only after the reload has ended too. A handler of the reload that never returns therefore
+    /// holds every other call, and a release that calls back into this method and waits for it never returns.
+    /// </para>
     /// </remarks>
     /// <exception cref="Exception">
-    /// One release threw: its own exception, unchanged. Only foreign code throws here, such as a consumer's ARI client,
-    /// the subscription of a consumer's AMI connection, or a <see cref="MeterListener"/> whose completion callback
-    /// throws when the instruments are released.
+    /// One attempt threw: its own exception, unchanged. Only foreign code throws here, such as the remove accessor of a
+    /// consumer's AMI connection, a consumer's ARI client, the subscription of a consumer's AMI connection, or a
+    /// <see cref="MeterListener"/> whose completion callback throws when the instruments are released.
     /// </exception>
     /// <exception cref="AggregateException">
-    /// More than one release threw: their exceptions, in release order.
+    /// More than one attempt threw: their exceptions, in release order.
     /// </exception>
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
+    {
+        // Read once, here, in the synchronous part: the reconnect's reload this call runs inside, if it has not ended.
+        var own = _ownReload.Value is { IsCompleted: false } running ? running : null;
+        var mine = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var earlier = Interlocked.CompareExchange(ref _disposal, mine, null);
+        if (earlier is null)
+            return ReleaseAsync(mine, excludedReload: own);
+
+        // From inside a reload that has not ended, joining would wait for that reload, which waits for this caller.
+        return own is not null ? ValueTask.CompletedTask : new ValueTask(earlier.Task);
+    }
+
+    /// <summary>
+    /// The first disposal's run of the releases. <paramref name="finished"/> is completed once they have ended and so has
+    /// <paramref name="excludedReload"/>, the reload this call runs inside and so does not wait for.
+    /// </summary>
+    private async ValueTask ReleaseAsync(TaskCompletionSource finished, Task? excludedReload)
+    {
+        try
+        {
+            await ReleaseCoreAsync(excludedReload);
+        }
+        finally
+        {
+            // Always with success: a failure reaches only the call that ran the releases. A caller that joins returns only
+            // once the reload left out of this call's wait has ended too.
+            if (excludedReload is null)
+            {
+                finished.SetResult();
+            }
+            else
+            {
+                _ = excludedReload.ContinueWith(static (_, state) => ((TaskCompletionSource)state!).SetResult(), finished,
+                    CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
+        }
+    }
+
+    private async ValueTask ReleaseCoreAsync(Task? excludedReload)
     {
         await _disposing.CancelAsync();
         Task[] deferred;
         lock (_deferredLoadsGate)
-            deferred = [.. _deferredLoads];
+            deferred = [.. _deferredLoads.Where(t => t != excludedReload)];
         await Task.WhenAll(deferred);
-        _connection.Reconnected -= OnReconnected;
-        if (_connection is AmiConnection amiConnection)
+
+        // A remove accessor of a consumer's connection is foreign code: an attempt like the releases after it.
+        List<Exception>? failures = null;
+        try
         {
-            amiConnection.Lost -= OnConnectionLost;
-            amiConnection.CallerReconnected -= OnCallerReconnected;
+            _connection.Reconnected -= OnReconnected;
+            if (_connection is AmiConnection amiConnection)
+            {
+                amiConnection.Lost -= OnConnectionLost;
+                amiConnection.CallerReconnected -= OnCallerReconnected;
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            (failures ??= []).Add(ex);
         }
 
-        List<Exception>? failures = null;
         try
         {
             _subscription?.Dispose();
