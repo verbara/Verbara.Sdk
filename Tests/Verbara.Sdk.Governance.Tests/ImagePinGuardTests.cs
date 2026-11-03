@@ -87,6 +87,43 @@ public sealed class ImagePinGuardTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Scan_ShouldAcceptAPinnedImageOutsideTheTable_WhenItIsTheProvenanceOfACapturedRecording()
+    {
+        using var tree = GreenTree();
+        var candidate = Asterisk + ":24.0.0-rc2_debian-trixie@sha256:" + new string('7', 64);
+        tree.Write("Tests/Some/Recordings/asterisk-ami/workload-asterisk-24.0.0-rc2.raw", $"Event: UserEvent\r\nImage: {candidate}\r\n\r\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.IsClean.Should().BeTrue("a recording names the image it captured, not a base the lane builds on: " + report);
+    }
+
+    [Fact]
+    public void Scan_ShouldStillRequireADigest_WhenAReferenceIsInACapturedRecording()
+    {
+        using var tree = GreenTree();
+        tree.Write("Tests/Some/Recordings/asterisk-ami/workload-asterisk-24.raw", $"Event: UserEvent\r\nImage: {Asterisk}:24\r\n\r\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.Violations.Should().ContainSingle(v => v.StartsWith("Tests/Some/Recordings/asterisk-ami/workload-asterisk-24.raw:2: ", StringComparison.Ordinal)
+            && v.Contains("no @sha256 digest", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Scan_ShouldReportAPinnedBaseOutsideTheTable_WhenTheFileIsNotARecording()
+    {
+        using var tree = GreenTree();
+        var candidate = Asterisk + ":24.0.0-rc2_debian-trixie@sha256:" + new string('7', 64);
+        tree.Write("Tests/Some/Recordings/asterisk-ami/notes.md", $"Image: {candidate}\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.Violations.Should().ContainSingle(v => v.StartsWith("Tests/Some/Recordings/asterisk-ami/notes.md:1: ", StringComparison.Ordinal)
+            && v.Contains("not a line of", StringComparison.Ordinal), "only a captured .raw recording is exempt from the table");
+    }
+
+    [Fact]
     public void Scan_ShouldReportEverySippReference_WhenTwoCarryDifferentDigests()
     {
         using var tree = GreenTree();

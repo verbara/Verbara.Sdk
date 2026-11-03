@@ -94,7 +94,7 @@ public sealed class TransferTests : FunctionalTestBase
             "RedirectAction to ext 161 must make the redirected channel run ext 161, reported as a NewExten on that channel within 5 s");
         var newExten = await reached161.Task;
         newExten.Channel.Should().Be(targetChannel, "the NewExten for ext 161 must come from the channel that was redirected");
-        (newExten.RawFields?.GetValueOrDefault("Context")).Should().Be(redirect.Context, "the NewExten must be in the context the redirect named");
+        newExten.Context.Should().Be(redirect.Context, "the NewExten must be in the context the redirect named");
     }
 
     /// <summary>
@@ -158,7 +158,7 @@ public sealed class TransferTests : FunctionalTestBase
     /// After a RedirectAction, VerbaraServer's ChannelManager should reflect
     /// the channel's new extension context.
     /// </summary>
-    [Fact(Skip = "Measured on Asterisk 23 and 22: after a Redirect to ext 161 that Asterisk reports as a NewExten 161 on the channel, the ChannelManager still holds Extension 100, the value the channel was created with; it sets it from Newchannel and a state reload only")]
+    [Fact]
     public async Task BlindTransfer_ShouldUpdateChannelManager()
     {
         // The connection reads the dialplan class, so the server receives the NewExten events of the redirect too.

@@ -41,7 +41,7 @@ public sealed class ChannelEventDeliveryTests
     }
 
     [Fact]
-    public void OnNewState_ShouldRethrowOnlyItsOwnFailureAfterItsNotifications_WhenAnotherPhysicalCallerChangesAChannel()
+    public void OnNewState_ShouldReturnNormallyAfterItsNotificationsAndThrowIntoNoCall_WhenItsHandlerFailsWhileAnotherPhysicalCallerChangesAChannel()
     {
         var manager = new ChannelManager(NullLogger.Instance);
         manager.OnNewChannel("failing", "PJSIP/failing", ChannelState.Ringing);
@@ -53,7 +53,7 @@ public sealed class ChannelEventDeliveryTests
         Exception? causingFailure = null;
         Exception? unrelatedFailure = null;
         var unrelatedObservedInsideHandler = false;
-        var heldBeforeRethrow = false;
+        var heldBeforeReturn = false;
         var causingThreadId = 0;
         var unrelatedThreadId = 0;
         var failingCallbackThreadId = 0;
@@ -93,10 +93,11 @@ public sealed class ChannelEventDeliveryTests
             try
             {
                 manager.OnNewState("failing", ChannelState.Up);
+                heldBeforeReturn = Volatile.Read(ref ownLaterEventCount) == 1;
+                order.Enqueue("causing-return");
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                heldBeforeRethrow = Volatile.Read(ref ownLaterEventCount) == 1;
                 causingFailure = ex;
                 order.Enqueue("causing-catch");
             }
@@ -138,14 +139,14 @@ public sealed class ChannelEventDeliveryTests
         causingJoined.Should().BeTrue("the causing physical caller must be reaped");
         unrelatedJoined.Should().BeTrue("the unrelated physical caller must be reaped");
         unrelatedObservedInsideHandler.Should().BeTrue("the unrelated event must not be stranded behind the failing handler");
-        causingFailure.Should().BeSameAs(expectedFailure);
+        causingFailure.Should().BeNull("a channel subscriber's failure is its own: the causing call does not receive it");
         unrelatedFailure.Should().BeNull("another call must not receive the causing handler's exception");
-        heldBeforeRethrow.Should().BeTrue("the causing call must deliver its handler's later notification before rethrowing");
+        heldBeforeReturn.Should().BeTrue("the causing call must deliver its handler's later notification before returning");
         ownLaterEventCount.Should().Be(1);
         causingThreadId.Should().NotBe(unrelatedThreadId);
         failingCallbackThreadId.Should().Be(causingThreadId);
         unrelatedCallbackThreadId.Should().Be(unrelatedThreadId);
-        order.Should().Equal("failing-state", "other-state", "own-held", "causing-catch");
+        order.Should().Equal("failing-state", "other-state", "own-held", "causing-return");
     }
 
     [Fact]

@@ -68,6 +68,26 @@ public sealed class ChannelManagerAllocationTests
         _observed.Should().Be(0);
     }
 
+    [Fact]
+    public void OnNewExtenAndOnNewCallerId_ShouldAllocateNothing_WhenTheChannelIsUnknown()
+    {
+        var manager = Preloaded();
+        manager.ChannelAdded += Count;
+
+        var allocated = Measure(() =>
+        {
+            foreach (var id in UnknownIds)
+            {
+                manager.OnNewExten(id, "ctx", "100", 2);
+                manager.OnNewCallerId(id, "7100", "Capture");
+            }
+        });
+
+        allocated.Should().Be(0, "a report for a channel the table does not hold changes nothing and costs nothing");
+        manager.ChannelCount.Should().Be(Channels, "no channel is admitted");
+        _observed.Should().Be(0);
+    }
+
     [Theory]
     [InlineData(Change.DialBegin)]
     [InlineData(Change.DialEnd)]

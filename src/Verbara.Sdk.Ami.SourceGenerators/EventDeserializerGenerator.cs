@@ -23,6 +23,10 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
     private const string ManagerEventFqn =
         "Verbara.Sdk.ManagerEvent";
 
+    // Internal to Verbara.Sdk.Ami; matched by name, so it adds no public symbol.
+    private const string InheritedHeaderPrefixFqn =
+        "Verbara.Sdk.Ami.Events.Base.InheritedHeaderPrefixAttribute";
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var eventInfos = context.SyntaxProvider
@@ -137,8 +141,19 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
                 type.Name,
                 SymbolEqualityComparer.Default.Equals(type, symbol), // isLeaf
                 properties.ToArray(),
-                ObsoleteDiagnostics.IdsOf(type)));
+                ObsoleteDiagnostics.IdsOf(type),
+                GetInheritedHeaderPrefix(type)));
         }
+    }
+
+    /// <summary>The prefix an <c>InheritedHeaderPrefix</c> attribute on <paramref name="type"/> names, or null.</summary>
+    private static string? GetInheritedHeaderPrefix(INamedTypeSymbol type)
+    {
+        return type.GetAttributes()
+            .Where(static attr => attr.AttributeClass?.ToDisplayString() == InheritedHeaderPrefixFqn
+                                  && attr.ConstructorArguments.Length > 0)
+            .Select(static attr => attr.ConstructorArguments[0].Value as string)
+            .FirstOrDefault(static prefix => !string.IsNullOrEmpty(prefix));
     }
 
     private static string GetFieldName(IPropertySymbol prop)
@@ -259,6 +274,41 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
                 {
                     obsoleteIds.AddRange(prop.ObsoleteIds);
                     EmitPropertyDeserialization(sb, varName, prop, "            ");
+                }
+                sb.AppendLine("        }");
+                sb.AppendLine();
+            }
+        }
+
+        // A layer carrying an InheritedHeaderPrefix attribute reads every member it inherits from the layers above it, and
+        // UniqueId, under that prefix. Emitted after every intermediate layer, so the prefixed header wins over the
+        // unprefixed one the base layer read.
+        var prefixedLayers = sorted
+            .SelectMany(static e => e.Hierarchy
+                .Select(static (layer, index) => (layer, index))
+                .Where(static x => !x.layer.IsLeaf && x.layer.HeaderPrefix != null)
+                .Select(x => (x.layer, inherited: e.Hierarchy.Take(x.index).SelectMany(static l => l.Properties).ToArray())))
+            .GroupBy(static x => x.layer.FullyQualifiedTypeName)
+            .Select(static group => group.First())
+            .OrderBy(static x => x.layer.FullyQualifiedTypeName)
+            .ToArray();
+
+        if (prefixedLayers.Length > 0)
+        {
+            sb.AppendLine("        // Set inherited members read under a header prefix");
+            foreach (var (layer, inherited) in prefixedLayers)
+            {
+                var prefix = layer.HeaderPrefix!;
+                var varName = ToCamelCase(layer.ClassName) + "Prefixed";
+                sb.AppendLine($"        if (evt is {layer.FullyQualifiedTypeName} {varName})");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            {varName}.UniqueId = msg[\"{EscapeString(prefix)}Uniqueid\"];");
+                foreach (var prop in inherited)
+                {
+                    obsoleteIds.AddRange(prop.ObsoleteIds);
+                    EmitPropertyDeserialization(sb, varName,
+                        new PropertyInfo(prop.Name, prefix + prop.FieldName, prop.Type, prop.ObsoleteIds),
+                        "            ");
                 }
                 sb.AppendLine("        }");
                 sb.AppendLine();
@@ -407,14 +457,17 @@ public sealed class EventDeserializerGenerator : IIncrementalGenerator
         public readonly bool IsLeaf;
         public readonly PropertyInfo[] Properties;
         public readonly string[] ObsoleteIds;
+        public readonly string? HeaderPrefix;
 
-        public TypeLayerInfo(string fqn, string className, bool isLeaf, PropertyInfo[] properties, string[] obsoleteIds)
+        public TypeLayerInfo(string fqn, string className, bool isLeaf, PropertyInfo[] properties, string[] obsoleteIds,
+            string? headerPrefix)
         {
             FullyQualifiedTypeName = fqn;
             ClassName = className;
             IsLeaf = isLeaf;
             Properties = properties;
             ObsoleteIds = obsoleteIds;
+            HeaderPrefix = headerPrefix;
         }
     }
 

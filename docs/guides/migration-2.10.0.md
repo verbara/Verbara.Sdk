@@ -9,6 +9,10 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [A client that only makes REST calls can turn its events off](#a-client-that-only-makes-rest-calls-can-turn-its-events-off) | new option, new state |
 | `Verbara.Sdk.Ari` | [An observer that throws no longer stops delivery](#an-observer-that-throws-no-longer-stops-delivery) | behaviour |
 | `Verbara.Sdk.Ari` | [`OriginateAsync` with an extension runs the dialplan](#originateasync-with-an-extension-runs-the-dialplan) | fix, behaviour |
+| `Verbara.Sdk.Live` | [A channel subscriber's failure stays with that subscriber](#a-channel-subscribers-failure-stays-with-that-subscriber) | behaviour, BREAKING |
+| `Verbara.Sdk.Live` | [A live channel follows its dialplan location and caller ID](#a-live-channel-follows-its-dialplan-location-and-caller-id) | fix, behaviour |
+| `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
+| `Verbara.Sdk.Ami` | [`NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends](#newextenevent-and-newcalleridevent-carry-what-the-wire-sends) | fix, new members |
 
 ## ARI
 
@@ -71,6 +75,74 @@ dialplan. A call with no extension sends `Application` as before.
 **Who is affected.** A caller who passes an extension and came to rely on the channel entering Stasis.
 
 **What to do.** To put a channel in Stasis, call `OriginateAsync` with no extension, or `Channels.CreateAsync`.
+
+## Live
+
+### A channel subscriber's failure stays with that subscriber
+
+**What changed.** A handler of a `ChannelManager` event (`ChannelAdded`, `ChannelRemoved`, `ChannelStateChanged`,
+`ChannelDialBegin`, `ChannelDialEnd`, `ChannelHeld`, `ChannelUnheld`) that throws no longer skips the handlers subscribed
+after it, and its exception no longer leaves the table. Every handler receives the event in subscription order; each failure
+logs one Warning, `[CHANNEL] Subscriber failed: event=<Event> unique_id=<UniqueId>; …`, with the exception, and adds one to
+`live.channels.subscriber_faults` (meter `Verbara.Sdk.Live`). A reload's reconciliation finishes past a throwing handler,
+where it used to stop at the first one. The SDK's own subscribers, the session engine included, are reported the same way.
+`OutOfMemoryException` is not caught. `QueueManager` and `MeetMeManager` keep their rule.
+
+The CHANGELOG labels this `Changed — BREAKING`: the 2.9.0 troubleshooting guide documented the first failure as rethrown
+from the call that made the change.
+
+**Who is affected.** Code that catches around a direct `ChannelManager.On*` call to learn that a handler failed: nothing
+is thrown there any more. An alert on `[AMI_EVENT] Observer threw on <EventType>` or on `ami.events.observer_faults` that
+was meant to catch a Live channel handler's failure: those no longer move for it.
+
+**What to do.** Read `live.channels.subscriber_faults`, or the Warning above, instead. Fix what throws. Only what throws on
+the delivering thread is caught; a handler that starts work on another thread or task owns that work's failures.
+
+### A live channel follows its dialplan location and caller ID
+
+**What changed.** `AsteriskChannel.Context`, `Extension` and `Priority` used to keep the values the channel was created
+with (or that a reload read). On a connection that receives `Newexten`, they now move to each step Asterisk reports, a
+`Redirect` and a `Goto` included, and `ExtensionHistory` records each visit, the last 100, oldest first; it is read as a
+copy, safe on any thread. `CallerIdNum` and `CallerIdName` now take what a `NewCallerid` reports, `<unknown>` included.
+No channel event is raised for either. `ChannelManager.OnNewExten` and `OnNewCallerId` are new, like the other `On*`
+methods. A reload does not move a held channel back to an older snapshot's location.
+
+**Who is affected.** A reader that took these members for where the call started or who called: they now say where the
+call is and the caller ID it carries now. Only on a connection that receives `Newexten`, which needs the `dialplan` class in
+the AMI user's `read`, and not behind the filter the troubleshooting guide recommends, which excludes `Newexten` on purpose.
+`NewCallerid` is class `call`. A session does not move: `CallSession.Context`, `Extension` and `Direction`, and each
+participant's `CallerIdNum` and `CallerIdName`, keep the values read when they were created.
+
+**What to do.** For the start of the call, read the session's `Context` and `Extension`. To have channels follow their
+location, see [the cost of `dialplan`](troubleshooting.md#the-cost-of-dialplan-and-a-filter-that-removes-it): delete the
+filter's `name(Newexten)` line and accept the volume it adds.
+
+## AMI
+
+### A parking event names its channel and where it is parked
+
+**What changed.** Asterisk sends the parked channel of `ParkedCall`, `UnParkedCall`, `ParkedCallTimeOut` and
+`ParkedCallGiveUp` only under `Parkee`-prefixed headers, so `Channel`, `UniqueId`, `Exten` and the other channel members of
+`ParkedCallEvent`, `UnparkedCallEvent`, `ParkedCallTimeOutEvent` and `ParkedCallGiveUpEvent` were always null. They now
+hold the parked channel's values. The four events derive from the new `ParkingEventBase`, itself a `ChannelEventBase`,
+which adds `ParkingSpace`, `ParkingLot` (from the header Asterisk spells `Parkinglot`), `ParkingTimeout`, `ParkingDuration`
+and `ParkerDialString`, as strings. `ParkedCallEvent.Timeout` now holds the number of `ParkingTimeout`.
+
+**Who is affected.** Source and binary compatible. Code that read the space from `Exten` (no supported Asterisk sends an
+`Exten` on these events): `Exten` now holds the parked channel's own extension, not the space.
+
+**What to do.** Read the space from `ParkingSpace`. To hang up or find a parked call, use `Channel`.
+
+### `NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends
+
+**What changed.** `NewExtenEvent` gains `Context`, `Exten` and `Priority` (a number), with the names every channel event
+uses; `Extension` stays and holds the same value as `Exten`. `NewCallerIdEvent.CidCallingPresTxt` now holds the
+`CID-CallingPres` header whole, for example `0 (Presentation Allowed, Not Screened)`, and `CidCallingPres` the number it
+starts with, or null when it starts with none; both were always null. A number assigned to `CidCallingPres` still wins.
+
+**Who is affected.** Code that read `RawFields["Context"]` or `RawFields["Priority"]` of a `Newexten`: it still works.
+
+**What to do.** Read the typed members.
 
 ## Resilience
 

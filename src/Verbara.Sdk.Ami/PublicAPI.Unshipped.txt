@@ -1,1 +1,19 @@
 #nullable enable
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase.ParkingEventBase() -> void
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase.ParkerDialString.get -> string?
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase.ParkerDialString.set -> void
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase.ParkingDuration.get -> string?
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase.ParkingDuration.set -> void
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase.ParkingLot.get -> string?
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase.ParkingLot.set -> void
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase.ParkingSpace.get -> string?
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase.ParkingSpace.set -> void
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase.ParkingTimeout.get -> string?
+Verbara.Sdk.Ami.Events.Base.ParkingEventBase.ParkingTimeout.set -> void
+Verbara.Sdk.Ami.Events.NewExtenEvent.Context.get -> string?
+Verbara.Sdk.Ami.Events.NewExtenEvent.Context.set -> void
+Verbara.Sdk.Ami.Events.NewExtenEvent.Exten.get -> string?
+Verbara.Sdk.Ami.Events.NewExtenEvent.Exten.set -> void
+Verbara.Sdk.Ami.Events.NewExtenEvent.Priority.get -> int?
+Verbara.Sdk.Ami.Events.NewExtenEvent.Priority.set -> void

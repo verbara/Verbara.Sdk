@@ -37,6 +37,15 @@ await pool.AddServerAsync("pbx-west", westOptions);
 var server = pool.GetServerForAgent("Agent/1001");
 ```
 
+## Where a channel is
+
+A channel's `Context`, `Extension` and `Priority` follow each `Newexten` the connection receives, and its
+`ExtensionHistory` keeps the last 100 visits; `CallerIdNum` and `CallerIdName` follow `NewCallerid`. `Newexten` needs the
+`dialplan` class, and the filter the [troubleshooting guide](../../docs/guides/troubleshooting.md#the-cost-of-dialplan-and-a-filter-that-removes-it)
+recommends excludes it to save most of that class's volume, so behind it a channel keeps the location it was created with.
+A `ChannelManager` subscriber that throws is logged at Warning and counted on `live.channels.subscriber_faults`; the other
+subscribers still receive the event.
+
 ## Reconciling the channels
 
 `VerbaraServer.ReconcileChannelsAsync()` asks Asterisk for its channel snapshot (`Status`), reads it to the end and

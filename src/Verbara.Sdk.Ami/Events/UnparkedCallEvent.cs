@@ -5,7 +5,7 @@ using Verbara.Sdk.Ami.Events.Base;
 namespace Verbara.Sdk.Ami.Events;
 
 [VerbaraMapping("UnparkedCall")]
-public sealed class UnparkedCallEvent : ChannelEventBase
+public sealed class UnparkedCallEvent : ParkingEventBase
 {
     public string? RetrieverChannel { get; set; }
     public int? RetrieverChannelState { get; set; }
