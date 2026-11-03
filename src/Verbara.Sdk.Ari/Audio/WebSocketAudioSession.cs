@@ -165,6 +165,7 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     private async Task ReadPumpAsync(CancellationToken ct)
     {
         var bufferWriter = new ArrayBufferWriter<byte>(8192);
+        var transportFailed = false;
 
         try
         {
@@ -241,19 +242,21 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         catch (WebSocketException ex)
         {
             // The peer's orderly ending is its close frame, which the loop above leaves on without an
-            // exception. Measured through the server: a connection reset raises ConnectionClosedPrematurely
+            // exception, whatever status the frame carries: the close code says the peer ended the stream, not
+            // who failed. Measured through the server: a connection reset raises ConnectionClosedPrematurely
             // over the socket's reset, and a connection that ends without a close frame raises
-            // ConnectionClosedPrematurely with no inner exception; both are abnormal endings. The session
-            // is still Connected here: only this pump's `finally` and a disposal that has awaited this pump
-            // publish its ending. Reported before the `finally` publishes Disconnected, so whoever reacts
-            // to the ending already finds the line and the count. The ending stays Disconnected.
-            // The `_disposed` filter is defensive: an owner's disposal sets it before it cancels or closes
-            // anything, and that teardown surfaces here as OperationCanceledException; no measured
-            // teardown has reached this catch.
+            // ConnectionClosedPrematurely with no inner exception; both are failed transports, so the ending
+            // is Error then Disconnected. The session is still Connected here: only this pump's `finally` and
+            // a disposal that has awaited this pump publish its ending. Reported before the `finally`
+            // publishes it, so whoever reacts to Error already finds the line and the count.
+            // The `_disposed` filter keeps an ending on this side an ending without an error: the disposal,
+            // which a server stop also ends in, sets it before it cancels or closes anything, so a connection
+            // that fails while that ending is in progress is neither reported nor classified as a failure.
             if (Volatile.Read(ref _disposed) == 0)
             {
                 WebSocketAudioSessionLog.TransportFailed(_logger, ex, ChannelId);
                 AudioStreamMetrics.TransportFailures.Add(1, AudioStreamMetrics.WebSocketTransport);
+                transportFailed = true;
             }
         }
         finally
@@ -262,7 +265,7 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
             // unnamed: the server then neither registers nor announces it.
             _firstFrame.TrySetResult(new WebSocketFirstFrame(WebSocketFirstFrameKind.Ended));
             _audioInChannel.Writer.TryComplete();
-            _state.TryEnd(error: false);
+            _state.TryEnd(error: transportFailed);
         }
     }
 
