@@ -11,7 +11,9 @@ Micro-benchmarks for the SDK's hot paths, driven by [BenchmarkDotNet](https://be
 | `ActionCorrelationBenchmark` | Request/response correlation via `ConcurrentDictionary<string, TCS>` |
 | `AsyncEventPumpBenchmark` | Channel-based event pump throughput |
 | `EventDeserializerBenchmark` | Source-generated `EventDeserializer` lookup |
+| `ParkingEventDeserializeBenchmark` | Source-generated deserializer on a captured `Newchannel` and a captured `ParkedCall` (prefixed `Parkee` members) |
 | `ChannelManagerBenchmark` | `ChannelManager` O(1) lookups (primary + secondary index) |
+| `ChannelLocationFollowBenchmark` | `ChannelManager.OnNewExten` per-report cost on 1,000 held channels (fresh and at the 100-entry history bound) and the cost of reading `ExtensionHistory` |
 | `QueueManagerBenchmark` | `QueueManager` per-event cost of member, device, caller-status, abandon and join/leave events, with and without one subscriber |
 | `MeetMeManagerBenchmark` | `MeetMeManager` per-event cost of a participant's mute change, with and without one subscriber |
 | `ObserverDispatchBenchmark` | Copy-on-write volatile array observer dispatch |
