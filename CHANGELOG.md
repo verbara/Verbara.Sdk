@@ -4,6 +4,57 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: a Live channel subscriber's failure stays with that subscriber (#516)
+
+A handler of a `ChannelManager` event (`ChannelAdded`, `ChannelRemoved`, `ChannelStateChanged`, `ChannelDialBegin`,
+`ChannelDialEnd`, `ChannelHeld`, `ChannelUnheld`) that throws no longer skips the handlers subscribed after it, and its
+exception no longer leaves the table: every handler receives the event in subscription order, and a reload's
+reconciliation finishes past a throwing handler where it used to stop at the first. Each failure logs one Warning,
+`[CHANNEL] Subscriber failed: event=<Event> unique_id=<UniqueId>; the other subscribers still receive it`, with the
+exception, and adds one to `live.channels.subscriber_faults` (meter `Verbara.Sdk.Live`); a logger that throws while
+reporting is ignored. The SDK's own subscribers, the session engine included, are reported the same way.
+`OutOfMemoryException` is not caught, and only what throws on the delivering thread is. BREAKING because the 2.9.0
+troubleshooting guide documented the first failure as rethrown from the call that made the change: code that catches
+around a direct `ChannelManager.On*` call, or alerts on `[AMI_EVENT] Observer threw` / `ami.events.observer_faults` for a
+channel handler's failure, should read the new counter instead. `QueueManager` and `MeetMeManager` keep their rule. A
+delivery allocates nothing per subscriber. See the [migration guide](docs/guides/migration-2.10.0.md).
+
+### Fixed: a live channel follows its dialplan location and caller ID (#516)
+
+`AsteriskChannel.Context`, `Extension` and `Priority` kept the values the channel was created with: nothing read
+`Newexten`, so after a `Redirect` the table still named the old extension, and `ExtensionHistory` never held an entry. On
+a connection that receives `Newexten` they now move to each step Asterisk reports and `ExtensionHistory` records each
+visit, the last 100, oldest first, read as a copy that is safe on any thread. `CallerIdNum` and `CallerIdName` take what
+a `NewCallerid` reports, `<unknown>` included, where they stayed `<unknown>` on every channel whose caller ID the dialplan
+set. No channel event is raised for either, a report for a channel the table does not hold (such as one that arrives
+after its `Hangup`) changes nothing and allocates nothing, and a reload does not move a held channel back. Sessions do
+not move: a session keeps the location, direction and participant identity it opened with. `Newexten` needs the
+`dialplan` class and is excluded by the filter the troubleshooting guide recommends, which stays the recommendation;
+the guide now documents both profiles. `ChannelManager.OnNewExten` and `OnNewCallerId` are new. Behaviour change: a
+reader that took these members for the creation location now reads the current one.
+
+### Fixed: a parking event names its channel and where it is parked (#516)
+
+Asterisk sends the parked channel of `ParkedCall`, `UnParkedCall`, `ParkedCallTimeOut` and `ParkedCallGiveUp` only under
+`Parkee`-prefixed headers, so `Channel`, `UniqueId` and every other channel member of the four events were always null and
+a consumer could not hang up or find a parked call. They now hold the parked channel's values. `ParkedCallEvent.Timeout`
+reads `ParkingTimeout`, which it never found. Held by captures of Asterisk 20.20.1, 22.11.0, 23.5.0 and 24.0.0-rc2.
+
+### Added: where a call is parked, and the dialplan location of a `Newexten` (#516)
+
+The four parking events derive from the new `ParkingEventBase` (a `ChannelEventBase`), which exposes `ParkingSpace`,
+`ParkingLot` (from the header Asterisk spells `Parkinglot`), `ParkingTimeout`, `ParkingDuration` and `ParkerDialString`
+as the header's string. Read the space from `ParkingSpace`: `Exten` is the parked channel's own extension. `NewExtenEvent`
+gains `Context`, `Exten` and `Priority` (a number), the names every channel event uses; `Extension` stays. Source and
+binary compatible.
+
+### Fixed: `NewCallerIdEvent` carries the presentation Asterisk sends (#516)
+
+`CidCallingPresTxt` read a header the wire never carries and `CidCallingPres` could not parse the text Asterisk sends.
+`CidCallingPresTxt` now holds `CID-CallingPres` whole (`0 (Presentation Allowed, Not Screened)`), and `CidCallingPres` the
+number it starts with, or null when it starts with none, derived on read; a number assigned to `CidCallingPres` still
+wins.
+
 ### Fixed: a Live server is disposed once and never against a reconnect (#514)
 
 `VerbaraServer.DisposeAsync` is idempotent and no longer races a reconnect. A second or concurrent call releases nothing
