@@ -71,6 +71,36 @@ the selected `ASTERISK_VERSION` and fails otherwise ("base is Asterisk 22.x.y, n
 only the version never produces the wrong server. Moving a version to a newer build is one edit to the table, with the
 new build's `asterisk -V` and digest measured first. `CODEC_OPUS_VERSION` picks the matching Digium Opus binary. If Digium has not yet published a codec_opus build for the selected version, the image continues to build with a warning — the SDK test suites do not exercise Opus audio payloads.
 
+## Running the suites against a prebuilt image
+
+The Functional and Integration fixtures build `docker/Dockerfile.asterisk` through Testcontainers. Before that build,
+Testcontainers pulls the Dockerfile's base image unless a local image carries the base's name as a *tag*: a base named
+by a content id (`sha256:…`), or by the digest of an image that exists only on your machine, is never a tag, so the
+pull runs, fails with `pull access denied`, and every fixture fails before Asterisk starts. To test a build of your
+own, such as a release candidate you built locally, build the test image yourself and name it in
+`ASTERISK_TEST_IMAGE`:
+
+```sh
+docker build -f docker/Dockerfile.asterisk docker/ \
+  --build-arg ASTERISK_VERSION=22 \
+  --build-arg CODEC_OPUS_VERSION=22.0_1.3.0 \
+  --build-arg ASTERISK_BASE_IMAGE=<your base: name:tag or name@sha256:digest> \
+  -t asterisk-sdk-test:local
+ASTERISK_VERSION=22 ASTERISK_TEST_IMAGE=asterisk-sdk-test:local \
+  dotnet test Tests/Verbara.Sdk.FunctionalTests/ --filter "Category=Functional"
+```
+
+`docker build` with BuildKit resolves a bare `sha256:…` id as a registry name and fails, so name the base by a tag
+or `name@sha256:…`; the variable itself takes any of the three. With the variable set, the fixtures build nothing:
+they look the image up on the Docker host Testcontainers uses (by tag, digest or id), start it by its content id, and
+never pull it. A name the host does not have fails the first fixture with a message naming the variable. Unset or
+blank, the fixtures build from the pinned base exactly as above.
+
+The image decides which Asterisk runs, so set `ASTERISK_VERSION` to its major version; a test that compares the
+server's version with the pinned line of `docker/asterisk-base-images.txt` reports the difference, because it measures
+your build, not the pin. CI never sets the variable: the Governance suite fails if a workflow names it, so the
+merge-queue legs always build on the table's pins.
+
 ## Known break-change risk areas between 22 ↔ 23
 
 | Area | 22 baseline | 23 delta (as of 2026-04-20 research) | SDK exposure |
