@@ -1,10 +1,11 @@
 # Recordings — asterisk-ami
 
 Byte captures of the AMI stream a real Asterisk PBX sent to one manager client, one capture per
-Asterisk version for each of five sets: twelve call shapes (`call-shapes-*`), seventeen queue
+Asterisk version for each of six sets: twelve call shapes (`call-shapes-*`), seventeen queue
 shapes (`queue-shapes-*`), four queue calls with the PBX's own state snapshots taken while they
 waited (`queue-reload-*`), and, read with the `dialplan` class, one call for each way of leaving a
-queue (`queue-exits-*`) and one timeout loop (`queue-loop-*`). This suite replays them through the SDK's own parsing path, so a
+queue (`queue-exits-*`) and one timeout loop (`queue-loop-*`), and the dialplan and parking events of one
+workload (`dialplan-and-parking-*`). This suite replays them through the SDK's own parsing path, so a
 call-session assertion made here is checked against what Asterisk actually sent rather than against
 what a test author believed it sends.
 
@@ -25,6 +26,10 @@ what a test author believed it sends.
 | `queue-loop-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 131 612 |
 | `queue-loop-asterisk-22.9.0.raw` | 22.9.0 | `Asterisk Call Manager/11.0.0` | 131 612 |
 | `queue-loop-asterisk-23.4.1.raw` | 23.4.1 | `Asterisk Call Manager/12.0.0` | 131 610 |
+| `dialplan-and-parking-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 92 743 |
+| `dialplan-and-parking-asterisk-22.11.0.raw` | 22.11.0 | `Asterisk Call Manager/11.0.0` | 92 744 |
+| `dialplan-and-parking-asterisk-23.5.0.raw` | 23.5.0 | `Asterisk Call Manager/12.0.0` | 92 742 |
+| `dialplan-and-parking-asterisk-24.0.0-rc2.raw` | 24.0.0-rc2 | `Asterisk Call Manager/13.0.0` | 92 742 |
 
 The call and queue shapes were captured 2026-09-27, the reload, exit and loop captures 2026-09-28. The
 `.gitattributes` rule `**/Recordings/**/*.raw binary` keeps the CRLF framing byte-exact; never open
@@ -867,9 +872,45 @@ ids below.
   by a single-character fill of the same length, in order of first appearance: `11111111-1111-1111-1111-111111111111`,
   then `22222222-…` and `33333333-…` (3 per file), for the recording redaction check.
 
+## The dialplan-and-parking captures
+
+One run of the `dialplan-and-parking` workload of `scripts/capture-ami-recording.py` (see
+[Capturing on a new Asterisk build](#capturing-on-a-new-asterisk-build)) on each of four images, pinned by digest,
+captured 2026-10-31. Each file is the first of three takes on its image, copied byte for byte; the three takes of an
+image carry the same frame counts.
+
+| Asterisk | Image digest |
+|----------|--------------|
+| 20.20.1 | `sha256:c202cdf0f0348ab75e6dee49967418ce8c08853644b8a5c00de91f6b4aca4dd1` |
+| 22.11.0 | `sha256:d6333b8b331563c5887b98b12da9371ef48317e657d17d81770fe085f335041d` |
+| 23.5.0 | `sha256:532e68e4194e968e866a27f321ccce03fdd66bd7e369ffa17c07e7210da0fde1` |
+| 24.0.0-rc2 | `sha256:67c68ac8d429defcb12a5608bc76826dd1faa688bfc318db9344d21ce97a8d29` |
+
+The workload runs on one container with Local channels and one PJSIP loopback call. The steps, each behind a
+`CaptureMarker`: a call that changes its caller ID in mid-call and jumps to another context (`NewCallerid`,
+`Newexten`); a call the tap moves with an AMI `Redirect`; a call that parks itself in space 701 and is picked up by
+dialing the space (`ParkedCall`, `UnParkedCall`); one parked and hung up by its caller (`ParkedCallGiveUp`); one parked
+with a 3 s timeout (`ParkedCallTimeOut`); `ParkedCalls` and `Parkinglots` listings; and `SendFlash`. Its dialplan,
+`res_parking.conf` and `pjsip.conf` are in the script. The manager account reads every class, `dialplan` included.
+
+What these files pin about the wire:
+
+- A parking event names the parked channel only under `Parkee`-prefixed headers (`ParkeeChannel`, `ParkeeUniqueid`,
+  `ParkeeExten`, …) and carries no `Channel` or `Uniqueid`. The space is `ParkingSpace`; `ParkeeExten` is the parked
+  channel's own extension (`park`), and no `Exten` header exists.
+- The lot header is spelled `Parkinglot`. Headers are matched case-insensitively.
+- `Newexten` carries `Context`, `Exten`, `Priority` and `Extension`, with `Exten` equal to `Extension`.
+- `NewCallerid` carries `CID-CallingPres` as text, `0 (Presentation Allowed, Not Screened)` on every frame here.
+
+Each file keeps 267 frames: `Newexten` 31, `NewCallerid` 17, `NewConnectedLine` 15, `Newchannel` 14, `Hangup` 14,
+`Newstate` 14, `ParkedCall` 4 (two of them the answer to the tap's `ParkedCalls`), and one each of `UnParkedCall`,
+`ParkedCallTimeOut` and `ParkedCallGiveUp`, among others. The reduction is the script's (below); it replaced 2 UUIDs per
+file and no address.
+
 ## Capturing on a new Asterisk build
 
-The fifteen files above were captured by hand-run probes. New captures are made by
+The fifteen call and queue files above were captured by hand-run probes; the `dialplan-and-parking-*` files by the
+script below. New captures are made by
 `scripts/capture-ami-recording.py`, which starts one throwaway Asterisk from an image pinned by digest,
 drives a fixed workload through a raw TCP tap, and writes the reduced recording here with a
 `<name>.provenance.json` sidecar:

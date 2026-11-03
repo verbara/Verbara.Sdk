@@ -34,6 +34,9 @@ internal static partial class ChannelManagerLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[CHANNEL] Event handler failed for a change whose call did not raise it")]
     public static partial void UnownedHandlerFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[CHANNEL] Subscriber failed: event={EventName} unique_id={UniqueId}; the other subscribers still receive it")]
+    public static partial void SubscriberFailed(ILogger logger, Exception exception, string eventName, string uniqueId);
 }
 
 /// <summary>
@@ -89,6 +92,8 @@ public sealed class ChannelManager
     /// </summary>
     private readonly Dictionary<string, long> _departures = new(StringComparer.Ordinal);
 
+    // Every channel event isolates each subscriber: see Raise. A subscriber's failure is logged at Warning and counted on
+    // live.channels.subscriber_faults; the later subscribers still receive the event and nothing leaves the table.
     public event Action<AsteriskChannel>? ChannelAdded;
     public event Action<AsteriskChannel>? ChannelRemoved;
     public event Action<AsteriskChannel>? ChannelStateChanged;
@@ -299,10 +304,104 @@ public sealed class ChannelManager
             LiveMetrics.ChannelsCreated.Add(1);
             ChannelManagerLog.NewChannel(_logger, entry.UniqueId, entry.Name, entry.State);
             if (ChannelAdded is not null)
-                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelAdded?.Invoke((AsteriskChannel)c!), this, channel, null);
+                _events.Post(static (m, c, _) => ((ChannelManager)m).Raise(((ChannelManager)m).ChannelAdded, nameof(ChannelAdded), (AsteriskChannel)c!), this, channel, null);
         }
 
         return Admission.Admitted;
+    }
+
+    /// <summary>
+    /// Delivers one channel event to each of <paramref name="handlers"/> in subscription order, each in its own guard: a
+    /// subscriber that throws is counted on <c>live.channels.subscriber_faults</c> and logged once at Warning with the
+    /// event and the channel, and the later subscribers still receive the event. Nothing a subscriber throws leaves
+    /// this method, so it reaches neither the outbox nor the call that made the change, and a reconciliation in
+    /// progress goes on. A logger that throws while reporting is ignored: the fault is already counted.
+    /// <see cref="OutOfMemoryException"/> is not caught. Only what throws on the delivering thread is caught.
+    /// <para>
+    /// The invocation list is walked with <see cref="Delegate.EnumerateInvocationList{TDelegate}"/>, a struct
+    /// enumerator, so a delivery allocates nothing whatever the number of subscribers.
+    /// </para>
+    /// </summary>
+    private void Raise(Action<AsteriskChannel>? handlers, string eventName, AsteriskChannel channel)
+    {
+        if (handlers is null)
+            return;
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(channel);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                LiveMetrics.ChannelSubscriberFaults.Add(1);
+                ReportSubscriberFailure(ex, eventName, channel.UniqueId);
+            }
+        }
+    }
+
+    private void ReportSubscriberFailure(Exception failure, string eventName, string uniqueId)
+    {
+        try
+        {
+            ChannelManagerLog.SubscriberFailed(_logger, failure, eventName, uniqueId);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The log line is the only trace a subscriber's failure leaves; when the logger fails too, the fault stays
+            // counted and the event goes on to the later subscribers.
+        }
+    }
+
+    /// <summary>
+    /// Handle a <c>Newexten</c> event: the held channel moves to the reported dialplan step. <see cref="AsteriskChannel.Context"/>,
+    /// <see cref="AsteriskChannel.Extension"/> and <see cref="AsteriskChannel.Priority"/> take the reported values and
+    /// <see cref="AsteriskChannel.ExtensionHistory"/> records the visit, keeping the last 100. No channel event is raised.
+    /// <para>
+    /// A report for a channel the table does not hold, or one missing any of the three values, changes nothing and
+    /// allocates nothing. Asterisk sends <c>Newexten</c> only to a manager user that reads the <c>dialplan</c> class
+    /// and whose filter lets it through; on any other connection the channel keeps the location it was admitted with.
+    /// </para>
+    /// </summary>
+    public void OnNewExten(string uniqueId, string? context, string? exten, int? priority)
+    {
+        if (string.IsNullOrEmpty(context) || string.IsNullOrEmpty(exten) || priority is not { } step)
+            return;
+        if (!_channelsByUniqueId.TryGetValue(uniqueId, out var channel))
+            return;
+
+        lock (channel.SyncRoot)
+        {
+            // A repeated value keeps the string the channel already holds, so the history does not retain one copy per
+            // frame of the same context or extension.
+            var heldContext = string.Equals(channel.Context, context, StringComparison.Ordinal) ? channel.Context! : context;
+            var heldExten = string.Equals(channel.Extension, exten, StringComparison.Ordinal) ? channel.Extension! : exten;
+            channel.Context = heldContext;
+            channel.Extension = heldExten;
+            channel.Priority = step;
+            channel.AddExtensionHistory(new ExtensionHistoryEntry(heldContext, heldExten, step, DateTimeOffset.UtcNow));
+        }
+    }
+
+    /// <summary>
+    /// Handle a <c>NewCallerid</c> event: the held channel takes the reported calling number and name, verbatim,
+    /// <c>&lt;unknown&gt;</c> included, and nothing else moves. A header the frame does not carry leaves its member as
+    /// it was. A report for a channel the table no longer holds (one that arrives after its <c>Hangup</c>) changes
+    /// nothing and allocates nothing. No channel event is raised.
+    /// </summary>
+    public void OnNewCallerId(string uniqueId, string? callerIdNum, string? callerIdName)
+    {
+        if (!_channelsByUniqueId.TryGetValue(uniqueId, out var channel))
+            return;
+
+        lock (channel.SyncRoot)
+        {
+            if (callerIdNum is not null)
+                channel.CallerIdNum = callerIdNum;
+            if (callerIdName is not null)
+                channel.CallerIdName = callerIdName;
+        }
     }
 
     /// <summary>Handle a NewState event (channel state changed).</summary>
@@ -320,7 +419,7 @@ public sealed class ChannelManager
                     _channelsByName[channelName] = channel;
                 }
                 if (ChannelStateChanged is not null)
-                    _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelStateChanged?.Invoke((AsteriskChannel)c!), this, channel, null);
+                    _events.Post(static (m, c, _) => ((ChannelManager)m).Raise(((ChannelManager)m).ChannelStateChanged, nameof(ChannelStateChanged), (AsteriskChannel)c!), this, channel, null);
             }
             ChannelManagerLog.StateChanged(_logger, uniqueId, newState);
         }
@@ -355,7 +454,7 @@ public sealed class ChannelManager
             channel.HangupCause = cause;
             channel.State = ChannelState.Down;
             if (ChannelRemoved is not null)
-                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelRemoved?.Invoke((AsteriskChannel)c!), this, channel, null);
+                _events.Post(static (m, c, _) => ((ChannelManager)m).Raise(((ChannelManager)m).ChannelRemoved, nameof(ChannelRemoved), (AsteriskChannel)c!), this, channel, null);
         }
         LiveMetrics.ChannelsDestroyed.Add(1);
         ChannelManagerLog.Hangup(_logger, uniqueId, cause);
@@ -412,7 +511,7 @@ public sealed class ChannelManager
         {
             channel.DialedChannel = destChannel;
             if (ChannelDialBegin is not null)
-                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelDialBegin?.Invoke((AsteriskChannel)c!), this, channel, null);
+                _events.Post(static (m, c, _) => ((ChannelManager)m).Raise(((ChannelManager)m).ChannelDialBegin, nameof(ChannelDialBegin), (AsteriskChannel)c!), this, channel, null);
         }
         _events.Drain();
     }
@@ -424,7 +523,7 @@ public sealed class ChannelManager
         {
             channel.DialStatus = dialStatus;
             if (ChannelDialEnd is not null)
-                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelDialEnd?.Invoke((AsteriskChannel)c!), this, channel, null);
+                _events.Post(static (m, c, _) => ((ChannelManager)m).Raise(((ChannelManager)m).ChannelDialEnd, nameof(ChannelDialEnd), (AsteriskChannel)c!), this, channel, null);
         }
         _events.Drain();
     }
@@ -437,7 +536,7 @@ public sealed class ChannelManager
             channel.IsOnHold = true;
             channel.HoldMusicClass = musicClass;
             if (ChannelHeld is not null)
-                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelHeld?.Invoke((AsteriskChannel)c!), this, channel, null);
+                _events.Post(static (m, c, _) => ((ChannelManager)m).Raise(((ChannelManager)m).ChannelHeld, nameof(ChannelHeld), (AsteriskChannel)c!), this, channel, null);
         }
         _events.Drain();
     }
@@ -450,7 +549,7 @@ public sealed class ChannelManager
             channel.IsOnHold = false;
             channel.HoldMusicClass = null;
             if (ChannelUnheld is not null)
-                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelUnheld?.Invoke((AsteriskChannel)c!), this, channel, null);
+                _events.Post(static (m, c, _) => ((ChannelManager)m).Raise(((ChannelManager)m).ChannelUnheld, nameof(ChannelUnheld), (AsteriskChannel)c!), this, channel, null);
         }
         _events.Drain();
     }
@@ -641,7 +740,7 @@ public sealed class ChannelManager
             gone.MarkRemovedByReload();
             gone.State = ChannelState.Down;
             if (ChannelRemoved is not null)
-                _events.Post(static (m, c, _) => ((ChannelManager)m).ChannelRemoved?.Invoke((AsteriskChannel)c!), this, gone, null);
+                _events.Post(static (m, c, _) => ((ChannelManager)m).Raise(((ChannelManager)m).ChannelRemoved, nameof(ChannelRemoved), (AsteriskChannel)c!), this, gone, null);
         }
 
         // Drop the name index only while it still points at this instance, so a reused or renamed
@@ -717,11 +816,26 @@ public sealed class AsteriskChannel : LiveObjectBase
     public string UniqueId { get; init; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public ChannelState State { get; set; }
+
+    /// <summary>
+    /// The calling number: the admission's, then the last one a <c>NewCallerid</c> reported, verbatim. A session's
+    /// participant keeps the identity it was created with.
+    /// </summary>
     public string? CallerIdNum { get; set; }
+
+    /// <summary>The calling name; see <see cref="CallerIdNum"/>.</summary>
     public string? CallerIdName { get; set; }
     public string? ConnectedLineNum { get; set; }
+    /// <summary>
+    /// The dialplan context the channel is in now: the admission's, then the last one a <c>Newexten</c> reported (on a
+    /// connection that receives the <c>dialplan</c> class). The location a session opened at stays on the session.
+    /// </summary>
     public string? Context { get; set; }
+
+    /// <summary>The extension the channel is at now; see <see cref="Context"/>.</summary>
     public string? Extension { get; set; }
+
+    /// <summary>The priority the channel is at now; see <see cref="Context"/>.</summary>
     public int Priority { get; set; }
     public AsteriskChannel? LinkedChannel { get; set; }
     public HangupCause HangupCause { get; set; }
@@ -800,17 +914,32 @@ public sealed class AsteriskChannel : LiveObjectBase
     /// </summary>
     internal void MarkRemovedByReload() => RemovedByReload = true;
 
-    /// <summary>Extension history for this channel (bounded to last 100 entries).</summary>
-    public IReadOnlyList<ExtensionHistoryEntry> ExtensionHistory => _extensionHistory;
+    /// <summary>
+    /// The dialplan steps Asterisk reported for this channel (<c>Newexten</c>), oldest first, bounded to the last 100.
+    /// Each read returns a copy taken under the channel's lock, so it is safe to enumerate on any thread while the
+    /// table records new visits. An entry's timestamp is when the SDK received the report. Empty on a connection that
+    /// does not receive <c>Newexten</c>.
+    /// </summary>
+    public IReadOnlyList<ExtensionHistoryEntry> ExtensionHistory
+    {
+        get
+        {
+            lock (SyncRoot)
+                return _extensionHistory.Count == 0 ? [] : _extensionHistory.ToArray();
+        }
+    }
 
     private const int MaxExtensionHistorySize = 100;
     private readonly List<ExtensionHistoryEntry> _extensionHistory = [];
 
     internal void AddExtensionHistory(ExtensionHistoryEntry entry)
     {
-        if (_extensionHistory.Count >= MaxExtensionHistorySize)
-            _extensionHistory.RemoveAt(0);
-        _extensionHistory.Add(entry);
+        lock (SyncRoot)
+        {
+            if (_extensionHistory.Count >= MaxExtensionHistorySize)
+                _extensionHistory.RemoveAt(0);
+            _extensionHistory.Add(entry);
+        }
     }
 }
 

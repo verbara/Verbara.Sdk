@@ -1978,6 +1978,16 @@ public sealed class VerbaraServer : IVerbaraServer
                             : HangupCause.NormalClearing);
                     break;
 
+                // dialplan class: the channel moves to the step Asterisk reports. Absent on a connection that does not read
+                // that class or whose filter excludes Newexten; the channel then keeps the location it was admitted with.
+                case NewExtenEvent nee:
+                    server.Channels.OnNewExten(nee.UniqueId ?? "", nee.Context, nee.Exten, nee.Priority);
+                    break;
+
+                case NewCallerIdEvent nci:
+                    server.Channels.OnNewCallerId(nci.UniqueId ?? "", nci.CallerIdNum, nci.CallerIdName);
+                    break;
+
                 case RenameEvent re:
                     server.Channels.OnRename(
                         re.UniqueId ?? "",

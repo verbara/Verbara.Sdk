@@ -1,0 +1,4222 @@
+Asterisk Call Manager/12.0.0
+Response: Success
+ActionID: cap-2
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487832.520789
+UserEvent: CaptureProvenance
+AsteriskVersion: Asterisk 23.5.0
+Image: andrius/asterisk:23.5.0_debian-trixie-c6e8a0e@sha256:532e68e4194e968e866a27f321ccce03fdd66bd7e369ffa17c07e7210da0fde1
+Workload: dialplan-and-parking
+ActionID: cap-2
+
+Response: Success
+ActionID: cap-3
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487832.520824
+UserEvent: CaptureMarker
+Step: dialplan
+ActionID: cap-3
+
+Response: Success
+ActionID: cap-4
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487832.520960
+Channel: Local/callerid@capture-00000000;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.0
+Linkedid: 1793487832.0
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487832.520979
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487832.520990
+Channel: Local/callerid@capture-00000000;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.0
+Linkedid: 1793487832.0
+Extension: callerid
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487832.520997
+Channel: Local/callerid@capture-00000000;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7100
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.0
+Linkedid: 1793487832.0
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487832.521000
+Channel: Local/callerid@capture-00000000;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7100
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.0
+Linkedid: 1793487832.0
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487832.521055
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7100
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487832.521057
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7100
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+
+Event: LocalBridge
+Privilege: call,all
+Timestamp: 1793487832.521075
+LocalOneChannel: Local/callerid@capture-00000000;1
+LocalOneChannelState: 0
+LocalOneChannelStateDesc: Down
+LocalOneCallerIDNum: 7100
+LocalOneCallerIDName: Capture
+LocalOneConnectedLineNum: 7100
+LocalOneConnectedLineName: Capture
+LocalOneLanguage: en
+LocalOneAccountCode: 
+LocalOneContext: capture
+LocalOneExten: callerid
+LocalOnePriority: 1
+LocalOneUniqueid: 1793487832.0
+LocalOneLinkedid: 1793487832.0
+LocalTwoChannel: Local/callerid@capture-00000000;2
+LocalTwoChannelState: 4
+LocalTwoChannelStateDesc: Ring
+LocalTwoCallerIDNum: 7100
+LocalTwoCallerIDName: Capture
+LocalTwoConnectedLineNum: 7100
+LocalTwoConnectedLineName: Capture
+LocalTwoLanguage: en
+LocalTwoAccountCode: 
+LocalTwoContext: capture
+LocalTwoExten: callerid
+LocalTwoPriority: 1
+LocalTwoUniqueid: 1793487832.1
+LocalTwoLinkedid: 1793487832.0
+Context: capture
+Exten: callerid
+LocalOptimization: No
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1793487832.521100
+DestChannel: Local/callerid@capture-00000000;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 7100
+DestCallerIDName: Capture
+DestConnectedLineNum: 7100
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: callerid
+DestPriority: 1
+DestUniqueid: 1793487832.0
+DestLinkedid: 1793487832.0
+DialString: callerid@capture/n
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487832.521128
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7100
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+Extension: callerid
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487832.521132
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7100
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487832.521143
+Channel: Local/callerid@capture-00000000;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7100
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.0
+Linkedid: 1793487832.0
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1793487832.521153
+DestChannel: Local/callerid@capture-00000000;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 7100
+DestCallerIDName: Capture
+DestConnectedLineNum: 7100
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: callerid
+DestPriority: 1
+DestUniqueid: 1793487832.0
+DestLinkedid: 1793487832.0
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1793487832.521152
+ActionID: cap-4
+Response: Success
+Channel: Local/callerid@capture-00000000;1
+Application: Wait
+Data: 8
+Reason: 4
+Uniqueid: 1793487832.0
+CallerIDNum: 7100
+CallerIDName: Capture
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487832.521188
+Device: Local/callerid@capture
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487832.521210
+Device: Local/callerid@capture
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487833.021766
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7100
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 2
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+Extension: callerid
+Application: Wait
+AppData: 1
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487834.022853
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7100
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 3
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+Extension: callerid
+Application: Set
+AppData: CALLERID(num)=7105
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487834.022878
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7105
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 3
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487834.022881
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7105
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 4
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+Extension: callerid
+Application: Set
+AppData: CALLERID(name)=Capture Changed
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487834.022884
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7105
+CallerIDName: Capture Changed
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 4
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487834.022886
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7105
+CallerIDName: Capture Changed
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 5
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+Extension: callerid
+Application: Goto
+AppData: capture-hop,hop,1
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487834.022919
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7105
+CallerIDName: Capture Changed
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-hop
+Exten: hop
+Priority: 1
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+Extension: hop
+Application: NoOp
+AppData: hop
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487834.022925
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7105
+CallerIDName: Capture Changed
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-hop
+Exten: hop
+Priority: 2
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+Extension: hop
+Application: Wait
+AppData: 1
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487835.024023
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7105
+CallerIDName: Capture Changed
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-hop
+Exten: hop
+Priority: 3
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+Extension: hop
+Application: Hangup
+AppData: 
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1793487835.024040
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7105
+CallerIDName: Capture Changed
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-hop
+Exten: hop
+Priority: 3
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+Cause: 16
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1793487835.024052
+Channel: Local/callerid@capture-00000000;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7100
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.0
+Linkedid: 1793487832.0
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487835.024054
+Channel: Local/callerid@capture-00000000;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7105
+CallerIDName: Capture Changed
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-hop
+Exten: hop
+Priority: 3
+Uniqueid: 1793487832.1
+Linkedid: 1793487832.0
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487835.024100
+Channel: Local/callerid@capture-00000000;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7100
+CallerIDName: Capture
+ConnectedLineNum: 7100
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: callerid
+Priority: 1
+Uniqueid: 1793487832.0
+Linkedid: 1793487832.0
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487835.024146
+Device: Local/callerid@capture
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487835.024168
+Device: Local/callerid@capture
+State: NOT_INUSE
+
+Response: Success
+ActionID: cap-5
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487836.025620
+UserEvent: CaptureMarker
+Step: redirect
+ActionID: cap-5
+
+Response: Success
+ActionID: cap-6
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487836.025876
+Channel: Local/hold@capture-00000001;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.2
+Linkedid: 1793487836.2
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487836.025895
+Channel: Local/hold@capture-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.3
+Linkedid: 1793487836.2
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487836.025922
+Channel: Local/hold@capture-00000001;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.2
+Linkedid: 1793487836.2
+Extension: hold
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487836.025934
+Channel: Local/hold@capture-00000001;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.2
+Linkedid: 1793487836.2
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487836.025950
+Channel: Local/hold@capture-00000001;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.2
+Linkedid: 1793487836.2
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487836.026022
+Channel: Local/hold@capture-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.3
+Linkedid: 1793487836.2
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487836.026023
+Channel: Local/hold@capture-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.3
+Linkedid: 1793487836.2
+
+Event: LocalBridge
+Privilege: call,all
+Timestamp: 1793487836.026053
+LocalOneChannel: Local/hold@capture-00000001;1
+LocalOneChannelState: 0
+LocalOneChannelStateDesc: Down
+LocalOneCallerIDNum: 7101
+LocalOneCallerIDName: Capture
+LocalOneConnectedLineNum: 7101
+LocalOneConnectedLineName: Capture
+LocalOneLanguage: en
+LocalOneAccountCode: 
+LocalOneContext: capture
+LocalOneExten: hold
+LocalOnePriority: 1
+LocalOneUniqueid: 1793487836.2
+LocalOneLinkedid: 1793487836.2
+LocalTwoChannel: Local/hold@capture-00000001;2
+LocalTwoChannelState: 4
+LocalTwoChannelStateDesc: Ring
+LocalTwoCallerIDNum: 7101
+LocalTwoCallerIDName: Capture
+LocalTwoConnectedLineNum: 7101
+LocalTwoConnectedLineName: Capture
+LocalTwoLanguage: en
+LocalTwoAccountCode: 
+LocalTwoContext: capture
+LocalTwoExten: hold
+LocalTwoPriority: 1
+LocalTwoUniqueid: 1793487836.3
+LocalTwoLinkedid: 1793487836.2
+Context: capture
+Exten: hold
+LocalOptimization: No
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1793487836.026084
+DestChannel: Local/hold@capture-00000001;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 7101
+DestCallerIDName: Capture
+DestConnectedLineNum: 7101
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: hold
+DestPriority: 1
+DestUniqueid: 1793487836.2
+DestLinkedid: 1793487836.2
+DialString: hold@capture/n
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487836.026137
+Channel: Local/hold@capture-00000001;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.3
+Linkedid: 1793487836.2
+Extension: hold
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487836.026147
+Channel: Local/hold@capture-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.3
+Linkedid: 1793487836.2
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487836.026156
+Channel: Local/hold@capture-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.2
+Linkedid: 1793487836.2
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1793487836.026168
+DestChannel: Local/hold@capture-00000001;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 7101
+DestCallerIDName: Capture
+DestConnectedLineNum: 7101
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: hold
+DestPriority: 1
+DestUniqueid: 1793487836.2
+DestLinkedid: 1793487836.2
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1793487836.026181
+ActionID: cap-6
+Response: Success
+Channel: Local/hold@capture-00000001;1
+Application: Wait
+Data: 12
+Reason: 4
+Uniqueid: 1793487836.2
+CallerIDNum: 7101
+CallerIDName: Capture
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487836.026199
+Device: Local/hold@capture
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487836.026210
+Device: Local/hold@capture
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487836.526764
+Channel: Local/hold@capture-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 2
+Uniqueid: 1793487836.3
+Linkedid: 1793487836.2
+Extension: hold
+Application: Wait
+AppData: 8
+
+Response: Success
+ActionID: cap-7
+Message: Redirect successful
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487836.527052
+Channel: Local/hold@capture-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: redirected
+Priority: 1
+Uniqueid: 1793487836.3
+Linkedid: 1793487836.2
+Extension: redirected
+Application: NoOp
+AppData: redirected
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487836.527061
+Channel: Local/hold@capture-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: redirected
+Priority: 2
+Uniqueid: 1793487836.3
+Linkedid: 1793487836.2
+Extension: redirected
+Application: Wait
+AppData: 1
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487837.528183
+Channel: Local/hold@capture-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: redirected
+Priority: 3
+Uniqueid: 1793487836.3
+Linkedid: 1793487836.2
+Extension: redirected
+Application: Hangup
+AppData: 
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1793487837.528205
+Channel: Local/hold@capture-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: redirected
+Priority: 3
+Uniqueid: 1793487836.3
+Linkedid: 1793487836.2
+Cause: 16
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1793487837.528227
+Channel: Local/hold@capture-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.2
+Linkedid: 1793487836.2
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487837.528239
+Channel: Local/hold@capture-00000001;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: redirected
+Priority: 3
+Uniqueid: 1793487836.3
+Linkedid: 1793487836.2
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487837.528280
+Channel: Local/hold@capture-00000001;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7101
+CallerIDName: Capture
+ConnectedLineNum: 7101
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: hold
+Priority: 1
+Uniqueid: 1793487836.2
+Linkedid: 1793487836.2
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487837.528302
+Device: Local/hold@capture
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487837.528311
+Device: Local/hold@capture
+State: NOT_INUSE
+
+Response: Success
+ActionID: cap-8
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487838.529653
+UserEvent: CaptureMarker
+Step: park
+ActionID: cap-8
+
+Response: Success
+ActionID: cap-9
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487838.529857
+Channel: Local/park@capture-00000002;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.4
+Linkedid: 1793487838.4
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487838.529872
+Channel: Local/park@capture-00000002;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487838.529898
+Channel: Local/park@capture-00000002;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.4
+Linkedid: 1793487838.4
+Extension: park
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487838.529908
+Channel: Local/park@capture-00000002;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.4
+Linkedid: 1793487838.4
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487838.529911
+Channel: Local/park@capture-00000002;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.4
+Linkedid: 1793487838.4
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487838.529973
+Channel: Local/park@capture-00000002;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487838.529975
+Channel: Local/park@capture-00000002;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+
+Event: LocalBridge
+Privilege: call,all
+Timestamp: 1793487838.529998
+LocalOneChannel: Local/park@capture-00000002;1
+LocalOneChannelState: 0
+LocalOneChannelStateDesc: Down
+LocalOneCallerIDNum: 7102
+LocalOneCallerIDName: Capture
+LocalOneConnectedLineNum: 7102
+LocalOneConnectedLineName: Capture
+LocalOneLanguage: en
+LocalOneAccountCode: 
+LocalOneContext: capture
+LocalOneExten: park
+LocalOnePriority: 1
+LocalOneUniqueid: 1793487838.4
+LocalOneLinkedid: 1793487838.4
+LocalTwoChannel: Local/park@capture-00000002;2
+LocalTwoChannelState: 4
+LocalTwoChannelStateDesc: Ring
+LocalTwoCallerIDNum: 7102
+LocalTwoCallerIDName: Capture
+LocalTwoConnectedLineNum: 7102
+LocalTwoConnectedLineName: Capture
+LocalTwoLanguage: en
+LocalTwoAccountCode: 
+LocalTwoContext: capture
+LocalTwoExten: park
+LocalTwoPriority: 1
+LocalTwoUniqueid: 1793487838.5
+LocalTwoLinkedid: 1793487838.4
+Context: capture
+Exten: park
+LocalOptimization: No
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1793487838.530020
+DestChannel: Local/park@capture-00000002;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 7102
+DestCallerIDName: Capture
+DestConnectedLineNum: 7102
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: park
+DestPriority: 1
+DestUniqueid: 1793487838.4
+DestLinkedid: 1793487838.4
+DialString: park@capture/n
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487838.530045
+Channel: Local/park@capture-00000002;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+Extension: park
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487838.530055
+Channel: Local/park@capture-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487838.530064
+Channel: Local/park@capture-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.4
+Linkedid: 1793487838.4
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1793487838.530079
+DestChannel: Local/park@capture-00000002;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 7102
+DestCallerIDName: Capture
+DestConnectedLineNum: 7102
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: park
+DestPriority: 1
+DestUniqueid: 1793487838.4
+DestLinkedid: 1793487838.4
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1793487838.530088
+ActionID: cap-9
+Response: Success
+Channel: Local/park@capture-00000002;1
+Application: Wait
+Data: 12
+Reason: 4
+Uniqueid: 1793487838.4
+CallerIDNum: 7102
+CallerIDName: Capture
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487838.530112
+Device: Local/park@capture
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487838.530135
+Device: Local/park@capture
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487839.030696
+Channel: Local/park@capture-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+Extension: park
+Application: Park
+AppData: default,s
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1793487839.030733
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: parking
+BridgeTechnology: holding_bridge
+BridgeCreator: Parking
+BridgeName: default
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: ParkedCall
+Privilege: call,all
+Timestamp: 1793487839.030792
+ParkeeChannel: Local/park@capture-00000002;2
+ParkeeChannelState: 6
+ParkeeChannelStateDesc: Up
+ParkeeCallerIDNum: 7102
+ParkeeCallerIDName: Capture
+ParkeeConnectedLineNum: 7102
+ParkeeConnectedLineName: Capture
+ParkeeLanguage: en
+ParkeeAccountCode: 
+ParkeeContext: capture
+ParkeeExten: park
+ParkeePriority: 2
+ParkeeUniqueid: 1793487838.5
+ParkeeLinkedid: 1793487838.4
+ParkerDialString: Local/park@capture
+Parkinglot: default
+ParkingSpace: 701
+ParkingTimeout: 20
+ParkingDuration: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487839.030798
+Device: park:701@parkedcalls
+State: INUSE
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1793487839.030811
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: parking
+BridgeTechnology: holding_bridge
+BridgeCreator: Parking
+BridgeName: default
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/park@capture-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+
+Response: Success
+ActionID: cap-10
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487839.531691
+UserEvent: CaptureMarker
+Step: parked-list
+ActionID: cap-10
+
+Response: Success
+ActionID: cap-11
+EventList: start
+Message: Parked calls will follow
+
+Event: ParkedCall
+ParkeeChannel: Local/park@capture-00000002;2
+ParkeeChannelState: 6
+ParkeeChannelStateDesc: Up
+ParkeeCallerIDNum: 7102
+ParkeeCallerIDName: Capture
+ParkeeConnectedLineNum: 7102
+ParkeeConnectedLineName: Capture
+ParkeeLanguage: en
+ParkeeAccountCode: 
+ParkeeContext: capture
+ParkeeExten: park
+ParkeePriority: 2
+ParkeeUniqueid: 1793487838.5
+ParkeeLinkedid: 1793487838.4
+ParkerDialString: Local/park@capture
+Parkinglot: default
+ParkingSpace: 701
+ParkingTimeout: 20
+ParkingDuration: 0
+ActionID: cap-11
+
+Event: ParkedCallsComplete
+ActionID: cap-11
+EventList: Complete
+ListItems: 1
+Total: 1
+
+Response: Success
+ActionID: cap-12
+EventList: start
+Message: Parking lots will follow
+
+Event: Parkinglot
+ActionID: cap-12
+Name: default
+StartSpace: 701
+StopSpace: 720
+Timeout: 20
+
+Event: ParkinglotsComplete
+ActionID: cap-12
+EventList: Complete
+ListItems: 1
+
+Response: Success
+ActionID: cap-13
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487839.531869
+UserEvent: CaptureMarker
+Step: unpark
+ActionID: cap-13
+
+Response: Success
+ActionID: cap-14
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487839.532039
+Channel: Local/701@capture-00000003;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.6
+Linkedid: 1793487839.6
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487839.532054
+Channel: Local/701@capture-00000003;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487839.6
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487839.532071
+Channel: Local/701@capture-00000003;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.6
+Linkedid: 1793487839.6
+Extension: 701
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487839.532078
+Channel: Local/701@capture-00000003;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.6
+Linkedid: 1793487839.6
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487839.532094
+Channel: Local/701@capture-00000003;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.6
+Linkedid: 1793487839.6
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487839.532177
+Channel: Local/701@capture-00000003;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487839.6
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487839.532178
+Channel: Local/701@capture-00000003;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487839.6
+
+Event: LocalBridge
+Privilege: call,all
+Timestamp: 1793487839.532212
+LocalOneChannel: Local/701@capture-00000003;1
+LocalOneChannelState: 0
+LocalOneChannelStateDesc: Down
+LocalOneCallerIDNum: 7103
+LocalOneCallerIDName: Capture
+LocalOneConnectedLineNum: 7103
+LocalOneConnectedLineName: Capture
+LocalOneLanguage: en
+LocalOneAccountCode: 
+LocalOneContext: capture
+LocalOneExten: 701
+LocalOnePriority: 1
+LocalOneUniqueid: 1793487839.6
+LocalOneLinkedid: 1793487839.6
+LocalTwoChannel: Local/701@capture-00000003;2
+LocalTwoChannelState: 4
+LocalTwoChannelStateDesc: Ring
+LocalTwoCallerIDNum: 7103
+LocalTwoCallerIDName: Capture
+LocalTwoConnectedLineNum: 7103
+LocalTwoConnectedLineName: Capture
+LocalTwoLanguage: en
+LocalTwoAccountCode: 
+LocalTwoContext: capture
+LocalTwoExten: 701
+LocalTwoPriority: 1
+LocalTwoUniqueid: 1793487839.7
+LocalTwoLinkedid: 1793487839.6
+Context: capture
+Exten: 701
+LocalOptimization: No
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1793487839.532237
+DestChannel: Local/701@capture-00000003;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 7103
+DestCallerIDName: Capture
+DestConnectedLineNum: 7103
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: 701
+DestPriority: 1
+DestUniqueid: 1793487839.6
+DestLinkedid: 1793487839.6
+DialString: 701@capture/n
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487839.532308
+Channel: Local/701@capture-00000003;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487839.6
+Extension: 701
+Application: ParkedCall
+AppData: default,701
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487839.532319
+Channel: Local/701@capture-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487839.6
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487839.532327
+Channel: Local/701@capture-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.6
+Linkedid: 1793487839.6
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1793487839.532347
+DestChannel: Local/701@capture-00000003;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 7103
+DestCallerIDName: Capture
+DestConnectedLineNum: 7103
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: 701
+DestPriority: 1
+DestUniqueid: 1793487839.6
+DestLinkedid: 1793487839.6
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1793487839.532349
+ActionID: cap-14
+Response: Success
+Channel: Local/701@capture-00000003;1
+Application: Wait
+Data: 2
+Reason: 4
+Uniqueid: 1793487839.6
+CallerIDNum: 7103
+CallerIDName: Capture
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487839.532382
+Device: Local/701@capture
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487839.532400
+Device: Local/701@capture
+State: INUSE
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1793487840.032994
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487840.033027
+Device: park:701@parkedcalls
+State: NOT_INUSE
+
+Event: UnParkedCall
+Privilege: call,all
+Timestamp: 1793487840.033033
+ParkeeChannel: Local/park@capture-00000002;2
+ParkeeChannelState: 6
+ParkeeChannelStateDesc: Up
+ParkeeCallerIDNum: 7102
+ParkeeCallerIDName: Capture
+ParkeeConnectedLineNum: 7102
+ParkeeConnectedLineName: Capture
+ParkeeLanguage: en
+ParkeeAccountCode: 
+ParkeeContext: capture
+ParkeeExten: park
+ParkeePriority: 2
+ParkeeUniqueid: 1793487838.5
+ParkeeLinkedid: 1793487838.4
+RetrieverChannel: Local/701@capture-00000003;2
+RetrieverChannelState: 6
+RetrieverChannelStateDesc: Up
+RetrieverCallerIDNum: 7103
+RetrieverCallerIDName: Capture
+RetrieverConnectedLineNum: 7103
+RetrieverConnectedLineName: Capture
+RetrieverLanguage: en
+RetrieverAccountCode: 
+RetrieverContext: capture
+RetrieverExten: 701
+RetrieverPriority: 1
+RetrieverUniqueid: 1793487839.7
+RetrieverLinkedid: 1793487839.6
+ParkerDialString: Local/park@capture
+Parkinglot: default
+ParkingSpace: 701
+ParkingTimeout: 19
+ParkingDuration: 1
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1793487840.033043
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: parking
+BridgeTechnology: holding_bridge
+BridgeCreator: Parking
+BridgeName: default
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: Local/park@capture-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1793487840.033070
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/park@capture-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1793487840.033139
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: Local/701@capture-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487838.4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487840.033196
+Channel: Local/park@capture-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+Variable: BRIDGEPEER
+Value: Local/701@capture-00000003;2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487840.033214
+Channel: Local/701@capture-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487838.4
+Variable: BRIDGEPEER
+Value: Local/park@capture-00000002;2
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487840.033239
+Channel: Local/701@capture-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487838.4
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487840.033243
+Channel: Local/park@capture-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1793487841.534762
+Channel: Local/701@capture-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487838.4
+Cause: 0
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487841.534779
+Channel: Local/701@capture-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.6
+Linkedid: 1793487839.6
+Cause: 0
+Cause-txt: Unknown
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487841.534783
+Channel: Local/701@capture-00000003;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.6
+Linkedid: 1793487839.6
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487841.534790
+Channel: Local/701@capture-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487838.4
+Variable: BRIDGEPEER
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487841.534820
+Device: Local/701@capture
+State: NOT_INUSE
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487841.534825
+Channel: Local/park@capture-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+Variable: BRIDGEPEER
+Value: 
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1793487841.534861
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/701@capture-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487838.4
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1793487841.534889
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: Local/park@capture-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1793487841.534894
+Channel: Local/701@capture-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487838.4
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487841.534916
+Channel: Local/701@capture-00000003;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 701
+Priority: 1
+Uniqueid: 1793487839.7
+Linkedid: 1793487838.4
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1793487841.534935
+Channel: Local/park@capture-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+Cause: 16
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1793487841.534944
+BridgeUniqueid: 22222222-2222-2222-2222-222222222222
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1793487841.534953
+Channel: Local/park@capture-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.4
+Linkedid: 1793487838.4
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487841.534958
+Channel: Local/park@capture-00000002;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7102
+CallerIDName: Capture
+ConnectedLineNum: 7103
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487838.5
+Linkedid: 1793487838.4
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487841.534961
+Device: Local/701@capture
+State: NOT_INUSE
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487841.534990
+Channel: Local/park@capture-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.4
+Linkedid: 1793487838.4
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487841.535002
+Channel: Local/park@capture-00000002;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7103
+CallerIDName: Capture
+ConnectedLineNum: 7102
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487838.4
+Linkedid: 1793487838.4
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487841.535006
+Device: Local/park@capture
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487841.535022
+Device: Local/park@capture
+State: NOT_INUSE
+
+Response: Success
+ActionID: cap-15
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487842.536326
+UserEvent: CaptureMarker
+Step: giveup
+ActionID: cap-15
+
+Response: Success
+ActionID: cap-16
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487842.536529
+Channel: Local/park@capture-00000004;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487842.8
+Linkedid: 1793487842.8
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487842.536539
+Channel: Local/park@capture-00000004;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487842.9
+Linkedid: 1793487842.8
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487842.536543
+Channel: Local/park@capture-00000004;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487842.8
+Linkedid: 1793487842.8
+Extension: park
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487842.536551
+Channel: Local/park@capture-00000004;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487842.8
+Linkedid: 1793487842.8
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487842.536555
+Channel: Local/park@capture-00000004;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487842.8
+Linkedid: 1793487842.8
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487842.536607
+Channel: Local/park@capture-00000004;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487842.9
+Linkedid: 1793487842.8
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487842.536609
+Channel: Local/park@capture-00000004;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487842.9
+Linkedid: 1793487842.8
+
+Event: LocalBridge
+Privilege: call,all
+Timestamp: 1793487842.536631
+LocalOneChannel: Local/park@capture-00000004;1
+LocalOneChannelState: 0
+LocalOneChannelStateDesc: Down
+LocalOneCallerIDNum: 7104
+LocalOneCallerIDName: Capture
+LocalOneConnectedLineNum: 7104
+LocalOneConnectedLineName: Capture
+LocalOneLanguage: en
+LocalOneAccountCode: 
+LocalOneContext: capture
+LocalOneExten: park
+LocalOnePriority: 1
+LocalOneUniqueid: 1793487842.8
+LocalOneLinkedid: 1793487842.8
+LocalTwoChannel: Local/park@capture-00000004;2
+LocalTwoChannelState: 4
+LocalTwoChannelStateDesc: Ring
+LocalTwoCallerIDNum: 7104
+LocalTwoCallerIDName: Capture
+LocalTwoConnectedLineNum: 7104
+LocalTwoConnectedLineName: Capture
+LocalTwoLanguage: en
+LocalTwoAccountCode: 
+LocalTwoContext: capture
+LocalTwoExten: park
+LocalTwoPriority: 1
+LocalTwoUniqueid: 1793487842.9
+LocalTwoLinkedid: 1793487842.8
+Context: capture
+Exten: park
+LocalOptimization: No
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1793487842.536645
+DestChannel: Local/park@capture-00000004;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 7104
+DestCallerIDName: Capture
+DestConnectedLineNum: 7104
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: park
+DestPriority: 1
+DestUniqueid: 1793487842.8
+DestLinkedid: 1793487842.8
+DialString: park@capture/n
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487842.536666
+Channel: Local/park@capture-00000004;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487842.9
+Linkedid: 1793487842.8
+Extension: park
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487842.536677
+Channel: Local/park@capture-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487842.9
+Linkedid: 1793487842.8
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487842.536680
+Channel: Local/park@capture-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487842.8
+Linkedid: 1793487842.8
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1793487842.536693
+DestChannel: Local/park@capture-00000004;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 7104
+DestCallerIDName: Capture
+DestConnectedLineNum: 7104
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: park
+DestPriority: 1
+DestUniqueid: 1793487842.8
+DestLinkedid: 1793487842.8
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1793487842.536700
+ActionID: cap-16
+Response: Success
+Channel: Local/park@capture-00000004;1
+Application: Wait
+Data: 2
+Reason: 4
+Uniqueid: 1793487842.8
+CallerIDNum: 7104
+CallerIDName: Capture
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487842.536717
+Device: Local/park@capture
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487842.536722
+Device: Local/park@capture
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487843.037263
+Channel: Local/park@capture-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487842.9
+Linkedid: 1793487842.8
+Extension: park
+Application: Park
+AppData: default,s
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487843.037306
+Device: park:701@parkedcalls
+State: INUSE
+
+Event: ParkedCall
+Privilege: call,all
+Timestamp: 1793487843.037309
+ParkeeChannel: Local/park@capture-00000004;2
+ParkeeChannelState: 6
+ParkeeChannelStateDesc: Up
+ParkeeCallerIDNum: 7104
+ParkeeCallerIDName: Capture
+ParkeeConnectedLineNum: 7104
+ParkeeConnectedLineName: Capture
+ParkeeLanguage: en
+ParkeeAccountCode: 
+ParkeeContext: capture
+ParkeeExten: park
+ParkeePriority: 2
+ParkeeUniqueid: 1793487842.9
+ParkeeLinkedid: 1793487842.8
+ParkerDialString: Local/park@capture
+Parkinglot: default
+ParkingSpace: 701
+ParkingTimeout: 20
+ParkingDuration: 0
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1793487843.037324
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: parking
+BridgeTechnology: holding_bridge
+BridgeCreator: Parking
+BridgeName: default
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/park@capture-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487842.9
+Linkedid: 1793487842.8
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1793487844.537475
+Channel: Local/park@capture-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487842.9
+Linkedid: 1793487842.8
+Cause: 0
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487844.537490
+Channel: Local/park@capture-00000004;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 1
+Uniqueid: 1793487842.8
+Linkedid: 1793487842.8
+Cause: 0
+Cause-txt: Unknown
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487844.537520
+Device: park:701@parkedcalls
+State: NOT_INUSE
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1793487844.537563
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: parking
+BridgeTechnology: holding_bridge
+BridgeCreator: Parking
+BridgeName: default
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: Local/park@capture-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487842.9
+Linkedid: 1793487842.8
+
+Event: ParkedCallGiveUp
+Privilege: call,all
+Timestamp: 1793487844.537564
+ParkeeChannel: Local/park@capture-00000004;2
+ParkeeChannelState: 6
+ParkeeChannelStateDesc: Up
+ParkeeCallerIDNum: 7104
+ParkeeCallerIDName: Capture
+ParkeeConnectedLineNum: 7104
+ParkeeConnectedLineName: Capture
+ParkeeLanguage: en
+ParkeeAccountCode: 
+ParkeeContext: capture
+ParkeeExten: park
+ParkeePriority: 2
+ParkeeUniqueid: 1793487842.9
+ParkeeLinkedid: 1793487842.8
+ParkerDialString: Local/park@capture
+Parkinglot: default
+ParkingSpace: 701
+ParkingTimeout: 19
+ParkingDuration: 1
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487844.537566
+Device: Local/park@capture
+State: NOT_INUSE
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1793487844.537581
+Channel: Local/park@capture-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487842.9
+Linkedid: 1793487842.8
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487844.537598
+Channel: Local/park@capture-00000004;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7104
+CallerIDName: Capture
+ConnectedLineNum: 7104
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park
+Priority: 2
+Uniqueid: 1793487842.9
+Linkedid: 1793487842.8
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487844.537627
+Device: Local/park@capture
+State: NOT_INUSE
+
+Response: Success
+ActionID: cap-17
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487845.539244
+UserEvent: CaptureMarker
+Step: timeout
+ActionID: cap-17
+
+Response: Success
+ActionID: cap-18
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487845.539469
+Channel: Local/park-short@capture-00000005;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.10
+Linkedid: 1793487845.10
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487845.539480
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487845.539485
+Channel: Local/park-short@capture-00000005;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.10
+Linkedid: 1793487845.10
+Extension: park-short
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487845.539499
+Channel: Local/park-short@capture-00000005;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.10
+Linkedid: 1793487845.10
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487845.539503
+Channel: Local/park-short@capture-00000005;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.10
+Linkedid: 1793487845.10
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487845.539549
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487845.539552
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+
+Event: LocalBridge
+Privilege: call,all
+Timestamp: 1793487845.539573
+LocalOneChannel: Local/park-short@capture-00000005;1
+LocalOneChannelState: 0
+LocalOneChannelStateDesc: Down
+LocalOneCallerIDNum: 7106
+LocalOneCallerIDName: Capture
+LocalOneConnectedLineNum: 7106
+LocalOneConnectedLineName: Capture
+LocalOneLanguage: en
+LocalOneAccountCode: 
+LocalOneContext: capture
+LocalOneExten: park-short
+LocalOnePriority: 1
+LocalOneUniqueid: 1793487845.10
+LocalOneLinkedid: 1793487845.10
+LocalTwoChannel: Local/park-short@capture-00000005;2
+LocalTwoChannelState: 4
+LocalTwoChannelStateDesc: Ring
+LocalTwoCallerIDNum: 7106
+LocalTwoCallerIDName: Capture
+LocalTwoConnectedLineNum: 7106
+LocalTwoConnectedLineName: Capture
+LocalTwoLanguage: en
+LocalTwoAccountCode: 
+LocalTwoContext: capture
+LocalTwoExten: park-short
+LocalTwoPriority: 1
+LocalTwoUniqueid: 1793487845.11
+LocalTwoLinkedid: 1793487845.10
+Context: capture
+Exten: park-short
+LocalOptimization: No
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1793487845.539592
+DestChannel: Local/park-short@capture-00000005;1
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 7106
+DestCallerIDName: Capture
+DestConnectedLineNum: 7106
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: park-short
+DestPriority: 1
+DestUniqueid: 1793487845.10
+DestLinkedid: 1793487845.10
+DialString: park-short@capture/n
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487845.539639
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+Extension: park-short
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487845.539659
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487845.539664
+Channel: Local/park-short@capture-00000005;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.10
+Linkedid: 1793487845.10
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1793487845.539670
+DestChannel: Local/park-short@capture-00000005;1
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 7106
+DestCallerIDName: Capture
+DestConnectedLineNum: 7106
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture
+DestExten: park-short
+DestPriority: 1
+DestUniqueid: 1793487845.10
+DestLinkedid: 1793487845.10
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1793487845.539670
+ActionID: cap-18
+Response: Success
+Channel: Local/park-short@capture-00000005;1
+Application: Wait
+Data: 15
+Reason: 4
+Uniqueid: 1793487845.10
+CallerIDNum: 7106
+CallerIDName: Capture
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487845.539717
+Device: Local/park-short@capture
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487845.539728
+Device: Local/park-short@capture
+State: INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487846.040229
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 2
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+Extension: park-short
+Application: Park
+AppData: default,st(3)
+
+Event: ParkedCall
+Privilege: call,all
+Timestamp: 1793487846.040301
+ParkeeChannel: Local/park-short@capture-00000005;2
+ParkeeChannelState: 6
+ParkeeChannelStateDesc: Up
+ParkeeCallerIDNum: 7106
+ParkeeCallerIDName: Capture
+ParkeeConnectedLineNum: 7106
+ParkeeConnectedLineName: Capture
+ParkeeLanguage: en
+ParkeeAccountCode: 
+ParkeeContext: capture
+ParkeeExten: park-short
+ParkeePriority: 2
+ParkeeUniqueid: 1793487845.11
+ParkeeLinkedid: 1793487845.10
+ParkerDialString: Local/park-short@capture
+Parkinglot: default
+ParkingSpace: 701
+ParkingTimeout: 3
+ParkingDuration: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487846.040317
+Device: park:701@parkedcalls
+State: INUSE
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1793487846.040352
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: parking
+BridgeTechnology: holding_bridge
+BridgeCreator: Parking
+BridgeName: default
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 2
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487849.039612
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 2
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+Variable: PARKING_SPACE
+Value: 701
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487849.039630
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 2
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+Variable: PARKEDLOT
+Value: default
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487849.039634
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 2
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+Variable: PARKER
+Value: Local/park-short@capture
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487849.039636
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 2
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+Variable: PARKER_FLAT
+Value: Local_park-short@capture
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487849.039648
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 2
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+Variable: BRIDGE_FEATURES
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487849.039760
+Device: park:701@parkedcalls
+State: NOT_INUSE
+
+Event: ParkedCallTimeOut
+Privilege: call,all
+Timestamp: 1793487849.039790
+ParkeeChannel: Local/park-short@capture-00000005;2
+ParkeeChannelState: 6
+ParkeeChannelStateDesc: Up
+ParkeeCallerIDNum: 7106
+ParkeeCallerIDName: Capture
+ParkeeConnectedLineNum: 7106
+ParkeeConnectedLineName: Capture
+ParkeeLanguage: en
+ParkeeAccountCode: 
+ParkeeContext: capture-parked-timeout
+ParkeeExten: Local_park-short@capture
+ParkeePriority: 1
+ParkeeUniqueid: 1793487845.11
+ParkeeLinkedid: 1793487845.10
+ParkerDialString: Local/park-short@capture
+Parkinglot: default
+ParkingSpace: 701
+ParkingTimeout: 0
+ParkingDuration: 3
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1793487849.039812
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: parking
+BridgeTechnology: holding_bridge
+BridgeCreator: Parking
+BridgeName: default
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 2
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487849.039827
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-parked-timeout
+Exten: Local_park-short@capture
+Priority: 1
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+Extension: Local_park-short@capture
+Application: Park
+AppData: default,st(3)
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1793487849.039879
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-parked-timeout
+Exten: Local_park-short@capture
+Priority: 1
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+Cause: 16
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1793487849.039896
+Channel: Local/park-short@capture-00000005;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.10
+Linkedid: 1793487845.10
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487849.039909
+Channel: Local/park-short@capture-00000005;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-parked-timeout
+Exten: Local_park-short@capture
+Priority: 1
+Uniqueid: 1793487845.11
+Linkedid: 1793487845.10
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487849.039934
+Channel: Local/park-short@capture-00000005;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7106
+CallerIDName: Capture
+ConnectedLineNum: 7106
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: park-short
+Priority: 1
+Uniqueid: 1793487845.10
+Linkedid: 1793487845.10
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487849.039973
+Device: Local/park-short@capture
+State: NOT_INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487849.039992
+Device: Local/park-short@capture
+State: NOT_INUSE
+
+Response: Success
+ActionID: cap-19
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487850.041335
+UserEvent: CaptureMarker
+Step: send-flash-help
+ActionID: cap-19
+
+Response: Success
+ActionID: cap-20
+Message: Command output follows
+Output: 
+Output:   -= Info about Manager Command 'SendFlash' =- 
+Output: 
+Output: [Synopsis]
+Output: Send a hook flash on a specific channel. 
+Output: 
+Output: [Provided By]
+Output: app_senddtmf
+Output: 
+Output: [Since]
+Output: 20.3.0, 18.18.0
+Output: 
+Output: [Description]
+Output: Sends a hook flash on the specified channel.
+Output: 
+Output: [Syntax]
+Output: Action: SendFlash
+Output: [ActionID:] <value>
+Output: Channel: <value>
+Output: [Receive:] <value>
+Output: 
+Output: [Arguments]
+Output: 
+Output: ActionID
+Output:     ActionID for this transaction. Will be returned.
+Output: 
+Output: Channel
+Output:     Channel name to send hook flash to.
+Output: 
+Output: Receive
+Output:     Emulate receiving a hook flash on this channel instead of sending it out.
+Output: 
+Output: [Privilege]
+Output: call,all
+Output: 
+Output: [See Also]
+Output: Not available
+Output: 
+Output: [List Responses]
+Output: None
+Output: 
+Output: [End List Responses]
+Output: 
+Output: [Final Response]
+Output: None
+Output: 
+Output: [End Final Response]
+Output: 
+
+Response: Success
+ActionID: cap-21
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487850.041810
+UserEvent: CaptureMarker
+Step: send-flash-receive
+ActionID: cap-21
+
+Response: Success
+ActionID: cap-22
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487850.042272
+Channel: PJSIP/flash-00000000
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487850.042314
+Channel: PJSIP/flash-00000000
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+Extension: s
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1793487850.042323
+Channel: PJSIP/flash-00000000
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1793487850.042336
+Channel: PJSIP/flash-00000000
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: 7107
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1793487850.042945
+DestChannel: PJSIP/flash-00000000
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 7107
+DestCallerIDName: Capture
+DestConnectedLineNum: 7107
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-flash
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1793487850.12
+DestLinkedid: 1793487850.12
+DialString: flash
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1793487850.043427
+Channel: PJSIP/flash-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 1
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487850.043536
+Channel: PJSIP/flash-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 1
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+Extension: flash-in
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487850.043554
+Channel: PJSIP/flash-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 1
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487850.043601
+Device: PJSIP/flash
+State: INUSE
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1793487850.043821
+Channel: PJSIP/flash-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: 7107
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1793487850.043855
+DestChannel: PJSIP/flash-00000000
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 7107
+DestCallerIDName: Capture
+DestConnectedLineNum: 7107
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-flash
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1793487850.12
+DestLinkedid: 1793487850.12
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1793487850.043861
+ActionID: cap-22
+Response: Success
+Channel: PJSIP/flash-00000000
+Application: Wait
+Data: 10
+Reason: 4
+Uniqueid: 1793487850.12
+CallerIDNum: 7107
+CallerIDName: Capture
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487850.544200
+Channel: PJSIP/flash-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 2
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+Extension: flash-in
+Application: Wait
+AppData: 8
+
+Response: Success
+ActionID: cap-23
+Message: Flash successfully queued
+
+Event: Flash
+Privilege: call,all
+Timestamp: 1793487850.544478
+Channel: PJSIP/flash-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: 7107
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+
+Response: Success
+ActionID: cap-24
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487851.545786
+UserEvent: CaptureMarker
+Step: send-flash-plain
+ActionID: cap-24
+
+Response: Success
+ActionID: cap-25
+Message: Flash successfully queued
+
+Event: Flash
+Privilege: call,all
+Timestamp: 1793487851.546257
+Channel: PJSIP/flash-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 2
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+
+Response: Success
+ActionID: cap-26
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487852.547552
+UserEvent: CaptureMarker
+Step: send-flash-missing
+ActionID: cap-26
+
+Response: Error
+ActionID: cap-27
+Message: Channel not found
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1793487858.548168
+Channel: PJSIP/flash-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 3
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+Extension: flash-in
+Application: Hangup
+AppData: 
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1793487858.548202
+Channel: PJSIP/flash-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 3
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+Cause: 16
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487858.548265
+Channel: PJSIP/flash-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 3
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+Variable: RTPAUDIOQOS
+Value: ssrc=1726714580;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487858.548270
+Channel: PJSIP/flash-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 3
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487858.548275
+Channel: PJSIP/flash-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 3
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487858.548279
+Channel: PJSIP/flash-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 3
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487858.548284
+Channel: PJSIP/flash-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 3
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487858.548510
+Channel: PJSIP/flash-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: flash-in
+Priority: 3
+Uniqueid: 1793487850.13
+Linkedid: 1793487850.13
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487858.548676
+Channel: PJSIP/flash-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: 7107
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+Variable: RTPAUDIOQOS
+Value: ssrc=987929865;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487858.548689
+Channel: PJSIP/flash-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: 7107
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487858.548694
+Channel: PJSIP/flash-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: 7107
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487858.548698
+Channel: PJSIP/flash-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: 7107
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1793487858.548702
+Channel: PJSIP/flash-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: 7107
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1793487858.548715
+Channel: PJSIP/flash-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: 7107
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1793487858.548785
+Channel: PJSIP/flash-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7107
+CallerIDName: Capture
+ConnectedLineNum: 7107
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-flash
+Exten: s
+Priority: 1
+Uniqueid: 1793487850.12
+Linkedid: 1793487850.12
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1793487858.548836
+Device: PJSIP/flash
+State: NOT_INUSE
+
+Response: Success
+ActionID: cap-28
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487859.550140
+UserEvent: CaptureMarker
+Step: parked-empty
+ActionID: cap-28
+
+Response: Success
+ActionID: cap-29
+EventList: start
+Message: Parked calls will follow
+
+Event: ParkedCallsComplete
+ActionID: cap-29
+EventList: Complete
+ListItems: 0
+Total: 0
+
+Response: Success
+ActionID: cap-30
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1793487860.051106
+UserEvent: CaptureMarker
+Step: done
+ActionID: cap-30
+
+Response: Goodbye
+ActionID: cap-31
+Message: Thanks for all the fish.
+
