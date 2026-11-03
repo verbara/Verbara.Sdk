@@ -1,1 +1,3 @@
 #nullable enable
+Verbara.Sdk.Ari.Client.AriClientOptions.EventsEnabled.get -> bool
+Verbara.Sdk.Ari.Client.AriClientOptions.EventsEnabled.set -> void

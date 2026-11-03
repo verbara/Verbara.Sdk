@@ -1,5 +1,6 @@
 using System.Diagnostics.Metrics;
 using System.Net.Sockets;
+using System.Net.WebSockets;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 
@@ -14,6 +15,47 @@ public sealed class TestSupportTests
 {
     /// <summary>Upper bound on any single wait. Reaching it is a failure, never a pace.</summary>
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
+
+    // ------------------------------------------------------------------------ ARI far end
+
+    [Fact]
+    public async Task AriFarEnd_ShouldCountTheDialAndTheUpgrade_WhenAnEventsSocketConnects()
+    {
+        await using var farEnd = new AriFarEnd();
+        using var socket = new ClientWebSocket();
+
+        await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{farEnd.Port}/ari/events"), CancellationToken.None);
+        await farEnd.WhenUpgraded(1).WaitAsync(SignalTimeout);
+
+        new { farEnd.Dials, farEnd.Upgrades, RequestCount = farEnd.Requests.Count }.Should().Be(
+            new { Dials = 1, Upgrades = 1, RequestCount = 0 }, "a socket is one dial and one upgrade, and no REST request");
+    }
+
+    [Fact]
+    public async Task AriFarEnd_ShouldAnswerWhatRespondSays_WhenARestRequestArrives()
+    {
+        await using var farEnd = new AriFarEnd { Respond = _ => (503, "busy") };
+        using var http = new HttpClient();
+
+        using var response = await http.GetAsync(new Uri($"{farEnd.BaseUrl}/ari/asterisk/ping"));
+
+        new { Status = (int)response.StatusCode, Upgrades = farEnd.Upgrades }.Should().Be(new { Status = 503, Upgrades = 0 });
+        farEnd.Requests.Should().Equal(["GET /ari/asterisk/ping HTTP/1.1"]);
+    }
+
+    [Fact]
+    public async Task AriFarEnd_ShouldResetTheConnection_WhenDropped()
+    {
+        await using var farEnd = new AriFarEnd();
+        using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{farEnd.Port}/ari/events"), CancellationToken.None);
+        await farEnd.WhenUpgraded(1).WaitAsync(SignalTimeout);
+
+        farEnd.Drop();
+        var receive = async () => await socket.ReceiveAsync(new byte[16], CancellationToken.None);
+
+        await receive.Should().ThrowAsync<WebSocketException>("the far end sent no close frame");
+    }
 
     // ------------------------------------------------------------------------ accepted clients
 

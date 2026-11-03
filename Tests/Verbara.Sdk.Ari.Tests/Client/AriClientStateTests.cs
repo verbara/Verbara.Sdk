@@ -21,6 +21,27 @@ public sealed class AriClientStateTests
 {
     private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(10);
 
+    // A consumer compiled against an earlier version may have stored these numbers.
+    [Theory]
+    [InlineData(AriConnectionState.Initial, 0)]
+    [InlineData(AriConnectionState.Connecting, 1)]
+    [InlineData(AriConnectionState.Connected, 2)]
+    [InlineData(AriConnectionState.Reconnecting, 3)]
+    [InlineData(AriConnectionState.Disconnecting, 4)]
+    [InlineData(AriConnectionState.Disconnected, 5)]
+    [InlineData(AriConnectionState.Faulted, 6)]
+    public void AriConnectionState_ShouldKeepItsNumber_WhenRestOnlyIsAppended(AriConnectionState state, int expected)
+    {
+        ((int)state).Should().Be(expected);
+    }
+
+    [Fact]
+    public void AriConnectionState_ShouldEndWithRestOnly_WhenListedInNumericOrder()
+    {
+        Enum.GetValues<AriConnectionState>().Should().EndWith(AriConnectionState.RestOnly);
+        Enum.GetValues<AriConnectionState>().Should().HaveCount(8);
+    }
+
     // The reconnect loop's dial bound, as the requirement states it.
     private static readonly TimeSpan ReconnectDialBound = TimeSpan.FromSeconds(5);
 
