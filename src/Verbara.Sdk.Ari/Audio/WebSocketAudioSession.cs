@@ -58,6 +58,12 @@ internal readonly record struct WebSocketFirstFrame(WebSocketFirstFrameKind Kind
 /// </remarks>
 internal sealed class WebSocketAudioSession : IChanWebSocketSession
 {
+    /// <summary>
+    /// The closing handshake's one bound: the answer to a peer's close, and a disposal's close plus its wait for the
+    /// peer's answer, together. A server stop disposes its sessions concurrently, so it spends one bound too.
+    /// </summary>
+    internal static readonly TimeSpan CloseBound = TimeSpan.FromSeconds(1);
+
     private readonly WebSocket _webSocket;
     private readonly AudioStreamStateChannel _state;
     private readonly Subject<ChanWebSocketControlMessage> _controlSubject = new();
@@ -169,7 +175,11 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
 
         try
         {
-            while (!ct.IsCancellationRequested && _webSocket.State == WebSocketState.Open)
+            // CloseSent too: a disposal sends its close frame first and this loop then reads until the peer's answer,
+            // so the answer is read instead of aborted. Frames read meanwhile are handled as usual; the audio channel is
+            // complete by then, so an audio frame goes nowhere.
+            while (!ct.IsCancellationRequested
+                   && _webSocket.State is WebSocketState.Open or WebSocketState.CloseSent)
             {
                 bufferWriter.Clear();
                 ValueWebSocketReceiveResult result;
@@ -183,7 +193,16 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
                 while (!result.EndOfMessage);
 
                 if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    // A close before the first frame ends the server's wait to be named first, so a connection whose
+                    // answer is still in flight is never announced. Then the answer, before the `finally` publishes
+                    // the ending: the peer has its reply before any consumer reacts to Disconnected. When this is the
+                    // answer to this side's own close, the socket is Closed and nothing is sent.
+                    _firstFrame.TrySetResult(new WebSocketFirstFrame(WebSocketFirstFrameKind.Ended));
+                    using var answerBound = new CancellationTokenSource(CloseBound);
+                    await CloseOnceAsync(_webSocket.CloseStatus ?? WebSocketCloseStatus.NormalClosure, answerBound.Token);
                     break;
+                }
 
                 // A text frame is read once: whether it is MEDIA_START, the call it names and the record it maps to all
                 // come from this one read, so they cannot disagree.
@@ -471,27 +490,73 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         }
     }
 
+    // The one place a close frame is sent: the pump's answer to a peer's close and a disposal's own close both come
+    // here. WebSocket allows one send at a time, so it takes the send lock; it sends only from Open or CloseReceived,
+    // read under that lock, so the answer and a racing disposal send one close between them. `bound` is the caller's
+    // own CloseBound source, never a token that asked for the ending. A close that cannot be sent is not a second
+    // ending: every failure the send can raise ends here.
+    private async Task CloseOnceAsync(WebSocketCloseStatus status, CancellationToken bound)
+    {
+        try
+        {
+            await _sendLock.WaitAsync(bound).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // A write holds the lock past the bound, on a peer that stopped reading: the ending goes on without the
+            // close frame rather than wait on that write.
+            return;
+        }
+
+        try
+        {
+            if (_webSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+                await _webSocket.CloseOutputAsync(status, statusDescription: null, bound).ConfigureAwait(false);
+        }
+        catch (WebSocketException)
+        {
+            // The connection already failed or closed under the send: the peer cannot hear a close any more.
+        }
+        catch (IOException)
+        {
+            // The transport refused the write (a reset or a closed socket): the same as above, one layer down.
+        }
+        catch (ObjectDisposedException)
+        {
+            // The socket was released under the send; nothing remains to close.
+        }
+        catch (OperationCanceledException)
+        {
+            // The bound ran out mid-send, on a peer that is not reading: the ending does not wait longer.
+        }
+        finally
+        {
+            _sendLock.Release();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         // Atomic: the connection handler that owns this session disposes it on its way out, and a
         // consumer holding it as an IAudioStream can dispose it at the same moment.
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
-        await _cts.CancelAsync();
         _audioInChannel.Writer.TryComplete();
 
-        if (_webSocket.State == WebSocketState.Open)
+        // The close goes out before anything stops the read, whether or not a read is pending: a cancelled receive
+        // aborts the socket, and an aborted socket sends nothing. Then the pump, still reading, takes the peer's
+        // answer and leaves on it. One bound covers the send and that wait together, so a peer that never answers
+        // costs the disposal one bound.
+        using (var closeBound = new CancellationTokenSource(CloseBound))
         {
-            try
-            {
-                // Bounded: a read pump that has not started receiving yet is not aborted by the
-                // cancellation above, so the socket is still open here and CloseAsync waits for the
-                // peer's close frame, which a peer that is not reading never sends.
-                using var closeCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", closeCts.Token);
-            }
-            catch { /* Best effort */ }
+            await CloseOnceAsync(WebSocketCloseStatus.NormalClosure, closeBound.Token);
+
+            if (_readPumpTask is not null)
+                await _readPumpTask.WaitAsync(closeBound.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         }
+
+        // Last: aborts a receive still pending once the bound is spent, on a peer that never answered.
+        await _cts.CancelAsync();
 
         if (_readPumpTask is not null)
             await _readPumpTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
