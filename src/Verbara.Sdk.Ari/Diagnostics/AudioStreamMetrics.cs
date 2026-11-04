@@ -134,9 +134,11 @@ public static class AudioStreamMetrics
     /// Audio sessions, AudioSocket or WebSocket, whose transport failed while the session was live. On
     /// AudioSocket: the connection was reset, or a read from the socket otherwise failed, after the
     /// identification frame and before any hangup or error frame. On WebSocket: the connection was reset,
-    /// or otherwise ended without the peer's close frame. Such a session still ends as
-    /// <c>Disconnected</c>, exactly as a hangup or a close does, so this counter and the session's
-    /// Warning are what tell the two apart. Internal:
+    /// or otherwise ended without the peer's close frame. What the session publishes differs by door. An
+    /// AudioSocket session still ends as <c>Disconnected</c> alone, as a hangup does, so there this counter
+    /// and the session's Warning are what tell the two apart. A WebSocket session publishes <c>Error</c>
+    /// then <c>Disconnected</c>, and the count and the Warning already exist when <c>Error</c> is
+    /// published. Internal:
     /// the instrument's name is the contract an exporter sees, and the field adds no public API.
     /// </summary>
     internal static readonly Counter<long> TransportFailures =

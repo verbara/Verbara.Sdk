@@ -25,6 +25,24 @@ public interface IChanWebSocketSession : IAudioStream
     /// <see cref="MediaStart"/>. A hangup is not a message: Asterisk closes the connection, and the ending is
     /// published on <see cref="IAudioStream.StateChanges"/>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A subscriber's failure stays its own: an exception it throws on the thread that delivers a message, or the
+    /// completion a disposal raises, is written once at Warning and counted once, and the stream, its disposal and the
+    /// other subscribers go on. A subscriber subscribed directly, an observer or a handler passed to <c>Subscribe</c>,
+    /// stays subscribed and receives the next message.
+    /// </para>
+    /// <para>
+    /// The guard cannot catch everything. Only an exception on the delivering thread is caught: one thrown after the
+    /// subscriber hands the message to another thread, a scheduler or an <c>async void</c> handler never reaches it. A
+    /// subscription composed through an Rx operator, such as <c>Where</c> or <c>Select</c>, is ended by that operator on
+    /// its first failure, so it receives nothing afterwards, while the stream and the other subscribers go on.
+    /// </para>
+    /// <para>
+    /// Messages can still arrive after a disposal starts: the stream keeps reading until the peer answers its close
+    /// frame, or the closing handshake's bound runs out.
+    /// </para>
+    /// </remarks>
     IObservable<ChanWebSocketControlMessage> ControlMessages { get; }
 
     /// <summary>

@@ -15,7 +15,7 @@ namespace Verbara.Sdk.Ari.Audio;
 
 internal static partial class WebSocketAudioSessionLog
 {
-    [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] Transport failed under a live session, which ends as Disconnected: channel_id={ChannelId}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] Transport failed under a live session, which ends as Error then Disconnected: channel_id={ChannelId}")]
     public static partial void TransportFailed(ILogger logger, Exception exception, string channelId);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] A second MEDIA_START on one connection is ignored: path_segment={PathSegment} first_channel_id={FirstChannelId} ignored_channel_id={IgnoredChannelId}")]
@@ -55,12 +55,24 @@ internal readonly record struct WebSocketFirstFrame(WebSocketFirstFrameKind Kind
 /// state (<see cref="MediaStart"/>), every other frame as a <see cref="ChanWebSocketControlMessage"/>.
 /// </summary>
 /// <remarks>
-/// Records the <c>Verbara.Sdk.Ari.Audio</c> instruments, each measurement tagged
+/// <para>
+/// <b>The ending.</b> A close frame from the peer, whatever its status, ends the session as the peer's close: it
+/// answers with one close frame, then publishes <see cref="AudioStreamState.Disconnected"/>. A connection that fails
+/// while the session is live, reset or ended with no close frame, is a failed transport: the session writes a Warning,
+/// counts it on <c>audio.transport.failures</c>, then publishes <see cref="AudioStreamState.Error"/> and
+/// <see cref="AudioStreamState.Disconnected"/>. A disposal, which a server stop also ends in, sends one close frame,
+/// keeps reading until the peer answers or <see cref="CloseBound"/> runs out, and only then stops the read; it publishes
+/// <see cref="AudioStreamState.Disconnected"/> alone, even when the connection fails while it is in progress.
+/// </para>
+/// <para>
+/// <b>The instruments.</b> Records the <c>Verbara.Sdk.Ari.Audio</c> instruments, each measurement tagged
 /// <c>audio.transport=websocket</c>: the stream opened at its start and closed at its one ending, the
 /// non-empty binary messages and their payload bytes received and sent, the time from receipt to the
-/// consumer's read, and a transport failure under a live session. It records no hangup or error frames:
+/// consumer's read, each received frame the full buffer drops, and a transport failure under a live session. A
+/// failure of a <see cref="ControlMessages"/> subscriber is counted untagged. It records no hangup or error frames:
 /// those instruments count AudioSocket frames. On chan_websocket a hangup is the peer's close frame, which ends the
 /// session, and its <c>ERROR</c> is a control message.
+/// </para>
 /// </remarks>
 internal sealed class WebSocketAudioSession : IChanWebSocketSession
 {

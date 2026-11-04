@@ -56,10 +56,13 @@ using var connSub = server.OnStreamConnected.Subscribe(stream =>
     // ChannelId is the channel_id of the call's MEDIA_START.
     Console.WriteLine($"[stream] connected channel_id={stream.ChannelId} format={stream.Format} sample_rate={stream.SampleRate}");
 
-    // The ending: a hangup closes the connection, and the stream publishes Disconnected once, last.
+    // The ending: a hangup closes the connection, and the stream publishes Disconnected once, last. A connection
+    // that failed under the call (a reset, or an end with no close frame) publishes Error just before it.
     var stateSub = stream.StateChanges.Subscribe(state =>
     {
-        if (state == AudioStreamState.Disconnected)
+        if (state == AudioStreamState.Error)
+            Console.WriteLine($"[stream] connection failed channel_id={stream.ChannelId}");
+        else if (state == AudioStreamState.Disconnected)
             Console.WriteLine($"[stream] ended channel_id={stream.ChannelId}");
     });
 
