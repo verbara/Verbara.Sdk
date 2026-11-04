@@ -82,10 +82,10 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     private bool _firstFrameRead;
     private int _mediaStarts;
 
-    // Set once, by the read pump, from the connection's first MEDIA_START: the format first, then the record, so a
-    // consumer that reads MediaStart reads the format it carried.
-    private volatile string _format;
-    private volatile int _sampleRate;
+    // Set once, by the read pump, from the connection's first MEDIA_START. Format and SampleRate read it over the
+    // constructor's default, so one reference write publishes all three: no reader sees the new format before it.
+    private readonly string _defaultFormat;
+    private readonly int _defaultSampleRate;
     private ChanWebSocketMediaStart? _mediaStart;
 
     // Completed once, by the read pump: with the first frame of any type, or with Ended when the pump ends first.
@@ -118,10 +118,10 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     /// </summary>
     internal Task CloseHandshake => _closeHandshake.Task;
     /// <summary>The server's configured format until the connection's first <c>MEDIA_START</c>, then the one it names.</summary>
-    public string Format => _format;
+    public string Format => MediaStart?.Format ?? _defaultFormat;
 
     /// <summary>The rate of <see cref="Format"/>, derived as <see cref="ChanWebSocketMediaStart.Rate"/> is.</summary>
-    public int SampleRate => _sampleRate;
+    public int SampleRate => MediaStart?.Rate ?? _defaultSampleRate;
 
     /// <inheritdoc />
     public ChanWebSocketMediaStart? MediaStart => Volatile.Read(ref _mediaStart);
@@ -150,8 +150,8 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         _channelId = channelId;
         _pathSegment = channelId;
         _state = new AudioStreamStateChannel(AudioStreamState.Connected, logger, () => ChannelId);
-        _format = format;
-        _sampleRate = AudioFormats.SampleRateOf(format);
+        _defaultFormat = format;
+        _defaultSampleRate = AudioFormats.SampleRateOf(format);
 
         _audioInChannel = Channel.CreateBounded<ReceivedAudioFrame>(new BoundedChannelOptions(1000)
         {
@@ -311,9 +311,7 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         }
 
         _firstMediaStartChannelId = channelId;
-        var mediaStart = ChanWebSocketInboundReader.ReadMediaStart(frame, _format);
-        _format = mediaStart.Format;
-        _sampleRate = mediaStart.Rate;
+        var mediaStart = ChanWebSocketInboundReader.ReadMediaStart(frame, _defaultFormat);
         Volatile.Write(ref _mediaStart, mediaStart);
         EmitMediaStarted(mediaStart);
     }

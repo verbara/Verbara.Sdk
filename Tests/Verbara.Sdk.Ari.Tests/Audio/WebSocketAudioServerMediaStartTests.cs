@@ -483,6 +483,59 @@ public sealed class WebSocketAudioServerMediaStartTests
         }
     }
 
+    [Fact]
+    public async Task FormatAndSampleRate_ShouldNeverRunAheadOfMediaStart_WhenALateMediaStartArrives()
+    {
+        // Arrange — a connection announced under its path segment after a binary first frame, on a ulaw (8000 Hz)
+        // default, and a reader on its own thread that watches Format and SampleRate leave the default
+        await using var harness = await Harness.StartAsync(defaultFormat: "ulaw");
+        var frame = DialPlain;
+        var announced = harness.Announcements.NextAsync();
+        using var client = await ConnectAsync(harness.Port, "seg-late-format");
+        await client.SendAsync(new byte[160], WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None);
+        var (stream, _) = await announced.WaitAsync(WaitLimit);
+        var session = (IChanWebSocketSession)stream;
+        using var started = new ManualResetEventSlim();
+        var deadline = DateTime.UtcNow + WaitLimit;
+        (string Format, int Rate, ChanWebSocketMediaStart? MediaStart)? firstChange = null;
+        var reader = new Thread(() =>
+        {
+            started.Set();
+            while (DateTime.UtcNow < deadline)
+            {
+                var format = stream.Format;
+                var rate = stream.SampleRate;
+                if (format != "ulaw" || rate != 8000)
+                {
+                    // MediaStart is read after the value that left the default, so it can only be newer than it
+                    firstChange = (format, rate, session.MediaStart);
+                    return;
+                }
+            }
+        }) { IsBackground = true, Name = "format-reader" };
+        reader.Start();
+        started.Wait(WaitLimit).Should().BeTrue("the reader runs before the MEDIA_START is sent");
+
+        // Act — the late MEDIA_START, then a second audio frame
+        await SendTextAsync(client, frame);
+        await client.SendAsync(new byte[640], WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None);
+        _ = await stream.ReadFrameAsync().AsTask().WaitAsync(WaitLimit);
+        _ = await stream.ReadFrameAsync().AsTask().WaitAsync(WaitLimit);
+        reader.Join(WaitLimit).Should().BeTrue("the reader sees the format leave the default and stops");
+
+        // Assert
+        using (new AssertionScope())
+        {
+            firstChange.Should().NotBeNull("once the second frame is read the format is slin16");
+            var change = firstChange.GetValueOrDefault();
+            change.MediaStart.Should().NotBeNull(
+                "a reader that sees Format {0} or SampleRate {1} reads MediaStart after it and finds it set", change.Format, change.Rate);
+            session.MediaStart.Should().BeSameAs(change.MediaStart, "MediaStart is written once, by the late MEDIA_START");
+            stream.Format.Should().Be("slin16");
+            stream.SampleRate.Should().Be(16000);
+        }
+    }
+
     // ================================================================ (k), (l), (m), (r): the tier rule
 
     [Fact]
