@@ -9,6 +9,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [A client that only makes REST calls can turn its events off](#a-client-that-only-makes-rest-calls-can-turn-its-events-off) | new option, new state |
 | `Verbara.Sdk.Ari` | [An observer that throws no longer stops delivery](#an-observer-that-throws-no-longer-stops-delivery) | behaviour |
 | `Verbara.Sdk.Ari` | [`OriginateAsync` with an extension runs the dialplan](#originateasync-with-an-extension-runs-the-dialplan) | fix, behaviour |
+| `Verbara.Sdk.Ari` | [`STATUS`, `MEDIA_BUFFERING_COMPLETED` and `QUEUE_DRAINED` read as typed records](#status-media_buffering_completed-and-queue_drained-read-as-typed-records) | behaviour, new records |
 | `Verbara.Sdk.Live` | [A channel subscriber's failure stays with that subscriber](#a-channel-subscribers-failure-stays-with-that-subscriber) | behaviour, BREAKING |
 | `Verbara.Sdk.Live` | [A live channel follows its dialplan location and caller ID](#a-live-channel-follows-its-dialplan-location-and-caller-id) | fix, behaviour |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
@@ -75,6 +76,25 @@ dialplan. A call with no extension sends `Application` as before.
 **Who is affected.** A caller who passes an extension and came to rely on the channel entering Stasis.
 
 **What to do.** To put a channel in Stasis, call `OriginateAsync` with no extension, or `Channels.CreateAsync`.
+
+### `STATUS`, `MEDIA_BUFFERING_COMPLETED` and `QUEUE_DRAINED` read as typed records
+
+**What changed.** `ChanWebSocketControlMessageSerializer.Deserialize`, both overloads, used to read these three
+chan_websocket messages as the generic `ChanWebSocketUnknownMessage`, with the message's name in `Event`. It now reads
+them, in either control format, as the new `ChanWebSocketStatus`, `ChanWebSocketMediaBufferingCompleted` and
+`ChanWebSocketQueueDrained`. Asterisk sends them in reply to `GET_STATUS`, `STOP_MEDIA_BUFFERING` and
+`REPORT_QUEUE_DRAINED`, which the session now writes through `SendGetStatusAsync`, `SendStopMediaBufferingAsync` and
+`SendReportQueueDrainedAsync`; the replies reach `IChanWebSocketSession.ControlMessages` as the typed records.
+`ChanWebSocketUnknownMessage` is left for a message no capture names.
+
+**Who is affected.** Code that passes a frame it read itself to `Deserialize` and matches `ChanWebSocketUnknownMessage`
+whose `Event` is `STATUS`, `MEDIA_BUFFERING_COMPLETED` or `QUEUE_DRAINED`: that arm no longer matches. A session could
+not receive these messages before, because no SDK method wrote the commands that provoke them.
+
+**What to do.** Match the typed record instead. `ChanWebSocketStatus` carries the frame's `queue_length`, `xon_level`,
+`xoff_level`, `queue_full`, `bulk_media` and `media_paused` as typed members; `ChanWebSocketMediaBufferingCompleted`
+carries the `correlation_id` the stop sent. `ChanWebSocketMediaBuffering`, deprecated with `VSDK0004`, now names
+`ChanWebSocketStatus.QueueLength` as the queue length to read.
 
 ## Live
 

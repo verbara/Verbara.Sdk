@@ -2,7 +2,9 @@
 
 Demonstrates the **`chan_websocket`** Channel Driver integration added in v1.12.0 — native Asterisk 22.8 / 23.2+ audio transport over WebSocket with control messages over TEXT frames, in plain text (Asterisk's default) or JSON (`f(json)`).
 
-The example stands up `WebSocketAudioServer` on port 9093 and prints each stream as it connects, keyed by the `channel_id` of the `MEDIA_START` Asterisk sends as the connection's first frame (the stream's `ChannelId`, and what `GetStream` finds it by), with the control format that frame negotiated (`MediaStart.ControlMessageFormat`). It logs the control messages Asterisk sends (`DTMF_END`, `MEDIA_XOFF`/`MEDIA_XON`, `MEDIA_MARK_PROCESSED`, `ERROR`, and any message the SDK does not model, by its event name), sends a `MARK_MEDIA` after 1 s, which Asterisk answers with `MEDIA_MARK_PROCESSED`, and a `SET_MEDIA_DIRECTION` (both) after 5 s on a JSON connection only. A hangup is not a message: Asterisk closes the connection, and the example prints the stream's ending from `StateChanges`.
+The example stands up `WebSocketAudioServer` on port 9093 and prints each stream as it connects, keyed by the `channel_id` of the `MEDIA_START` Asterisk sends as the connection's first frame (the stream's `ChannelId`, and what `GetStream` finds it by), with the control format that frame negotiated (`MediaStart.ControlMessageFormat`). It logs the control messages Asterisk sends (`DTMF_END`, `MEDIA_XOFF`/`MEDIA_XON`, `MEDIA_MARK_PROCESSED`, `STATUS`, `ERROR`, and any message the SDK does not model, by its event name), sends a `MARK_MEDIA` after 1 s, which Asterisk answers with `MEDIA_MARK_PROCESSED`, and a `SET_MEDIA_DIRECTION` (both) after 5 s on a JSON connection only. A hangup is not a message: Asterisk closes the connection, and the example prints the stream's ending from `StateChanges`.
+
+It also shows **barge-in**. After 2 s it plays a prompt, 8 s of tone written at once, so Asterisk queues what it has not played yet. When the caller presses a key, the example stops writing the prompt, calls `SendFlushMediaAsync`, which writes `FLUSH_MEDIA` and makes Asterisk empty that queue, and then `SendGetStatusAsync`, whose `STATUS` reply reports the queue's length. A voice application triggers the same from its speech detector. Stop writing before the flush: audio written after it, or still in flight before it, would be queued afterwards (not measured). How soon the caller stops hearing the prompt was not measured either.
 
 ## Prerequisites
 
@@ -36,8 +38,14 @@ exten => 6000,1,Answer()
 
 or create the channel over ARI with `POST /channels/externalMedia` and `transport=websocket`,
 `encapsulation=none`, `external_host=media-demo`, where the key is the channel id the create returns.
-That connection uses Asterisk's global `control_message_format` (plain text unless
-`chan_websocket.conf` sets `json`; read in Asterisk's source, not measured), so the example skips its `SET_MEDIA_DIRECTION` there.
+Add `transport_data=f(json)` for JSON control messages (measured from Asterisk 20.20); with the SDK,
+pass `TransportData = "f(json)"` in the `AriExternalMediaRequest` you give `CreateExternalMediaAsync`,
+or set it on `ExternalMediaActivity`. Without it the connection uses Asterisk's global
+`control_message_format` (plain text unless `chan_websocket.conf` sets `json`; read in Asterisk's
+source, not measured), and the example skips its `SET_MEDIA_DIRECTION` there.
+
+The commands were measured on the ARI `externalMedia` route; on the `Dial(WebSocket/…)` route they were
+not.
 
 (Replace `127.0.0.1` with the IP of the host running this example.)
 
@@ -54,18 +62,27 @@ Then dial extension `6000` from a SIP phone. You should see:
 [stream] control format=Json
 [send] MARK_MEDIA  mark=demo-mark-1
 [control] MEDIA_MARK_PROCESSED  mark=demo-mark-1
+[prompt] written: 8 s of tone; press a key to barge in
 [send] SET_MEDIA_DIRECTION  direction=both
 [stream] ended channel_id=<the call's channel id>
 ```
 
-The last line appears when the call hangs up.
+The last line appears when the call hangs up. Press a key while the tone plays to barge in:
+
+```
+[control] DTMF_END  digit=1
+[send] FLUSH_MEDIA  (barge-in: Asterisk drops the prompt audio it still has queued)
+[send] GET_STATUS
+[control] STATUS  queue_length=0 media_paused=False
+```
 
 ## What It Shows
 
 - `WebSocketAudioServer` — RFC 6455 server built on `TcpListener` + `WebSocket.CreateFromStream()`.
 - `IChanWebSocketSession` — sub-interface that exposes the control messages Asterisk sends, read in either format, as an `IObservable<ChanWebSocketControlMessage>`, and the connection's `MEDIA_START` as `MediaStart`.
 - Pattern-matching over the message records, with `ChanWebSocketUnknownMessage` for a message the SDK does not model (AOT-clean, no reflection).
-- `SendMarkAsync`, `SendSetMediaDirectionAsync` — the two commands Asterisk acts on (`SendXonAsync`/`SendXoffAsync` are deprecated, `VSDK0004`: Asterisk has no such command, and they throw).
+- `SendMarkAsync`, `SendSetMediaDirectionAsync`, and `SendFlushMediaAsync` with `SendGetStatusAsync` for barge-in. The session also writes `PAUSE_MEDIA`, `CONTINUE_MEDIA`, `START_MEDIA_BUFFERING`, `STOP_MEDIA_BUFFERING` and `REPORT_QUEUE_DRAINED` (`SendXonAsync`/`SendXoffAsync` are deprecated, `VSDK0004`: Asterisk has no such command, and they throw).
+- No `ANSWER` and no `HANGUP` on the session: answer with ARI `AnswerAsync`, whose relation to chan_websocket's `ANSWER` was not measured, and end the call with ARI `HangupAsync`.
 - `IAudioStream.StateChanges` — the stream's ending, which is how a hangup reaches the application.
 
 ## Key SDK Packages Used
