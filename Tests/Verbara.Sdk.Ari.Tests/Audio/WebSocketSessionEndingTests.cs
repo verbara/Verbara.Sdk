@@ -557,6 +557,7 @@ public sealed class WebSocketSessionEndingTests
     {
         // Arrange — three announced streams whose handlers a subscriber holds, and peers that never answer. Each peer
         // sends its upgrade after its accept, so its handler is parked off the accept loop when the subscriber holds it.
+        const int heldHandlers = 3;
         using var release = new ManualResetEventSlim();
         var entered = 0;
         await using var harness = await WebSocketEndingHarness.StartWithAcceptSignalsAsync(recording =>
@@ -568,9 +569,17 @@ public sealed class WebSocketSessionEndingTests
         using var bound = new CancellationTokenSource(SignalTimeout);
         using var owned = new DisposableSet();
         var peers = new List<RawWebSocketPeer>();
+
+        // Each held handler parks a pool thread for the whole test, and every bound of the stop expires on a pool
+        // thread. On a machine with few cores the pool's minimum is that core count, so the pool would add the threads
+        // it is missing one at a time, about half a second apart, and the bounds would expire late by that much: a
+        // stop that takes one bound would read as 1.5 or 2 bounds. The minimum gets the parked threads back for the
+        // test and is restored after it.
+        ThreadPool.GetMinThreads(out var minWorkers, out var minIo);
+        ThreadPool.SetMinThreads(minWorkers + heldHandlers, minIo);
         try
         {
-            for (var i = 0; i < 3; i++)
+            for (var i = 0; i < heldHandlers; i++)
             {
                 var peer = owned.Add(await RawWebSocketPeer.ConnectAsync(harness.Port, bound.Token));
                 peers.Add(peer);
@@ -599,6 +608,7 @@ public sealed class WebSocketSessionEndingTests
         finally
         {
             release.Set();
+            ThreadPool.SetMinThreads(minWorkers, minIo);
         }
     }
 
