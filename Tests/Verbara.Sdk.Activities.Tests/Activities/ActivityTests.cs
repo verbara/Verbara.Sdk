@@ -1,7 +1,10 @@
+using System.Net.WebSockets;
 using Verbara.Sdk;
 using Verbara.Sdk.Activities.Activities;
 using Verbara.Sdk.Activities.Models;
 using Verbara.Sdk.Ari.Audio;
+using Verbara.Sdk.TestInfrastructure.Wire;
+using Verbara.Sdk.Tests.Shared.Sockets;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -744,6 +747,223 @@ public class ActivityTests
             + "ConnectionTimeout and then reports a connection failure");
         activity.Status.Should().Be(ActivityStatus.Failed,
             "a refused configuration is a failed activity, not a cancelled one");
+    }
+
+    // ================================================================ TransportData and Variables
+
+    /// <summary>The two options, each alone and together, as a theory row names them.</summary>
+    private static (string? TransportData, IReadOnlyDictionary<string, string>? Variables) Options(string which) => which switch
+    {
+        "transportData" => ("f(json)", null),
+        "variables" => (null, new Dictionary<string, string> { ["LABEMVAR"] = "em-json-0" }),
+        "both" => ("f(json)", new Dictionary<string, string> { ["LABEMVAR"] = "em-json-0" }),
+        _ => throw new ArgumentOutOfRangeException(nameof(which), which, null),
+    };
+
+    [Theory]
+    [InlineData("transportData")]
+    [InlineData("variables")]
+    [InlineData("both")]
+    public async Task StartAsync_ShouldSendTheOptionsAsGivenThroughTheRequestOverload_WhenEitherIsSet(string which)
+    {
+        // Spec: "An activity with both options" — the create it sends carries them. Asserted on the request object that
+        // leaves the activity, since the bytes it becomes are the resource's tests' (AriResourceTests).
+        var (transportData, variables) = Options(which);
+        var ariClient = Substitute.For<IAriClient>();
+        var channelsResource = Substitute.For<IAriChannelsResource>();
+        ariClient.Channels.Returns(channelsResource);
+
+        AriExternalMediaRequest? sent = null;
+#pragma warning disable CA2012
+        channelsResource.CreateExternalMediaAsync(Arg.Any<AriExternalMediaRequest>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                sent = callInfo.Arg<AriExternalMediaRequest>();
+                return new ValueTask<AriChannel>(new AriChannel { Id = "ext-ch-options" });
+            });
+#pragma warning restore CA2012
+
+        var activity = new ExternalMediaActivity(ariClient)
+        {
+            App = "test",
+            ExternalHost = "cmedia",
+            Format = "ulaw",
+            Transport = "websocket",
+            TransportData = transportData,
+            Variables = variables,
+            ConnectionTimeout = TimeSpan.FromMilliseconds(50),
+        };
+
+        var start = () => activity.StartAsync().AsTask();
+        await start.Should().ThrowAsync<TimeoutException>(
+            "no audio server is handed to this activity, so it times out; the create on the way there is what is asserted");
+
+        sent.Should().NotBeNull("an option the shipped overload cannot carry must reach the overload that takes a request");
+        sent!.App.Should().Be("test");
+        sent.ExternalHost.Should().Be("cmedia");
+        sent.Format.Should().Be("ulaw");
+        sent.Transport.Should().Be("websocket", "an explicit transport is sent as given");
+        sent.Encapsulation.Should().BeNull("with no AudioSocket server nothing derives one, as with neither option");
+        sent.ConnectionType.Should().BeNull();
+        sent.Direction.Should().BeNull();
+        sent.Data.Should().BeNull();
+        sent.ChannelId.Should().BeNull(
+            "on the WebSocket path the activity sends no channelId with or without the options: MEDIA_START names the "
+            + "channel Asterisk created, and the server keys the stream by it");
+        sent.TransportData.Should().Be(transportData, "the activity forwards the value and derives nothing from it");
+        sent.Variables.Should().BeSameAs(variables, "the activity forwards the caller's entries as given");
+        activity.Channel!.Id.Should().Be("ext-ch-options");
+        channelsResource.ReceivedCalls().Should().ContainSingle(
+            "one create, through the request overload, and none through the shipped one");
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldKeepTheAudioSocketDerivationInTheRequest_WhenAnOptionIsSet()
+    {
+        // The options change which overload is called, not what the activity derives: under AudioSocket the request still
+        // carries "tcp" and one canonical identifier as both data and channelId, which is how the stream is found there.
+        var ariClient = Substitute.For<IAriClient>();
+        var channelsResource = Substitute.For<IAriChannelsResource>();
+        ariClient.Channels.Returns(channelsResource);
+
+        AriExternalMediaRequest? sent = null;
+#pragma warning disable CA2012
+        channelsResource.CreateExternalMediaAsync(Arg.Any<AriExternalMediaRequest>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                sent = callInfo.Arg<AriExternalMediaRequest>();
+                return new ValueTask<AriChannel>(new AriChannel { Id = sent.ChannelId ?? "no-channel-id-was-sent" });
+            });
+#pragma warning restore CA2012
+
+        await using var audioSocketServer = new AudioSocketServer(
+            new AudioServerOptions { AudioSocketPort = 0, ListenAddress = "127.0.0.1" },
+            NullLogger<AudioSocketServer>.Instance);
+
+        var activity = new ExternalMediaActivity(ariClient, audioSocketServer)
+        {
+            App = "test",
+            ExternalHost = "127.0.0.1:19099",
+            TransportData = "f(json)",
+            Variables = new Dictionary<string, string> { ["K"] = "V" },
+            ConnectionTimeout = TimeSpan.FromMilliseconds(50),
+        };
+
+        var start = () => activity.StartAsync().AsTask();
+        await start.Should().ThrowAsync<TimeoutException>("nothing connects to the unbound server here");
+
+        sent.Should().NotBeNull();
+        sent!.Encapsulation.Should().Be("audiosocket");
+        sent.Transport.Should().Be("tcp");
+        sent.Data.Should().NotBeNull();
+        sent.ChannelId.Should().Be(sent.Data);
+        Guid.TryParse(sent.Data, out var minted).Should().BeTrue();
+        sent.Data.Should().Be(minted.ToString());
+        sent.TransportData.Should().Be("f(json)", "sent as given on any transport; nothing refuses it here");
+        sent.Variables.Should().ContainSingle().Which.Should().Be(new KeyValuePair<string, string>("K", "V"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StartAsync_ShouldCallTheShippedOverloadWithTheSameArguments_WhenNeitherOptionIsSet(bool emptyVariables)
+    {
+        // Spec: "An activity with neither option" — the shipped overload, with the arguments it passed before. An empty
+        // dictionary sends no body either way, so it is no option and takes the same path.
+        var ariClient = Substitute.For<IAriClient>();
+        var channelsResource = Substitute.For<IAriChannelsResource>();
+        ariClient.Channels.Returns(channelsResource);
+#pragma warning disable CA2012
+        channelsResource.CreateExternalMediaAsync(
+            app: Arg.Any<string>(), externalHost: Arg.Any<string>(), format: Arg.Any<string>(),
+            encapsulation: Arg.Any<string?>(), transport: Arg.Any<string?>(),
+            connectionType: Arg.Any<string?>(), direction: Arg.Any<string?>(),
+            data: Arg.Any<string?>(), channelId: Arg.Any<string?>(),
+            cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<AriChannel>(new AriChannel { Id = "ext-ch-neither" }));
+#pragma warning restore CA2012
+
+        var activity = new ExternalMediaActivity(ariClient)
+        {
+            App = "test",
+            ExternalHost = "cmedia",
+            Transport = "websocket",
+            Variables = emptyVariables ? new Dictionary<string, string>() : null,
+            ConnectionTimeout = TimeSpan.FromMilliseconds(50),
+        };
+
+        var start = () => activity.StartAsync().AsTask();
+        await start.Should().ThrowAsync<TimeoutException>("no audio server is handed to this activity");
+
+        await channelsResource.Received(1).CreateExternalMediaAsync(
+            "test", "cmedia", "slin16",
+            encapsulation: null, transport: "websocket", connectionType: null, direction: null,
+            data: null, channelId: null, cancellationToken: Arg.Any<CancellationToken>());
+        await channelsResource.DidNotReceive().CreateExternalMediaAsync(
+            Arg.Any<AriExternalMediaRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StartAsync_ShouldFindTheWebSocketStreamByChannelId_WithOrWithoutTheOptions(bool withOptions)
+    {
+        // Spec: "it finds its stream as an activity with neither does". The connection is a real one to a real server,
+        // fed the MEDIA_START Asterisk 20.20.1 sent for an externalMedia create with transport_data f(json) and one
+        // variable (2026-10-31 capture); the substituted create answers with the id Asterisk gave that channel. With
+        // and without the options, the activity's GetStream(Channel.Id) is what finds the stream.
+        var frame = ChanWebSocketWireCapture.MediaStart.Single(f =>
+            f.AsteriskVersion == "20.20.1" && f.ChannelId == "lab-em-json-0");
+
+        var ariClient = Substitute.For<IAriClient>();
+        var channelsResource = Substitute.For<IAriChannelsResource>();
+        ariClient.Channels.Returns(channelsResource);
+#pragma warning disable CA2012
+        var created = new ValueTask<AriChannel>(new AriChannel { Id = frame.ChannelId });
+        channelsResource.CreateExternalMediaAsync(Arg.Any<AriExternalMediaRequest>(), Arg.Any<CancellationToken>())
+            .Returns(created);
+        channelsResource.CreateExternalMediaAsync(
+            app: Arg.Any<string>(), externalHost: Arg.Any<string>(), format: Arg.Any<string>(),
+            encapsulation: Arg.Any<string?>(), transport: Arg.Any<string?>(),
+            connectionType: Arg.Any<string?>(), direction: Arg.Any<string?>(),
+            data: Arg.Any<string?>(), channelId: Arg.Any<string?>(),
+            cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(created);
+#pragma warning restore CA2012
+
+        var (server, port) = await LoopbackServerBind.StartAsync(
+            p => new WebSocketAudioServer(
+                new AudioServerOptions { ListenAddress = "127.0.0.1", WebSocketPort = p },
+                NullLogger<WebSocketAudioServer>.Instance),
+            s => s.StartAsync());
+        await using var _ = server;
+
+        var (transportData, variables) = withOptions ? Options("both") : (null, null);
+        await using var activity = new ExternalMediaActivity(ariClient, webSocketServer: server)
+        {
+            App = "test",
+            ExternalHost = "cmedia",
+            Transport = "websocket",
+            TransportData = transportData,
+            Variables = variables,
+            ConnectionTimeout = TimeSpan.FromSeconds(10),
+        };
+
+        var start = activity.StartAsync().AsTask();
+
+        using var client = new ClientWebSocket();
+        await client.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/media/cmedia"), CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(10));
+        await client.SendAsync(frame.Payload(), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
+
+        await start.WaitAsync(TimeSpan.FromSeconds(15));
+
+        activity.Status.Should().Be(ActivityStatus.Completed);
+        activity.AudioStream.Should().NotBeNull();
+        activity.AudioStream!.ChannelId.Should().Be(frame.ChannelId);
+        if (withOptions)
+            await channelsResource.Received(1).CreateExternalMediaAsync(Arg.Any<AriExternalMediaRequest>(), Arg.Any<CancellationToken>());
+        channelsResource.ReceivedCalls().Should().ContainSingle("one create per activity, through one overload");
     }
 
     [Fact]
