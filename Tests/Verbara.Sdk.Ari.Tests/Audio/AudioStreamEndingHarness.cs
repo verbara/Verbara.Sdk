@@ -432,9 +432,14 @@ internal sealed class WebSocketEndingHarness : IAsyncDisposable
 
     /// <summary>
     /// Starts a server bound to a port it never dials, whose accept seam hands it the connections this harness
-    /// accepts on its own loopback listener and reports each one through <see cref="NextAcceptedAsync"/>. A peer that
-    /// sends its upgrade only after its accept is reported finds its handler parked on the upgrade read, off the
-    /// accept loop, so a subscriber that blocks holds that handler and no other.
+    /// accepts on its own loopback listener and reports each one through <see cref="NextAcceptedAsync"/>. A
+    /// connection is reported when the accept loop asks for the next one, not when it is accepted: the server
+    /// starts each handler inline on the accept loop, so the loop asking again proves that handler has suspended
+    /// on its upgrade read. A peer that sends its upgrade only after its accept is reported therefore finds its
+    /// handler parked off the accept loop, and a subscriber that blocks holds that handler and no other. Reported
+    /// at the accept instead, the upgrade could be buffered before the handler's first read; that read then
+    /// completes at once and the handler runs on the accept loop into the subscriber, which holds the loop and
+    /// every later accept with it (seen in a cold process, where the handler's path is not yet compiled).
     /// </summary>
     public static async Task<WebSocketEndingHarness> StartWithAcceptSignalsAsync(Action<StateRecording> subscribe, int maxStreams = 1000)
     {
@@ -447,10 +452,16 @@ internal sealed class WebSocketEndingHarness : IAsyncDisposable
         {
             _ownListener = listener,
         };
+
+        // The accept loop calls this seam one call at a time, so the previous connection is only ever touched here.
+        TcpClient? previous = null;
         server.AcceptOverride = async token =>
         {
+            if (previous is not null)
+                harness._accepted.Writer.TryWrite(previous);
+            previous = null;
             var accepted = await listener.AcceptTcpClientAsync(token);
-            harness._accepted.Writer.TryWrite(accepted);
+            previous = accepted;
             return accepted;
         };
         await server.StartAsync();
@@ -471,7 +482,10 @@ internal sealed class WebSocketEndingHarness : IAsyncDisposable
 
     private TcpListener? _ownListener;
 
-    /// <summary>The next connection the accept seam handed to the server (<see cref="StartWithAcceptSignalsAsync"/> only).</summary>
+    /// <summary>
+    /// The next connection the accept seam handed to the server, once its handler is parked off the accept loop
+    /// (<see cref="StartWithAcceptSignalsAsync"/> only).
+    /// </summary>
     public async Task NextAcceptedAsync(CancellationToken token) =>
         await _accepted.Reader.ReadAsync(token);
 
