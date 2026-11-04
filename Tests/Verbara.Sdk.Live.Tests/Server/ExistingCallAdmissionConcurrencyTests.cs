@@ -442,23 +442,35 @@ public sealed class ExistingCallAdmissionConcurrencyTests
         var ended = rig.Manager.GetByChannelId("server", "X")!;
         using var subscriber = new NotificationGate();
         using var arrival = new NotificationGate();
+        using var walk = new NotificationGate();
+        var returned = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Task? admission = null;
         using var subscription = rig.Manager.Events.Subscribe(new AdmissionObserver(e =>
         {
             if (e is not CallEndedEvent ending || ending.SessionId != ended.SessionId) return;
             subscriber.Hold();
             admission = rig.Manager.AdmitExistingCalls("server").AsTask();
+            returned.TrySetResult();
         }));
-        rig.Manager.StepHook = (step, _, id) => { if (step == HandlerStep.ArrivalBuilt && id == "Y") arrival.Hold(); };
+        // The walk parks at its first step on whichever thread runs it. Offloaded, the subscriber has already
+        // returned; on the subscriber's own thread the park sits inside it and `returned` cannot complete.
+        rig.Manager.StepHook = (step, _, id) =>
+        {
+            if (step == HandlerStep.AdmissionWalkStarted) walk.Hold();
+            if (step == HandlerStep.ArrivalBuilt && id == "Y") arrival.Hold();
+        };
         var workers = new List<Task>();
-        await NotificationGate.RunAsync([subscriber, arrival], workers, async () =>
+        await NotificationGate.RunAsync([subscriber, arrival, walk], workers, async () =>
         {
             var hangup = Task.Run(() => rig.Hangup("X")); workers.Add(hangup);
             await subscriber.Entered.Task.WaitAsync(Run.Bound);
             var added = Task.Run(() => rig.Add("Y", "K")); workers.Add(added);
             await arrival.Entered.Task.WaitAsync(Run.Bound);
-            subscriber.Release(); await hangup.WaitAsync(Run.Bound);
-            arrival.Release(); await added.WaitAsync(Run.Bound);
+            subscriber.Release();
+            await walk.Entered.Task.WaitAsync(Run.Bound);
+            await returned.Task.WaitAsync(Run.Bound);
+            await hangup.WaitAsync(Run.Bound);
+            walk.Release(); arrival.Release(); await added.WaitAsync(Run.Bound);
             admission.Should().NotBeNull();
             await admission!.WaitAsync(Run.Bound);
         });
