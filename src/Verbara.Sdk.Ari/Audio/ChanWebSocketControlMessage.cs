@@ -4,7 +4,7 @@ namespace Verbara.Sdk.Ari.Audio;
 
 /// <summary>
 /// Base type for the chan_websocket text-frame control messages (Asterisk 22.8 / 23.2+): the messages Asterisk sends,
-/// read in the format it sends them, and the two commands it acts on.
+/// read in the format it sends them, and the commands the session writes for it to act on.
 /// </summary>
 /// <remarks>
 /// chan_websocket sends two kinds of WebSocket frames on the consumer's server:
@@ -102,8 +102,10 @@ public sealed record ChanWebSocketMediaStart(
     /// </summary>
     /// <remarks>
     /// The values come from the dialplan and from the peer, so the SDK never logs them. To pass data to the stream, set
-    /// an inherited variable before <c>Dial(WebSocket/…)</c>, or <c>variables</c> on an ARI <c>externalMedia</c> you
-    /// create outside the SDK.
+    /// an inherited variable before <c>Dial(WebSocket/…)</c>, or, on a channel you create through ARI <c>externalMedia</c>,
+    /// set <see cref="AriExternalMediaRequest.Variables"/> together with <c>f(json)</c> as
+    /// <see cref="AriExternalMediaRequest.TransportData"/>, the form measured reaching this member on 20.20.1, 22.11.0,
+    /// 23.5.0, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2; a plain-text connection does not carry them.
     /// </remarks>
     [JsonIgnore]
     public IReadOnlyDictionary<string, string>? ChannelVariables { get; init; }
@@ -149,12 +151,14 @@ public sealed record ChanWebSocketMediaXon : ChanWebSocketControlMessage
 
 /// <summary>
 /// Never published: no chan_websocket message reports a buffer fill in bytes. Flow control arrives as
-/// <see cref="ChanWebSocketMediaXoff"/> and <see cref="ChanWebSocketMediaXon"/>.
+/// <see cref="ChanWebSocketMediaXoff"/> and <see cref="ChanWebSocketMediaXon"/>; the queue length is
+/// <see cref="ChanWebSocketStatus.QueueLength"/>, the reply to <see cref="IChanWebSocketSession.SendGetStatusAsync"/>.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, in both control formats: no message carries a
-/// buffer fill, and <c>MEDIA_BUFFERING_COMPLETED</c> is never mapped onto this record. The type still compiles;
+/// buffer fill, and <c>MEDIA_BUFFERING_COMPLETED</c> is never mapped onto this record: it is read as
+/// <see cref="ChanWebSocketMediaBufferingCompleted"/>. The type still compiles;
 /// nothing is taken away.
 /// </para>
 /// <para>
@@ -165,7 +169,7 @@ public sealed record ChanWebSocketMediaXon : ChanWebSocketControlMessage
 /// </remarks>
 /// <param name="Bytes">Never set by the SDK.</param>
 [Obsolete(
-    "Never published: no chan_websocket message reports a buffer fill in bytes. Flow control arrives as ChanWebSocketMediaXoff / ChanWebSocketMediaXon; the queue length is in STATUS, reachable once GetStatusAsync exists.",
+    "Never published: no chan_websocket message reports a buffer fill in bytes. Flow control arrives as ChanWebSocketMediaXoff / ChanWebSocketMediaXon; the queue length is ChanWebSocketStatus.QueueLength, the reply to SendGetStatusAsync.",
     DiagnosticId = "VSDK0004")]
 public sealed record ChanWebSocketMediaBuffering(int Bytes) : ChanWebSocketControlMessage;
 
@@ -235,8 +239,9 @@ public sealed record ChanWebSocketError(string ChannelId, string ErrorText) : Ch
 
 /// <summary>
 /// Inbound. A message the model does not name: published with its event name and its exact text, never dropped, so
-/// a consumer sees it before the SDK models it. Asterisk sends <c>STATUS</c>, <c>QUEUE_DRAINED</c> and
-/// <c>MEDIA_BUFFERING_COMPLETED</c> only in reply to commands this SDK has no method for; they arrive as this record.
+/// a consumer sees it before the SDK models it. Every message a capture shows reaching the session has its own record,
+/// <c>STATUS</c>, <c>MEDIA_BUFFERING_COMPLETED</c> and <c>QUEUE_DRAINED</c> included; this one carries any event no
+/// capture names.
 /// </summary>
 /// <param name="Event">
 /// The message's event name: the first token of a plain-text line, or the JSON <c>event</c>; empty when the frame names

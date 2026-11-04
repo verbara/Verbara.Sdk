@@ -405,8 +405,9 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         "been read, or call once MediaStart is set.";
 
     private const string SetMediaDirectionNeedsJsonMessage =
-        "The connection's control format is plain text; Asterisk accepts SET_MEDIA_DIRECTION in JSON only — set " +
-        "control_message_format = json in chan_websocket.conf, or add f(json) to a dial string you write.";
+        "The connection's control format is plain text; Asterisk accepts SET_MEDIA_DIRECTION in JSON only — pass " +
+        "f(json) as the TransportData of a channel you create through ARI externalMedia, add f(json) to a dial string " +
+        "you write, or set control_message_format = json in chan_websocket.conf.";
 
     private const string NoXonXoffCommandMessage =
         "chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and " +

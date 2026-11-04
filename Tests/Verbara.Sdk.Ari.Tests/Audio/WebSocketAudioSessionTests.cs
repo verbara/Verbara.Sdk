@@ -1120,7 +1120,9 @@ public class WebSocketAudioSessionTests
             {
                 s.Ws.Sent.Should().BeEmpty();
                 thrown.Should().BeOfType<InvalidOperationException>()
-                    .Which.Message.Should().Contain("control_message_format = json").And.Contain("f(json) to a dial string you write");
+                    .Which.Message.Should().Contain("control_message_format = json")
+                    .And.Contain("f(json) as the TransportData of a channel you create")
+                    .And.Contain("f(json) to a dial string you write");
             }
         }
         finally

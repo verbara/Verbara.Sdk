@@ -5,23 +5,37 @@ namespace Verbara.Sdk.Ari.Audio;
 /// Adds the text-frame control channel on top of the binary audio pump provided by
 /// <see cref="IAudioStream"/>: the control messages Asterisk sends, read in either of its two formats (plain-text
 /// <c>EVENT key:value …</c> lines by default, JSON objects named by <c>event</c> with <c>f(json)</c> or
-/// <c>control_message_format = json</c>), and the two commands Asterisk acts on, written in the format the connection
-/// negotiated. Both formats were captured on Asterisk 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2.
+/// <c>control_message_format = json</c>), and the commands Asterisk acts on, written in the format the connection
+/// negotiated: <c>MARK_MEDIA</c>, <c>FLUSH_MEDIA</c>, <c>PAUSE_MEDIA</c>, <c>CONTINUE_MEDIA</c>, <c>GET_STATUS</c>,
+/// <c>START_MEDIA_BUFFERING</c>, <c>STOP_MEDIA_BUFFERING</c> and <c>REPORT_QUEUE_DRAINED</c> in either format, and
+/// <c>SET_MEDIA_DIRECTION</c> in JSON. Both formats were captured on Asterisk 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2
+/// and 24.0.0-rc2.
 /// </summary>
 /// <remarks>
+/// <para>
+/// The session writes no <c>HANGUP</c> and no <c>ANSWER</c>. End the call with the ARI hangup,
+/// <see cref="IAriChannelsResource.HangupAsync"/> (<c>DELETE /channels/{id}</c>): after chan_websocket's own
+/// <c>HANGUP</c> ARI reports cause 0 "Unknown", where the ARI hangup reports 16 "Normal Clearing". Answer the channel
+/// with ARI <see cref="IAriChannelsResource.AnswerAsync"/>; no comparison between it and chan_websocket's
+/// <c>ANSWER</c> was measured, and none is claimed here.
+/// </para>
+/// <para>
 /// Added as a sub-interface rather than folding the control methods into <see cref="IAudioStream"/>
 /// because AudioSocket sessions do not share the chan_websocket control-message protocol —
 /// widening <see cref="IAudioStream"/> would force AudioSocket to throw NotSupportedException
 /// for every method. Consumers receive <see cref="IAudioStream"/> from <c>IAudioServer.GetStream</c>
 /// and should check for this interface: <c>if (stream is IChanWebSocketSession ws) ...</c>.
+/// </para>
 /// </remarks>
 public interface IChanWebSocketSession : IAudioStream
 {
     /// <summary>
     /// Control messages Asterisk sends on this connection, read in the format it sends them (plain text by default,
     /// JSON with <c>f(json)</c>; captured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2): DTMF, flow
-    /// control (<c>MEDIA_XOFF</c>/<c>MEDIA_XON</c>), mark acknowledgements, Asterisk's <c>ERROR</c> replies, and the
-    /// generic record for any message the model does not name. Never <c>MEDIA_START</c>, which is
+    /// control (<c>MEDIA_XOFF</c>/<c>MEDIA_XON</c>), mark acknowledgements, the replies to the commands this session
+    /// writes (<see cref="ChanWebSocketStatus"/>, <see cref="ChanWebSocketMediaBufferingCompleted"/>,
+    /// <see cref="ChanWebSocketQueueDrained"/>), Asterisk's <c>ERROR</c> replies, and the generic record for any message
+    /// the model does not name. Never <c>MEDIA_START</c>, which is
     /// <see cref="MediaStart"/>. A hangup is not a message: Asterisk closes the connection, and the ending is
     /// published on <see cref="IAudioStream.StateChanges"/>.
     /// </summary>
@@ -34,8 +48,7 @@ public interface IChanWebSocketSession : IAudioStream
     /// frame names the stream, so <see cref="IAudioStream.ChannelId"/>, not this value, says which key the stream has:
     /// a <c>MEDIA_START</c> that follows audio fills this and leaves the key at the path segment. Its
     /// <see cref="ChanWebSocketMediaStart.ControlMessageFormat"/> is the format every command is written in; while
-    /// <see langword="null"/>, <see cref="SendMarkAsync"/> and <see cref="SendSetMediaDirectionAsync"/> throw
-    /// <see cref="InvalidOperationException"/>.
+    /// <see langword="null"/>, every method that writes a command throws <see cref="InvalidOperationException"/>.
     /// </summary>
     /// <remarks>
     /// The default implementation never reports a <c>MEDIA_START</c> and returns <see langword="null"/>; the SDK's
@@ -135,10 +148,11 @@ public interface IChanWebSocketSession : IAudioStream
     /// <see cref="ChanWebSocketControlMessageFormat.Json"/> is the only format Asterisk accepts this command in.
     /// </summary>
     /// <remarks>
-    /// To get a JSON connection for a channel the SDK creates, set <c>control_message_format = json</c> in Asterisk's
-    /// <c>chan_websocket.conf</c> (read in Asterisk's source, not measured). Add <c>f(json)</c> only to a dial string you
-    /// write yourself, such as <c>Dial(WebSocket/&lt;connection&gt;/f(json))</c>; it is not something to pass through the
-    /// SDK.
+    /// To get a JSON connection for a channel you create through ARI <c>externalMedia</c>, pass <c>f(json)</c> as
+    /// <see cref="AriExternalMediaRequest.TransportData"/> (a JSON <c>MEDIA_START</c> was measured on 20.20.1, 22.11.0,
+    /// 23.5.0, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2). In a dial string you write yourself, add <c>f(json)</c>, such as
+    /// <c>Dial(WebSocket/&lt;connection&gt;/f(json))</c>. For every channel, set <c>control_message_format = json</c> in
+    /// Asterisk's <c>chan_websocket.conf</c> (read in Asterisk's source, not measured).
     /// </remarks>
     /// <param name="direction">The direction to set: <c>in</c>, <c>out</c> or <c>both</c>.</param>
     /// <param name="cancellationToken">Cancels the wait for the send lock and the write.</param>
