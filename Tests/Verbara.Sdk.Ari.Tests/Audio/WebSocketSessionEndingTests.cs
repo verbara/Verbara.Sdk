@@ -27,11 +27,27 @@ public sealed class WebSocketSessionEndingTests
     /// <summary>Upper bound on any wait. Reaching it is a failure, never a pace.</summary>
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
 
-    /// <summary>The closing handshake's bound: at most 2 seconds, by the stream's contract.</summary>
-    private static readonly TimeSpan CloseBound = TimeSpan.FromSeconds(2);
+    /// <summary>
+    /// The closing handshake's bound: at most 1 second, by the stream's contract, for the answer, the disposal and the
+    /// server stop alike.
+    /// </summary>
+    private static readonly TimeSpan CloseBound = TimeSpan.FromSeconds(1);
 
-    /// <summary>Scheduling slack over <see cref="CloseBound"/> for a wait that may spend the whole bound.</summary>
-    private static readonly TimeSpan Slack = TimeSpan.FromSeconds(1);
+    /// <summary>
+    /// Scheduling slack over <see cref="CloseBound"/> for a wait that may spend the whole bound. Kept under half a bound,
+    /// so <c>CloseBound + Slack</c> (1.5 s) still fails a 2 s bound.
+    /// </summary>
+    private static readonly TimeSpan Slack = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// The limit on a stop that closes several streams whose peers never answer: one bound plus the slack (1.5 s).
+    /// Closed one after another, three such streams take three bounds (3 s), two take 2 s, and streams on a 2 s bound
+    /// take 2 s; each fails it.
+    /// </summary>
+    private static readonly TimeSpan OneBoundStopLimit = CloseBound + Slack;
+
+    /// <summary>How long a peer that answers late waits before its answering close: a tenth of the bound.</summary>
+    private static readonly TimeSpan LateAnswer = CloseBound / 10;
 
     private const string TransportFailedEvent = "TransportFailed";
 
@@ -302,6 +318,32 @@ public sealed class WebSocketSessionEndingTests
     }
 
     [Fact]
+    public async Task ReadPump_ShouldAnswerWithExactlyOneClose_WhenADisposalRacesTheAnswerBehindABlockedWrite()
+    {
+        // Arrange — the peer stops reading, so a consumer's write blocks and holds the send. The peer's close, then the
+        // consumer's disposal, each have a close to send, and both wait behind that write while the socket reads
+        // CloseReceived.
+        await using var harness = await WebSocketEndingHarness.StartAsync(recording => recording.Subscribe());
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        var (peer, recording) = await harness.ConnectRawAsync($"race-{Guid.NewGuid():N}", bound.Token, readPaused: true);
+        using var _ = peer;
+        var blocked = await WriteUntilOneBlocksAsync(recording.Stream, bound.Token);
+        await peer.SendCloseAsync();
+        await Task.Delay(LateAnswer, bound.Token); // fence-allow: SETTLE — lets the read loop take the peer's close and queue its answer behind the blocked write
+        var disposal = recording.Stream.DisposeAsync().AsTask();
+        await Task.Delay(LateAnswer, bound.Token); // fence-allow: SETTLE — lets the disposal queue its own close behind the same write
+
+        // Act — the peer reads again: the write completes, and whatever was queued behind it goes out
+        peer.ResumeReading();
+        await disposal.WaitAsync(bound.Token);
+        await peer.Ended.WaitAsync(bound.Token);
+        await Record.ExceptionAsync(() => blocked.WaitAsync(bound.Token));
+
+        // Assert
+        peer.Closes.Should().ContainSingle("the answer and a racing disposal send one close frame between them");
+    }
+
+    [Fact]
     public async Task HandleConnection_ShouldAnswerTheCloseAndNeverAnnounce_WhenAPeerClosesBeforeNamingItsCall()
     {
         // Arrange — a server that waits to be named, far longer than this test runs
@@ -389,7 +431,7 @@ public sealed class WebSocketSessionEndingTests
     [Fact]
     public async Task DisposeAsync_ShouldReadTheAnswerAndReleaseBeforeTheBound_WhenThePeerSendsFramesBeforeItsAnswer()
     {
-        // Arrange — the peer answers the close with audio first, then its close
+        // Arrange — the peer answers the close with audio first, then, a tenth of the bound later, its close
         await using var harness = await WebSocketEndingHarness.StartAsync(recording => recording.Subscribe());
         using var bound = new CancellationTokenSource(SignalTimeout);
         var (peer, recording) = await harness.ConnectRawAsync($"frames-first-{Guid.NewGuid():N}", bound.Token);
@@ -402,14 +444,15 @@ public sealed class WebSocketSessionEndingTests
         await recording.Stream.DisposeAsync().AsTask().WaitAsync(bound.Token);
         var disposal = clock.Elapsed;
         await peer.Ended.WaitAsync(bound.Token);
-        var answered = await answer.WaitAsync(bound.Token);
+        var answeredAt = await answer.WaitAsync(bound.Token);
 
         // Assert
         using (new AssertionScope())
         {
             peer.Closes.Should().ContainSingle("the disposal sends its close frame").Which.CloseStatus.Should().Be(1000);
-            answered.Should().BeTrue("the peer read that close and sent its frames and its answer");
-            disposal.Should().BeLessThan(CloseBound / 4, "the answer is read, so the connection is released without waiting for the bound");
+            answeredAt.Should().NotBeNull("the peer read that close and sent its frames and its answer");
+            peer.EndedAt.Should().BeGreaterThan(answeredAt ?? long.MaxValue, "the frames before the answer do not end the read: the connection is released after the answer");
+            disposal.Should().BeLessThan(CloseBound / 2, "the answer is read, so the connection is released without waiting for the bound");
         }
     }
 
@@ -467,7 +510,7 @@ public sealed class WebSocketSessionEndingTests
             using (new AssertionScope())
             {
                 calls.Select(c => c.Peer.Closes.Count).Should().AllBeEquivalentTo(1, "every stream's peer receives one close frame");
-                stop.Should().BeLessThan(CloseBound * 2, "the streams close together: one bound however many mute peers");
+                stop.Should().BeLessThan(OneBoundStopLimit, "the streams close together: one bound however many mute peers");
             }
         }
         finally
@@ -550,7 +593,7 @@ public sealed class WebSocketSessionEndingTests
             using (new AssertionScope())
             {
                 closed.Should().AllBeEquivalentTo(true, "every stream's peer receives a close frame");
-                elapsed.Should().BeLessThan(CloseBound * 2, "the streams close together: one bound however many mute peers");
+                elapsed.Should().BeLessThan(OneBoundStopLimit, "the streams close together: one bound however many mute peers");
             }
         }
         finally
@@ -588,21 +631,27 @@ public sealed class WebSocketSessionEndingTests
         }
     }
 
-    private static async Task<bool> AnswerWithFramesFirstAsync(RawWebSocketPeer peer)
+    /// <summary>
+    /// Waits for the server's close, sends three audio frames, waits <see cref="LateAnswer"/> and answers; returns the
+    /// timestamp taken just before the answer was sent, or null if the connection was gone first.
+    /// </summary>
+    private static async Task<long?> AnswerWithFramesFirstAsync(RawWebSocketPeer peer)
     {
         if (!await WaitForCloseAsync(peer, CloseBound + Slack))
-            return false;
+            return null;
 
         try
         {
             for (var i = 0; i < 3; i++)
                 await peer.SendBinaryAsync(new byte[320]);
+            await Task.Delay(LateAnswer); // fence-allow: SIMULATED-WORK — the peer's answer comes after its frames, late enough that a read which stopped at the frames releases the connection first
+            var answeredAt = Stopwatch.GetTimestamp();
             await peer.SendCloseAsync();
-            return true;
+            return answeredAt;
         }
         catch (Exception ex) when (ex is SocketException or ObjectDisposedException)
         {
-            return false;
+            return null;
         }
     }
 
