@@ -1,3 +1,128 @@
 #nullable enable
+Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia
+Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.ChanWebSocketContinueMedia() -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia
+Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia.ChanWebSocketFlushMedia() -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus
+Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus.ChanWebSocketGetStatus() -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.ChanWebSocketMediaBufferingCompleted(string! CorrelationId) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.ChannelId.get -> string?
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.ChannelId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.CorrelationId.get -> string!
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.CorrelationId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.Deconstruct(out string! CorrelationId) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia
+Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia.ChanWebSocketPauseMedia() -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained
+Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained.ChanWebSocketQueueDrained() -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained.ChannelId.get -> string?
+Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained.ChannelId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained
+Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained.ChanWebSocketReportQueueDrained() -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering
+Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering.ChanWebSocketStartMediaBuffering() -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.BulkMedia.get -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.BulkMedia.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.ChanWebSocketStatus(string! ChannelId, int QueueLength, int XonLevel, int XoffLevel, bool QueueFull, bool BulkMedia, bool MediaPaused) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.ChannelId.get -> string!
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.ChannelId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.Deconstruct(out string! ChannelId, out int QueueLength, out int XonLevel, out int XoffLevel, out bool QueueFull, out bool BulkMedia, out bool MediaPaused) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketStatus? other) -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.MediaPaused.get -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.MediaPaused.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.QueueFull.get -> bool
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.QueueFull.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.QueueLength.get -> int
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.QueueLength.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.XoffLevel.get -> int
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.XoffLevel.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.XonLevel.get -> int
+Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.XonLevel.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering
+Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.ChanWebSocketStopMediaBuffering(string! CorrelationId) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.CorrelationId.get -> string!
+Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.CorrelationId.init -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.Deconstruct(out string! CorrelationId) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? other) -> bool
 Verbara.Sdk.Ari.Client.AriClientOptions.EventsEnabled.get -> bool
 Verbara.Sdk.Ari.Client.AriClientOptions.EventsEnabled.set -> void
+override Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketStatus!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.ToString() -> string!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering!
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.Equals(object? obj) -> bool
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.GetHashCode() -> int
+override Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.ToString() -> string!
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia? left, Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia? left, Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia? left, Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia? left, Verbara.Sdk.Ari.Audio.ChanWebSocketFlushMedia? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus? left, Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus? left, Verbara.Sdk.Ari.Audio.ChanWebSocketGetStatus? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBufferingCompleted? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia? left, Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia? left, Verbara.Sdk.Ari.Audio.ChanWebSocketPauseMedia? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained? left, Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained? left, Verbara.Sdk.Ari.Audio.ChanWebSocketQueueDrained? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained? left, Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained? left, Verbara.Sdk.Ari.Audio.ChanWebSocketReportQueueDrained? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering? left, Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering? left, Verbara.Sdk.Ari.Audio.ChanWebSocketStartMediaBuffering? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketStatus? left, Verbara.Sdk.Ari.Audio.ChanWebSocketStatus? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketStatus? left, Verbara.Sdk.Ari.Audio.ChanWebSocketStatus? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? left, Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? right) -> bool
+static Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? left, Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? right) -> bool
