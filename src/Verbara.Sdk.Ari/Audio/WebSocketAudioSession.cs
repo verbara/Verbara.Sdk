@@ -15,11 +15,17 @@ namespace Verbara.Sdk.Ari.Audio;
 
 internal static partial class WebSocketAudioSessionLog
 {
-    [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] Transport failed under a live session, which ends as Disconnected: channel_id={ChannelId}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] Transport failed under a live session, which ends as Error then Disconnected: channel_id={ChannelId}")]
     public static partial void TransportFailed(ILogger logger, Exception exception, string channelId);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] A second MEDIA_START on one connection is ignored: path_segment={PathSegment} first_channel_id={FirstChannelId} ignored_channel_id={IgnoredChannelId}")]
     public static partial void SecondMediaStartIgnored(ILogger logger, string pathSegment, string firstChannelId, string ignoredChannelId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] A ControlMessages subscriber threw; the stream and the other subscribers went on: message_type={MessageType} channel_id={ChannelId}")]
+    public static partial void ControlMessageSubscriberFailed(ILogger logger, Exception exception, string messageType, string channelId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] A ControlMessages subscriber threw on the completion; the disposal went on: channel_id={ChannelId}")]
+    public static partial void ControlMessageSubscriberFailedOnCompletion(ILogger logger, Exception exception, string channelId);
 }
 
 /// <summary>How a WebSocket audio connection's wait for its first frame ended.</summary>
@@ -49,18 +55,37 @@ internal readonly record struct WebSocketFirstFrame(WebSocketFirstFrameKind Kind
 /// state (<see cref="MediaStart"/>), every other frame as a <see cref="ChanWebSocketControlMessage"/>.
 /// </summary>
 /// <remarks>
-/// Records the <c>Verbara.Sdk.Ari.Audio</c> instruments, each measurement tagged
+/// <para>
+/// <b>The ending.</b> A close frame from the peer, whatever its status, ends the session as the peer's close: it
+/// answers with one close frame, then publishes <see cref="AudioStreamState.Disconnected"/>. A connection that fails
+/// while the session is live, reset or ended with no close frame, is a failed transport: the session writes a Warning,
+/// counts it on <c>audio.transport.failures</c>, then publishes <see cref="AudioStreamState.Error"/> and
+/// <see cref="AudioStreamState.Disconnected"/>. A disposal, which a server stop also ends in, sends one close frame,
+/// keeps reading until the peer answers or <see cref="CloseBound"/> runs out, and only then stops the read; it publishes
+/// <see cref="AudioStreamState.Disconnected"/> alone, even when the connection fails while it is in progress.
+/// </para>
+/// <para>
+/// <b>The instruments.</b> Records the <c>Verbara.Sdk.Ari.Audio</c> instruments, each measurement tagged
 /// <c>audio.transport=websocket</c>: the stream opened at its start and closed at its one ending, the
 /// non-empty binary messages and their payload bytes received and sent, the time from receipt to the
-/// consumer's read, and a transport failure under a live session. It records no hangup or error frames:
+/// consumer's read, each received frame the full buffer drops, and a transport failure under a live session. A
+/// failure of a <see cref="ControlMessages"/> subscriber is counted untagged. It records no hangup or error frames:
 /// those instruments count AudioSocket frames. On chan_websocket a hangup is the peer's close frame, which ends the
 /// session, and its <c>ERROR</c> is a control message.
+/// </para>
 /// </remarks>
 internal sealed class WebSocketAudioSession : IChanWebSocketSession
 {
+    /// <summary>
+    /// The closing handshake's one bound: the answer to a peer's close, and a disposal's close plus its wait for the
+    /// peer's answer, together. A server stop disposes its sessions concurrently, so it spends one bound too.
+    /// </summary>
+    internal static readonly TimeSpan CloseBound = TimeSpan.FromSeconds(1);
+
     private readonly WebSocket _webSocket;
     private readonly AudioStreamStateChannel _state;
     private readonly Subject<ChanWebSocketControlMessage> _controlSubject = new();
+    private readonly GuardedControlMessages _controlMessages;
     private readonly Channel<ReceivedAudioFrame> _audioInChannel;
     private readonly CancellationTokenSource _cts = new();
     private readonly ILogger _logger;
@@ -76,14 +101,17 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     private bool _firstFrameRead;
     private int _mediaStarts;
 
-    // Set once, by the read pump, from the connection's first MEDIA_START: the format first, then the record, so a
-    // consumer that reads MediaStart reads the format it carried.
-    private volatile string _format;
-    private volatile int _sampleRate;
+    // Set once, by the read pump, from the connection's first MEDIA_START. Format and SampleRate read it over the
+    // constructor's default, so one reference write publishes all three: no reader sees the new format before it.
+    private readonly string _defaultFormat;
+    private readonly int _defaultSampleRate;
     private ChanWebSocketMediaStart? _mediaStart;
 
     // Completed once, by the read pump: with the first frame of any type, or with Ended when the pump ends first.
     private readonly TaskCompletionSource<WebSocketFirstFrame> _firstFrame = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    // Completed once, by the first disposal, when its close and its wait for the peer's answer are over, whichever way.
+    private readonly TaskCompletionSource _closeHandshake = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>
     /// The key this stream is registered under: the <c>channel_id</c> its first frame named when that frame was
@@ -100,17 +128,25 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
 
     /// <summary>Completes with the connection's first frame, or with <see cref="WebSocketFirstFrameKind.Ended"/>.</summary>
     internal Task<WebSocketFirstFrame> FirstFrame => _firstFrame.Task;
+
+    /// <summary>
+    /// Completes when the first disposal has sent its close and stopped waiting for the peer's answer: on the answer,
+    /// on the bound, or at once when there was nothing to wait for. A second disposal returns immediately, so a caller
+    /// that must not release the connection under a handshake in progress awaits this after its own disposal. It is
+    /// bounded by <see cref="CloseBound"/> and completes before the disposal publishes anything to a subscriber.
+    /// </summary>
+    internal Task CloseHandshake => _closeHandshake.Task;
     /// <summary>The server's configured format until the connection's first <c>MEDIA_START</c>, then the one it names.</summary>
-    public string Format => _format;
+    public string Format => MediaStart?.Format ?? _defaultFormat;
 
     /// <summary>The rate of <see cref="Format"/>, derived as <see cref="ChanWebSocketMediaStart.Rate"/> is.</summary>
-    public int SampleRate => _sampleRate;
+    public int SampleRate => MediaStart?.Rate ?? _defaultSampleRate;
 
     /// <inheritdoc />
     public ChanWebSocketMediaStart? MediaStart => Volatile.Read(ref _mediaStart);
     public bool IsConnected => Volatile.Read(ref _disposed) == 0 && _webSocket.State == WebSocketState.Open;
     public IObservable<AudioStreamState> StateChanges => _state;
-    public IObservable<ChanWebSocketControlMessage> ControlMessages => _controlSubject;
+    public IObservable<ChanWebSocketControlMessage> ControlMessages => _controlMessages;
 
     /// <summary>
     /// Completes when the session's ending is published, before any observer is notified of it: the
@@ -133,15 +169,21 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         _channelId = channelId;
         _pathSegment = channelId;
         _state = new AudioStreamStateChannel(AudioStreamState.Connected, logger, () => ChannelId);
-        _format = format;
-        _sampleRate = AudioFormats.SampleRateOf(format);
+        _controlMessages = new GuardedControlMessages(this);
+        _defaultFormat = format;
+        _defaultSampleRate = AudioFormats.SampleRateOf(format);
 
-        _audioInChannel = Channel.CreateBounded<ReceivedAudioFrame>(new BoundedChannelOptions(1000)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true,
-            SingleWriter = true
-        });
+        // DropOldest never refuses a write for a full buffer: the channel discards its oldest frame instead, and
+        // reports it only through this callback, so TryWrite in the pump cannot see a drop. The read never waits for a
+        // slow consumer.
+        _audioInChannel = Channel.CreateBounded<ReceivedAudioFrame>(
+            new BoundedChannelOptions(1000)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+                SingleWriter = true
+            },
+            static _ => AudioStreamMetrics.FramesDropped.Add(1, AudioStreamMetrics.WebSocketTransport));
     }
 
     /// <summary>
@@ -165,10 +207,15 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     private async Task ReadPumpAsync(CancellationToken ct)
     {
         var bufferWriter = new ArrayBufferWriter<byte>(8192);
+        var transportFailed = false;
 
         try
         {
-            while (!ct.IsCancellationRequested && _webSocket.State == WebSocketState.Open)
+            // CloseSent too: a disposal sends its close frame first and this loop then reads until the peer's answer,
+            // so the answer is read instead of aborted. Frames read meanwhile are handled as usual; the audio channel is
+            // complete by then, so an audio frame goes nowhere.
+            while (!ct.IsCancellationRequested
+                   && _webSocket.State is WebSocketState.Open or WebSocketState.CloseSent)
             {
                 bufferWriter.Clear();
                 ValueWebSocketReceiveResult result;
@@ -182,7 +229,16 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
                 while (!result.EndOfMessage);
 
                 if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    // A close before the first frame ends the server's wait to be named first, so a connection whose
+                    // answer is still in flight is never announced. Then the answer, before the `finally` publishes
+                    // the ending: the peer has its reply before any consumer reacts to Disconnected. When this is the
+                    // answer to this side's own close, the socket is Closed and nothing is sent.
+                    _firstFrame.TrySetResult(new WebSocketFirstFrame(WebSocketFirstFrameKind.Ended));
+                    using var answerBound = new CancellationTokenSource(CloseBound);
+                    await CloseOnceAsync(_webSocket.CloseStatus ?? WebSocketCloseStatus.NormalClosure, answerBound.Token);
                     break;
+                }
 
                 // A text frame is read once: whether it is MEDIA_START, the call it names and the record it maps to all
                 // come from this one read, so they cannot disagree.
@@ -241,19 +297,21 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         catch (WebSocketException ex)
         {
             // The peer's orderly ending is its close frame, which the loop above leaves on without an
-            // exception. Measured through the server: a connection reset raises ConnectionClosedPrematurely
+            // exception, whatever status the frame carries: the close code says the peer ended the stream, not
+            // who failed. Measured through the server: a connection reset raises ConnectionClosedPrematurely
             // over the socket's reset, and a connection that ends without a close frame raises
-            // ConnectionClosedPrematurely with no inner exception; both are abnormal endings. The session
-            // is still Connected here: only this pump's `finally` and a disposal that has awaited this pump
-            // publish its ending. Reported before the `finally` publishes Disconnected, so whoever reacts
-            // to the ending already finds the line and the count. The ending stays Disconnected.
-            // The `_disposed` filter is defensive: an owner's disposal sets it before it cancels or closes
-            // anything, and that teardown surfaces here as OperationCanceledException; no measured
-            // teardown has reached this catch.
+            // ConnectionClosedPrematurely with no inner exception; both are failed transports, so the ending
+            // is Error then Disconnected. The session is still Connected here: only this pump's `finally` and
+            // a disposal that has awaited this pump publish its ending. Reported before the `finally`
+            // publishes it, so whoever reacts to Error already finds the line and the count.
+            // The `_disposed` filter keeps an ending on this side an ending without an error: the disposal,
+            // which a server stop also ends in, sets it before it cancels or closes anything, so a connection
+            // that fails while that ending is in progress is neither reported nor classified as a failure.
             if (Volatile.Read(ref _disposed) == 0)
             {
                 WebSocketAudioSessionLog.TransportFailed(_logger, ex, ChannelId);
                 AudioStreamMetrics.TransportFailures.Add(1, AudioStreamMetrics.WebSocketTransport);
+                transportFailed = true;
             }
         }
         finally
@@ -262,7 +320,7 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
             // unnamed: the server then neither registers nor announces it.
             _firstFrame.TrySetResult(new WebSocketFirstFrame(WebSocketFirstFrameKind.Ended));
             _audioInChannel.Writer.TryComplete();
-            _state.TryEnd(error: false);
+            _state.TryEnd(error: transportFailed);
         }
     }
 
@@ -278,9 +336,7 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         }
 
         _firstMediaStartChannelId = channelId;
-        var mediaStart = ChanWebSocketInboundReader.ReadMediaStart(frame, _format);
-        _format = mediaStart.Format;
-        _sampleRate = mediaStart.Rate;
+        var mediaStart = ChanWebSocketInboundReader.ReadMediaStart(frame, _defaultFormat);
         Volatile.Write(ref _mediaStart, mediaStart);
         EmitMediaStarted(mediaStart);
     }
@@ -468,27 +524,80 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         }
     }
 
+    // The one place a close frame is sent: the pump's answer to a peer's close and a disposal's own close both come
+    // here. WebSocket allows one send at a time, so it takes the send lock; it sends only from Open or CloseReceived,
+    // read under that lock, so the answer and a racing disposal send one close between them. `bound` is the caller's
+    // own CloseBound source, never a token that asked for the ending. A close that cannot be sent is not a second
+    // ending: every failure the send can raise ends here.
+    private async Task CloseOnceAsync(WebSocketCloseStatus status, CancellationToken bound)
+    {
+        try
+        {
+            await _sendLock.WaitAsync(bound).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // A write holds the lock past the bound, on a peer that stopped reading: the ending goes on without the
+            // close frame rather than wait on that write.
+            return;
+        }
+
+        try
+        {
+            if (_webSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+                await _webSocket.CloseOutputAsync(status, statusDescription: null, bound).ConfigureAwait(false);
+        }
+        catch (WebSocketException)
+        {
+            // The connection already failed or closed under the send: the peer cannot hear a close any more.
+        }
+        catch (IOException)
+        {
+            // The transport refused the write (a reset or a closed socket): the same as above, one layer down.
+        }
+        catch (ObjectDisposedException)
+        {
+            // The socket was released under the send; nothing remains to close.
+        }
+        catch (OperationCanceledException)
+        {
+            // The bound ran out mid-send, on a peer that is not reading: the ending does not wait longer.
+        }
+        finally
+        {
+            _sendLock.Release();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         // Atomic: the connection handler that owns this session disposes it on its way out, and a
         // consumer holding it as an IAudioStream can dispose it at the same moment.
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
-        await _cts.CancelAsync();
         _audioInChannel.Writer.TryComplete();
 
-        if (_webSocket.State == WebSocketState.Open)
+        // The close goes out before anything stops the read, whether or not a read is pending: a cancelled receive
+        // aborts the socket, and an aborted socket sends nothing. Then the pump, still reading, takes the peer's
+        // answer and leaves on it. One bound covers the send and that wait together, so a peer that never answers
+        // costs the disposal one bound.
+        try
         {
-            try
-            {
-                // Bounded: a read pump that has not started receiving yet is not aborted by the
-                // cancellation above, so the socket is still open here and CloseAsync waits for the
-                // peer's close frame, which a peer that is not reading never sends.
-                using var closeCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", closeCts.Token);
-            }
-            catch { /* Best effort */ }
+            using var closeBound = new CancellationTokenSource(CloseBound);
+            await CloseOnceAsync(WebSocketCloseStatus.NormalClosure, closeBound.Token);
+
+            if (_readPumpTask is not null)
+                await _readPumpTask.WaitAsync(closeBound.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         }
+        finally
+        {
+            // The handshake is over, answered or not: a server handler that joined this disposal may release the
+            // connection now.
+            _closeHandshake.TrySetResult();
+        }
+
+        // Last: aborts a receive still pending once the bound is spent, on a peer that never answered.
+        await _cts.CancelAsync();
 
         if (_readPumpTask is not null)
             await _readPumpTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
@@ -502,5 +611,78 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         _webSocket.Dispose();
         _sendLock.Dispose();
         _cts.Dispose();
+    }
+
+    // One failure of a ControlMessages subscriber: written once at Warning, with the exception, and counted once.
+    // A null message is the completion.
+    private void ReportControlSubscriberFailure(Exception exception, ChanWebSocketControlMessage? message)
+    {
+        if (message is null)
+            WebSocketAudioSessionLog.ControlMessageSubscriberFailedOnCompletion(_logger, exception, ChannelId);
+        else
+            WebSocketAudioSessionLog.ControlMessageSubscriberFailed(_logger, exception, message.GetType().Name, ChannelId);
+
+        AudioStreamMetrics.ControlMessageSubscriberFaults.Add(1);
+    }
+
+    /// <summary>
+    /// <see cref="ControlMessages"/>: each subscriber behind its own guard. An exception a subscriber throws on the
+    /// delivering thread, on a message or on the completion, is reported and goes no further: the read pump, a
+    /// disposal and the other subscribers go on, and the subscriber stays subscribed. A subscription composed through
+    /// an operator is ended by that operator on its first failure; the guard sees the exception after that and
+    /// reports it the same way. A plain observable, not an Rx producer, so subscribing adds no safeguard of Rx's own.
+    /// </summary>
+    private sealed class GuardedControlMessages(WebSocketAudioSession owner) : IObservable<ChanWebSocketControlMessage>
+    {
+        public IDisposable Subscribe(IObserver<ChanWebSocketControlMessage> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+            return owner._controlSubject.Subscribe(new GuardedObserver(owner, observer));
+        }
+    }
+
+    /// <summary>One <see cref="ControlMessages"/> subscriber, behind the guard. A <c>Subject</c> replays nothing, so every
+    /// notification is a publication.</summary>
+    private sealed class GuardedObserver(WebSocketAudioSession owner, IObserver<ChanWebSocketControlMessage> inner)
+        : IObserver<ChanWebSocketControlMessage>
+    {
+        public void OnNext(ChanWebSocketControlMessage value)
+        {
+            try
+            {
+                inner.OnNext(value);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Consumer code failed on a message: the line and the count are the only trace of it.
+                owner.ReportControlSubscriberFailure(ex, value);
+            }
+        }
+
+        public void OnCompleted()
+        {
+            try
+            {
+                inner.OnCompleted();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Raised by the disposal, which goes on to release the connection.
+                owner.ReportControlSubscriberFailure(ex, message: null);
+            }
+        }
+
+        public void OnError(Exception error)
+        {
+            try
+            {
+                inner.OnError(error);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The session never fails the sequence; guarded the same way should that change.
+                owner.ReportControlSubscriberFailure(ex, message: null);
+            }
+        }
     }
 }

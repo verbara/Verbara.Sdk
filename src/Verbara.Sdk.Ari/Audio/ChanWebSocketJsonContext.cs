@@ -135,6 +135,8 @@ public static class ChanWebSocketControlMessageSerializer
     /// and never publishes — and <see cref="ChanWebSocketUnknownMessage"/>, with the frame's event name and exact text, for
     /// a frame the model does not name. Never <see langword="null"/>. 2.8.x's <c>kind</c> JSON, which no Asterisk sends,
     /// reads as <see cref="ChanWebSocketUnknownMessage"/>.
+    /// A <c>MEDIA_START</c> that names no <c>format</c> reads as a <see cref="ChanWebSocketMediaStart"/> whose
+    /// <see cref="ChanWebSocketMediaStart.Format"/> is empty: this reader has no stream format to keep.
     /// </summary>
     /// <param name="json">The frame's text, in either format (the parameter's name is shipped).</param>
     /// <exception cref="ArgumentNullException"><paramref name="json"/> is <see langword="null"/>.</exception>
@@ -149,6 +151,8 @@ public static class ChanWebSocketControlMessageSerializer
     /// <see cref="ChanWebSocketMediaStart"/>, which the session keeps as <see cref="IChanWebSocketSession.MediaStart"/>
     /// and never publishes — and <see cref="ChanWebSocketUnknownMessage"/> for a frame the model does not name, as
     /// <see cref="Deserialize(string)"/> does. Never <see langword="null"/>.
+    /// A <c>MEDIA_START</c> that names no <c>format</c> reads as a <see cref="ChanWebSocketMediaStart"/> whose
+    /// <see cref="ChanWebSocketMediaStart.Format"/> is empty: this reader has no stream format to keep.
     /// </summary>
     /// <param name="utf8Json">The frame's text as UTF-8, in either format (the parameter's name is shipped).</param>
     public static ChanWebSocketControlMessage? Deserialize(ReadOnlySpan<byte> utf8Json)

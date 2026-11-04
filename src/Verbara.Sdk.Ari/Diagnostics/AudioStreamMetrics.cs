@@ -28,6 +28,9 @@ namespace Verbara.Sdk.Ari.Diagnostics;
 /// connection that ends that way never opened, so it counts no <see cref="StreamsOpened"/> or
 /// <see cref="StreamsClosed"/>). A WebSocket has no such frames; its hangup is a text control message,
 /// counted by neither.</description></item>
+/// <item><description>WebSocket only: <c>audio.frames.dropped</c>, each frame received and then discarded because the
+/// stream's receive buffer was full (the consumer fell behind, and the oldest frame goes), counted at the discard and
+/// also counted in <see cref="FramesReceived"/>.</description></item>
 /// </list>
 /// </para>
 /// <para>
@@ -75,6 +78,16 @@ public static class AudioStreamMetrics
         Meter.CreateCounter<long>("audio.frames.sent", "frames",
             "Audio frames sent to Asterisk");
 
+    /// <summary>
+    /// Audio frames a WebSocket stream received and then discarded, because its receive buffer was full: a consumer
+    /// that fell behind loses the oldest frame, one count each, tagged with the WebSocket transport. An AudioSocket
+    /// stream does not record it. Internal: the instrument's name is the contract an exporter sees, and the field adds
+    /// no public API.
+    /// </summary>
+    internal static readonly Counter<long> FramesDropped =
+        Meter.CreateCounter<long>("audio.frames.dropped", "frames",
+            "Audio frames a WebSocket stream discarded because its receive buffer was full; an AudioSocket stream does not record it");
+
     /// <summary>Total bytes received from Asterisk.</summary>
     public static readonly Counter<long> BytesReceived =
         Meter.CreateCounter<long>("audio.bytes.received", "bytes",
@@ -121,9 +134,11 @@ public static class AudioStreamMetrics
     /// Audio sessions, AudioSocket or WebSocket, whose transport failed while the session was live. On
     /// AudioSocket: the connection was reset, or a read from the socket otherwise failed, after the
     /// identification frame and before any hangup or error frame. On WebSocket: the connection was reset,
-    /// or otherwise ended without the peer's close frame. Such a session still ends as
-    /// <c>Disconnected</c>, exactly as a hangup or a close does, so this counter and the session's
-    /// Warning are what tell the two apart. Internal:
+    /// or otherwise ended without the peer's close frame. What the session publishes differs by door. An
+    /// AudioSocket session still ends as <c>Disconnected</c> alone, as a hangup does, so there this counter
+    /// and the session's Warning are what tell the two apart. A WebSocket session publishes <c>Error</c>
+    /// then <c>Disconnected</c>, and the count and the Warning already exist when <c>Error</c> is
+    /// published. Internal:
     /// the instrument's name is the contract an exporter sees, and the field adds no public API.
     /// </summary>
     internal static readonly Counter<long> TransportFailures =
@@ -140,6 +155,16 @@ public static class AudioStreamMetrics
     internal static readonly Counter<long> ConnectionsRefused =
         Meter.CreateCounter<long>("audio.connections.refused", "connections",
             "Audio connections closed at accept because MaxConcurrentStreams places were already held");
+
+    /// <summary>
+    /// Failures of a WebSocket stream's <c>ControlMessages</c> subscribers: each exception a subscriber throws on the
+    /// delivering thread, on a message or on the completion its disposal raises, counted once, together with its
+    /// Warning. The stream and its other subscribers go on. No tags: a subscriber's failure is consumer code, not a
+    /// transport's. Internal: the instrument's name is the contract an exporter sees, and the field adds no public API.
+    /// </summary>
+    internal static readonly Counter<long> ControlMessageSubscriberFaults =
+        Meter.CreateCounter<long>("audio.control_messages.subscriber_faults", "faults",
+            "Exceptions thrown by WebSocket ControlMessages subscribers, caught and reported without stopping the stream");
 
     // --- Latency ---
 

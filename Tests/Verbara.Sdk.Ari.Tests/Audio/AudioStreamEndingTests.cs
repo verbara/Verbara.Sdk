@@ -108,10 +108,10 @@ public sealed class AudioStreamEndingTests
     }
 
     [Theory]
-    [InlineData(WebSocketEnding.CloseFrame)]
-    [InlineData(WebSocketEnding.PeerAbort)]
-    [InlineData(WebSocketEnding.ServerStop)]
-    public async Task StateChanges_ShouldPublishDisconnectedOnceAndLast_WhenAWebSocketStreamEnds(WebSocketEnding ending)
+    [InlineData(WebSocketEnding.CloseFrame, "Connected,Disconnected")]
+    [InlineData(WebSocketEnding.PeerAbort, "Connected,Error,Disconnected")]
+    [InlineData(WebSocketEnding.ServerStop, "Connected,Disconnected")]
+    public async Task StateChanges_ShouldPublishDisconnectedOnceAndLast_WhenAWebSocketStreamEnds(WebSocketEnding ending, string expected)
     {
         // Arrange
         await using var harness = await WebSocketEndingHarness.StartAsync(recording => recording.Subscribe());
@@ -139,8 +139,9 @@ public sealed class AudioStreamEndingTests
 
         // Assert
         var sequences = calls.Select(c => string.Join(",", c.Recording.States)).ToList();
+        // An abort is a failed transport, so Error comes first; every ending publishes Disconnected once, last.
         sequences.Should().AllBe(
-            "Connected,Disconnected",
+            expected,
             $"a WebSocket stream ended by {ending} publishes Disconnected once, last, then completes; recorded: {Summarise(sequences)}");
         foreach (var call in calls)
             call.Peer.Dispose();

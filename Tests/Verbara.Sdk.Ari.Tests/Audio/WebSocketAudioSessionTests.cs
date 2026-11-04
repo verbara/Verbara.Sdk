@@ -319,6 +319,43 @@ public class WebSocketAudioSessionTests
         }
     }
 
+    public static TheoryData<string, ChanWebSocketCaptureFormat> EveryCapturedXoffXonPair()
+    {
+        var data = new TheoryData<string, ChanWebSocketCaptureFormat>();
+        foreach (var xoff in ChanWebSocketWireCapture.ControlMessages.Where(m => m.Event == "MEDIA_XOFF"))
+            data.Add(xoff.AsteriskVersion, xoff.Format);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryCapturedXoffXonPair))]
+    public async Task ControlMessages_ShouldPublishXoffThenXonInOrder_WhenOneSessionReadsTheCapturedPair(
+        string version, ChanWebSocketCaptureFormat format)
+    {
+        // Arrange — the captured MEDIA_XOFF and MEDIA_XON of one trigger record, as Asterisk sent them on one connection
+        var pair = ChanWebSocketWireCapture.ControlMessages
+            .Where(m => m.AsteriskVersion == version && m.Format == format && m.Trigger == "xoff-xon")
+            .ToArray();
+        var xoff = pair.Single(m => m.Event == "MEDIA_XOFF");
+        var xon = pair.Single(m => m.Event == "MEDIA_XON");
+        xoff.ConnectionChannelId.Should().Be(xon.ConnectionChannelId, "both edges come from the same captured connection");
+
+        // Act — one session fed both edges in the captured order, then an audio frame
+        await using var fed = await Fed.StartAsync("ch-1", "slin16", Text(xoff.Payload()), Text(xon.Payload()));
+
+        // Assert
+        using (new AssertionScope($"{version} {format}"))
+        {
+            fed.MarkerDelivered.Should().BeTrue("the audio frame after both edges is delivered");
+            var published = fed.Published.ToArray();
+            published.Select(m => m.GetType()).Should().Equal(
+                [typeof(ChanWebSocketMediaXoff), typeof(ChanWebSocketMediaXon)],
+                "a consumer pausing on XOFF must read the XON that resumes it, after it, on the same session");
+            published.OfType<ChanWebSocketMediaXoff>().Select(m => m.ChannelId).Should().Equal(xoff.ChannelId);
+            published.OfType<ChanWebSocketMediaXon>().Select(m => m.ChannelId).Should().Equal(xon.ChannelId);
+        }
+    }
+
     [Theory]
     [InlineData(ChanWebSocketCaptureFormat.PlainText)]
     [InlineData(ChanWebSocketCaptureFormat.Json)]
@@ -955,6 +992,54 @@ public class WebSocketAudioSessionTests
         }
     }
 
+    // A mark holding a lone surrogate is not valid UTF-16. No capture sends one; these two pin what the SDK does with it,
+    // and the XML of SendMarkAsync quotes them.
+    private const string MarkWithALoneSurrogate = "m\uD800";
+
+    [Fact]
+    public async Task SendMarkAsync_ShouldWriteTheEscapedReplacementCharacter_WhenTheMarkHoldsALoneSurrogateOnAJsonConnection()
+    {
+        var s = await NegotiatedAsync(ChanWebSocketCaptureFormat.Json);
+        try
+        {
+            await s.Session.SendMarkAsync(MarkWithALoneSurrogate);
+
+            using (new AssertionScope())
+            {
+                var sent = s.Ws.Sent.Should().ContainSingle().Subject;
+                sent.Type.Should().Be(WebSocketMessageType.Text);
+                Encoding.UTF8.GetString(sent.Data).Should().Be(
+                    """{"command":"MARK_MEDIA","correlation_id":"m\uFFFD"}""",
+                    "the lone surrogate is written as the escaped U+FFFD");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Fact]
+    public async Task SendMarkAsync_ShouldWriteTheReplacementCharacter_WhenTheMarkHoldsALoneSurrogateOnAPlainTextConnection()
+    {
+        var s = await NegotiatedAsync(ChanWebSocketCaptureFormat.PlainText);
+        try
+        {
+            await s.Session.SendMarkAsync(MarkWithALoneSurrogate);
+
+            using (new AssertionScope())
+            {
+                var sent = s.Ws.Sent.Should().ContainSingle().Subject;
+                sent.Type.Should().Be(WebSocketMessageType.Text);
+                sent.Data.Should().Equal([.. "MARK_MEDIA m"u8, 0xEF, 0xBF, 0xBD], "the lone surrogate is written as U+FFFD");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
     [Theory]
     [InlineData(ChanWebSocketMediaDirection.In, "in")]
     [InlineData(ChanWebSocketMediaDirection.Out, "out")]
@@ -1142,7 +1227,8 @@ public class WebSocketAudioSessionTests
                 s.Ws.Sent.Should().HaveCount(sentBefore).And.BeEmpty();
                 ((IChanWebSocketSession)s.Session).MediaStart.Should().BeSameAs(mediaStart);
                 thrown.Should().BeOfType<NotSupportedException>()
-                    .Which.Message.Should().Contain("no XON/XOFF command").And.Contain("ChanWebSocketMediaXoff");
+                    .Which.Message.Should().Contain("no XON/XOFF command").And.Contain("ChanWebSocketMediaXoff")
+                    .And.Contain("ChanWebSocketMediaXon");
             }
         }
         finally

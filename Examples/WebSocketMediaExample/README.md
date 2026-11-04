@@ -2,7 +2,7 @@
 
 Demonstrates the **`chan_websocket`** Channel Driver integration added in v1.12.0 — native Asterisk 22.8 / 23.2+ audio transport over WebSocket with control messages over TEXT frames, in plain text (Asterisk's default) or JSON (`f(json)`).
 
-The example stands up `WebSocketAudioServer` on port 9093 and prints each stream as it connects, keyed by the `channel_id` of the `MEDIA_START` Asterisk sends as the connection's first frame (the stream's `ChannelId`, and what `GetStream` finds it by), with the control format that frame negotiated (`MediaStart.ControlMessageFormat`). It logs the control messages Asterisk sends (`DTMF_END`, `MEDIA_XOFF`/`MEDIA_XON`, `MEDIA_MARK_PROCESSED`, `ERROR`, and any message the SDK does not model, by its event name), sends a `MARK_MEDIA` after 1 s, which Asterisk answers with `MEDIA_MARK_PROCESSED`, and a `SET_MEDIA_DIRECTION` (both) after 5 s on a JSON connection only. A hangup is not a message: Asterisk closes the connection, and the example prints the stream's ending from `StateChanges`.
+The example stands up `WebSocketAudioServer` on port 9093 and prints each stream as it connects, keyed by the `channel_id` of the `MEDIA_START` Asterisk sends as the connection's first frame (the stream's `ChannelId`, and what `GetStream` finds it by), with the control format that frame negotiated (`MediaStart.ControlMessageFormat`). It logs the control messages Asterisk sends (`DTMF_END`, `MEDIA_XOFF`/`MEDIA_XON`, `MEDIA_MARK_PROCESSED`, `ERROR`, and any message the SDK does not model, by its event name), sends a `MARK_MEDIA` after 1 s, which Asterisk answers with `MEDIA_MARK_PROCESSED`, and a `SET_MEDIA_DIRECTION` (both) after 5 s on a JSON connection only. A hangup is not a message: Asterisk closes the connection, and the example prints the stream's ending from `StateChanges`, with a `connection failed` line first when the connection broke instead (`Error`, then `Disconnected`).
 
 ## Prerequisites
 
@@ -58,7 +58,7 @@ Then dial extension `6000` from a SIP phone. You should see:
 [stream] ended channel_id=<the call's channel id>
 ```
 
-The last line appears when the call hangs up.
+The last line appears when the call hangs up. If the connection fails under the call instead (a reset, or an end with no close frame), `[stream] connection failed channel_id=…` comes just before it.
 
 ## What It Shows
 
@@ -66,7 +66,7 @@ The last line appears when the call hangs up.
 - `IChanWebSocketSession` — sub-interface that exposes the control messages Asterisk sends, read in either format, as an `IObservable<ChanWebSocketControlMessage>`, and the connection's `MEDIA_START` as `MediaStart`.
 - Pattern-matching over the message records, with `ChanWebSocketUnknownMessage` for a message the SDK does not model (AOT-clean, no reflection).
 - `SendMarkAsync`, `SendSetMediaDirectionAsync` — the two commands Asterisk acts on (`SendXonAsync`/`SendXoffAsync` are deprecated, `VSDK0004`: Asterisk has no such command, and they throw).
-- `IAudioStream.StateChanges` — the stream's ending, which is how a hangup reaches the application.
+- `IAudioStream.StateChanges` — the stream's ending, which is how a hangup reaches the application: `Disconnected` once, last, after `Error` when the connection failed rather than closed.
 
 ## Key SDK Packages Used
 
