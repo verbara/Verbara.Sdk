@@ -70,12 +70,20 @@ using var connSub = server.OnStreamConnected.Subscribe(stream =>
     // Set when the caller barges in or the stream ends: the prompt stops writing at its next frame.
     var stopPrompt = 0;
 
-    // The ending: a hangup closes the connection, and the stream publishes Disconnected once, last.
+    // The ending: a hangup closes the connection, and the stream publishes Disconnected once, last. A connection
+    // that failed under the call (a reset, or an end with no close frame) publishes Error just before it.
     var stateSub = stream.StateChanges.Subscribe(state =>
     {
-        if (state != AudioStreamState.Disconnected) return;
-        Volatile.Write(ref stopPrompt, 1);
-        Console.WriteLine($"[stream] ended channel_id={stream.ChannelId}");
+        if (state == AudioStreamState.Error)
+        {
+            Volatile.Write(ref stopPrompt, 1);
+            Console.WriteLine($"[stream] connection failed channel_id={stream.ChannelId}");
+        }
+        else if (state == AudioStreamState.Disconnected)
+        {
+            Volatile.Write(ref stopPrompt, 1);
+            Console.WriteLine($"[stream] ended channel_id={stream.ChannelId}");
+        }
     });
 
     // Cast to IChanWebSocketSession to read the control messages and send commands.

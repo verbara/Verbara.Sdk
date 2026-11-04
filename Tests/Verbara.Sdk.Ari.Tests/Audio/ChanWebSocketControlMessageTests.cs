@@ -265,6 +265,34 @@ public class ChanWebSocketControlMessageTests
         }
     }
 
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json)]
+    public void Deserialize_ShouldReadAnEmptyFormat_WhenAMediaStartNamesNoFormat(ChanWebSocketCaptureFormat captureFormat)
+    {
+        // Arrange — synthetic: the captured MEDIA_START with its format field cut out; no capture sends one without it
+        var captured = ChanWebSocketWireCapture.MediaStart.First(f =>
+            f.AsteriskVersion == "24.0.0-rc2" && f.Producer == ChanWebSocketCaptureProducer.Dial && f.Format == captureFormat && f.Option == "none");
+        var formatField = captureFormat == ChanWebSocketCaptureFormat.Json ? "\"format\":\"slin16\"," : " format:slin16";
+        captured.Text.Should().Contain(formatField);
+        var withoutFormat = captured.Text.Replace(formatField, string.Empty, StringComparison.Ordinal);
+
+        // Act
+        var fromString = ChanWebSocketControlMessageSerializer.Deserialize(withoutFormat);
+        var fromBytes = ChanWebSocketControlMessageSerializer.Deserialize(Encoding.UTF8.GetBytes(withoutFormat).AsSpan());
+
+        // Assert
+        using (new AssertionScope(captured.Source))
+        {
+            foreach (var message in new[] { fromString, fromBytes })
+            {
+                var mediaStart = message.Should().BeOfType<ChanWebSocketMediaStart>().Subject;
+                mediaStart.Format.Should().BeEmpty("the public reader has no stream format to keep");
+                mediaStart.ChannelId.Should().Be(captured.ChannelId, "the rest of the frame is still read");
+            }
+        }
+    }
+
     [Fact]
     public void Deserialize_ShouldReadTheKindJsonAsTheGenericRecord_WhenGivenTheShapeNothingSends()
     {

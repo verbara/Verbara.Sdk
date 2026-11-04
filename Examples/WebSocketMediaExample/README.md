@@ -2,7 +2,7 @@
 
 Demonstrates the **`chan_websocket`** Channel Driver integration added in v1.12.0 — native Asterisk 22.8 / 23.2+ audio transport over WebSocket with control messages over TEXT frames, in plain text (Asterisk's default) or JSON (`f(json)`).
 
-The example stands up `WebSocketAudioServer` on port 9093 and prints each stream as it connects, keyed by the `channel_id` of the `MEDIA_START` Asterisk sends as the connection's first frame (the stream's `ChannelId`, and what `GetStream` finds it by), with the control format that frame negotiated (`MediaStart.ControlMessageFormat`). It logs the control messages Asterisk sends (`DTMF_END`, `MEDIA_XOFF`/`MEDIA_XON`, `MEDIA_MARK_PROCESSED`, `STATUS`, `ERROR`, and any message the SDK does not model, by its event name), sends a `MARK_MEDIA` after 1 s, which Asterisk answers with `MEDIA_MARK_PROCESSED`, and a `SET_MEDIA_DIRECTION` (both) after 5 s on a JSON connection only. A hangup is not a message: Asterisk closes the connection, and the example prints the stream's ending from `StateChanges`.
+The example stands up `WebSocketAudioServer` on port 9093 and prints each stream as it connects, keyed by the `channel_id` of the `MEDIA_START` Asterisk sends as the connection's first frame (the stream's `ChannelId`, and what `GetStream` finds it by), with the control format that frame negotiated (`MediaStart.ControlMessageFormat`). It logs the control messages Asterisk sends (`DTMF_END`, `MEDIA_XOFF`/`MEDIA_XON`, `MEDIA_MARK_PROCESSED`, `STATUS`, `ERROR`, and any message the SDK does not model, by its event name), sends a `MARK_MEDIA` after 1 s, which Asterisk answers with `MEDIA_MARK_PROCESSED`, and a `SET_MEDIA_DIRECTION` (both) after 5 s on a JSON connection only. A hangup is not a message: Asterisk closes the connection, and the example prints the stream's ending from `StateChanges`, with a `connection failed` line first when the connection broke instead (`Error`, then `Disconnected`).
 
 It also shows **barge-in**. After 2 s it plays a prompt, 8 s of tone written at once, so Asterisk queues what it has not played yet. When the caller presses a key, the example stops writing the prompt, calls `SendFlushMediaAsync`, which writes `FLUSH_MEDIA` and makes Asterisk empty that queue, and then `SendGetStatusAsync`, whose `STATUS` reply reports the queue's length. A voice application triggers the same from its speech detector. Stop writing before the flush: audio written after it, or still in flight before it, would be queued afterwards (not measured). How soon the caller stops hearing the prompt was not measured either.
 
@@ -67,7 +67,7 @@ Then dial extension `6000` from a SIP phone. You should see:
 [stream] ended channel_id=<the call's channel id>
 ```
 
-The last line appears when the call hangs up. Press a key while the tone plays to barge in:
+The last line appears when the call hangs up. If the connection fails under the call instead (a reset, or an end with no close frame), `[stream] connection failed channel_id=…` comes just before it. Press a key while the tone plays to barge in:
 
 ```
 [control] DTMF_END  digit=1
@@ -83,7 +83,7 @@ The last line appears when the call hangs up. Press a key while the tone plays t
 - Pattern-matching over the message records, with `ChanWebSocketUnknownMessage` for a message the SDK does not model (AOT-clean, no reflection).
 - `SendMarkAsync`, `SendSetMediaDirectionAsync`, and `SendFlushMediaAsync` with `SendGetStatusAsync` for barge-in. The session also writes `PAUSE_MEDIA`, `CONTINUE_MEDIA`, `START_MEDIA_BUFFERING`, `STOP_MEDIA_BUFFERING` and `REPORT_QUEUE_DRAINED` (`SendXonAsync`/`SendXoffAsync` are deprecated, `VSDK0004`: Asterisk has no such command, and they throw).
 - No `ANSWER` and no `HANGUP` on the session: answer with ARI `AnswerAsync`, whose relation to chan_websocket's `ANSWER` was not measured, and end the call with ARI `HangupAsync`.
-- `IAudioStream.StateChanges` — the stream's ending, which is how a hangup reaches the application.
+- `IAudioStream.StateChanges` — the stream's ending, which is how a hangup reaches the application: `Disconnected` once, last, after `Error` when the connection failed rather than closed.
 
 ## Key SDK Packages Used
 

@@ -10,6 +10,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [An observer that throws no longer stops delivery](#an-observer-that-throws-no-longer-stops-delivery) | behaviour |
 | `Verbara.Sdk.Ari` | [`OriginateAsync` with an extension runs the dialplan](#originateasync-with-an-extension-runs-the-dialplan) | fix, behaviour |
 | `Verbara.Sdk.Ari` | [`STATUS`, `MEDIA_BUFFERING_COMPLETED` and `QUEUE_DRAINED` read as typed records](#status-media_buffering_completed-and-queue_drained-read-as-typed-records) | behaviour, new records |
+| `Verbara.Sdk.Ari` | [A WebSocket audio stream whose connection failed ends with `Error`](#a-websocket-audio-stream-whose-connection-failed-ends-with-error) | behaviour |
 | `Verbara.Sdk.Live` | [A channel subscriber's failure stays with that subscriber](#a-channel-subscribers-failure-stays-with-that-subscriber) | behaviour, BREAKING |
 | `Verbara.Sdk.Live` | [A live channel follows its dialplan location and caller ID](#a-live-channel-follows-its-dialplan-location-and-caller-id) | fix, behaviour |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
@@ -95,6 +96,19 @@ not receive these messages before, because no SDK method wrote the commands that
 `xoff_level`, `queue_full`, `bulk_media` and `media_paused` as typed members; `ChanWebSocketMediaBufferingCompleted`
 carries the `correlation_id` the stop sent. `ChanWebSocketMediaBuffering`, deprecated with `VSDK0004`, now names
 `ChanWebSocketStatus.QueueLength` as the queue length to read.
+
+### A WebSocket audio stream whose connection failed ends with `Error`
+
+**What changed.** A WebSocket audio stream whose connection failed while it was live (a reset, or an end with no close
+frame from the peer) publishes `AudioStreamState.Error` and then `Disconnected` on `StateChanges`. In 2.9.0 it published
+`Disconnected` alone. A peer's close frame and an ending on this side still publish `Disconnected` alone. Disposing a stream
+whose peer never answers the close now gives up after 1 s, not 2 s.
+
+**Who is affected.** Code that subscribes to `StateChanges` of a WebSocket stream and treats `Error` as something only an
+AudioSocket error frame produces, or that waits for `Disconnected` as the first ending state.
+
+**What to do.** Handle `Error` as "the connection failed" and keep waiting for `Disconnected` as the last state, as an
+AudioSocket stream already required. AudioSocket streams are unchanged.
 
 ## Live
 
