@@ -60,6 +60,16 @@ public class ChannelManagerBenchmark
     }
 
     [Benchmark]
+    public void Create1000Channels_TwoLegCalls()
+    {
+        var mgr = new ChannelManager(NullLogger.Instance);
+        for (int i = 0; i < 1000; i++)
+        {
+            mgr.OnNewChannel($"{i}.1", $"SIP/{i}-{i:D8}", ChannelState.Ring, linkedId: $"{i & ~1}.1");
+        }
+    }
+
+    [Benchmark]
     public void Update1000ChannelStates()
     {
         for (int i = 0; i < 1000; i++)
