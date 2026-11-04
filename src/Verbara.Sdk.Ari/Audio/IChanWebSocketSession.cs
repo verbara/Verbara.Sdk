@@ -53,8 +53,17 @@ public interface IChanWebSocketSession : IAudioStream
     /// <see cref="ChanWebSocketError"/> in passthrough mode (22.10.1/23.4.1) or while the media direction is <c>in</c>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The mark is an opaque token that Asterisk echoes; avoid leading or trailing whitespace, which Asterisk strips from
     /// a plain-text frame (read in its source, not measured).
+    /// </para>
+    /// <para>
+    /// A mark that is not valid UTF-16, such as one holding a lone surrogate, is not refused: nothing is thrown and the
+    /// command is written with U+FFFD in place of the surrogate — escaped as <c>\uFFFD</c> on a JSON connection
+    /// (<c>"m\uD800"</c> is written as <c>{"command":"MARK_MEDIA","correlation_id":"m\uFFFD"}</c>), and as its UTF-8
+    /// bytes <c>EF BF BD</c> on a plain-text one (<c>MARK_MEDIA m</c> followed by those bytes). The token on the wire is
+    /// then not <paramref name="mark"/>; no capture sends such a mark.
+    /// </para>
     /// </remarks>
     /// <param name="mark">The token Asterisk echoes in the reply.</param>
     /// <param name="cancellationToken">Cancels the wait for the send lock and the write.</param>
