@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed: a WebSocket audio stream whose connection failed ends with `Error` (#NNN)
+### Changed: a WebSocket audio stream whose connection failed ends with `Error` (#517)
 
 A WebSocket audio stream whose connection failed while it was live (a reset, or an end with no close frame from the peer)
 now publishes `AudioStreamState.Error` before `Disconnected` on `StateChanges`, where it published `Disconnected` alone, as
@@ -13,52 +13,52 @@ stop) still publish `Disconnected` alone. The Warning `[WebSocketAudio] Transpor
 as Error then Disconnected` and the `audio.transport.failures` count already exist when `Error` is published. AudioSocket
 streams are unchanged. See the [migration guide](docs/guides/migration-2.10.0.md).
 
-### Changed: a WebSocket audio stream gives up on a silent peer after 1 s (#NNN)
+### Changed: a WebSocket audio stream gives up on a silent peer after 1 s (#517)
 
 Disposing a WebSocket audio stream whose peer never answers the close frame now gives up after 1 s, not 2 s; a server stop
 and the answer to a peer's close share that one bound. Asterisk answered every close in the measurement this rests on
 (200/200 on six images, p99 0.48 ms at most), so the bound only matters for a peer that is gone or stalled.
 
-### Fixed: a WebSocket audio stream closes before it stops reading (#NNN)
+### Fixed: a WebSocket audio stream closes before it stops reading (#517)
 
 `DisposeAsync` on a WebSocket audio stream cancelled its read and released the connection without sending a close frame.
 It now sends one close with status 1000, waits within the 1 s bound for the peer's answer, and only then stops reading and
 releases. A second `DisposeAsync` still returns at once.
 
-### Fixed: a WebSocket audio stream answers the peer's close (#NNN)
+### Fixed: a WebSocket audio stream answers the peer's close (#517)
 
 A close frame from the peer went unanswered. The stream now sends exactly one answering close before it publishes
 `Disconnected`, as the WebSocket protocol asks; the answer and any write in progress share one send lock, so a disposal
 racing the answer never sends a second close. Protocol hygiene: Asterisk ended the call the same way with or without the
 answer in every case measured.
 
-### Fixed: a WebSocket audio server's stop waits for each closing handshake (#NNN)
+### Fixed: a WebSocket audio server's stop waits for each closing handshake (#517)
 
 `WebSocketAudioServer.StopAsync` could close a connection while its session was still waiting for the peer's answer, and
 when the stop's wait was cancelled it disposed the remaining sessions one after another, each with its own bound. Each
 connection is now kept until its session's closing handshake is over, and a cancelled stop starts every remaining
 disposal together, so N streams cost one bound.
 
-### Fixed: a WebSocket audio server selects `media` only for the exact token (#NNN)
+### Fixed: a WebSocket audio server selects `media` only for the exact token (#517)
 
 The upgrade compared the offered subprotocol without regard to case, so a client that offered `MEDIA` was answered
 `Sec-WebSocket-Protocol: media`, a token it never offered. The server now selects `media` only when that exact token is
 offered; header names are still matched without regard to case.
 
-### Fixed: a WebSocket audio stream's format never runs ahead of its `MediaStart` (#NNN)
+### Fixed: a WebSocket audio stream's format never runs ahead of its `MediaStart` (#517)
 
 A `MEDIA_START` that arrived after the first audio frame could let a reader see `Format` and `SampleRate` change before
 `MediaStart` was set, or see the new format with the old sample rate. The three now change together, in one write, and a
 reader that sees the new format finds `MediaStart` set.
 
-### Fixed: a `ControlMessages` subscriber that throws no longer ends the WebSocket stream (#NNN)
+### Fixed: a `ControlMessages` subscriber that throws no longer ends the WebSocket stream (#517)
 
 An exception from a subscriber of `IChanWebSocketSession.ControlMessages` ended the stream: the other subscribers stopped
 receiving, `StateChanges` went to `Disconnected`, and `DisposeAsync` rethrew it without releasing the connection. Each
 failure is now caught on the delivering thread, logged once as a Warning naming the message type, and counted on
 `audio.control_messages.subscriber_faults` (meter `Verbara.Sdk.Ari.Audio`); the stream and the other subscribers go on.
 
-### Fixed: a WebSocket audio stream counts the frames its full buffer drops (#NNN)
+### Fixed: a WebSocket audio stream counts the frames its full buffer drops (#517)
 
 When a consumer fell behind, a WebSocket audio stream's full receive buffer discarded the oldest frame without a trace. Each
 discarded frame now adds one to the new `audio.frames.dropped` counter (meter `Verbara.Sdk.Ari.Audio`, tagged with the
