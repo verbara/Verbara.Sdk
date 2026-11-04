@@ -28,6 +28,9 @@ namespace Verbara.Sdk.Ari.Diagnostics;
 /// connection that ends that way never opened, so it counts no <see cref="StreamsOpened"/> or
 /// <see cref="StreamsClosed"/>). A WebSocket has no such frames; its hangup is a text control message,
 /// counted by neither.</description></item>
+/// <item><description>WebSocket only: <c>audio.frames.dropped</c>, each frame received and then discarded because the
+/// stream's receive buffer was full (the consumer fell behind, and the oldest frame goes), counted at the discard and
+/// also counted in <see cref="FramesReceived"/>.</description></item>
 /// </list>
 /// </para>
 /// <para>
@@ -74,6 +77,16 @@ public static class AudioStreamMetrics
     public static readonly Counter<long> FramesSent =
         Meter.CreateCounter<long>("audio.frames.sent", "frames",
             "Audio frames sent to Asterisk");
+
+    /// <summary>
+    /// Audio frames a WebSocket stream received and then discarded, because its receive buffer was full: a consumer
+    /// that fell behind loses the oldest frame, one count each, tagged with the WebSocket transport. An AudioSocket
+    /// stream does not record it. Internal: the instrument's name is the contract an exporter sees, and the field adds
+    /// no public API.
+    /// </summary>
+    internal static readonly Counter<long> FramesDropped =
+        Meter.CreateCounter<long>("audio.frames.dropped", "frames",
+            "Audio frames a WebSocket stream discarded because its receive buffer was full; an AudioSocket stream does not record it");
 
     /// <summary>Total bytes received from Asterisk.</summary>
     public static readonly Counter<long> BytesReceived =

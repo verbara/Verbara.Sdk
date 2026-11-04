@@ -161,12 +161,17 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         _defaultFormat = format;
         _defaultSampleRate = AudioFormats.SampleRateOf(format);
 
-        _audioInChannel = Channel.CreateBounded<ReceivedAudioFrame>(new BoundedChannelOptions(1000)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true,
-            SingleWriter = true
-        });
+        // DropOldest never refuses a write for a full buffer: the channel discards its oldest frame instead, and
+        // reports it only through this callback, so TryWrite in the pump cannot see a drop. The read never waits for a
+        // slow consumer.
+        _audioInChannel = Channel.CreateBounded<ReceivedAudioFrame>(
+            new BoundedChannelOptions(1000)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+                SingleWriter = true
+            },
+            static _ => AudioStreamMetrics.FramesDropped.Add(1, AudioStreamMetrics.WebSocketTransport));
     }
 
     /// <summary>

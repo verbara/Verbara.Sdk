@@ -39,6 +39,7 @@ public sealed class AudioStreamMetricsTests
                 ("audio.streams.closed", "streams"),
                 ("audio.frames.received", "frames"),
                 ("audio.frames.sent", "frames"),
+                ("audio.frames.dropped", "frames"),
                 ("audio.bytes.received", "bytes"),
                 ("audio.bytes.sent", "bytes"),
                 ("audio.buffer.underruns", "underruns"),
