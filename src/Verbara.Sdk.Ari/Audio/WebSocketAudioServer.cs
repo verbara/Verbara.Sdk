@@ -748,9 +748,10 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 wsKey = line["Sec-WebSocket-Key:".Length..].Trim();
             }
             else if (line.StartsWith("Sec-WebSocket-Protocol:", StringComparison.OrdinalIgnoreCase)
-                     // A comma-separated list, and the header may repeat (RFC 6455 §4.1).
+                     // A comma-separated list, and the header may repeat (RFC 6455 §4.1). The header name is
+                     // case-insensitive; a subprotocol token is not, so MEDIA does not offer media.
                      && line["Sec-WebSocket-Protocol:".Length..].Split(',')
-                         .Any(offered => string.Equals(offered.Trim(), MediaSubprotocol, StringComparison.OrdinalIgnoreCase)))
+                         .Any(offered => string.Equals(offered.Trim(), MediaSubprotocol, StringComparison.Ordinal)))
             {
                 offersMedia = true;
             }

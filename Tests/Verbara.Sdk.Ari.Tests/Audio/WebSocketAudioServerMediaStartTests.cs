@@ -598,6 +598,7 @@ public sealed class WebSocketAudioServerMediaStartTests
     [InlineData("media", true)]
     [InlineData(null, false)]
     [InlineData("chat", false)]
+    [InlineData("MEDIA", false)]
     public async Task Upgrade_ShouldCarrySecWebSocketProtocolOnlyForAnOfferedMedia_WhenTheResponseBytesAreRead(string? offered, bool expected)
     {
         await using var harness = await Harness.StartAsync();
