@@ -287,6 +287,33 @@ public class ChanWebSocketControlMessageTests
         }
     }
 
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json)]
+    public void Deserialize_ShouldReadTheRepliesToTheAddedCommandsAsTheirOwnRecords_ThroughBothOverloads(ChanWebSocketCaptureFormat format)
+    {
+        // Arrange — the captured full-queue STATUS (22.10.1, xoff-xon), and a captured completion and drain report
+        var status = ChanWebSocketWireCapture.ControlMessages.Single(m => m.Event == "STATUS" && m.Format == format && m.Trigger == "xoff-xon");
+        var completed = ChanWebSocketWireCapture.ControlMessages.First(m => m.Event == "MEDIA_BUFFERING_COMPLETED" && m.Format == format && m.Trigger == "buffering");
+        var drained = ChanWebSocketWireCapture.ControlMessages.First(m => m.Event == "QUEUE_DRAINED" && m.Format == format);
+
+        // Assert
+        using (new AssertionScope(format.ToString()))
+        {
+            foreach (var read in new Func<ChanWebSocketCapturedMessage, ChanWebSocketControlMessage?>[]
+            {
+                m => ChanWebSocketControlMessageSerializer.Deserialize(m.Text),
+                m => ChanWebSocketControlMessageSerializer.Deserialize(m.Payload().AsSpan()),
+            })
+            {
+                read(status).Should().Be(new ChanWebSocketStatus(
+                    status.ChannelId!, QueueLength: 976, XonLevel: 800, XoffLevel: 900, QueueFull: true, BulkMedia: false, MediaPaused: false));
+                read(completed).Should().Be(new ChanWebSocketMediaBufferingCompleted("b4-0") { ChannelId = completed.ChannelId });
+                read(drained).Should().Be(new ChanWebSocketQueueDrained { ChannelId = drained.ChannelId });
+            }
+        }
+    }
+
     [Fact]
     public void Deserialize_ShouldThrowArgumentNullException_WhenTheTextIsNull()
     {

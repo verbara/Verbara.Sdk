@@ -153,4 +153,173 @@ public interface IChanWebSocketSession : IAudioStream
     ValueTask SendSetMediaDirectionAsync(
         ChanWebSocketMediaDirection direction,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes a <c>FLUSH_MEDIA</c> command, in the connection's control format: Asterisk empties its queue of audio this
+    /// application sent, so a <see cref="ChanWebSocketStatus"/> read after it has a
+    /// <see cref="ChanWebSocketStatus.QueueLength"/> of 0 (<see cref="ChanWebSocketFlushMedia"/> lists the versions).
+    /// Asterisk sends no reply to an accepted one, so completion means only that the frame was written. A refusal that
+    /// depends on the channel's options or version arrives from Asterisk as <see cref="ChanWebSocketError"/> on
+    /// <see cref="ControlMessages"/>; this method does not guess it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Audio written after the command, or still in flight before it, is queued afterwards: stop writing audio first.
+    /// What the caller hears, and how soon, is not measured.
+    /// </para>
+    /// <para>
+    /// The default implementation throws <see cref="NotSupportedException"/> naming this method and writes nothing; the
+    /// SDK's session overrides it. It is a default member so an implementation written against 2.8.0 still compiles.
+    /// </para>
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the wait for the send lock and the write.</param>
+    /// <exception cref="InvalidOperationException">
+    /// While <see cref="MediaStart"/> is <see langword="null"/> — no <c>MEDIA_START</c> read yet — the connection's
+    /// control format is not known and the method throws instead of guessing, before anything is written; keep
+    /// <see cref="AudioServerOptions.MediaStartTimeout"/> at its default, or call once <see cref="MediaStart"/> is set.
+    /// </exception>
+    ValueTask SendFlushMediaAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            "SendFlushMediaAsync is not implemented by this IChanWebSocketSession; the SDK's session implements it.");
+
+    /// <summary>
+    /// Writes a <c>PAUSE_MEDIA</c> command, in the connection's control format: Asterisk freezes its queue of audio this
+    /// application sent, keeping its length, until <see cref="SendContinueMediaAsync"/>;
+    /// <see cref="ChanWebSocketStatus.MediaPaused"/> reads <see langword="true"/> meanwhile
+    /// (<see cref="ChanWebSocketPauseMedia"/> lists the versions).
+    /// Asterisk sends no reply to an accepted one, so completion means only that the frame was written. A refusal that
+    /// depends on the channel's options or version arrives from Asterisk as <see cref="ChanWebSocketError"/> on
+    /// <see cref="ControlMessages"/>; this method does not guess it.
+    /// </summary>
+    /// <remarks>
+    /// The default implementation throws <see cref="NotSupportedException"/> naming this method and writes nothing; the
+    /// SDK's session overrides it. It is a default member so an implementation written against 2.8.0 still compiles.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the wait for the send lock and the write.</param>
+    /// <exception cref="InvalidOperationException">
+    /// While <see cref="MediaStart"/> is <see langword="null"/> — no <c>MEDIA_START</c> read yet — the connection's
+    /// control format is not known and the method throws instead of guessing, before anything is written; keep
+    /// <see cref="AudioServerOptions.MediaStartTimeout"/> at its default, or call once <see cref="MediaStart"/> is set.
+    /// </exception>
+    ValueTask SendPauseMediaAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            "SendPauseMediaAsync is not implemented by this IChanWebSocketSession; the SDK's session implements it.");
+
+    /// <summary>
+    /// Writes a <c>CONTINUE_MEDIA</c> command, in the connection's control format: Asterisk releases the queue
+    /// <see cref="SendPauseMediaAsync"/> froze (<see cref="ChanWebSocketContinueMedia"/> lists the versions).
+    /// Asterisk sends no reply to an accepted one, so completion means only that the frame was written. A refusal that
+    /// depends on the channel's options or version arrives from Asterisk as <see cref="ChanWebSocketError"/> on
+    /// <see cref="ControlMessages"/>; this method does not guess it.
+    /// </summary>
+    /// <remarks>
+    /// The default implementation throws <see cref="NotSupportedException"/> naming this method and writes nothing; the
+    /// SDK's session overrides it. It is a default member so an implementation written against 2.8.0 still compiles.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the wait for the send lock and the write.</param>
+    /// <exception cref="InvalidOperationException">
+    /// While <see cref="MediaStart"/> is <see langword="null"/> — no <c>MEDIA_START</c> read yet — the connection's
+    /// control format is not known and the method throws instead of guessing, before anything is written; keep
+    /// <see cref="AudioServerOptions.MediaStartTimeout"/> at its default, or call once <see cref="MediaStart"/> is set.
+    /// </exception>
+    ValueTask SendContinueMediaAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            "SendContinueMediaAsync is not implemented by this IChanWebSocketSession; the SDK's session implements it.");
+
+    /// <summary>
+    /// Writes a <c>GET_STATUS</c> command, in the connection's control format, and returns without waiting for the reply:
+    /// Asterisk's <c>STATUS</c> arrives on <see cref="ControlMessages"/> as <see cref="ChanWebSocketStatus"/>. The reply
+    /// carries no correlation id, so it is tied to its request only by order (<see cref="ChanWebSocketGetStatus"/> lists
+    /// the versions).
+    /// </summary>
+    /// <remarks>
+    /// The default implementation throws <see cref="NotSupportedException"/> naming this method and writes nothing; the
+    /// SDK's session overrides it. It is a default member so an implementation written against 2.8.0 still compiles.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the wait for the send lock and the write.</param>
+    /// <exception cref="InvalidOperationException">
+    /// While <see cref="MediaStart"/> is <see langword="null"/> — no <c>MEDIA_START</c> read yet — the connection's
+    /// control format is not known and the method throws instead of guessing, before anything is written; keep
+    /// <see cref="AudioServerOptions.MediaStartTimeout"/> at its default, or call once <see cref="MediaStart"/> is set.
+    /// </exception>
+    ValueTask SendGetStatusAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            "SendGetStatusAsync is not implemented by this IChanWebSocketSession; the SDK's session implements it.");
+
+    /// <summary>
+    /// Writes a <c>START_MEDIA_BUFFERING</c> command, in the connection's control format: Asterisk buffers the media this
+    /// application sends until <see cref="SendStopMediaBufferingAsync"/> (<see cref="ChanWebSocketStartMediaBuffering"/>
+    /// lists the versions and the refusals).
+    /// Asterisk sends no reply to an accepted one, so completion means only that the frame was written. A refusal that
+    /// depends on the channel's options or version arrives from Asterisk as <see cref="ChanWebSocketError"/> on
+    /// <see cref="ControlMessages"/>; this method does not guess it.
+    /// </summary>
+    /// <remarks>
+    /// The default implementation throws <see cref="NotSupportedException"/> naming this method and writes nothing; the
+    /// SDK's session overrides it. It is a default member so an implementation written against 2.8.0 still compiles.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the wait for the send lock and the write.</param>
+    /// <exception cref="InvalidOperationException">
+    /// While <see cref="MediaStart"/> is <see langword="null"/> — no <c>MEDIA_START</c> read yet — the connection's
+    /// control format is not known and the method throws instead of guessing, before anything is written; keep
+    /// <see cref="AudioServerOptions.MediaStartTimeout"/> at its default, or call once <see cref="MediaStart"/> is set.
+    /// </exception>
+    ValueTask SendStartMediaBufferingAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            "SendStartMediaBufferingAsync is not implemented by this IChanWebSocketSession; the SDK's session implements it.");
+
+    /// <summary>
+    /// Writes a <c>STOP_MEDIA_BUFFERING</c> command with <paramref name="correlationId"/>, in the connection's control
+    /// format, and returns without waiting for the reply: Asterisk answers with
+    /// <see cref="ChanWebSocketMediaBufferingCompleted"/> carrying the id, after the buffered media, on
+    /// <see cref="ControlMessages"/>. With no start before it the reply is that completion before 22.12 and a
+    /// <see cref="ChanWebSocketError"/> from 22.12 (<see cref="ChanWebSocketStopMediaBuffering"/>).
+    /// </summary>
+    /// <remarks>
+    /// The default implementation throws <see cref="NotSupportedException"/> naming this method and writes nothing; the
+    /// SDK's session overrides it. It is a default member so an implementation written against 2.8.0 still compiles.
+    /// </remarks>
+    /// <param name="correlationId">
+    /// The id Asterisk echoes in the completion, the only way to tie the reply to this stop. The command must fit
+    /// <see cref="ChanWebSocketControlMessageSerializer.MaxCommandBytes"/>: up to 107 bytes of id in plain text, 74 in
+    /// JSON before escaping.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the wait for the send lock and the write.</param>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="correlationId"/> is <see langword="null"/>; nothing is written.
+    /// </exception>
+    /// <exception cref="ArgumentException"><paramref name="correlationId"/> is empty; nothing is written.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The command for <paramref name="correlationId"/>, in the connection's format, is longer than
+    /// <see cref="ChanWebSocketControlMessageSerializer.MaxCommandBytes"/>, which every supported Asterisk drops unread;
+    /// nothing is written.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// While <see cref="MediaStart"/> is <see langword="null"/> — no <c>MEDIA_START</c> read yet — the connection's
+    /// control format is not known and the method throws instead of guessing, before anything is written; keep
+    /// <see cref="AudioServerOptions.MediaStartTimeout"/> at its default, or call once <see cref="MediaStart"/> is set.
+    /// </exception>
+    ValueTask SendStopMediaBufferingAsync(string correlationId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            "SendStopMediaBufferingAsync is not implemented by this IChanWebSocketSession; the SDK's session implements it.");
+
+    /// <summary>
+    /// Writes a <c>REPORT_QUEUE_DRAINED</c> command, in the connection's control format, and returns without waiting for
+    /// the reply: Asterisk sends <c>QUEUE_DRAINED</c>, read as <see cref="ChanWebSocketQueueDrained"/> on
+    /// <see cref="ControlMessages"/>, after the audio this application had queued
+    /// (<see cref="ChanWebSocketReportQueueDrained"/> lists the versions and the refusals).
+    /// </summary>
+    /// <remarks>
+    /// The default implementation throws <see cref="NotSupportedException"/> naming this method and writes nothing; the
+    /// SDK's session overrides it. It is a default member so an implementation written against 2.8.0 still compiles.
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the wait for the send lock and the write.</param>
+    /// <exception cref="InvalidOperationException">
+    /// While <see cref="MediaStart"/> is <see langword="null"/> — no <c>MEDIA_START</c> read yet — the connection's
+    /// control format is not known and the method throws instead of guessing, before anything is written; keep
+    /// <see cref="AudioServerOptions.MediaStartTimeout"/> at its default, or call once <see cref="MediaStart"/> is set.
+    /// </exception>
+    ValueTask SendReportQueueDrainedAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            "SendReportQueueDrainedAsync is not implemented by this IChanWebSocketSession; the SDK's session implements it.");
 }

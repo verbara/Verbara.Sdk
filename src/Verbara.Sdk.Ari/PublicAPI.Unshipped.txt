@@ -54,6 +54,13 @@ Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.CorrelationId.get -> strin
 Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.CorrelationId.init -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.Deconstruct(out string! CorrelationId) -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? other) -> bool
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendContinueMediaAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendFlushMediaAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendGetStatusAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendPauseMediaAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendReportQueueDrainedAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendStartMediaBufferingAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendStopMediaBufferingAsync(string! correlationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.Ari.Client.AriClientOptions.EventsEnabled.get -> bool
 Verbara.Sdk.Ari.Client.AriClientOptions.EventsEnabled.set -> void
 override Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia!
