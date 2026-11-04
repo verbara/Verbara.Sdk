@@ -141,6 +141,16 @@ public static class AudioStreamMetrics
         Meter.CreateCounter<long>("audio.connections.refused", "connections",
             "Audio connections closed at accept because MaxConcurrentStreams places were already held");
 
+    /// <summary>
+    /// Failures of a WebSocket stream's <c>ControlMessages</c> subscribers: each exception a subscriber throws on the
+    /// delivering thread, on a message or on the completion its disposal raises, counted once, together with its
+    /// Warning. The stream and its other subscribers go on. No tags: a subscriber's failure is consumer code, not a
+    /// transport's. Internal: the instrument's name is the contract an exporter sees, and the field adds no public API.
+    /// </summary>
+    internal static readonly Counter<long> ControlMessageSubscriberFaults =
+        Meter.CreateCounter<long>("audio.control_messages.subscriber_faults", "faults",
+            "Exceptions thrown by WebSocket ControlMessages subscribers, caught and reported without stopping the stream");
+
     // --- Latency ---
 
     /// <summary>Time from receive to consumer read.</summary>

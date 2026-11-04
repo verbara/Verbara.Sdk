@@ -20,6 +20,12 @@ internal static partial class WebSocketAudioSessionLog
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "[WebSocketAudio] A second MEDIA_START on one connection is ignored: path_segment={PathSegment} first_channel_id={FirstChannelId} ignored_channel_id={IgnoredChannelId}")]
     public static partial void SecondMediaStartIgnored(ILogger logger, string pathSegment, string firstChannelId, string ignoredChannelId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] A ControlMessages subscriber threw; the stream and the other subscribers went on: message_type={MessageType} channel_id={ChannelId}")]
+    public static partial void ControlMessageSubscriberFailed(ILogger logger, Exception exception, string messageType, string channelId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[WebSocketAudio] A ControlMessages subscriber threw on the completion; the disposal went on: channel_id={ChannelId}")]
+    public static partial void ControlMessageSubscriberFailedOnCompletion(ILogger logger, Exception exception, string channelId);
 }
 
 /// <summary>How a WebSocket audio connection's wait for its first frame ended.</summary>
@@ -67,6 +73,7 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     private readonly WebSocket _webSocket;
     private readonly AudioStreamStateChannel _state;
     private readonly Subject<ChanWebSocketControlMessage> _controlSubject = new();
+    private readonly GuardedControlMessages _controlMessages;
     private readonly Channel<ReceivedAudioFrame> _audioInChannel;
     private readonly CancellationTokenSource _cts = new();
     private readonly ILogger _logger;
@@ -127,7 +134,7 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     public ChanWebSocketMediaStart? MediaStart => Volatile.Read(ref _mediaStart);
     public bool IsConnected => Volatile.Read(ref _disposed) == 0 && _webSocket.State == WebSocketState.Open;
     public IObservable<AudioStreamState> StateChanges => _state;
-    public IObservable<ChanWebSocketControlMessage> ControlMessages => _controlSubject;
+    public IObservable<ChanWebSocketControlMessage> ControlMessages => _controlMessages;
 
     /// <summary>
     /// Completes when the session's ending is published, before any observer is notified of it: the
@@ -150,6 +157,7 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         _channelId = channelId;
         _pathSegment = channelId;
         _state = new AudioStreamStateChannel(AudioStreamState.Connected, logger, () => ChannelId);
+        _controlMessages = new GuardedControlMessages(this);
         _defaultFormat = format;
         _defaultSampleRate = AudioFormats.SampleRateOf(format);
 
@@ -586,5 +594,78 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         _webSocket.Dispose();
         _sendLock.Dispose();
         _cts.Dispose();
+    }
+
+    // One failure of a ControlMessages subscriber: written once at Warning, with the exception, and counted once.
+    // A null message is the completion.
+    private void ReportControlSubscriberFailure(Exception exception, ChanWebSocketControlMessage? message)
+    {
+        if (message is null)
+            WebSocketAudioSessionLog.ControlMessageSubscriberFailedOnCompletion(_logger, exception, ChannelId);
+        else
+            WebSocketAudioSessionLog.ControlMessageSubscriberFailed(_logger, exception, message.GetType().Name, ChannelId);
+
+        AudioStreamMetrics.ControlMessageSubscriberFaults.Add(1);
+    }
+
+    /// <summary>
+    /// <see cref="ControlMessages"/>: each subscriber behind its own guard. An exception a subscriber throws on the
+    /// delivering thread, on a message or on the completion, is reported and goes no further: the read pump, a
+    /// disposal and the other subscribers go on, and the subscriber stays subscribed. A subscription composed through
+    /// an operator is ended by that operator on its first failure; the guard sees the exception after that and
+    /// reports it the same way. A plain observable, not an Rx producer, so subscribing adds no safeguard of Rx's own.
+    /// </summary>
+    private sealed class GuardedControlMessages(WebSocketAudioSession owner) : IObservable<ChanWebSocketControlMessage>
+    {
+        public IDisposable Subscribe(IObserver<ChanWebSocketControlMessage> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+            return owner._controlSubject.Subscribe(new GuardedObserver(owner, observer));
+        }
+    }
+
+    /// <summary>One <see cref="ControlMessages"/> subscriber, behind the guard. A <c>Subject</c> replays nothing, so every
+    /// notification is a publication.</summary>
+    private sealed class GuardedObserver(WebSocketAudioSession owner, IObserver<ChanWebSocketControlMessage> inner)
+        : IObserver<ChanWebSocketControlMessage>
+    {
+        public void OnNext(ChanWebSocketControlMessage value)
+        {
+            try
+            {
+                inner.OnNext(value);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Consumer code failed on a message: the line and the count are the only trace of it.
+                owner.ReportControlSubscriberFailure(ex, value);
+            }
+        }
+
+        public void OnCompleted()
+        {
+            try
+            {
+                inner.OnCompleted();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Raised by the disposal, which goes on to release the connection.
+                owner.ReportControlSubscriberFailure(ex, message: null);
+            }
+        }
+
+        public void OnError(Exception error)
+        {
+            try
+            {
+                inner.OnError(error);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The session never fails the sequence; guarded the same way should that change.
+                owner.ReportControlSubscriberFailure(ex, message: null);
+            }
+        }
     }
 }
