@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added: a WebSocket audio session writes every command chan_websocket reads (#NNN)
+### Added: a WebSocket audio session writes every command chan_websocket reads (#518)
 
 `IChanWebSocketSession` gains `SendFlushMediaAsync`, `SendPauseMediaAsync`, `SendContinueMediaAsync`,
 `SendGetStatusAsync`, `SendStartMediaBufferingAsync`, `SendStopMediaBufferingAsync(string correlationId)` and
@@ -14,10 +14,10 @@ or JSON), through the same send lock as audio and after the same format and leng
 is now: stop writing, `SendFlushMediaAsync`, then a `SendGetStatusAsync` whose reply reads `QueueLength` 0. They are
 default interface members, so an implementation written against an earlier version still compiles. The matching
 outbound records and their `ChanWebSocketControlMessageSerializer` forms are added. Held by captures of Asterisk
-20.20.1, 22.10.1, 22.12.0-rc2, 23 and 24.0.0-rc2, and re-measured through the SDK on six images: every command gets the
+20.20.1, 22.10.1, 22.12.0-rc2 and 24.0.0-rc2, and re-measured through the SDK on six images: every command gets the
 reply Asterisk sends to a hand-written one. Hangup stays ARI `DELETE /channels/{id}` and answer stays `AnswerAsync`.
 
-### Added: an external media channel can carry transport data and channel variables (#NNN)
+### Added: an external media channel can carry transport data and channel variables (#518)
 
 `IAriChannelsResource.CreateExternalMediaAsync(AriExternalMediaRequest, CancellationToken)` is a new overload whose request
 carries `TransportData` and `Variables`; `ExternalMediaActivity` gains the same two properties. `TransportData = "f(json)"`
@@ -26,7 +26,7 @@ makes one channel speak JSON control messages without editing `chan_websocket.co
 neither set, both paths send the request they sent before. The shipped overload and its request are untouched; an
 `IAriChannelsResource` implemented outside the SDK throws `NotSupportedException` naming the option it does not support.
 
-### Changed: `STATUS`, `MEDIA_BUFFERING_COMPLETED` and `QUEUE_DRAINED` read as typed records (#NNN)
+### Changed: `STATUS`, `MEDIA_BUFFERING_COMPLETED` and `QUEUE_DRAINED` read as typed records (#518)
 
 `ChanWebSocketControlMessageSerializer.Deserialize` and a session's `ControlMessages` now give the new
 `ChanWebSocketStatus` (queue length, XON/XOFF levels, queue full, bulk media, paused),
