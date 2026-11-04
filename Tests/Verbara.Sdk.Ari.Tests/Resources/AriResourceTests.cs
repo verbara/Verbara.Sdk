@@ -217,6 +217,144 @@ public class AriResourceTests
     }
 
     [Fact]
+    public async Task Channels_CreateExternalMediaAsync_ShouldSendTransportDataDecodingToTheValueGiven_WhenTheRequestSetsIt()
+    {
+        using var handler = new FakeHttpHandler(ExternalMediaChannelJson);
+        using var http = CreateHttpClient(handler);
+        IAriChannelsResource sut = new AriChannelsResource(http, DefaultOptions);
+
+        var result = await sut.CreateExternalMediaAsync(new AriExternalMediaRequest
+        {
+            App = "myapp",
+            ExternalHost = "media_connection1",
+            Format = "slin16",
+            Transport = "websocket",
+            TransportData = "f(json)",
+        });
+
+        result.Id.Should().Be("ch-ext");
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        var transportData = QueryParameters(handler.LastRequestQuery).Where(p => p.Name == "transport_data").ToList();
+        transportData.Should().ContainSingle("the parameter is spelled transport_data, and Asterisk ignores any other spelling")
+            .Which.Value.Should().Be("f(json)", "the SDK sends the caller's value without parsing or rewriting it");
+        // The escaped form a compiled create sent through a logging proxy, which Asterisk read as f(json) and answered
+        // with a JSON MEDIA_START on every image measured.
+        handler.LastRequestQuery.Should().Contain("transport_data=f%28json%29");
+        handler.LastRequestHadContent.Should().BeFalse("a request with no variables has no body");
+    }
+
+    [Fact]
+    public async Task Channels_CreateExternalMediaAsync_ShouldSendVariablesAsTheJsonBodyItDeclares_WhenTheRequestHoldsThem()
+    {
+        using var handler = new FakeHttpHandler(ExternalMediaChannelJson);
+        using var http = CreateHttpClient(handler);
+        IAriChannelsResource sut = new AriChannelsResource(http, DefaultOptions);
+        var variables = new Dictionary<string, string>
+        {
+            ["PLAIN"] = "value",
+            ["Q\"UO\\TE"] = "line1\nline2 \"quoted\" \u00e9 </script> & \u0001",
+        };
+
+        await sut.CreateExternalMediaAsync(new AriExternalMediaRequest
+        {
+            App = "myapp",
+            ExternalHost = "media_connection1",
+            Format = "slin16",
+            Variables = variables,
+        });
+
+        handler.LastRequestHadContent.Should().BeTrue();
+        handler.LastContentType.Should().Be("application/json", "the measured create declared exactly this, with no charset");
+        handler.LastContentLength.Should().Be(handler.LastRequestBody!.Length);
+        using var body = JsonDocument.Parse(handler.LastRequestBody);
+        body.RootElement.ValueKind.Should().Be(JsonValueKind.Object);
+        body.RootElement.EnumerateObject().Select(p => p.Name).Should().Equal("variables");
+        body.RootElement.GetProperty("variables").EnumerateObject()
+            .ToDictionary(p => p.Name, p => p.Value.GetString()!)
+            .Should().BeEquivalentTo(variables);
+        QueryParameters(handler.LastRequestQuery).Select(p => p.Name).Should().NotContain(
+            n => n.StartsWith("variables", StringComparison.Ordinal), "the variables travel in the body only");
+    }
+
+    [Fact]
+    public async Task Channels_CreateExternalMediaAsync_ShouldSendBothOptions_WhenTheRequestSetsBoth()
+    {
+        using var handler = new FakeHttpHandler(ExternalMediaChannelJson);
+        using var http = CreateHttpClient(handler);
+        IAriChannelsResource sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.CreateExternalMediaAsync(new AriExternalMediaRequest
+        {
+            App = "myapp",
+            ExternalHost = "media_connection1",
+            Format = "slin16",
+            TransportData = "f(json)",
+            Variables = new Dictionary<string, string> { ["LABVAR"] = "1" },
+        });
+
+        QueryParameters(handler.LastRequestQuery).Should().Contain(("transport_data", "f(json)"));
+        using var body = JsonDocument.Parse(handler.LastRequestBody!);
+        body.RootElement.GetProperty("variables").GetProperty("LABVAR").GetString().Should().Be("1");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Channels_CreateExternalMediaAsync_ShouldSendTheShippedRequest_WhenTheRequestSetsNeitherOption(bool emptyVariables)
+    {
+        using var shippedHandler = new FakeHttpHandler(ExternalMediaChannelJson);
+        using var shippedHttp = CreateHttpClient(shippedHandler);
+        await new AriChannelsResource(shippedHttp, DefaultOptions).CreateExternalMediaAsync("myapp", "127.0.0.1:8000", "slin16",
+            encapsulation: "rtp", transport: "udp", connectionType: "client", direction: "both",
+            data: "f9e8d7c6-b5a4-3928-1706-f5e4d3c2b1a0", channelId: "0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9");
+
+        using var handler = new FakeHttpHandler(ExternalMediaChannelJson);
+        using var http = CreateHttpClient(handler);
+        IAriChannelsResource sut = new AriChannelsResource(http, DefaultOptions);
+        await sut.CreateExternalMediaAsync(new AriExternalMediaRequest
+        {
+            App = "myapp",
+            ExternalHost = "127.0.0.1:8000",
+            Format = "slin16",
+            Encapsulation = "rtp",
+            Transport = "udp",
+            ConnectionType = "client",
+            Direction = "both",
+            Data = "f9e8d7c6-b5a4-3928-1706-f5e4d3c2b1a0",
+            ChannelId = "0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9",
+            Variables = emptyVariables ? new Dictionary<string, string>() : null,
+        });
+
+        handler.LastMethod.Should().Be(shippedHandler.LastMethod);
+        handler.LastRequestPath.Should().Be(shippedHandler.LastRequestPath);
+        handler.LastRequestQuery.Should().Be(shippedHandler.LastRequestQuery);
+        shippedHandler.LastRequestHadContent.Should().BeFalse();
+        handler.LastRequestHadContent.Should().BeFalse("an empty Variables is no option, and sends no body");
+    }
+
+    [Fact]
+    public async Task Channels_CreateExternalMediaAsync_ShouldThrowArgumentNull_WhenTheRequestIsNull()
+    {
+        using var handler = new FakeHttpHandler(ExternalMediaChannelJson);
+        using var http = CreateHttpClient(handler);
+        IAriChannelsResource sut = new AriChannelsResource(http, DefaultOptions);
+
+        var act = async () => await sut.CreateExternalMediaAsync(request: null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>().WithParameterName("request");
+        handler.LastMethod.Should().BeNull("nothing is sent");
+    }
+
+    private static readonly string ExternalMediaChannelJson = JsonSerializer.Serialize(
+        new AriChannel { Id = "ch-ext", Name = "WebSocket/media_connection1" }, AriJsonContext.Default.AriChannel);
+
+    private static List<(string Name, string Value)> QueryParameters(string? query) =>
+        (query ?? "").TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(pair => pair.Split('=', 2))
+            .Select(parts => (parts[0], Uri.UnescapeDataString(parts.Length > 1 ? parts[1] : "")))
+            .ToList();
+
+    [Fact]
     public async Task Channels_GetAsync_ShouldDeserializeFullModel()
     {
         const string json = """
@@ -777,15 +915,32 @@ internal sealed class FakeHttpHandler(string responseJson, HttpStatusCode status
     public HttpMethod? LastMethod { get; private set; }
     public string? LastRequestUri { get; private set; }
 
-    protected override Task<HttpResponseMessage> SendAsync(
+    /// <summary>The path of the last request, still escaped as sent.</summary>
+    public string? LastRequestPath { get; private set; }
+
+    /// <summary>The query of the last request with its leading <c>?</c>, still escaped as sent.</summary>
+    public string? LastRequestQuery { get; private set; }
+
+    public bool LastRequestHadContent { get; private set; }
+    public string? LastContentType { get; private set; }
+    public long? LastContentLength { get; private set; }
+    public byte[]? LastRequestBody { get; private set; }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
         LastMethod = request.Method;
         LastRequestUri = request.RequestUri?.ToString();
+        LastRequestPath = request.RequestUri?.AbsolutePath;
+        LastRequestQuery = request.RequestUri?.Query;
+        LastRequestHadContent = request.Content is not null;
+        LastContentType = request.Content?.Headers.ContentType?.ToString();
+        LastContentLength = request.Content?.Headers.ContentLength;
+        LastRequestBody = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken);
 
-        return Task.FromResult(new HttpResponseMessage(statusCode)
+        return new HttpResponseMessage(statusCode)
         {
             Content = new StringContent(responseJson, System.Text.Encoding.UTF8, "application/json")
-        });
+        };
     }
 }

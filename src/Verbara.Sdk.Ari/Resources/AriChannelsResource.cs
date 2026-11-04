@@ -86,6 +86,44 @@ public sealed class AriChannelsResource : IAriChannelsResource
         string? direction = null, string? data = null, string? channelId = null,
         CancellationToken cancellationToken = default)
     {
+        var url = ExternalMediaUrl(app, externalHost, format, encapsulation, transport, connectionType, direction, data, channelId);
+
+        var response = await _http.PostAsync(url, null, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriChannel)!;
+    }
+
+    /// <summary>Create an external media channel from a request whose parameters are named. POST /channels/externalMedia</summary>
+    /// <remarks>
+    /// <see cref="AriExternalMediaRequest.TransportData"/> is sent as the <c>transport_data</c> query parameter, escaped and
+    /// otherwise as given. <see cref="AriExternalMediaRequest.Variables"/>, when it holds an entry, is sent as the body
+    /// <c>{"variables":{…}}</c> with <c>Content-Type: application/json</c>. With neither, the request is the one
+    /// <see cref="CreateExternalMediaAsync(string, string, string, string?, string?, string?, string?, string?, string?, CancellationToken)"/>
+    /// sends for the same values: no <c>transport_data</c> and no body.
+    /// </remarks>
+    /// <param name="request">The parameters of the create.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+    public async ValueTask<AriChannel> CreateExternalMediaAsync(AriExternalMediaRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var url = ExternalMediaUrl(request.App, request.ExternalHost, request.Format, request.Encapsulation, request.Transport,
+            request.ConnectionType, request.Direction, request.Data, request.ChannelId);
+        // Escaped like every other value: f(json) leaves as f%28json%29, which Asterisk decodes back to f(json).
+        if (request.TransportData is not null) url += $"&transport_data={Uri.EscapeDataString(request.TransportData)}";
+
+        // No body without an entry, so the request stays the shipped overload's. The values are never logged.
+        using var body = request.Variables is { Count: > 0 } variables ? VariablesBody(variables) : null;
+        var response = await _http.PostAsync(url, body, cancellationToken);
+        await response.EnsureAriSuccessAsync();
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriChannel)!;
+    }
+
+    private static string ExternalMediaUrl(string app, string externalHost, string format, string? encapsulation,
+        string? transport, string? connectionType, string? direction, string? data, string? channelId)
+    {
         var url = $"channels/externalMedia?app={Uri.EscapeDataString(app)}&external_host={Uri.EscapeDataString(externalHost)}&format={Uri.EscapeDataString(format)}";
         if (encapsulation is not null) url += $"&encapsulation={Uri.EscapeDataString(encapsulation)}";
         if (transport is not null) url += $"&transport={Uri.EscapeDataString(transport)}";
@@ -97,11 +135,17 @@ public sealed class AriChannelsResource : IAriChannelsResource
         // rejecting it, so a misspelling here would drop the channel id with an HTTP 200 and no
         // symptom until a lookup missed. Verbara.Sdk.Ari.Tests asserts the literal "channelId=".
         if (channelId is not null) url += $"&channelId={Uri.EscapeDataString(channelId)}";
+        return url;
+    }
 
-        var response = await _http.PostAsync(url, null, cancellationToken);
-        await response.EnsureAriSuccessAsync();
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriChannel)!;
+    // {"variables":{"K":"V",…}} as UTF-8 bytes, with Content-Type application/json and no charset parameter: the shape a
+    // measured create carried. ByteArrayContent, so Content-Length is set from the bytes.
+    private static ByteArrayContent VariablesBody(IReadOnlyDictionary<string, string> variables)
+    {
+        var content = new ByteArrayContent(
+            JsonSerializer.SerializeToUtf8Bytes(new AriExternalMediaBody(variables), AriRequestJsonContext.Default.AriExternalMediaBody));
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        return content;
     }
 
     public async ValueTask<AriVariable> GetVariableAsync(string channelId, string variable, CancellationToken cancellationToken = default)

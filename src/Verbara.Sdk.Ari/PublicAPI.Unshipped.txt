@@ -63,6 +63,7 @@ Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendStartMediaBufferingAsync(System.
 Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendStopMediaBufferingAsync(string! correlationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.Ari.Client.AriClientOptions.EventsEnabled.get -> bool
 Verbara.Sdk.Ari.Client.AriClientOptions.EventsEnabled.set -> void
+Verbara.Sdk.Ari.Resources.AriChannelsResource.CreateExternalMediaAsync(Verbara.Sdk.AriExternalMediaRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
 override Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia!
 override Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.Equals(object? obj) -> bool
 override Verbara.Sdk.Ari.Audio.ChanWebSocketContinueMedia.GetHashCode() -> int
