@@ -237,27 +237,54 @@ public sealed class WebSocketSessionEndingTests
     public async Task ReadPump_ShouldAnswerWithExactlyOneCloseBeforeDisconnected_WhenThePeerClosesFirst()
     {
         // Arrange — the Disconnected observer holds the publishing thread until the answer reaches the peer, so the
-        // answer can arrive in that window only if it was sent before the ending was published
+        // answer can arrive in that window only if it was sent before the ending was published. The announcement
+        // subscriber holds the connection's handler until the observer is done: the handler disposes the stream only
+        // after its announcement returns, so in that window no close but the read pump's answer can reach the peer.
+        const int parkedThreads = 2; // the held handler and the observer
         RawWebSocketPeer? farEnd = null;
         bool? answeredBeforeDisconnected = null;
+        using var observed = new ManualResetEventSlim();
+        var announced = new TaskCompletionSource<StateRecording>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var harness = await WebSocketEndingHarness.StartAsync(recording =>
         {
             recording.Subscribe();
             recording.Stream.StateChanges.Subscribe(state =>
             {
-                if (state == AudioStreamState.Disconnected)
-                    answeredBeforeDisconnected = Volatile.Read(ref farEnd)!.WaitForClose(CloseBound);
+                if (state != AudioStreamState.Disconnected)
+                    return;
+                answeredBeforeDisconnected = Volatile.Read(ref farEnd)!.WaitForClose(CloseBound);
+                observed.Set();
             });
+            announced.TrySetResult(recording);
+            observed.Wait(SignalTimeout);
         });
         using var bound = new CancellationTokenSource(SignalTimeout);
-        var (peer, recording) = await harness.ConnectRawAsync($"answer-{Guid.NewGuid():N}", bound.Token);
+        var peer = await RawWebSocketPeer.ConnectAsync(harness.Port, bound.Token);
         using var _ = peer;
         Volatile.Write(ref farEnd, peer);
 
-        // Act
-        await peer.SendCloseAsync();
-        await recording.Completed.WaitAsync(bound.Token);
-        await peer.Ended.WaitAsync(bound.Token);
+        // The held handler and the observer each park a pool thread while the peer's read of the answer needs another
+        // one. On a machine with few cores the pool's minimum is that core count, so the pool would add the missing
+        // thread only after about half a second, and the peer would read an answer already sent after the observer
+        // gave up. The minimum gets the parked threads back for the test and is restored after it.
+        ThreadPool.GetMinThreads(out var minWorkers, out var minIo);
+        ThreadPool.SetMinThreads(minWorkers + parkedThreads, minIo);
+        StateRecording recording;
+        try
+        {
+            await peer.UpgradeAsync($"answer-{Guid.NewGuid():N}", bound.Token);
+            recording = await announced.Task.WaitAsync(bound.Token);
+
+            // Act
+            await peer.SendCloseAsync();
+            await recording.Completed.WaitAsync(bound.Token);
+            await peer.Ended.WaitAsync(bound.Token);
+        }
+        finally
+        {
+            observed.Set();
+            ThreadPool.SetMinThreads(minWorkers, minIo);
+        }
 
         // Assert
         using (new AssertionScope())
