@@ -173,6 +173,103 @@ public sealed class ChanWebSocketCapturedWireTests
             m => m.Event == "ERROR" && m.Value!.EndsWith('\n'), "an ERROR whose text ends in a newline is captured");
     }
 
+    // ---------------------------------------------------------------- the frames the session's command methods are tested against
+
+    [Fact]
+    public void ControlMessages_ShouldHoldAFullQueueStatusInBothFormats_WhenReadForTheStatusRecord()
+    {
+        foreach (var format in new[] { ChanWebSocketCaptureFormat.PlainText, ChanWebSocketCaptureFormat.Json })
+        {
+            var full = ChanWebSocketWireCapture.ControlMessages
+                .Where(m => m.Event == "STATUS" && m.Format == format)
+                .Where(m => ReadField(m.Text, m.Format, "queue_full") == "true")
+                .ToList();
+
+            full.Should().NotBeEmpty("a STATUS sent while the queue was full is captured in {0}", format);
+            foreach (var status in full)
+            {
+                ReadField(status.Text, status.Format, "queue_length").Should().Be("976", status.Source);
+                status.Trigger.Should().Be("xoff-xon", "the full queue is the flood that makes Asterisk send MEDIA_XOFF ({0})", status.Source);
+            }
+        }
+    }
+
+    [Fact]
+    public void ControlMessages_ShouldHoldTheFlushRefusalOfAPassthroughConnectionAndItsMediaStart_WhenReadForThePassthroughScenario()
+    {
+        const string flushRefused = "FLUSH_MEDIA not supported in passthrough mode";
+
+        foreach (var format in new[] { ChanWebSocketCaptureFormat.PlainText, ChanWebSocketCaptureFormat.Json })
+        {
+            var error = ChanWebSocketWireCapture.ControlMessages.SingleOrDefault(
+                m => m.Event == "ERROR" && m.Format == format && m.Value == flushRefused);
+
+            error.Should().NotBeNull("the refusal of FLUSH_MEDIA on a passthrough connection is captured in {0}", format);
+            error!.AsteriskVersion.Should().Be("22.12.0-rc2", "the passthrough flag is sent from 22.12 on");
+            var mediaStart = ChanWebSocketWireCapture.MediaStart.SingleOrDefault(f => f.ChannelId == error.ConnectionChannelId);
+            mediaStart.Should().NotBeNull("the MEDIA_START of the connection that was refused is captured ({0})", error.Source);
+            mediaStart!.Format.Should().Be(format);
+            mediaStart.AsteriskVersion.Should().Be(error.AsteriskVersion);
+            mediaStart.Option.Should().Be("p");
+            ReadPassthroughAndUnbuffered(mediaStart).Should().Be((true, true), mediaStart.Source);
+        }
+    }
+
+    [Fact]
+    public void ControlMessages_ShouldHoldBothRepliesToAStopWithoutAStart_WhenTheVersionsDiffer()
+    {
+        foreach (var format in new[] { ChanWebSocketCaptureFormat.PlainText, ChanWebSocketCaptureFormat.Json })
+        {
+            var replies = ChanWebSocketWireCapture.ControlMessages
+                .Where(m => m.Trigger == "stop-no-start" && m.Format == format)
+                .ToList();
+
+            replies.Should().ContainSingle(m => m.AsteriskVersion == "22.10.1", "the control version's reply is captured in {0}", format)
+                .Which.Event.Should().Be("MEDIA_BUFFERING_COMPLETED", "before 22.12 a stop with no start is answered as a completion");
+            var refusal = replies.Should().ContainSingle(m => m.AsteriskVersion == "22.12.0-rc2", "the rc's reply is captured in {0}", format)
+                .Subject;
+            refusal.Event.Should().Be("ERROR", "from 22.12 a stop with no start is refused");
+            refusal.Value.Should().EndWith("\n", "the refusal's text keeps the newline Asterisk sent ({0})", refusal.Source);
+        }
+    }
+
+    [Fact]
+    public void MediaStart_ShouldHoldTheCreatesVariableOnlyInJson_WhenTheExternalMediaCreateSentOne()
+    {
+        var fromCreates = ChanWebSocketWireCapture.MediaStart
+            .Where(f => f.Source.StartsWith("2026-10-31 capture", StringComparison.Ordinal))
+            .ToList();
+
+        fromCreates.Should().OnlyContain(f => f.Producer == ChanWebSocketCaptureProducer.ExternalMedia && f.Option == "none");
+        var json = fromCreates.Where(f => f.Format == ChanWebSocketCaptureFormat.Json).ToList();
+        json.Select(f => f.AsteriskVersion).Should().BeEquivalentTo(["20.20.1", "24.0.0-rc2"]);
+        foreach (var frame in json)
+        {
+            using var document = JsonDocument.Parse(frame.Text);
+            var variables = document.RootElement.GetProperty("channel_variables");
+            variables.GetProperty("LABEMVAR").GetString().Should().Be("em-json-0", "the create's variable reaches the frame ({0})", frame.Source);
+            document.RootElement.TryGetProperty("passthrough", out _).Should().Be(
+                frame.AsteriskVersion != "20.20.1", "20.20.1 sends no passthrough key ({0})", frame.Source);
+        }
+
+        var plain = fromCreates.Should().ContainSingle(f => f.Format == ChanWebSocketCaptureFormat.PlainText).Subject;
+        plain.Text.Should().NotContain("LABEMVAR", "a plain-text MEDIA_START carries no channel variables ({0})", plain.Source);
+    }
+
+    private static string? ReadField(string text, ChanWebSocketCaptureFormat format, string key)
+    {
+        if (format == ChanWebSocketCaptureFormat.Json)
+        {
+            using var json = JsonDocument.Parse(text);
+            return json.RootElement.TryGetProperty(key, out var value) ? value.GetRawText() : null;
+        }
+
+        return text.Split(' ').Skip(1)
+            .Where(t => t.StartsWith(key + ":", StringComparison.Ordinal))
+            .Select(t => t[(key.Length + 1)..])
+            .SingleOrDefault();
+    }
+
     private static (string? EventName, string? ChannelId) ReadEventAndChannelId(ChanWebSocketCapturedFrame frame)
     {
         if (frame.Format == ChanWebSocketCaptureFormat.Json)
