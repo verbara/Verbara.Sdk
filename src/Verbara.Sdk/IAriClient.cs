@@ -152,6 +152,36 @@ public interface IAriChannelsResource
         string? direction = null, string? data = null, string? channelId = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Create an external media channel from a request whose parameters are named. POST /channels/externalMedia</summary>
+    /// <remarks>
+    /// The default body serves an implementation written before this overload existed: a request that sets neither
+    /// <see cref="AriExternalMediaRequest.TransportData"/> nor an entry of <see cref="AriExternalMediaRequest.Variables"/>
+    /// is forwarded to the overload above with the same values, and one that sets either throws, so an option is never
+    /// silently dropped.
+    /// </remarks>
+    /// <param name="request">The parameters of the create.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The implementation does not override this overload and the request sets <c>TransportData</c> or
+    /// <c>Variables</c>; nothing was sent.
+    /// </exception>
+    ValueTask<AriChannel> CreateExternalMediaAsync(AriExternalMediaRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.TransportData is not null)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not implement CreateExternalMediaAsync(AriExternalMediaRequest): it cannot send TransportData, and nothing was sent.");
+        if (request.Variables is { Count: > 0 })
+            throw new NotSupportedException(
+                $"{GetType().Name} does not implement CreateExternalMediaAsync(AriExternalMediaRequest): it cannot send Variables, and nothing was sent.");
+
+        return CreateExternalMediaAsync(request.App, request.ExternalHost, request.Format,
+            encapsulation: request.Encapsulation, transport: request.Transport, connectionType: request.ConnectionType,
+            direction: request.Direction, data: request.Data, channelId: request.ChannelId,
+            cancellationToken: cancellationToken);
+    }
+
     /// <summary>Get a channel variable. GET /channels/{channelId}/variable</summary>
     ValueTask<AriVariable> GetVariableAsync(string channelId, string variable, CancellationToken cancellationToken = default);
 
@@ -726,7 +756,7 @@ public interface IAudioStream : IAsyncDisposable
     /// from the sixteen wire bytes as <c>new Guid(bytes, bigEndian: true).ToString()</c> — so always
     /// in <b>canonical lowercase hyphenated</b> form, e.g.
     /// <c>cd98c592-9ce2-4093-afae-420d53629a4f</c>. Over ARI that is the value the creator passed as
-    /// <c>data</c> to <see cref="IAriChannelsResource.CreateExternalMediaAsync"/>. It equals
+    /// <c>data</c> to <see cref="IAriChannelsResource.CreateExternalMediaAsync(string, string, string, string?, string?, string?, string?, string?, string?, CancellationToken)"/>. It equals
     /// <see cref="AriChannel.Id"/> only when the creator passed that same value as <c>channelId</c>
     /// as well — which is what <c>ExternalMediaActivity</c> does. Passing <c>data</c> alone leaves
     /// <see cref="AriChannel.Id"/> an Asterisk-minted uniqueid such as <c>1790244226.1</c>, which

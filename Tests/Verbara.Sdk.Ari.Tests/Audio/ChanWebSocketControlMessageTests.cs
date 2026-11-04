@@ -72,10 +72,73 @@ public class ChanWebSocketControlMessageTests
         }
     }
 
+    // The spelling Asterisk reads, written here as literals: the 2026-10-27 control-message capture's driver sent each bare
+    // command as its name in plain text and as `{"command":"<NAME>"}` in JSON, and STOP_MEDIA_BUFFERING with its id as
+    // `STOP_MEDIA_BUFFERING <id>` and under `correlation_id`; Asterisk 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and
+    // 24.0.0-rc2 answered each, and 20.20.1, 22.11.0 and 23.5.0 answered the same bytes in 2026-11-03's re-run.
+    [Theory]
+    [InlineData(nameof(ChanWebSocketFlushMedia), "FLUSH_MEDIA", "{\"command\":\"FLUSH_MEDIA\"}")]
+    [InlineData(nameof(ChanWebSocketPauseMedia), "PAUSE_MEDIA", "{\"command\":\"PAUSE_MEDIA\"}")]
+    [InlineData(nameof(ChanWebSocketContinueMedia), "CONTINUE_MEDIA", "{\"command\":\"CONTINUE_MEDIA\"}")]
+    [InlineData(nameof(ChanWebSocketGetStatus), "GET_STATUS", "{\"command\":\"GET_STATUS\"}")]
+    [InlineData(nameof(ChanWebSocketStartMediaBuffering), "START_MEDIA_BUFFERING", "{\"command\":\"START_MEDIA_BUFFERING\"}")]
+    [InlineData(nameof(ChanWebSocketReportQueueDrained), "REPORT_QUEUE_DRAINED", "{\"command\":\"REPORT_QUEUE_DRAINED\"}")]
+    [InlineData(nameof(ChanWebSocketStopMediaBuffering), "STOP_MEDIA_BUFFERING s", "{\"command\":\"STOP_MEDIA_BUFFERING\",\"correlation_id\":\"s\"}")]
+    public void SerializeToUtf8Bytes_ShouldWriteTheCapturedSpelling_WhenTheCommandIsOneThisReleaseAdds(
+        string recordType, string plainText, string jsonText)
+    {
+        // Arrange
+        var record = CommandThisReleaseAdds(recordType);
+
+        // Act
+        var plain = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, ChanWebSocketControlMessageFormat.PlainText);
+        var json = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, ChanWebSocketControlMessageFormat.Json);
+
+        // Assert
+        using (new AssertionScope(recordType))
+        {
+            plain.Should().Equal(Encoding.UTF8.GetBytes(plainText), "the captured plain-text spelling");
+            json.Should().Equal(Encoding.UTF8.GetBytes(jsonText), "the captured JSON spelling");
+            ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record).Should().Equal(json, "the format-less writer writes the JSON form");
+            ChanWebSocketControlMessageSerializer.Serialize(record, ChanWebSocketControlMessageFormat.PlainText).Should().Be(plainText);
+            ChanWebSocketControlMessageSerializer.Serialize(record, ChanWebSocketControlMessageFormat.Json).Should().Be(jsonText);
+            ChanWebSocketControlMessageSerializer.Serialize(record).Should().Be(jsonText);
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketControlMessageFormat.PlainText, 107, 128)]
+    [InlineData(ChanWebSocketControlMessageFormat.Json, 74, 128)]
+    public void SerializeToUtf8Bytes_ShouldFillTheFrame_WhenTheStopIdIsTheLongestThatFits(
+        ChanWebSocketControlMessageFormat format, int idBytes, int frameBytes)
+    {
+        // Arrange — an ASCII id that needs no JSON escaping
+        var record = new ChanWebSocketStopMediaBuffering(new string('b', idBytes));
+
+        // Act
+        var bytes = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, format);
+
+        // Assert — the writer does not check length; the session refuses one byte more
+        bytes.Should().HaveCount(frameBytes).And.HaveCount(ChanWebSocketControlMessageSerializer.MaxCommandBytes);
+    }
+
+    private static ChanWebSocketControlMessage CommandThisReleaseAdds(string recordType) => recordType switch
+    {
+        nameof(ChanWebSocketFlushMedia) => new ChanWebSocketFlushMedia(),
+        nameof(ChanWebSocketPauseMedia) => new ChanWebSocketPauseMedia(),
+        nameof(ChanWebSocketContinueMedia) => new ChanWebSocketContinueMedia(),
+        nameof(ChanWebSocketGetStatus) => new ChanWebSocketGetStatus(),
+        nameof(ChanWebSocketStartMediaBuffering) => new ChanWebSocketStartMediaBuffering(),
+        nameof(ChanWebSocketReportQueueDrained) => new ChanWebSocketReportQueueDrained(),
+        nameof(ChanWebSocketStopMediaBuffering) => new ChanWebSocketStopMediaBuffering("s"),
+        _ => throw new ArgumentOutOfRangeException(nameof(recordType), recordType, null),
+    };
+
     public static TheoryData<string> EveryRecordAsteriskSends() =>
     [
         nameof(ChanWebSocketMediaStart), nameof(ChanWebSocketMediaXoff), nameof(ChanWebSocketMediaXon),
         nameof(ChanWebSocketMediaMarkProcessed), nameof(ChanWebSocketDtmf), nameof(ChanWebSocketError),
+        nameof(ChanWebSocketStatus), nameof(ChanWebSocketMediaBufferingCompleted), nameof(ChanWebSocketQueueDrained),
 #pragma warning disable VSDK0004 // the obsolete type is the point: a record no capture shows Asterisk sending has no command form either
         nameof(ChanWebSocketUnknownMessage), nameof(ChanWebSocketHangup), nameof(ChanWebSocketMediaBuffering),
 #pragma warning restore VSDK0004
@@ -112,6 +175,9 @@ public class ChanWebSocketControlMessageTests
         nameof(ChanWebSocketMediaMarkProcessed) => new ChanWebSocketMediaMarkProcessed("m"),
         nameof(ChanWebSocketDtmf) => new ChanWebSocketDtmf("1", 0),
         nameof(ChanWebSocketError) => new ChanWebSocketError("c", "e"),
+        nameof(ChanWebSocketStatus) => new ChanWebSocketStatus("c", 0, 800, 900, false, false, false),
+        nameof(ChanWebSocketMediaBufferingCompleted) => new ChanWebSocketMediaBufferingCompleted("b4-0"),
+        nameof(ChanWebSocketQueueDrained) => new ChanWebSocketQueueDrained(),
         nameof(ChanWebSocketUnknownMessage) => new ChanWebSocketUnknownMessage("FUTURE_EVENT", "FUTURE_EVENT"),
 #pragma warning disable VSDK0004 // the obsolete type is the point: it has no command form either
         nameof(ChanWebSocketHangup) => new ChanWebSocketHangup(null),
@@ -249,11 +315,118 @@ public class ChanWebSocketControlMessageTests
         }
     }
 
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json)]
+    public void Deserialize_ShouldReadTheRepliesToTheAddedCommandsAsTheirOwnRecords_ThroughBothOverloads(ChanWebSocketCaptureFormat format)
+    {
+        // Arrange — the captured full-queue STATUS (22.10.1, xoff-xon), and a captured completion and drain report
+        var status = ChanWebSocketWireCapture.ControlMessages.Single(m => m.Event == "STATUS" && m.Format == format && m.Trigger == "xoff-xon");
+        var completed = ChanWebSocketWireCapture.ControlMessages.First(m => m.Event == "MEDIA_BUFFERING_COMPLETED" && m.Format == format && m.Trigger == "buffering");
+        var drained = ChanWebSocketWireCapture.ControlMessages.First(m => m.Event == "QUEUE_DRAINED" && m.Format == format);
+
+        // Assert
+        using (new AssertionScope(format.ToString()))
+        {
+            foreach (var read in new Func<ChanWebSocketCapturedMessage, ChanWebSocketControlMessage?>[]
+            {
+                m => ChanWebSocketControlMessageSerializer.Deserialize(m.Text),
+                m => ChanWebSocketControlMessageSerializer.Deserialize(m.Payload().AsSpan()),
+            })
+            {
+                read(status).Should().Be(new ChanWebSocketStatus(
+                    status.ChannelId!, QueueLength: 976, XonLevel: 800, XoffLevel: 900, QueueFull: true, BulkMedia: false, MediaPaused: false));
+                read(completed).Should().Be(new ChanWebSocketMediaBufferingCompleted("b4-0") { ChannelId = completed.ChannelId });
+                read(drained).Should().Be(new ChanWebSocketQueueDrained { ChannelId = drained.ChannelId });
+            }
+        }
+    }
+
     [Fact]
     public void Deserialize_ShouldThrowArgumentNullException_WhenTheTextIsNull()
     {
         Action act = () => ChanWebSocketControlMessageSerializer.Deserialize((string)null!);
 
         act.Should().Throw<ArgumentNullException>();
+    }
+
+    // ------------------------------------------------------------------------
+    // The records of the commands the session writes and of the replies Asterisk sends to them
+    // ------------------------------------------------------------------------
+
+    [Fact]
+    public void InboundReplyRecords_ShouldCarryTheCallTheirFrameNames_WhenBuiltWithTheCapturedValues()
+    {
+        // Arrange — the values of the captured full-queue STATUS (22.10.1, xoff-xon) and of a captured completion
+        var status = new ChanWebSocketStatus("t4-xoff-xon-json-0-3x539", QueueLength: 976, XonLevel: 800, XoffLevel: 900,
+            QueueFull: true, BulkMedia: false, MediaPaused: false);
+        var completedPlain = new ChanWebSocketMediaBufferingCompleted("b4-0");
+        var completedJson = new ChanWebSocketMediaBufferingCompleted("b4-0") { ChannelId = "t4-buffering-json-0-q6w53" };
+        var drainedPlain = new ChanWebSocketQueueDrained();
+        var drainedJson = new ChanWebSocketQueueDrained { ChannelId = "t4-drained-json-0-s4dwd" };
+
+        // Assert
+        using (new AssertionScope())
+        {
+            status.ChannelId.Should().Be("t4-xoff-xon-json-0-3x539");
+            status.QueueLength.Should().Be(976);
+            status.XonLevel.Should().Be(800);
+            status.XoffLevel.Should().Be(900);
+            status.QueueFull.Should().BeTrue();
+            status.BulkMedia.Should().BeFalse();
+            status.MediaPaused.Should().BeFalse();
+            completedPlain.CorrelationId.Should().Be("b4-0");
+            completedPlain.ChannelId.Should().BeNull("a plain-text completion carries no channel_id");
+            completedJson.ChannelId.Should().Be("t4-buffering-json-0-q6w53");
+            drainedPlain.ChannelId.Should().BeNull("a plain-text QUEUE_DRAINED is bare");
+            drainedJson.ChannelId.Should().Be("t4-drained-json-0-s4dwd");
+            drainedPlain.Should().NotBe(drainedJson, "the call a record names is part of its value");
+        }
+    }
+
+    [Fact]
+    public void OutboundCommandRecords_ShouldBeOneTypePerCommand_WhenBuilt()
+    {
+        // Arrange
+        ChanWebSocketControlMessage[] commands =
+        [
+            new ChanWebSocketFlushMedia(),
+            new ChanWebSocketPauseMedia(),
+            new ChanWebSocketContinueMedia(),
+            new ChanWebSocketGetStatus(),
+            new ChanWebSocketStartMediaBuffering(),
+            new ChanWebSocketStopMediaBuffering("b4-0"),
+            new ChanWebSocketReportQueueDrained(),
+        ];
+
+        // Assert
+        using (new AssertionScope())
+        {
+            commands.Select(c => c.GetType()).Should().OnlyHaveUniqueItems("each command Asterisk reads has its own record");
+            new ChanWebSocketStopMediaBuffering("b4-0").CorrelationId.Should().Be("b4-0");
+            new ChanWebSocketStopMediaBuffering("b4-0").Should().Be(new ChanWebSocketStopMediaBuffering("b4-0"));
+            new ChanWebSocketFlushMedia().Should().Be(new ChanWebSocketFlushMedia());
+        }
+    }
+
+    [Fact]
+    public void CommandAndReplyRecords_ShouldHaveNoKindDiscriminator_AsChanWebSocketErrorHasNone()
+    {
+        // Arrange — 2.8.0's `kind` polymorphism rows on the base record (read by reflection, in the test only)
+        var derived = typeof(ChanWebSocketControlMessage)
+            .GetCustomAttributes(typeof(System.Text.Json.Serialization.JsonDerivedTypeAttribute), inherit: false)
+            .Cast<System.Text.Json.Serialization.JsonDerivedTypeAttribute>()
+            .Select(a => a.DerivedType)
+            .ToList();
+
+        // Assert — no Asterisk frame carries `kind`, so a record added after 2.8.0 gets no row
+        derived.Should().NotContain(
+        [
+            typeof(ChanWebSocketError),
+            typeof(ChanWebSocketFlushMedia), typeof(ChanWebSocketPauseMedia), typeof(ChanWebSocketContinueMedia),
+            typeof(ChanWebSocketGetStatus), typeof(ChanWebSocketStartMediaBuffering), typeof(ChanWebSocketStopMediaBuffering),
+            typeof(ChanWebSocketReportQueueDrained), typeof(ChanWebSocketStatus), typeof(ChanWebSocketMediaBufferingCompleted),
+            typeof(ChanWebSocketQueueDrained),
+        ]);
     }
 }

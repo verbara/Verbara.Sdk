@@ -188,24 +188,93 @@ this server is not involved. (Read in Asterisk's documentation and source, not m
 ### Control messages and commands
 
 The session reads Asterisk's control messages in the format the connection uses: plain-text lines,
-Asterisk's default, or JSON objects with `f(json)` in the dial string or `control_message_format = json`
-in `chan_websocket.conf`. The connection's first `MEDIA_START` is not a control message: it is
-`IChanWebSocketSession.MediaStart`, and its `ControlMessageFormat` is the format every command is
-written in.
+Asterisk's default, or JSON objects. The connection's first `MEDIA_START` is not a control message:
+it is `IChanWebSocketSession.MediaStart`, and its `ControlMessageFormat` is the format every command
+is written in. A connection is JSON when:
 
-To pass data to the stream, set an inherited variable before `Dial(WebSocket/…)`, or `variables` on
-an ARI `externalMedia` you create outside the SDK; read it from `MediaStart.ChannelVariables` on a
-JSON connection.
+- the channel is created with `f(json)` as its transport data: `TransportData = "f(json)"` on the
+  `AriExternalMediaRequest` passed to `CreateExternalMediaAsync`, or on `ExternalMediaActivity`;
+- a dial string you write carries `f(json)`, such as `Dial(WebSocket/<connection>/f(json))`;
+- or `chan_websocket.conf` sets `control_message_format = json`, for every channel (read in
+  Asterisk's source, not measured).
+
+#### Transport data and variables
+
+`TransportData` is sent as given, as `transport_data`: it is Asterisk's dial-option grammar, and the
+SDK neither parses nor validates it. What Asterisk does with it was measured with
+`transport=websocket` only, on Asterisk 20.20.1, 22.11.0 and 23.5.0 and on the 22.12.0, 23.6.0 and
+24.0.0 release candidates:
+
+- `f(json)`: from 20.20, the connection's `MEDIA_START` and control messages are JSON, and its
+  `channel_variables` carry the channel's variables. Without it they are plain text, which carries
+  none.
+- `u`: not recognised on 20.20, 22.11 and 23.5. The create returns HTTP 200 and Asterisk logs a
+  warning; the 200 does not mean the option took effect.
+- `p`: no warning on those versions; its effect there is not measured.
+- Both `p` and `u` are documented from 22.12 and 23.6. What either does to the audio was not
+  measured on any version.
+
+To pass data to the stream, set `Variables` on the `AriExternalMediaRequest` or on
+`ExternalMediaActivity`: the SDK sends them in the create's JSON body, and each one is readable on
+the created channel. They reach `MediaStart.ChannelVariables` on an `f(json)` connection only. For a
+call through `Dial(WebSocket/…)`, set an inherited variable before the dial and read it the same way,
+on a JSON connection.
+
+The `AriExternalMediaRequest` overload is new. With neither `TransportData` nor `Variables` set, its
+request, and `ExternalMediaActivity`'s, is the one the shipped overload sends. An
+`IAriChannelsResource` you implement yourself inherits a default body that forwards such a request to
+your `CreateExternalMediaAsync`, and throws `NotSupportedException` when either option is set rather
+than drop it.
+
+#### Commands
+
+Each method writes its command in the connection's format and returns once the frame is written. A
+reply, when Asterisk sends one, arrives on `ControlMessages`:
+
+| Method | Command | What Asterisk does | Reply |
+|---|---|---|---|
+| `SendMarkAsync(mark)` | `MARK_MEDIA` | tags a position in the audio this application sends | `ChanWebSocketMediaMarkProcessed` when the mark reaches playback |
+| `SendFlushMediaAsync` | `FLUSH_MEDIA` | empties its queue of audio this application sent | none |
+| `SendPauseMediaAsync` | `PAUSE_MEDIA` | freezes that queue, keeping its length | none |
+| `SendContinueMediaAsync` | `CONTINUE_MEDIA` | releases the queue a pause froze | none |
+| `SendGetStatusAsync` | `GET_STATUS` | reports its queue | `ChanWebSocketStatus` |
+| `SendStartMediaBufferingAsync` | `START_MEDIA_BUFFERING` | buffers the media this application sends until the stop | none |
+| `SendStopMediaBufferingAsync(correlationId)` | `STOP_MEDIA_BUFFERING` | ends the buffering | `ChanWebSocketMediaBufferingCompleted` with the id, after the buffered media |
+| `SendReportQueueDrainedAsync` | `REPORT_QUEUE_DRAINED` | reports when its queue is drained | `ChanWebSocketQueueDrained`, after the audio queued before it |
+| `SendSetMediaDirectionAsync(direction)` | `SET_MEDIA_DIRECTION` | changes the direction of the channel's media; JSON only | none |
+
+Every command but `SET_MEDIA_DIRECTION` was measured in both formats, sent on the ARI `externalMedia`
+route, on Asterisk 20.20.1, 22.10.1, 22.11.0, 23.4.1 and 23.5.0 and on the 22.12.0, 23.6.0 and 24.0.0
+release candidates by a bare client, and by this session on all of them but 22.10.1 and 23.4.1. A
+`STATUS` carries no correlation id, so it is tied to its `GET_STATUS` only by order;
+`SendGetStatusAsync` does not wait for it.
+
+Whether Asterisk accepts a command depends on the channel's options and its version: on a passthrough
+(`p`) or unbuffered (`u`) connection, or with the direction `in`, some commands are refused, and a
+`STOP_MEDIA_BUFFERING` with no start before it is answered with a completion before 22.12 and with an
+error from 22.12. The session writes the command and does not guess: a refusal arrives as
+`ChanWebSocketError`. It refuses only what it can tell from its own state, before writing anything: a
+format not known yet, a frame longer than 128 bytes, a `null` or empty correlation id.
+
+**Barge-in.** To cut a prompt short, stop writing its audio first, then call `SendFlushMediaAsync`:
+Asterisk empties its queue of the audio this application sent, and a `STATUS` read afterwards reports
+a `QueueLength` of 0. Audio written after the flush, or still in flight before it, would be queued
+afterwards, which was not measured. Nor was how soon the caller stops hearing the prompt.
+
+**Answer and hangup.** The session offers no `ANSWER` and no `HANGUP`. Answer the channel with ARI
+`AnswerAsync` (`POST /channels/{id}/answer`); no comparison between it and chan_websocket's `ANSWER`
+was measured, and none is claimed here. End the call with ARI `HangupAsync`
+(`DELETE /channels/{id}`): after chan_websocket's own `HANGUP`, ARI reports cause 0 "Unknown", where
+its own hangup reports 16 "Normal Clearing".
 
 A command is written only once the connection's `MEDIA_START` has been read; with
-`MediaStartTimeout = TimeSpan.Zero` call `SendMarkAsync` and `SendSetMediaDirectionAsync` only once
-`MediaStart` is set, or they throw `InvalidOperationException`.
+`MediaStartTimeout = TimeSpan.Zero`, call any of these methods only once `MediaStart` is set, or it
+throws `InvalidOperationException`.
 
 `SendSetMediaDirectionAsync` writes only on a JSON connection, the one format Asterisk accepts the
-command in, and throws `InvalidOperationException` on a plain-text one: for a channel the SDK creates,
-set `control_message_format = json` in `chan_websocket.conf` (read in Asterisk's source, not
-measured); add `f(json)` only to a dial string you write yourself. Read
-`MediaStart.ControlMessageFormat` before calling it.
+command in, and throws `InvalidOperationException` on a plain-text one. Read
+`MediaStart.ControlMessageFormat` before calling it, and use one of the three ways above to get a
+JSON connection.
 
 ### A reader that stalls
 

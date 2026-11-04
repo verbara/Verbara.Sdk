@@ -461,8 +461,9 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         "been read, or call once MediaStart is set.";
 
     private const string SetMediaDirectionNeedsJsonMessage =
-        "The connection's control format is plain text; Asterisk accepts SET_MEDIA_DIRECTION in JSON only — set " +
-        "control_message_format = json in chan_websocket.conf, or add f(json) to a dial string you write.";
+        "The connection's control format is plain text; Asterisk accepts SET_MEDIA_DIRECTION in JSON only — pass " +
+        "f(json) as the TransportData of a channel you create through ARI externalMedia, add f(json) to a dial string " +
+        "you write, or set control_message_format = json in chan_websocket.conf.";
 
     private const string NoXonXoffCommandMessage =
         "chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and " +
@@ -505,6 +506,48 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         var command = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(new ChanWebSocketSetMediaDirection(direction), format);
         return SendCommandAsync(command, cancellationToken);
     }
+
+    public ValueTask SendFlushMediaAsync(CancellationToken cancellationToken = default)
+        => SendFixedCommandAsync(new ChanWebSocketFlushMedia(), cancellationToken);
+
+    public ValueTask SendPauseMediaAsync(CancellationToken cancellationToken = default)
+        => SendFixedCommandAsync(new ChanWebSocketPauseMedia(), cancellationToken);
+
+    public ValueTask SendContinueMediaAsync(CancellationToken cancellationToken = default)
+        => SendFixedCommandAsync(new ChanWebSocketContinueMedia(), cancellationToken);
+
+    public ValueTask SendGetStatusAsync(CancellationToken cancellationToken = default)
+        => SendFixedCommandAsync(new ChanWebSocketGetStatus(), cancellationToken);
+
+    public ValueTask SendStartMediaBufferingAsync(CancellationToken cancellationToken = default)
+        => SendFixedCommandAsync(new ChanWebSocketStartMediaBuffering(), cancellationToken);
+
+    public ValueTask SendReportQueueDrainedAsync(CancellationToken cancellationToken = default)
+        => SendFixedCommandAsync(new ChanWebSocketReportQueueDrained(), cancellationToken);
+
+    public ValueTask SendStopMediaBufferingAsync(string correlationId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(correlationId);
+        var format = NegotiatedFormat();
+        var command = ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(new ChanWebSocketStopMediaBuffering(correlationId), format);
+        if (command.Length > ChanWebSocketControlMessageSerializer.MaxCommandBytes)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(correlationId),
+                command.Length,
+                $"The STOP_MEDIA_BUFFERING command for this id is {command.Length} bytes in {format}, over the " +
+                $"{ChanWebSocketControlMessageSerializer.MaxCommandBytes}-byte text frame chan_websocket reads (a longer one is " +
+                "dropped unread, with no reply); nothing was written. An id may carry at most 107 bytes in PlainText, 74 in " +
+                "Json before escaping.");
+        }
+
+        return SendCommandAsync(command, cancellationToken);
+    }
+
+    // A command whose length the caller cannot set: it always fits the frame (the longest, START_MEDIA_BUFFERING in
+    // JSON, is 35 bytes), so the only refusal is a format not yet known.
+    private ValueTask SendFixedCommandAsync(ChanWebSocketControlMessage record, CancellationToken cancellationToken)
+        => SendCommandAsync(ChanWebSocketControlMessageSerializer.SerializeToUtf8Bytes(record, NegotiatedFormat()), cancellationToken);
 
     // The connection's control format: the first MEDIA_START's, read once from the one write that publishes it. Before
     // one has been read there is none, and no command is written.

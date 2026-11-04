@@ -7,7 +7,7 @@ namespace Verbara.Sdk.TestInfrastructure.Wire;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Provenance.</b> Two captures, each with a bare listener on the far end of a <c>websocket_client.conf</c>
+/// <b>Provenance.</b> Captures with a bare listener on the far end of a <c>websocket_client.conf</c>
 /// connection, so nothing here passed through this repository's code, and nothing here may be produced by it:
 /// </para>
 /// <list type="bullet">
@@ -21,6 +21,18 @@ namespace Verbara.Sdk.TestInfrastructure.Wire;
 /// container per row, ten calls per row (the first two concurrent), section <c>cmedia</c> (<c>protocols = media</c>),
 /// file <c>&lt;version&gt;/listener-&lt;version&gt;-echoon.jsonl</c>. The listener logged every frame with its length;
 /// each entry's <see cref="ChanWebSocketCapturedFrame.CapturedLength"/> is that length.
+/// </description></item>
+/// <item><description>
+/// <b>2026-10-27, control messages</b>: the capture <see cref="ControlMessages"/> comes from, for the
+/// <c>MEDIA_START</c> of the two 22.12.0-rc2 connections (one per format) whose <c>FLUSH_MEDIA</c> refusal
+/// <see cref="ControlMessages"/> keeps; their length is the one its listener logged.
+/// </description></item>
+/// <item><description>
+/// <b>2026-10-31</b>, Asterisk 20.20.1 and 24.0.0-rc2 by image digest, ARI <c>externalMedia</c> creates with
+/// <c>transport=websocket</c> and one variable (<c>LABEMVAR</c>) in a JSON body, with and without
+/// <c>transport_data=f(json)</c>; files <c>&lt;image&gt;/media/&lt;connection&gt;.frames</c>, each frame stored with its
+/// length and SHA-256, both checked when it was copied here. With <c>f(json)</c> the variable is in
+/// <c>channel_variables</c>; without it the frame is plain text and carries none.
 /// </description></item>
 /// </list>
 /// <para>
@@ -37,7 +49,8 @@ namespace Verbara.Sdk.TestInfrastructure.Wire;
 /// <b>Which connection was kept.</b> Each entry is the first connection of its route, format and option in that
 /// capture, not a selected one; every other connection of the same row differs only in the channel pointer and
 /// <c>channel_id</c>. The JSON entries keep <c>channel_variables</c> as sent, including the caller's inherited
-/// variable in the <c>dialjsoninh</c> rows.
+/// variable in the <c>dialjsoninh</c> rows. The entries of the 2026-10-27 control-message capture and of the 2026-10-31
+/// capture are the first connection (lowest <c>i</c>) of the row their source names.
 /// </para>
 /// <para>
 /// <b>Adding to it.</b> Only from a capture. A hand-written frame is a guess about the wire wearing the costume
@@ -297,6 +310,29 @@ public static class ChanWebSocketWireCapture
             "2026-10-27 capture, 24.0.0-rc2/listener-24.0.0-rc2-echoon.jsonl, connection 111 (row em-u-json-cmedia)",
             ChannelId: "ta2-em-u-json-cmedia-2-1299430", CapturedLength: 336,
             Text: """{"event":"MEDIA_START","connection_id":"cmedia","channel":"WebSocket/cmedia/0x7fb6b80027b0","channel_id":"ta2-em-u-json-cmedia-2-1299430","format":"slin16","optimal_frame_size":640,"ptime":20,"passthrough":false,"unbuffered":true,"channel_variables":{"MEDIA_WEBSOCKET_CONNECTION_ID":"cmedia","MEDIA_WEBSOCKET_OPTIMAL_FRAME_SIZE":"640"}}"""),
+        // ── 22.12.0-rc2 (2026-10-27 control-message capture): a passthrough connection, the one whose FLUSH_MEDIA ──
+        // ── ControlMessages keeps refused ──────────────────────────────────────────────────────────────────────
+        new("22.12.0-rc2", ChanWebSocketCaptureProducer.ExternalMedia, ChanWebSocketCaptureFormat.PlainText, "p",
+            "2026-10-27 control-message capture, 22.12.0-rc2/results-22.12.0-rc2-text.jsonl, record i=0 (trigger reject-p, connection 172), MEDIA_START",
+            ChannelId: "t4-reject-p-text-0-ts8dn", CapturedLength: 187,
+            Text: "MEDIA_START connection_id:cmedia channel:WebSocket/cmedia/0x7fbf3c0082e0 channel_id:t4-reject-p-text-0-ts8dn format:slin16 optimal_frame_size:640 ptime:20 passthrough:true unbuffered:true"),
+        new("22.12.0-rc2", ChanWebSocketCaptureProducer.ExternalMedia, ChanWebSocketCaptureFormat.Json, "p",
+            "2026-10-27 control-message capture, 22.12.0-rc2/results-22.12.0-rc2-json.jsonl, record i=0 (trigger reject-p, connection 518), MEDIA_START",
+            ChannelId: "t4-reject-p-json-0-o3ruc", CapturedLength: 329,
+            Text: "{\"event\":\"MEDIA_START\",\"connection_id\":\"cmedia\",\"channel\":\"WebSocket/cmedia/0x7fe154000ab0\",\"channel_id\":\"t4-reject-p-json-0-o3ruc\",\"format\":\"slin16\",\"optimal_frame_size\":640,\"ptime\":20,\"passthrough\":true,\"unbuffered\":true,\"channel_variables\":{\"MEDIA_WEBSOCKET_CONNECTION_ID\":\"cmedia\",\"MEDIA_WEBSOCKET_OPTIMAL_FRAME_SIZE\":\"640\"}}"),
+        // ── 20.20.1 and 24.0.0-rc2 (2026-10-31 capture): externalMedia creates that sent one variable ──────────
+        new("20.20.1", ChanWebSocketCaptureProducer.ExternalMedia, ChanWebSocketCaptureFormat.PlainText, "none",
+            "2026-10-31 capture, a20/media/001.frames, frame seq 1 (externalMedia create with no transport_data and one variable, channel lab-em-absent-0)",
+            ChannelId: "lab-em-absent-0", CapturedLength: 145,
+            Text: "MEDIA_START connection_id:cmedia channel:WebSocket/cmedia/0x7f7f44000b40 channel_id:lab-em-absent-0 format:slin16 optimal_frame_size:640 ptime:20"),
+        new("20.20.1", ChanWebSocketCaptureProducer.ExternalMedia, ChanWebSocketCaptureFormat.Json, "none",
+            "2026-10-31 capture, a20/media/011.frames, frame seq 1 (externalMedia create with transport_data f(json) and one variable, channel lab-em-json-0)",
+            ChannelId: "lab-em-json-0", CapturedLength: 304,
+            Text: "{\"event\":\"MEDIA_START\",\"connection_id\":\"cmedia\",\"channel\":\"WebSocket/cmedia/0x7f7f44005270\",\"channel_id\":\"lab-em-json-0\",\"format\":\"slin16\",\"optimal_frame_size\":640,\"ptime\":20,\"channel_variables\":{\"LABEMVAR\":\"em-json-0\",\"MEDIA_WEBSOCKET_CONNECTION_ID\":\"cmedia\",\"MEDIA_WEBSOCKET_OPTIMAL_FRAME_SIZE\":\"640\"}}"),
+        new("24.0.0-rc2", ChanWebSocketCaptureProducer.ExternalMedia, ChanWebSocketCaptureFormat.Json, "none",
+            "2026-10-31 capture, r24/media/011.frames, frame seq 1 (externalMedia create with transport_data f(json) and one variable, channel lab-em-json-0)",
+            ChannelId: "lab-em-json-0", CapturedLength: 343,
+            Text: "{\"event\":\"MEDIA_START\",\"connection_id\":\"cmedia\",\"channel\":\"WebSocket/cmedia/0x7fb964003500\",\"channel_id\":\"lab-em-json-0\",\"format\":\"slin16\",\"optimal_frame_size\":640,\"ptime\":20,\"passthrough\":false,\"unbuffered\":false,\"channel_variables\":{\"LABEMVAR\":\"em-json-0\",\"MEDIA_WEBSOCKET_CONNECTION_ID\":\"cmedia\",\"MEDIA_WEBSOCKET_OPTIMAL_FRAME_SIZE\":\"640\"}}"),
     ];
 
     /// <summary>
@@ -310,7 +346,11 @@ public static class ChanWebSocketWireCapture
     /// 24.0.0-rc2 by image digest, one ARI <c>externalMedia</c> call per row on a bare listener, files
     /// <c>&lt;version&gt;/results-&lt;version&gt;-&lt;text|json&gt;.jsonl</c>. Each entry is the first frame of its event
     /// in the first record (lowest <c>i</c>) of its trigger, copied from the record's text, never selected: every other
-    /// record of the same trigger differs only in its <c>channel_id</c>. <see cref="ChanWebSocketCapturedMessage.Value"/>
+    /// record of the same trigger differs only in its <c>channel_id</c>. Three triggers add entries after the per-version
+    /// blocks: <c>xoff-xon</c>'s <c>STATUS</c> on 22.10.1 (the queue full, <c>queue_length</c> 976), <c>reject-p</c>'s
+    /// <c>ERROR</c> on 22.12.0-rc2 whose <c>error_text</c> names <c>FLUSH_MEDIA</c> (picked by that text: the record refuses
+    /// other commands first), and <c>stop-no-start</c>'s reply on 22.10.1 (<c>MEDIA_BUFFERING_COMPLETED</c>) and on
+    /// 22.12.0-rc2 (<c>ERROR</c>). <see cref="ChanWebSocketCapturedMessage.Value"/>
     /// was read off the same text by the extraction script, not by this repository's code. Plain-text
     /// <c>MEDIA_XOFF</c>, <c>MEDIA_XON</c>, <c>MEDIA_MARK_PROCESSED</c>, <c>QUEUE_DRAINED</c> and
     /// <c>MEDIA_BUFFERING_COMPLETED</c> carry no <c>channel_id</c> on any version; their JSON forms do.
@@ -722,5 +762,40 @@ public static class ChanWebSocketWireCapture
             "2026-10-27 capture, 24.0.0-rc2/results-24.0.0-rc2-json.jsonl, record i=0 (trigger buffering, connection 374), text frame seq 2",
             ConnectionChannelId: "t4-buffering-json-0-hduhu", ChannelId: "t4-buffering-json-0-hduhu", Value: null,
             Text: "{\"event\":\"MEDIA_BUFFERING_COMPLETED\",\"channel_id\":\"t4-buffering-json-0-hduhu\",\"correlation_id\":\"b4-0\"}"),
+        // ── 22.10.1: a STATUS with the queue full (2026-10-27 capture) ──
+        new("22.10.1", ChanWebSocketCaptureFormat.PlainText, "STATUS", "xoff-xon",
+            "2026-10-27 capture, 22.10.1/results-22.10.1-text.jsonl, record i=0 (trigger xoff-xon, connection 60), text frame seq 3",
+            ConnectionChannelId: "t4-xoff-xon-text-0-rmv2d", ChannelId: "t4-xoff-xon-text-0-rmv2d", Value: null,
+            Text: "STATUS channel_id:t4-xoff-xon-text-0-rmv2d queue_length:976 xon_level:800 xoff_level:900 queue_full:true bulk_media:false media_paused:false"),
+        new("22.10.1", ChanWebSocketCaptureFormat.Json, "STATUS", "xoff-xon",
+            "2026-10-27 capture, 22.10.1/results-22.10.1-json.jsonl, record i=0 (trigger xoff-xon, connection 400), text frame seq 3",
+            ConnectionChannelId: "t4-xoff-xon-json-0-3x539", ChannelId: "t4-xoff-xon-json-0-3x539", Value: null,
+            Text: "{\"event\":\"STATUS\",\"channel_id\":\"t4-xoff-xon-json-0-3x539\",\"queue_length\":976,\"xon_level\":800,\"xoff_level\":900,\"queue_full\":true,\"bulk_media\":false,\"media_paused\":false}"),
+        // ── 22.12.0-rc2: FLUSH_MEDIA refused on a passthrough connection (2026-10-27 capture) ──
+        new("22.12.0-rc2", ChanWebSocketCaptureFormat.PlainText, "ERROR", "reject-p",
+            "2026-10-27 capture, 22.12.0-rc2/results-22.12.0-rc2-text.jsonl, record i=0 (trigger reject-p, connection 172), text frame seq 5",
+            ConnectionChannelId: "t4-reject-p-text-0-ts8dn", ChannelId: "t4-reject-p-text-0-ts8dn", Value: "FLUSH_MEDIA not supported in passthrough mode",
+            Text: "ERROR channel_id:t4-reject-p-text-0-ts8dn error_text:FLUSH_MEDIA not supported in passthrough mode"),
+        new("22.12.0-rc2", ChanWebSocketCaptureFormat.Json, "ERROR", "reject-p",
+            "2026-10-27 capture, 22.12.0-rc2/results-22.12.0-rc2-json.jsonl, record i=0 (trigger reject-p, connection 518), text frame seq 5",
+            ConnectionChannelId: "t4-reject-p-json-0-o3ruc", ChannelId: "t4-reject-p-json-0-o3ruc", Value: "FLUSH_MEDIA not supported in passthrough mode",
+            Text: "{\"event\":\"ERROR\",\"channel_id\":\"t4-reject-p-json-0-o3ruc\",\"error_text\":\"FLUSH_MEDIA not supported in passthrough mode\"}"),
+        // ── STOP_MEDIA_BUFFERING with no START before it, before and after 22.12 (2026-10-27 capture) ──
+        new("22.10.1", ChanWebSocketCaptureFormat.PlainText, "MEDIA_BUFFERING_COMPLETED", "stop-no-start",
+            "2026-10-27 capture, 22.10.1/results-22.10.1-text.jsonl, record i=0 (trigger stop-no-start, connection 214), text frame seq 2",
+            ConnectionChannelId: "t4-stop-no-start-text-0-md8wu", ChannelId: null, Value: null,
+            Text: "MEDIA_BUFFERING_COMPLETED n4-0"),
+        new("22.10.1", ChanWebSocketCaptureFormat.Json, "MEDIA_BUFFERING_COMPLETED", "stop-no-start",
+            "2026-10-27 capture, 22.10.1/results-22.10.1-json.jsonl, record i=0 (trigger stop-no-start, connection 552), text frame seq 2",
+            ConnectionChannelId: "t4-stop-no-start-json-0-oxunn", ChannelId: "t4-stop-no-start-json-0-oxunn", Value: null,
+            Text: "{\"event\":\"MEDIA_BUFFERING_COMPLETED\",\"channel_id\":\"t4-stop-no-start-json-0-oxunn\",\"correlation_id\":\"n4-0\"}"),
+        new("22.12.0-rc2", ChanWebSocketCaptureFormat.PlainText, "ERROR", "stop-no-start",
+            "2026-10-27 capture, 22.12.0-rc2/results-22.12.0-rc2-text.jsonl, record i=0 (trigger stop-no-start, connection 219), text frame seq 2",
+            ConnectionChannelId: "t4-stop-no-start-text-0-x74er", ChannelId: "t4-stop-no-start-text-0-x74er", Value: "STOP_MEDIA_BUFFERING can't be called when media buffering isn't active.\n",
+            Text: "ERROR channel_id:t4-stop-no-start-text-0-x74er error_text:STOP_MEDIA_BUFFERING can't be called when media buffering isn't active.\n"),
+        new("22.12.0-rc2", ChanWebSocketCaptureFormat.Json, "ERROR", "stop-no-start",
+            "2026-10-27 capture, 22.12.0-rc2/results-22.12.0-rc2-json.jsonl, record i=0 (trigger stop-no-start, connection 560), text frame seq 2",
+            ConnectionChannelId: "t4-stop-no-start-json-0-2hmr0", ChannelId: "t4-stop-no-start-json-0-2hmr0", Value: "STOP_MEDIA_BUFFERING can't be called when media buffering isn't active.\n",
+            Text: "{\"event\":\"ERROR\",\"channel_id\":\"t4-stop-no-start-json-0-2hmr0\",\"error_text\":\"STOP_MEDIA_BUFFERING can't be called when media buffering isn't active.\\n\"}"),
     ];
 }

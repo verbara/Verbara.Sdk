@@ -1,1 +1,5 @@
 #nullable enable
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.TransportData.get -> string?
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.TransportData.init -> void
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.Variables.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.Variables.init -> void
