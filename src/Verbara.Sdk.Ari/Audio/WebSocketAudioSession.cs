@@ -91,6 +91,9 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     // Completed once, by the read pump: with the first frame of any type, or with Ended when the pump ends first.
     private readonly TaskCompletionSource<WebSocketFirstFrame> _firstFrame = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    // Completed once, by the first disposal, when its close and its wait for the peer's answer are over, whichever way.
+    private readonly TaskCompletionSource _closeHandshake = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     /// <summary>
     /// The key this stream is registered under: the <c>channel_id</c> its first frame named when that frame was
     /// <c>MEDIA_START</c>, otherwise the upgrade path's last segment. It changes at most once, before the server
@@ -106,6 +109,14 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
 
     /// <summary>Completes with the connection's first frame, or with <see cref="WebSocketFirstFrameKind.Ended"/>.</summary>
     internal Task<WebSocketFirstFrame> FirstFrame => _firstFrame.Task;
+
+    /// <summary>
+    /// Completes when the first disposal has sent its close and stopped waiting for the peer's answer: on the answer,
+    /// on the bound, or at once when there was nothing to wait for. A second disposal returns immediately, so a caller
+    /// that must not release the connection under a handshake in progress awaits this after its own disposal. It is
+    /// bounded by <see cref="CloseBound"/> and completes before the disposal publishes anything to a subscriber.
+    /// </summary>
+    internal Task CloseHandshake => _closeHandshake.Task;
     /// <summary>The server's configured format until the connection's first <c>MEDIA_START</c>, then the one it names.</summary>
     public string Format => _format;
 
@@ -547,12 +558,19 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         // aborts the socket, and an aborted socket sends nothing. Then the pump, still reading, takes the peer's
         // answer and leaves on it. One bound covers the send and that wait together, so a peer that never answers
         // costs the disposal one bound.
-        using (var closeBound = new CancellationTokenSource(CloseBound))
+        try
         {
+            using var closeBound = new CancellationTokenSource(CloseBound);
             await CloseOnceAsync(WebSocketCloseStatus.NormalClosure, closeBound.Token);
 
             if (_readPumpTask is not null)
                 await _readPumpTask.WaitAsync(closeBound.Token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
+        finally
+        {
+            // The handshake is over, answered or not: a server handler that joined this disposal may release the
+            // connection now.
+            _closeHandshake.TrySetResult();
         }
 
         // Last: aborts a receive still pending once the bound is spent, on a peer that never answered.

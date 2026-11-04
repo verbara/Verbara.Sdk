@@ -639,7 +639,13 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 {
                     _live.TryRemove(session, out _);
                     Release(session.ChannelId, session);
+
+                    // A disposal begun elsewhere (the consumer's, or a cancelled stop's) makes the call below return
+                    // at once, possibly while its close waits for the peer's answer. The connection is released
+                    // only when that handshake is over, so the `using (client)` never closes it under the answer.
+                    var handshake = session.CloseHandshake;
                     await session.DisposeAsync();
+                    await handshake;
                 }
             }
         }
@@ -776,8 +782,10 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
 
     /// <summary>
     /// Stops accepting connections, cancels the connection handlers and waits for them to finish,
-    /// which disposes their sessions. Cancelling <paramref name="cancellationToken"/> ends that wait,
-    /// and the sessions still registered are then disposed directly.
+    /// which disposes their sessions concurrently: each sends its peer a close and waits for the answer
+    /// within one closing bound, so the stop spends one bound however many streams are live. Cancelling
+    /// <paramref name="cancellationToken"/> ends that wait, and the sessions still registered are then
+    /// disposed directly, together, within that same one bound.
     /// </summary>
     public async ValueTask StopAsync(CancellationToken cancellationToken = default)
     {
@@ -807,15 +815,21 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
         // StopAsync returns.
         await Task.WhenAll(_connections.Keys).WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
-        // Empty unless a wait was cancelled. A session disposed here makes its handler's own dispose a
-        // no-op, and a handler that registers a session after this point still disposes it, because
-        // its token is already cancelled.
+        // Empty unless a wait was cancelled. One walk claims each entry and starts its disposal, then one
+        // wait covers them all, so the sessions close together and N mute peers cost one bound, not N.
+        // A session disposed here makes its handler's own dispose return at once, and the handler then
+        // joins this disposal's handshake before it releases the connection. A handler that registers a
+        // session after this point still disposes it, because its token is already cancelled.
         // A pending entry is claimed for its registrant instead, which withdraws it.
+        List<Task>? disposals = null;
         foreach (var (session, entry) in _live)
         {
             if (entry.ClaimForStop())
-                await session.DisposeAsync();
+                (disposals ??= []).Add(session.DisposeAsync().AsTask());
         }
+
+        if (disposals is not null)
+            await Task.WhenAll(disposals);
 
         _live.Clear();
         _streams.Clear();
