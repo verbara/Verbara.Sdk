@@ -82,46 +82,52 @@ public static class ServiceCollectionExtensions
         // ARI with validation
         if (options.Ari is not null)
         {
-            var ariOptions = options.Ari;
-            services.AddOptions<AriClientOptions>()
-                .Configure(o => CopyAriOptions(ariOptions, o))
-                .ValidateOnStart();
-            services.AddSingleton<IValidateOptions<AriClientOptions>, AriClientOptionsValidator>();
-
-            // Audio servers (AudioSocket + WebSocket)
-            if (options.Ari.ConfigureAudioServer is not null)
-            {
-                var audioOpts = new AudioServerOptions();
-                options.Ari.ConfigureAudioServer(audioOpts);
-                services.AddSingleton(audioOpts);
-                services.TryAddSingleton<AudioSocketServer>();
-
-                if (audioOpts.WebSocketPort > 0)
-                    services.TryAddSingleton<WebSocketAudioServer>();
-
-                services.TryAddSingleton<IAudioServer>(sp =>
-                {
-                    var servers = new List<IAudioServer> { sp.GetRequiredService<AudioSocketServer>() };
-                    var ws = sp.GetService<WebSocketAudioServer>();
-                    if (ws is not null) servers.Add(ws);
-                    return new CompositeAudioServer(servers);
-                });
-
-                services.AddSingleton<IHostedService, AriAudioHostedService>();
-            }
-
-            // Use factory to safely inject optional IAudioServer
-            services.TryAddSingleton<IAriClient>(sp => new AriClient(
-                sp.GetRequiredService<IOptions<AriClientOptions>>(),
-                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<AriClient>>(),
-                sp.GetService<IAudioServer>()));
-
-            services.AddHealthChecks()
-                .AddCheck<Verbara.Sdk.Ari.Diagnostics.AriHealthCheck>("ari");
-            services.AddSingleton<IHostedService, AriConnectionHostedService>();
+            AddAriClient(services, options.Ari);
         }
 
         return services;
+    }
+
+    // The ARI registration of AddVerbara: options with every value copied and validated on start, the validator,
+    // the audio servers when ConfigureAudioServer is set, the client, the ari check and its hosted service.
+    private static void AddAriClient(IServiceCollection services, AriClientOptions ariOptions)
+    {
+        services.AddOptions<AriClientOptions>()
+            .Configure(o => CopyAriOptions(ariOptions, o))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<AriClientOptions>, AriClientOptionsValidator>();
+
+        // Audio servers (AudioSocket + WebSocket)
+        if (ariOptions.ConfigureAudioServer is not null)
+        {
+            var audioOpts = new AudioServerOptions();
+            ariOptions.ConfigureAudioServer(audioOpts);
+            services.AddSingleton(audioOpts);
+            services.TryAddSingleton<AudioSocketServer>();
+
+            if (audioOpts.WebSocketPort > 0)
+                services.TryAddSingleton<WebSocketAudioServer>();
+
+            services.TryAddSingleton<IAudioServer>(sp =>
+            {
+                var servers = new List<IAudioServer> { sp.GetRequiredService<AudioSocketServer>() };
+                var ws = sp.GetService<WebSocketAudioServer>();
+                if (ws is not null) servers.Add(ws);
+                return new CompositeAudioServer(servers);
+            });
+
+            services.AddSingleton<IHostedService, AriAudioHostedService>();
+        }
+
+        // Use factory to safely inject optional IAudioServer
+        services.TryAddSingleton<IAriClient>(sp => new AriClient(
+            sp.GetRequiredService<IOptions<AriClientOptions>>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<AriClient>>(),
+            sp.GetService<IAudioServer>()));
+
+        services.AddHealthChecks()
+            .AddCheck<Verbara.Sdk.Ari.Diagnostics.AriHealthCheck>("ari");
+        services.AddSingleton<IHostedService, AriConnectionHostedService>();
     }
 
     /// <summary>
