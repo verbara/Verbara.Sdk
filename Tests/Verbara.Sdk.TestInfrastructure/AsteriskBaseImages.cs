@@ -38,6 +38,23 @@ public static class AsteriskBaseImages
             + "Add a '<version> <image>:<build tag>@<digest>' line, measured first, to build that version.");
     }
 
+    /// <summary>
+    /// The Asterisk version a pinned base reference carries, read from its tag: <c>22.12.0</c> from
+    /// <c>image:22.12.0_build@sha256:…</c> and from <c>image:22.12.0@sha256:…</c>, <c>22.12.0-rc2</c> from
+    /// <c>image:22.12.0-rc2@sha256:…</c>.
+    /// </summary>
+    /// <param name="reference">An <c>&lt;image&gt;:&lt;tag&gt;[@&lt;digest&gt;]</c> reference, as the table pins it.</param>
+    public static string PinnedVersion(string reference)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+
+        var at = reference.IndexOf('@', StringComparison.Ordinal);
+        var named = at < 0 ? reference : reference[..at];
+        var tag = named[(named.LastIndexOf(':') + 1)..];
+        var underscore = tag.IndexOf('_', StringComparison.Ordinal);
+        return underscore < 0 ? tag : tag[..underscore];
+    }
+
     private static Dictionary<string, string> Parse(string table)
     {
         var lines = new Dictionary<string, string>(StringComparer.Ordinal);
