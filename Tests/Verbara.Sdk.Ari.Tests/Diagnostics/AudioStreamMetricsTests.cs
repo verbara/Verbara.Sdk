@@ -39,6 +39,7 @@ public sealed class AudioStreamMetricsTests
                 ("audio.streams.closed", "streams"),
                 ("audio.frames.received", "frames"),
                 ("audio.frames.sent", "frames"),
+                ("audio.frames.dropped", "frames"),
                 ("audio.bytes.received", "bytes"),
                 ("audio.bytes.sent", "bytes"),
                 ("audio.buffer.underruns", "underruns"),
@@ -46,6 +47,7 @@ public sealed class AudioStreamMetricsTests
                 ("audio.error.frames", "frames"),
                 ("audio.transport.failures", "sessions"),
                 ("audio.connections.refused", "connections"),
+                ("audio.control_messages.subscriber_faults", "faults"),
                 ("audio.frame.latency", "ms"),
             });
     }

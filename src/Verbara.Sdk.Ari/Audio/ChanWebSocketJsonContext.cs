@@ -38,12 +38,16 @@ namespace Verbara.Sdk.Ari.Audio;
 public sealed partial class ChanWebSocketJsonContext : JsonSerializerContext;
 
 /// <summary>
-/// Writes the two commands Asterisk acts on, in the format the connection negotiated, and reads a text frame as
+/// Writes every command the session sends, in the format the connection negotiated, and reads a text frame as
 /// Asterisk sends it, in either format; the session is the writer — see <see cref="IChanWebSocketSession"/>.
 /// </summary>
 /// <remarks>
-/// The writer has two commands, in the spelling captured from Asterisk 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and
-/// 24.0.0-rc2: <c>MARK_MEDIA</c> in either format and <c>SET_MEDIA_DIRECTION</c> in JSON, the only format Asterisk
+/// The writer spells each command as captured from Asterisk 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, and
+/// as 20.20.1, 22.11.0 and 23.5.0 answered it: in plain text the command's name, followed by a space and the id for
+/// <c>MARK_MEDIA</c> and <c>STOP_MEDIA_BUFFERING</c>; in JSON one compact object, <c>{"command":"&lt;NAME&gt;"}</c>, with
+/// the id under <c>correlation_id</c>. The commands are <c>MARK_MEDIA</c>, <c>FLUSH_MEDIA</c>, <c>PAUSE_MEDIA</c>,
+/// <c>CONTINUE_MEDIA</c>, <c>GET_STATUS</c>, <c>START_MEDIA_BUFFERING</c>, <c>STOP_MEDIA_BUFFERING</c> and
+/// <c>REPORT_QUEUE_DRAINED</c> in either format, and <c>SET_MEDIA_DIRECTION</c> in JSON, the only format Asterisk
 /// accepts it in. Every record Asterisk sends has no command form. The writer does not check length: a session refuses a
 /// command longer than <see cref="MaxCommandBytes"/> before writing it. No reflection, so it is safe under Native AOT.
 /// </remarks>
@@ -81,11 +85,8 @@ public static class ChanWebSocketControlMessageSerializer
 
     /// <summary>
     /// Writes a command in <paramref name="format"/>, as the UTF-8 form of
-    /// <see cref="SerializeToUtf8Bytes(ChanWebSocketControlMessage, ChanWebSocketControlMessageFormat)"/> decodes:
-    /// <see cref="ChanWebSocketMarkMedia"/> as <c>MARK_MEDIA &lt;mark&gt;</c> in plain text and
-    /// <c>{"command":"MARK_MEDIA","correlation_id":"&lt;mark&gt;"}</c> in JSON; <see cref="ChanWebSocketSetMediaDirection"/>
-    /// as <c>{"command":"SET_MEDIA_DIRECTION","direction":"in|out|both"}</c> in JSON only. No length check: the session
-    /// enforces <see cref="MaxCommandBytes"/>.
+    /// <see cref="SerializeToUtf8Bytes(ChanWebSocketControlMessage, ChanWebSocketControlMessageFormat)"/> decodes, in the
+    /// spelling that overload lists. No length check: the session enforces <see cref="MaxCommandBytes"/>.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="format"/> is not a <see cref="ChanWebSocketControlMessageFormat"/> value.</exception>
@@ -99,9 +100,14 @@ public static class ChanWebSocketControlMessageSerializer
     /// <summary>
     /// Writes a command in <paramref name="format"/>, as UTF-8: <see cref="ChanWebSocketMarkMedia"/> as <c>MARK_MEDIA &lt;mark&gt;</c>
     /// in plain text and <c>{"command":"MARK_MEDIA","correlation_id":"&lt;mark&gt;"}</c> in JSON;
-    /// <see cref="ChanWebSocketSetMediaDirection"/> as <c>{"command":"SET_MEDIA_DIRECTION","direction":"in|out|both"}</c> in
-    /// JSON only. JSON strings are escaped as <see cref="System.Text.Encodings.Web.JavaScriptEncoder.Default"/> escapes them.
-    /// No length check: the session enforces <see cref="MaxCommandBytes"/>.
+    /// <see cref="ChanWebSocketStopMediaBuffering"/> as <c>STOP_MEDIA_BUFFERING &lt;id&gt;</c> and
+    /// <c>{"command":"STOP_MEDIA_BUFFERING","correlation_id":"&lt;id&gt;"}</c>; <see cref="ChanWebSocketFlushMedia"/>,
+    /// <see cref="ChanWebSocketPauseMedia"/>, <see cref="ChanWebSocketContinueMedia"/>, <see cref="ChanWebSocketGetStatus"/>,
+    /// <see cref="ChanWebSocketStartMediaBuffering"/> and <see cref="ChanWebSocketReportQueueDrained"/> as the bare command
+    /// name (<c>FLUSH_MEDIA</c>, …) and <c>{"command":"&lt;NAME&gt;"}</c>; <see cref="ChanWebSocketSetMediaDirection"/> as
+    /// <c>{"command":"SET_MEDIA_DIRECTION","direction":"in|out|both"}</c> in JSON only. JSON strings are escaped as
+    /// <see cref="System.Text.Encodings.Web.JavaScriptEncoder.Default"/> escapes them. No length check: the session
+    /// enforces <see cref="MaxCommandBytes"/>.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="format"/> is not a <see cref="ChanWebSocketControlMessageFormat"/> value.</exception>
@@ -115,12 +121,20 @@ public static class ChanWebSocketControlMessageSerializer
         if (format is not (ChanWebSocketControlMessageFormat.PlainText or ChanWebSocketControlMessageFormat.Json))
             throw new ArgumentOutOfRangeException(nameof(format), format, "Not a ChanWebSocketControlMessageFormat value.");
 
+        var plain = format == ChanWebSocketControlMessageFormat.PlainText;
         return message switch
         {
-            ChanWebSocketMarkMedia mark when format == ChanWebSocketControlMessageFormat.PlainText =>
-                Encoding.UTF8.GetBytes("MARK_MEDIA " + mark.Mark),
+            ChanWebSocketMarkMedia mark when plain => Encoding.UTF8.GetBytes("MARK_MEDIA " + mark.Mark),
             ChanWebSocketMarkMedia mark => WriteJsonCommand("MARK_MEDIA", "correlation_id", mark.Mark),
-            ChanWebSocketSetMediaDirection direction when format == ChanWebSocketControlMessageFormat.Json =>
+            ChanWebSocketStopMediaBuffering stop when plain => Encoding.UTF8.GetBytes("STOP_MEDIA_BUFFERING " + stop.CorrelationId),
+            ChanWebSocketStopMediaBuffering stop => WriteJsonCommand("STOP_MEDIA_BUFFERING", "correlation_id", stop.CorrelationId),
+            ChanWebSocketFlushMedia => WriteBareCommand("FLUSH_MEDIA", plain),
+            ChanWebSocketPauseMedia => WriteBareCommand("PAUSE_MEDIA", plain),
+            ChanWebSocketContinueMedia => WriteBareCommand("CONTINUE_MEDIA", plain),
+            ChanWebSocketGetStatus => WriteBareCommand("GET_STATUS", plain),
+            ChanWebSocketStartMediaBuffering => WriteBareCommand("START_MEDIA_BUFFERING", plain),
+            ChanWebSocketReportQueueDrained => WriteBareCommand("REPORT_QUEUE_DRAINED", plain),
+            ChanWebSocketSetMediaDirection direction when !plain =>
                 WriteJsonCommand("SET_MEDIA_DIRECTION", "direction", DirectionValue(direction.Direction)),
             ChanWebSocketSetMediaDirection => throw new NotSupportedException(
                 "Asterisk accepts SET_MEDIA_DIRECTION in JSON only: it has no plain-text form."),
@@ -135,6 +149,8 @@ public static class ChanWebSocketControlMessageSerializer
     /// and never publishes — and <see cref="ChanWebSocketUnknownMessage"/>, with the frame's event name and exact text, for
     /// a frame the model does not name. Never <see langword="null"/>. 2.8.x's <c>kind</c> JSON, which no Asterisk sends,
     /// reads as <see cref="ChanWebSocketUnknownMessage"/>.
+    /// A <c>MEDIA_START</c> that names no <c>format</c> reads as a <see cref="ChanWebSocketMediaStart"/> whose
+    /// <see cref="ChanWebSocketMediaStart.Format"/> is empty: this reader has no stream format to keep.
     /// </summary>
     /// <param name="json">The frame's text, in either format (the parameter's name is shipped).</param>
     /// <exception cref="ArgumentNullException"><paramref name="json"/> is <see langword="null"/>.</exception>
@@ -149,6 +165,8 @@ public static class ChanWebSocketControlMessageSerializer
     /// <see cref="ChanWebSocketMediaStart"/>, which the session keeps as <see cref="IChanWebSocketSession.MediaStart"/>
     /// and never publishes — and <see cref="ChanWebSocketUnknownMessage"/> for a frame the model does not name, as
     /// <see cref="Deserialize(string)"/> does. Never <see langword="null"/>.
+    /// A <c>MEDIA_START</c> that names no <c>format</c> reads as a <see cref="ChanWebSocketMediaStart"/> whose
+    /// <see cref="ChanWebSocketMediaStart.Format"/> is empty: this reader has no stream format to keep.
     /// </summary>
     /// <param name="utf8Json">The frame's text as UTF-8, in either format (the parameter's name is shipped).</param>
     public static ChanWebSocketControlMessage? Deserialize(ReadOnlySpan<byte> utf8Json)
@@ -162,14 +180,20 @@ public static class ChanWebSocketControlMessageSerializer
         _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, "Not a ChanWebSocketMediaDirection value."),
     };
 
-    private static byte[] WriteJsonCommand(string command, string parameter, string value)
+    // A command with no parameter: its name alone in plain text, {"command":"<NAME>"} in JSON.
+    private static byte[] WriteBareCommand(string command, bool plain)
+        => plain ? Encoding.UTF8.GetBytes(command) : WriteJsonCommand(command, parameter: null, value: null);
+
+    // Zero parameters (parameter null) or one, under its own name after "command".
+    private static byte[] WriteJsonCommand(string command, string? parameter, string? value)
     {
         var buffer = new ArrayBufferWriter<byte>(64);
         using (var writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
             writer.WriteString("command", command);
-            writer.WriteString(parameter, value);
+            if (parameter is not null)
+                writer.WriteString(parameter, value);
             writer.WriteEndObject();
         }
 

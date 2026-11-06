@@ -18,11 +18,15 @@ internal static partial class AudioStreamStateLog
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>One ending.</b> Every party that can end a stream — the read pump on a hangup or error frame or
-/// at its end, and the stream's disposal — calls <see cref="TryEnd"/>. The first call publishes the
-/// ending (<see cref="AudioStreamState.Error"/> first when an error frame ended it, then
-/// <see cref="AudioStreamState.Disconnected"/>); every later call publishes nothing. The disposal then
-/// completes the sequence with <see cref="Dispose"/>.
+/// <b>One ending.</b> Every party that can end a stream — the read pump on a hangup or error frame, a
+/// close frame or a failed transport, or at its end, and the stream's disposal — calls
+/// <see cref="TryEnd"/>. The first call publishes the ending (<see cref="AudioStreamState.Error"/> first
+/// when the stream ended badly, then <see cref="AudioStreamState.Disconnected"/>); every later call
+/// publishes nothing, so the first ending decides the classification. The disposal then completes the
+/// sequence with <see cref="Dispose"/>. What counts as ending badly is the session's: an AudioSocket
+/// session passes an error for an error frame only, so its failed transport ends as
+/// <see cref="AudioStreamState.Disconnected"/> alone; a WebSocket session passes one for a connection that
+/// failed while it was live, and never for a close frame or for its own disposal.
 /// </para>
 /// <para>
 /// <b>The server's signal.</b> <see cref="Ended"/> completes inside the first <see cref="TryEnd"/>,

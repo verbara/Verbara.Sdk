@@ -403,30 +403,113 @@ internal sealed class WebSocketEndingHarness : IAsyncDisposable
 
     public CountingLogger<WebSocketAudioServer> Logger { get; }
 
-    public static async Task<WebSocketEndingHarness> StartAsync(Action<StateRecording> subscribe, int maxStreams = 1000)
+    /// <summary>Starts a server on a loopback port; <paramref name="subscribe"/> runs inside each announcement.</summary>
+    /// <param name="subscribe">Runs inside each announcement, on the connection's handler.</param>
+    /// <param name="maxStreams">The server's stream limit.</param>
+    /// <param name="mediaStartTimeout">
+    /// The server's wait to be named. <see cref="TimeSpan.Zero"/> unless a test passes one: these are tests of the zero
+    /// bound's exception (no wait). Their subject is the waiting list, the count, the limit, the stop, the restart or the
+    /// ending, and their clients send no MEDIA_START, so each connection is announced at once under its path segment,
+    /// as before the re-key; without it each would wait out the 2 s default before its announcement. A test of a
+    /// connection that ends during that wait passes a bound it never reaches.
+    /// </param>
+    public static async Task<WebSocketEndingHarness> StartAsync(
+        Action<StateRecording> subscribe,
+        int maxStreams = 1000,
+        TimeSpan? mediaStartTimeout = null)
     {
         var logger = new CountingLogger<WebSocketAudioServer>();
         AudioServerOptions? options = null;
         var (server, port) = await LoopbackServerBind.StartAsync(
             p =>
             {
-                options = new AudioServerOptions
-                {
-                    WebSocketPort = p,
-                    ListenAddress = "127.0.0.1",
-                    MaxConcurrentStreams = maxStreams,
-                    IdleTimeout = TimeSpan.FromSeconds(60),
-
-                    // MediaStartTimeout = Zero: these are tests of the zero bound's exception (no wait). Their subject is the
-                    // waiting list, the count, the limit, the stop, the restart or the ending, and their clients send no
-                    // MEDIA_START, so each connection is announced at once under its path segment, as before the re-key;
-                    // without it each would wait out the 2 s default before its announcement.
-                    MediaStartTimeout = TimeSpan.Zero,
-                };
+                options = NewOptions(p, maxStreams, mediaStartTimeout);
                 return new WebSocketAudioServer(options, logger, TimeProvider.System);
             },
             s => s.StartAsync());
         return new WebSocketEndingHarness(server, port, options!, logger, subscribe);
+    }
+
+    /// <summary>
+    /// Starts a server bound to a port it never dials, whose accept seam hands it the connections this harness
+    /// accepts on its own loopback listener and reports each one through <see cref="NextAcceptedAsync"/>. A
+    /// connection is reported when the accept loop asks for the next one, not when it is accepted: the server
+    /// starts each handler inline on the accept loop, so the loop asking again proves that handler has suspended
+    /// on its upgrade read. A peer that sends its upgrade only after its accept is reported therefore finds its
+    /// handler parked off the accept loop, and a subscriber that blocks holds that handler and no other. Reported
+    /// at the accept instead, the upgrade could be buffered before the handler's first read; that read then
+    /// completes at once and the handler runs on the accept loop into the subscriber, which holds the loop and
+    /// every later accept with it (seen in a cold process, where the handler's path is not yet compiled).
+    /// </summary>
+    public static async Task<WebSocketEndingHarness> StartWithAcceptSignalsAsync(Action<StateRecording> subscribe, int maxStreams = 1000)
+    {
+        var logger = new CountingLogger<WebSocketAudioServer>();
+        var options = NewOptions(0, maxStreams, mediaStartTimeout: null);
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var server = new WebSocketAudioServer(options, logger, TimeProvider.System);
+        var harness = new WebSocketEndingHarness(server, ((IPEndPoint)listener.LocalEndpoint).Port, options, logger, subscribe)
+        {
+            _ownListener = listener,
+        };
+
+        // The accept loop calls this seam one call at a time, so the previous connection is only ever touched here.
+        TcpClient? previous = null;
+        server.AcceptOverride = async token =>
+        {
+            if (previous is not null)
+                harness._accepted.Writer.TryWrite(previous);
+            previous = null;
+            var accepted = await listener.AcceptTcpClientAsync(token);
+            previous = accepted;
+            return accepted;
+        };
+        await server.StartAsync();
+        return harness;
+    }
+
+    private static AudioServerOptions NewOptions(int port, int maxStreams, TimeSpan? mediaStartTimeout) => new()
+    {
+        WebSocketPort = port,
+        ListenAddress = "127.0.0.1",
+        MaxConcurrentStreams = maxStreams,
+        IdleTimeout = TimeSpan.FromSeconds(60),
+        MediaStartTimeout = mediaStartTimeout ?? TimeSpan.Zero,
+    };
+
+    private readonly System.Threading.Channels.Channel<TcpClient> _accepted =
+        System.Threading.Channels.Channel.CreateUnbounded<TcpClient>();
+
+    private TcpListener? _ownListener;
+
+    /// <summary>
+    /// The next connection the accept seam handed to the server, once its handler is parked off the accept loop
+    /// (<see cref="StartWithAcceptSignalsAsync"/> only).
+    /// </summary>
+    public async Task NextAcceptedAsync(CancellationToken token) =>
+        await _accepted.Reader.ReadAsync(token);
+
+    /// <summary>
+    /// Connects a <see cref="RawWebSocketPeer"/> to <paramref name="id"/>'s path, upgrades it, and waits for the
+    /// server to announce it.
+    /// </summary>
+    public async Task<(RawWebSocketPeer Peer, StateRecording Recording)> ConnectRawAsync(
+        string id,
+        CancellationToken token,
+        bool readPaused = false)
+    {
+        var announced = AnnouncedAs(id);
+        var peer = await RawWebSocketPeer.ConnectAsync(Port, token, readPaused);
+        try
+        {
+            await peer.UpgradeAsync(id, token);
+            return (peer, await announced.WaitAsync(token));
+        }
+        catch
+        {
+            peer.Dispose();
+            throw;
+        }
     }
 
     public Task<StateRecording> AnnouncedAs(string id) => _announced.GetOrAdd(id, NewSlot).Task;
@@ -468,6 +551,7 @@ internal sealed class WebSocketEndingHarness : IAsyncDisposable
         _subscription.Dispose();
         if (!ServerDisposedByTest)
             await Server.DisposeAsync();
+        _ownListener?.Dispose();
     }
 
     private static TaskCompletionSource<StateRecording> NewSlot(string _) =>
@@ -504,6 +588,66 @@ internal sealed class WebSocketTestPeer : IDisposable
     public void Abort() => _client.Abort();
 
     public void Dispose() => _client.Dispose();
+}
+
+/// <summary>
+/// A harness whose server was stopped and started again on the port it first bound. That port was probed
+/// free and then released, so between the stop and the restart anything else on the machine that binds an
+/// ephemeral port — a probe or an outbound connect in a test assembly running alongside — can take it, and
+/// the restart then fails with <see cref="SocketError.AddressAlreadyInUse"/>. The restart tolerates that race
+/// as the first start does (<see cref="LoopbackServerBind"/>): it disposes the harness and repeats
+/// start → stop → restart on a fresh harness, so on a freshly probed port, immediately, up to
+/// <see cref="LoopbackServerBind.MaxAttempts"/> times. Any other failure propagates on the attempt it
+/// happened on; exhaustion throws naming every port tried.
+/// </summary>
+internal static class RestartedHarness
+{
+    /// <summary>
+    /// Starts a harness with <paramref name="start"/>, then runs <paramref name="stopThenStart"/> on it,
+    /// retrying on a fresh harness only when that restart's bind found the port taken.
+    /// </summary>
+    /// <param name="start">Starts a fresh harness on a freshly probed port.</param>
+    /// <param name="stopThenStart">Stops the harness's server and starts it again on the same port.</param>
+    /// <param name="port">The port a harness bound, for the exhaustion message.</param>
+    public static async Task<THarness> StartStoppedAndRestartedAsync<THarness>(
+        Func<Task<THarness>> start,
+        Func<THarness, ValueTask> stopThenStart,
+        Func<THarness, int> port)
+        where THarness : IAsyncDisposable
+    {
+        ArgumentNullException.ThrowIfNull(start);
+        ArgumentNullException.ThrowIfNull(stopThenStart);
+        ArgumentNullException.ThrowIfNull(port);
+
+        var tried = new List<int>();
+        SocketException? lastInUse = null;
+        for (var attempt = 0; attempt < LoopbackServerBind.MaxAttempts; attempt++)
+        {
+            var harness = await start();
+            tried.Add(port(harness));
+            var restarted = false;
+            try
+            {
+                await stopThenStart(harness);
+                restarted = true;
+                return harness;
+            }
+            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+            {
+                lastInUse = ex;
+            }
+            finally
+            {
+                if (!restarted)
+                    await harness.DisposeAsync();
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Could not restart a loopback server in {LoopbackServerBind.MaxAttempts} attempts: every restart failed with " +
+            $"{nameof(SocketError.AddressAlreadyInUse)}. Ports tried: {string.Join(", ", tried)}.",
+            lastInUse);
+    }
 }
 
 /// <summary>Disposes everything added to it, in order, when it is disposed.</summary>

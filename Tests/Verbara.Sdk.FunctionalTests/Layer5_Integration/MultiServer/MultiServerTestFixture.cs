@@ -30,15 +30,9 @@ public sealed class MultiServerTestFixture : Xunit.IAsyncLifetime
     public MultiServerFixture Lab { get; }
 
     /// <summary>The Asterisk version the leg's pinned base carries, such as <c>22.10.1</c>, read from the base's build tag.</summary>
-    public static string PinnedVersion
-    {
-        get
-        {
-            var reference = AsteriskBaseImages.Resolve(Environment.GetEnvironmentVariable("ASTERISK_VERSION") ?? "22");
-            var tag = reference[(reference.IndexOf(':', StringComparison.Ordinal) + 1)..];
-            return tag[..tag.IndexOf('_', StringComparison.Ordinal)];
-        }
-    }
+    public static string PinnedVersion =>
+        AsteriskBaseImages.PinnedVersion(
+            AsteriskBaseImages.Resolve(Environment.GetEnvironmentVariable("ASTERISK_VERSION") ?? "22"));
 
     /// <summary>The class measurement, taken once by the first test that asks for it.</summary>
     public Task<ClassMeasurement> MeasurementAsync()

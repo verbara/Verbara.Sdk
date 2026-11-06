@@ -152,6 +152,36 @@ public interface IAriChannelsResource
         string? direction = null, string? data = null, string? channelId = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Create an external media channel from a request whose parameters are named. POST /channels/externalMedia</summary>
+    /// <remarks>
+    /// The default body serves an implementation written before this overload existed: a request that sets neither
+    /// <see cref="AriExternalMediaRequest.TransportData"/> nor an entry of <see cref="AriExternalMediaRequest.Variables"/>
+    /// is forwarded to the overload above with the same values, and one that sets either throws, so an option is never
+    /// silently dropped.
+    /// </remarks>
+    /// <param name="request">The parameters of the create.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The implementation does not override this overload and the request sets <c>TransportData</c> or
+    /// <c>Variables</c>; nothing was sent.
+    /// </exception>
+    ValueTask<AriChannel> CreateExternalMediaAsync(AriExternalMediaRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.TransportData is not null)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not implement CreateExternalMediaAsync(AriExternalMediaRequest): it cannot send TransportData, and nothing was sent.");
+        if (request.Variables is { Count: > 0 })
+            throw new NotSupportedException(
+                $"{GetType().Name} does not implement CreateExternalMediaAsync(AriExternalMediaRequest): it cannot send Variables, and nothing was sent.");
+
+        return CreateExternalMediaAsync(request.App, request.ExternalHost, request.Format,
+            encapsulation: request.Encapsulation, transport: request.Transport, connectionType: request.ConnectionType,
+            direction: request.Direction, data: request.Data, channelId: request.ChannelId,
+            cancellationToken: cancellationToken);
+    }
+
     /// <summary>Get a channel variable. GET /channels/{channelId}/variable</summary>
     ValueTask<AriVariable> GetVariableAsync(string channelId, string variable, CancellationToken cancellationToken = default);
 
@@ -726,7 +756,7 @@ public interface IAudioStream : IAsyncDisposable
     /// from the sixteen wire bytes as <c>new Guid(bytes, bigEndian: true).ToString()</c> — so always
     /// in <b>canonical lowercase hyphenated</b> form, e.g.
     /// <c>cd98c592-9ce2-4093-afae-420d53629a4f</c>. Over ARI that is the value the creator passed as
-    /// <c>data</c> to <see cref="IAriChannelsResource.CreateExternalMediaAsync"/>. It equals
+    /// <c>data</c> to <see cref="IAriChannelsResource.CreateExternalMediaAsync(string, string, string, string?, string?, string?, string?, string?, string?, CancellationToken)"/>. It equals
     /// <see cref="AriChannel.Id"/> only when the creator passed that same value as <c>channelId</c>
     /// as well — which is what <c>ExternalMediaActivity</c> does. Passing <c>data</c> alone leaves
     /// <see cref="AriChannel.Id"/> an Asterisk-minted uniqueid such as <c>1790244226.1</c>, which
@@ -767,8 +797,15 @@ public interface IAudioStream : IAsyncDisposable
     /// <summary>Observable for connection state changes.</summary>
     /// <remarks>
     /// The stream publishes its ending once: <see cref="AudioStreamState.Disconnected"/> exactly once, as
-    /// the last state, after <see cref="AudioStreamState.Error"/> when an error frame ended it; a disposal
-    /// after the ending publishes nothing more. A subscriber is replayed the current state inside its
+    /// the last state, after <see cref="AudioStreamState.Error"/> when it ended badly; a disposal after the
+    /// ending publishes nothing more. What precedes <see cref="AudioStreamState.Disconnected"/> depends on the
+    /// transport. An AudioSocket stream publishes <see cref="AudioStreamState.Error"/> when an error frame
+    /// ended it, and a reset or other failed connection ends it as <see cref="AudioStreamState.Disconnected"/>
+    /// alone, as a hangup does. A WebSocket stream publishes <see cref="AudioStreamState.Error"/> when its
+    /// connection failed while it was live: a reset, or an end with no close frame from the peer. A close
+    /// frame from the peer, whatever its status, and an ending on this side (a disposal or the server's stop)
+    /// publish <see cref="AudioStreamState.Disconnected"/> alone, even when the connection fails while that
+    /// ending is in progress. A subscriber is replayed the current state inside its
     /// <c>Subscribe</c> call, and an exception it throws there reaches that caller, with the subscription
     /// dropped. An exception a subscriber throws on a later notification is logged at Error and does not
     /// stop the other subscribers, the stream's teardown or its release by the server that owns it, which

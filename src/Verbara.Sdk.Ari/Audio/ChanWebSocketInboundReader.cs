@@ -11,9 +11,10 @@ namespace Verbara.Sdk.Ari.Audio;
 /// </summary>
 /// <remarks>
 /// Both formats as captured (<c>f(json)</c> or <c>control_message_format = json</c> selects JSON). In plain text,
-/// <c>MEDIA_XOFF</c>, <c>MEDIA_XON</c> and <c>MEDIA_MARK_PROCESSED</c> are bare, a mark's correlation id is the value
-/// after the event name, and an <c>ERROR</c>'s <c>error_text</c> runs to the end of the frame, spaces and a trailing
-/// newline included.
+/// <c>MEDIA_XOFF</c>, <c>MEDIA_XON</c>, <c>MEDIA_MARK_PROCESSED</c>, <c>MEDIA_BUFFERING_COMPLETED</c> and
+/// <c>QUEUE_DRAINED</c> carry no <c>channel_id</c>, a mark's or a completed buffering's correlation id is the value after
+/// the event name, and an <c>ERROR</c>'s <c>error_text</c> runs to the end of the frame, spaces and a trailing newline
+/// included.
 /// </remarks>
 internal static class ChanWebSocketInboundReader
 {
@@ -72,9 +73,33 @@ internal static class ChanWebSocketInboundReader
                 ChannelId = frame.Get("channel_id"),
             },
             "ERROR" => new ChanWebSocketError(frame.Get("channel_id") ?? string.Empty, frame.Get(ErrorTextKey) ?? string.Empty),
-            _ => new ChanWebSocketUnknownMessage(frame.Event ?? string.Empty, frame.Text),
+            "STATUS" => (ChanWebSocketControlMessage?)ReadStatus(frame) ?? Unknown(frame),
+            "MEDIA_BUFFERING_COMPLETED" => new ChanWebSocketMediaBufferingCompleted(
+                (frame.IsJson ? frame.Get("correlation_id") : frame.Positional) ?? string.Empty)
+            {
+                ChannelId = frame.Get("channel_id"),
+            },
+            "QUEUE_DRAINED" => new ChanWebSocketQueueDrained { ChannelId = frame.Get("channel_id") },
+            _ => Unknown(frame),
         };
     }
+
+    private static ChanWebSocketUnknownMessage Unknown(ChanWebSocketTextFrame frame) =>
+        new(frame.Event ?? string.Empty, frame.Text);
+
+    // Every captured STATUS carries all six counters and flags, in both formats. One that lacks any of them, or carries
+    // one that does not read as a number or a boolean, is published as the generic record with its exact text rather
+    // than with a value the frame did not send: a QueueLength of 0 read from nothing would look like an emptied queue.
+    private static ChanWebSocketStatus? ReadStatus(ChanWebSocketTextFrame frame) =>
+        frame.GetInt("queue_length") is { } queueLength
+        && frame.GetInt("xon_level") is { } xonLevel
+        && frame.GetInt("xoff_level") is { } xoffLevel
+        && frame.GetBool("queue_full") is { } queueFull
+        && frame.GetBool("bulk_media") is { } bulkMedia
+        && frame.GetBool("media_paused") is { } mediaPaused
+            ? new ChanWebSocketStatus(
+                frame.Get("channel_id") ?? string.Empty, queueLength, xonLevel, xoffLevel, queueFull, bulkMedia, mediaPaused)
+            : null;
 }
 
 /// <summary>

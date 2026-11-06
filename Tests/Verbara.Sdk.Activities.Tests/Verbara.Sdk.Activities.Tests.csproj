@@ -5,6 +5,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verbara.Sdk.Activities\Verbara.Sdk.Activities.csproj" />
+    <ProjectReference Include="..\Verbara.Sdk.TestInfrastructure.Wire\Verbara.Sdk.TestInfrastructure.Wire.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\Sockets\LoopbackServerBind.cs" Link="Shared\Sockets\LoopbackServerBind.cs" />
   </ItemGroup>
 
   <ItemGroup>

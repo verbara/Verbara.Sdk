@@ -1,2 +1,34 @@
 #nullable enable
+Verbara.Sdk.AriExternalMediaRequest
+Verbara.Sdk.AriExternalMediaRequest.<Clone>$() -> Verbara.Sdk.AriExternalMediaRequest!
+Verbara.Sdk.AriExternalMediaRequest.App.get -> string!
+Verbara.Sdk.AriExternalMediaRequest.App.init -> void
+Verbara.Sdk.AriExternalMediaRequest.AriExternalMediaRequest() -> void
+Verbara.Sdk.AriExternalMediaRequest.ChannelId.get -> string?
+Verbara.Sdk.AriExternalMediaRequest.ChannelId.init -> void
+Verbara.Sdk.AriExternalMediaRequest.ConnectionType.get -> string?
+Verbara.Sdk.AriExternalMediaRequest.ConnectionType.init -> void
+Verbara.Sdk.AriExternalMediaRequest.Data.get -> string?
+Verbara.Sdk.AriExternalMediaRequest.Data.init -> void
+Verbara.Sdk.AriExternalMediaRequest.Direction.get -> string?
+Verbara.Sdk.AriExternalMediaRequest.Direction.init -> void
+Verbara.Sdk.AriExternalMediaRequest.Encapsulation.get -> string?
+Verbara.Sdk.AriExternalMediaRequest.Encapsulation.init -> void
+Verbara.Sdk.AriExternalMediaRequest.Equals(Verbara.Sdk.AriExternalMediaRequest? other) -> bool
+Verbara.Sdk.AriExternalMediaRequest.ExternalHost.get -> string!
+Verbara.Sdk.AriExternalMediaRequest.ExternalHost.init -> void
+Verbara.Sdk.AriExternalMediaRequest.Format.get -> string!
+Verbara.Sdk.AriExternalMediaRequest.Format.init -> void
+Verbara.Sdk.AriExternalMediaRequest.Transport.get -> string?
+Verbara.Sdk.AriExternalMediaRequest.Transport.init -> void
+Verbara.Sdk.AriExternalMediaRequest.TransportData.get -> string?
+Verbara.Sdk.AriExternalMediaRequest.TransportData.init -> void
+Verbara.Sdk.AriExternalMediaRequest.Variables.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+Verbara.Sdk.AriExternalMediaRequest.Variables.init -> void
 Verbara.Sdk.Enums.AriConnectionState.RestOnly = 7 -> Verbara.Sdk.Enums.AriConnectionState
+Verbara.Sdk.IAriChannelsResource.CreateExternalMediaAsync(Verbara.Sdk.AriExternalMediaRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriChannel!>
+override Verbara.Sdk.AriExternalMediaRequest.Equals(object? obj) -> bool
+override Verbara.Sdk.AriExternalMediaRequest.GetHashCode() -> int
+override Verbara.Sdk.AriExternalMediaRequest.ToString() -> string!
+static Verbara.Sdk.AriExternalMediaRequest.operator !=(Verbara.Sdk.AriExternalMediaRequest? left, Verbara.Sdk.AriExternalMediaRequest? right) -> bool
+static Verbara.Sdk.AriExternalMediaRequest.operator ==(Verbara.Sdk.AriExternalMediaRequest? left, Verbara.Sdk.AriExternalMediaRequest? right) -> bool

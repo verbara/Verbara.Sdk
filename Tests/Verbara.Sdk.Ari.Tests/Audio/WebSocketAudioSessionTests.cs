@@ -309,13 +309,66 @@ public class WebSocketAudioSessionTests
                     error.ChannelId.Should().Be(captured.ChannelId);
                     error.ErrorText.Should().Be(captured.Value);
                     break;
+                case "STATUS":
+                    // The expected values are read off the captured text by the test, never by the SDK's reader.
+                    var status = message.Should().BeOfType<ChanWebSocketStatus>().Subject;
+                    status.ChannelId.Should().Be(captured.ChannelId);
+                    status.QueueLength.Should().Be(int.Parse(CapturedField(captured, "queue_length")!, CultureInfo.InvariantCulture));
+                    status.XonLevel.Should().Be(int.Parse(CapturedField(captured, "xon_level")!, CultureInfo.InvariantCulture));
+                    status.XoffLevel.Should().Be(int.Parse(CapturedField(captured, "xoff_level")!, CultureInfo.InvariantCulture));
+                    status.QueueFull.Should().Be(CapturedField(captured, "queue_full") == "true");
+                    status.BulkMedia.Should().Be(CapturedField(captured, "bulk_media") == "true");
+                    status.MediaPaused.Should().Be(CapturedField(captured, "media_paused") == "true");
+                    break;
+                case "QUEUE_DRAINED":
+                    message.Should().BeOfType<ChanWebSocketQueueDrained>().Which.ChannelId.Should().Be(captured.ChannelId);
+                    break;
+                case "MEDIA_BUFFERING_COMPLETED":
+                    var completed = message.Should().BeOfType<ChanWebSocketMediaBufferingCompleted>().Subject;
+                    completed.CorrelationId.Should().Be(CapturedCorrelationId(captured));
+                    completed.ChannelId.Should().Be(captured.ChannelId);
+                    break;
                 default:
-                    // STATUS, QUEUE_DRAINED, MEDIA_BUFFERING_COMPLETED: replies to commands this SDK has no method for
-                    var generic = message.Should().BeOfType<ChanWebSocketUnknownMessage>().Subject;
-                    generic.Event.Should().Be(captured.Event);
-                    generic.RawText.Should().Be(captured.Text);
+                    Assert.Fail($"every captured event has its own record; {captured.Event} has no expectation here");
                     break;
             }
+        }
+    }
+
+    public static TheoryData<string, ChanWebSocketCaptureFormat> EveryCapturedXoffXonPair()
+    {
+        var data = new TheoryData<string, ChanWebSocketCaptureFormat>();
+        foreach (var xoff in ChanWebSocketWireCapture.ControlMessages.Where(m => m.Event == "MEDIA_XOFF"))
+            data.Add(xoff.AsteriskVersion, xoff.Format);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryCapturedXoffXonPair))]
+    public async Task ControlMessages_ShouldPublishXoffThenXonInOrder_WhenOneSessionReadsTheCapturedPair(
+        string version, ChanWebSocketCaptureFormat format)
+    {
+        // Arrange — the captured MEDIA_XOFF and MEDIA_XON of one trigger record, as Asterisk sent them on one connection
+        var pair = ChanWebSocketWireCapture.ControlMessages
+            .Where(m => m.AsteriskVersion == version && m.Format == format && m.Trigger == "xoff-xon")
+            .ToArray();
+        var xoff = pair.Single(m => m.Event == "MEDIA_XOFF");
+        var xon = pair.Single(m => m.Event == "MEDIA_XON");
+        xoff.ConnectionChannelId.Should().Be(xon.ConnectionChannelId, "both edges come from the same captured connection");
+
+        // Act — one session fed both edges in the captured order, then an audio frame
+        await using var fed = await Fed.StartAsync("ch-1", "slin16", Text(xoff.Payload()), Text(xon.Payload()));
+
+        // Assert
+        using (new AssertionScope($"{version} {format}"))
+        {
+            fed.MarkerDelivered.Should().BeTrue("the audio frame after both edges is delivered");
+            var published = fed.Published.ToArray();
+            published.Select(m => m.GetType()).Should().Equal(
+                [typeof(ChanWebSocketMediaXoff), typeof(ChanWebSocketMediaXon)],
+                "a consumer pausing on XOFF must read the XON that resumes it, after it, on the same session");
+            published.OfType<ChanWebSocketMediaXoff>().Select(m => m.ChannelId).Should().Equal(xoff.ChannelId);
+            published.OfType<ChanWebSocketMediaXon>().Select(m => m.ChannelId).Should().Equal(xon.ChannelId);
         }
     }
 
@@ -355,6 +408,116 @@ public class WebSocketAudioSessionTests
             var generic = fed.Published.Should().ContainSingle("a message the model does not name is not dropped")
                 .Which.Should().BeOfType<ChanWebSocketUnknownMessage>().Subject;
             generic.Event.Should().Be(expectedEvent);
+            generic.RawText.Should().Be(synthetic);
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json)]
+    public async Task ControlMessages_ShouldPublishTheStatusWithTheCapturedValues_WhenAsteriskReportsAFullQueue(ChanWebSocketCaptureFormat format)
+    {
+        // Arrange — the captured STATUS sent while the flood had filled the queue (22.10.1, xoff-xon)
+        var captured = ChanWebSocketWireCapture.ControlMessages.Single(
+            m => m.Event == "STATUS" && m.Format == format && m.Trigger == "xoff-xon");
+
+        // Act
+        await using var fed = await Fed.StartAsync("ch-1", "slin16", Text(captured.Payload()));
+
+        // Assert
+        using (new AssertionScope(captured.Source))
+        {
+            fed.MarkerDelivered.Should().BeTrue();
+            var status = fed.Published.Should().ContainSingle("no generic record besides it").Which
+                .Should().BeOfType<ChanWebSocketStatus>().Subject;
+            status.Should().Be(new ChanWebSocketStatus(
+                captured.ChannelId!, QueueLength: 976, XonLevel: 800, XoffLevel: 900, QueueFull: true, BulkMedia: false, MediaPaused: false));
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json)]
+    public async Task ControlMessages_ShouldPublishTheCompletionWithItsId_WhenAsteriskEndsABufferedStream(ChanWebSocketCaptureFormat format)
+    {
+        // Arrange — the captured reply to STOP_MEDIA_BUFFERING b4-0
+        var captured = ChanWebSocketWireCapture.ControlMessages.First(
+            m => m.Event == "MEDIA_BUFFERING_COMPLETED" && m.Format == format && m.Trigger == "buffering");
+
+        // Act
+        await using var fed = await Fed.StartAsync("ch-1", "slin16", Text(captured.Payload()));
+
+        // Assert — its own record, never the deprecated buffering record nor the generic one
+        using (new AssertionScope(captured.Source))
+        {
+            var completed = fed.Published.Should().ContainSingle().Which
+                .Should().BeOfType<ChanWebSocketMediaBufferingCompleted>().Subject;
+            completed.CorrelationId.Should().Be("b4-0");
+            completed.ChannelId.Should().Be(format == ChanWebSocketCaptureFormat.Json ? captured.ChannelId : null);
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json)]
+    public async Task ControlMessages_ShouldPublishTheDrainReport_WhenAsteriskHasPlayedTheQueuedAudio(ChanWebSocketCaptureFormat format)
+    {
+        // Arrange
+        var captured = ChanWebSocketWireCapture.ControlMessages.First(m => m.Event == "QUEUE_DRAINED" && m.Format == format);
+
+        // Act
+        await using var fed = await Fed.StartAsync("ch-1", "slin16", Text(captured.Payload()));
+
+        // Assert
+        using (new AssertionScope(captured.Source))
+        {
+            var drained = fed.Published.Should().ContainSingle().Which.Should().BeOfType<ChanWebSocketQueueDrained>().Subject;
+            drained.ChannelId.Should().Be(format == ChanWebSocketCaptureFormat.Json ? captured.ChannelId : null);
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json)]
+    public async Task ControlMessages_ShouldReadTheReplyToAStopWithoutAStartPerVersion_WhenAsteriskAnswersIt(ChanWebSocketCaptureFormat format)
+    {
+        // Arrange — the captured replies to STOP_MEDIA_BUFFERING with no START before it
+        var before = ChanWebSocketWireCapture.ControlMessages.Single(
+            m => m.Trigger == "stop-no-start" && m.Format == format && m.AsteriskVersion == "22.10.1");
+        var from2212 = ChanWebSocketWireCapture.ControlMessages.Single(
+            m => m.Trigger == "stop-no-start" && m.Format == format && m.AsteriskVersion == "22.12.0-rc2");
+
+        // Act
+        await using var fedBefore = await Fed.StartAsync("ch-1", "slin16", Text(before.Payload()));
+        await using var fedFrom2212 = await Fed.StartAsync("ch-2", "slin16", Text(from2212.Payload()));
+
+        // Assert
+        using (new AssertionScope())
+        {
+            fedBefore.Published.Should().ContainSingle(before.Source).Which
+                .Should().BeOfType<ChanWebSocketMediaBufferingCompleted>().Which.CorrelationId.Should().Be("n4-0");
+            fedFrom2212.Published.Should().ContainSingle(from2212.Source).Which
+                .Should().BeOfType<ChanWebSocketError>().Which.ErrorText.Should().Be(from2212.Value)
+                .And.EndWith("\n", "the trailing newline is part of what Asterisk sent");
+        }
+    }
+
+    [Theory]
+    // Synthetic, in the captured plain-text STATUS grammar with queue_length left out: no capture shows such a frame.
+    [InlineData("STATUS channel_id:synthetic-1 xon_level:800 xoff_level:900 queue_full:false bulk_media:false media_paused:false")]
+    // Synthetic, in the captured JSON STATUS grammar with queue_length not a number: no capture shows such a frame.
+    [InlineData("""{"event":"STATUS","channel_id":"synthetic-1","queue_length":"many","xon_level":800,"xoff_level":900,"queue_full":false,"bulk_media":false,"media_paused":false}""")]
+    public async Task ControlMessages_ShouldPublishTheGenericRecord_WhenAStatusLacksAValue(string synthetic)
+    {
+        // Act
+        await using var fed = await Fed.StartAsync("ch-1", "slin16", Text(Encoding.UTF8.GetBytes(synthetic)));
+
+        // Assert — a queue length of 0 read from nothing would look like an emptied queue
+        using (new AssertionScope())
+        {
+            fed.MarkerDelivered.Should().BeTrue();
+            var generic = fed.Published.Should().ContainSingle().Which.Should().BeOfType<ChanWebSocketUnknownMessage>().Subject;
+            generic.Event.Should().Be("STATUS");
             generic.RawText.Should().Be(synthetic);
         }
     }
@@ -955,6 +1118,54 @@ public class WebSocketAudioSessionTests
         }
     }
 
+    // A mark holding a lone surrogate is not valid UTF-16. No capture sends one; these two pin what the SDK does with it,
+    // and the XML of SendMarkAsync quotes them.
+    private const string MarkWithALoneSurrogate = "m\uD800";
+
+    [Fact]
+    public async Task SendMarkAsync_ShouldWriteTheEscapedReplacementCharacter_WhenTheMarkHoldsALoneSurrogateOnAJsonConnection()
+    {
+        var s = await NegotiatedAsync(ChanWebSocketCaptureFormat.Json);
+        try
+        {
+            await s.Session.SendMarkAsync(MarkWithALoneSurrogate);
+
+            using (new AssertionScope())
+            {
+                var sent = s.Ws.Sent.Should().ContainSingle().Subject;
+                sent.Type.Should().Be(WebSocketMessageType.Text);
+                Encoding.UTF8.GetString(sent.Data).Should().Be(
+                    """{"command":"MARK_MEDIA","correlation_id":"m\uFFFD"}""",
+                    "the lone surrogate is written as the escaped U+FFFD");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Fact]
+    public async Task SendMarkAsync_ShouldWriteTheReplacementCharacter_WhenTheMarkHoldsALoneSurrogateOnAPlainTextConnection()
+    {
+        var s = await NegotiatedAsync(ChanWebSocketCaptureFormat.PlainText);
+        try
+        {
+            await s.Session.SendMarkAsync(MarkWithALoneSurrogate);
+
+            using (new AssertionScope())
+            {
+                var sent = s.Ws.Sent.Should().ContainSingle().Subject;
+                sent.Type.Should().Be(WebSocketMessageType.Text);
+                sent.Data.Should().Equal([.. "MARK_MEDIA m"u8, 0xEF, 0xBF, 0xBD], "the lone surrogate is written as U+FFFD");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
     [Theory]
     [InlineData(ChanWebSocketMediaDirection.In, "in")]
     [InlineData(ChanWebSocketMediaDirection.Out, "out")]
@@ -994,7 +1205,9 @@ public class WebSocketAudioSessionTests
             {
                 s.Ws.Sent.Should().BeEmpty();
                 thrown.Should().BeOfType<InvalidOperationException>()
-                    .Which.Message.Should().Contain("control_message_format = json").And.Contain("f(json) to a dial string you write");
+                    .Which.Message.Should().Contain("control_message_format = json")
+                    .And.Contain("f(json) as the TransportData of a channel you create")
+                    .And.Contain("f(json) to a dial string you write");
             }
         }
         finally
@@ -1086,6 +1299,7 @@ public class WebSocketAudioSessionTests
         // Act — never awaited
         var mark = Synchronously<InvalidOperationException>(() => _ = sut.SendMarkAsync("m"));
         var direction = Synchronously<InvalidOperationException>(() => _ = sut.SendSetMediaDirectionAsync(ChanWebSocketMediaDirection.Both));
+        var added = AddedCommands.Select(c => (c, Synchronously<InvalidOperationException>(() => _ = Send(sut, c)))).ToList();
 
         // Assert
         using (new AssertionScope())
@@ -1096,6 +1310,8 @@ public class WebSocketAudioSessionTests
             ws.Sent[0].Data.Should().Equal(audio);
             mark.Should().BeOfType<InvalidOperationException>().Which.Message.Should().Contain(FormatNotYetKnown);
             direction.Should().BeOfType<InvalidOperationException>().Which.Message.Should().Contain(FormatNotYetKnown);
+            foreach (var (command, thrown) in added)
+                thrown.Should().BeOfType<InvalidOperationException>(command).Which.Message.Should().Contain(FormatNotYetKnown);
         }
 
         await sut.DisposeAsync();
@@ -1142,13 +1358,239 @@ public class WebSocketAudioSessionTests
                 s.Ws.Sent.Should().HaveCount(sentBefore).And.BeEmpty();
                 ((IChanWebSocketSession)s.Session).MediaStart.Should().BeSameAs(mediaStart);
                 thrown.Should().BeOfType<NotSupportedException>()
-                    .Which.Message.Should().Contain("no XON/XOFF command").And.Contain("ChanWebSocketMediaXoff");
+                    .Which.Message.Should().Contain("no XON/XOFF command").And.Contain("ChanWebSocketMediaXoff")
+                    .And.Contain("ChanWebSocketMediaXon");
             }
         }
         finally
         {
             await DisposeAsync(s);
         }
+    }
+
+    // -- The commands this release adds -----------------------------------------
+    // The expected bytes are the spellings the 2026-10-27 control-message capture's driver sent and Asterisk answered,
+    // written here as literals: bare name in plain text, one compact object named by `command` in JSON, the stop's id
+    // after a space or under `correlation_id`. None is produced by this SDK's encoder.
+
+    private static readonly string[] AddedCommands =
+        ["FlushMedia", "PauseMedia", "ContinueMedia", "GetStatus", "StartMediaBuffering", "StopMediaBuffering", "ReportQueueDrained"];
+
+    /// <summary>Calls one added command through the interface a consumer holds; the stop carries the id <c>b4-0</c>.</summary>
+    private static ValueTask Send(IChanWebSocketSession session, string command) => command switch
+    {
+        "FlushMedia" => session.SendFlushMediaAsync(),
+        "PauseMedia" => session.SendPauseMediaAsync(),
+        "ContinueMedia" => session.SendContinueMediaAsync(),
+        "GetStatus" => session.SendGetStatusAsync(),
+        "StartMediaBuffering" => session.SendStartMediaBufferingAsync(),
+        "StopMediaBuffering" => session.SendStopMediaBufferingAsync("b4-0"),
+        "ReportQueueDrained" => session.SendReportQueueDrainedAsync(),
+        _ => throw new ArgumentOutOfRangeException(nameof(command), command, null),
+    };
+
+    public static TheoryData<string, ChanWebSocketCaptureFormat, string> EveryAddedCommandInEachFormat() => new()
+    {
+        { "FlushMedia", ChanWebSocketCaptureFormat.PlainText, "FLUSH_MEDIA" },
+        { "FlushMedia", ChanWebSocketCaptureFormat.Json, """{"command":"FLUSH_MEDIA"}""" },
+        { "PauseMedia", ChanWebSocketCaptureFormat.PlainText, "PAUSE_MEDIA" },
+        { "PauseMedia", ChanWebSocketCaptureFormat.Json, """{"command":"PAUSE_MEDIA"}""" },
+        { "ContinueMedia", ChanWebSocketCaptureFormat.PlainText, "CONTINUE_MEDIA" },
+        { "ContinueMedia", ChanWebSocketCaptureFormat.Json, """{"command":"CONTINUE_MEDIA"}""" },
+        { "GetStatus", ChanWebSocketCaptureFormat.PlainText, "GET_STATUS" },
+        { "GetStatus", ChanWebSocketCaptureFormat.Json, """{"command":"GET_STATUS"}""" },
+        { "StartMediaBuffering", ChanWebSocketCaptureFormat.PlainText, "START_MEDIA_BUFFERING" },
+        { "StartMediaBuffering", ChanWebSocketCaptureFormat.Json, """{"command":"START_MEDIA_BUFFERING"}""" },
+        { "StopMediaBuffering", ChanWebSocketCaptureFormat.PlainText, "STOP_MEDIA_BUFFERING b4-0" },
+        { "StopMediaBuffering", ChanWebSocketCaptureFormat.Json, """{"command":"STOP_MEDIA_BUFFERING","correlation_id":"b4-0"}""" },
+        { "ReportQueueDrained", ChanWebSocketCaptureFormat.PlainText, "REPORT_QUEUE_DRAINED" },
+        { "ReportQueueDrained", ChanWebSocketCaptureFormat.Json, """{"command":"REPORT_QUEUE_DRAINED"}""" },
+    };
+
+    [Theory]
+    [MemberData(nameof(EveryAddedCommandInEachFormat))]
+    public async Task AddedCommands_ShouldWriteOneTextFrameInTheCapturedSpelling_WhenTheConnectionsFormatIsKnown(
+        string command, ChanWebSocketCaptureFormat format, string expected)
+    {
+        // Arrange
+        var s = await NegotiatedAsync(format);
+        try
+        {
+            // Act — completes once written: Asterisk's reply, if any, arrives on ControlMessages
+            await Send(s.Session, command);
+
+            // Assert
+            using (new AssertionScope($"{command} {format}"))
+            {
+                var sent = s.Ws.Sent.Should().ContainSingle().Subject;
+                sent.Type.Should().Be(WebSocketMessageType.Text);
+                sent.Data.Should().Equal(Encoding.UTF8.GetBytes(expected));
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    public static TheoryData<string> EveryAddedCommand()
+    {
+        var data = new TheoryData<string>();
+        foreach (var command in AddedCommands)
+            data.Add(command);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryAddedCommand))]
+    public async Task AddedCommands_ShouldThrowSynchronouslyAndWriteNothing_WhenNoMediaStartHasBeenRead(string command)
+    {
+        var s = StartedFedNothing();
+        try
+        {
+            // Act — never awaited: the refusal precedes the send lock
+            var thrown = Synchronously<InvalidOperationException>(() => _ = Send(s.Session, command));
+
+            // Assert
+            using (new AssertionScope(command))
+            {
+                s.Ws.Sent.Should().BeEmpty();
+                thrown.Should().BeOfType<InvalidOperationException>()
+                    .Which.Message.Should().Contain(FormatNotYetKnown).And.Contain("MediaStartTimeout");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Theory]
+    [InlineData("none")]
+    [InlineData("plain")]
+    [InlineData("json")]
+    public async Task SendStopMediaBufferingAsync_ShouldRefuseAMissingIdSynchronously_BeforeTheFormatCheck(string state)
+    {
+        // Arrange — a session with MediaStart null, and sessions with MediaStart set in each format
+        var s = state switch
+        {
+            "none" => StartedFedNothing(),
+            "plain" => await NegotiatedAsync(ChanWebSocketCaptureFormat.PlainText),
+            _ => await NegotiatedAsync(ChanWebSocketCaptureFormat.Json),
+        };
+        try
+        {
+            // Act — never awaited
+            var nullId = Synchronously<ArgumentException>(() => _ = ((IChanWebSocketSession)s.Session).SendStopMediaBufferingAsync(null!));
+            var emptyId = Synchronously<ArgumentException>(() => _ = ((IChanWebSocketSession)s.Session).SendStopMediaBufferingAsync(""));
+
+            // Assert
+            using (new AssertionScope(state))
+            {
+                s.Ws.Sent.Should().BeEmpty();
+                nullId.Should().BeOfType<ArgumentNullException>().Which.ParamName.Should().Be("correlationId");
+                emptyId.Should().BeOfType<ArgumentException>().Which.ParamName.Should().Be("correlationId");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText, 107)]
+    [InlineData(ChanWebSocketCaptureFormat.Json, 74)]
+    public async Task SendStopMediaBufferingAsync_ShouldWriteOne128ByteFrame_WhenTheIdFillsTheFrame(ChanWebSocketCaptureFormat format, int idBytes)
+    {
+        var s = await NegotiatedAsync(format);
+        var id = new string('b', idBytes);
+        var expected = format == ChanWebSocketCaptureFormat.PlainText
+            ? "STOP_MEDIA_BUFFERING " + id
+            : "{\"command\":\"STOP_MEDIA_BUFFERING\",\"correlation_id\":\"" + id + "\"}";
+        try
+        {
+            await ((IChanWebSocketSession)s.Session).SendStopMediaBufferingAsync(id);
+
+            using (new AssertionScope())
+            {
+                var sent = s.Ws.Sent.Should().ContainSingle().Subject;
+                sent.Type.Should().Be(WebSocketMessageType.Text);
+                sent.Data.Should().Equal(Encoding.UTF8.GetBytes(expected));
+                sent.Data.Should().HaveCount(ChanWebSocketControlMessageSerializer.MaxCommandBytes);
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText, 108)]
+    [InlineData(ChanWebSocketCaptureFormat.Json, 75)]
+    public async Task SendStopMediaBufferingAsync_ShouldThrowSynchronouslyAndWriteNothing_WhenTheIdIsOneByteOver(ChanWebSocketCaptureFormat format, int idBytes)
+    {
+        var s = await NegotiatedAsync(format);
+        try
+        {
+            // Act — never awaited: the refusal precedes the send lock
+            var thrown = Synchronously<ArgumentOutOfRangeException>(() => _ = ((IChanWebSocketSession)s.Session).SendStopMediaBufferingAsync(new string('b', idBytes)));
+
+            // Assert
+            using (new AssertionScope())
+            {
+                s.Ws.Sent.Should().BeEmpty("nothing is written for a frame Asterisk drops unread");
+                var refused = thrown.Should().BeOfType<ArgumentOutOfRangeException>().Subject;
+                refused.ParamName.Should().Be("correlationId");
+                refused.ActualValue.Should().Be(129);
+                refused.Message.Should().Contain("128").And.Contain("107").And.Contain("74");
+            }
+        }
+        finally
+        {
+            await DisposeAsync(s);
+        }
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText, "FLUSH_MEDIA")]
+    [InlineData(ChanWebSocketCaptureFormat.Json, """{"command":"FLUSH_MEDIA"}""")]
+    public async Task SendFlushMediaAsync_ShouldWriteAndLetAsteriskReportTheRefusal_WhenTheConnectionIsPassthrough(
+        ChanWebSocketCaptureFormat format, string expected)
+    {
+        // Arrange — the captured passthrough connection whose FLUSH_MEDIA Asterisk refused (22.12.0-rc2, reject-p)
+        var refusal = ChanWebSocketWireCapture.ControlMessages.Single(
+            m => m.Trigger == "reject-p" && m.Format == format && m.Value == "FLUSH_MEDIA not supported in passthrough mode");
+        var mediaStart = ChanWebSocketWireCapture.MediaStart.Single(f => f.ChannelId == refusal.ConnectionChannelId);
+        using var ws = new FakeWebSocket();
+        ws.EnqueueReceive(mediaStart.Payload(), WebSocketMessageType.Text);
+        ws.EnqueueReceive(new byte[640]);
+        var sut = CreateSession(ws);
+        var published = new ConcurrentQueue<ChanWebSocketControlMessage>();
+        using var subscription = sut.ControlMessages.Subscribe(published.Enqueue);
+        sut.Start();
+        (await sut.ReadFrameAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5))).Length.Should().Be(640);
+        ((IChanWebSocketSession)sut).MediaStart!.Passthrough.Should().BeTrue(mediaStart.Source);
+
+        // Act — the session writes; Asterisk's refusal follows, then an audio marker
+        var thrown = await Record.ExceptionAsync(() => ((IChanWebSocketSession)sut).SendFlushMediaAsync().AsTask());
+        ws.EnqueueReceive(refusal.Payload(), WebSocketMessageType.Text);
+        ws.EnqueueReceive(AudioMarker);
+        var marker = await sut.ReadFrameAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        using (new AssertionScope(refusal.Source))
+        {
+            thrown.Should().BeNull("the session does not refuse a command Asterisk owns");
+            ws.Sent.Should().ContainSingle().Which.Data.Should().Equal(Encoding.UTF8.GetBytes(expected));
+            marker.Length.Should().Be(AudioMarker.Length, "the frames before the marker have been handled");
+            var error = published.Should().ContainSingle().Which.Should().BeOfType<ChanWebSocketError>().Subject;
+            error.ErrorText.Should().Be("FLUSH_MEDIA not supported in passthrough mode");
+            error.ChannelId.Should().Be(refusal.ChannelId);
+        }
+
+        await sut.DisposeAsync();
     }
 
 #pragma warning restore CA2012
@@ -1208,6 +1650,30 @@ public class WebSocketAudioSessionTests
     }
 
     private static (WebSocketMessageType Type, byte[] Data) Binary(byte[] data) => (WebSocketMessageType.Binary, data);
+
+    /// <summary>
+    /// A field of a captured frame, read by the test: the JSON member (a string's value, any other value's raw text), or
+    /// the plain-text <c>key:value</c> token. Never read through the SDK's reader, which is what is under test.
+    /// </summary>
+    private static string? CapturedField(ChanWebSocketCapturedMessage captured, string key)
+    {
+        if (captured.Format == ChanWebSocketCaptureFormat.Json)
+        {
+            using var json = JsonDocument.Parse(captured.Text);
+            return json.RootElement.TryGetProperty(key, out var value)
+                ? value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText()
+                : null;
+        }
+
+        var prefix = key + ":";
+        return captured.Text.Split(' ').FirstOrDefault(t => t.StartsWith(prefix, StringComparison.Ordinal))?[prefix.Length..];
+    }
+
+    /// <summary>A captured completion's correlation id, read by the test: <c>correlation_id</c> in JSON, the token after the event name in plain text.</summary>
+    private static string CapturedCorrelationId(ChanWebSocketCapturedMessage captured) =>
+        captured.Format == ChanWebSocketCaptureFormat.Json
+            ? CapturedField(captured, "correlation_id") ?? string.Empty
+            : captured.Text.Split(' ', 2) is [_, var id] ? id : string.Empty;
 
     /// <summary>
     /// A session fed the given frames, then an audio marker frame and a close frame, read up to the marker: the pump

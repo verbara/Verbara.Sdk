@@ -83,6 +83,40 @@ public sealed class ExternalMediaActivity : AriActivityBase
     /// <summary>Timeout waiting for Asterisk to connect to the audio server.</summary>
     public TimeSpan ConnectionTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Sent as <c>transport_data</c>, exactly as given, on any transport; <see langword="null"/> sends none. Its grammar
+    /// is Asterisk's dial-option grammar: the activity neither parses nor validates it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Measured with <c>transport=websocket</c> only. <c>f(json)</c>: from 20.20, the connection's <c>MEDIA_START</c>
+    /// and control messages are JSON, and <see cref="ChanWebSocketMediaStart.ChannelVariables"/> carries the channel's
+    /// variables; a plain-text connection carries none. <c>u</c>: not recognised on 20.20, 22.11 and 23.5 (the create
+    /// returns HTTP 200 and Asterisk logs a warning). <c>p</c>: no warning on those versions, its effect not measured
+    /// there. Both are documented from 22.12 and 23.6.
+    /// </para>
+    /// <para>
+    /// Set, or with an entry in <see cref="Variables"/>, the activity creates the channel through
+    /// <see cref="IAriChannelsResource.CreateExternalMediaAsync(AriExternalMediaRequest, CancellationToken)"/>, which an
+    /// <see cref="IAriChannelsResource"/> written before that overload existed refuses with
+    /// <see cref="NotSupportedException"/> rather than drop the option.
+    /// </para>
+    /// </remarks>
+    public string? TransportData { get; init; }
+
+    /// <summary>
+    /// Channel variables, sent in the create's body as given, on any transport; <see langword="null"/> or empty sends
+    /// no body. Measured with <c>transport=websocket</c> only: each variable is readable on the created channel, and
+    /// appears in <see cref="ChanWebSocketMediaStart.ChannelVariables"/> on an <c>f(json)</c> connection only (see
+    /// <see cref="TransportData"/>).
+    /// </summary>
+    /// <remarks>
+    /// With neither this nor <see cref="TransportData"/> set, the activity calls the
+    /// <see cref="IAriChannelsResource.CreateExternalMediaAsync(string, string, string, string?, string?, string?, string?, string?, string?, CancellationToken)"/>
+    /// overload, so its request is the one it sent before these properties existed.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string>? Variables { get; init; }
+
     /// <summary>The audio stream once the connection is established.</summary>
     public IAudioStream? AudioStream => _audioStream;
 
@@ -162,14 +196,31 @@ public sealed class ExternalMediaActivity : AriActivityBase
             channelId = identifier;
         }
 
-        // 2. Create ExternalMedia channel via ARI
-        Channel = await AriClient.Channels.CreateExternalMediaAsync(
-            App, ExternalHost, Format,
-            encapsulation: encapsulation,
-            transport: transport,
-            data: data,
-            channelId: channelId,
-            cancellationToken: cancellationToken);
+        // 2. Create ExternalMedia channel via ARI. With neither option the shipped overload, so the request and every
+        // implementation written against it are as before; with either, the overload that carries them, which an
+        // implementation that cannot send them refuses instead of dropping them.
+        Channel = TransportData is null && Variables is not { Count: > 0 }
+            ? await AriClient.Channels.CreateExternalMediaAsync(
+                App, ExternalHost, Format,
+                encapsulation: encapsulation,
+                transport: transport,
+                data: data,
+                channelId: channelId,
+                cancellationToken: cancellationToken)
+            : await AriClient.Channels.CreateExternalMediaAsync(
+                new AriExternalMediaRequest
+                {
+                    App = App,
+                    ExternalHost = ExternalHost,
+                    Format = Format,
+                    Encapsulation = encapsulation,
+                    Transport = transport,
+                    Data = data,
+                    ChannelId = channelId,
+                    TransportData = TransportData,
+                    Variables = Variables,
+                },
+                cancellationToken);
 
         // 3. Poll for audio server connection (200ms interval)
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
