@@ -441,7 +441,7 @@ public class WebSocketAudioServerTests
             // Act — an ordinary second connection while the first observer is parked.
             using var second = await RawWebSocketPeer.ConnectAsync(accepts.Port, bound.Token);
             _ = second.UpgradeAsync("ch-second", bound.Token);
-            announcedInTime = await Task.WhenAny(secondAnnounced.Task, Task.Delay(WaitLimit)) == secondAnnounced.Task;
+            announcedInTime = await Task.WhenAny(secondAnnounced.Task, Task.Delay(WaitLimit)) == secondAnnounced.Task; // fence-allow: GUARD-TIMEOUT — failure bound on the second announcement; a green run leaves on the announcement
             firstStillParked = !firstLeft.Task.IsCompleted;
         }
         finally
@@ -550,7 +550,7 @@ public class WebSocketAudioServerTests
             // accept loop to end, which happens off this thread, so a read taken as the stop returns its task
             // would find it incomplete even if it did not wait for the observer at all.
             var stop = server.StopAsync().AsTask();
-            stopFinishedWhileParked = await Task.WhenAny(stop, Task.Delay(StopObservationWindow)) == stop;
+            stopFinishedWhileParked = await Task.WhenAny(stop, Task.Delay(StopObservationWindow)) == stop; // fence-allow: SETTLE — the negative "has not finished while the observer is parked" needs a bounded window; the release below decides the positive
             parkedWhenRead = !firstLeft.Task.IsCompleted;
 
             release.Set();
