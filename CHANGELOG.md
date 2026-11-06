@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed — BREAKING: a call is found on the server that reported it (#N)
+### Changed — BREAKING: a call is found on the server that reported it (#533)
 
 `CallSessionManager` keeps its channel-id, `linkedid` and bridge indexes per server id, where it kept one of each for
 every server attached to it. A channel event of one server is correlated only with calls of that server: two Asterisk
@@ -18,7 +18,7 @@ where it returned a call. Use the scoped lookups below where you know the server
 `systemname`: a consumer keyed by `linkedid` alone still cannot tell two servers' calls apart. See the
 [migration guide](docs/guides/migration-2.10.0.md#a-call-is-found-on-the-server-that-reported-it).
 
-### Changed — BREAKING: a server is never attached from inside a session notification (#N)
+### Changed — BREAKING: a server is never attached from inside a session notification (#533)
 
 `AttachToServer` asked for from inside a notification of a session engine (a subscriber of `Events`) or from an
 attachment handler throws `InvalidOperationException` naming the server id before it installs anything, an attach of
@@ -28,7 +28,7 @@ one. A `DetachFromServer(id)` the subscriber already made stands, so a detach fo
 leaves the server detached. Attach from another thread and do not wait for it inside the subscriber. See the
 [migration guide](docs/guides/migration-2.10.0.md#a-server-is-never-attached-from-inside-a-session-notification).
 
-### Added: scoped session lookups and the admission of calls already up (#N)
+### Added: scoped session lookups and the admission of calls already up (#533)
 
 `GetByChannelId(serverId, uniqueId)`, `GetByLinkedId(serverId, linkedId)` and `GetByBridgeId(serverId, bridgeId)` on
 `CallSessionManager` and `ICallSessionManager` return the call that server's index holds for the id, or `null`. The
@@ -41,14 +41,14 @@ walk never runs on the caller's thread, a table that is not complete is first as
 it without an error; an id with no instance attached throws `InvalidOperationException`. The interface's default admits
 nothing.
 
-### Added: a refused `Status` is counted and visible (#N)
+### Added: a refused `Status` is counted and visible (#533)
 
 Each `Status` that Asterisk refuses on a load, a reload or a reconciliation adds one to `live.status.refused` (meter
 `Verbara.Sdk.Live`), tagged `live.status.reader` (`load` or `reconciliation`) and `server.id` when the server is in a
 pool; a refusal before the server joins a pool is counted without the id. `VerbaraServer.LastStatusRefusal` returns the
 last refusal as a `StatusRefusal` (`Message`, UTC `OccurredAt`), or `null`; a later `Status` read in full clears it.
 
-### Fixed: a call ends only when its server's channel table holds none of its channels (#N)
+### Fixed: a call ends only when its server's channel table holds none of its channels (#533)
 
 A call the engine did not observe from its start (a reconstructed call, a call a reload or an admission opened, a call
 a server left behind) is decided against its server's channel table by its `linkedid`, once that table is complete on
@@ -61,7 +61,7 @@ refused the table never completes, so such calls wait, counted `sessions.unverif
 `DetachFromServer(id, DetachedCalls.Release)` releases them; 2.9.0 ended a left call there by its legs' observed
 hangups.
 
-### Fixed: a server that comes back under the same id reconciles the calls it left (#N)
+### Fixed: a server that comes back under the same id reconciles the calls it left (#533)
 
 A server detached with `DetachFromServer(id)` and attached again under that id, as the same instance or a new one, used
 to keep the calls it left open for the life of the process, counted `sessions.unverifiable` on every tick. Those calls
@@ -71,13 +71,13 @@ one with a channel still up is kept and ends by its own hangup; legs the table n
 that lost one leg while its server was away still ends. The pool sweep asks for a `Status` from a server whose calls
 wait for a complete table.
 
-### Changed: the pool health check reports a refused `Status` (#N)
+### Changed: the pool health check reports a refused `Status` (#533)
 
 The `verbara-pool` health check reads `Degraded`, where it read `Healthy`, while every server is connected and at least
 one has a last `Status` refusal. Its data gains one reserved `status-refused` entry, `serverId: message` per refused
 server joined by `; ` in ordinal server-id order; each server's own entry still holds its connection state.
 
-### Changed: reconstruction is scoped to its server, refuses visibly and decides at once (#N)
+### Changed: reconstruction is scoped to its server, refuses visibly and decides at once (#533)
 
 `RegisterReconstructedSession` maps the call into its own server's indexes only. It refuses, and logs at Information,
 a session id already held, a null or empty `linkedid`, a `linkedid` its server already holds, and a call carrying a
@@ -86,7 +86,7 @@ kept and logged at Debug. An accepted call joins the legs its server's channel t
 decided at once, so a call reconstructed after its channels hung up ends at its registration. Do not call it
 synchronously from a session subscriber.
 
-### Changed: the cross-server collision Warning and `sessions.unverifiable` (#N)
+### Changed: the cross-server collision Warning and `sessions.unverifiable` (#533)
 
 The Warning logged when two servers report the same channel id or `linkedid` now says that the calls are kept apart,
 and that a lookup naming no server and a consumer keyed only by `linkedid` cannot tell them apart. The sweep's
