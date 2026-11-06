@@ -523,7 +523,17 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 {
                     try
                     {
-                        upgrade = await ReadUpgradeAsync(stream, upgradeCts.Token);
+                        // Forced to yield even when the upgrade request has already arrived: the accept
+                        // loop starts this handler inline, so without it a buffered upgrade (and a first
+                        // frame already in, or no wait for one) would carry the 101 response, the
+                        // registration and the consumers' OnStreamConnected handlers on the accept loop's
+                        // stack, and no further connection would be accepted until those handlers
+                        // returned. The AudioSocket server's identification wait yields for the same
+                        // reason. The read and parse of a buffered upgrade still run before the yield;
+                        // that is bounded work with no consumer code in it. Only ForceYielding: the idle
+                        // catch below must still see the cancellation.
+                        upgrade = await ReadUpgradeAsync(stream, upgradeCts.Token)
+                            .ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
                     }
                     catch (OperationCanceledException) when (idle.IsCancellationRequested && !ct.IsCancellationRequested)
                     {
@@ -805,8 +815,9 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
             await _cts.CancelAsync();
 
         // Both waits below end when the token is cancelled. An OnStreamConnected subscriber that
-        // blocks holds its handler, and a handler whose upgrade request was already buffered runs on
-        // the accept loop until it reaches that subscriber, so either wait can be the one held.
+        // blocks holds its handler, so the handler wait can be the one held; the accept loop cannot,
+        // because every handler yields at its upgrade read before anything of the connection reaches
+        // a subscriber.
         if (_acceptLoop is not null)
             await _acceptLoop.WaitAsync(cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
