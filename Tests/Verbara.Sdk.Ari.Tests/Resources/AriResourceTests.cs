@@ -450,7 +450,7 @@ public class AriResourceTests
     }
 
     [Fact]
-    public async Task Channels_HoldAsync_ShouldSendPut()
+    public async Task Channels_HoldAsync_ShouldSendPost()
     {
         using var handler = new FakeHttpHandler("");
         using var http = CreateHttpClient(handler);
@@ -458,7 +458,7 @@ public class AriResourceTests
 
         await sut.HoldAsync("ch-1");
 
-        handler.LastMethod.Should().Be(HttpMethod.Put);
+        handler.LastMethod.Should().Be(HttpMethod.Post);
         handler.LastRequestUri.Should().Contain("channels/ch-1/hold");
     }
 
@@ -476,7 +476,7 @@ public class AriResourceTests
     }
 
     [Fact]
-    public async Task Channels_MuteAsync_ShouldSendPutWithDirection()
+    public async Task Channels_MuteAsync_ShouldSendPostWithDirection()
     {
         using var handler = new FakeHttpHandler("");
         using var http = CreateHttpClient(handler);
@@ -484,9 +484,9 @@ public class AriResourceTests
 
         await sut.MuteAsync("ch-1", "in");
 
-        handler.LastMethod.Should().Be(HttpMethod.Put);
-        handler.LastRequestUri.Should().Contain("channels/ch-1/mute");
-        handler.LastRequestUri.Should().Contain("direction=in");
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestPath.Should().EndWith("channels/ch-1/mute");
+        handler.LastRequestQuery.Should().Be("?direction=in");
     }
 
     [Fact]
@@ -499,7 +499,8 @@ public class AriResourceTests
         await sut.UnmuteAsync("ch-1");
 
         handler.LastMethod.Should().Be(HttpMethod.Delete);
-        handler.LastRequestUri.Should().Contain("channels/ch-1/mute");
+        handler.LastRequestPath.Should().EndWith("channels/ch-1/mute");
+        handler.LastRequestQuery.Should().Be("?direction=both");
     }
 
     [Fact]

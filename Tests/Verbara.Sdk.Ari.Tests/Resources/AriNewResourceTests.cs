@@ -224,7 +224,7 @@ public class AriNewResourceTests
 
         await sut.RotateLogChannelAsync("messages");
 
-        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastMethod.Should().Be(HttpMethod.Put);
         handler.LastRequestUri.Should().Contain("asterisk/logging/messages/rotate");
     }
 

@@ -188,16 +188,16 @@ public interface IAriChannelsResource
     /// <summary>Set a channel variable. POST /channels/{channelId}/variable</summary>
     ValueTask SetVariableAsync(string channelId, string variable, string value, CancellationToken cancellationToken = default);
 
-    /// <summary>Hold a channel. PUT /channels/{channelId}/hold</summary>
+    /// <summary>Hold a channel. POST /channels/{channelId}/hold</summary>
     ValueTask HoldAsync(string channelId, CancellationToken cancellationToken = default);
 
     /// <summary>Remove a channel from hold. DELETE /channels/{channelId}/hold</summary>
     ValueTask UnholdAsync(string channelId, CancellationToken cancellationToken = default);
 
-    /// <summary>Mute a channel. PUT /channels/{channelId}/mute</summary>
+    /// <summary>Mute a channel. POST /channels/{channelId}/mute; a <c>null</c> direction mutes both directions.</summary>
     ValueTask MuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Unmute a channel. DELETE /channels/{channelId}/mute</summary>
+    /// <summary>Unmute a channel. DELETE /channels/{channelId}/mute; a <c>null</c> direction unmutes both directions.</summary>
     ValueTask UnmuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default);
 
     /// <summary>Send DTMF to a channel. POST /channels/{channelId}/dtmf</summary>
@@ -438,6 +438,8 @@ public interface IAriAsteriskResource
     ValueTask<AriLogChannel[]> ListLoggingAsync(CancellationToken cancellationToken = default);
     ValueTask AddLogChannelAsync(string logChannelName, string configuration, CancellationToken cancellationToken = default);
     ValueTask DeleteLogChannelAsync(string logChannelName, CancellationToken cancellationToken = default);
+
+    /// <summary>Rotate a log channel's file. PUT /asterisk/logging/{logChannelName}/rotate</summary>
     ValueTask RotateLogChannelAsync(string logChannelName, CancellationToken cancellationToken = default);
     ValueTask<AriConfigTuple[]> GetConfigAsync(string configClass, string objectType, string id, CancellationToken cancellationToken = default);
     ValueTask UpdateConfigAsync(string configClass, string objectType, string id, CancellationToken cancellationToken = default);
