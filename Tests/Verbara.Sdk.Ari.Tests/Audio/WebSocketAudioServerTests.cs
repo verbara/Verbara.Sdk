@@ -1544,6 +1544,7 @@ public class WebSocketAudioServerTests
         private readonly bool _handFirstOverOnceReadable;
         private int _accepted;
 
+        /// <summary>Starts the loopback listener.</summary>
         /// <param name="handFirstOverOnceReadable">
         /// Whether the first connection is handed to the server only once bytes its peer sent are readable on it.
         /// A peer that writes its upgrade in one send on loopback has then had its whole request received.
