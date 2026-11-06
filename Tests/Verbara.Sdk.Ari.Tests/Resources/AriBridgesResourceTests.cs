@@ -211,6 +211,42 @@ public sealed class AriBridgesResourceTests
         QueryPairs(handler.LastRequestQuery!).Select(p => p.Key + "=" + p.Value).Should().Equal("media=tone:440");
     }
 
+    // Captured from the same run (raw/a22/sdkproxy/proxy/conn-003.s2c @2086): the 201 body answering
+    // POST /ari/bridges/{id}/record?name=…&format=wav&recorder_format=slin16. recorder_format set the Recorder
+    // channel's read format on every image measured; announcerFormat= was ignored.
+    private const string CapturedBridgeLiveRecording201 =
+        "{\"name\":\"c04d-037f4ffe-0-declared\",\"format\":\"wav\",\"state\":\"queued\",\"target_uri\":\"bridge:497c55a4-f29f-45de-a433-90be5694a208\"}";
+
+    [Fact]
+    public async Task RecordAsync_ShouldSendRecorderFormat_WhenFormatIsGiven()
+    {
+        using var handler = new FakeHttpHandler(CapturedBridgeLiveRecording201, HttpStatusCode.Created);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriBridgesResource(http, DefaultOptions);
+
+        var result = await sut.RecordAsync(
+            "497c55a4-f29f-45de-a433-90be5694a208", "c04d-037f4ffe-0-declared", "wav", format: "slin16");
+
+        result.Name.Should().Be("c04d-037f4ffe-0-declared");
+        var pairs = QueryPairs(handler.LastRequestQuery!);
+        pairs.Should().ContainSingle(p => p.Key == "format").Which.Value.Should().Be("wav");
+        pairs.Should().ContainSingle(p => p.Key == "recorder_format").Which.Value.Should().Be("slin16");
+        pairs.Select(p => p.Key).Should().NotContain("announcerFormat");
+    }
+
+    [Fact]
+    public async Task RecordAsync_ShouldOmitRecorderFormat_WhenFormatIsNull()
+    {
+        using var handler = new FakeHttpHandler(CapturedBridgeLiveRecording201, HttpStatusCode.Created);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriBridgesResource(http, DefaultOptions);
+
+        await sut.RecordAsync("497c55a4-f29f-45de-a433-90be5694a208", "c04d-037f4ffe-0-declared", "wav");
+
+        QueryPairs(handler.LastRequestQuery!).Select(p => p.Key + "=" + p.Value)
+            .Should().Equal("name=c04d-037f4ffe-0-declared", "format=wav");
+    }
+
     [Fact]
     public async Task CreateWithIdAsync_ShouldPostToBridgeIdUrl()
     {
