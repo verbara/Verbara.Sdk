@@ -16,7 +16,9 @@ namespace Verbara.Sdk.FunctionalTests.Layer5_Integration.Ari;
 
 /// <summary>
 /// Channel hold, mute and unmute, and log-channel rotation, sent by the SDK to a real Asterisk: every call must be one
-/// Asterisk accepts, because a verb or a query it rejects answers 405 or 400 whatever the channel.
+/// Asterisk accepts, because a verb or a query it rejects answers 405 or 400 whatever the channel. A bridge playback's
+/// or recording's format must reach the announcer or recorder, because a key Asterisk does not read is accepted and
+/// ignored.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -134,6 +136,124 @@ public sealed class AriChannelControlVerbTests : FunctionalTestBase, IClassFixtu
             await BestEffort.AriAsync(() => ari.Channels.HangupAsync(a));
             await BestEffort.AriAsync(() => ari.Channels.HangupAsync(b));
         }
+    }
+
+    [Fact]
+    public async Task BridgeMedia_ShouldSetTheAnnouncerAndRecorderFormat_WhenFormatIsGiven()
+    {
+        _output.WriteLine(_asterisk.Version);
+
+        // The rig: the image has no recording directory, and every bridge recording answers 500 without it. The
+        // container runs as asterisk, which owns /var/spool/asterisk, so it can create it.
+        var mkdir = await _asterisk.ExecAsync(["mkdir", "-p", "/var/spool/asterisk/recording"]);
+        mkdir.ExitCode.Should().Be(0, "the recording directory must be creatable: {0}", mkdir.Stderr);
+        var listing = await _asterisk.ExecAsync(["ls", "-ld", "/var/spool/asterisk/recording"]);
+        listing.ExitCode.Should().Be(0, "the recording directory must exist: {0}", listing.Stderr);
+        _output.WriteLine(listing.Stdout.Trim());
+
+        await using var ari = AriClientFactory.Create(_asterisk.Address, VerbsAsterisk.AriPort, LoggerFactory, Application);
+        var bLeg = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var aLeg = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = ari.Subscribe(new Observer(evt =>
+        {
+            switch (evt)
+            {
+                case StasisStartEvent { Channel: { } channel } start when start.Args is ["bside", ..]:
+                    bLeg.TrySetResult(channel.Id);
+                    break;
+                case StasisStartEvent { Channel: { } channel }:
+                    aLeg.TrySetResult(channel.Id);
+                    break;
+            }
+        }));
+        await ari.ConnectAsync();
+
+        await using var ami = AmiConnectionFactory.Create(_asterisk.Address, VerbsAsterisk.AmiPort, LoggerFactory, o =>
+        {
+            o.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
+            o.AutoReconnect = false;
+        });
+        await ami.ConnectAsync();
+        await ami.SendActionAsync(new OriginateAction
+        {
+            Channel = "PJSIP/1005@loop",
+            Application = "Stasis",
+            Data = Application,
+            IsAsync = true,
+        });
+
+        var a = await aLeg.Task.WaitAsync(EventTimeout);
+        var b = await bLeg.Task.WaitAsync(EventTimeout);
+        _output.WriteLine($"A leg {a}, B leg {b}");
+
+        // A mixing bridge holding the ulaw-only PJSIP leg A: the bridge's announcer and recorder default to ulaw and
+        // slin, so slin16 is read only when Asterisk was told the format under the key it reads.
+        var bridge = await ari.Bridges.CreateAsync(type: "mixing");
+        try
+        {
+            await ari.Bridges.AddChannelAsync(bridge.Id, a);
+
+            // A tone, because the image carries no sound files, and a tone does not end by itself.
+            var playback = await ari.Bridges.PlayAsync(bridge.Id, "tone:440", format: "slin16");
+            var announcer = await BridgeChannelFormatAsync(bridge.Id, "Announcer/", "WriteFormat");
+            await ari.Playbacks.StopAsync(playback.Id);
+
+            var recording = "verbs-" + Guid.NewGuid().ToString("N")[..8];
+            await ari.Bridges.RecordAsync(bridge.Id, recording, "wav", format: "slin16");
+            var recorder = await BridgeChannelFormatAsync(bridge.Id, "Recorder/", "ReadFormat");
+            await ari.Recordings.StopAsync(recording);
+
+            var readings = new List<string>
+            {
+                "Announcer ;2 WriteFormat: " + announcer,
+                "Recorder ;2 ReadFormat: " + recorder,
+            };
+            foreach (var line in readings)
+                _output.WriteLine(line);
+
+            readings.Should().Equal(
+                ["Announcer ;2 WriteFormat: slin16", "Recorder ;2 ReadFormat: slin16"],
+                "the format argument is sent under the key Asterisk reads for the bridge's announcer and recorder");
+        }
+        finally
+        {
+            await BestEffort.AriAsync(() => ari.Bridges.DestroyAsync(bridge.Id));
+            await BestEffort.AriAsync(() => ari.Channels.HangupAsync(a));
+            await BestEffort.AriAsync(() => ari.Channels.HangupAsync(b));
+        }
+    }
+
+    /// <summary>
+    /// Reads one format field of the bridge's <c>;2</c> half of an <c>Announcer/</c> or <c>Recorder/</c> channel from
+    /// the Asterisk CLI, while the playback or recording is still active. The channel is joined to the bridge by the
+    /// bridge id in <c>core show channels concise</c>. Each CLI exec is a round trip to the container, which paces the
+    /// polling.
+    /// </summary>
+    private async Task<string> BridgeChannelFormatAsync(string bridgeId, string prefix, string field)
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!deadline.IsCancellationRequested)
+        {
+            var concise = await _asterisk.ExecAsync(["asterisk", "-rx", "core show channels concise"]);
+            var name = concise.Stdout.Split('\n')
+                .Select(line => line.Trim().Split('!'))
+                .Where(f => f.Length > 12 && f[0].StartsWith(prefix, StringComparison.Ordinal)
+                    && f[0].EndsWith(";2", StringComparison.Ordinal) && f[12] == bridgeId)
+                .Select(f => f[0])
+                .FirstOrDefault();
+            if (name is not null)
+            {
+                var channel = await _asterisk.ExecAsync(["asterisk", "-rx", "core show channel " + name]);
+                var value = channel.Stdout.Split('\n')
+                    .Select(line => line.Trim())
+                    .Where(line => line.StartsWith(field + ":", StringComparison.Ordinal))
+                    .Select(line => line[(field.Length + 1)..].Trim())
+                    .FirstOrDefault();
+                return value ?? $"no {field} in core show channel {name}";
+            }
+        }
+
+        return $"no {prefix}…;2 channel in bridge {bridgeId} within 5 s";
     }
 
     private static async Task<string> Outcome(string call, Func<ValueTask> act)

@@ -260,10 +260,10 @@ public interface IAriBridgesResource
     ValueTask AddChannelAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default);
     ValueTask RemoveChannelAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default);
 
-    /// <summary>Play media to a bridge. POST /bridges/{bridgeId}/play. The format parameter (Asterisk 23+) sets the Announcer channel audio format.</summary>
+    /// <summary>Play media to a bridge. POST /bridges/{bridgeId}/play. <c>format</c> is the Announcer channel's audio format (<c>announcer_format</c> on the wire).</summary>
     ValueTask<AriPlayback> PlayAsync(string bridgeId, string media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, string? format = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Record audio from a bridge. POST /bridges/{bridgeId}/record. The format parameter (Asterisk 23+) sets the Recorder channel audio format.</summary>
+    /// <summary>Record audio from a bridge. POST /bridges/{bridgeId}/record. <c>recordingFormat</c> is the recording's file format (<c>format</c> on the wire); <c>format</c> is the Recorder channel's audio format (<c>recorder_format</c> on the wire).</summary>
     ValueTask<AriLiveRecording> RecordAsync(string bridgeId, string name, string recordingFormat, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, string? format = null, CancellationToken cancellationToken = default);
 
     /// <summary>Create bridge with specific ID. POST /bridges/{bridgeId}</summary>
