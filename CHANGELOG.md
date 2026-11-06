@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: ARI hold, mute and log rotation send the method Asterisk accepts, and a bridge format argument takes effect (#535)
+
+`Channels.HoldAsync` and `Channels.MuteAsync` now send `POST` and `Asterisk.RotateLogChannelAsync` sends `PUT`, the
+methods Asterisk accepts; they always failed with 405 (#506). `MuteAsync` and `UnmuteAsync` without a direction now
+apply to both directions (they failed with 400). `Bridges.PlayAsync` and `Bridges.RecordAsync` given a `format` now set
+the announcer's or recorder's audio format: the SDK sent it under a key Asterisk accepts and ignores (`format` /
+`announcerFormat` instead of `announcer_format` / `recorder_format`), so the argument had no effect. Not breaking: no
+signature or parameter-name changes.
+
 ### Fixed: an ARI outbound idle timeout inside a message is logged as an idle timeout (#532)
 
 An idle timeout that fires while a fragment of one message is still arriving, or while its last fragment is, is
