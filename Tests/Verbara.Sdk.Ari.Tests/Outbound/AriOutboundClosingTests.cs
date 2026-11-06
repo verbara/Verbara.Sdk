@@ -402,6 +402,51 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         }
     }
     [Fact]
+    public async Task Pump_ShouldLogIdleTimeout_WhenItFiresWhileAFragmentIsReturning()
+    {
+        await using var rig = new Rig();
+        using var hook = new WebSocketReceiveHook();
+        await hook.Watch(() => rig.StartAsync());
+        using var peer = await rig.ConnectAsync();
+        hook.Arm(() => IdleDeadlineOf(rig.Last!).Cancel());
+        await peer.SendAsync("{"u8.ToArray().AsMemory(), WebSocketMessageType.Text, false, CancellationToken.None);
+        await hook.Fired.WaitAsync(Limit);
+        await rig.Log.Closed.Task.WaitAsync(Limit);
+        foreach (var entry in rig.Log.Entries) output.WriteLine($"{entry.Id.Name}: {entry.Level}; {entry.Exception}; {entry.Message}");
+        AssertOneIdleTimeoutNamingItsBound(rig);
+    }
+    [Fact]
+    public async Task Pump_ShouldLogIdleTimeout_WhenItFiresWhileTheFinalFragmentIsReturning()
+    {
+        await using var rig = new Rig();
+        using var hook = new WebSocketReceiveHook();
+        await hook.Watch(() => rig.StartAsync());
+        using var peer = await rig.ConnectAsync();
+        var delivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = rig.Last!.Events.Subscribe(_ => delivered.TrySetResult());
+        hook.Arm(() => IdleDeadlineOf(rig.Last!).Cancel());
+        await peer.SendAsync("{\"type\":\"StasisStart\",\"application\":\"app\"}"u8.ToArray().AsMemory(), WebSocketMessageType.Text, true, CancellationToken.None);
+        await hook.Fired.WaitAsync(Limit);
+        await rig.Log.Closed.Task.WaitAsync(Limit);
+        foreach (var entry in rig.Log.Entries) output.WriteLine($"{entry.Id.Name}: {entry.Level}; {entry.Exception}; {entry.Message}");
+        delivered.Task.IsCompletedSuccessfully.Should().BeTrue("the message whose last fragment the read returned is the consumer's");
+        AssertOneIdleTimeoutNamingItsBound(rig);
+    }
+    private static CancellationTokenSource IdleDeadlineOf(AriOutboundConnection connection) =>
+        (CancellationTokenSource)typeof(AriOutboundConnection).GetField("_idleDeadline", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(connection)!;
+    private static void AssertOneIdleTimeoutNamingItsBound(Rig rig)
+    {
+        var idle = rig.Log.Entries.Where(e => e.Id.Name == "IdleTimeout").ToArray();
+        using (new AssertionScope())
+        {
+            rig.Log.Entries.Should().NotContain(e => e.Level == LogLevel.Error, "the idle bound, not the transport, ended the read");
+            idle.Should().ContainSingle("the idle bound fired inside the read and ended the connection once");
+            idle.Should().OnlyContain(e => e.Level == LogLevel.Warning);
+            idle.SelectMany(e => e.State ?? []).Should().ContainSingle(kv => kv.Key == "IdleTimeout")
+                .Which.Value.Should().Be(Rig.DefaultIdle, "the line names the configured bound");
+        }
+    }
+    [Fact]
     public async Task Pump_ShouldNotLogError_WhenStopLandsInsideAPartialRead()
     {
         await using var rig = new Rig();
@@ -886,6 +931,7 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
     }
     private sealed class Rig : IAsyncDisposable
     {
+        internal static readonly TimeSpan DefaultIdle = TimeSpan.FromMinutes(10);
         private readonly Channel<AriOutboundConnection> _accepted = Channel.CreateUnbounded<AriOutboundConnection>();
         private readonly IDisposable _subscription;
         internal ClosingLogger<AriOutboundListener> Log { get; } = new();
@@ -895,7 +941,7 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         {
             Listener = new AriOutboundListener(Options.Create(new AriOutboundListenerOptions
             {
-                ListenAddress = "127.0.0.1", Port = 0, ConnectionIdleTimeout = idle ?? TimeSpan.FromMinutes(10)
+                ListenAddress = "127.0.0.1", Port = 0, ConnectionIdleTimeout = idle ?? DefaultIdle
             }), beforeClosed is null ? Log : new BeforeClosedLogger(Log, beforeClosed), clock ?? TimeProvider.System);
             _subscription = Listener.OnConnectionAccepted.Subscribe(c =>
             {
