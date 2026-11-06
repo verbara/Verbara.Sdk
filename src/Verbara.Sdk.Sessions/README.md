@@ -5,7 +5,7 @@ Session Engine for the Verbara.Sdk ecosystem. Provides call session correlation,
 ## Features
 
 - **CallSession** - Models the full lifecycle of a call: Created, Dialing, Ringing, Queued, Connected, OnHold, Transferring, Conference, Completed, Failed (`TimedOut` is kept for sessions stored by earlier versions; since 2.7.0 no call ends in it)
-- **CallSessionManager** - Automatic session creation and correlation by LinkedId, with 4-tier O(1) indexing
+- **CallSessionManager** - Automatic session creation and correlation by LinkedId, with 4-tier O(1) indexing, kept per server: see [Several servers](#several-servers)
 - **Reconciliation sweep** - Registered by `AddVerbaraSessions`: when a held call is older than `DialingTimeout`, it checks the held calls against Asterisk's channel snapshot and ends, as a reload ends it, a call whose channels Asterisk no longer reports. It never ends a call for its age. See [the migration guide](../../docs/guides/call-session-ending-migration.md#the-reconciliation-sweep-and-long-answered-calls)
 - **Domain Events** - Observable stream of CallStarted, CallConnected, CallQueued, CallHeld, CallEnded, CallReleased and the other notifications of a call
 - **Extension Points** - Abstract base classes for custom routing (CallRouterBase), agent selection (AgentSelectorBase), and persistence (SessionStoreBase)
@@ -65,6 +65,44 @@ agent's lock. Its failures log at `Warning` under the tracker's own category, Ev
 state changes threw on the change of agent {AgentId} from {PreviousState} to {NewState}; …`) and EventId 6 (its
 completion or error), and count on the same `sessions.events.subscriber_faults`.
 
+## Several servers
+
+One `CallSessionManager` can follow several Asterisk servers, each attached under its own id with
+`AttachToServer(server, serverId)`. Since 2.10.0 its channel-id, `linkedid` and bridge indexes are kept per server id:
+a channel event of one server is correlated only with calls of that server, and the same id reported by two servers is
+two calls.
+
+- **Scoped lookups.** `GetByChannelId(serverId, uniqueId)`, `GetByLinkedId(serverId, linkedId)` and
+  `GetByBridgeId(serverId, bridgeId)` return the call that server's index holds for the id, or `null`. A session
+  carries its server id as `CallSession.ServerId`; `AddVerbaraSessions` attaches its one server under `default`.
+- **Unscoped lookups.** `GetByChannelId(uniqueId)`, `GetByLinkedId(linkedId)` and `GetByBridgeId(bridgeId)` return the
+  call of the one server that holds the id, and `null` when two or more servers hold it. Two servers hold the same ids
+  when their Asterisk servers have no `systemname` of their own, or when one Asterisk is attached under two ids; give
+  every Asterisk its own `systemname` and attach it once. The first such collision between two servers is logged at
+  Warning.
+- **An implementation of your own.** `ICallSessionManager`'s default implementation of each scoped lookup calls the
+  unscoped one and keeps the call only when it belongs to the named server, so it returns `null` for an id two servers
+  hold. Override the three members to answer per server.
+- **Calls already up when a server is attached.** `AdmitExistingCalls(serverId)`, called after `AttachToServer` (and
+  after registering any reconstructed call with `RegisterReconstructedSession`), opens a session, as a reload does, for
+  each call the server's channel table holds that no session holds, raising its `CallStartedEvent`, and joins the legs
+  of calls already held. A channel another call of that server owns keeps its owner, and a repeated admission adds
+  nothing. When the table is not complete, it first asks Asterisk for one `Status`; a refused one leaves those calls
+  waiting for a later completed one. The walk never runs on the caller's thread, and a detach stops it without an
+  error. It throws `InvalidOperationException` for an id with no instance attached. A session-event subscriber must
+  not wait for it: the subscriber holds a call's lock, and the walk takes channel locks before call locks.
+- **A call the engine did not see whole** (registered with `RegisterReconstructedSession`, opened by a reload or an
+  admission, or left behind by a server detached with `DetachedCalls.Keep` and attached again) is decided against its
+  server's channel table by its `linkedid`, once that table is complete on its current AMI session: it ends when the
+  table holds none of its channels, as a reload ends a call, and is kept while it holds one. On a server whose `Status`
+  is refused the table never completes, so such a call waits, counted `sessions.unverifiable` by the sweep, until a
+  `Status` completes or you release it with `DetachedCalls.Release`.
+- **Attach outside notifications.** `AttachToServer` asked for from inside a notification of a session engine, or from
+  an attachment handler, throws `InvalidOperationException` before it changes anything, even for the instance already
+  attached under that id. Attach from another thread and do not wait for it in the subscriber: the attach takes the
+  lock of each call the server left. A `Keep` detach the subscriber already made stands. Do not call
+  `RegisterReconstructedSession` synchronously from a subscriber either.
+
 ## A server that leaves for good
 
 `DetachFromServer(serverId)` unsubscribes the server and keeps every call the engine holds for it: those calls stay
@@ -122,9 +160,9 @@ release, and every attach or release of that id waiting for it, until it returns
 Hand slow work to another thread.
 
 **Not from inside a notification.** A release asked for from inside any notification of the engine (a
-`CallReleasedEvent` included), and an attach that would have to wait for a release in progress of its id, throws
-`InvalidOperationException` naming the server id, and detaches and releases nothing: it would wait for the very
-thread that is delivering the notification. Handle that exception inside the subscriber and ask from another thread.
+`CallReleasedEvent` included) throws `InvalidOperationException` naming the server id, and detaches and releases
+nothing: it would wait for the very thread that is delivering the notification. Since 2.10.0 every attach asked for
+there throws too, before it changes anything (see [Several servers](#several-servers)). Handle that exception inside the subscriber and ask from another thread.
 One the subscriber lets escape is reported like any subscriber failure, and the delivery continues.
 
 **What the trackers do.** `IQueueSessionTracker` closes the released call's queue visit: a caller still waiting

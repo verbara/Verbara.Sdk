@@ -141,19 +141,23 @@ await pool.AddServerAsync("pbx-west", new AmiConnectionOptions
 });
 ```
 
-`AddVerbaraMultiServer` also registers a health check named `verbara-pool`, with no tags, once however often it is called. It reads every server's AMI connection when it runs: `Healthy` when every server is connected or the pool holds none, `Unhealthy` when every server's connection has ended (`Disconnecting` or `Disconnected`), and `Degraded` otherwise; its data maps each server id to its connection's state. An unfiltered `/health` endpoint includes it, so point a liveness probe at an endpoint filtered by tag ([migration guide](../../docs/guides/ami-connection-state-and-health-migration.md)).
+`AddVerbaraMultiServer` also registers a health check named `verbara-pool`, with no tags, once however often it is called. It reads every server's AMI connection when it runs: `Healthy` when every server is connected or the pool holds none, `Unhealthy` when every server's connection has ended (`Disconnecting` or `Disconnected`), and `Degraded` otherwise; its data maps each server id to its connection's state. A pool whose servers are all connected reads `Degraded` while any server's last `Status` was refused (`VerbaraServer.LastStatusRefusal`), and its data then adds one `status-refused` entry naming each such server and Asterisk's message; every refusal also counts on `live.status.refused`. An unfiltered `/health` endpoint includes it, so point a liveness probe at an endpoint filtered by tag ([migration guide](../../docs/guides/ami-connection-state-and-health-migration.md)).
 
-For call sessions, `AddVerbaraSessionsMultiServer` registers the session engine and a reconciliation sweep for every server of the pool. It attaches no server: attach each one under its id in the pool, and detach it when it leaves.
+For call sessions, `AddVerbaraSessionsMultiServer` registers the session engine and a reconciliation sweep for every server of the pool. It attaches no server: attach each one under its id in the pool, admit the calls it already carries, and detach it when it leaves. Never attach from inside a subscriber of the session engine's `Events`: that throws `InvalidOperationException`.
 
 ```csharp
 builder.Services.AddVerbaraMultiServer();
 builder.Services.AddVerbaraSessionsMultiServer();
 // ...
 var server = await pool.AddServerAsync("pbx-east", options);
-host.Services.GetRequiredService<ICallSessionManager>().AttachToServer(server, "pbx-east");
+var sessions = host.Services.GetRequiredService<ICallSessionManager>();
+sessions.AttachToServer(server, "pbx-east");
+await sessions.AdmitExistingCalls("pbx-east");
 ```
 
-On each `SessionOptions.ReconciliationInterval` tick (30 s by default) the sweep verifies, for each server, the held calls attached under its id against one `Status` of that server, and ends a call whose hangup was lost as a reload ends it; one server's failure never stops the others. `o => o.ReconciliationInterval = Timeout.InfiniteTimeSpan` in the `configure` delegate switches it off. Give every Asterisk of the pool its own `systemname`, so no two servers issue the same channel ids. See [the migration guide](../../docs/guides/call-session-ending-migration.md#the-sweep-on-a-multi-server-host-280).
+`AdmitExistingCalls` opens a session for each call the server's channel table holds that no session holds, so calls already up when the server is attached are followed too. The session engine indexes calls per server id: find a call with `GetByChannelId(serverId, uniqueId)`, `GetByLinkedId(serverId, linkedId)` or `GetByBridgeId(serverId, bridgeId)`. The lookups that name no server return `null` when two servers hold the id.
+
+On each `SessionOptions.ReconciliationInterval` tick (30 s by default) the sweep verifies, for each server, the held calls attached under its id against one `Status` of that server, and ends a call whose hangup was lost as a reload ends it; one server's failure never stops the others. `o => o.ReconciliationInterval = Timeout.InfiniteTimeSpan` in the `configure` delegate switches it off. Give every Asterisk of the pool its own `systemname`, so no two servers issue the same channel ids: calls of two servers are kept apart without it, but a lookup that names no server, or a consumer keyed by `linkedid` alone, cannot tell them apart. See [the migration guide](../../docs/guides/call-session-ending-migration.md#the-sweep-on-a-multi-server-host-280) and, for what 2.10.0 changes, [the 2.10.0 migration guide](../../docs/guides/migration-2.10.0.md#sessions).
 
 See `Examples/MultiServerExample/` for a full federation walkthrough.
 
