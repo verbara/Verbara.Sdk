@@ -139,7 +139,21 @@ The option's name says less than it takes away. Measured with no WebSocket open,
 - `Channels.OriginateAsync` with an extension runs the dialplan and sends no application, on any client. Without one it
   sends `Application`.
 - The client, its hosted service and its health check need no reachable Asterisk for a host to start. A host built by
-  `AddVerbara` still needs AMI at start: the AMI connection dials then, and a failed dial stops the host.
+  `AddVerbara` still needs AMI at start: the AMI connection dials then, and a failed dial stops the host. A host that
+  wants only REST registers the client with `AddVerbaraAri` from `Verbara.Sdk.Hosting`, which registers nothing of AMI:
+
+  ```csharp
+  builder.Services.AddVerbaraAri(options =>
+  {
+      options.BaseUrl = "http://pbx.example.com:8088";
+      options.Username = "admin";
+      options.Password = "secret";
+      options.Application = "myapp";
+      options.EventsEnabled = false;
+  });
+  ```
+
+  That host starts and stops with no Asterisk reachable, and its `ari` check reads `Unhealthy` until Asterisk answers.
 
 ## Observers
 
