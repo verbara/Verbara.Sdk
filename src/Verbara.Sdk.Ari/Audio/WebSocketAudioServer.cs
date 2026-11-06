@@ -100,6 +100,12 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     private TimeSpan _mediaStartTimeout;
 
     /// <summary>Observable that emits each new audio stream when a connection is established.</summary>
+    /// <remarks>
+    /// Observers are called as <see cref="IAudioServer.OnStreamConnected"/> states. On this server a
+    /// <see cref="StopAsync"/> with no cancellable token waits for an observer that blocks: it returns only once
+    /// that observer has returned and its connection has been released. Cancelling the stop's token ends that
+    /// wait, and the stream is then disposed while the observer still runs.
+    /// </remarks>
     public IObservable<IAudioStream> OnStreamConnected => _streamSubject;
 
     /// <summary>
