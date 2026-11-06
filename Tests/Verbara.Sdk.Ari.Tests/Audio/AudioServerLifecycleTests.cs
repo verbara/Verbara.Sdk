@@ -146,11 +146,15 @@ public sealed class AudioServerLifecycleTests
     {
         // A pin of the ARI contract, green before and after: unlike the Voice AI server, an ARI audio
         // server binds and serves again when started after a stop
-        await using var harness = await AudioSocketEndingHarness.StartAsync(_ => { });
+        await using var harness = await RestartedHarness.StartStoppedAndRestartedAsync(
+            () => AudioSocketEndingHarness.StartAsync(_ => { }),
+            static async h =>
+            {
+                await h.Server.StopAsync();
+                await h.Server.StartAsync();
+            },
+            static h => h.Port);
         using var bound = new CancellationTokenSource(SignalTimeout);
-        await harness.Server.StopAsync();
-
-        await harness.Server.StartAsync();
         var (peer, recording) = await harness.IdentifyUntilAdmittedAsync(Guid.NewGuid(), bound.Token);
         using var _ = peer;
 
@@ -164,11 +168,15 @@ public sealed class AudioServerLifecycleTests
     [Fact]
     public async Task StartAsync_ShouldBindAndServe_WhenTheWebSocketServerWasStopped()
     {
-        await using var harness = await WebSocketEndingHarness.StartAsync(_ => { });
+        await using var harness = await RestartedHarness.StartStoppedAndRestartedAsync(
+            () => WebSocketEndingHarness.StartAsync(_ => { }),
+            static async h =>
+            {
+                await h.Server.StopAsync();
+                await h.Server.StartAsync();
+            },
+            static h => h.Port);
         using var bound = new CancellationTokenSource(SignalTimeout);
-        await harness.Server.StopAsync();
-
-        await harness.Server.StartAsync();
         var (peer, _) = await harness.ConnectUntilAdmittedAsync($"restart-{Guid.NewGuid():N}", bound.Token);
         using var connection = peer;
 

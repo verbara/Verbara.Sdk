@@ -590,6 +590,66 @@ internal sealed class WebSocketTestPeer : IDisposable
     public void Dispose() => _client.Dispose();
 }
 
+/// <summary>
+/// A harness whose server was stopped and started again on the port it first bound. That port was probed
+/// free and then released, so between the stop and the restart anything else on the machine that binds an
+/// ephemeral port — a probe or an outbound connect in a test assembly running alongside — can take it, and
+/// the restart then fails with <see cref="SocketError.AddressAlreadyInUse"/>. The restart tolerates that race
+/// as the first start does (<see cref="LoopbackServerBind"/>): it disposes the harness and repeats
+/// start → stop → restart on a fresh harness, so on a freshly probed port, immediately, up to
+/// <see cref="LoopbackServerBind.MaxAttempts"/> times. Any other failure propagates on the attempt it
+/// happened on; exhaustion throws naming every port tried.
+/// </summary>
+internal static class RestartedHarness
+{
+    /// <summary>
+    /// Starts a harness with <paramref name="start"/>, then runs <paramref name="stopThenStart"/> on it,
+    /// retrying on a fresh harness only when that restart's bind found the port taken.
+    /// </summary>
+    /// <param name="start">Starts a fresh harness on a freshly probed port.</param>
+    /// <param name="stopThenStart">Stops the harness's server and starts it again on the same port.</param>
+    /// <param name="port">The port a harness bound, for the exhaustion message.</param>
+    public static async Task<THarness> StartStoppedAndRestartedAsync<THarness>(
+        Func<Task<THarness>> start,
+        Func<THarness, ValueTask> stopThenStart,
+        Func<THarness, int> port)
+        where THarness : IAsyncDisposable
+    {
+        ArgumentNullException.ThrowIfNull(start);
+        ArgumentNullException.ThrowIfNull(stopThenStart);
+        ArgumentNullException.ThrowIfNull(port);
+
+        var tried = new List<int>();
+        SocketException? lastInUse = null;
+        for (var attempt = 0; attempt < LoopbackServerBind.MaxAttempts; attempt++)
+        {
+            var harness = await start();
+            tried.Add(port(harness));
+            var restarted = false;
+            try
+            {
+                await stopThenStart(harness);
+                restarted = true;
+                return harness;
+            }
+            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+            {
+                lastInUse = ex;
+            }
+            finally
+            {
+                if (!restarted)
+                    await harness.DisposeAsync();
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Could not restart a loopback server in {LoopbackServerBind.MaxAttempts} attempts: every restart failed with " +
+            $"{nameof(SocketError.AddressAlreadyInUse)}. Ports tried: {string.Join(", ", tried)}.",
+            lastInUse);
+    }
+}
+
 /// <summary>Disposes everything added to it, in order, when it is disposed.</summary>
 internal sealed class DisposableSet : IDisposable
 {
