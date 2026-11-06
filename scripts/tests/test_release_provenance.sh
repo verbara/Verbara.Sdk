@@ -56,7 +56,8 @@ workflow() {
 }
 
 # Built once and copied per case: each suite owned by one workflow run, and the twelve merge-queue
-# check runs that landed 019fb697 (ci.yml's ten, codeql.yml's two), all green.
+# check runs that landed 019fb697 (ci.yml's ten, codeql.yml's two), all green, plus the Asterisk 24
+# functional leg the merge queue has run since: thirteen.
 fresh
 workflow "$CI_MQ" .github/workflows/ci.yml
 workflow "$CODEQL_MQ" .github/workflows/codeql.yml
@@ -66,7 +67,8 @@ workflow "$HYGIENE_PUSH" "$HYGIENE"
 workflow "$PUBLISH" .github/workflows/publish.yml
 for name in "AOT Trim Check" "Audit Test Asserts" "Coverage Ratchet" "Coverage Script Tests" \
             "Docs-only gate" "Functional Tests (Testcontainers) (22)" \
-            "Functional Tests (Testcontainers) (23)" "OpenSpec Validate" "Pack Warnings Gate" "Unit Tests"; do
+            "Functional Tests (Testcontainers) (23)" "Functional Tests (Testcontainers) (24)" \
+            "OpenSpec Validate" "Pack Warnings Gate" "Unit Tests"; do
   check "$CI_MQ" "$name" completed success
 done
 check "$CODEQL_MQ" "Analyze (C#)" completed success
@@ -131,7 +133,7 @@ grep -qxF "DEPENDABOT_WORKFLOW='$DEPENDABOT'" "$GATE" && ok || bad "the gate's D
 # =============================================================================================
 landed
 run 0 "every completed check run green"
-says "12 completed check run(s), all green (12 success)" "a pass reports what it judged"
+says "13 completed check run(s), all green (13 success)" "a pass reports what it judged"
 lacks "::notice::" "nothing ignored, so nothing announced"
 lacks "::error::" "a pass reports no error"
 
@@ -142,7 +144,7 @@ release_2_5_1 failure success
 run 0 "2.5.1 exactly: only release-hygiene.yml's Publish Liveness failed"
 says "::notice::release-provenance: ignored 2 check run(s) from $HYGIENE" "the exclusion is announced, with its workflow"
 says '"Publish Liveness" (failure)' "the notice names the failure it ignored"
-says "13 completed check run(s), all green" "everything else is still judged"
+says "14 completed check run(s), all green" "everything else is still judged"
 says '"Pack and push to nuget.org" (in_progress)' "runs in flight are listed, not judged"
 lacks "::error::" "the ignored failure is not an error"
 
@@ -163,7 +165,7 @@ check "$HYGIENE_PUSH" "Publish Liveness" completed failure
 check "$AOT_PUSH" "aot-check" completed failure
 run 1 "a release-hygiene.yml failure beside a real failure"
 errors_name '"aot-check" concluded failure — .github/workflows/aot-validate.yml' "the real failure is named with its workflow"
-errors_name "has 1 non-green check run(s) of 13 completed" "the count leaves out the ignored run (twelve landed, plus aot-check)"
+errors_name "has 1 non-green check run(s) of 14 completed" "the count leaves out the ignored run (thirteen landed, plus aot-check)"
 no_error_names "Publish Liveness" "the ignored failure is not given as the reason"
 says '"Publish Liveness" (failure)' "the ignored failure is still announced"
 
@@ -352,7 +354,7 @@ run 2 "garbage in the workflow-runs document"
 landed
 echo '"a string"' >> "$CHECKS"
 run 2 "a bare string among the check runs"
-errors_name "value #13" "the offending value is located"
+errors_name "value #14" "the offending value is located"
 
 landed
 echo '{"name": "x", "status": "completed", "conclusion": "success"}' >> "$CHECKS"
@@ -449,7 +451,7 @@ release_2_5_1 failure success
 jq '.' "$CHECKS" > "$WORK/pretty.json"
 cp "$WORK/pretty.json" "$CHECKS"
 run 0 "pretty-printed check runs — one value per run, not one per line"
-says "13 completed check run(s), all green" "multi-line values are all read"
+says "14 completed check run(s), all green" "multi-line values are all read"
 
 # =============================================================================================
 # a check run's name cannot forge a workflow command

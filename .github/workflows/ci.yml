@@ -387,14 +387,14 @@ jobs:
     # skips for the general reason. See ADR-0039 + addendum, then ADR-0051.
     # The pull_request matrix stays [23] even though its heavy steps now no-op: the matrix must
     # still EXPAND so the required context "Functional Tests (Testcontainers) (23)" materializes
-    # and reports — that is the whole #104/#105 lesson. Full matrix [22, 23] in the merge queue, so
+    # and reports — that is the whole #104/#105 lesson. Full matrix [22, 23, 24] in the merge queue, so
     # nothing lands on main without full-matrix validation. ADR-0038 (D3) moved the 22 leg to queue
-    # time; ADR-0051 moves the 23 leg with it. See also verbara-meta/ADR-0003. Cost: ~19 min per
+    # time; ADR-0051 moves the 23 leg with it; the 24 leg joins them there. See also verbara-meta/ADR-0003. Cost: ~19 min per
     # variant in the queue, parallel across runners; seconds on a PR.
     strategy:
       fail-fast: false
       matrix:
-        asterisk: ${{ github.event_name == 'merge_group' && fromJSON('[22, 23]') || fromJSON('[23]') }}
+        asterisk: ${{ github.event_name == 'merge_group' && fromJSON('[22, 23, 24]') || fromJSON('[23]') }}
     env:
       ASTERISK_VERSION: ${{ matrix.asterisk }}
     steps:
