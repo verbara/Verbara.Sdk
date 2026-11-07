@@ -1544,6 +1544,53 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EventObserver_ShouldWriteOnlyTheAgentTheTableHolds_WhenAReplacementRunsDuringTheRoutedDerivation(bool listed)
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        var loggedIn = new ConcurrentQueue<string>();
+        _sut.Agents.AgentLoggedIn += a => loggedIn.Enqueue(a.AgentId);
+        var writes = new ConcurrentQueue<bool>();
+        using var lookedUp = new ManualResetEventSlim();
+        using var releaseLookup = new ManualResetEventSlim();
+        var hooked = 0;
+        _sut.Agents.MembershipsChangeLookedUp = id =>
+        {
+            if (id != "1001" || Interlocked.Exchange(ref hooked, 1) != 0)
+                return;
+            lookedUp.Set();
+            releaseLookup.Wait(TimeSpan.FromSeconds(10));
+        };
+        _sut.Agents.MembershipsChangeWriting = (id, heldByTable) =>
+        {
+            if (id == "1001")
+                writes.Enqueue(heldByTable);
+        };
+        var listedFrom = _sut.Agents.LiveEventMark();
+        IReadOnlyList<AgentSnapshotRow> rows = listed ? [new AgentSnapshotRow("1001", null, null, LoggedIn: false)] : [];
+
+        var pause = Task.Run(() => PauseMember("sales", "Agent/1001", paused: true));
+        lookedUp.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue("premise: the routed derivation looked the agent up");
+        var replacement = Task.Run(() => _sut.Agents.ReplaceWithSnapshot(rows, listedFrom));
+        await Task.WhenAny(replacement, Task.Delay(TimeSpan.FromSeconds(2)));
+        releaseLookup.Set();
+        await Task.WhenAll(pause, replacement).WaitAsync(TimeSpan.FromSeconds(5));
+
+        using (new AssertionScope())
+        {
+            writes.Should().NotBeEmpty().And.OnlyContain(held => held, "a routed write lands only on the agent the table holds");
+            if (listed)
+                StateOf("1001").Should().Be(AgentState.LoggedOff, "the list reports the agent logged off");
+            else
+                _sut.Agents.GetById("1001").Should().BeNull("the list omits the agent");
+            loggedIn.Should().NotContain("1001");
+        }
+    }
+
     [Fact]
     public async Task EventObserver_ShouldPauseTheAgent_WhenAMemberAddedHandlerThrows()
     {

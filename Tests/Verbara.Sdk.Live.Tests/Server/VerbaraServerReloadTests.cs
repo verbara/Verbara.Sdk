@@ -47,6 +47,10 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
     private CancellationTokenSource? _cancelAfterFirstEntry;
     private IReadOnlyList<AgentsEvent> _agentsReply = [];
     private IReadOnlyList<ManagerEvent> _queueStatusReply = [];
+    private IObserver<ManagerEvent>? _observer;
+
+    /// <summary>Runs while the fake answers <c>Agents</c>, before its rows: a live event the list is older than.</summary>
+    private Action? _duringAgentsRead;
 
     private enum SnapshotEnding
     {
@@ -67,6 +71,7 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
     public VerbaraServerReloadTests()
     {
         _connection.AsteriskVersion.Returns("21.0.0");
+        _connection.Subscribe(Arg.Do<IObserver<ManagerEvent>>(obs => _observer = obs)).Returns(Substitute.For<IDisposable>());
         _connection
             .SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
             .Returns(ci => Reply(ci.ArgAt<ManagerAction>(0)));
@@ -90,6 +95,7 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
 
             if (action is AgentsAction)
             {
+                _duringAgentsRead?.Invoke();
                 foreach (var agent in _agentsReply)
                     yield return agent;
 
@@ -699,6 +705,134 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
             announced.Should().Equal([AgentState.Paused], "every Agent/1001 membership is paused when the reload announces it");
             changed.Should().BeEmpty("the announcement carries the state; no separate state change is raised");
             _sut.Queues.GetByName("sales")!.Members["Agent/" + AgentId].Paused.Should().BeTrue();
+        }
+    }
+
+    // --- The reload derives each announced agent from the queue table it loaded first ---
+
+    private static QueueMemberPauseEvent PauseFrame(string queue, string iface, bool paused) => new()
+    {
+        Paused = paused,
+        RawFields = new Dictionary<string, string> { ["Queue"] = queue, ["Interface"] = iface },
+    };
+
+    /// <summary>A started server holding agent 1001 logged in, its one membership <c>Agent/1001</c>@sales unpaused, which
+    /// the reload's queue snapshot lists unpaused.</summary>
+    private async Task GivenAnAgentWithOneUnpausedMembership()
+    {
+        await GivenAStartedServerHolding();
+        _observer.Should().NotBeNull("StartAsync subscribes the event observer");
+        _observer!.OnNext(new AgentLoginEvent { Agent = "1001", Channel = "PJSIP/1001" });
+        _observer.OnNext(new QueueMemberAddedEvent { Queue = "sales", Interface = "Agent/1001", MemberName = "1001", Paused = false, Status = 1 });
+        _queueStatusReply =
+        [
+            new QueueParamsEvent { Queue = "sales", Strategy = "ringall" },
+            new QueueMemberEvent { Queue = "sales", Interface = "Agent/1001", MemberName = "1001", Paused = false, Status = 1 },
+        ];
+    }
+
+    [Fact]
+    public async Task OnReconnected_ShouldAnnounceTheAgentPaused_WhenItIsPausedLiveDuringTheAgentsRead()
+    {
+        await GivenAnAgentWithOneUnpausedMembership();
+        _duringAgentsRead = () => _observer!.OnNext(PauseFrame("sales", "Agent/1001", paused: true));
+        _agentsReply = [new AgentsEvent { Agent = "1001", Status = "AGENT_IDLE" }];
+        var announced = new List<AgentState>();
+        var replaced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _sut.Agents.AgentLoggedIn += a =>
+        {
+            announced.Add(a.State);
+            replaced.TrySetResult();
+        };
+
+        await WhenTheConnectionReconnects();
+        await replaced.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        using (new AssertionScope())
+        {
+            announced.Should().Equal([AgentState.Paused], "the pause reached the queue table before the agents were derived");
+            _sut.Agents.GetById("1001")!.State.Should().Be(AgentState.Paused);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task OnReconnected_ShouldNotKeepThePausedAgent_WhenTheListReportsItLoggedOffOrOmitsIt(bool listed)
+    {
+        await GivenAnAgentWithOneUnpausedMembership();
+        _duringAgentsRead = () => _observer!.OnNext(PauseFrame("sales", "Agent/1001", paused: true));
+        _agentsReply = listed
+            ? [new AgentsEvent { Agent = "1001", Status = "AGENT_LOGGEDOFF" }, new AgentsEvent { Agent = "2001", Status = "AGENT_IDLE" }]
+            : [new AgentsEvent { Agent = "2001", Status = "AGENT_IDLE" }];
+        var announced = new List<string>();
+        var replaced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _sut.Agents.AgentLoggedIn += a =>
+        {
+            announced.Add(a.AgentId);
+            if (a.AgentId == "2001")
+                replaced.TrySetResult();
+        };
+
+        await WhenTheConnectionReconnects();
+        await replaced.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        using (new AssertionScope())
+        {
+            if (listed)
+                _sut.Agents.GetById("1001")!.State.Should().Be(AgentState.LoggedOff, "a pause says nothing about login: the row decides");
+            else
+                _sut.Agents.GetById("1001").Should().BeNull("a pause says nothing about login: the list omits the agent");
+            announced.Should().NotContain("1001");
+        }
+    }
+
+    [Fact]
+    public async Task OnReconnected_ShouldEndPaused_WhenALivePauseArrivesWhileTheReloadDerivesTheAgent()
+    {
+        await GivenAnAgentWithOneUnpausedMembership();
+        _agentsReply = [new AgentsEvent { Agent = "1001", Status = "AGENT_IDLE" }];
+        var notifications = new List<(string Kind, AgentState State)>();
+        var announced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _sut.Agents.AgentLoggedIn += a =>
+        {
+            lock (notifications)
+                notifications.Add(("AgentLoggedIn", a.State));
+            announced.TrySetResult();
+        };
+        _sut.Agents.AgentStateChanged += a =>
+        {
+            lock (notifications)
+                notifications.Add(("AgentStateChanged", a.State));
+        };
+        using var settleRead = new ManualResetEventSlim();
+        using var releaseSettle = new ManualResetEventSlim();
+        var hooked = 0;
+        _sut.Agents.ReplacedSettling = a =>
+        {
+            if (a.AgentId != "1001" || Interlocked.Exchange(ref hooked, 1) != 0)
+                return;
+            settleRead.Set();
+            releaseSettle.Wait(TimeSpan.FromSeconds(10));
+        };
+
+        var reload = WhenTheConnectionReconnects();
+        settleRead.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue("premise: the reload read the memberships unpaused");
+        // The pump applies the pause and derives the agent; that derivation waits for the reload's, which holds the
+        // agent's lock, or runs to its end where the reload reads outside it.
+        var pump = Task.Run(() => _observer!.OnNext(PauseFrame("sales", "Agent/1001", paused: true)));
+        await Task.WhenAny(pump, Task.Delay(TimeSpan.FromSeconds(2)));
+        releaseSettle.Set();
+        await pump.WaitAsync(TimeSpan.FromSeconds(5));
+        await reload;
+        await announced.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        using (new AssertionScope())
+        {
+            _sut.Agents.GetById("1001")!.State.Should().Be(AgentState.Paused, "the last derivation read the paused table");
+            lock (notifications)
+                notifications.Should().NotBeEmpty().And.Subject.Last().State.Should().Be(AgentState.Paused,
+                    "the last notification for the agent carries the state it ends in");
         }
     }
 

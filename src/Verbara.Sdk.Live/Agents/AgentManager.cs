@@ -368,6 +368,36 @@ public sealed class AgentManager
     }
 
     /// <summary>
+    /// Null outside deterministic tests; runs inside <see cref="SettleReplaced"/> under the agent's lock, after the
+    /// memberships were read and before the state is written.
+    /// </summary>
+    internal Action<AsteriskAgent>? ReplacedSettling { get; set; }
+
+    /// <summary>
+    /// Derives the state of an agent <see cref="ReplaceWithSnapshot"/> returned from the server's queue table, which the
+    /// load filled before it read the agents, so that <see cref="AnnounceLogin"/> announces it paused while all its
+    /// memberships are. Raises nothing: the announcement carries the state. Call it after the replacement published the
+    /// agent and before announcing it; it takes only the agent's lock, so a live derivation of the same agent is ordered
+    /// wholly before or after it, and the later of the two reads the newer table.
+    /// </summary>
+    internal void SettleReplaced(AsteriskAgent agent)
+    {
+        lock (agent.SyncRoot)
+        {
+            if (!FollowsMemberships(agent.State))
+                return;
+
+            var target = Settled(MembershipsOf(agent.AgentId));
+            ReplacedSettling?.Invoke(agent);
+            if (target == agent.State)
+                return;
+
+            agent.State = target;
+            agent.LastStateChangeAt = DateTimeOffset.UtcNow;
+        }
+    }
+
+    /// <summary>
     /// Logs and raises <see cref="AgentLoggedIn"/> for an agent <see cref="ReplaceWithSnapshot"/> reported logged in, unless
     /// a live logoff has been applied to it since: that logoff is newer than the list, and its <see cref="AgentLoggedOff"/>
     /// may already have been raised, so a login announced after it would leave subscribers holding the agent logged in.

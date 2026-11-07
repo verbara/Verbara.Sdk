@@ -1541,6 +1541,8 @@ public sealed class VerbaraServer : IVerbaraServer
             foreach (var agent in Agents.ReplaceWithSnapshot(rows, listedFrom))
             {
                 StopIfSessionIsGone(session, states);
+                // The queues loaded first: a paused agent is announced paused, with no separate state change.
+                Agents.SettleReplaced(agent);
                 Agents.AnnounceLogin(agent);
             }
 
