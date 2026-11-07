@@ -88,6 +88,34 @@ public sealed class LiveEventHandlerOffloadTests
     }
 
     [Fact]
+    public void OnMemberPaused_ShouldLetItsHandlerWaitForAnotherThread_WhenThatThreadPausesAnotherMember()
+    {
+        _queues.OnMemberAdded(Queue, "PJSIP/agent-1", "Agent 1", 0, false, 1);
+        _queues.OnMemberAdded(Queue, "PJSIP/agent-2", "Agent 2", 0, false, 1);
+        _queues.MemberPaused += (_, member) =>
+        {
+            if (member.Interface == "PJSIP/agent-1")
+                _probe.Offload(() => _queues.OnMemberPaused(Queue, "PJSIP/agent-2", true, "break"));
+        };
+
+        _queues.OnMemberPaused(Queue, "PJSIP/agent-1", true, "lunch");
+
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a MemberPaused handler waiting on another pause must not deadlock");
+    }
+
+    [Fact]
+    public void OnMemberPaused_ShouldLetItsHandlerWaitForAnotherThread_WhenThatThreadAddsAMember()
+    {
+        _queues.OnMemberAdded(Queue, "PJSIP/agent-1", "Agent 1", 0, false, 1);
+        _queues.MemberPaused += (_, _) =>
+            _probe.Offload(() => _queues.OnMemberAdded(Queue, "PJSIP/agent-2", "Agent 2", 0, true, 1));
+
+        _queues.OnMemberPaused(Queue, "PJSIP/agent-1", true, "lunch");
+
+        _probe.FinishedInsideTheHandler().Should().BeTrue("a MemberPaused handler waiting on a member add must not deadlock");
+    }
+
+    [Fact]
     public void OnCallerJoined_ShouldLetItsHandlerWaitForAnotherThread_WhenThatThreadHandlesAnotherJoin()
     {
         _queues.CallerJoined += (_, entry) =>

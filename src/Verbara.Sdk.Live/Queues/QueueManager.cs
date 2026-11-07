@@ -89,6 +89,15 @@ public sealed class QueueManager
     public event Action<string, AsteriskQueueMember>? MemberAdded;
     public event Action<string, AsteriskQueueMember>? MemberRemoved;
     public event Action<string, AsteriskQueueMember>? MemberStatusChanged;
+
+    /// <summary>
+    /// Raised for every pause or unpause Asterisk reports (<c>QueueMemberPause</c>) for a member this manager's table
+    /// holds, after the table applied it: the queue's name and the held member, whose <see cref="AsteriskQueueMember.Paused"/>
+    /// and <see cref="AsteriskQueueMember.PausedReason"/> read as the table holds them when the handler runs. A frame for a
+    /// member the table does not hold raises nothing, and a member added already paused is announced by
+    /// <see cref="MemberAdded"/> alone: Asterisk sends no pause frame for it.
+    /// </summary>
+    public event Action<string, AsteriskQueueMember>? MemberPaused;
     public event Action<string, AsteriskQueueEntry>? CallerJoined;
     public event Action<string, AsteriskQueueEntry>? CallerLeft;
 
@@ -287,20 +296,33 @@ public sealed class QueueManager
     /// <summary>Handle QueueMemberPaused event.</summary>
     public void OnMemberPaused(string queueName, string iface, bool paused, string? reason = null)
     {
-        lock (_windowsLock)
+        try
         {
-            foreach (var window in _windows)
-                window.OnLiveMemberPaused(queueName, iface, paused, reason);
-            if (!_queues.TryGetValue(queueName, out var queue))
-                return;
-            lock (queue.SyncRoot)
+            lock (_windowsLock)
             {
-                if (queue.RemovedFromTable || !queue.Members.TryGetValue(iface, out var member))
+                foreach (var window in _windows)
+                    window.OnLiveMemberPaused(queueName, iface, paused, reason);
+                if (!_queues.TryGetValue(queueName, out var queue))
                     return;
-                member.Paused = paused;
-                member.PausedReason = reason;
-                QueueManagerLog.MemberPaused(_logger, queueName, iface, paused, reason);
+                lock (queue.SyncRoot)
+                {
+                    if (queue.RemovedFromTable || !queue.Members.TryGetValue(iface, out var member))
+                        return;
+                    member.Paused = paused;
+                    member.PausedReason = reason;
+                    QueueManagerLog.MemberPaused(_logger, queueName, iface, paused, reason);
+                    // Logging may reenter. Announce only the lifetime that holds the pause now.
+                    if (MemberPaused is not null && IsCurrentMemberLocked(queue, member))
+                    {
+                        _events.Post(static (m, q, member) =>
+                            ((QueueManager)m).MemberPaused?.Invoke((string)q!, (AsteriskQueueMember)member!), this, queue.Name, member);
+                    }
+                }
             }
+        }
+        finally
+        {
+            RaisePending();
         }
     }
 
