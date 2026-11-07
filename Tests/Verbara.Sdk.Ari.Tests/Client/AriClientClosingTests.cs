@@ -290,7 +290,7 @@ public sealed class AriClientClosingTests(ITestOutputHelper output)
 
 internal sealed class ClosingLogger<T> : ILogger<T>
 {
-    internal ConcurrentQueue<(LogLevel Level, EventId Id, Exception? Exception, string Message)> Entries { get; } = new();
+    internal ConcurrentQueue<(LogLevel Level, EventId Id, Exception? Exception, string Message, IReadOnlyList<KeyValuePair<string, object?>>? State)> Entries { get; } = new();
     internal Action? BeforeReconnect { get; set; }
     internal TaskCompletionSource Reconnecting { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal TaskCompletionSource Closed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -298,7 +298,7 @@ internal sealed class ClosingLogger<T> : ILogger<T>
     public bool IsEnabled(LogLevel logLevel) => true;
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        Entries.Enqueue((logLevel, eventId, exception, formatter(state, exception)));
+        Entries.Enqueue((logLevel, eventId, exception, formatter(state, exception), state as IReadOnlyList<KeyValuePair<string, object?>>));
         if (eventId.Name == "ConnectionClosed") Closed.TrySetResult();
         if (eventId.Name == "Reconnecting")
         {

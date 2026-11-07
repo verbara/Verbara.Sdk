@@ -14,6 +14,12 @@ connection's handler after admission, never on the accept loop; a blocking obser
 a throwing one loses the connection and later observers do not receive that stream; and, per server, what a stop with
 no cancellable token does while an observer blocks. No public API changes.
 
+### Fixed: an ARI outbound idle timeout inside a message is logged as an idle timeout (#532)
+
+An idle timeout that fires while a fragment of one message is still arriving, or while its last fragment is, is
+logged as `Idle timeout` at Warning, as documented, not as `Connection error` with a `WebSocketException`; the line now
+carries the configured bound (`idle=`).
+
 ### Added: a WebSocket audio session writes every command chan_websocket reads (#518)
 
 `IChanWebSocketSession` gains `SendFlushMediaAsync`, `SendPauseMediaAsync`, `SendContinueMediaAsync`,
