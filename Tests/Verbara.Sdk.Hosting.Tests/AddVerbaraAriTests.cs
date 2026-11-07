@@ -115,6 +115,7 @@ public sealed class AddVerbaraAriTests
         var act = () => services.AddVerbara(o => o.Ari = new AriClientOptions());
 
         ShouldNameBothMethods(act);
+        services.Count(d => d.ServiceType == typeof(IAriClient)).Should().Be(1, "the failing call registered no second client");
     }
 
     [Fact]
@@ -126,6 +127,7 @@ public sealed class AddVerbaraAriTests
         var act = () => services.AddVerbaraAri(Valid);
 
         ShouldNameBothMethods(act);
+        services.Count(d => d.ServiceType == typeof(IAriClient)).Should().Be(1, "the failing call registered no second client");
     }
 
     [Fact]
