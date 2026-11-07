@@ -133,17 +133,18 @@ public sealed partial class CallSessionManager
         // Outside the bookkeeping lock: it is never held across a walk of the calls.
         foreach (var held in _sessions)
         {
-            var call = held.Value;
-            if (string.Equals(call.ServerId, serverId, StringComparison.Ordinal)
-                && IsHeld(call) && !HasEnded(call) && !call.EndingDelivered)
-            {
+            if (IsHeldLiveCallOf(held.Value, serverId))
                 return;
-            }
         }
 
         lock (_attachLock)
             Interlocked.CompareExchange(ref index.LatestAttachment, null, latest);
     }
+
+    /// <summary>Whether <paramref name="call"/> is of <paramref name="serverId"/>, still held and not ended.</summary>
+    private bool IsHeldLiveCallOf(CallSession call, string serverId) =>
+        string.Equals(call.ServerId, serverId, StringComparison.Ordinal)
+        && IsHeld(call) && !HasEnded(call) && !call.EndingDelivered;
 
     /// <summary>Clears <paramref name="mark"/> and lets every attach or release of the id waiting for it go on.</summary>
     private void EndRelease(string serverId, ReleaseInProgress mark)

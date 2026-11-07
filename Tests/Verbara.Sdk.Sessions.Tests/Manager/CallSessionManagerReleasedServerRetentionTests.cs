@@ -138,7 +138,7 @@ public sealed class CallSessionManagerReleasedServerRetentionTests
                     call.SyncRoot.Exit();
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 holderFault = ex;
             }
