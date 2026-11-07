@@ -1,0 +1,36 @@
+Asterisk base image recipe
+
+The files in this directory that build the image (Dockerfile, build.sh, entrypoint.sh, healthcheck.sh) derive from
+the Asterisk Docker build recipe by Andrius Kairiukstis, published at https://github.com/andrius under the
+repository name "asterisk" (the Dockerfile and scripts its generator renders for Debian trixie, at commit
+8d9e9559652122a0a9d3cffc6515c7e5cb8c8095). They are used under the MIT License below.
+
+Asterisk itself, and the pjproject it bundles, are licensed under the GNU General Public License, version 2; they
+are not part of this directory. The image is built from the official, unmodified release tarball, and
+/usr/share/doc/verbara-asterisk-base/SOURCE.txt inside it names that tarball, its sha256 and the recipe commit.
+
+The Digium codec_opus binary is not downloaded and not part of the image.
+
+--------------------------------------------------------------------------------
+
+The MIT License (MIT)
+
+Copyright (c) 2016 Andrius Kairiukstis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

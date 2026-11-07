@@ -1,0 +1,17 @@
+Asterisk ${ASTERISK_VERSION} base image: where its source is
+
+This image contains Asterisk and the pjproject it bundles, both licensed under the GNU General Public License,
+version 2. The complete corresponding source is the official release tarball named below, unmodified, built with
+the recipe at the commit named below.
+
+Asterisk source tarball:
+  https://downloads.asterisk.org/pub/telephony/asterisk/releases/asterisk-${ASTERISK_VERSION}.tar.gz
+  sha256 ${TARBALL_SHA256}
+  signature: the .tar.gz.asc next to it, by the Asterisk Development Team
+  (key fingerprint F2FC93DB7587BD1FB49E045A5D984BE337191CE7)
+
+Build recipe (Dockerfile, build.sh, entrypoint.sh, healthcheck.sh):
+  ${SOURCE_REPOSITORY}/tree/${RECIPE_REVISION}/docker/base
+
+No source file is patched. The build recipe derives from the andrius Asterisk Docker recipe (MIT); its notice is in
+NOTICE next to this file.
