@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a WebSocket audio server keeps accepting while an observer of new streams runs (#534)
+
+When a connection's upgrade request had already arrived by the time it was accepted, `WebSocketAudioServer` served it
+on its accept loop up to and including the `OnStreamConnected` announcement, so an observer that blocked held every
+later connection out until it returned. The handler now yields before it serves the upgrade, as the AudioSocket server
+already did. `IAudioServer.OnStreamConnected` now documents how observers are called: synchronously from the
+connection's handler after admission, never on the accept loop; a blocking observer holds that connection's release;
+a throwing one loses the connection and later observers do not receive that stream; and, per server, what a stop with
+no cancellable token does while an observer blocks. No public API changes.
+
 ### Fixed: an ARI outbound idle timeout inside a message is logged as an idle timeout (#532)
 
 An idle timeout that fires while a fragment of one message is still arriving, or while its last fragment is, is
