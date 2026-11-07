@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Collections.Concurrent;
+using Verbara.Sdk.Live.Agents;
 using Verbara.Sdk.Live.Diagnostics;
 using Verbara.Sdk.Live.Server;
 using Microsoft.Extensions.Logging;
@@ -53,6 +55,9 @@ public sealed class QueueManager
 {
     private readonly ConcurrentDictionary<string, AsteriskQueue> _queues = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _queuesByMember = new(StringComparer.Ordinal);
+
+    // The reverse index read by a span key, so the membership query builds no string per spelling it looks up.
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>>.AlternateLookup<ReadOnlySpan<char>> _queuesByMemberSpan;
     private readonly ILogger _logger;
 
     // The snapshot windows open now: one per load reading QueueStatus. Replaced, never mutated, under _windowsLock.
@@ -139,6 +144,7 @@ public sealed class QueueManager
     {
         _logger = logger;
         _events = new LiveEventOutbox(ex => QueueManagerLog.UnownedHandlerFailed(logger, ex), LiveEventOutbox.DefaultTurnWait);
+        _queuesByMemberSpan = _queuesByMember.GetAlternateLookup<ReadOnlySpan<char>>();
     }
 
     public IEnumerable<AsteriskQueue> Queues => _queues.Values;
@@ -153,6 +159,54 @@ public sealed class QueueManager
         if (_queuesByMember.TryGetValue(memberInterface, out var queues))
             return queues.Keys;
         return [];
+    }
+
+    /// <summary>
+    /// What this table holds of app_agent_pool agent <paramref name="agentId"/>'s memberships: every member whose interface
+    /// is <c>Agent/</c>, in any letter case, followed by exactly <paramref name="agentId"/>, compared with case, as agents
+    /// are keyed. <see cref="AgentMemberships.AllPaused"/> when at least one is held and every one is paused.
+    /// Each of the 32 letter-case spellings of the prefix is one lookup in the reverse index; no queue lock is taken, so
+    /// the caller may hold an agent's lock.
+    /// </summary>
+    internal AgentMemberships AgentMembershipsOf(string agentId)
+    {
+        const string Prefix = "Agent/";
+        const int Letters = 5;
+        var length = Prefix.Length + agentId.Length;
+        char[]? rented = null;
+        var key = length <= 128 ? stackalloc char[length] : (rented = ArrayPool<char>.Shared.Rent(length)).AsSpan(0, length);
+        try
+        {
+            key[Letters] = '/';
+            agentId.AsSpan().CopyTo(key[Prefix.Length..]);
+            var held = false;
+            for (var spelling = 0; spelling < 1 << Letters; spelling++)
+            {
+                for (var i = 0; i < Letters; i++)
+                    key[i] = ((spelling >> i) & 1) != 0 ? char.ToUpperInvariant(Prefix[i]) : char.ToLowerInvariant(Prefix[i]);
+
+                if (!_queuesByMemberSpan.TryGetValue(key, out var iface, out var queueNames))
+                    continue;
+
+                foreach (var entry in queueNames)
+                {
+                    if (!_queues.TryGetValue(entry.Key, out var queue) || queue.RemovedFromTable
+                        || !queue.Members.TryGetValue(iface, out var member))
+                        continue;
+
+                    if (!member.Paused)
+                        return AgentMemberships.NotAllPaused;
+                    held = true;
+                }
+            }
+
+            return held ? AgentMemberships.AllPaused : AgentMemberships.None;
+        }
+        finally
+        {
+            if (rented is not null)
+                ArrayPool<char>.Shared.Return(rented);
+        }
     }
 
     /// <summary>Get queue objects where a member interface is registered.</summary>
@@ -319,12 +373,20 @@ public sealed class QueueManager
                     }
                 }
             }
+
+            MemberPauseApplied?.Invoke();
         }
         finally
         {
             RaisePending();
         }
     }
+
+    /// <summary>
+    /// Null outside deterministic tests; runs on the thread that applied a pause to a held member, after it released the
+    /// window gate and before it drains its notifications.
+    /// </summary>
+    internal Action? MemberPauseApplied { get; set; }
 
     /// <summary>Handle QueueMemberStatus event (device state change).</summary>
     public void OnMemberStatusChanged(string queueName, string iface, int status)

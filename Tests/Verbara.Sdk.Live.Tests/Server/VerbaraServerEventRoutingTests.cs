@@ -1512,6 +1512,30 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task EventObserver_ShouldPauseTheAgent_WhenAMemberAddedHandlerThrows()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        _sut.Queues.MemberAdded += (_, _) => throw new InvalidOperationException("a failing subscriber");
+        var changes = RecordStateChanges("1001");
+
+        try
+        {
+            AddMember("sales", "Agent/1001", paused: true);
+        }
+        catch (InvalidOperationException)
+        {
+            // Where a failing handler's exception surfaces is the outbox's contract, not this test's.
+        }
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Paused, "a member handler's failure does not skip the agent");
+            changes.Should().Equal([AgentState.Paused]);
+        }
+    }
+
+    [Fact]
     public async Task EventObserver_ShouldPauseTheAgentWithNoMemberPaused_WhenItsMembershipIsAddedAlreadyPaused()
     {
         await StartAndGetObserverAsync();

@@ -322,7 +322,7 @@ public sealed class VerbaraServer : IVerbaraServer
         _logger = logger;
         Channels = new ChannelManager(logger);
         Queues = new QueueManager(logger);
-        Agents = new AgentManager(logger);
+        Agents = new AgentManager(logger) { Memberships = Queues.AgentMembershipsOf };
         MeetMe = new MeetMeManager(logger);
         Bridges = new BridgeManager(logger);
         _instanceMeter = new Meter("Verbara.Sdk.Live", "1.0.0");
@@ -330,6 +330,15 @@ public sealed class VerbaraServer : IVerbaraServer
         // A channel a reconciliation proved gone takes its waiting caller out of the queue table, in the same
         // reconciliation: no QueueCallerLeave will come for it.
         Channels.ChannelRemoved += OnChannelRemoved;
+    }
+
+    // An app_agent_pool member names its agent after the technology, which Asterisk matches without regard to case; any
+    // other interface names no agent. A pause is not a live agent event for a reload's ordering: it speaks of no login.
+    private void SettleAgentMember(string memberInterface)
+    {
+        const string AgentTechnology = "Agent/";
+        if (memberInterface.StartsWith(AgentTechnology, StringComparison.OrdinalIgnoreCase))
+            Agents.OnMembershipsChanged(memberInterface[AgentTechnology.Length..]);
     }
 
     private void OnChannelRemoved(AsteriskChannel channel)
@@ -2050,30 +2059,60 @@ public sealed class VerbaraServer : IVerbaraServer
                     break;
 
                 // Queue events
+                // An Agent/<id> member's add, removal or pause re-derives that agent's state from the queue table, in a
+                // finally: the queue call raises its own notification first, and a queue handler's failure, which the
+                // call rethrows, does not skip the agent.
                 case QueueMemberAddedEvent qma:
-                    server.Queues.OnMemberAdded(
-                        qma.Queue ?? "",
-                        qma.Location ?? qma.Interface ?? "",
-                        qma.MemberName,
-                        qma.Penalty ?? 0,
-                        qma.Paused ?? false,
-                        qma.Status ?? 0);
+                {
+                    var iface = qma.Location ?? qma.Interface ?? "";
+                    try
+                    {
+                        server.Queues.OnMemberAdded(
+                            qma.Queue ?? "",
+                            iface,
+                            qma.MemberName,
+                            qma.Penalty ?? 0,
+                            qma.Paused ?? false,
+                            qma.Status ?? 0);
+                    }
+                    finally
+                    {
+                        server.SettleAgentMember(iface);
+                    }
+
                     break;
+                }
 
                 case QueueMemberRemovedEvent qmr:
-                    server.Queues.OnMemberRemoved(
-                        qmr.Queue ?? "",
-                        qmr.Location ?? qmr.Interface ?? "");
+                {
+                    var iface = qmr.Location ?? qmr.Interface ?? "";
+                    try
+                    {
+                        server.Queues.OnMemberRemoved(qmr.Queue ?? "", iface);
+                    }
+                    finally
+                    {
+                        server.SettleAgentMember(iface);
+                    }
+
                     break;
+                }
 
 #pragma warning disable VSDK0005 // Asterisk 11 and earlier send QueueMemberPaused; no supported version does
                 case QueueMemberPausedEvent qmp:
-                    server.Queues.OnMemberPaused(
-                        qmp.Queue ?? "",
-                        qmp.Location ?? qmp.Interface ?? "",
-                        qmp.Paused ?? false,
-                        qmp.Reason);
+                {
+                    var iface = qmp.Location ?? qmp.Interface ?? "";
+                    try
+                    {
+                        server.Queues.OnMemberPaused(qmp.Queue ?? "", iface, qmp.Paused ?? false, qmp.Reason);
+                    }
+                    finally
+                    {
+                        server.SettleAgentMember(iface);
+                    }
+
                     break;
+                }
 #pragma warning restore VSDK0005
 
                 case QueueMemberStatusEvent qms:
@@ -2084,12 +2123,23 @@ public sealed class VerbaraServer : IVerbaraServer
                     break;
 
                 case QueueMemberPauseEvent qmpe:
-                    server.Queues.OnMemberPaused(
-                        qmpe.RawFields?.GetValueOrDefault("Queue") ?? "",
-                        qmpe.RawFields?.GetValueOrDefault("Location") ?? qmpe.RawFields?.GetValueOrDefault("Interface") ?? "",
-                        qmpe.Paused ?? false,
-                        qmpe.Pausedreason);
+                {
+                    var iface = qmpe.RawFields?.GetValueOrDefault("Location") ?? qmpe.RawFields?.GetValueOrDefault("Interface") ?? "";
+                    try
+                    {
+                        server.Queues.OnMemberPaused(
+                            qmpe.RawFields?.GetValueOrDefault("Queue") ?? "",
+                            iface,
+                            qmpe.Paused ?? false,
+                            qmpe.Pausedreason);
+                    }
+                    finally
+                    {
+                        server.SettleAgentMember(iface);
+                    }
+
                     break;
+                }
 
                 case QueueCallerJoinEvent qcj:
                     server.Queues.OnCallerJoined(
