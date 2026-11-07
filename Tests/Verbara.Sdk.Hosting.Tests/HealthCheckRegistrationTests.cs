@@ -1,3 +1,4 @@
+using Verbara.Sdk.Ari.Client;
 using Verbara.Sdk.Hosting;
 using Verbara.Sdk.Live.Diagnostics;
 using FluentAssertions;
@@ -93,5 +94,102 @@ public sealed class HealthCheckRegistrationTests
         var report = (await run.Should().NotThrowAsync(
             "a second sessions registration adds no second check under the same name")).Subject;
         report.Entries.Keys.Should().Equal(["sessions"], "the sessions check is registered once");
+    }
+
+    private static readonly string[] SdkCheckNames = ["ami", "live", "agi", "ari", "sessions", "verbara-pool"];
+
+    /// <summary>
+    /// A host that names no tag: <c>AddVerbara</c> with ARI configured, a sessions registration and
+    /// <c>AddVerbaraMultiServer()</c>, so all six SDK checks are registered.
+    /// </summary>
+    private static ServiceCollection AllSixChecks()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbara(o => o.Ari = new AriClientOptions
+        {
+            BaseUrl = "http://127.0.0.1:8088",
+            Username = "asterisk",
+            Password = "secret",
+            Application = "tags",
+            EventsEnabled = false,
+        });
+        services.AddVerbaraSessionsMultiServer();
+        services.AddVerbaraMultiServer();
+        return services;
+    }
+
+    [Fact]
+    public async Task Registrations_ShouldCarryNoTags_WhenNoTagIsNamed()
+    {
+        var services = AllSixChecks();
+
+        await using var provider = services.BuildServiceProvider();
+        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
+
+        registrations.Select(r => r.Name).Should().BeEquivalentTo(SdkCheckNames, "all six SDK checks are registered");
+        registrations.Should().OnlyContain(r => r.Tags.Count == 0,
+            "the SDK names no tag of its own, so a host that names none gets exactly the untagged registrations of before");
+    }
+
+    [Fact]
+    public async Task ReadinessPredicate_ShouldSelectNoSdkCheck_WhenNoTagIsNamed()
+    {
+        var services = AllSixChecks();
+        Func<HealthCheckRegistration, bool> readiness = r => r.Tags.Contains("ready");
+
+        await using var provider = services.BuildServiceProvider();
+        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
+
+        registrations.Should().HaveCount(SdkCheckNames.Length, "the six SDK checks are there to be filtered");
+        registrations.Where(readiness).Should().BeEmpty(
+            "an endpoint filtered on the readiness tag reads none of the SDK's checks unless the host tags them");
+    }
+
+    [Fact]
+    public void HealthCheckRegistration_ShouldCompareTagsIgnoringCase_WhenTheFrameworkBuildsIt()
+    {
+        var registration = new HealthCheckRegistration("probe", _ => new StubCheck(), failureStatus: null, tags: ["voice"]);
+
+        registration.Tags.Add("Voice").Should().BeFalse("the framework's tag set compares ignoring case, so Voice is voice");
+        registration.Tags.Add("ops").Should().BeTrue("the tag set is mutable after the registration is built");
+        registration.Tags.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void HealthCheckRegistration_ShouldCopyTheTagsItIsGiven_WhenConstructed()
+    {
+        var source = new List<string> { "voice", "Voice" };
+
+        var registration = new HealthCheckRegistration("probe", _ => new StubCheck(), failureStatus: null, tags: source);
+        source.Add("late");
+
+        registration.Tags.Should().ContainSingle("voice and Voice are one tag in the registration's own set")
+            .Which.Should().BeEquivalentTo("voice");
+        registration.Tags.Should().NotContain("late", "the registration copies the list it is given and does not share it");
+    }
+
+    [Fact]
+    public async Task AddVerbara_ShouldLeaveAHostsOwnCheckUntagged_WhenTheHostNamesTags()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHealthChecks().AddCheck<StubCheck>("postgres");
+        services.AddVerbara(_ => { });
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("pbx"));
+
+        await using var provider = services.BuildServiceProvider();
+        var registrations = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
+
+        registrations.Single(r => r.Name == "postgres").Tags.Should().BeEmpty(
+            "the host-wide tags reach only the checks the SDK registers, never a host's own");
+        registrations.Single(r => r.Name == "ami").Tags.Should().BeEquivalentTo(["pbx"],
+            "the same provider puts the host's tag on the SDK's ami check");
+    }
+
+    private sealed class StubCheck : IHealthCheck
+    {
+        public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+            => Task.FromResult(HealthCheckResult.Healthy());
     }
 }
