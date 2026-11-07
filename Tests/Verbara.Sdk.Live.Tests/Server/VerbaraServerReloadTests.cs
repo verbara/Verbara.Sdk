@@ -821,6 +821,7 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
         // The pump applies the pause and derives the agent; that derivation waits for the reload's, which holds the
         // agent's lock, or runs to its end where the reload reads outside it.
         var pump = Task.Run(() => _observer!.OnNext(PauseFrame("sales", "Agent/1001", paused: true)));
+        // fence-allow: GUARD-TIMEOUT — bounds the wait for a thread that, under the fix, stays blocked on the lock under test
         await Task.WhenAny(pump, Task.Delay(TimeSpan.FromSeconds(2)));
         releaseSettle.Set();
         await pump.WaitAsync(TimeSpan.FromSeconds(5));

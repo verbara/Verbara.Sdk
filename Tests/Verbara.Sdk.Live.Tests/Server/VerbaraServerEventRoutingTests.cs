@@ -1576,6 +1576,7 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
         var pause = Task.Run(() => PauseMember("sales", "Agent/1001", paused: true));
         lookedUp.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue("premise: the routed derivation looked the agent up");
         var replacement = Task.Run(() => _sut.Agents.ReplaceWithSnapshot(rows, listedFrom));
+        // fence-allow: GUARD-TIMEOUT — bounds the wait for a thread that, under the fix, stays blocked on the lock under test
         await Task.WhenAny(replacement, Task.Delay(TimeSpan.FromSeconds(2)));
         releaseLookup.Set();
         await Task.WhenAll(pause, replacement).WaitAsync(TimeSpan.FromSeconds(5));
