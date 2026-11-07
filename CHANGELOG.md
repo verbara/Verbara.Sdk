@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: a host that needs only ARI registers only ARI (#537)
+
+`AddVerbaraAri(Action<AriClientOptions>)` registers the ARI client and nothing else: its validated options, the `ari`
+health check, its hosted service and, with `ConfigureAudioServer` set, the audio servers; no AMI connection, AGI server
+or Live server. A host built with it and `EventsEnabled = false` starts and stops with no Asterisk reachable. The ARI
+client is registered once: a second registration, through `AddVerbaraAri` or `AddVerbara` with `Ari` set, throws
+`InvalidOperationException` at registration instead of failing when the health check service is resolved.
+
 ### Fixed: an ARI outbound idle timeout inside a message is logged as an idle timeout (#532)
 
 An idle timeout that fires while a fragment of one message is still arriving, or while its last fragment is, is
