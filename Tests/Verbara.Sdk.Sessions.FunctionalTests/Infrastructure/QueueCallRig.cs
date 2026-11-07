@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Verbara.Sdk.Ami.Events;
@@ -54,7 +55,8 @@ internal sealed class QueueCallRig : IAsyncDisposable
     public IReadOnlyList<CallQueuedEvent> Queued => [.. _events.OfType<CallQueuedEvent>()];
 
     /// <summary>
-    /// Starts a server whose state-load actions return nothing outside <see cref="ReconnectAsync"/>, and
+    /// Starts a server whose state-load actions return nothing outside <see cref="ReconnectAsync"/>, except for
+    /// optional initial <paramref name="loadedChannels"/> on its first Status, and
     /// attaches a manager and a tracker to it.
     /// </summary>
     /// <param name="clock">
@@ -70,19 +72,28 @@ internal sealed class QueueCallRig : IAsyncDisposable
     /// Optional. The wrap-up duration provider the manager is given through its internal constructor; none when
     /// omitted.
     /// </param>
+    /// <param name="loadedChannels">
+    /// Optional initial Status frames loaded before the manager attaches, as for a host reconstructing calls from
+    /// a server whose channel table is already loaded. With no frames supplied, the usual attach-before-start path is used.
+    /// </param>
+    /// <param name="logger">Optional manager log observer; a null logger when omitted.</param>
     public static async Task<QueueCallRig> StartAsync(TimeProvider? clock = null, SessionStoreBase? store = null,
-        IWrapUpDurationProvider? wrapUpDurations = null)
+        IWrapUpDurationProvider? wrapUpDurations = null, IReadOnlyList<ManagerEvent>? loadedChannels = null,
+        ILogger<CallSessionManager>? logger = null)
     {
-        var connection = new ReloadableConnection();
+        var connection = new ReloadableConnection(loadedChannels);
         var options = Options.Create(new SessionOptions());
         var server = new VerbaraServer(connection.Connection, connection.ServerLogger) { TimeProvider = clock ?? TimeProvider.System };
-        var manager = new CallSessionManager(options, NullLogger<CallSessionManager>.Instance, store ?? new InMemorySessionStore(),
+        var manager = new CallSessionManager(options, logger ?? NullLogger<CallSessionManager>.Instance, store ?? new InMemorySessionStore(),
             clock ?? TimeProvider.System, wrapUpDurations);
         var tracker = new QueueSessionTracker(manager, options);
         try
         {
-            manager.AttachToServer(server, ServerId);
+            if (loadedChannels is null)
+                manager.AttachToServer(server, ServerId);
             await server.StartAsync();
+            if (loadedChannels is not null)
+                manager.AttachToServer(server, ServerId);
 
             // Throws now, not at the first delivery, if the server subscribed no event observer.
             _ = connection.Observer;

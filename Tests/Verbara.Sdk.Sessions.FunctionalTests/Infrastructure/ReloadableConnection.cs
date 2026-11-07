@@ -42,8 +42,9 @@ internal sealed class ReloadableConnection
     private TaskCompletionSource? _reloadFailed;
     private ReloadScript _script = ReloadScript.None;
 
-    public ReloadableConnection()
+    public ReloadableConnection(IReadOnlyList<ManagerEvent>? loadedChannels = null)
     {
+        _status = loadedChannels ?? [];
         Connection = Substitute.For<IAmiConnection>();
         Connection.AsteriskVersion.Returns("22.9.0");
         Connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
@@ -141,6 +142,8 @@ internal sealed class ReloadableConnection
                 QueueStatusAction => _queueStatus,
                 _ => [],
             };
+            if (action is StatusAction)
+                _status = [];
             done = action is AgentsAction ? _reloadDone : null;
             script = _script;
         }

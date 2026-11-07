@@ -216,6 +216,12 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>The Asterisk version string.</summary>
     public string? AsteriskVersion => _connection.AsteriskVersion;
 
+    /// <summary>
+    /// The last Status refusal, or <see langword="null"/> when none remains. A later Status read in full clears it,
+    /// even when its reconciliation is deferred; cancellation and the end of an AMI session leave it unchanged.
+    /// </summary>
+    public StatusRefusal? LastStatusRefusal => Volatile.Read(ref _lastStatusRefusal);
+
     // The clock a load's waits for a starting Asterisk run on: the interval between two asks, and the budget, which
     // is measured with GetTimestamp so that a step of the wall clock cannot stretch or cut it. Settable by tests (via
     // InternalsVisibleTo) to drive both on a manual clock.
@@ -290,6 +296,8 @@ public sealed class VerbaraServer : IVerbaraServer
     // 1 once ReconcileChannelsAsync has logged a refused Status at Warning in the current AMI session; the reload after
     // a reconnect sets it back to 0, so the first refusal of every session is a Warning and the ones after it are Debug.
     private int _statusRefusalWarned;
+
+    private StatusRefusal? _lastStatusRefusal;
 
     // 1 once a load has logged a refused conference listing at Warning in the current AMI session; the reload after a
     // reconnect sets it back to 0, so the first refusal of every session is a Warning and the ones after it are Debug.
@@ -440,6 +448,23 @@ public sealed class VerbaraServer : IVerbaraServer
     // Justification: called from the two event handlers above, which are synchronous up to the first await on purpose.
     // All exceptions are caught in the try/catch below — no unobserved exceptions.
 #pragma warning disable VSTHRD100 // Avoid async void — required by Action event delegate
+    private int _channelTableVerified;
+    private int _channelApplications;
+    private long _channelVerifiedSession;
+    private Task? _channelVerifiedConnection;
+    internal bool ChannelTableComplete => Volatile.Read(ref _channelTableVerified) != 0
+        && Volatile.Read(ref _channelApplications) == 0
+        && Interlocked.Read(ref _channelVerifiedSession) == Interlocked.Read(ref _reconnects)
+        && (_connection is not AmiConnection ami || ReferenceEquals(Volatile.Read(ref _channelVerifiedConnection), ami.FullyBooted));
+    // Attachment generations belong to the subscriber. The emitting instance/session lets a new
+    // subscription accept a read that was already in flight when that attachment was installed.
+    internal event Action<ChannelSnapshotCompletion>? ChannelSnapshotCompleted;
+    internal string? PoolId { get; set; }
+
+    /// <summary>Requests the channel-only snapshot needed by an admission on an incomplete table.</summary>
+    internal ValueTask RequestChannelSnapshotAsync(CancellationToken cancellationToken = default) =>
+        ChannelTableComplete ? ValueTask.CompletedTask : ReconcileChannelsAsync(cancellationToken);
+
     private async void ReloadNewSession(CancellationToken cancellationToken)
 #pragma warning restore VSTHRD100
     {
@@ -457,6 +482,7 @@ public sealed class VerbaraServer : IVerbaraServer
 
         // First, before anything is reloaded or delivered: every event the outage swallowed lies before it.
         Interlocked.Increment(ref _reconnects);
+        Volatile.Write(ref _channelTableVerified, 0);
 
         // A new AMI session: the channel reconciliation's first refusal on it is a Warning again.
         Volatile.Write(ref _statusRefusalWarned, 0);
@@ -642,14 +668,15 @@ public sealed class VerbaraServer : IVerbaraServer
 
     /// <summary>Who reads a channel snapshot: a load, or <see cref="ReconcileChannelsAsync"/>.</summary>
     /// <param name="Name">What the reader is called in the exception a session ending under it throws.</param>
+    /// <param name="MetricName">The load or reconciliation label carried by the refusal counter.</param>
     /// <param name="WarnsOncePerSession">
     /// Whether a refused <c>Status</c> is a <c>Warning</c> only the first time in an AMI session: a load warns every time.
     /// </param>
-    private sealed record ChannelReader(string Name, bool WarnsOncePerSession)
+    private sealed record ChannelReader(string Name, string MetricName, bool WarnsOncePerSession)
     {
-        public static readonly ChannelReader Load = new("live state load", WarnsOncePerSession: false);
+        public static readonly ChannelReader Load = new("live state load", "load", WarnsOncePerSession: false);
 
-        public static readonly ChannelReader Reconciliation = new("live channel reconciliation", WarnsOncePerSession: true);
+        public static readonly ChannelReader Reconciliation = new("live channel reconciliation", "reconciliation", WarnsOncePerSession: true);
     }
 
     /// <summary>
@@ -668,16 +695,37 @@ public sealed class VerbaraServer : IVerbaraServer
         // every hangup the event observer delivers is recorded for it, so a channel the answer still lists after it hung
         // up is not brought back. It is closed on every way out of them — completed, refused, thrown, cancelled or ended
         // with the session — so nothing it keeps outlives this snapshot.
+        var channelSession = Interlocked.Read(ref _reconnects);
+        var channelConnection = (_connection as AmiConnection)?.FullyBooted;
         using var window = Channels.OpenReadWindow();
         var mark = session is not null ? new ListSnapshotMark() : null;
         var channelSnapshot = await ReadChannelSnapshotAsync(session, mark, states, activity, reader, cancellationToken);
         if (channelSnapshot is null)
+        {
+            Volatile.Write(ref _channelTableVerified, 0);
             return null;
+        }
 
         // Before the snapshot removes anything, the pump dispatches every event received before StatusComplete, so a
         // Hangup still queued then removes its channel first, as the hangup it is. The window stays open while it waits.
         var full = await AwaitBarrierAsync(session, mark, "Status", states, reader.Name, activity, barriers, cancellationToken);
-        Channels.ReconcileWithSnapshot(channelSnapshot, window, removeAbsent: full);
+        Interlocked.Increment(ref _channelApplications);
+        try
+        {
+            Volatile.Write(ref _channelTableVerified, 0);
+            Channels.ReconcileWithSnapshot(channelSnapshot, window, removeAbsent: full);
+            Volatile.Write(ref _channelVerifiedConnection, channelConnection);
+            Interlocked.Exchange(ref _channelVerifiedSession, channelSession);
+            Volatile.Write(ref _channelTableVerified, full && channelSession == Interlocked.Read(ref _reconnects) ? 1 : 0);
+        }
+        catch
+        {
+            Volatile.Write(ref _channelTableVerified, 0);
+            throw;
+        }
+        finally { Interlocked.Decrement(ref _channelApplications); }
+        if (full && ChannelTableComplete)
+            ChannelSnapshotCompleted?.Invoke(new ChannelSnapshotCompletion(this, channelSession, channelConnection));
         return channelSnapshot;
     }
 
@@ -1374,6 +1422,12 @@ public sealed class VerbaraServer : IVerbaraServer
         if (outcome is { Reported: true, Rejection: { } rejection })
         {
             var message = rejection.Length == 0 ? "(Asterisk sent no message)" : rejection;
+            Volatile.Write(ref _lastStatusRefusal, new StatusRefusal(rejection, TimeProvider.GetUtcNow()));
+            var readerTag = new KeyValuePair<string, object?>("live.status.reader", reader.MetricName);
+            if (PoolId is { } serverId)
+                LiveMetrics.StatusRefused.Add(1, readerTag, new KeyValuePair<string, object?>("server.id", serverId));
+            else
+                LiveMetrics.StatusRefused.Add(1, readerTag);
             if (!reader.WarnsOncePerSession || Interlocked.Exchange(ref _statusRefusalWarned, 1) == 0)
                 VerbaraServerLog.StatusRefused(_logger, message);
             else
@@ -1382,6 +1436,7 @@ public sealed class VerbaraServer : IVerbaraServer
             return null;
         }
 
+        Volatile.Write(ref _lastStatusRefusal, null);
         return snapshot;
     }
 
@@ -2258,3 +2313,6 @@ public sealed class OriginateResult
     public string? Message { get; init; }
     public string? ChannelId { get; init; }
 }
+
+/// <summary>A fully applied channel reconciliation of the emitting instance's AMI session.</summary>
+internal readonly record struct ChannelSnapshotCompletion(VerbaraServer Server, long SessionGeneration, Task? SessionIdentity);

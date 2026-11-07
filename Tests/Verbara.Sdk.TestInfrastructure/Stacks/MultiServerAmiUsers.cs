@@ -46,8 +46,14 @@ public static class MultiServerAmiUsers
     public static readonly AmiUserClass Consumer = new(
         "consumer", "system,call,agent,user,config,originate,reporting,command", "system,call,agent,user,config,originate,command");
 
+    /// <summary>
+    /// Every read class, but only the <c>originate</c> write class: none of the <c>system</c>, <c>call</c> or
+    /// <c>reporting</c> classes that allow <c>Status</c>.
+    /// </summary>
+    public static readonly AmiUserClass NoStatus = new("nostatus", "all", "originate");
+
     /// <summary>Every user each server has, in the order <c>manager.conf</c> declares them.</summary>
-    public static readonly IReadOnlyList<AmiUserClass> All = [Full, NoHangup, NoAgent, Consumer];
+    public static readonly IReadOnlyList<AmiUserClass> All = [Full, NoHangup, NoAgent, Consumer, NoStatus];
 
     /// <summary>A secret for one user of one run: 16 random bytes, hexadecimal.</summary>
     public static string NewSecret() => Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();

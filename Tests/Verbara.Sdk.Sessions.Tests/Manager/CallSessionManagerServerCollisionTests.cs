@@ -37,7 +37,7 @@ public sealed class CallSessionManagerServerCollisionTests : IAsyncLifetime
 
     private static readonly int[] ExpectedCallSizes = [2, 1];
     private static readonly string[] SharedCalls = ["1700000000.1", "1700000000.2", "1700000000.3"];
-    private static readonly string[] ExpectedOpeners = ["a", "a", "b"];
+    private static readonly string[] ExpectedOpeners = ["a", "b", "a", "b", "a", "b"];
     private static readonly string[] ExpectedOwnLegs = ["X"];
 
     private readonly RecordingLogger _logger = new();
@@ -87,6 +87,10 @@ public sealed class CallSessionManagerServerCollisionTests : IAsyncLifetime
         _logger.Entries.Where(e => e.EventId.Name == eventName).ToList();
 
     private int CollisionEntries => Collisions(CollisionEvent).Count + Collisions(CollisionAgainEvent).Count;
+
+    private CallSession SessionOf(string serverId, string linkedId) =>
+        _sut.GetByLinkedId(serverId, linkedId)
+            ?? throw new InvalidOperationException($"premise: a session of {serverId} is indexed under linkedid {linkedId}");
 
     private CallSession SessionOf(string linkedId) =>
         _sut.GetByLinkedId(linkedId)
@@ -225,10 +229,12 @@ public sealed class CallSessionManagerServerCollisionTests : IAsyncLifetime
         Leg(b, "1700000000.2");
         Leg(b, "1700000000.3");
         Leg(a, "1700000000.3");
-        var first = SessionOf("1700000000.1");
+        var first = SessionOf("a", "1700000000.1");
         var participantsAfterAdds = first.Participants.Count;
 
         a.Channels.OnHangup("1700000000.1", HangupCause.NormalClearing);
+        SessionOf("b", "1700000000.1").EndingDelivered.Should().BeFalse("a cannot end b");
+        first.EndingDelivered.Should().BeFalse("a still holds its second leg");
         b.Channels.OnHangup("1700000000.1", HangupCause.NormalClearing);
         a.Channels.OnHangup("1700000000.9", HangupCause.NormalClearing);
         foreach (var server in new[] { a, b })
@@ -242,7 +248,7 @@ public sealed class CallSessionManagerServerCollisionTests : IAsyncLifetime
         {
             Participants = participantsAfterAdds,
             Sessions = SharedCalls
-                .Select(l => SessionOf(l).ServerId).ToArray(),
+                .SelectMany(l => new[] { SessionOf("a", l).ServerId, SessionOf("b", l).ServerId }).ToArray(),
             Started = events.OfType<CallStartedEvent>().Count(),
             Ended = events.OfType<CallEndedEvent>().Count(),
         }.Should().BeEquivalentTo(
@@ -250,11 +256,10 @@ public sealed class CallSessionManagerServerCollisionTests : IAsyncLifetime
             {
                 Participants = 2,
                 Sessions = ExpectedOpeners,
-                Started = 3,
-                Ended = 3,
+                Started = 6,
+                Ended = 6,
             },
-            "the report changes nothing about correlation: a second server's leg still joins, or is taken for, the "
-            + "call its ids name, and each call still starts once and ends once");
+            "the scoped correlation keeps six calls, one per server and linkedid, with one start and ending each");
     }
 
     [Fact]
@@ -315,14 +320,14 @@ public sealed class CallSessionManagerServerCollisionTests : IAsyncLifetime
         var a = Attach("a");
         var b = Attach("b");
         Leg(a, "a-1", linkedId: "L");
-        var ended = SessionOf("L");
+        var ended = SessionOf("a", "L");
         a.Channels.OnHangup("a-1", HangupCause.NormalClearing);
         _events.OfType<CallEndedEvent>().Count(e => e.SessionId == ended.SessionId)
             .Should().Be(1, "premise: server a's call ended and is retained");
 
         Leg(b, "b-1", linkedId: "L");
 
-        var replacement = SessionOf("L");
+        var replacement = SessionOf("b", "L");
         var warnings = Collisions(CollisionEvent);
         warnings.Should().ContainSingle(
             "a linkedid entry of another server's ended, retained call is replaced by this arrival, so it is a collision");

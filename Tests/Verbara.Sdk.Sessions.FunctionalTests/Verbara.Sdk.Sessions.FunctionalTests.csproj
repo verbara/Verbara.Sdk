@@ -5,6 +5,7 @@
     <ProjectReference Include="..\..\src\Verbara.Sdk.Ami\Verbara.Sdk.Ami.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\Shared\Sessions\SessionIndexInvariant.cs" Link="Shared\Sessions\SessionIndexInvariant.cs" />
     <Compile Include="..\Shared\Metrics\LiveQueueWaitSamples.cs" Link="Shared\Metrics\LiveQueueWaitSamples.cs" />
   </ItemGroup>
   <ItemGroup>

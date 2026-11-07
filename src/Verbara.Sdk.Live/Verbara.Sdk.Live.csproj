@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Verbara.Sdk.Live.Tests" />
+    <InternalsVisibleTo Include="Verbara.Sdk.Hosting.Tests" />
     <!-- Captured queue rows and session replay must use the same deterministic test clock. -->
     <InternalsVisibleTo Include="Verbara.Sdk.Sessions.FunctionalTests" />
     <!-- CallSessionManager subscribes to ChannelManager.ChannelRemoved and must be able to read

@@ -25,10 +25,11 @@ public enum DetachedCalls
     /// so one that blocks holds the release, and any attach or release of that id waiting for it, until it returns.
     /// Hand slow work to another thread.</para>
     /// <para><b>Not from inside a notification.</b> A release asked for from inside any notification of the session
-    /// engine — and an attach that would have to wait for a release in progress — throws
-    /// <see cref="System.InvalidOperationException"/> naming the server id, and detaches and releases nothing: it would
-    /// wait for the thread delivering the notification. Handle that exception inside the subscriber, and ask from
-    /// another thread. One the subscriber lets escape is reported like any subscriber failure, and the notification
+    /// engine — and any attach requested there or inside an attachment handler, including a same-instance attach —
+    /// throws <see cref="System.InvalidOperationException"/> naming the server id before changing the attachment.
+    /// Handle that exception inside the subscriber and ask from another thread without waiting here: attach takes
+    /// the calls' locks. A Keep detach already made stands. A release refuses before detaching or releasing anything.
+    /// One the subscriber lets escape is reported like any subscriber failure, and the notification
     /// still reaches the later subscribers.</para>
     /// <para><b>A wrap-up already open keeps running.</b> A wrap-up opened for the call before its release closes as it
     /// would have without the release, by its duration or by the agent's next connection; its one

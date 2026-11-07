@@ -288,9 +288,10 @@ public sealed class QueueReloadPinTests(ITestOutputHelper output)
     public async Task Reload_ShouldAnnounceAndOfferTheVisit_WhenItReportsACallThisManagerNeverSawJoin()
     {
         var clock = new ManualClock(T0);
-        await using var rig = await QueueCallRig.StartAsync(clock);
-
         const string caller = "c-restored", callerChannel = "PJSIP/pstn-00000020";
+        await using var rig = await QueueCallRig.StartAsync(clock, loadedChannels:
+            [Status(caller, callerChannel, caller, "4", "5552120", "from-pstn", "4021", "Queue", "q-pjsip")],
+            logger: new ReloadEndingLog(output));
         var restored = new CallSession("s-restored", caller, QueueCallRig.ServerId, CallDirection.Inbound)
         {
             QueueName = "q-pjsip",
@@ -311,5 +312,16 @@ public sealed class QueueReloadPinTests(ITestOutputHelper output)
         rig.Queued.Should().ContainSingle("this manager never saw the visit open, so the reload's report opens it")
             .Which.SessionId.Should().Be(restored.SessionId);
         rig.Tracker.GetByQueueName("q-pjsip")!.CallsOffered.Should().Be(1, "the visit is offered once");
+    }
+
+    private sealed class ReloadEndingLog(ITestOutputHelper output) : Microsoft.Extensions.Logging.ILogger<Verbara.Sdk.Sessions.Manager.CallSessionManager>
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+            TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            output.WriteLine(formatter(state, exception));
     }
 }

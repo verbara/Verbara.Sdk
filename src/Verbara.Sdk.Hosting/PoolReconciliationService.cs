@@ -9,7 +9,10 @@ namespace Verbara.Sdk.Hosting;
 /// <summary>
 /// The reconciliation sweep of a multi-server host: on each <see cref="SessionOptions.ReconciliationInterval"/> tick it
 /// takes the servers <see cref="VerbaraServerPool"/> holds and runs, for each one, the pass a single-server host runs
-/// (<see cref="ServerSweep"/>), with the held calls whose <c>ServerId</c> is that server's pool id as its candidates.
+/// (<see cref="ServerSweep"/>), restricted to the exact pool id and current attached instance. Each pass first decides
+/// pending calls against a complete current table without Status, unless reconnect is pending, then applies the
+/// ordinary Status candidate, connection and load gates. Pending waiting counts use actual refusal state; legacy
+/// observed/detached counts remain distinct, and ended/released calls are excluded.
 /// </summary>
 /// <remarks>
 /// <para>

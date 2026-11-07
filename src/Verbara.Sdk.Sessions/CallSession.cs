@@ -8,8 +8,8 @@ namespace Verbara.Sdk.Sessions;
 public sealed class CallSession
 {
     private readonly List<SessionParticipant> _participants = [];
-    private readonly List<CallSessionEvent> _events = [];
-    private readonly ConcurrentDictionary<string, string> _metadata = new();
+    private readonly List<CallSessionEvent> _events = new(2);
+    private ConcurrentDictionary<string, string>? _metadata;
     internal DateTimeOffset? _holdStartedAt;
     internal TimeSpan _accumulatedHoldTime;
 
@@ -33,6 +33,7 @@ public sealed class CallSession
 
     // Participants
     public IReadOnlyList<SessionParticipant> Participants => _participants;
+    internal List<SessionParticipant> ParticipantStorage => _participants;
 
     // Convenience — originating party info
     /// <summary>Caller ID number of the originating party.</summary>
@@ -107,13 +108,121 @@ public sealed class CallSession
         (_holdStartedAt.HasValue ? DateTimeOffset.UtcNow - _holdStartedAt.Value : TimeSpan.Zero);
 
     // Metadata
-    public IReadOnlyDictionary<string, string> Metadata => _metadata;
+    private ConcurrentDictionary<string, string> MetadataStorage =>
+        LazyInitializer.EnsureInitialized(ref _metadata, static () => new ConcurrentDictionary<string, string>());
+
+    public IReadOnlyDictionary<string, string> Metadata => MetadataStorage;
 
     // Audit trail
     public IReadOnlyList<CallSessionEvent> Events => _events;
 
     // Thread safety
     internal readonly Lock SyncRoot = new();
+    private const byte UnverifiedFlag = 1;
+    private const byte FirstDepartureRecordedFlag = 2;
+    private const byte HasLastDepartureFlag = 4;
+    private const byte ReloadDepartureFlag = 8;
+    private const byte HasDepartureCauseFlag = 16;
+    private const byte DepartureProvenanceFlags = HasLastDepartureFlag | ReloadDepartureFlag | HasDepartureCauseFlag;
+    private byte _endingFlags;
+    /// <summary>The delivering or joined attachment's generation; internal and never persisted.</summary>
+    internal long AttachmentGeneration { get; set; }
+    private int _lastDepartureCause;
+    private long _firstParticipantMark;
+    private EndingOverflow? _endingOverflow;
+
+    // All state is per call and read/written under SyncRoot. The first key is already stored in
+    // the append-only participant list; additional keys or historical first-key marks use lazy overflow.
+    private sealed class EndingOverflow
+    {
+        internal Dictionary<string, long>? ParticipantMarks;
+        internal HashSet<(string Id, long Mark)>? RecordedDepartures;
+    }
+
+    internal bool Unverified
+    {
+        get => (_endingFlags & UnverifiedFlag) != 0;
+        set => _endingFlags = value ? (byte)(_endingFlags | UnverifiedFlag) : (byte)(_endingFlags & ~UnverifiedFlag);
+    }
+
+    private bool IsFirstParticipant(string id) => _participants.Count != 0
+        && string.Equals(_participants[0].UniqueId, id, StringComparison.Ordinal);
+
+    private HashSet<(string Id, long Mark)> OverflowDepartures =>
+        (_endingOverflow ??= new()).RecordedDepartures ??= [];
+
+    private void PreserveRecordedFirstMark(long replacement)
+    {
+        if ((_endingFlags & FirstDepartureRecordedFlag) == 0 || replacement == _firstParticipantMark) return;
+        // Re-admission of a first participant must not erase its earlier recorded incarnation.
+        OverflowDepartures.Add((_participants[0].UniqueId, _firstParticipantMark));
+        _endingFlags &= unchecked((byte)~FirstDepartureRecordedFlag);
+    }
+
+    internal void SetParticipantMark(string id, long mark)
+    {
+        if (_participants.Count == 0 || IsFirstParticipant(id))
+        {
+            PreserveRecordedFirstMark(mark);
+            _firstParticipantMark = mark;
+        }
+        else
+            ((_endingOverflow ??= new()).ParticipantMarks ??= new(StringComparer.Ordinal))[id] = mark;
+    }
+
+    internal long GetParticipantMark(string id) => IsFirstParticipant(id)
+        ? _firstParticipantMark : _endingOverflow?.ParticipantMarks?.GetValueOrDefault(id) ?? 0;
+
+    internal void ClearParticipantMarks()
+    {
+        PreserveRecordedFirstMark(0);
+        _firstParticipantMark = 0;
+        if (_endingOverflow is not null) _endingOverflow.ParticipantMarks = null;
+    }
+
+    internal bool RecordDeparture(string id, long mark)
+    {
+        if (IsFirstParticipant(id) && mark == _firstParticipantMark)
+        {
+            if ((_endingFlags & FirstDepartureRecordedFlag) != 0
+                || _endingOverflow?.RecordedDepartures?.Contains((id, mark)) == true) return false;
+            _endingFlags |= FirstDepartureRecordedFlag;
+            return true;
+        }
+        return OverflowDepartures.Add((id, mark));
+    }
+
+    internal bool HasRecordedDeparture(string id, long mark) =>
+        (IsFirstParticipant(id) && mark == _firstParticipantMark && (_endingFlags & FirstDepartureRecordedFlag) != 0)
+        || _endingOverflow?.RecordedDepartures?.Contains((id, mark)) == true;
+
+    internal void ClearRecordedDepartures()
+    {
+        _endingFlags &= unchecked((byte)~FirstDepartureRecordedFlag);
+        if (_endingOverflow is not null) _endingOverflow.RecordedDepartures = null;
+    }
+
+    internal (bool Reload, HangupCause? Cause)? LastDeparture
+    {
+        get => (_endingFlags & HasLastDepartureFlag) == 0 ? null
+            : ((_endingFlags & ReloadDepartureFlag) != 0,
+                (_endingFlags & HasDepartureCauseFlag) != 0 ? (HangupCause?)_lastDepartureCause : null);
+        set
+        {
+            _endingFlags &= unchecked((byte)~DepartureProvenanceFlags);
+            _lastDepartureCause = 0;
+            if (value is not { } departure) return;
+            _endingFlags |= HasLastDepartureFlag;
+            if (departure.Reload) _endingFlags |= ReloadDepartureFlag;
+            if (departure.Cause is { } cause)
+            {
+                _endingFlags |= HasDepartureCauseFlag;
+                _lastDepartureCause = (int)cause;
+            }
+        }
+    }
+
+
 
     /// <summary>
     /// Whether this call's ending has been delivered: its <c>CallEndedEvent</c>, its completion
@@ -349,7 +458,7 @@ public sealed class CallSession
     // Mutators
     internal void AddParticipant(SessionParticipant participant) => _participants.Add(participant);
     internal void AddEvent(CallSessionEvent evt) => _events.Add(evt);
-    public void SetMetadata(string key, string value) => _metadata[key] = value;
+    public void SetMetadata(string key, string value) => MetadataStorage[key] = value;
 
     private void UpdateTimestamp(CallSessionState state)
     {

@@ -10,9 +10,9 @@ public sealed partial class CallSessionManager
     internal static readonly TimeSpan DrainBound = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// Guards the attach and detach bookkeeping only: <c>_serverSubs</c>, the subscribing and unsubscribing of a
-    /// server's events, and <c>_releasesInProgress</c>. Never held across a wait, and never taken by a handler, so it
-    /// cannot be part of a deadlock with a call's lock.
+    /// Guards subscription bookkeeping, attachment generations and latest identity, and releases in progress.
+    /// Never held across a wait or a call walk. A subscriber holding a call lock can request Keep and take this
+    /// lock, so the attach's deciding walk runs only after this bookkeeping lock has been released.
     /// </summary>
     private readonly Lock _attachLock = new();
 
@@ -21,11 +21,11 @@ public sealed partial class CallSessionManager
 
     /// <summary>
     /// How deep the current thread is inside the session engine's own work: entered by every handler of an
-    /// attachment and by every raise of a notification (<see cref="Publish"/>). A release, or an attach that would wait
-    /// for a release, asked for while it is above zero would wait for the very thread asking — a handler of the server
-    /// being released, a call's lock that thread holds, or the release that raised the notification — so it is refused
-    /// instead. One count for every manager in the process: a release asked from inside another manager's
-    /// notification is refused too, which costs a host nothing it could rely on.
+    /// attachment and by every raise of a notification (<see cref="Publish"/>). Every release and attach requested
+    /// while it is above zero is refused before mutation: either can wait for a call lock this thread holds, or for
+    /// the release that raised the notification. The refusal includes a same-instance attach with no release running.
+    /// One count covers every manager in the process, including another manager's notifications. Keep remains allowed:
+    /// it takes no call lock and changes no call's observation or attachment generation.
     /// </summary>
     [ThreadStatic]
     private static int t_notificationDepth;
@@ -42,17 +42,18 @@ public sealed partial class CallSessionManager
         + "release from another thread.");
 
     private static InvalidOperationException AttachRefused(string serverId) => new(
-        $"Server '{serverId}' cannot be attached from inside a notification of the session engine while its release "
-        + "is in progress: the attach would wait for the thread that is delivering it. Handle this exception inside "
-        + "the subscriber, and attach the server from another thread.");
+        $"Server '{serverId}' cannot be attached from inside a notification of the session engine: the attach takes "
+        + "the locks of the calls the server left. Handle this exception inside the subscriber, and attach the server "
+        + "from another thread, and do not wait for it here: that attach takes the locks of the calls the server left, "
+        + "and this thread holds one. A detach this subscriber already made stands.");
 
     /// <summary>
     /// Subscribes <paramref name="subscriptions"/> under <paramref name="serverId"/>, after any release of that id in
     /// progress has finished, so an attach never overlaps a release of its own id: the release neither unsubscribes
-    /// the new attachment nor releases its calls. Asked for from inside a notification while such a release runs, it
-    /// throws instead of waiting for its own thread.
+    /// the new attachment nor releases its calls. The public entry point refuses every request from inside engine
+    /// work before reaching this method. A real installation alone advances the generation; a no-op advances nothing.
     /// </summary>
-    private void Subscribe(string serverId, ServerSubscriptions subscriptions)
+    private bool Subscribe(string serverId, ServerSubscriptions subscriptions)
     {
         while (true)
         {
@@ -61,14 +62,22 @@ public sealed partial class CallSessionManager
             {
                 if (!_releasesInProgress.TryGetValue(serverId, out inProgress))
                 {
-                    subscriptions.Attach();
+                    if (_serverSubs.TryGetValue(serverId, out var attached))
+                    {
+                        if (ReferenceEquals(attached.Server, subscriptions.Server))
+                            return false;
+                        throw new InvalidOperationException($"Server '{serverId}' is already attached to a different instance; detach it before replacing it.");
+                    }
+                    var index = IndexOf(serverId);
+                    subscriptions.InitializeGeneration(++index.Generation);
+                    subscriptions.Attach(this, serverId);
                     _serverSubs[serverId] = subscriptions;
-                    return;
+                    subscriptions.MarkInstalled();
+                    Step(HandlerStep.AttachmentPublicationStarted, serverId, string.Empty);
+                    Volatile.Write(ref index.LatestAttachment, subscriptions);
+                    return true;
                 }
             }
-
-            if (t_notificationDepth > 0)
-                throw AttachRefused(serverId);
 
             inProgress.Wait();
         }

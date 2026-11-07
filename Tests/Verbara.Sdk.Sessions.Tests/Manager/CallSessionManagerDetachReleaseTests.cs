@@ -288,15 +288,15 @@ public sealed class CallSessionManagerDetachReleaseTests
         rig.HangUpCall("a", "old");
         rig["b"].Server.Channels.OnNewChannel("b-leg-old", "PJSIP/300-old", ChannelState.Up, context: "from-trunk",
             linkedId: ReleaseRig.LinkedIdOf("old"));
-        var c5 = rig.Manager.GetByLinkedId(ReleaseRig.LinkedIdOf("old"))!;
+        var c5 = rig.Manager.GetByLinkedId("b", ReleaseRig.LinkedIdOf("old"))!;
 
         var released = rig.Release("a");
 
         new
         {
             Released = released.Select(c => c.SessionId).ToArray(),
-            ChannelStillB = ReferenceEquals(rig.Manager.GetByChannelId(ReleaseRig.CallerLeg("nw")), c2),
-            LinkedIdStillB = ReferenceEquals(rig.Manager.GetByLinkedId(ReleaseRig.LinkedIdOf("old")), c5),
+            ChannelStillB = ReferenceEquals(rig.Manager.GetByChannelId("b", ReleaseRig.CallerLeg("nw")), c2),
+            LinkedIdStillB = ReferenceEquals(rig.Manager.GetByLinkedId("b", ReleaseRig.LinkedIdOf("old")), c5),
             C2Held = ReferenceEquals(rig.Manager.GetById(c2.SessionId), c2),
             C5Held = ReferenceEquals(rig.Manager.GetById(c5.SessionId), c5),
         }.Should().BeEquivalentTo(
@@ -318,7 +318,12 @@ public sealed class CallSessionManagerDetachReleaseTests
     [Fact]
     public async Task DetachFromServer_ShouldKeepTheBridgeOfACallRegisteredUnderTheReleasedSessionId_WhenItIsRegisteredDuringTheRelease()
     {
-        await using var rig = await ReleaseRig.StartAsync("a", "b");
+        await using var rig = await ReleaseRig.StartAsync("a");
+        var b = await rig.NewInstanceAsync("b");
+        b.Server.Channels.OnNewChannel("br-late-leg", "PJSIP/300-br-late", ChannelState.Up,
+            context: "from-trunk", linkedId: "br-late-L");
+        rig.Manager.AttachToServer(b.Server, "b");
+        rig.Current(b);
         var c1 = rig.ConnectedCall("a", "br");
         var sessionId = c1.SessionId;
         var early = ReconstructedOnB(sessionId, "br-early-L", "br-early-bridge");
@@ -690,7 +695,12 @@ public sealed class CallSessionManagerDetachReleaseTests
         var linkedId = ReleaseRig.LinkedIdOf("c");
 
         var returned = rig.Release("n1");
-        await rig.AttachAsync("n1");
+        var back = await rig.NewInstanceAsync("n1");
+        back.Server.Channels.OnNewChannel(ReleaseRig.CallerLeg("c"), "PJSIP/100-c-a", ChannelState.Up, callerIdNum: "100",
+            context: "from-internal", linkedId: linkedId);
+        back.Server.Channels.OnNewChannel(ReleaseRig.CalleeLeg("c"), "PJSIP/200-c-b", ChannelState.Up, linkedId: linkedId);
+        rig.Manager.AttachToServer(back.Server, "n1");
+        rig.Current(back);
         var sessionId = reusesTheSessionId ? released.SessionId : $"{released.SessionId}-rebuilt";
         var reconstructed = new CallSession(sessionId, linkedId, "n1", CallDirection.Inbound);
         var accepted = rig.Manager.RegisterReconstructedSession(reconstructed);

@@ -47,7 +47,7 @@ public sealed class SessionOptions
 
     /// <summary>
     /// How long an ended call stays held after it ends: reachable through
-    /// <see cref="ICallSessionManager.GetById"/>, <see cref="ICallSessionManager.GetByLinkedId"/> and
+    /// <see cref="ICallSessionManager.GetById"/>, <see cref="ICallSessionManager.GetByLinkedId(string)"/> and
     /// <see cref="ICallSessionManager.GetRecentCompleted"/>, and through the default in-memory store.
     /// This is the only bound on the ended calls held; <see cref="MaxCompletedSessions"/> bounds
     /// nothing. Default: 10 minutes.

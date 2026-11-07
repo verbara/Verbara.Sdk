@@ -1,8 +1,11 @@
 # Follow servers added to a pool at runtime
 
-`VerbaraServerPool.ServerAdded` announces a usable server after its start and while that exact instance is still in
-the pool. `ServerRemoved` announces every actual departure before disposal, including a failed start that an initial
-walker could have seen. A listener can therefore receive a removal without having received an addition.
+`VerbaraServerPool.ServerAdded` announces a usable server after its start and while that exact instance is still in the
+pool. A start cut short by a loss that the connection's own reconnect loop repairs returns (2.9.0, #457), so such a
+server is announced without waiting for the reload that follows the reconnect: `ServerAdded` says the server is
+in the pool and its start returned, not that its tables are full. `ServerRemoved` announces every actual departure
+before disposal, including a failed start that an initial walker could have seen. A listener can therefore receive a
+removal without having received an addition.
 
 Both events carry `(serverId, server)`. Pair ownership by the server instance. For one id, the old instance's removal
 finishes before the replacement's addition. A duplicate id is refused without a notification. Empty or whitespace ids

@@ -165,16 +165,16 @@ public sealed partial class CallSessionManager
     /// open instant, so a slow provider cannot move it; the second takes the open decision with the resolved length.
     /// </para>
     /// </summary>
-    private void OnQueueCallerCompleted(QueueCallerCompletion completion, string serverId)
+    private void OnQueueCallerCompleted(QueueCallerCompletion completion, string serverId, ServerIndex serverIndex)
     {
         if (completion.MemberInterface is not { } memberInterface)
             return;
 
         CallSession? session = null;
         if (completion.CallerUniqueId is { } callerUniqueId)
-            _byChannelId.TryGetValue(callerUniqueId, out session);
+            serverIndex.ByChannelId.TryGetValue(callerUniqueId, out session);
         if (session is null && completion.LinkedId is { } linkedId)
-            _byLinkedId.TryGetValue(linkedId, out session);
+            serverIndex.ByLinkedId.TryGetValue(linkedId, out session);
         if (session is null)
             return;
 

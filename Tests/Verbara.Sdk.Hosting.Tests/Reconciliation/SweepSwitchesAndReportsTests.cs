@@ -6,6 +6,8 @@ using FluentAssertions;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Manager;
+using Verbara.Sdk.Tests.Shared.Sessions;
 
 namespace Verbara.Sdk.Hosting.Tests.Reconciliation;
 
@@ -110,12 +112,20 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
         rig.Age(rig.DialingCall("listed"));
         var dropped = rig.DialingCall("dropped");
         rig.Age(dropped);
-        rig.Age(rig.ZeroChannelSession("unheld"));
+        var unheld = rig.CreatedCall("unheld");
+        rig.Age(unheld);
+        unheld.Unverified.Should().BeFalse();
+        rig.Manager.IsPendingDecision(unheld).Should().BeFalse();
         rig.DialingCall("young");
         rig.AsteriskLists("listed", "young");
         var sweep = rig.BuildSweep();
 
-        var verified = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+        using var parked = StepParker.Install(rig.Manager, HandlerStep.RemovalFound, SweepRig.ServerId, unheld.Participants.Single().UniqueId);
+        var removal = Task.Run(() => rig.HangUp("unheld", HangupCause.NormalClearing));
+        try
+        {
+            parked.WaitUntilParked();
+            var verified = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
         rig.ConnectionState = AmiConnectionState.Reconnecting;
         var skipped = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
 
@@ -140,6 +150,15 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
             },
             "a sweep tags its span with the calls it would verify, the ones no snapshot can prove gone, whether it "
             + $"verified or why not, and how many of its candidates ended. Measured: {rig.Describe()}");
+            rig.EndingsOf(unheld).Should().Be(0);
+        }
+        finally { parked.LetGo(); await removal.WaitAsync(SweepRig.Bound); }
+        rig.EndingsOf(unheld).Should().Be(1);
+        unheld.HangupCause.Should().Be(HangupCause.NormalClearing);
+        unheld.Metadata.Should().NotContainKey("cause");
+        var after = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+        after["sessions.unverifiable"].Should().Be(0);
+        SessionIndexInvariant.Assert(rig.Manager);
     }
 
     // ── A reconnect of the server is pending: logged in again, its Reconnected not yet handled ──────────
@@ -205,6 +224,47 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Sweep_ShouldSkipAsReconnectPending_WhenTheCallerReconnectedAndTheServerHasNotHandledItsReturn()
+    {
+        await using var rig = await ReconnectingSweepRig.StartAsync(sessions: 2, autoReconnect: false);
+        rig.HoldFirstLoss();
+        var sweep = rig.BuildSweep();
+
+        try
+        {
+            rig.Peers[0].CloseSession();
+            await rig.ConnectionLog.Logged("[AMI] Disconnected").WaitAsync(SweepRig.Bound);
+            await rig.Connection.ConnectAsync().AsTask().WaitAsync(SweepRig.Bound);
+            var pending = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+
+            // The ending count observes this window; the new connection also left the channel table incomplete.
+            ScopedSweepDecisionTests.Complete(rig.Server).Should().BeFalse();
+            Console.WriteLine($"caller-route PIN pending: verification={pending["verification"]}; Status={rig.Peers[1].Asked("Status")}; sessions.ended={pending["sessions.ended"]}; tableComplete=false; loss gate held");
+            new
+            {
+                Verification = pending["verification"],
+                Status = rig.Peers[1].Asked("Status"),
+                Ended = pending["sessions.ended"],
+            }.Should().BeEquivalentTo(
+                new { Verification = "skipped:reconnect-pending", Status = 0, Ended = 0 },
+                "the caller's return is still held behind the loss handler, so the sweep reports the pending return "
+                + "and sends no Status; zero endings is an observation while the channel table is also incomplete");
+        }
+        finally
+        {
+            rig.ReleaseLoss();
+        }
+
+        await rig.ServerLog.Logged("[LIVE] State loaded", 2).WaitAsync(SweepRig.Bound);
+        await rig.ReconnectHandled();
+        var handled = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+        Console.WriteLine($"caller-route PIN handled: verification={handled["verification"]}; Status={rig.Peers[1].Asked("Status")}");
+        new { Verification = handled["verification"], Status = rig.Peers[1].Asked("Status") }.Should().BeEquivalentTo(
+            new { Verification = "run", Status = 2 },
+            "after the caller's return has reloaded and been handled, the sweep sends the session's second Status");
+    }
+
+    [Fact]
     public async Task Sweep_ShouldVerify_WhenTheCallerReconnectedAfterALossWithoutAutoReconnect()
     {
         await using var rig = await ReconnectingSweepRig.StartAsync(sessions: 2, autoReconnect: false);
@@ -224,7 +284,7 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
     }
 
     /// <summary>The tags of the one <c>session reconciliation</c> span <paramref name="sweep"/> opens.</summary>
-    private static async Task<Dictionary<string, object?>> SweepTagsAsync(Func<Task> sweep)
+    internal static async Task<Dictionary<string, object?>> SweepTagsAsync(Func<Task> sweep)
     {
         var spans = new ConcurrentQueue<Activity>();
         var previous = Activity.Current;

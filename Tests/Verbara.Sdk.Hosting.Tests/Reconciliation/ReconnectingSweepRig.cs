@@ -196,6 +196,8 @@ internal sealed class SweepPeer
     private readonly ConcurrentDictionary<string, int> _asks = new(StringComparer.OrdinalIgnoreCase);
     private PipedSocket? _socket;
 
+    public bool ListsCall { get; set; } = true;
+
     public int Asked(string action) => _asks.TryGetValue(action, out var count) ? count : 0;
 
     /// <summary>Ends the session from the peer's side.</summary>
@@ -231,14 +233,14 @@ internal sealed class SweepPeer
         {
             case "STATUS":
                 await socket.RespondAsync("Success", id, [new("EventList", "start")]);
-                await socket.WriteEventAsync("Status",
+                if (ListsCall) await socket.WriteEventAsync("Status",
                 [
                     new("ActionID", id), new("Channel", ReconnectingSweepRig.CallChannel), new("ChannelState", "4"),
                     new("ChannelStateDesc", "Ring"), new("CallerIDNum", "5551234"), new("Context", "from-trunk"),
                     new("Exten", "100"), new("Uniqueid", ReconnectingSweepRig.CallUid),
                     new("Linkedid", ReconnectingSweepRig.CallUid),
                 ]);
-                await socket.WriteEventAsync("StatusComplete", [new("ActionID", id), new("EventList", "Complete"), new("ListItems", "1")]);
+                await socket.WriteEventAsync("StatusComplete", [new("ActionID", id), new("EventList", "Complete"), new("ListItems", ListsCall ? "1" : "0")]);
                 break;
             case "QUEUESTATUS":
             case "AGENTS":

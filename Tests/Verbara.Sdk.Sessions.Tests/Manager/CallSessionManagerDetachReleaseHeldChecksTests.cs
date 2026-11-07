@@ -102,19 +102,21 @@ public sealed class CallSessionManagerDetachReleaseHeldChecksTests
             serverIds: ["a", "b"]);
         var call = rig.Arrival("a", "ac");
         var linkedId = ReleaseRig.LinkedIdOf("ac");
-        rig["b"].Deliver(AgentLogin("agent-2", Member, "login-b2"));
-        using var parker = StepParker.Install(rig.Manager, HandlerStep.AgentConnectFound, "b", linkedId);
-        var connect = ReleaseRig.OnThread(() => rig["b"].Deliver(
+        rig["a"].Deliver(AgentLogin("agent-2", Member, "login-b2"));
+        using var parker = StepParker.Install(rig.Manager, HandlerStep.AgentConnectFound, "a", linkedId);
+        var connect = ReleaseRig.OnThread(() => rig["a"].Deliver(
             AgentConnect("", "b-caller-ac", "PJSIP/trunk-b-caller-ac", linkedId, Member, "b-agent-ac",
                 MemberChannel(Member, "b-agent-ac"), "agent-2")));
         parker.WaitUntilParked(ReleaseRig.Bound);
 
+        rig.Manager.DetachFromServer("a", DetachedCalls.Keep);
         var release = ReleaseRig.OnThread(() => rig.Release("a"));
         var returned = ReleaseRig.Returns(release);
         parker.LetGo();
         var connected = ReleaseRig.Returns(connect);
         var leftovers = rig.Manager.ReleaseLeftovers([call]);
 
+        rig["b"].Deliver(AgentLogin("agent-2", Member, "login-b-next"));
         rig["b"].Deliver(NamedAgentCallConnected("an", "anm", Member, "agent-2"));
         var next = rig.Manager.GetByLinkedId("an")!;
         rig["b"].Deliver(NamedAgentCallEnds("an", "anm"));
@@ -158,11 +160,12 @@ public sealed class CallSessionManagerDetachReleaseHeldChecksTests
         using var queues = new QueueSessionTracker(rig.Manager, Options.Create(new SessionOptions()));
         var call = rig.Arrival("a", "qf");
         var caller = ReleaseRig.CallerLeg("qf");
-        using var parker = StepParker.Install(rig.Manager, HandlerStep.QueueJoinFound, "b", caller);
+        using var parker = StepParker.Install(rig.Manager, HandlerStep.QueueJoinFound, "a", caller);
         var join = ReleaseRig.OnThread(() =>
-            rig["b"].Deliver(Join("q1", "PJSIP/trunk-qf-a", caller, ReleaseRig.LinkedIdOf("qf"))));
+            rig["a"].Deliver(Join("q1", "PJSIP/trunk-qf-a", caller, ReleaseRig.LinkedIdOf("qf"))));
         parker.WaitUntilParked(ReleaseRig.Bound);
 
+        rig.Manager.DetachFromServer("a", DetachedCalls.Keep);
         var release = ReleaseRig.OnThread(() => rig.Release("a"));
         var returned = ReleaseRig.Returns(release);
         parker.LetGo();

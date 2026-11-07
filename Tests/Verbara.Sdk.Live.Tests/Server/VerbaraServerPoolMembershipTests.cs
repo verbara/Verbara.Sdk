@@ -49,6 +49,7 @@ public sealed class VerbaraServerPoolMembershipTests
         rig.Pool.ServerAdded += (id, server) =>
         {
             rig.Pool.GetServer(id).Should().BeSameAs(server);
+            server.ChannelTableComplete.Should().BeTrue();
             added.Add(server);
         };
         var add = rig.Pool.AddServerAsync("n1", new AmiConnectionOptions()).AsTask();
