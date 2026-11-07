@@ -1015,6 +1015,540 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
 
         throw new InvalidOperationException("The QueueStatus answer was cut off before QueueStatusComplete.");
     }
+
+    // ==========================================================================
+    // A queue member's pause, and an Agent/<id> member's pause as that agent's state
+    // ==========================================================================
+
+    private void AddMember(string queue, string iface, bool paused = false) =>
+        _observer!.OnNext(new QueueMemberAddedEvent
+        {
+            Queue = queue, Interface = iface, MemberName = iface, Penalty = 0, Paused = paused, Status = 1,
+        });
+
+    private void RemoveMember(string queue, string iface) =>
+        _observer!.OnNext(new QueueMemberRemovedEvent { Queue = queue, Interface = iface });
+
+    // QueueMemberPause as Asterisk 12+ sends it: Queue and Interface are read from the frame's fields.
+    private void PauseMember(string queue, string iface, bool paused, string? reason = null) =>
+        _observer!.OnNext(PauseFrame(queue, iface, paused, reason));
+
+    private static QueueMemberPauseEvent PauseFrame(string queue, string iface, bool paused, string? reason = null) => new()
+    {
+        Paused = paused,
+        Pausedreason = reason,
+        RawFields = new Dictionary<string, string> { ["Queue"] = queue, ["Interface"] = iface },
+    };
+
+    private List<AgentState> RecordStateChanges(string agentId)
+    {
+        var states = new List<AgentState>();
+        _sut.Agents.AgentStateChanged += a =>
+        {
+            if (a.AgentId == agentId)
+                states.Add(a.State);
+        };
+        return states;
+    }
+
+    private AgentState? StateOf(string agentId) => _sut.Agents.GetById(agentId)?.State;
+
+    [Fact]
+    public async Task EventObserver_ShouldAnnounceThePause_WhenAQueueMemberPauseNamesAnAgent()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        var notifications = new List<string>();
+        // Every public notification of the server's queue and agent tables.
+        _sut.Queues.QueueUpdated += q => notifications.Add("QueueUpdated " + q.Name);
+        _sut.Queues.MemberAdded += (q, m) => notifications.Add("MemberAdded " + q + " " + m.Interface);
+        _sut.Queues.MemberRemoved += (q, m) => notifications.Add("MemberRemoved " + q + " " + m.Interface);
+        _sut.Queues.MemberStatusChanged += (q, m) => notifications.Add("MemberStatusChanged " + q + " " + m.Interface);
+        _sut.Queues.CallerJoined += (q, e) => notifications.Add("CallerJoined " + q);
+        _sut.Queues.CallerLeft += (q, e) => notifications.Add("CallerLeft " + q);
+        _sut.Agents.AgentLoggedIn += a => notifications.Add("AgentLoggedIn " + a.AgentId);
+        _sut.Agents.AgentLoggedOff += a => notifications.Add("AgentLoggedOff " + a.AgentId);
+        _sut.Agents.AgentStateChanged += a => notifications.Add("AgentStateChanged " + a.AgentId + " " + a.State);
+        _sut.Agents.AgentConnected += (a, _, _) => notifications.Add("AgentConnected " + a);
+
+        PauseMember("sales", "Agent/1001", paused: true);
+
+        using (new AssertionScope())
+        {
+            notifications.Should().NotBeEmpty("a pause Asterisk reported and the table applied is announced");
+            StateOf("1001").Should().Be(AgentState.Paused, "every membership of agent 1001 is paused");
+        }
+    }
+
+#pragma warning disable VSDK0005 // the pre-12 frame name is routed the same way until the type leaves
+    [Fact]
+    public async Task EventObserver_ShouldPauseTheAgent_WhenTheObsoleteQueueMemberPausedNamesAnAgent()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        var changes = RecordStateChanges("1001");
+
+        _observer!.OnNext(new QueueMemberPausedEvent { Queue = "sales", Interface = "Agent/1001", Paused = true });
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Paused);
+            changes.Should().Equal([AgentState.Paused]);
+        }
+    }
+#pragma warning restore VSDK0005
+
+    [Fact]
+    public async Task EventObserver_ShouldKeepTheAgentAvailable_WhenOnlyOneOfItsTwoMembershipsIsPaused()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        AddMember("support", "Agent/1001");
+        var changes = RecordStateChanges("1001");
+
+        PauseMember("sales", "Agent/1001", paused: true);
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Available, "its support membership still takes calls");
+            changes.Should().BeEmpty();
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldMakeTheAgentAvailable_WhenOneOfItsPausedMembershipsIsUnpaused()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        AddMember("support", "Agent/1001");
+        var changes = RecordStateChanges("1001");
+        PauseMember("sales", "Agent/1001", paused: true);
+        PauseMember("support", "Agent/1001", paused: true);
+        StateOf("1001").Should().Be(AgentState.Paused, "premise: every membership is paused");
+
+        PauseMember("sales", "Agent/1001", paused: false);
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Available);
+            changes.Should().Equal([AgentState.Paused, AgentState.Available]);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldPauseTheAgent_WhenTheMembershipPrefixIsLowerCase()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "agent/1001");
+
+        PauseMember("sales", "agent/1001", paused: true);
+
+        StateOf("1001").Should().Be(AgentState.Paused, "the technology prefix is matched without regard to case");
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldChangeNoAgent_WhenAPauseNamesAQueueTheTableDoesNotHold()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        var changes = RecordStateChanges("1001");
+        var loggedIn = 0;
+        _sut.Agents.AgentLoggedIn += _ => loggedIn++;
+
+        PauseMember("sales", "Agent/1001", paused: true);
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Available, "the server holds no membership of agent 1001");
+            changes.Should().BeEmpty();
+            loggedIn.Should().Be(0);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldAddNoAgent_WhenAPauseNamesAnAgentTheTableDoesNotHold()
+    {
+        await StartAndGetObserverAsync();
+        AddMember("sales", "Agent/2002");
+        var agentNotifications = 0;
+        _sut.Agents.AgentStateChanged += _ => agentNotifications++;
+        _sut.Agents.AgentLoggedIn += _ => agentNotifications++;
+
+        PauseMember("sales", "Agent/2002", paused: true);
+        AddMember("support", "Agent/2002", paused: true);
+
+        using (new AssertionScope())
+        {
+            _sut.Agents.GetById("2002").Should().BeNull("a pause or a paused add never adds an agent to the table");
+            agentNotifications.Should().Be(0);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldKeepTheAgentAvailable_WhenAnotherSpellingOfItsMembershipIsUnpaused()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        AddMember("support", "agent/1001");
+        var changes = RecordStateChanges("1001");
+
+        PauseMember("support", "agent/1001", paused: true);
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Available, "Agent/1001 in sales is the same agent and is unpaused");
+            changes.Should().BeEmpty();
+        }
+
+        PauseMember("sales", "Agent/1001", paused: true);
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Paused, "both spellings of the membership are now paused");
+            changes.Should().Equal([AgentState.Paused]);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldCountEverySpellingOfTheMembership_WhenTheAgentLogsIn()
+    {
+        await StartAndGetObserverAsync();
+        AddMember("sales", "Agent/1001", paused: true);
+        AddMember("support", "agent/1001");
+        var announced = new List<AgentState>();
+        _sut.Agents.AgentLoggedIn += a => announced.Add(a.State);
+
+        LoginAgent("1001");
+        _observer!.OnNext(new AgentLogoffEvent { Agent = "1001" });
+        PauseMember("support", "agent/1001", paused: true);
+        LoginAgent("1001");
+
+        announced.Should().Equal([AgentState.Available, AgentState.Paused],
+            "the first login sees an unpaused spelling; the second sees both paused");
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldPauseOnlyThatAgent_WhenTwoAgentIdsDifferOnlyInCase()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("abc", "PJSIP/abc");
+        LoginAgent("ABC", "PJSIP/ABC");
+        AddMember("sales", "Agent/ABC");
+        var lower = RecordStateChanges("abc");
+
+        PauseMember("sales", "Agent/ABC", paused: true);
+
+        using (new AssertionScope())
+        {
+            StateOf("ABC").Should().Be(AgentState.Paused);
+            StateOf("abc").Should().Be(AgentState.Available, "the agent id is compared with case, as the table keys it");
+            lower.Should().BeEmpty();
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldKeepTheAgentOnCall_WhenItsMembershipsArePaused_AndPauseItWhenTheCallCompletes()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        // OnCall is reached only through the manager's connect report: app_agent_pool frames name no agent.
+        _sut.Agents.OnAgentConnect("1001", "PJSIP/caller");
+        var changes = RecordStateChanges("1001");
+
+        PauseMember("sales", "Agent/1001", paused: true);
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.OnCall, "a call wins over a pause");
+            changes.Should().BeEmpty();
+        }
+
+        _sut.Agents.OnAgentComplete("1001");
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Paused, "the completed call returns to what the memberships say");
+            changes.Should().Equal([AgentState.Paused]);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldKeepTheAgentLoggedOff_WhenItsMembershipIsPaused_AndAnnounceItPausedAtLogin()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        _observer!.OnNext(new AgentLogoffEvent { Agent = "1001" });
+        var changes = RecordStateChanges("1001");
+        var announced = new List<AgentState>();
+        _sut.Agents.AgentLoggedIn += a => announced.Add(a.State);
+
+        PauseMember("sales", "Agent/1001", paused: true);
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.LoggedOff, "a logoff wins over a pause");
+            changes.Should().BeEmpty();
+        }
+
+        LoginAgent("1001");
+
+        announced.Should().Equal([AgentState.Paused]);
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldMakeTheAgentAvailable_WhenAnUnpausedMembershipIsAddedToAPausedAgent()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        PauseMember("sales", "Agent/1001", paused: true);
+        StateOf("1001").Should().Be(AgentState.Paused, "premise: its one membership is paused");
+        var changes = RecordStateChanges("1001");
+
+        AddMember("support", "Agent/1001");
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Available);
+            changes.Should().Equal([AgentState.Available]);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldPauseTheAgent_WhenItsLastUnpausedMembershipIsRemoved()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001", paused: true);
+        AddMember("support", "Agent/1001");
+        var changes = RecordStateChanges("1001");
+
+        RemoveMember("support", "Agent/1001");
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Paused, "its only remaining membership is paused");
+            changes.Should().Equal([AgentState.Paused]);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldMakeTheAgentAvailable_WhenItsLastMembershipIsRemoved()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        PauseMember("sales", "Agent/1001", paused: true);
+        StateOf("1001").Should().Be(AgentState.Paused, "premise: its one membership is paused");
+        var changes = RecordStateChanges("1001");
+
+        RemoveMember("sales", "Agent/1001");
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Available, "an agent with no membership is not paused");
+            changes.Should().Equal([AgentState.Available]);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldChangeNoAgent_WhenAPausedMemberIsNotAnAgent()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "PJSIP/1001");
+        var agentNotifications = 0;
+        _sut.Agents.AgentStateChanged += _ => agentNotifications++;
+        _sut.Agents.AgentLoggedIn += _ => agentNotifications++;
+        _sut.Agents.AgentLoggedOff += _ => agentNotifications++;
+
+        PauseMember("sales", "PJSIP/1001", paused: true);
+
+        using (new AssertionScope())
+        {
+            _sut.Queues.GetByName("sales")!.Members["PJSIP/1001"].Paused.Should().BeTrue("premise: the pause was applied");
+            StateOf("1001").Should().Be(AgentState.Available, "a device member is not agent 1001");
+            agentNotifications.Should().Be(0);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldPauseOnlyTheReportingServersAgent_WhenTwoServersHoldTheSameAgentId()
+    {
+        await StartAndGetObserverAsync();
+        var other = Substitute.For<IAmiConnection>();
+        IObserver<ManagerEvent>? otherObserver = null;
+        other.Subscribe(Arg.Do<IObserver<ManagerEvent>>(obs => otherObserver = obs)).Returns(Substitute.For<IDisposable>());
+        other.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>()).Returns(EmptyAsyncEnumerable());
+        await using var b = new VerbaraServer(other, NullLogger<VerbaraServer>.Instance);
+        await b.StartAsync();
+        foreach (var observer in new[] { _observer!, otherObserver! })
+        {
+            observer.OnNext(new AgentLoginEvent { Agent = "1001", Channel = "PJSIP/1001" });
+            observer.OnNext(new QueueMemberAddedEvent { Queue = "sales", Interface = "Agent/1001", Paused = false, Status = 1 });
+        }
+        var aChanges = RecordStateChanges("1001");
+
+        otherObserver!.OnNext(PauseFrame("sales", "Agent/1001", paused: true));
+
+        using (new AssertionScope())
+        {
+            b.Agents.GetById("1001")!.State.Should().Be(AgentState.Paused, "server b reported the pause");
+            StateOf("1001").Should().Be(AgentState.Available, "server a's agent 1001 is another agent");
+            aChanges.Should().BeEmpty();
+        }
+    }
+
+
+    // --- Tests that name QueueManager.MemberPaused: red on main by compile error (CS1061) ---
+
+#pragma warning disable VSDK0005 // the pre-12 frame name is announced the same way until the type leaves
+    [Fact]
+    public async Task EventObserver_ShouldAnnounceTheMemberPaused_WhenTheObsoleteQueueMemberPausedArrives()
+    {
+        await StartAndGetObserverAsync();
+        CreateQueueWithMember("support", "PJSIP/2000");
+        var seen = new List<(string Queue, string Interface, bool Paused, string? Reason)>();
+        _sut.Queues.MemberPaused += (q, m) => seen.Add((q, m.Interface, m.Paused, m.PausedReason));
+
+        _observer!.OnNext(new QueueMemberPausedEvent { Queue = "support", Interface = "PJSIP/2000", Paused = true, Reason = "lunch" });
+
+        seen.Should().Equal([("support", "PJSIP/2000", true, "lunch")]);
+    }
+#pragma warning restore VSDK0005
+
+    [Fact]
+    public async Task EventObserver_ShouldRaiseThreeMemberPausedAndOneAgentStateChanged_WhenEachOfThreeMembershipsIsPaused()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        foreach (var q in new[] { "q1", "q2", "q3" })
+            AddMember(q, "Agent/1001");
+        var order = new List<string>();
+        _sut.Queues.MemberPaused += (q, _) => order.Add("MemberPaused " + q);
+        _sut.Agents.AgentStateChanged += a => order.Add("AgentStateChanged " + a.State);
+
+        foreach (var q in new[] { "q1", "q2", "q3" })
+            PauseMember(q, "Agent/1001", paused: true);
+
+        order.Should().Equal(["MemberPaused q1", "MemberPaused q2", "MemberPaused q3", "AgentStateChanged Paused"]);
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldRaiseTheMemberPausedBeforeTheAgentStateChanged_WhenAPauseChangesTheAgent()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        var order = new List<string>();
+        _sut.Queues.MemberPaused += (_, m) => order.Add("MemberPaused " + m.Paused);
+        _sut.Agents.AgentStateChanged += a => order.Add("AgentStateChanged " + a.State);
+
+        PauseMember("sales", "Agent/1001", paused: true);
+
+        order.Should().Equal(["MemberPaused True", "AgentStateChanged Paused"]);
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldRaiseTheMemberPausedAfterTheHandler_WhenAPauseIsFedFromAQueueHandler()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        var order = new List<string>();
+        var fed = false;
+        _sut.Queues.MemberStatusChanged += (_, _) =>
+        {
+            if (fed)
+                return;
+            fed = true;
+            PauseMember("sales", "Agent/1001", paused: true);
+            order.Add("MemberStatusChanged handler returns");
+        };
+        _sut.Queues.MemberPaused += (_, _) => order.Add("MemberPaused");
+        var changes = RecordStateChanges("1001");
+
+        _observer!.OnNext(new QueueMemberStatusEvent { Queue = "sales", Interface = "Agent/1001", Status = 2 });
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Paused);
+            changes.Should().Equal([AgentState.Paused]);
+            order.Should().Equal(["MemberStatusChanged handler returns", "MemberPaused"]);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldPauseTheAgent_WhenAMemberPausedHandlerThrows()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001");
+        _sut.Queues.MemberPaused += (_, _) => throw new InvalidOperationException("a failing subscriber");
+        var changes = RecordStateChanges("1001");
+
+        try
+        {
+            PauseMember("sales", "Agent/1001", paused: true);
+        }
+        catch (InvalidOperationException)
+        {
+            // Where a failing handler's exception surfaces is the outbox's contract, not this test's.
+        }
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Paused);
+            changes.Should().Equal([AgentState.Paused]);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldPauseTheAgentWithNoMemberPaused_WhenItsMembershipIsAddedAlreadyPaused()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        var memberPaused = 0;
+        _sut.Queues.MemberPaused += (_, _) => memberPaused++;
+        var changes = RecordStateChanges("1001");
+
+        AddMember("sales", "Agent/1001", paused: true);
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Paused);
+            changes.Should().Equal([AgentState.Paused]);
+            memberPaused.Should().Be(0, "Asterisk sends no pause frame for a member added paused");
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldAnnounceOnlyTheMemberPaused_WhenADeviceMemberIsPaused()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "PJSIP/1001");
+        var memberPaused = 0;
+        _sut.Queues.MemberPaused += (_, _) => memberPaused++;
+        var changes = RecordStateChanges("1001");
+
+        PauseMember("sales", "PJSIP/1001", paused: true);
+
+        using (new AssertionScope())
+        {
+            memberPaused.Should().Be(1);
+            StateOf("1001").Should().Be(AgentState.Available);
+            changes.Should().BeEmpty();
+        }
+    }
 }
 
 /// <summary>Reaches a type's internal members by reflection, so a test compiles before they exist.</summary>

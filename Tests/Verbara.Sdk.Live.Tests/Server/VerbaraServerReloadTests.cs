@@ -3,6 +3,7 @@ using Verbara.Sdk;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Enums;
+using Verbara.Sdk.Live.Agents;
 using Verbara.Sdk.Live.Channels;
 using Verbara.Sdk.Live.Server;
 using FluentAssertions;
@@ -45,6 +46,7 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
     private SnapshotEnding _ending = SnapshotEnding.Completes;
     private CancellationTokenSource? _cancelAfterFirstEntry;
     private IReadOnlyList<AgentsEvent> _agentsReply = [];
+    private IReadOnlyList<ManagerEvent> _queueStatusReply = [];
 
     private enum SnapshotEnding
     {
@@ -80,6 +82,12 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
 
         if (action is not StatusAction)
         {
+            if (action is QueueStatusAction)
+            {
+                foreach (var row in _queueStatusReply)
+                    yield return row;
+            }
+
             if (action is AgentsAction)
             {
                 foreach (var agent in _agentsReply)
@@ -658,6 +666,40 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
 
         _sut.Agents.Agents.Select(a => a.AgentId).Should().Equal(
             [Listed], "no session says how the list ended here, so what it delivered replaces the table");
+    }
+
+    [Fact]
+    public async Task OnReconnected_ShouldAnnounceTheAgentPaused_WhenItsMembershipsArePaused()
+    {
+        const string AgentId = "1001";
+        await GivenAStartedServerHolding();
+        _sut.Queues.OnMemberAdded("sales", "Agent/" + AgentId, AgentId, 0, true, 1);
+        _sut.Agents.OnAgentLogin(AgentId);
+        _queueStatusReply =
+        [
+            new QueueParamsEvent { Queue = "sales", Strategy = "ringall" },
+            new QueueMemberEvent { Queue = "sales", Interface = "Agent/" + AgentId, MemberName = AgentId, Paused = true, Status = 1 },
+        ];
+        _agentsReply = [new AgentsEvent { Agent = AgentId, Status = "AGENT_IDLE" }];
+        var announced = new List<AgentState>();
+        var changed = new List<AgentState>();
+        var replaced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _sut.Agents.AgentLoggedIn += a =>
+        {
+            announced.Add(a.State);
+            replaced.TrySetResult();
+        };
+        _sut.Agents.AgentStateChanged += a => changed.Add(a.State);
+
+        await WhenTheConnectionReconnects();
+        await replaced.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        using (new AssertionScope())
+        {
+            announced.Should().Equal([AgentState.Paused], "every Agent/1001 membership is paused when the reload announces it");
+            changed.Should().BeEmpty("the announcement carries the state; no separate state change is raised");
+            _sut.Queues.GetByName("sales")!.Members["Agent/" + AgentId].Paused.Should().BeTrue();
+        }
     }
 
     [Fact]

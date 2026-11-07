@@ -79,6 +79,8 @@ public class AgentStatisticsTests
         agent.LastStateChangeAt.Should().BeAfter(loginTime!.Value);
     }
 
+    // Pins the public OnAgentPaused toggle a host may call. The server never calls it: it derives an Agent/<id>
+    // member's pause from that agent's queue memberships instead.
     [Fact]
     public void OnAgentPaused_ShouldUpdateLastStateChangeAt()
     {
