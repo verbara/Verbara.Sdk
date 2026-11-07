@@ -144,7 +144,7 @@ public sealed class AriClientRestOnlyTests
             using (new AssertionScope())
             {
                 farEnd.Requests.Should().Equal(
-                    "PUT /ari/channels/ch-1/hold HTTP/1.1", "DELETE /ari/channels/ch-1/hold HTTP/1.1");
+                    "POST /ari/channels/ch-1/hold HTTP/1.1", "DELETE /ari/channels/ch-1/hold HTTP/1.1");
                 farEnd.Upgrades.Should().Be(1, "only the other client holds a connection");
                 other.State.Should().Be(AriConnectionState.Connected, "the other client's connection is untouched");
                 sut.State.Should().Be(AriConnectionState.RestOnly);

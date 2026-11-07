@@ -188,16 +188,16 @@ public interface IAriChannelsResource
     /// <summary>Set a channel variable. POST /channels/{channelId}/variable</summary>
     ValueTask SetVariableAsync(string channelId, string variable, string value, CancellationToken cancellationToken = default);
 
-    /// <summary>Hold a channel. PUT /channels/{channelId}/hold</summary>
+    /// <summary>Hold a channel. POST /channels/{channelId}/hold</summary>
     ValueTask HoldAsync(string channelId, CancellationToken cancellationToken = default);
 
     /// <summary>Remove a channel from hold. DELETE /channels/{channelId}/hold</summary>
     ValueTask UnholdAsync(string channelId, CancellationToken cancellationToken = default);
 
-    /// <summary>Mute a channel. PUT /channels/{channelId}/mute</summary>
+    /// <summary>Mute a channel. POST /channels/{channelId}/mute; a <c>null</c> direction mutes both directions.</summary>
     ValueTask MuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Unmute a channel. DELETE /channels/{channelId}/mute</summary>
+    /// <summary>Unmute a channel. DELETE /channels/{channelId}/mute; a <c>null</c> direction unmutes both directions.</summary>
     ValueTask UnmuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default);
 
     /// <summary>Send DTMF to a channel. POST /channels/{channelId}/dtmf</summary>
@@ -260,10 +260,10 @@ public interface IAriBridgesResource
     ValueTask AddChannelAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default);
     ValueTask RemoveChannelAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default);
 
-    /// <summary>Play media to a bridge. POST /bridges/{bridgeId}/play. The format parameter (Asterisk 23+) sets the Announcer channel audio format.</summary>
+    /// <summary>Play media to a bridge. POST /bridges/{bridgeId}/play. <c>format</c> is the Announcer channel's audio format (<c>announcer_format</c> on the wire).</summary>
     ValueTask<AriPlayback> PlayAsync(string bridgeId, string media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, string? format = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Record audio from a bridge. POST /bridges/{bridgeId}/record. The format parameter (Asterisk 23+) sets the Recorder channel audio format.</summary>
+    /// <summary>Record audio from a bridge. POST /bridges/{bridgeId}/record. <c>recordingFormat</c> is the recording's file format (<c>format</c> on the wire); <c>format</c> is the Recorder channel's audio format (<c>recorder_format</c> on the wire).</summary>
     ValueTask<AriLiveRecording> RecordAsync(string bridgeId, string name, string recordingFormat, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, string? format = null, CancellationToken cancellationToken = default);
 
     /// <summary>Create bridge with specific ID. POST /bridges/{bridgeId}</summary>
@@ -438,6 +438,8 @@ public interface IAriAsteriskResource
     ValueTask<AriLogChannel[]> ListLoggingAsync(CancellationToken cancellationToken = default);
     ValueTask AddLogChannelAsync(string logChannelName, string configuration, CancellationToken cancellationToken = default);
     ValueTask DeleteLogChannelAsync(string logChannelName, CancellationToken cancellationToken = default);
+
+    /// <summary>Rotate a log channel's file. PUT /asterisk/logging/{logChannelName}/rotate</summary>
     ValueTask RotateLogChannelAsync(string logChannelName, CancellationToken cancellationToken = default);
     ValueTask<AriConfigTuple[]> GetConfigAsync(string configClass, string objectType, string id, CancellationToken cancellationToken = default);
     ValueTask UpdateConfigAsync(string configClass, string objectType, string id, CancellationToken cancellationToken = default);
