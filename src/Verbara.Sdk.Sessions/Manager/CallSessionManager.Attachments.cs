@@ -86,10 +86,11 @@ public sealed partial class CallSessionManager
     /// <summary>
     /// The first step of a release, under the bookkeeping lock: once no other release of <paramref name="serverId"/>
     /// is in progress, marks this one in progress, unsubscribes the attachment and closes its gate. Returns the
-    /// attachment closed — null when the id is not attached — and the mark, which the caller finishes in a
+    /// attachment closed (null when the id is not attached), the id's latest attachment read under the same lock hold
+    /// (the one closed, one a previous keep left, or null), and the mark, which the caller finishes in a
     /// <c>finally</c>.
     /// </summary>
-    private (ServerSubscriptions? Closed, ReleaseInProgress Mark) BeginRelease(string serverId)
+    private (ServerSubscriptions? Closed, ServerSubscriptions? Latest, ReleaseInProgress Mark) BeginRelease(string serverId)
     {
         var mark = new ReleaseInProgress();
         while (true)
@@ -100,17 +101,48 @@ public sealed partial class CallSessionManager
                 if (!_releasesInProgress.TryGetValue(serverId, out earlier))
                 {
                     _releasesInProgress[serverId] = mark;
+                    var latest = _serverIndexes.TryGetValue(serverId, out var index)
+                        ? Volatile.Read(ref index.LatestAttachment)
+                        : null;
                     if (!_serverSubs.TryRemove(serverId, out var closed))
-                        return (null, mark);
+                        return (null, latest, mark);
 
                     closed.Detach();
                     closed.Gate.Close();
-                    return (closed, mark);
+                    return (closed, latest, mark);
                 }
             }
 
             earlier.Wait();
         }
+    }
+
+    /// <summary>
+    /// The last step of a release before its mark is cleared: when no call of <paramref name="serverId"/> that has not
+    /// ended is still held, lets go of <paramref name="latest"/>, the attachment that was the id's latest when the
+    /// release began, so the manager keeps no reference to a server the host has released. A call still held — one the
+    /// walk skipped, or one held meanwhile — keeps it, for a later release of the id to let go of. The id's index and
+    /// its generation stay, so a later attach still gets a greater generation. Only <paramref name="latest"/> itself is
+    /// cleared: while the release is in progress no attach of the id installs another.
+    /// </summary>
+    private void LetGoOfLatestAttachment(string serverId, ServerSubscriptions? latest)
+    {
+        if (latest is null || !_serverIndexes.TryGetValue(serverId, out var index))
+            return;
+
+        // Outside the bookkeeping lock: it is never held across a walk of the calls.
+        foreach (var held in _sessions)
+        {
+            var call = held.Value;
+            if (string.Equals(call.ServerId, serverId, StringComparison.Ordinal)
+                && IsHeld(call) && !HasEnded(call) && !call.EndingDelivered)
+            {
+                return;
+            }
+        }
+
+        lock (_attachLock)
+            Interlocked.CompareExchange(ref index.LatestAttachment, null, latest);
     }
 
     /// <summary>Clears <paramref name="mark"/> and lets every attach or release of the id waiting for it go on.</summary>
