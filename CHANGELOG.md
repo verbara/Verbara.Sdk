@@ -4,13 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added: a host that needs only ARI registers only ARI (#537)
+### Fixed: a WebSocket audio server keeps accepting while an observer of new streams runs (#534)
 
-`AddVerbaraAri(Action<AriClientOptions>)` registers the ARI client and nothing else: its validated options, the `ari`
-health check, its hosted service and, with `ConfigureAudioServer` set, the audio servers; no AMI connection, AGI server
-or Live server. A host built with it and `EventsEnabled = false` starts and stops with no Asterisk reachable. The ARI
-client is registered once: a second registration, through `AddVerbaraAri` or `AddVerbara` with `Ari` set, throws
-`InvalidOperationException` at registration instead of failing when the health check service is resolved.
+When a connection's upgrade request had already arrived by the time it was accepted, `WebSocketAudioServer` served it
+on its accept loop up to and including the `OnStreamConnected` announcement, so an observer that blocked held every
+later connection out until it returned. The handler now yields before it serves the upgrade, as the AudioSocket server
+already did. `IAudioServer.OnStreamConnected` now documents how observers are called: synchronously from the
+connection's handler after admission, never on the accept loop; a blocking observer holds that connection's release;
+a throwing one loses the connection and later observers do not receive that stream; and, per server, what a stop with
+no cancellable token does while an observer blocks. No public API changes.
 
 ### Fixed: an ARI outbound idle timeout inside a message is logged as an idle timeout (#532)
 
@@ -154,6 +156,14 @@ The four parking events derive from the new `ParkingEventBase` (a `ChannelEventB
 as the header's string. Read the space from `ParkingSpace`: `Exten` is the parked channel's own extension. `NewExtenEvent`
 gains `Context`, `Exten` and `Priority` (a number), the names every channel event uses; `Extension` stays. Source and
 binary compatible.
+
+### Added: a host that needs only ARI registers only ARI (#537)
+
+`AddVerbaraAri(Action<AriClientOptions>)` registers the ARI client and nothing else: its validated options, the `ari`
+health check, its hosted service and, with `ConfigureAudioServer` set, the audio servers; no AMI connection, AGI server
+or Live server. A host built with it and `EventsEnabled = false` starts and stops with no Asterisk reachable. The ARI
+client is registered once: a second registration, through `AddVerbaraAri` or `AddVerbara` with `Ari` set, throws
+`InvalidOperationException` at registration instead of failing when the health check service is resolved.
 
 ### Fixed: `NewCallerIdEvent` carries the presentation Asterisk sends (#516)
 
