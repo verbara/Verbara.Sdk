@@ -70,8 +70,8 @@ The check's data gains `amiState`, the state's name as a string. A recovering co
 
 **Before:** `AddVerbaraMultiServer` registered no health check.
 
-**Now:** it registers `VerbaraServerPoolHealthCheck` under the name `verbara-pool`, with no tags,
-once however often it is called. It reads every server's AMI connection when it runs:
+**Now:** it registers `VerbaraServerPoolHealthCheck` under the name `verbara-pool`, with no tags
+unless you name them, once however often it is called. It reads every server's AMI connection when it runs:
 
 | The pool's servers | `verbara-pool` |
 |---|---|
@@ -85,17 +85,42 @@ Its data maps each server id to its connection's state name.
 
 - **An unfiltered endpoint** (`app.MapHealthChecks("/health")`) aggregates every registered check,
   so it now reports these two. If a liveness probe reads it, an Asterisk outage that the
-  connection does not recover from restarts your pod. Point liveness at an endpoint filtered by tag
-  and keep the AMI checks on readiness, or on a diagnostics endpoint:
+  connection does not recover from restarts your pod. Point liveness at an endpoint filtered by tag,
+  and put the SDK's checks on a diagnostics endpoint — never on the tag your readiness probe reads:
 
   ```csharp
   app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = check => check.Tags.Contains("liveness") });
   app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
   ```
 
-  The SDK registers its health checks with no tags, so an endpoint filtered by tag includes them
-  only if you tag them yourself.
-- **An endpoint filtered by tag** sees no change: `verbara-pool` and `live` carry none.
+  The SDK registers its health checks with no tags unless you name them, so an endpoint filtered by
+  tag includes them only if you tag them yourself.
+
+  `VerbaraHealthCheckOptions.Tags` is the one place to tag every SDK check at once (`ami`, `live`,
+  `agi`, `ari`, `sessions`, `verbara-pool`):
+  `services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"))`, before or after the
+  SDK's registrations. A host configured with `AddVerbara(IConfiguration)` can set the array
+  `Asterisk:HealthCheckTags` instead; the key and every `Configure` add to one set. To tag one check,
+  edit its registration in a `PostConfigure`:
+
+  ```csharp
+  // Before or after AddVerbaraMultiServer(): PostConfigure runs after every Configure, so the SDK's registration is there.
+  services.PostConfigure<HealthCheckServiceOptions>(o =>
+  {
+      foreach (var r in o.Registrations)
+          if (r.Name == "verbara-pool") r.Tags.Add("voice");   // your tag, your endpoint
+  });
+  ```
+
+  The same `PostConfigure` keeps one check off the host-wide tag: `r.Tags.Remove("voice")` for that
+  check's name, which works wherever it is registered, because it runs after the SDK adds the tags.
+  Write it as `PostConfigure`, not `Configure`: a `Configure<HealthCheckServiceOptions>` registered
+  before an SDK registration (`AddVerbara`, `AddVerbaraMultiServer()` or a sessions registration)
+  sees none of that registration's checks, because each of them is added from a `Configure` too.
+  Never put an SDK check on the tag your readiness probe reads: an Asterisk outage would take the pod
+  out of service.
+- **An endpoint filtered by tag** sees no change unless you name tags: the SDK's checks carry only
+  the tags you name.
 - **An alert on `Degraded`** fires during every reconnect now, for as long as the reconnect takes.
 
 ## The `ami` health check

@@ -528,6 +528,84 @@ public sealed class HealthCheckRegistrationTests
             .Which.Message.Should().Contain(nameof(VerbaraHealthCheckOptions.Tags));
     }
 
+    /// <summary>The docs' recipe, as the migration guide and the Hosting README show it.</summary>
+    private static void TagThePoolRecipe(IServiceCollection services) =>
+        services.PostConfigure<HealthCheckServiceOptions>(o =>
+        {
+            foreach (var r in o.Registrations)
+                if (r.Name == "verbara-pool") r.Tags.Add("voice");
+        });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PostConfigureRecipe_ShouldTagThePool_WhenRegisteredBeforeOrAfterTheCall(bool before)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        if (before)
+            TagThePoolRecipe(services);
+        services.AddVerbaraMultiServer();
+        if (!before)
+            TagThePoolRecipe(services);
+
+        await using var provider = services.BuildServiceProvider();
+
+        Registrations(provider).Should().ContainSingle().Which.Tags.Should().BeEquivalentTo(["voice"],
+            "PostConfigure runs after every Configure, so the SDK's registration is there in either order");
+    }
+
+    public enum SdkRegistration
+    {
+        MultiServer,
+        Verbara,
+    }
+
+    [Theory]
+    [InlineData(SdkRegistration.MultiServer, "verbara-pool")]
+    [InlineData(SdkRegistration.Verbara, "ami")]
+    public async Task ConfigureRecipe_ShouldMissTheCheck_WhenRegisteredBeforeTheCall(SdkRegistration registration, string check)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<HealthCheckServiceOptions>(o =>
+        {
+            foreach (var r in o.Registrations)
+                if (r.Name == check) r.Tags.Add("voice");
+        });
+        if (registration == SdkRegistration.MultiServer)
+            services.AddVerbaraMultiServer();
+        else
+            services.AddVerbara(_ => { });
+
+        await using var provider = services.BuildServiceProvider();
+
+        Registrations(provider).Single(r => r.Name == check).Tags.Should().BeEmpty(
+            "the SDK's registration is added from a Configure too, so an earlier Configure sees none of it, as the docs say");
+    }
+
+    [Fact]
+    public async Task PostConfigureRecipe_ShouldRemoveTheHostWideTag_FromOneCheck()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.PostConfigure<HealthCheckServiceOptions>(o =>
+        {
+            foreach (var r in o.Registrations)
+                if (r.Name == "agi") r.Tags.Remove("voice");
+        });
+        services.AddVerbara(_ => { });
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+
+        await using var provider = services.BuildServiceProvider();
+        var registrations = Registrations(provider);
+
+        registrations.Single(r => r.Name == "ami").Tags.Should().BeEquivalentTo(["voice"]);
+        registrations.Single(r => r.Name == "live").Tags.Should().BeEquivalentTo(["voice"]);
+        registrations.Single(r => r.Name == "agi").Tags.Should().BeEmpty(
+            "the PostConfigure runs after the SDK adds the host-wide tag, wherever it is registered");
+    }
+
     private sealed class HostCheck : IHealthCheck
     {
         public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
