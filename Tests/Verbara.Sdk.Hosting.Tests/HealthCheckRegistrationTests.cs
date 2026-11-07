@@ -187,6 +187,84 @@ public sealed class HealthCheckRegistrationTests
             "the same provider puts the host's tag on the SDK's ami check");
     }
 
+    private static AriClientOptions TagsAri() => new()
+    {
+        BaseUrl = "http://127.0.0.1:8088",
+        Username = "asterisk",
+        Password = "secret",
+        Application = "tags",
+        EventsEnabled = false,
+    };
+
+    private static ICollection<HealthCheckRegistration> Registrations(ServiceProvider provider) =>
+        provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
+
+    [Fact]
+    public async Task AddVerbara_ShouldTagEveryCheckItRegisters_WhenTheHostNamesTags()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+        services.AddVerbara(o => o.Ari = TagsAri());
+
+        await using var provider = services.BuildServiceProvider();
+        var registrations = Registrations(provider);
+
+        registrations.Select(r => r.Name).Should().BeEquivalentTo(["ami", "live", "agi", "ari"]);
+        registrations.Should().OnlyContain(r => r.Tags.Count == 1 && r.Tags.Contains("voice"),
+            "every check AddVerbara registers carries the host-wide tag, and nothing else");
+    }
+
+    [Fact]
+    public async Task AddVerbara_ShouldTagNoAriCheck_WhenAriIsNotConfigured()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+        services.AddVerbara(_ => { });
+
+        await using var provider = services.BuildServiceProvider();
+        var registrations = Registrations(provider);
+
+        registrations.Select(r => r.Name).Should().BeEquivalentTo(["ami", "live", "agi"],
+            "with no ARI section there is no ari check to tag");
+        registrations.Should().OnlyContain(r => r.Tags.Contains("voice"));
+    }
+
+    [Fact]
+    public async Task AddVerbara_ShouldTagTheChecks_WhenTheOptionsAreConfiguredAfterTheCall()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbara(o => o.Ari = TagsAri());
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+
+        await using var provider = services.BuildServiceProvider();
+
+        Registrations(provider).Should().HaveCount(4).And.OnlyContain(r => r.Tags.Contains("voice"),
+            "the tags are read when the health options are first built, after every Configure, whatever the order");
+    }
+
+    [Fact]
+    public async Task AddVerbara_ShouldAcceptReady_WhenTheHostNamesIt()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbara(o =>
+        {
+            o.Ami.Username = "admin";
+            o.Ami.Password = "secret";
+        });
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("ready"));
+
+        await using var provider = services.BuildServiceProvider();
+        var validate = () => provider.GetRequiredService<IStartupValidator>().Validate();
+
+        validate.Should().NotThrow("the SDK does not know the host's vocabulary, so it refuses no tag by name");
+        Registrations(provider).Should().OnlyContain(r => r.Tags.Contains("ready"),
+            "the host named it, so the host's own choice is applied (the docs warn against it)");
+    }
+
     private sealed class StubCheck : IHealthCheck
     {
         public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
