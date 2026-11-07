@@ -528,8 +528,9 @@ public static class ServiceCollectionExtensions
     /// </summary>
     /// <remarks>
     /// Also registers one <see cref="Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck"/> under the name
-    /// <c>verbara-pool</c>, with no tags: it reads the AMI connection of every server the pool holds when it runs.
-    /// Calling this method more than once registers the check once.
+    /// <c>verbara-pool</c>, with no tags unless the host names them in <see cref="VerbaraHealthCheckOptions.Tags"/>: it
+    /// reads the AMI connection of every server the pool holds when it runs. Calling this method more than once registers
+    /// the check once.
     /// </remarks>
     public static IServiceCollection AddVerbaraMultiServer(
         this IServiceCollection services)
@@ -541,21 +542,11 @@ public static class ServiceCollectionExtensions
 
         // Guarded, not a plain AddCheck: every call to this method adds this Configure, and a second registration
         // under the same name makes HealthCheckService throw "Duplicate health checks were registered" on resolve.
-        services.AddHealthChecks();
-        services.Configure<HealthCheckServiceOptions>(options =>
-        {
-            foreach (var registration in options.Registrations)
-            {
-                if (string.Equals(registration.Name, ServerPoolHealthCheckName, StringComparison.Ordinal))
-                    return;
-            }
-
-            options.Registrations.Add(new HealthCheckRegistration(
-                ServerPoolHealthCheckName,
-                sp => new Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck(sp.GetRequiredService<VerbaraServerPool>()),
-                failureStatus: null,
-                tags: null));
-        });
+        AddSdkHealthCheck(
+            services,
+            ServerPoolHealthCheckName,
+            sp => new Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck(sp.GetRequiredService<VerbaraServerPool>()),
+            guarded: true);
         return services;
     }
 

@@ -4,6 +4,7 @@ using Verbara.Sdk.Live.Diagnostics;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace Verbara.Sdk.Hosting.Tests;
@@ -348,6 +349,183 @@ public sealed class HealthCheckRegistrationTests
         sessions.Tags.Should().BeEmpty("the SDK tags only the registrations it creates, never one it finds");
         registrations.Single(r => r.Name == "ami").Tags.Should().BeEquivalentTo(["voice"],
             "the same provider tags the SDK's own checks");
+    }
+
+    private static readonly string[] VoiceAndOps = ["voice", "ops"];
+
+    [Fact]
+    public async Task AddVerbaraMultiServer_ShouldTagThePoolCheck_WhenTheHostNamesTags()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbaraMultiServer();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+
+        await using var provider = services.BuildServiceProvider();
+        var pool = Registrations(provider).Should().ContainSingle().Which;
+
+        pool.Name.Should().Be("verbara-pool");
+        pool.Tags.Should().BeEquivalentTo(["voice"], "the pool check reads the host-wide option");
+        pool.Factory(provider).Should().BeOfType<VerbaraServerPoolHealthCheck>("the check itself is unchanged");
+    }
+
+    /// <summary>
+    /// The three calls of the merge scenario in every order: <c>V</c> adds <c>voice</c>, <c>M</c> is
+    /// <c>AddVerbaraMultiServer()</c>, <c>O</c> adds <c>ops</c>.
+    /// </summary>
+    [Theory]
+    [InlineData("VMO")]
+    [InlineData("VOM")]
+    [InlineData("MVO")]
+    [InlineData("MOV")]
+    [InlineData("OVM")]
+    [InlineData("OMV")]
+    public async Task AddVerbaraMultiServer_ShouldMergeTwoContributions_WhateverTheOrder(string order)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        foreach (var call in order)
+        {
+            switch (call)
+            {
+                case 'V': services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice")); break;
+                case 'O': services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("ops")); break;
+                default: services.AddVerbaraMultiServer(); break;
+            }
+        }
+
+        await using var provider = services.BuildServiceProvider();
+        var resolve = () => provider.GetRequiredService<HealthCheckService>();
+
+        resolve.Should().NotThrow("one pool registration reaches the health check service");
+        Registrations(provider).Should().ContainSingle("the pool check is registered once")
+            .Which.Tags.Should().BeEquivalentTo(VoiceAndOps, "every contribution is in one set, whatever the order");
+    }
+
+    [Fact]
+    public async Task AddVerbaraMultiServer_ShouldTagThePoolAndTheSessions_WhenBothAreRegistered()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbaraMultiServer();
+        services.AddVerbaraSessionsMultiServer();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+
+        await using var provider = services.BuildServiceProvider();
+        var registrations = Registrations(provider);
+
+        registrations.Select(r => r.Name).Should().BeEquivalentTo(["verbara-pool", "sessions"]);
+        registrations.Should().OnlyContain(r => r.Tags.Count == 1 && r.Tags.Contains("voice"),
+            "a pool host's two SDK checks each carry exactly the host's tag");
+    }
+
+    [Fact]
+    public async Task AddVerbaraMultiServer_ShouldLeaveAHostsOwnCheckUntagged()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHealthChecks().AddCheck<HostCheck>("postgres");
+        services.AddVerbaraMultiServer();
+        services.AddVerbaraSessionsMultiServer();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+
+        await using var provider = services.BuildServiceProvider();
+        var registrations = Registrations(provider);
+
+        registrations.Single(r => r.Name == "postgres").Tags.Should().BeEmpty("the host's own check is not the SDK's");
+        registrations.Single(r => r.Name == "verbara-pool").Tags.Should().BeEquivalentTo(["voice"]);
+        registrations.Single(r => r.Name == "sessions").Tags.Should().BeEquivalentTo(["voice"]);
+    }
+
+    [Fact]
+    public async Task AddVerbaraMultiServer_ShouldLeaveTheHostsOwnPoolAndSessionsChecksUntagged_WhenTheyTakeTheSdkNames()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHealthChecks().AddCheck<HostCheck>("verbara-pool").AddCheck<HostCheck>("sessions")
+            .AddCheck<StubCheck>("postgres");
+        services.AddVerbaraMultiServer();
+        services.AddVerbaraSessionsMultiServer();
+        services.AddVerbara(_ => { });
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+
+        await using var provider = services.BuildServiceProvider();
+        var registrations = Registrations(provider);
+
+        foreach (var name in new[] { "verbara-pool", "sessions" })
+        {
+            var owned = registrations.Where(r => r.Name == name).Should()
+                .ContainSingle($"the guard keeps the host's {name} and adds none of its own").Which;
+            owned.Factory(provider).Should().BeOfType<HostCheck>($"the {name} registration is the host's");
+            owned.Tags.Should().BeEmpty($"the SDK never tags a {name} registration it did not create");
+        }
+
+        registrations.Single(r => r.Name == "postgres").Tags.Should().BeEmpty();
+        registrations.Single(r => r.Name == "ami").Tags.Should().BeEquivalentTo(["voice"],
+            "the same provider tags the SDK's own checks");
+    }
+
+    [Fact]
+    public async Task AddVerbaraMultiServer_ShouldRegisterOneTaggedCheck_WhenCalledTwice()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbaraMultiServer();
+        services.AddVerbaraMultiServer();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+
+        await using var provider = services.BuildServiceProvider();
+        var run = async () => await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
+
+        await run.Should().NotThrowAsync("the second call finds the first registration and adds nothing");
+        Registrations(provider).Should().ContainSingle()
+            .Which.Tags.Should().BeEquivalentTo(["voice"], "one registration, one tag");
+    }
+
+    [Fact]
+    public async Task AddVerbaraMultiServer_ShouldFailTheStart_WhenATagIsBlank()
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services.AddVerbaraMultiServer();
+        builder.Services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add(" "));
+        using var host = builder.Build();
+
+        var start = async () => await host.StartAsync();
+
+        (await start.Should().ThrowAsync<OptionsValidationException>("a blank tag stops the host's start"))
+            .Which.Message.Should().Contain(nameof(VerbaraHealthCheckOptions.Tags), "the failure names the option to fix");
+    }
+
+    [Fact]
+    public async Task AddVerbaraMultiServer_ShouldFailTheHealthOptions_WhenATagIsBlankAndTheHostIsNotStarted()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbaraMultiServer();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add(" "));
+
+        await using var provider = services.BuildServiceProvider();
+        var read = () => Registrations(provider);
+
+        read.Should().Throw<OptionsValidationException>("the health options read the tags, so a blank one fails the read")
+            .Which.Message.Should().Contain(nameof(VerbaraHealthCheckOptions.Tags));
+    }
+
+    [Fact]
+    public async Task AddVerbaraMultiServer_ShouldFailTheHealthOptions_WhenATagIsBlankAndTheHostOwnsThePoolName()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHealthChecks().AddCheck<HostCheck>("verbara-pool");
+        services.AddVerbaraMultiServer();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add(" "));
+
+        await using var provider = services.BuildServiceProvider();
+        var read = () => Registrations(provider);
+
+        read.Should().Throw<OptionsValidationException>(
+                "the tags are read before the guard, so a blank one fails even when the guard then adds nothing")
+            .Which.Message.Should().Contain(nameof(VerbaraHealthCheckOptions.Tags));
     }
 
     private sealed class HostCheck : IHealthCheck
