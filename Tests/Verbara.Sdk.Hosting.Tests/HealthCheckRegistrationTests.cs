@@ -528,12 +528,12 @@ public sealed class HealthCheckRegistrationTests
             .Which.Message.Should().Contain(nameof(VerbaraHealthCheckOptions.Tags));
     }
 
-    /// <summary>The docs' recipe, as the migration guide and the Hosting README show it.</summary>
+    /// <summary>The docs' recipe, as the migration guide and the Hosting README show it, with its filter written out.</summary>
     private static void TagThePoolRecipe(IServiceCollection services) =>
         services.PostConfigure<HealthCheckServiceOptions>(o =>
         {
-            foreach (var r in o.Registrations)
-                if (r.Name == "verbara-pool") r.Tags.Add("voice");
+            foreach (var r in o.Registrations.Where(r => r.Name == "verbara-pool"))
+                r.Tags.Add("voice");
         });
 
     [Theory]
@@ -570,8 +570,8 @@ public sealed class HealthCheckRegistrationTests
         services.AddLogging();
         services.Configure<HealthCheckServiceOptions>(o =>
         {
-            foreach (var r in o.Registrations)
-                if (r.Name == check) r.Tags.Add("voice");
+            foreach (var r in o.Registrations.Where(r => r.Name == check))
+                r.Tags.Add("voice");
         });
         if (registration == SdkRegistration.MultiServer)
             services.AddVerbaraMultiServer();
@@ -591,8 +591,8 @@ public sealed class HealthCheckRegistrationTests
         services.AddLogging();
         services.PostConfigure<HealthCheckServiceOptions>(o =>
         {
-            foreach (var r in o.Registrations)
-                if (r.Name == "agi") r.Tags.Remove("voice");
+            foreach (var r in o.Registrations.Where(r => r.Name == "agi"))
+                r.Tags.Remove("voice");
         });
         services.AddVerbara(_ => { });
         services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
