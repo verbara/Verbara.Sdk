@@ -269,12 +269,12 @@ public sealed class AriChannelsResource : IAriChannelsResource
         if (channelId is not null) sb.Append("&channelId=").Append(Uri.EscapeDataString(channelId));
         if (otherChannelId is not null) sb.Append("&otherChannelId=").Append(Uri.EscapeDataString(otherChannelId));
         if (originator is not null) sb.Append("&originator=").Append(Uri.EscapeDataString(originator));
-        if (variables is not null)
-        {
-            foreach (var kv in variables)
-                sb.Append("&variables[").Append(Uri.EscapeDataString(kv.Key)).Append("]=").Append(Uri.EscapeDataString(kv.Value));
-        }
-        var response = await _http.PostAsync(sb.ToString(), null, cancellationToken);
+
+        // Asterisk ignores variables in the query of this route (the create returns 200 and the variable stays unset);
+        // it reads them from a JSON body. No body without an entry, so that request stays the one sent before. The
+        // values are never logged.
+        using var body = variables is { Count: > 0 } ? VariablesBody(variables) : null;
+        var response = await _http.PostAsync(sb.ToString(), body, cancellationToken);
         await response.EnsureAriSuccessAsync();
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriChannel)!;

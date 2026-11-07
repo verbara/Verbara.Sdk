@@ -219,6 +219,11 @@ public interface IAriChannelsResource
     ValueTask ContinueAsync(string channelId, string? context = null, string? extension = null, int? priority = null, string? label = null, CancellationToken cancellationToken = default);
 
     /// <summary>Create a channel without dialing. POST /channels/create</summary>
+    /// <remarks>
+    /// <paramref name="variables"/>, when it holds an entry, is sent as the JSON body <c>{"variables":{…}}</c> with
+    /// <c>Content-Type: application/json</c>, and each entry is set on the created channel. No variable is written into
+    /// the query. A <see langword="null"/> or empty <paramref name="variables"/> sends no body.
+    /// </remarks>
     ValueTask<AriChannel> CreateWithoutDialAsync(string endpoint, string app, string? channelId = null, string? otherChannelId = null, string? originator = null, IReadOnlyDictionary<string, string>? variables = null, CancellationToken cancellationToken = default);
 
     /// <summary>Move channel to another Stasis app. POST /channels/{channelId}/move</summary>

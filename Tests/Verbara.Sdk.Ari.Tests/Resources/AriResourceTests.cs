@@ -345,6 +345,68 @@ public class AriResourceTests
         handler.LastMethod.Should().BeNull("nothing is sent");
     }
 
+    // A create Asterisk accepted and then answered GET .../variable for with the value sent, captured byte for byte by a
+    // logging proxy between the client and ARI, lab run 2026-11-05-9c29d430, on Asterisk 20.20.1, image
+    // andrius/asterisk:20.20.1_debian-trixie-d0182a6@sha256:c202cdf0f0348ab75e6dee49967418ce8c08853644b8a5c00de91f6b4aca4dd1
+    // (the same form was read back on 22.11.0, 23.5.0, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2). The request as captured:
+    //   POST /ari/channels/create?endpoint=PJSIP%2F1005%40loop&app=cap&channelId=506a482e-a9f8-46c6-a198-af7d261f785f HTTP/1.1
+    //   Content-Type: application/json
+    //   Content-Length: 36
+    //
+    //   {"variables":{"LABEMVAR":"cwd-a-0"}}
+    // The same variable sent as variables[LABEMVAR]=cwd-a-0 in the query, with no body, was answered 200 and then 404
+    // on the read on every one of those images.
+    private const string CapturedCreateEndpoint = "PJSIP/1005@loop";
+    private const string CapturedCreateApp = "cap";
+    private const string CapturedCreateChannelId = "506a482e-a9f8-46c6-a198-af7d261f785f";
+    private const string CapturedCreateBody = """{"variables":{"LABEMVAR":"cwd-a-0"}}""";
+
+    private static readonly string CreatedChannelJson = JsonSerializer.Serialize(
+        new AriChannel { Id = CapturedCreateChannelId, Name = "PJSIP/1005-00000001" }, AriJsonContext.Default.AriChannel);
+
+    [Fact]
+    public async Task Channels_CreateWithoutDialAsync_ShouldSendVariablesInJsonBody_WhenVariablesGiven()
+    {
+        using var handler = new FakeHttpHandler(CreatedChannelJson);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.CreateWithoutDialAsync(CapturedCreateEndpoint, CapturedCreateApp, CapturedCreateChannelId,
+            variables: new Dictionary<string, string> { ["LABEMVAR"] = "cwd-a-0" });
+
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestPath.Should().Be("/ari/channels/create");
+        QueryParameters(handler.LastRequestQuery).Should().Equal(
+            [("endpoint", CapturedCreateEndpoint), ("app", CapturedCreateApp), ("channelId", CapturedCreateChannelId)],
+            "the other parameters stay in the query, and no variable travels there in any form");
+        handler.LastRequestHadContent.Should().BeTrue("Asterisk reads the variables of a create from a JSON body only");
+        handler.LastRequestBody.Should().Equal(System.Text.Encoding.UTF8.GetBytes(CapturedCreateBody),
+            "these are the body bytes of the captured create whose variable Asterisk set");
+        handler.LastContentType.Should().Be("application/json", "the captured create declared exactly this, with no charset");
+        handler.LastContentLength.Should().Be(CapturedCreateBody.Length);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Channels_CreateWithoutDialAsync_ShouldSendNoBody_WhenVariablesNullOrEmpty(bool emptyVariables)
+    {
+        using var handler = new FakeHttpHandler(CreatedChannelJson);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriChannelsResource(http, DefaultOptions);
+
+        await sut.CreateWithoutDialAsync(CapturedCreateEndpoint, CapturedCreateApp, CapturedCreateChannelId,
+            otherChannelId: "other-1", originator: "orig-1",
+            variables: emptyVariables ? new Dictionary<string, string>() : null);
+
+        handler.LastMethod.Should().Be(HttpMethod.Post);
+        handler.LastRequestPath.Should().Be("/ari/channels/create");
+        // The literal the shipped method sends for these arguments, so a create without variables stays the same request.
+        handler.LastRequestQuery.Should().Be(
+            "?endpoint=PJSIP%2F1005%40loop&app=cap&channelId=506a482e-a9f8-46c6-a198-af7d261f785f&otherChannelId=other-1&originator=orig-1");
+        handler.LastRequestHadContent.Should().BeFalse("a create without variables has no body");
+    }
+
     private static readonly string ExternalMediaChannelJson = JsonSerializer.Serialize(
         new AriChannel { Id = "ch-ext", Name = "WebSocket/media_connection1" }, AriJsonContext.Default.AriChannel);
 
