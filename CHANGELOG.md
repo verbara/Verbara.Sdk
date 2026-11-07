@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a created ARI channel keeps the variables it is given (#536)
+
+`Channels.CreateWithoutDialAsync` now sets the channel variables it is given. It sent them in the query, where Asterisk
+ignores them (the create returned 200 and the variable stayed unset); they now travel as a JSON body
+`{"variables":{…}}` with `Content-Type: application/json`. A create without variables sends the same request as before.
+
 ### Fixed: an ARI outbound idle timeout inside a message is logged as an idle timeout (#532)
 
 An idle timeout that fires while a fragment of one message is still arriving, or while its last fragment is, is
