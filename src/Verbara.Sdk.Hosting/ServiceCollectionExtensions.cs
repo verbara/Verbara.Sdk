@@ -82,46 +82,91 @@ public static class ServiceCollectionExtensions
         // ARI with validation
         if (options.Ari is not null)
         {
-            var ariOptions = options.Ari;
-            services.AddOptions<AriClientOptions>()
-                .Configure(o => CopyAriOptions(ariOptions, o))
-                .ValidateOnStart();
-            services.AddSingleton<IValidateOptions<AriClientOptions>, AriClientOptionsValidator>();
-
-            // Audio servers (AudioSocket + WebSocket)
-            if (options.Ari.ConfigureAudioServer is not null)
-            {
-                var audioOpts = new AudioServerOptions();
-                options.Ari.ConfigureAudioServer(audioOpts);
-                services.AddSingleton(audioOpts);
-                services.TryAddSingleton<AudioSocketServer>();
-
-                if (audioOpts.WebSocketPort > 0)
-                    services.TryAddSingleton<WebSocketAudioServer>();
-
-                services.TryAddSingleton<IAudioServer>(sp =>
-                {
-                    var servers = new List<IAudioServer> { sp.GetRequiredService<AudioSocketServer>() };
-                    var ws = sp.GetService<WebSocketAudioServer>();
-                    if (ws is not null) servers.Add(ws);
-                    return new CompositeAudioServer(servers);
-                });
-
-                services.AddSingleton<IHostedService, AriAudioHostedService>();
-            }
-
-            // Use factory to safely inject optional IAudioServer
-            services.TryAddSingleton<IAriClient>(sp => new AriClient(
-                sp.GetRequiredService<IOptions<AriClientOptions>>(),
-                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<AriClient>>(),
-                sp.GetService<IAudioServer>()));
-
-            services.AddHealthChecks()
-                .AddCheck<Verbara.Sdk.Ari.Diagnostics.AriHealthCheck>("ari");
-            services.AddSingleton<IHostedService, AriConnectionHostedService>();
+            AddAriClient(services, options.Ari);
         }
 
         return services;
+    }
+
+    /// <summary>
+    /// Add the ARI client and nothing else: no AMI connection, no AGI server, no Live server and none of their health
+    /// checks. For a host that needs only ARI; with <see cref="AriClientOptions.EventsEnabled"/> set to
+    /// <see langword="false"/> such a host starts and stops with no Asterisk reachable.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Registers what <see cref="AddVerbara(IServiceCollection, Action{VerbaraOptions})"/> registers for ARI: the
+    /// options, with every value set in <paramref name="configure"/> delivered and validated on start, the client, the
+    /// <c>ari</c> health check, the hosted service that connects the client and, when
+    /// <see cref="AriClientOptions.ConfigureAudioServer"/> is set, the audio servers and their hosted service.
+    /// <paramref name="configure"/> runs once, here, on a new <see cref="AriClientOptions"/>.
+    /// </para>
+    /// <para>
+    /// The ARI client is registered once: calling this method twice, or on a collection where <c>AddVerbara</c> set its
+    /// <see cref="VerbaraOptions.Ari"/>, throws <see cref="InvalidOperationException"/>. The session engine
+    /// (<c>AddVerbaraSessions</c>) reads the Live server, which only <c>AddVerbara</c> registers.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddVerbaraAri(
+        this IServiceCollection services,
+        Action<AriClientOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var options = new AriClientOptions();
+        configure(options);
+        AddAriClient(services, options);
+        return services;
+    }
+
+    // The ARI registration of AddVerbara and AddVerbaraAri: options with every value copied and validated on start, the
+    // validator, the audio servers when ConfigureAudioServer is set, the client, the ari check and its hosted service.
+    // Registered once: a second registration would add a second ari check, which fails when the health check service is
+    // resolved, and a client built from the first options while the second options' Configure also runs.
+    private static void AddAriClient(IServiceCollection services, AriClientOptions ariOptions)
+    {
+        if (services.Any(d => d.ServiceType == typeof(AriClientRegistration)))
+            throw new InvalidOperationException(
+                "The ARI client is already registered. Register it once: through AddVerbara(o => o.Ari = …) or through " +
+                "AddVerbaraAri(…), not both and not twice.");
+        services.AddSingleton(AriClientRegistration.Instance);
+
+        services.AddOptions<AriClientOptions>()
+            .Configure(o => CopyAriOptions(ariOptions, o))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<AriClientOptions>, AriClientOptionsValidator>();
+
+        // Audio servers (AudioSocket + WebSocket)
+        if (ariOptions.ConfigureAudioServer is not null)
+        {
+            var audioOpts = new AudioServerOptions();
+            ariOptions.ConfigureAudioServer(audioOpts);
+            services.AddSingleton(audioOpts);
+            services.TryAddSingleton<AudioSocketServer>();
+
+            if (audioOpts.WebSocketPort > 0)
+                services.TryAddSingleton<WebSocketAudioServer>();
+
+            services.TryAddSingleton<IAudioServer>(sp =>
+            {
+                var servers = new List<IAudioServer> { sp.GetRequiredService<AudioSocketServer>() };
+                var ws = sp.GetService<WebSocketAudioServer>();
+                if (ws is not null) servers.Add(ws);
+                return new CompositeAudioServer(servers);
+            });
+
+            services.AddSingleton<IHostedService, AriAudioHostedService>();
+        }
+
+        // Use factory to safely inject optional IAudioServer
+        services.TryAddSingleton<IAriClient>(sp => new AriClient(
+            sp.GetRequiredService<IOptions<AriClientOptions>>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<AriClient>>(),
+            sp.GetService<IAudioServer>()));
+
+        services.AddHealthChecks()
+            .AddCheck<Verbara.Sdk.Ari.Diagnostics.AriHealthCheck>("ari");
+        services.AddSingleton<IHostedService, AriConnectionHostedService>();
     }
 
     /// <summary>
@@ -490,6 +535,12 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IAriOutboundListener, AriOutboundListener>();
         services.AddSingleton<IHostedService, AriOutboundListenerHostedService>();
         return services;
+    }
+
+    /// <summary>Marks a collection whose ARI client is registered, so a second registration fails where it is made.</summary>
+    private sealed class AriClientRegistration
+    {
+        public static readonly AriClientRegistration Instance = new();
     }
 }
 

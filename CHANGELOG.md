@@ -166,6 +166,14 @@ as the header's string. Read the space from `ParkingSpace`: `Exten` is the parke
 gains `Context`, `Exten` and `Priority` (a number), the names every channel event uses; `Extension` stays. Source and
 binary compatible.
 
+### Added: a host that needs only ARI registers only ARI (#537)
+
+`AddVerbaraAri(Action<AriClientOptions>)` registers the ARI client and nothing else: its validated options, the `ari`
+health check, its hosted service and, with `ConfigureAudioServer` set, the audio servers; no AMI connection, AGI server
+or Live server. A host built with it and `EventsEnabled = false` starts and stops with no Asterisk reachable. The ARI
+client is registered once: a second registration, through `AddVerbaraAri` or `AddVerbara` with `Ari` set, throws
+`InvalidOperationException` at registration instead of failing when the health check service is resolved.
+
 ### Fixed: `NewCallerIdEvent` carries the presentation Asterisk sends (#516)
 
 `CidCallingPresTxt` read a header the wire never carries and `CidCallingPres` could not parse the text Asterisk sends.
