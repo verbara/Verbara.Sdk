@@ -4,7 +4,8 @@ The recommended entry point to the [Verbara.Sdk](https://github.com/verbara/Verb
 
 ## What it does
 
-- **`AddVerbara(IConfiguration | Action<VerbaraOptions>)`** — registers `IAmiConnection`, `IAriClient`, `IAgiServer`, the Live API (`VerbaraServer`), `IActivityRegistry`, `ISessionEngine`, and the supporting hosted services. Idempotent and source-generator-validated.
+- **`AddVerbara(IConfiguration | Action<VerbaraOptions>)`** — registers `IAmiConnection`, `IAriClient`, `IAgiServer`, the Live API (`VerbaraServer`), `IActivityRegistry`, `ISessionEngine`, and the supporting hosted services. Source-generator-validated.
+- **`AddVerbaraAri(Action<AriClientOptions>)`** — registers `IAriClient` and nothing else, for a host that needs only ARI ([below](#ari-only-hosts)).
 - **`VerbaraOptions`** — strongly-typed configuration model with `[OptionsValidator]` source-generated validation (no runtime reflection). Bind directly from `appsettings.json` or configure inline.
 - **Hosted lifecycle** — `IHostedService` implementations connect AMI on `StartAsync`, drain on `StopAsync`. AGI server, ARI WebSocket, and `VerbaraServer` (Live aggregate) follow the same pattern.
 - **Health checks** — `AmiHealthCheck` (`ami`, the same state table as `live`), `LiveHealthCheck` (`live`) and `AgiHealthCheck` (`agi`) auto-registered, `AriHealthCheck` (`ari`, the same state table as `ami`, ARI's `Faulted` as `Unhealthy`) with an `Ari` section; `AddVerbaraMultiServer` adds `VerbaraServerPoolHealthCheck` (`verbara-pool`). Expose at `/health` for Kubernetes probes.
@@ -65,6 +66,36 @@ var server = host.Services.GetRequiredService<VerbaraServer>();   // Live API ag
 var ari = host.Services.GetRequiredService<IAriClient>();
 ```
 
+## ARI-only hosts
+
+`AddVerbara` always registers the AMI connection, and its hosted service dials AMI when the host starts: a failed dial
+stops the host. A host that needs only ARI registers it with `AddVerbaraAri` instead:
+
+```csharp
+builder.Services.AddVerbaraAri(options =>
+{
+    options.BaseUrl = "http://pbx.example.com:8088";
+    options.Username = "admin";
+    options.Password = "secret";
+    options.Application = "my-app";
+    options.EventsEnabled = false;
+});
+```
+
+It registers what `AddVerbara` registers for ARI, and no more: the client, its options (every value set in the callback
+is delivered, and validated when the host starts), the `ari` health check, the hosted service that connects the client,
+and the audio servers when `ConfigureAudioServer` is set. No AMI connection, AGI server or Live server is registered, and
+no `ami`, `agi` or `live` check. With `EventsEnabled = false` the client opens no events WebSocket, so the host starts and
+stops with no Asterisk reachable; with events on, the client dials at start and a failed dial stops the host.
+
+- The `ari` check asks Asterisk on each run, so on a host with no reachable Asterisk it reads `Unhealthy`. If a readiness
+  probe must not read it, leave it out of that endpoint (see [Health endpoint](#health-endpoint)).
+- The ARI client is registered once. Calling `AddVerbaraAri` twice, or on a collection where `AddVerbara` set its `Ari`
+  options, throws an `InvalidOperationException` naming both methods. `AddVerbara` with no `Ari` options and
+  `AddVerbaraAri` on the same collection is fine.
+- The session engine (`AddVerbaraSessions*`) and `AddVerbaraMultiServer` read the Live server, which needs AMI: they need
+  `AddVerbara`, not `AddVerbaraAri`.
+
 ## Session options from configuration
 
 Each sessions registration accepts the host configuration: `AddVerbaraSessions`, `AddVerbaraSessionsBuilder`,
@@ -103,7 +134,7 @@ using the existing overloads.
 
 ## Health endpoint
 
-The package auto-registers `IHealthCheck` for AMI/ARI/AGI. Wire to ASP.NET Core:
+The package auto-registers `IHealthCheck` for AMI/ARI/AGI (`AddVerbaraAri`: for ARI only). Wire to ASP.NET Core:
 
 ```csharp
 builder.Services.AddHealthChecks();
@@ -112,6 +143,13 @@ app.MapHealthChecks("/health");
 ```
 
 The `ami` check reads the AMI connection's state: `Connected` is `Healthy`, `Reconnecting`, `Connecting` or not yet connected is `Degraded` (the connection may come back, or nobody has connected it yet), and `Disconnecting` or `Disconnected` is `Unhealthy`; its data carries the state as `amiState`. It uses the same table as `live`, so the two never disagree on a state ([migration guide](../../docs/guides/ami-connection-state-and-health-migration.md#the-ami-health-check)). The `ari` check reads the ARI client's state with the same table, ARI's `Faulted` as `Unhealthy`; its data carries the state as `ariState` ([migration guide](../../docs/guides/ari-connection-state-and-accept-loop-migration.md#the-ari-health-check)).
+
+A client with `EventsEnabled = false` reads `RestOnly`, and its `ari` check sends one `GET /ari/asterisk/ping` per run
+instead: an answer reads `Healthy`, anything else `Unhealthy`. To keep it out of an endpoint, filter that endpoint by name:
+
+```csharp
+app.MapHealthChecks("/ready", new HealthCheckOptions { Predicate = check => check.Name != "ari" });
+```
 
 The `live` check reads the AMI connection before the state it holds: `Connected` reports on the state as before, `Reconnecting`, `Connecting` or not yet connected is `Degraded` (the state is not being updated, but the connection may come back), and `Disconnecting` or `Disconnected` is `Unhealthy`; its data carries the connection's state as `amiState`.
 
@@ -163,7 +201,7 @@ See `Examples/MultiServerExample/` for a full federation walkthrough.
 
 ## Native AOT
 
-`AddVerbara` is fully AOT-safe: options validation comes from a source generator, no `Type.GetType` lookups, no `Activator.CreateInstance`. 0 trim warnings.
+`AddVerbara` and `AddVerbaraAri` are fully AOT-safe: options validation comes from a source generator, no `Type.GetType` lookups, no `Activator.CreateInstance`. 0 trim warnings.
 
 ## License
 

@@ -28,8 +28,8 @@ internal static partial class AriOutboundListenerLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AriOutbound] Upgrade rejected: remote={RemoteEndpoint} reason={Reason}")]
     public static partial void UpgradeRejected(ILogger logger, string remoteEndpoint, string reason);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "[AriOutbound] Idle timeout — closing connection: remote={RemoteEndpoint} app={Application}")]
-    public static partial void IdleTimeout(ILogger logger, string remoteEndpoint, string application);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AriOutbound] Idle timeout — closing connection: remote={RemoteEndpoint} app={Application} idle={IdleTimeout}")]
+    public static partial void IdleTimeout(ILogger logger, string remoteEndpoint, string application, TimeSpan idleTimeout);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "[AriOutbound] Connection closed: remote={RemoteEndpoint} app={Application}")]
     public static partial void ConnectionClosed(ILogger logger, string remoteEndpoint, string application);
@@ -462,18 +462,33 @@ public sealed class AriOutboundListener : IAriOutboundListener
                     do
                     {
                         ct.ThrowIfCancellationRequested();
+                        idleCts.Token.ThrowIfCancellationRequested();
                         var memory = bufferWriter.GetMemory(4096);
                         result = await webSocket.ReceiveAsync(memory, idleCts.Token);
                         bufferWriter.Advance(result.Count);
                     }
                     while (!result.EndOfMessage);
+
+                    // The idle bound fired inside the read that returned the final fragment: the read
+                    // completed, so no catch runs, but the socket is aborted. The message is the
+                    // consumer's, so it is delivered before the idle timeout ends the connection.
+                    if (idleCts.IsCancellationRequested && !ct.IsCancellationRequested && !tracked.Connection.IsClosing)
+                    {
+                        Deliver(result, bufferWriter, subject);
+                        AriOutboundListenerLog.IdleTimeout(_logger, tracked.Connection.RemoteEndpoint, appName, idleTimeout);
+                        break;
+                    }
                 }
-                catch (OperationCanceledException) when (!ct.IsCancellationRequested && !tracked.Connection.IsClosing)
+                catch (Exception ex) when (ex is OperationCanceledException or WebSocketException
+                    && idleCts.IsCancellationRequested && !ct.IsCancellationRequested && !tracked.Connection.IsClosing)
                 {
-                    AriOutboundListenerLog.IdleTimeout(_logger, tracked.Connection.RemoteEndpoint, appName);
+                    // Classified by the reader's own signals — the idle source fired, no stop was
+                    // requested, the connection is not closing. The type list is only the shape an
+                    // aborted receive raises: a pending read sees the cancellation, a read that
+                    // returned a fragment as the bound fired leaves the next one an aborted socket.
+                    AriOutboundListenerLog.IdleTimeout(_logger, tracked.Connection.RemoteEndpoint, appName, idleTimeout);
                     break;
                 }
-
                 finally
                 {
                     tracked.Connection.SetIdleDeadline(null);
@@ -497,21 +512,15 @@ public sealed class AriOutboundListener : IAriOutboundListener
                     break;
                 }
 
-                if (result.MessageType == WebSocketMessageType.Text && bufferWriter.WrittenCount > 0)
-                {
-                    var json = Encoding.UTF8.GetString(bufferWriter.WrittenSpan);
-                    var evt = AriClient.ParseEvent(json, _logger);
-                    if (evt is not null)
-                        subject.OnNext(evt);
-                }
+                Deliver(result, bufferWriter, subject);
             }
         }
         catch (OperationCanceledException)
         {
             // The stop token, `ct` — _cts.Token, cancelled by StopAsync and DisposeAsync — and only
             // that. The idle timeout is the OTHER ending a cancellation can mean here, and it is
-            // already taken by the filtered `when (!ct.IsCancellationRequested)` catch inside the loop
-            // above, which logs it and breaks; anything reaching here is the listener stopping.
+            // already taken by the filtered idle catch inside the loop above (idle fired, no stop,
+            // not closing), which logs it and breaks; anything reaching here is the listener stopping.
             /* Best effort — the listener is stopping */
         }
         catch (WebSocketException) when (ct.IsCancellationRequested || tracked.Connection.IsClosing)
@@ -532,6 +541,17 @@ public sealed class AriOutboundListener : IAriOutboundListener
 
             try { await tracked.Connection.DisposeAsync(); }
             catch (ObjectDisposedException) { /* Best effort */ }
+        }
+    }
+
+    private void Deliver(ValueWebSocketReceiveResult result, ArrayBufferWriter<byte> bufferWriter, Subject<AriEvent> subject)
+    {
+        if (result.MessageType == WebSocketMessageType.Text && bufferWriter.WrittenCount > 0)
+        {
+            var json = Encoding.UTF8.GetString(bufferWriter.WrittenSpan);
+            var evt = AriClient.ParseEvent(json, _logger);
+            if (evt is not null)
+                subject.OnNext(evt);
         }
     }
 

@@ -94,6 +94,31 @@ and that a lookup naming no server and a consumer keyed only by `linkedid` canno
 complete makes its server a candidate instead, and one on a server whose last `Status` was refused is counted on every
 tick.
 
+### Fixed: a WebSocket audio server keeps accepting while an observer of new streams runs (#534)
+
+When a connection's upgrade request had already arrived by the time it was accepted, `WebSocketAudioServer` served it
+on its accept loop up to and including the `OnStreamConnected` announcement, so an observer that blocked held every
+later connection out until it returned. The handler now yields before it serves the upgrade, as the AudioSocket server
+already did. `IAudioServer.OnStreamConnected` now documents how observers are called: synchronously from the
+connection's handler after admission, never on the accept loop; a blocking observer holds that connection's release;
+a throwing one loses the connection and later observers do not receive that stream; and, per server, what a stop with
+no cancellable token does while an observer blocks. No public API changes.
+
+### Fixed: an ARI outbound idle timeout inside a message is logged as an idle timeout (#532)
+
+An idle timeout that fires while a fragment of one message is still arriving, or while its last fragment is, is
+logged as `Idle timeout` at Warning, as documented, not as `Connection error` with a `WebSocketException`; the line now
+carries the configured bound (`idle=`).
+
+### Fixed: ARI hold, mute and log rotation send the method Asterisk accepts, and a bridge format argument takes effect (#535)
+
+`Channels.HoldAsync` and `Channels.MuteAsync` now send `POST` and `Asterisk.RotateLogChannelAsync` sends `PUT`, the
+methods Asterisk accepts; they always failed with 405 (#506). `MuteAsync` and `UnmuteAsync` without a direction now
+apply to both directions (they failed with 400). `Bridges.PlayAsync` and `Bridges.RecordAsync` given a `format` now set
+the announcer's or recorder's audio format: the SDK sent it under a key Asterisk accepts and ignores (`format` /
+`announcerFormat` instead of `announcer_format` / `recorder_format`), so the argument had no effect. Not breaking: no
+signature or parameter-name changes.
+
 ### Added: a WebSocket audio session writes every command chan_websocket reads (#518)
 
 `IChanWebSocketSession` gains `SendFlushMediaAsync`, `SendPauseMediaAsync`, `SendContinueMediaAsync`,
@@ -230,6 +255,14 @@ The four parking events derive from the new `ParkingEventBase` (a `ChannelEventB
 as the header's string. Read the space from `ParkingSpace`: `Exten` is the parked channel's own extension. `NewExtenEvent`
 gains `Context`, `Exten` and `Priority` (a number), the names every channel event uses; `Extension` stays. Source and
 binary compatible.
+
+### Added: a host that needs only ARI registers only ARI (#537)
+
+`AddVerbaraAri(Action<AriClientOptions>)` registers the ARI client and nothing else: its validated options, the `ari`
+health check, its hosted service and, with `ConfigureAudioServer` set, the audio servers; no AMI connection, AGI server
+or Live server. A host built with it and `EventsEnabled = false` starts and stops with no Asterisk reachable. The ARI
+client is registered once: a second registration, through `AddVerbaraAri` or `AddVerbara` with `Ari` set, throws
+`InvalidOperationException` at registration instead of failing when the health check service is resolved.
 
 ### Fixed: `NewCallerIdEvent` carries the presentation Asterisk sends (#516)
 

@@ -59,6 +59,13 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
     private int _disposed;
 
     /// <summary>Observable that emits each new audio stream when a connection is established.</summary>
+    /// <remarks>
+    /// Observers are called as <see cref="IAudioServer.OnStreamConnected"/> states. On this server a
+    /// <see cref="StopAsync"/> does not wait for an observer that blocks: it ends that stream and removes its
+    /// registration, so <see cref="GetStream(string)"/> no longer finds it, and returns while the observer still
+    /// runs. The connection's place in <see cref="AudioServerOptions.MaxConcurrentStreams"/> comes back only when
+    /// the observer returns.
+    /// </remarks>
     public IObservable<IAudioStream> OnStreamConnected => _streamSubject;
 
     /// <summary>

@@ -215,6 +215,30 @@ await bus.PublishAsync(sample);
     }
 }
 
+// Exercise AddVerbaraAri with the Hosting README's example as written (the callback's body is the README's), so the
+// example compiles and the ARI-only registration, its options copy and the client's factory reach ILC's analysis.
+{
+    var builder = new { Services = (IServiceCollection)new ServiceCollection() };
+    builder.Services.AddLogging();
+    builder.Services.AddVerbaraAri(options =>
+    {
+        options.BaseUrl = "http://pbx.example.com:8088";
+        options.Username = "admin";
+        options.Password = "secret";
+        options.Application = "my-app";
+        options.EventsEnabled = false;
+    });
+    await using var ariOnlyProvider = builder.Services.BuildServiceProvider();
+    var ariOnly = ariOnlyProvider.GetRequiredService<IAriClient>();
+    var ariOnlyHasAmi = ariOnlyProvider.GetService<IAmiConnection>() is not null;
+    Console.WriteLine($"AddVerbaraAri: state={ariOnly.State} ami={ariOnlyHasAmi}");
+    if (ariOnly.State != Verbara.Sdk.Enums.AriConnectionState.RestOnly || ariOnlyHasAmi)
+    {
+        Console.Error.WriteLine("AOT canary: AddVerbaraAri did not register a REST-only client alone.");
+        return 1;
+    }
+}
+
 // Exercise the multi-server sessions registration: its pool sweep is a hosted service built by an explicit factory, and
 // only resolving and starting it brings that factory and the sweep's loop into ILC's analysis.
 {

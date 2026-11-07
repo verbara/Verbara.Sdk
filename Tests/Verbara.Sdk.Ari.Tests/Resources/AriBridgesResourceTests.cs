@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using Verbara.Sdk;
 using Verbara.Sdk.Ari.Client;
@@ -176,6 +177,76 @@ public sealed class AriBridgesResourceTests
         handler.LastRequestUri.Should().Contain("terminateOn=%23");
     }
 
+    // Captured from Asterisk 22.11.0 through a byte relay (lab capture run 2026-11-06-a04e8a3e, image 22.11.0, lab
+    // commit 94e3d214, raw/a22/sdkproxy/proxy/conn-003.s2c @1290): the 201 body answering
+    // POST /ari/bridges/{id}/play?media=tone%3A440&announcer_format=slin16. On every image measured (20.20.1 to
+    // 24.0.0-rc2) announcer_format set the Announcer channel's write format and a bare format= was ignored.
+    private const string CapturedBridgePlayback201 =
+        "{\"id\":\"833dcc33-7238-4e81-9af1-4d42b233551c\",\"media_uri\":\"tone:440\",\"target_uri\":\"bridge:45f040b2-cefc-4dc9-9d4d-ecf5c7752ebd\",\"language\":\"en\",\"state\":\"queued\"}";
+
+    [Fact]
+    public async Task PlayAsync_ShouldSendAnnouncerFormat_WhenFormatIsGiven()
+    {
+        using var handler = new FakeHttpHandler(CapturedBridgePlayback201, HttpStatusCode.Created);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriBridgesResource(http, DefaultOptions);
+
+        var result = await sut.PlayAsync("45f040b2-cefc-4dc9-9d4d-ecf5c7752ebd", "tone:440", format: "slin16");
+
+        result.Id.Should().Be("833dcc33-7238-4e81-9af1-4d42b233551c");
+        var pairs = QueryPairs(handler.LastRequestQuery!);
+        pairs.Should().ContainSingle(p => p.Key == "announcer_format").Which.Value.Should().Be("slin16");
+        pairs.Select(p => p.Key).Should().NotContain("format");
+    }
+
+    [Fact]
+    public async Task PlayAsync_ShouldOmitAnnouncerFormat_WhenFormatIsNull()
+    {
+        using var handler = new FakeHttpHandler(CapturedBridgePlayback201, HttpStatusCode.Created);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriBridgesResource(http, DefaultOptions);
+
+        await sut.PlayAsync("45f040b2-cefc-4dc9-9d4d-ecf5c7752ebd", "tone:440");
+
+        QueryPairs(handler.LastRequestQuery!).Select(p => p.Key + "=" + p.Value).Should().Equal("media=tone:440");
+    }
+
+    // Captured from the same run (raw/a22/sdkproxy/proxy/conn-003.s2c @2086): the 201 body answering
+    // POST /ari/bridges/{id}/record?name=…&format=wav&recorder_format=slin16. recorder_format set the Recorder
+    // channel's read format on every image measured; announcerFormat= was ignored.
+    private const string CapturedBridgeLiveRecording201 =
+        "{\"name\":\"c04d-037f4ffe-0-declared\",\"format\":\"wav\",\"state\":\"queued\",\"target_uri\":\"bridge:497c55a4-f29f-45de-a433-90be5694a208\"}";
+
+    [Fact]
+    public async Task RecordAsync_ShouldSendRecorderFormat_WhenFormatIsGiven()
+    {
+        using var handler = new FakeHttpHandler(CapturedBridgeLiveRecording201, HttpStatusCode.Created);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriBridgesResource(http, DefaultOptions);
+
+        var result = await sut.RecordAsync(
+            "497c55a4-f29f-45de-a433-90be5694a208", "c04d-037f4ffe-0-declared", "wav", format: "slin16");
+
+        result.Name.Should().Be("c04d-037f4ffe-0-declared");
+        var pairs = QueryPairs(handler.LastRequestQuery!);
+        pairs.Should().ContainSingle(p => p.Key == "format").Which.Value.Should().Be("wav");
+        pairs.Should().ContainSingle(p => p.Key == "recorder_format").Which.Value.Should().Be("slin16");
+        pairs.Select(p => p.Key).Should().NotContain("announcerFormat");
+    }
+
+    [Fact]
+    public async Task RecordAsync_ShouldOmitRecorderFormat_WhenFormatIsNull()
+    {
+        using var handler = new FakeHttpHandler(CapturedBridgeLiveRecording201, HttpStatusCode.Created);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriBridgesResource(http, DefaultOptions);
+
+        await sut.RecordAsync("497c55a4-f29f-45de-a433-90be5694a208", "c04d-037f4ffe-0-declared", "wav");
+
+        QueryPairs(handler.LastRequestQuery!).Select(p => p.Key + "=" + p.Value)
+            .Should().Equal("name=c04d-037f4ffe-0-declared", "format=wav");
+    }
+
     [Fact]
     public async Task CreateWithIdAsync_ShouldPostToBridgeIdUrl()
     {
@@ -275,5 +346,23 @@ public sealed class AriBridgesResourceTests
         await sut.GetAsync("bridge/special");
 
         handler.LastRequestUri.Should().Contain("bridges/bridge%2Fspecial");
+    }
+
+    // Splits an escaped query into unescaped key/value pairs, so a test asserts on exact keys: a substring check
+    // would let "announcer_format=slin16" or "recorder_format=slin16" satisfy "format=slin16".
+    private static List<KeyValuePair<string, string>> QueryPairs(string query)
+    {
+        var trimmed = query.TrimStart('?');
+        if (trimmed.Length == 0) return [];
+        return trimmed.Split('&')
+            .Select(pair =>
+            {
+                var eq = pair.IndexOf('=', StringComparison.Ordinal);
+                return eq < 0
+                    ? new KeyValuePair<string, string>(Uri.UnescapeDataString(pair), "")
+                    : new KeyValuePair<string, string>(
+                        Uri.UnescapeDataString(pair[..eq]), Uri.UnescapeDataString(pair[(eq + 1)..]));
+            })
+            .ToList();
     }
 }

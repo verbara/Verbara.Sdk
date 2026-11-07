@@ -120,6 +120,40 @@ public sealed partial class AddVerbaraOptionsDeliveryTests
             $"AriClientOptions.{option} set on AddVerbara(o => o.Ari.{option} = …) is the value the client runs with");
     }
 
+    /// <summary>Every settable ARI option, the audio-server callback included.</summary>
+    public static TheoryData<string> AriOptionNamesAndTheAudioServerCallback =>
+        new(AriOptions.Keys.Append(nameof(AriClientOptions.ConfigureAudioServer)));
+
+    [Theory]
+    [MemberData(nameof(AriOptionNamesAndTheAudioServerCallback))]
+    public async Task AddVerbaraAri_ShouldDeliverEveryAriOption_WhenSetInline(string option)
+    {
+        if (option == nameof(AriClientOptions.ConfigureAudioServer))
+        {
+            Action<AudioServerOptions> configureAudioServer = a => a.AudioSocketPort = 9191;
+
+            await using var withCallback = Build(services => services.AddVerbaraAri(o => o.ConfigureAudioServer = configureAudioServer));
+
+            using (new AssertionScope())
+            {
+                withCallback.GetRequiredService<IOptions<AriClientOptions>>().Value.ConfigureAudioServer.Should().BeSameAs(configureAudioServer,
+                    "the audio-server callback set on AddVerbaraAri reaches the resolved ARI options");
+                withCallback.GetRequiredService<AudioServerOptions>().AudioSocketPort.Should().Be(9191,
+                    "the callback configures the registered audio servers, as through AddVerbara");
+            }
+
+            return;
+        }
+
+        var (_, set, get) = AriOptions[option];
+        var expected = get(Changed(set));
+
+        await using var provider = Build(services => services.AddVerbaraAri(set));
+
+        get(provider.GetRequiredService<IOptions<AriClientOptions>>().Value).Should().Be(expected,
+            $"AriClientOptions.{option} set on AddVerbaraAri(o => o.{option} = …) is the value the client runs with");
+    }
+
     [Fact]
     public async Task AddVerbara_ShouldDeliverTheAudioServerCallback_WhenSetInline()
     {

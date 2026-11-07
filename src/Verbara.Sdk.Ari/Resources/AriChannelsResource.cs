@@ -164,7 +164,7 @@ public sealed class AriChannelsResource : IAriChannelsResource
 
     public async ValueTask HoldAsync(string channelId, CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"channels/{Uri.EscapeDataString(channelId)}/hold");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"channels/{Uri.EscapeDataString(channelId)}/hold");
         var response = await _http.SendAsync(request, cancellationToken);
         await response.EnsureAriSuccessAsync("channel", channelId);
     }
@@ -177,17 +177,17 @@ public sealed class AriChannelsResource : IAriChannelsResource
 
     public async ValueTask MuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default)
     {
-        var url = $"channels/{Uri.EscapeDataString(channelId)}/mute";
-        if (direction is not null) url += $"?direction={Uri.EscapeDataString(direction)}";
-        using var request = new HttpRequestMessage(HttpMethod.Put, url);
+        // Asterisk declares direction optional (default both) but answers 400 without it, so null sends both.
+        var url = $"channels/{Uri.EscapeDataString(channelId)}/mute?direction={Uri.EscapeDataString(direction ?? "both")}";
+        using var request = new HttpRequestMessage(HttpMethod.Post, url);
         var response = await _http.SendAsync(request, cancellationToken);
         await response.EnsureAriSuccessAsync("channel", channelId);
     }
 
     public async ValueTask UnmuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default)
     {
-        var url = $"channels/{Uri.EscapeDataString(channelId)}/mute";
-        if (direction is not null) url += $"?direction={Uri.EscapeDataString(direction)}";
+        // As MuteAsync: Asterisk answers 400 to an unmute without direction, so null sends both.
+        var url = $"channels/{Uri.EscapeDataString(channelId)}/mute?direction={Uri.EscapeDataString(direction ?? "both")}";
         var response = await _http.DeleteAsync(url, cancellationToken);
         await response.EnsureAriSuccessAsync("channel", channelId);
     }
