@@ -4,11 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: a created ARI channel keeps the variables it is given (#536)
+### Fixed: a WebSocket audio server keeps accepting while an observer of new streams runs (#534)
 
-`Channels.CreateWithoutDialAsync` now sets the channel variables it is given. It sent them in the query, where Asterisk
-ignores them (the create returned 200 and the variable stayed unset); they now travel as a JSON body
-`{"variables":{…}}` with `Content-Type: application/json`. A create without variables sends the same request as before.
+When a connection's upgrade request had already arrived by the time it was accepted, `WebSocketAudioServer` served it
+on its accept loop up to and including the `OnStreamConnected` announcement, so an observer that blocked held every
+later connection out until it returned. The handler now yields before it serves the upgrade, as the AudioSocket server
+already did. `IAudioServer.OnStreamConnected` now documents how observers are called: synchronously from the
+connection's handler after admission, never on the accept loop; a blocking observer holds that connection's release;
+a throwing one loses the connection and later observers do not receive that stream; and, per server, what a stop with
+no cancellable token does while an observer blocks. No public API changes.
 
 ### Fixed: an ARI outbound idle timeout inside a message is logged as an idle timeout (#532)
 
@@ -108,6 +112,12 @@ failure is now caught on the delivering thread, logged once as a Warning naming 
 When a consumer fell behind, a WebSocket audio stream's full receive buffer discarded the oldest frame without a trace. Each
 discarded frame now adds one to the new `audio.frames.dropped` counter (meter `Verbara.Sdk.Ari.Audio`, tagged with the
 WebSocket transport); it is still counted as received. AudioSocket streams do not record it.
+
+### Fixed: a created ARI channel keeps the variables it is given (#536)
+
+`Channels.CreateWithoutDialAsync` now sets the channel variables it is given. It sent them in the query, where Asterisk
+ignores them (the create returned 200 and the variable stayed unset); they now travel as a JSON body
+`{"variables":{…}}` with `Content-Type: application/json`. A create without variables sends the same request as before.
 
 ### Changed — BREAKING: a Live channel subscriber's failure stays with that subscriber (#516)
 

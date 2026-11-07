@@ -19,6 +19,19 @@ public class WebSocketAudioServerTests
 {
     private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// How long an observer parked by a test stays parked if the test never releases it: longer than any wait the
+    /// test takes while it is parked, so the park outlasts them, and bounded, so a test that fails before its
+    /// release cannot hold a thread for the rest of the run.
+    /// </summary>
+    private static readonly TimeSpan ParkLimit = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// How long a stop is watched for completing while an observer is parked. A stop that does not wait for the
+    /// observer finishes within milliseconds here, its peers answering its close at once.
+    /// </summary>
+    private static readonly TimeSpan StopObservationWindow = TimeSpan.FromMilliseconds(500);
+
     [Fact]
     public async Task ReadUpgradeRequestAsync_ShouldParseWsKeyAndChannelId()
     {
@@ -372,6 +385,194 @@ public class WebSocketAudioServerTests
             "IsRunning describes the server's intent, not the completion of its teardown — a stop " +
             "that has begun is a stop, and the accept loop's classification of its own shutdown " +
             "depends on reading it that way");
+    }
+
+    // ------------------------------------------------- an observer of new streams that blocks or throws
+
+    [Fact]
+    public async Task AcceptLoopAsync_ShouldAnnounceTheNextConnection_WhenAStreamConnectedSubscriberBlocks()
+    {
+        // Arrange — the server's accepts come from a listener this test owns, and the first connection is handed
+        // over only once its upgrade request is readable on it. The accept loop starts each handler inline, so a
+        // handler whose upgrade read finds its bytes already there, and whose wait to be named is disabled, can
+        // reach the announcement without ever suspending; an observer that blocks there would then hold the
+        // accept loop, and no later connection would be accepted.
+        using var accepts = new TestOwnedAccepts(handFirstOverOnceReadable: true);
+        await using var server = CreateServer(PortTheOsPicks, mediaStartTimeout: TimeSpan.Zero);
+        server.AcceptOverride = accepts.AcceptAsync;
+        using var release = new ManualResetEventSlim();
+        var firstParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstLeft = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondAnnounced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var seen = 0;
+        using var parking = server.OnStreamConnected.Subscribe(_ =>
+        {
+            // Parks on the first stream only; every later one is recorded and let through.
+            if (Interlocked.Increment(ref seen) != 1)
+            {
+                secondAnnounced.TrySetResult();
+                return;
+            }
+
+            try
+            {
+                firstParked.TrySetResult();
+                release.Wait(ParkLimit);
+            }
+            finally
+            {
+                firstLeft.TrySetResult();
+            }
+        });
+        void ReleaseParked() => release.Set();
+        await server.StartAsync();
+        using var bound = new CancellationTokenSource(ParkLimit);
+
+        bool announcedInTime;
+        bool firstStillParked;
+        try
+        {
+            // The first peer writes its whole upgrade at once; the seam hands its connection to the loop once
+            // those bytes are readable on the server's side.
+            using var first = await RawWebSocketPeer.ConnectAsync(accepts.Port, bound.Token);
+            _ = first.UpgradeAsync("ch-first", bound.Token);
+            await firstParked.Task.WaitAsync(WaitLimit);
+
+            // Act — an ordinary second connection while the first observer is parked.
+            using var second = await RawWebSocketPeer.ConnectAsync(accepts.Port, bound.Token);
+            _ = second.UpgradeAsync("ch-second", bound.Token);
+            announcedInTime = await Task.WhenAny(secondAnnounced.Task, Task.Delay(WaitLimit)) == secondAnnounced.Task; // fence-allow: GUARD-TIMEOUT — failure bound on the second announcement; a green run leaves on the announcement
+            firstStillParked = !firstLeft.Task.IsCompleted;
+        }
+        finally
+        {
+            ReleaseParked();
+            if (firstParked.Task.IsCompleted)
+                await firstLeft.Task.WaitAsync(WaitLimit);
+        }
+
+        // Assert
+        using (new AssertionScope())
+        {
+            announcedInTime.Should().BeTrue(
+                "a connection is accepted and announced while an observer of an earlier connection blocks: nothing " +
+                "of a connection after its upgrade read runs on the accept loop");
+            firstStillParked.Should().BeTrue(
+                "the premise is an announcement made while the first observer is still blocked");
+        }
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_ShouldNotAnnounceToLaterObservers_WhenAnEarlierObserverThrows()
+    {
+        // Arrange — three observers in subscription order: one that records, one that throws, one that records.
+        var (started, port) = await StartOnLoopbackAsync();
+        await using var server = started;
+        var disposedSignal = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var laterObserverCalls = 0;
+        using var earlier = server.OnStreamConnected.Subscribe(stream => disposedSignal.TrySetResult(WhenDisposed(stream)));
+        using var throwing = server.OnStreamConnected.Subscribe(static _ => throw new InvalidOperationException("subscriber failure"));
+        using var later = server.OnStreamConnected.Subscribe(_ => Interlocked.Increment(ref laterObserverCalls));
+
+        // Act — the client stays open, so only the failed connection's own cleanup can dispose the session, and
+        // that cleanup runs after the announcement has ended.
+        using var client = new ClientWebSocket();
+        await client.ConnectAsync(ChannelUri(port, "ch-throw-order"), CancellationToken.None);
+        var disposed = await disposedSignal.Task.WaitAsync(WaitLimit);
+        await disposed.WaitAsync(WaitLimit);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            Volatile.Read(ref laterObserverCalls).Should().Be(
+                0,
+                "the announcement ends at the observer that throws, so an observer subscribed after it never " +
+                "receives that stream");
+            server.ActiveStreamCount.Should().Be(0, "the connection whose announcement failed is released");
+            server.GetStream("ch-throw-order").Should().BeNull();
+        }
+    }
+
+    [Fact]
+    public async Task StopAsync_ShouldWaitForABlockedObserver_WhenAnotherConnectionWasAcceptedMeanwhile()
+    {
+        // Arrange — the server's accepts come from a listener this test owns, and each peer sends its upgrade only
+        // after the accept loop has asked for the next connection: the handler it started inline has then
+        // suspended on its upgrade read, so no observer runs on the accept loop, whichever tree this runs on. Both
+        // peers answer the server's close, so a stop that does not wait for the observer would finish at once.
+        using var accepts = new TestOwnedAccepts();
+        await using var server = CreateServer(PortTheOsPicks);
+        server.AcceptOverride = accepts.AcceptAsync;
+        using var release = new ManualResetEventSlim();
+        var firstParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstLeft = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondAnnounced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var seen = 0;
+        using var parking = server.OnStreamConnected.Subscribe(_ =>
+        {
+            if (Interlocked.Increment(ref seen) != 1)
+            {
+                secondAnnounced.TrySetResult();
+                return;
+            }
+
+            try
+            {
+                firstParked.TrySetResult();
+                release.Wait(ParkLimit);
+            }
+            finally
+            {
+                firstLeft.TrySetResult();
+            }
+        });
+        await server.StartAsync();
+        await accepts.NextAskAsync();
+        using var bound = new CancellationTokenSource(ParkLimit);
+
+        bool stopFinishedWhileParked;
+        bool parkedWhenRead;
+        try
+        {
+            using var first = await RawWebSocketPeer.ConnectAsync(accepts.Port, bound.Token);
+            await accepts.NextAskAsync();
+            first.AnswerCloseWhenReceived();
+            await first.UpgradeAsync("ch-held", bound.Token);
+            await firstParked.Task.WaitAsync(WaitLimit);
+
+            using var second = await RawWebSocketPeer.ConnectAsync(accepts.Port, bound.Token);
+            await accepts.NextAskAsync();
+            second.AnswerCloseWhenReceived();
+            await second.UpgradeAsync("ch-meanwhile", bound.Token);
+            await secondAnnounced.Task.WaitAsync(WaitLimit);
+
+            // Act — a stop with no token. It is read after a window and not at once: its first wait is for the
+            // accept loop to end, which happens off this thread, so a read taken as the stop returns its task
+            // would find it incomplete even if it did not wait for the observer at all.
+            var stop = server.StopAsync().AsTask();
+            stopFinishedWhileParked = await Task.WhenAny(stop, Task.Delay(StopObservationWindow)) == stop; // fence-allow: SETTLE — the negative "has not finished while the observer is parked" needs a bounded window; the release below decides the positive
+            parkedWhenRead = !firstLeft.Task.IsCompleted;
+
+            release.Set();
+            await stop.WaitAsync(WaitLimit);
+        }
+        finally
+        {
+            release.Set();
+            if (firstParked.Task.IsCompleted)
+                await firstLeft.Task.WaitAsync(WaitLimit);
+        }
+
+        // Assert
+        using (new AssertionScope())
+        {
+            stopFinishedWhileParked.Should().BeFalse(
+                "on the WebSocket server a stop with no token waits for the handler an observer holds, and so for " +
+                "the observer");
+            parkedWhenRead.Should().BeTrue("the premise is a stop read while the first observer is still blocked");
+            server.IsRunning.Should().BeFalse();
+            server.ActiveStreamCount.Should().Be(0, "once the observer returned, the stop completed and released both");
+        }
     }
 
     // ------------------------------------------------------- accept failures that are not the stop
@@ -1329,6 +1530,53 @@ public class WebSocketAudioServerTests
             server => server.StartAsync());
 
     private static Uri ChannelUri(int port, string channelId) => new($"ws://127.0.0.1:{port}/ws/{channelId}");
+
+    /// <summary>
+    /// A loopback listener the test owns, whose connections reach the server through its accept seam, so the test
+    /// decides when the server gets each one. Every call of <see cref="AcceptAsync"/> is the accept loop asking for
+    /// its next connection and is reported through <see cref="NextAskAsync"/>: the loop starts each handler inline,
+    /// so it asks again only once that handler has suspended.
+    /// </summary>
+    private sealed class TestOwnedAccepts : IDisposable
+    {
+        private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+        private readonly Channel<bool> _asks = Channel.CreateUnbounded<bool>();
+        private readonly bool _handFirstOverOnceReadable;
+        private int _accepted;
+
+        /// <summary>Starts the loopback listener.</summary>
+        /// <param name="handFirstOverOnceReadable">
+        /// Whether the first connection is handed to the server only once bytes its peer sent are readable on it.
+        /// A peer that writes its upgrade in one send on loopback has then had its whole request received.
+        /// </param>
+        public TestOwnedAccepts(bool handFirstOverOnceReadable = false)
+        {
+            _handFirstOverOnceReadable = handFirstOverOnceReadable;
+            _listener.Start();
+        }
+
+        public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+        /// <summary>The server's accept seam.</summary>
+        public async ValueTask<TcpClient> AcceptAsync(CancellationToken token)
+        {
+            _asks.Writer.TryWrite(true);
+            var client = await _listener.AcceptTcpClientAsync(token);
+            if (_handFirstOverOnceReadable && Interlocked.Increment(ref _accepted) == 1
+                && (!client.Client.Poll(WaitLimit, SelectMode.SelectRead) || client.Available == 0))
+            {
+                client.Dispose();
+                throw new TimeoutException("The first peer's upgrade request never became readable.");
+            }
+
+            return client;
+        }
+
+        /// <summary>Completes when the accept loop has asked for its next connection.</summary>
+        public async Task NextAskAsync() => await _asks.Reader.ReadAsync().AsTask().WaitAsync(WaitLimit);
+
+        public void Dispose() => _listener.Dispose();
+    }
 
     /// <summary>
     /// An accept that never returns a connection and ends only when <paramref name="token"/> does, so

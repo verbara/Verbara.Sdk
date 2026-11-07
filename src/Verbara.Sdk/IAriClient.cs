@@ -838,6 +838,34 @@ public enum AudioStreamState
 public interface IAudioServer
 {
     /// <summary>Observable that emits each new audio stream when a connection is established.</summary>
+    /// <remarks>
+    /// <para>
+    /// Each stream is delivered <b>synchronously</b> to the observers, in the order they subscribed, from the
+    /// handler of the connection that carries it: after that connection has been admitted and is listed in
+    /// <see cref="ActiveStreams"/> and counted in <see cref="ActiveStreamCount"/>, and never on the server's
+    /// accept loop, so other connections are accepted and served while an observer runs. Being announced does
+    /// not mean being found: a connection that presents a key another live connection holds is announced while
+    /// it waits for that key, and <see cref="GetStream(string)"/> keeps returning the earlier holder until it
+    /// takes the key over.
+    /// </para>
+    /// <para>
+    /// An observer that <b>blocks</b> holds that connection's release — its registration, its place in the
+    /// server's concurrent-stream limit and its socket — until it returns, even after the far end has hung up.
+    /// What a stop with no cancellable token does meanwhile depends on the server, and each one states it on its
+    /// own <c>OnStreamConnected</c>: <c>WebSocketAudioServer.StopAsync</c> waits for that observer to return.
+    /// <c>AudioSocketServer.StopAsync</c> does not wait for it: it ends that stream, removes its registration and
+    /// returns while the observer still runs, and the connection's place in the limit comes back only when the
+    /// observer returns.
+    /// </para>
+    /// <para>
+    /// An observer that <b>throws</b> loses that connection: the server logs the failure, releases the
+    /// connection and closes it, and observers subscribed after the throwing one do not receive that stream.
+    /// </para>
+    /// <para>
+    /// Long or blocking work belongs off the observer: hand the stream to <see cref="Task.Run(Func{Task})"/>,
+    /// or to a channel the consumer drains, and return.
+    /// </para>
+    /// </remarks>
     IObservable<IAudioStream> OnStreamConnected { get; }
 
     /// <summary>
