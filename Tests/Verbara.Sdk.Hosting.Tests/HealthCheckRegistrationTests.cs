@@ -265,6 +265,97 @@ public sealed class HealthCheckRegistrationTests
             "the host named it, so the host's own choice is applied (the docs warn against it)");
     }
 
+    [Fact]
+    public async Task AddVerbaraSessions_ShouldTagTheSessionsCheck_WhenTheHostNamesTags()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+        services.AddVerbaraSessions();
+
+        await using var provider = services.BuildServiceProvider();
+        var sessions = Registrations(provider).Should().ContainSingle().Which;
+
+        sessions.Name.Should().Be("sessions");
+        sessions.Tags.Should().BeEquivalentTo(["voice"], "the sessions check reads the host-wide option");
+    }
+
+    [Theory]
+    [InlineData(SessionsTwice.MultiServerTwice)]
+    [InlineData(SessionsTwice.SingleAndMultiServer)]
+    public async Task SessionsRegistrations_ShouldRegisterOneTaggedCheck_WhenRegisteredTwice(SessionsTwice registrations)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+        if (registrations == SessionsTwice.SingleAndMultiServer)
+            services.AddVerbaraSessions();
+        else
+            services.AddVerbaraSessionsMultiServer();
+        services.AddVerbaraSessionsMultiServer();
+
+        await using var provider = services.BuildServiceProvider();
+
+        Registrations(provider).Should().ContainSingle("the second registration finds the first and adds nothing")
+            .Which.Tags.Should().BeEquivalentTo(["voice"], "the one registration carries the host's tag");
+    }
+
+    [Fact]
+    public async Task AddVerbaraSessions_ShouldCollapseTags_WhenTheyDifferOnlyInCase()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+        services.AddVerbaraSessions();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("Voice"));
+
+        await using var provider = services.BuildServiceProvider();
+
+        Registrations(provider).Should().ContainSingle().Which.Tags.Should().ContainSingle(
+            "voice and Voice are one tag in the registration's case-insensitive set");
+    }
+
+    [Fact]
+    public async Task AddVerbaraSessions_ShouldApplyALaterConfigure_WhenItIsRegisteredAfterTheRegistration()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbaraSessions();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+
+        await using var provider = services.BuildServiceProvider();
+
+        Registrations(provider).Should().ContainSingle().Which.Tags.Should().BeEquivalentTo(["voice"],
+            "the tags are read when the health options are first built, after every Configure");
+    }
+
+    [Fact]
+    public async Task AddVerbaraSessions_ShouldLeaveAHostsOwnSessionsCheckUntagged_WhenItTakesTheName()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHealthChecks().AddCheck<HostCheck>("sessions");
+        services.AddVerbaraSessions();
+        services.AddVerbara(_ => { });
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+
+        await using var provider = services.BuildServiceProvider();
+        var registrations = Registrations(provider);
+
+        var sessions = registrations.Where(r => r.Name == "sessions").Should()
+            .ContainSingle("the guard keeps the host's registration and adds none of its own").Which;
+        sessions.Factory(provider).Should().BeOfType<HostCheck>("the registration under that name is the host's");
+        sessions.Tags.Should().BeEmpty("the SDK tags only the registrations it creates, never one it finds");
+        registrations.Single(r => r.Name == "ami").Tags.Should().BeEquivalentTo(["voice"],
+            "the same provider tags the SDK's own checks");
+    }
+
+    private sealed class HostCheck : IHealthCheck
+    {
+        public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+            => Task.FromResult(HealthCheckResult.Healthy());
+    }
+
     private sealed class StubCheck : IHealthCheck
     {
         public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)

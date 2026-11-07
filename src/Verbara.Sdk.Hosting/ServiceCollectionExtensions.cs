@@ -514,21 +514,11 @@ public static class ServiceCollectionExtensions
         // Guarded, not a plain AddCheck: a host may call more than one sessions registration (the single-server and the
         // multi-server one, or one of them twice), and a second registration under the same name makes
         // HealthCheckService throw "Duplicate health checks were registered" on resolve.
-        services.AddHealthChecks();
-        services.Configure<HealthCheckServiceOptions>(options =>
-        {
-            foreach (var registration in options.Registrations)
-            {
-                if (string.Equals(registration.Name, SessionsHealthCheckName, StringComparison.Ordinal))
-                    return;
-            }
-
-            options.Registrations.Add(new HealthCheckRegistration(
-                SessionsHealthCheckName,
-                sp => new Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck(sp.GetRequiredService<ICallSessionManager>()),
-                failureStatus: null,
-                tags: null));
-        });
+        AddSdkHealthCheck(
+            services,
+            SessionsHealthCheckName,
+            sp => new Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck(sp.GetRequiredService<ICallSessionManager>()),
+            guarded: true);
         return services;
     }
 
