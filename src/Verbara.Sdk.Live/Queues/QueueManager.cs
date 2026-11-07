@@ -190,13 +190,14 @@ public sealed class QueueManager
 
                 foreach (var entry in queueNames)
                 {
-                    if (!_queues.TryGetValue(entry.Key, out var queue) || queue.RemovedFromTable
-                        || !queue.Members.TryGetValue(iface, out var member))
-                        continue;
-
-                    if (!member.Paused)
-                        return AgentMemberships.NotAllPaused;
-                    held = true;
+                    switch (HeldPauseOf(entry.Key, iface))
+                    {
+                        case false:
+                            return AgentMemberships.NotAllPaused;
+                        case true:
+                            held = true;
+                            break;
+                    }
                 }
             }
 
@@ -208,6 +209,12 @@ public sealed class QueueManager
                 ArrayPool<char>.Shared.Return(rented);
         }
     }
+
+    // The pause of the membership of iface in queueName while the table holds it; null when it holds none.
+    private bool? HeldPauseOf(string queueName, string iface) =>
+        _queues.TryGetValue(queueName, out var queue) && !queue.RemovedFromTable && queue.Members.TryGetValue(iface, out var member)
+            ? member.Paused
+            : null;
 
     /// <summary>Get queue objects where a member interface is registered.</summary>
     public IEnumerable<AsteriskQueue> GetQueueObjectsForMember(string memberInterface)
