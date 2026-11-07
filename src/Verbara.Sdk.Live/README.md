@@ -26,6 +26,20 @@ server.Agents.AgentStateChanged += agent =>
     Console.WriteLine($"Agent {agent.AgentId}: {agent.State}");
 ```
 
+## Pauses
+
+`server.Queues.MemberPaused` is raised for every pause or unpause Asterisk reports for a queue member the table holds,
+whatever the member's interface, after the table applied it.
+
+`server.Agents.AgentStateChanged` reports `AgentState.Paused` only for an app_agent_pool member (`Agent/<id>`, the
+prefix in any letter case), and only while every one of that agent's memberships on that server is paused; an unpause
+in any of its queues makes it `Available` again. A call and a logoff win over a pause: an agent on a call or logged off
+keeps that state. A device member (`PJSIP/…`, `SIP/…`, `Local/…`) changes no agent; read `MemberPaused` for it.
+
+A load, a reload, a login and an `Agent/<id>` member add or remove keep the pause. `OnCall` and the return from a call
+are reached only through `OnAgentConnect`/`OnAgentComplete` called by the host: Asterisk's `AgentConnect`/`AgentComplete`
+frames name no agent.
+
 ## Multi-Server
 
 ```csharp
