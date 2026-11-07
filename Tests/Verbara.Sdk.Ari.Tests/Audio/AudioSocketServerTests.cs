@@ -19,6 +19,12 @@ public class AudioSocketServerTests : IAsyncLifetime
     /// <summary>Upper bound on any single wait. Reaching it is a failure, never a pace.</summary>
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// How long an observer parked by a test stays parked if the test never releases it: longer than any wait the
+    /// test takes while it is parked, and bounded, so a test that fails before its release cannot hold a thread.
+    /// </summary>
+    private static readonly TimeSpan ParkLimit = TimeSpan.FromSeconds(30);
+
     private AudioSocketServer? _server;
 
     [Fact]
@@ -1000,6 +1006,97 @@ public class AudioSocketServerTests : IAsyncLifetime
             0,
             "the finally deregisters the session on the failing path as well as the clean one");
         server.IsRunning.Should().BeTrue("one connection failing is not the server failing");
+    }
+
+    [Fact]
+    public async Task HandleConnection_ShouldNotAnnounceToLaterObservers_WhenAnEarlierObserverThrows()
+    {
+        // Arrange — three observers in subscription order: one that records, one that throws, one that records.
+        var (server, port) = await StartOnLoopbackAsync();
+        var earlierSaw = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var laterObserverCalls = 0;
+        using var earlier = server.OnStreamConnected.Subscribe(stream => earlierSaw.TrySetResult(stream));
+        using var throwing = server.OnStreamConnected.Subscribe(
+            static _ => throw new InvalidOperationException("the consumer's handler failed"));
+        using var later = server.OnStreamConnected.Subscribe(_ => Interlocked.Increment(ref laterObserverCalls));
+        var uuid = Guid.NewGuid();
+
+        using var client = await ConnectAsync(port);
+        var stream = client.GetStream();
+
+        // Act
+        await stream.WriteAsync(BuildUuidFrame(uuid));
+        await stream.FlushAsync();
+
+        // Assert — the read returns 0 only once the handler has released the connection, which it does after the
+        // announcement has ended.
+        var read = await stream.ReadAsync(new byte[1]).AsTask().WaitAsync(SignalTimeout);
+        var seen = await earlierSaw.Task.WaitAsync(SignalTimeout);
+
+        using (new AssertionScope())
+        {
+            read.Should().Be(0, "the connection whose announcement failed is released");
+            seen.ChannelId.Should().Be(uuid.ToString(), "the observer subscribed first received this stream");
+            Volatile.Read(ref laterObserverCalls).Should().Be(
+                0,
+                "the announcement ends at the observer that throws, so an observer subscribed after it never " +
+                "receives that stream");
+            server.ActiveStreamCount.Should().Be(0);
+        }
+    }
+
+    [Fact]
+    public async Task StopAsync_ShouldReturnWithoutWaitingForTheObserver_WhenAnObserverOfNewStreamsBlocks()
+    {
+        // Arrange — an observer that parks the connection's handler inside the announcement until the test releases it.
+        var (server, port) = await StartOnLoopbackAsync();
+        var parked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var left = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        using var parking = server.OnStreamConnected.Subscribe(_ =>
+        {
+            try
+            {
+                parked.TrySetResult();
+                release.Wait(ParkLimit);
+            }
+            finally
+            {
+                left.TrySetResult();
+            }
+        });
+        var uuid = Guid.NewGuid();
+
+        bool stillParkedWhenStopped;
+        IAudioStream? foundAfterStop;
+        try
+        {
+            using var client = await ConnectAsync(port);
+            var stream = client.GetStream();
+            await stream.WriteAsync(BuildUuidFrame(uuid));
+            await stream.FlushAsync();
+            await parked.Task.WaitAsync(SignalTimeout);
+
+            // Act — a stop with no token, bounded so a stop that waits for the observer fails here instead of hanging.
+            await server.StopAsync().AsTask().WaitAsync(SignalTimeout);
+            stillParkedWhenStopped = !left.Task.IsCompleted;
+            foundAfterStop = server.GetStream(uuid.ToString());
+        }
+        finally
+        {
+            release.Set();
+            if (parked.Task.IsCompleted)
+                await left.Task.WaitAsync(SignalTimeout);
+        }
+
+        // Assert
+        using (new AssertionScope())
+        {
+            stillParkedWhenStopped.Should().BeTrue(
+                "the AudioSocket server's stop does not wait for an observer: it ends that stream and returns");
+            foundAfterStop.Should().BeNull("the stop unregistered the stream whose observer is still blocked");
+            server.IsRunning.Should().BeFalse();
+        }
     }
 
     [Fact]
