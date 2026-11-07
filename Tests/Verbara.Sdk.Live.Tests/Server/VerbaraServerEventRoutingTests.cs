@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -1508,6 +1509,38 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
         {
             StateOf("1001").Should().Be(AgentState.Paused);
             changes.Should().Equal([AgentState.Paused]);
+        }
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldEndAsTheFinalTableImplies_WhenAPauseAndAnUnpauseOfTwoMembershipsRace()
+    {
+        await StartAndGetObserverAsync();
+        LoginAgent("1001");
+        AddMember("sales", "Agent/1001", paused: true);
+        AddMember("support", "Agent/1001");
+        var changes = new ConcurrentQueue<AgentState>();
+        _sut.Agents.AgentStateChanged += a => changes.Enqueue(a.State);
+        using var start = new Barrier(2);
+
+        var pause = Task.Run(() =>
+        {
+            start.SignalAndWait();
+            PauseMember("support", "Agent/1001", paused: true);
+        });
+        var unpause = Task.Run(() =>
+        {
+            start.SignalAndWait();
+            PauseMember("sales", "Agent/1001", paused: false);
+        });
+        await Task.WhenAll(pause, unpause).WaitAsync(TimeSpan.FromSeconds(10));
+
+        using (new AssertionScope())
+        {
+            StateOf("1001").Should().Be(AgentState.Available, "the final table implies it: sales is unpaused");
+            // Either the unpause derived first (no change at all) or the pause did (Paused, then Available): one
+            // notification per real change, never a stale derivation's lone Paused.
+            changes.Count.Should().BeOneOf([0, 2], "each real change is announced once");
         }
     }
 
