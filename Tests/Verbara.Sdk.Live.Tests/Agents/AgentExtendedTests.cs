@@ -54,6 +54,8 @@ public sealed class AgentExtendedTests
 
     // ── State transitions ──────────────────────────────────────────────
 
+    // Pins the public OnAgentPaused toggle a host may call. The server never calls it: it derives an Agent/<id>
+    // member's pause from that agent's queue memberships instead.
     [Fact]
     public void FullLifecycle_LoggedOff_Available_OnCall_Available_Paused_Available_LoggedOff()
     {
@@ -78,6 +80,8 @@ public sealed class AgentExtendedTests
 
     // ── GetAgentsByState ───────────────────────────────────────────────
 
+    // Pins the public OnAgentPaused toggle a host may call. The server never calls it: it derives an Agent/<id>
+    // member's pause from that agent's queue memberships instead.
     [Fact]
     public void GetAgentsByState_ShouldFilterCorrectly()
     {
@@ -216,6 +220,8 @@ public sealed class AgentExtendedTests
         _sut.AgentCount.Should().Be(0);
     }
 
+    // Pins the public OnAgentPaused toggle a host may call. The server never calls it: it derives an Agent/<id>
+    // member's pause from that agent's queue memberships instead.
     [Fact]
     public void OnAgentPaused_ShouldBeNoOp_WhenAgentUnknown()
     {

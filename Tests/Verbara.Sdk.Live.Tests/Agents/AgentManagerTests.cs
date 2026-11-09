@@ -1,6 +1,9 @@
 using System.Globalization;
 using Verbara.Sdk.Live.Agents;
 using FluentAssertions;
+using FluentAssertions.Execution;
+using NSubstitute;
+using Verbara.Sdk.Live.Server;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Verbara.Sdk.Live.Tests.Agents;
@@ -51,6 +54,8 @@ public class AgentManagerTests
         _sut.GetById("1001")!.State.Should().Be(AgentState.Available);
     }
 
+    // Pins the public OnAgentPaused toggle a host may call. The server never calls it: it derives an Agent/<id>
+    // member's pause from that agent's queue memberships instead.
     [Fact]
     public void OnAgentPaused_ShouldSetPaused()
     {
@@ -105,6 +110,27 @@ public class AgentManagerTests
             await Task.WhenAll(live, replacement);
 
             manager.GetById(agentId).Should().NotBeNull("the event that added it is newer than the list, whichever ran first");
+        }
+    }
+
+    [Fact]
+    public async Task OnAgentLogin_ShouldReadPaused_WhenEveryMembershipIsPaused()
+    {
+        var server = new VerbaraServer(Substitute.For<IAmiConnection>(), NullLogger<VerbaraServer>.Instance);
+        await using (server)
+        {
+            server.Queues.OnMemberAdded("sales", "Agent/1001", "1001", 0, true, 1);
+            server.Queues.OnMemberAdded("support", "Agent/1001", "1001", 0, true, 1);
+            var announced = new List<AgentState>();
+            server.Agents.AgentLoggedIn += a => announced.Add(a.State);
+
+            server.Agents.OnAgentLogin("1001", "PJSIP/1001");
+
+            using (new AssertionScope())
+            {
+                server.Agents.GetById("1001")!.State.Should().Be(AgentState.Paused);
+                announced.Should().Equal([AgentState.Paused], "the login is announced with the state it derived");
+            }
         }
     }
 }

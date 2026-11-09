@@ -113,6 +113,18 @@ connection's handler after admission, never on the accept loop; a blocking obser
 a throwing one loses the connection and later observers do not receive that stream; and, per server, what a stop with
 no cancellable token does while an observer blocks. No public API changes.
 
+### Added: a queue member's pause and unpause are announced (#541)
+
+`QueueManager.MemberPaused` is raised for each pause and unpause Live applies to a member its queue table holds,
+with the queue name and the member, whose `Paused` and `PausedReason` read as the table holds them. Before, a pause
+updated the table and raised nothing, so a subscriber had to poll to see one.
+
+### Changed: an agent paused in its queues reads `Paused` (#541)
+
+`AgentStateChanged` and `AgentLoggedIn`'s `State` report `AgentState.Paused` for an `Agent/<id>` member while every
+one of its memberships on that server is paused; a load, a reload, a login, a member add or remove and a completed
+call keep the pause. A consumer that switches on `AgentState` should handle `Paused`.
+
 ### Fixed: an ARI outbound idle timeout inside a message is logged as an idle timeout (#532)
 
 An idle timeout that fires while a fragment of one message is still arriving, or while its last fragment is, is
