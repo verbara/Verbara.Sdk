@@ -221,6 +221,18 @@ When a consumer fell behind, a WebSocket audio stream's full receive buffer disc
 discarded frame now adds one to the new `audio.frames.dropped` counter (meter `Verbara.Sdk.Ari.Audio`, tagged with the
 WebSocket transport); it is still counted as received. AudioSocket streams do not record it.
 
+### Added: a host names the tags of the health checks the SDK registers (#542)
+
+`VerbaraHealthCheckOptions.Tags` is the one place a host names the tags every health check a `Verbara.Sdk.Hosting`
+registration installs carries — `ami`, `live`, `agi`, `ari`, `sessions` and `verbara-pool` — with
+`services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"))` in any order, or the `Asterisk:HealthCheckTags`
+key with `AddVerbara(IConfiguration)`. Tags are added, never replaced, so every contribution merges into one set
+compared ignoring case; a null, empty or whitespace tag fails the host's start with an `OptionsValidationException`
+naming `Tags`. The SDK still names no tag of its own, so a host that sets nothing, and an endpoint filtered by tag,
+see no change. Never put an SDK check on the tag your readiness probe reads: an Asterisk outage would take the pod out
+of service. To tag or untag one check only, use `PostConfigure<HealthCheckServiceOptions>` (migration guide, "The
+`verbara-pool` health check").
+
 ### Fixed: a created ARI channel keeps the variables it is given (#536)
 
 `Channels.CreateWithoutDialAsync` now sets the channel variables it is given. It sent them in the query, where Asterisk

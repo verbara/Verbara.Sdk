@@ -31,6 +31,12 @@ public static class ServiceCollectionExtensions
     /// Add all Verbara Sdk services (AMI, AGI, ARI, Live) to the service collection.
     /// Configures a single Asterisk server connection with options validation on startup.
     /// </summary>
+    /// <remarks>
+    /// Registers the health checks <c>ami</c>, <c>live</c>, <c>agi</c> and, when <see cref="VerbaraOptions.Ari"/> is set,
+    /// <c>ari</c>, with no tags unless the host names them in <see cref="VerbaraHealthCheckOptions.Tags"/> (set before or
+    /// after this call). Never name the tag your readiness probe reads: an Asterisk outage would take the pod out of
+    /// service.
+    /// </remarks>
     public static IServiceCollection AddVerbara(
         this IServiceCollection services,
         Action<VerbaraOptions> configure)
@@ -61,23 +67,23 @@ public static class ServiceCollectionExtensions
                 options.AgiPort,
                 sp.GetRequiredService<IMappingStrategy>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<FastAgiServer>>()));
-        services.AddHealthChecks()
-            .AddCheck<Verbara.Sdk.Agi.Diagnostics.AgiHealthCheck>("agi");
+        AddSdkHealthCheck(services, "agi",
+            sp => ActivatorUtilities.GetServiceOrCreateInstance<Verbara.Sdk.Agi.Diagnostics.AgiHealthCheck>(sp), guarded: false);
         services.AddSingleton<IHostedService, Verbara.Sdk.Agi.Hosting.AgiHostedService>();
 
         // Live
         services.TryAddSingleton<VerbaraServer>();
         services.TryAddSingleton<IVerbaraServer>(sp => sp.GetRequiredService<VerbaraServer>());
-        services.AddHealthChecks()
-            .AddCheck<Verbara.Sdk.Live.Diagnostics.LiveHealthCheck>("live");
+        AddSdkHealthCheck(services, "live",
+            sp => ActivatorUtilities.GetServiceOrCreateInstance<Verbara.Sdk.Live.Diagnostics.LiveHealthCheck>(sp), guarded: false);
 
         // Hosted services for automatic lifecycle management
         services.AddSingleton<IHostedService, AmiConnectionHostedService>();
         services.AddSingleton<IHostedService, VerbaraServerHostedService>();
 
         // Health checks
-        services.AddHealthChecks()
-            .AddCheck<Verbara.Sdk.Ami.Diagnostics.AmiHealthCheck>("ami");
+        AddSdkHealthCheck(services, "ami",
+            sp => ActivatorUtilities.GetServiceOrCreateInstance<Verbara.Sdk.Ami.Diagnostics.AmiHealthCheck>(sp), guarded: false);
 
         // ARI with validation
         if (options.Ari is not null)
@@ -164,9 +170,45 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<AriClient>>(),
             sp.GetService<IAudioServer>()));
 
-        services.AddHealthChecks()
-            .AddCheck<Verbara.Sdk.Ari.Diagnostics.AriHealthCheck>("ari");
+        AddSdkHealthCheck(services, "ari",
+            sp => ActivatorUtilities.GetServiceOrCreateInstance<Verbara.Sdk.Ari.Diagnostics.AriHealthCheck>(sp), guarded: false);
         services.AddSingleton<IHostedService, AriConnectionHostedService>();
+    }
+
+    /// <summary>
+    /// Registers the host's health-check options once (validated on start) and adds one SDK health check that carries
+    /// the host's tags (<see cref="VerbaraHealthCheckOptions.Tags"/>). Guarded: adds nothing when a registration of that
+    /// name already exists — another SDK call's or the host's own — and tags nothing it did not create.
+    /// </summary>
+    private static void AddSdkHealthCheck(
+        IServiceCollection services,
+        string name,
+        Func<IServiceProvider, IHealthCheck> factory,
+        bool guarded)
+    {
+        services.AddHealthChecks();
+        services.AddOptions<VerbaraHealthCheckOptions>().ValidateOnStart();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IValidateOptions<VerbaraHealthCheckOptions>, VerbaraHealthCheckOptionsValidator>());
+        services.AddOptions<HealthCheckServiceOptions>().Configure<IOptions<VerbaraHealthCheckOptions>>((health, host) =>
+        {
+            // Read first: a blank tag fails here even when the guard below returns.
+            var tags = host.Value.Tags;
+            if (guarded)
+            {
+                foreach (var registration in health.Registrations)
+                {
+                    if (string.Equals(registration.Name, name, StringComparison.Ordinal))
+                        return;
+                }
+            }
+
+            health.Registrations.Add(new HealthCheckRegistration(
+                name,
+                factory,
+                failureStatus: null,
+                tags: tags.Count == 0 ? null : tags));
+        });
     }
 
     /// <summary>
@@ -177,14 +219,21 @@ public static class ServiceCollectionExtensions
     /// a value that cannot be converted throws an <see cref="InvalidOperationException"/> naming its key.
     /// AOT-safe: the binding is emitted by the configuration-binding source generator, not done by reflection.
     /// </summary>
+    /// <remarks>
+    /// Also reads <c>Asterisk:HealthCheckTags</c> (an array) into <see cref="VerbaraHealthCheckOptions.Tags"/>, added to
+    /// whatever a <c>Configure</c> adds; the health checks carry no tags unless the host names them there. A blank value
+    /// fails the options' validation. Never name the tag your readiness probe reads: an Asterisk outage would take the
+    /// pod out of service.
+    /// </remarks>
     public static IServiceCollection AddVerbara(
         this IServiceCollection services,
         IConfiguration configuration)
     {
         var ami = configuration.GetSection("Asterisk:Ami");
         var ari = configuration.GetSection("Asterisk:Ari");
+        var healthCheckTags = configuration.GetSection("Asterisk:HealthCheckTags").Get<string[]>();
 
-        return services.AddVerbara(o =>
+        services.AddVerbara(o =>
         {
             ami.Bind(o.Ami);
 
@@ -197,6 +246,18 @@ public static class ServiceCollectionExtensions
                 ari.Bind(o.Ari);
             }
         });
+
+        // Added, never filtered: a blank value fails the options' validation like any blank tag.
+        if (healthCheckTags is { Length: > 0 })
+        {
+            services.Configure<VerbaraHealthCheckOptions>(o =>
+            {
+                foreach (var tag in healthCheckTags)
+                    o.Tags.Add(tag);
+            });
+        }
+
+        return services;
     }
 
     /// <summary>Copies every settable option of <paramref name="source"/> onto <paramref name="target"/>.</summary>
@@ -453,21 +514,11 @@ public static class ServiceCollectionExtensions
         // Guarded, not a plain AddCheck: a host may call more than one sessions registration (the single-server and the
         // multi-server one, or one of them twice), and a second registration under the same name makes
         // HealthCheckService throw "Duplicate health checks were registered" on resolve.
-        services.AddHealthChecks();
-        services.Configure<HealthCheckServiceOptions>(options =>
-        {
-            foreach (var registration in options.Registrations)
-            {
-                if (string.Equals(registration.Name, SessionsHealthCheckName, StringComparison.Ordinal))
-                    return;
-            }
-
-            options.Registrations.Add(new HealthCheckRegistration(
-                SessionsHealthCheckName,
-                sp => new Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck(sp.GetRequiredService<ICallSessionManager>()),
-                failureStatus: null,
-                tags: null));
-        });
+        AddSdkHealthCheck(
+            services,
+            SessionsHealthCheckName,
+            sp => new Verbara.Sdk.Sessions.Diagnostics.SessionHealthCheck(sp.GetRequiredService<ICallSessionManager>()),
+            guarded: true);
         return services;
     }
 
@@ -477,8 +528,9 @@ public static class ServiceCollectionExtensions
     /// </summary>
     /// <remarks>
     /// Also registers one <see cref="Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck"/> under the name
-    /// <c>verbara-pool</c>, with no tags: it reads the AMI connection of every server the pool holds when it runs.
-    /// Calling this method more than once registers the check once.
+    /// <c>verbara-pool</c>, with no tags unless the host names them in <see cref="VerbaraHealthCheckOptions.Tags"/>: it
+    /// reads the AMI connection of every server the pool holds when it runs. Calling this method more than once registers
+    /// the check once.
     /// </remarks>
     public static IServiceCollection AddVerbaraMultiServer(
         this IServiceCollection services)
@@ -490,21 +542,11 @@ public static class ServiceCollectionExtensions
 
         // Guarded, not a plain AddCheck: every call to this method adds this Configure, and a second registration
         // under the same name makes HealthCheckService throw "Duplicate health checks were registered" on resolve.
-        services.AddHealthChecks();
-        services.Configure<HealthCheckServiceOptions>(options =>
-        {
-            foreach (var registration in options.Registrations)
-            {
-                if (string.Equals(registration.Name, ServerPoolHealthCheckName, StringComparison.Ordinal))
-                    return;
-            }
-
-            options.Registrations.Add(new HealthCheckRegistration(
-                ServerPoolHealthCheckName,
-                sp => new Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck(sp.GetRequiredService<VerbaraServerPool>()),
-                failureStatus: null,
-                tags: null));
-        });
+        AddSdkHealthCheck(
+            services,
+            ServerPoolHealthCheckName,
+            sp => new Verbara.Sdk.Live.Diagnostics.VerbaraServerPoolHealthCheck(sp.GetRequiredService<VerbaraServerPool>()),
+            guarded: true);
         return services;
     }
 

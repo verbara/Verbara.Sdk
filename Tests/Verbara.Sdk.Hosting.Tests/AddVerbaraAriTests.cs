@@ -150,6 +150,23 @@ public sealed class AddVerbaraAriTests
         }
     }
 
+    [Fact]
+    public async Task AddVerbaraAri_ShouldTagTheAriCheck_WhenTheHostNamesTags()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbaraAri(Valid);
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"));
+
+        await using var provider = services.BuildServiceProvider();
+        var ari = provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations
+            .Should().ContainSingle("an ARI-only host has the ari check alone").Which;
+
+        ari.Name.Should().Be("ari");
+        ari.Tags.Should().BeEquivalentTo(["voice"], "the ARI-only registration reads the same host-wide option");
+        ari.Factory(provider).Should().BeOfType<Verbara.Sdk.Ari.Diagnostics.AriHealthCheck>("the check itself is unchanged");
+    }
+
     private static void ShouldNameBothMethods(Func<IServiceCollection> act)
     {
         var message = act.Should().Throw<InvalidOperationException>("the ARI client is registered once").Which.Message;
