@@ -94,6 +94,15 @@ and that a lookup naming no server and a consumer keyed only by `linkedid` canno
 complete makes its server a candidate instead, and one on a server whose last `Status` was refused is counted on every
 tick.
 
+### Fixed: a released server is let go of (#540)
+
+Once `DetachFromServer(id, DetachedCalls.Release)` leaves no call of that id held, the session manager no longer
+references the released `VerbaraServer`. Before, the manager kept the last server attached under each id reachable —
+its channel and agent tables and its connection — until that id was attached again, so a host that retires server
+ids over its lifetime kept one such server per retired id. `DetachFromServer(id)` and `DetachedCalls.Keep` are
+unchanged: a kept server stays referenced while its kept calls need it, and an attach after a release behaves as
+before.
+
 ### Fixed: a WebSocket audio server keeps accepting while an observer of new streams runs (#534)
 
 When a connection's upgrade request had already arrived by the time it was accepted, `WebSocketAudioServer` served it

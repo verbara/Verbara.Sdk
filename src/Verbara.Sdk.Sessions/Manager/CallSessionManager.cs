@@ -25,7 +25,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         public ConcurrentDictionary<string, CallSession> ByLinkedId { get; } = new(StringComparer.Ordinal);
         public ConcurrentDictionary<string, CallSession> ByChannelId { get; } = new(StringComparer.Ordinal);
         public ConcurrentDictionary<string, string> BridgeToSession { get; } = new(StringComparer.Ordinal);
-        // Written under _attachLock; detaches never change either value.
+        // Written under _attachLock. Nothing but an attach changes the generation; a release that leaves no call of
+        // the id held clears the latest attachment, and no other detach changes it.
         public long Generation;
         public ServerSubscriptions? LatestAttachment;
     }
