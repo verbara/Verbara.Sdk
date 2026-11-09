@@ -52,4 +52,13 @@ public sealed class AsteriskBaseImagesTests
 
         reference.Should().Contain(tag).And.MatchRegex("@sha256:[0-9a-f]{64}$");
     }
+
+    [Theory]
+    [InlineData("andrius" + "/" + "asterisk:22.12.0_debian-trixie-x@sha256:0000000000000000000000000000000000000000000000000000000000000022", "22.12.0")]
+    [InlineData("ghcr.io" + "/verbara/" + "asterisk-base:22.12.0@sha256:abababababababababababababababababababababababababababababababab", "22.12.0")]
+    [InlineData("verbara-asterisk-base:22.12.0-rc2@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "22.12.0-rc2")]
+    public void PinnedVersion_ShouldReturnTheTagsVersion_WhenTheTagHasAnyShape(string reference, string version)
+    {
+        AsteriskBaseImages.PinnedVersion(reference).Should().Be(version);
+    }
 }

@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace Verbara.Sdk.Governance.Tests;
 
 /// <summary>
-/// Detector for the functional lane's image pins: every reference to the Asterisk base image or the SIPp image under
+/// Detector for the functional lane's image pins: every reference to an Asterisk base image or the SIPp image under
 /// <c>docker/</c>, <c>.github/workflows/</c> and <c>Tests/</c> carries a registry digest, every pinned Asterisk base is
 /// a line of <c>docker/asterisk-base-images.txt</c>, every SIPp reference carries the same digest, <c>docker/Dockerfile.asterisk</c> defaults to that table's
 /// 22 line and refuses a base of another version, and no workflow names the prebuilt-image variable.
@@ -33,14 +33,30 @@ namespace Verbara.Sdk.Governance.Tests;
 /// <para>
 /// The image names are assembled from parts, so this file and its tests never hold a reference the walk would find.
 /// </para>
+/// <para>
+/// Two Asterisk base images are admitted. The base this repository publishes (built from the official,
+/// signature-checked tarball by <c>docker/base/</c>) is the lane's source for 22 and later; the third-party build stays
+/// admitted only for the 20 line, a measurement control that keeps its pin until the 2.11.0 cycle moves it, and then the
+/// second name goes. Either name carries the same rules: a digest everywhere, and a table line that starts with the
+/// name, a colon and the line's version. <c>docker/base/</c> is under <c>docker/</c> and is scanned like the rest: the
+/// recipe and its workflow assemble the published name from parts, so neither holds a floating reference.
+/// </para>
 /// </remarks>
 internal static partial class ImagePinScanner
 {
-    /// <summary>The Asterisk base image.</summary>
-    public static readonly string AsteriskImage = "andrius" + "/" + "asterisk";
+    /// <summary>The Asterisk base image this repository publishes from <c>docker/base/</c>.</summary>
+    public static readonly string OwnAsteriskImage = "ghcr.io" + "/verbara/asterisk-base";
+
+    /// <summary>The third-party Asterisk build, admitted only while the 20 control line still pins it.</summary>
+    public static readonly string ControlAsteriskImage = "andrius" + "/" + "asterisk";
+
+    /// <summary>Every admitted Asterisk base image.</summary>
+    public static readonly IReadOnlyList<string> AsteriskImages = [OwnAsteriskImage, ControlAsteriskImage];
 
     /// <summary>The SIPp image.</summary>
     public static readonly string SippImage = "ctaloi" + "/" + "sipp";
+
+    private static readonly IReadOnlyList<string> AllImages = [.. AsteriskImages, SippImage];
 
     /// <summary>The table of pinned Asterisk bases, relative to the repository root.</summary>
     public const string TablePath = "docker/asterisk-base-images.txt";
@@ -98,8 +114,10 @@ internal static partial class ImagePinScanner
                 violations.AddRange(FindPrebuiltImageVariable(text, relative));
         }
 
-        foreach (var image in new[] { AsteriskImage, SippImage }.Where(i => !references.Any(r => r.Image == i)))
-            violations.Add($"found no reference to {image} under {string.Join(", ", ScannedDirectories)}: the walk read nothing, so it proves nothing");
+        if (!references.Any(r => AsteriskImages.Contains(r.Image)))
+            violations.Add($"found no reference to any Asterisk image ({string.Join(", ", AsteriskImages)}) under {string.Join(", ", ScannedDirectories)}: the walk read nothing, so it proves nothing");
+        if (!references.Any(r => r.Image == SippImage))
+            violations.Add($"found no reference to {SippImage} under {string.Join(", ", ScannedDirectories)}: the walk read nothing, so it proves nothing");
 
         foreach (var reference in references.Where(r => !r.IsPinned))
             violations.Add($"{reference}: no @sha256 digest — a tag names whatever its publisher serves that day");
@@ -122,7 +140,7 @@ internal static partial class ImagePinScanner
         {
             var pinnedBases = new HashSet<string>(table.Values, StringComparer.Ordinal);
             foreach (var reference in references.Where(r =>
-                         r.Image == AsteriskImage && r.IsPinned && r.Path != TablePath && !IsRecording(r.Path)
+                         AsteriskImages.Contains(r.Image) && r.IsPinned && r.Path != TablePath && !IsRecording(r.Path)
                          && !pinnedBases.Contains(r.Text)))
                 violations.Add($"{reference}: a pinned Asterisk base that is not a line of {TablePath}");
         }
@@ -137,13 +155,13 @@ internal static partial class ImagePinScanner
         && path.Contains("/Recordings/", StringComparison.Ordinal)
         && path.EndsWith(".raw", StringComparison.Ordinal);
 
-    /// <summary>Every reference to either image in <paramref name="text"/>, with its 1-based line.</summary>
+    /// <summary>Every reference to an admitted image in <paramref name="text"/>, with its 1-based line.</summary>
     public static IEnumerable<Reference> FindReferences(string text, string path)
     {
         var lines = text.Split('\n');
         for (var i = 0; i < lines.Length; i++)
         {
-            foreach (var image in new[] { AsteriskImage, SippImage })
+            foreach (var image in AllImages)
             {
                 var at = 0;
                 while ((at = lines[i].IndexOf(image, at, StringComparison.Ordinal)) >= 0)
@@ -171,8 +189,8 @@ internal static partial class ImagePinScanner
 
     /// <summary>
     /// Reads the table: one <c>&lt;version&gt; &lt;reference&gt;</c> per line, <c>#</c> comments and blank lines
-    /// skipped. Adds a violation for a malformed line, a duplicate version, a reference without a digest, a reference
-    /// to another image, and a tag that does not start with its line's version.
+    /// skipped. Adds a violation for a malformed line, a duplicate version, a reference without a digest, and a
+    /// reference that does not start with an admitted Asterisk image, a colon and its line's version.
     /// </summary>
     public static IReadOnlyDictionary<string, string> ReadTable(string text, List<string> violations)
     {
@@ -196,9 +214,9 @@ internal static partial class ImagePinScanner
             if (!table.TryAdd(version, reference))
                 violations.Add($"{where}: version {version} has a second line");
 
-            var tagPrefix = AsteriskImage + ":" + version + ".";
-            if (!reference.StartsWith(tagPrefix, StringComparison.Ordinal))
-                violations.Add($"{where}: the reference for {version} does not start with '{tagPrefix}'");
+            var tagPrefixes = AsteriskImages.Select(image => image + ":" + version + ".").ToList();
+            if (!tagPrefixes.Any(prefix => reference.StartsWith(prefix, StringComparison.Ordinal)))
+                violations.Add($"{where}: the reference for {version} does not start with {string.Join(" or ", tagPrefixes.Select(prefix => $"'{prefix}'"))}");
 
             if (!DigestPattern().IsMatch(reference))
                 violations.Add($"{where}: the reference for {version} has no @sha256 digest");

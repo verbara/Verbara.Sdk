@@ -1,8 +1,10 @@
 using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Ari.Client;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
 namespace Verbara.Sdk.Hosting.Tests;
@@ -69,5 +71,87 @@ public sealed class ServiceCollectionExtensionsTests
                 "the registered client is built by its constructor, which rejects a multiplier below 1 with AutoReconnect on")
             .Which.ParamName.Should().Be(nameof(AriClientOptions.ReconnectMultiplier), "the error names the option to fix");
         resolved.Should().BeNull();
+    }
+
+    private static readonly string[] VoiceAndPbx = ["voice", "pbx"];
+    private static readonly string[] OpsAndVoice = ["ops", "voice"];
+
+    private static readonly Dictionary<string, string?> AriSection = new()
+    {
+        ["Asterisk:Ari:BaseUrl"] = "http://127.0.0.1:8088",
+        ["Asterisk:Ari:Username"] = "asterisk",
+        ["Asterisk:Ari:Password"] = "secret",
+        ["Asterisk:Ari:Application"] = "tags",
+        ["Asterisk:Ari:EventsEnabled"] = "false",
+    };
+
+    private static IConfiguration WithAri(params (string Key, string? Value)[] extra)
+    {
+        var values = new Dictionary<string, string?>(AriSection);
+        foreach (var (key, value) in extra)
+            values[key] = value;
+        return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+    }
+
+    private static ICollection<HealthCheckRegistration> Registrations(ServiceProvider provider) =>
+        provider.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value.Registrations;
+
+    [Fact]
+    public async Task AddVerbaraConfiguration_ShouldTagTheChecks_WhenAsteriskHealthCheckTagsIsSet()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbara(WithAri(("Asterisk:HealthCheckTags:0", "voice"), ("Asterisk:HealthCheckTags:1", "pbx")));
+
+        await using var provider = services.BuildServiceProvider();
+        var registrations = Registrations(provider);
+
+        registrations.Select(r => r.Name).Should().BeEquivalentTo(["ami", "live", "agi", "ari"]);
+        registrations.Should().OnlyContain(r => r.Tags.SetEquals(VoiceAndPbx),
+            "the configuration key names the tags every SDK check carries");
+    }
+
+    [Fact]
+    public async Task AddVerbaraConfiguration_ShouldMergeTheKeyWithAConfigure_WhenBothAreSet()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("ops"));
+        services.AddVerbara(WithAri(("Asterisk:HealthCheckTags:0", "voice")));
+        services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("Voice"));
+
+        await using var provider = services.BuildServiceProvider();
+
+        Registrations(provider).Should().HaveCount(4).And.OnlyContain(r => r.Tags.SetEquals(OpsAndVoice),
+            "the key and every Configure add to one set, and voice and Voice are one tag");
+    }
+
+    [Fact]
+    public async Task AddVerbaraConfiguration_ShouldTagNothing_WhenTheKeyIsAbsent()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbara(WithAri());
+
+        await using var provider = services.BuildServiceProvider();
+
+        Registrations(provider).Should().HaveCount(4).And.OnlyContain(r => r.Tags.Count == 0,
+            "with no key and no Configure the SDK's checks are untagged, as before");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task AddVerbaraConfiguration_ShouldFailNamingTags_WhenAKeyValueIsBlank(string blank)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddVerbara(WithAri(("Asterisk:HealthCheckTags:0", blank)));
+
+        await using var provider = services.BuildServiceProvider();
+        var read = () => Registrations(provider);
+
+        read.Should().Throw<OptionsValidationException>("a blank configured tag reaches the validator, unfiltered")
+            .Which.Message.Should().Contain(nameof(VerbaraHealthCheckOptions.Tags), "the failure names the option to fix");
     }
 }

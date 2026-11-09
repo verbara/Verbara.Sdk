@@ -4,6 +4,142 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: a call is found on the server that reported it (#533)
+
+`CallSessionManager` keeps its channel-id, `linkedid` and bridge indexes per server id, where it kept one of each for
+every server attached to it. A channel event of one server is correlated only with calls of that server: two Asterisk
+servers without their own `systemname`, which issue the same ids in the same second, no longer have a `Hangup` on one
+end a call of the other or their calls share a session. The same channel id, `linkedid` or bridge id on two servers is
+two calls, and one Asterisk attached under two server ids yields two sessions per call. The unscoped lookups
+`GetByChannelId(uniqueId)`, `GetByLinkedId(linkedId)` and `GetByBridgeId(bridgeId)` stay and are not obsolete, but
+answer only when the id is unambiguous: the call of the one server that holds it, and `null` when two or more servers
+do, where they returned whichever call last wrote the shared index. BREAKING because such a lookup now returns `null`
+where it returned a call. Use the scoped lookups below where you know the server, and give every Asterisk its own
+`systemname`: a consumer keyed by `linkedid` alone still cannot tell two servers' calls apart. See the
+[migration guide](docs/guides/migration-2.10.0.md#a-call-is-found-on-the-server-that-reported-it).
+
+### Changed — BREAKING: a server is never attached from inside a session notification (#533)
+
+`AttachToServer` asked for from inside a notification of a session engine (a subscriber of `Events`) or from an
+attachment handler throws `InvalidOperationException` naming the server id before it installs anything, an attach of
+the instance already attached under that id included. In 2.9.0 only an attach that had to wait for a release in
+progress of its id was refused there. An attach now takes the lock of each call the server left, and a subscriber holds
+one. A `DetachFromServer(id)` the subscriber already made stands, so a detach followed by an attach in the same callback
+leaves the server detached. Attach from another thread and do not wait for it inside the subscriber. See the
+[migration guide](docs/guides/migration-2.10.0.md#a-server-is-never-attached-from-inside-a-session-notification).
+
+### Added: scoped session lookups and the admission of calls already up (#533)
+
+`GetByChannelId(serverId, uniqueId)`, `GetByLinkedId(serverId, linkedId)` and `GetByBridgeId(serverId, bridgeId)` on
+`CallSessionManager` and `ICallSessionManager` return the call that server's index holds for the id, or `null`. The
+interface members have a default implementation, which keeps the unscoped answer only when it belongs to the named
+server, so no implementer breaks. `AdmitExistingCalls(serverId)`, on both, opens a session as a reload does for each
+call the server's channel table holds that no session holds, raising its `CallStartedEvent`, and joins the legs of calls
+already held, so a reconstructed call gains its legs: call it after `AttachToServer` and after registering
+reconstructed calls. A channel another call of that server owns keeps its owner, a repeated admission adds nothing, its
+walk never runs on the caller's thread, a table that is not complete is first asked for one `Status`, and a detach stops
+it without an error; an id with no instance attached throws `InvalidOperationException`. The interface's default admits
+nothing.
+
+### Added: a refused `Status` is counted and visible (#533)
+
+Each `Status` that Asterisk refuses on a load, a reload or a reconciliation adds one to `live.status.refused` (meter
+`Verbara.Sdk.Live`), tagged `live.status.reader` (`load` or `reconciliation`) and `server.id` when the server is in a
+pool; a refusal before the server joins a pool is counted without the id. `VerbaraServer.LastStatusRefusal` returns the
+last refusal as a `StatusRefusal` (`Message`, UTC `OccurredAt`), or `null`; a later `Status` read in full clears it.
+
+### Fixed: a call ends only when its server's channel table holds none of its channels (#533)
+
+A call the engine did not observe from its start (a reconstructed call, a call a reload or an admission opened, a call
+a server left behind) is decided against its server's channel table by its `linkedid`, once that table is complete on
+its current AMI session: it ends when the table holds none of its channels and is kept while it holds one. It is
+decided at each departure of one of its channels, each completed snapshot, the attach, the end of an admission, its
+registration and each sweep tick, under the call's lock. Such a call is no longer ended while a leg is still up, split in
+two when a leg hangs up between two visits of an admission, or kept open after its channels are gone; two departures
+announced at once end it once. A call the engine observed from its start ends as before. On a server whose `Status` is
+refused the table never completes, so such calls wait, counted `sessions.unverifiable`, until a `Status` completes or
+`DetachFromServer(id, DetachedCalls.Release)` releases them; 2.9.0 ended a left call there by its legs' observed
+hangups.
+
+### Fixed: a server that comes back under the same id reconciles the calls it left (#533)
+
+A server detached with `DetachFromServer(id)` and attached again under that id, as the same instance or a new one, used
+to keep the calls it left open for the life of the process, counted `sessions.unverifiable` on every tick. Those calls
+are now decided once its channel table is complete, at the attach if it already is, otherwise at the next completed
+`Status`: a call of which the table holds no channel ends as a reload ends it (`Metadata["cause"] == "reload"`), and
+one with a channel still up is kept and ends by its own hangup; legs the table no longer holds are retired, so a call
+that lost one leg while its server was away still ends. The pool sweep asks for a `Status` from a server whose calls
+wait for a complete table.
+
+### Changed: the pool health check reports a refused `Status` (#533)
+
+The `verbara-pool` health check reads `Degraded`, where it read `Healthy`, while every server is connected and at least
+one has a last `Status` refusal. Its data gains one reserved `status-refused` entry, `serverId: message` per refused
+server joined by `; ` in ordinal server-id order; each server's own entry still holds its connection state.
+
+### Changed: reconstruction is scoped to its server, refuses visibly and decides at once (#533)
+
+`RegisterReconstructedSession` maps the call into its own server's indexes only. It refuses, and logs at Information,
+a session id already held, a null or empty `linkedid`, a `linkedid` its server already holds, and a call carrying a
+leg its server maps to another call; a refusal leaves every index as it was, and a bridge its server already maps is
+kept and logged at Debug. An accepted call joins the legs its server's channel table holds for its `linkedid` and is
+decided at once, so a call reconstructed after its channels hung up ends at its registration. Do not call it
+synchronously from a session subscriber.
+
+### Changed: the cross-server collision Warning and `sessions.unverifiable` (#533)
+
+The Warning logged when two servers report the same channel id or `linkedid` now says that the calls are kept apart,
+and that a lookup naming no server and a consumer keyed only by `linkedid` cannot tell them apart. The sweep's
+`sessions.unverifiable` counts the held calls it can neither verify nor decide; a call waiting on a table a `Status` can
+complete makes its server a candidate instead, and one on a server whose last `Status` was refused is counted on every
+tick.
+
+### Fixed: a released server is let go of (#540)
+
+Once `DetachFromServer(id, DetachedCalls.Release)` leaves no call of that id held, the session manager no longer
+references the released `VerbaraServer`. Before, the manager kept the last server attached under each id reachable —
+its channel and agent tables and its connection — until that id was attached again, so a host that retires server
+ids over its lifetime kept one such server per retired id. `DetachFromServer(id)` and `DetachedCalls.Keep` are
+unchanged: a kept server stays referenced while its kept calls need it, and an attach after a release behaves as
+before.
+
+### Fixed: a WebSocket audio server keeps accepting while an observer of new streams runs (#534)
+
+When a connection's upgrade request had already arrived by the time it was accepted, `WebSocketAudioServer` served it
+on its accept loop up to and including the `OnStreamConnected` announcement, so an observer that blocked held every
+later connection out until it returned. The handler now yields before it serves the upgrade, as the AudioSocket server
+already did. `IAudioServer.OnStreamConnected` now documents how observers are called: synchronously from the
+connection's handler after admission, never on the accept loop; a blocking observer holds that connection's release;
+a throwing one loses the connection and later observers do not receive that stream; and, per server, what a stop with
+no cancellable token does while an observer blocks. No public API changes.
+
+### Added: a queue member's pause and unpause are announced (#541)
+
+`QueueManager.MemberPaused` is raised for each pause and unpause Live applies to a member its queue table holds,
+with the queue name and the member, whose `Paused` and `PausedReason` read as the table holds them. Before, a pause
+updated the table and raised nothing, so a subscriber had to poll to see one.
+
+### Changed: an agent paused in its queues reads `Paused` (#541)
+
+`AgentStateChanged` and `AgentLoggedIn`'s `State` report `AgentState.Paused` for an `Agent/<id>` member while every
+one of its memberships on that server is paused; a load, a reload, a login, a member add or remove and a completed
+call keep the pause. A consumer that switches on `AgentState` should handle `Paused`.
+
+### Fixed: an ARI outbound idle timeout inside a message is logged as an idle timeout (#532)
+
+An idle timeout that fires while a fragment of one message is still arriving, or while its last fragment is, is
+logged as `Idle timeout` at Warning, as documented, not as `Connection error` with a `WebSocketException`; the line now
+carries the configured bound (`idle=`).
+
+### Fixed: ARI hold, mute and log rotation send the method Asterisk accepts, and a bridge format argument takes effect (#535)
+
+`Channels.HoldAsync` and `Channels.MuteAsync` now send `POST` and `Asterisk.RotateLogChannelAsync` sends `PUT`, the
+methods Asterisk accepts; they always failed with 405 (#506). `MuteAsync` and `UnmuteAsync` without a direction now
+apply to both directions (they failed with 400). `Bridges.PlayAsync` and `Bridges.RecordAsync` given a `format` now set
+the announcer's or recorder's audio format: the SDK sent it under a key Asterisk accepts and ignores (`format` /
+`announcerFormat` instead of `announcer_format` / `recorder_format`), so the argument had no effect. Not breaking: no
+signature or parameter-name changes.
+
 ### Added: a WebSocket audio session writes every command chan_websocket reads (#518)
 
 `IChanWebSocketSession` gains `SendFlushMediaAsync`, `SendPauseMediaAsync`, `SendContinueMediaAsync`,
@@ -97,6 +233,24 @@ When a consumer fell behind, a WebSocket audio stream's full receive buffer disc
 discarded frame now adds one to the new `audio.frames.dropped` counter (meter `Verbara.Sdk.Ari.Audio`, tagged with the
 WebSocket transport); it is still counted as received. AudioSocket streams do not record it.
 
+### Added: a host names the tags of the health checks the SDK registers (#542)
+
+`VerbaraHealthCheckOptions.Tags` is the one place a host names the tags every health check a `Verbara.Sdk.Hosting`
+registration installs carries — `ami`, `live`, `agi`, `ari`, `sessions` and `verbara-pool` — with
+`services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"))` in any order, or the `Asterisk:HealthCheckTags`
+key with `AddVerbara(IConfiguration)`. Tags are added, never replaced, so every contribution merges into one set
+compared ignoring case; a null, empty or whitespace tag fails the host's start with an `OptionsValidationException`
+naming `Tags`. The SDK still names no tag of its own, so a host that sets nothing, and an endpoint filtered by tag,
+see no change. Never put an SDK check on the tag your readiness probe reads: an Asterisk outage would take the pod out
+of service. To tag or untag one check only, use `PostConfigure<HealthCheckServiceOptions>` (migration guide, "The
+`verbara-pool` health check").
+
+### Fixed: a created ARI channel keeps the variables it is given (#536)
+
+`Channels.CreateWithoutDialAsync` now sets the channel variables it is given. It sent them in the query, where Asterisk
+ignores them (the create returned 200 and the variable stayed unset); they now travel as a JSON body
+`{"variables":{…}}` with `Content-Type: application/json`. A create without variables sends the same request as before.
+
 ### Changed — BREAKING: a Live channel subscriber's failure stays with that subscriber (#516)
 
 A handler of a `ChannelManager` event (`ChannelAdded`, `ChannelRemoved`, `ChannelStateChanged`, `ChannelDialBegin`,
@@ -140,6 +294,14 @@ The four parking events derive from the new `ParkingEventBase` (a `ChannelEventB
 as the header's string. Read the space from `ParkingSpace`: `Exten` is the parked channel's own extension. `NewExtenEvent`
 gains `Context`, `Exten` and `Priority` (a number), the names every channel event uses; `Extension` stays. Source and
 binary compatible.
+
+### Added: a host that needs only ARI registers only ARI (#537)
+
+`AddVerbaraAri(Action<AriClientOptions>)` registers the ARI client and nothing else: its validated options, the `ari`
+health check, its hosted service and, with `ConfigureAudioServer` set, the audio servers; no AMI connection, AGI server
+or Live server. A host built with it and `EventsEnabled = false` starts and stops with no Asterisk reachable. The ARI
+client is registered once: a second registration, through `AddVerbaraAri` or `AddVerbara` with `Ari` set, throws
+`InvalidOperationException` at registration instead of failing when the health check service is resolved.
 
 ### Fixed: `NewCallerIdEvent` carries the presentation Asterisk sends (#516)
 

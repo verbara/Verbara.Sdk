@@ -559,7 +559,9 @@ public sealed class VerbaraServerPoolTests : IAsyncLifetime
 
     /// <summary>
     /// Negative control, green before and after: a connection reading <c>Connected</c> when its session ends under the
-    /// load is reconnecting, the start returns, and the reload that follows the reconnect loads the state.
+    /// load is reconnecting, the start returns, and the reload that follows the reconnect loads the state. Since the
+    /// close-audit F1 ruling (2026-11-05) it also pins that such a server is announced as added once
+    /// (<c>server-pool-membership</c>, "A server whose first load a reconnect will repair is announced").
     /// </summary>
     [Fact]
     public async Task AddServerAsync_ShouldKeepTheServer_WhenTheReconnectWillRepairTheStart()
@@ -567,11 +569,18 @@ public sealed class VerbaraServerPoolTests : IAsyncLifetime
         var reconnecting = LoadingConnection(_ => ThrowNotConnectedAsync(), AmiConnectionState.Connected);
         var (factory, _) = FactoryOf(reconnecting);
         await using var pool = new VerbaraServerPool(factory, NullLoggerFactory.Instance);
+        var added = new List<(string Id, VerbaraServer Server)>();
+        pool.ServerAdded += (id, server) => added.Add((id, server));
 
         var server = await pool.AddServerAsync("s1", Credentials());
 
-        pool.GetServer("s1").Should().BeSameAs(server);
-        await reconnecting.DidNotReceive().DisposeAsync();
+        using (new AssertionScope())
+        {
+            pool.GetServer("s1").Should().BeSameAs(server);
+            await reconnecting.DidNotReceive().DisposeAsync();
+            added.Should().ContainSingle("a start the reconnect repairs returned, so the server is announced once")
+                .Which.Should().Be(("s1", server));
+        }
     }
 
     /// <summary>

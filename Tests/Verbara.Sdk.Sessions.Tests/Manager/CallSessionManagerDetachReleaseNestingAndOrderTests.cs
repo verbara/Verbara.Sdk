@@ -178,18 +178,19 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
     // --- (b) The release notification is the last; every notification under the call's lock ------------
 
     [Fact]
-    public async Task CallReleasedEvent_ShouldBeTheLastNotification_WhenAnotherServersQueueJoinIsInFlight()
+    public async Task CallReleasedEvent_ShouldBeTheLastNotification_WhenTheOldAttachmentsQueueJoinIsInFlight()
     {
         await using var rig = await ReleaseRig.StartAsync("a", "b");
         using var queues = new QueueSessionTracker(rig.Manager, Options.Create(new SessionOptions()));
         var call = rig.Arrival("a", "qj");
         var caller = ReleaseRig.CallerLeg("qj");
-        using var joinParker = StepParker.Install(rig.Manager, HandlerStep.QueueVisitWritten, "b", caller);
+        using var joinParker = StepParker.Install(rig.Manager, HandlerStep.QueueVisitWritten, "a", caller);
         using var walkParker = new StepParker(HandlerStep.ReleaseWalkStarted, "a") { WhenReached = joinParker.LetGo };
         walkParker.Install(rig.Manager);
 
-        var join = ReleaseRig.OnThread(() => rig["b"].Deliver(Join("q1", "PJSIP/trunk-qj-a", caller, ReleaseRig.LinkedIdOf("qj"))));
+        var join = ReleaseRig.OnThread(() => rig["a"].Deliver(Join("q1", "PJSIP/trunk-qj-a", caller, ReleaseRig.LinkedIdOf("qj"))));
         joinParker.WaitUntilParked(ReleaseRig.Bound);
+        rig.Manager.DetachFromServer("a", DetachedCalls.Keep);
         var release = ReleaseRig.OnThread(() => rig.Release("a"));
         walkParker.WaitUntilParked(ReleaseRig.Bound);
         walkParker.LetGo();
@@ -205,7 +206,7 @@ public sealed class CallSessionManagerDetachReleaseNestingAndOrderTests
             ByCaller = rig.Manager.GetByChannelId(caller) is null,
         }.Should().BeEquivalentTo(
             new { returned = true, Last = nameof(CallReleasedEvent), QueuedAfterRelease = false, Waiting = 0, ByCaller = true },
-            "b's queue join for a's call, parked after it wrote the visit and let go as a's release starts walking, "
+            "the old attachment's queue join, parked after it wrote the visit and let go as a's release starts walking, "
             + "cannot announce the call after its release: the release is the last notification, the queue counts no "
             + "caller waiting, and the caller's channel finds nothing. " + rig.Describe());
     }

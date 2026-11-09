@@ -3,7 +3,8 @@ using Xunit.Abstractions;
 namespace Verbara.Sdk.Governance.Tests;
 
 /// <summary>
-/// The functional lane's Asterisk and SIPp images are pinned by digest: no reference under <c>docker/</c>,
+/// The functional lane's Asterisk and SIPp images are pinned by digest, under either admitted Asterisk image name (the
+/// base this repository publishes, and the third-party build the 20 control line keeps): no reference under <c>docker/</c>,
 /// <c>.github/workflows/</c> or <c>Tests/</c> names one by a tag alone, every pinned Asterisk base is a line of
 /// <c>docker/asterisk-base-images.txt</c>, and <c>docker/Dockerfile.asterisk</c> defaults to the table's 22 line and
 /// refuses a base of another version, and no workflow names the prebuilt-image variable. The fixtures build their image references from parts so the tree walk never
@@ -11,7 +12,8 @@ namespace Verbara.Sdk.Governance.Tests;
 /// </summary>
 public sealed class ImagePinGuardTests(ITestOutputHelper output)
 {
-    private static readonly string Asterisk = ImagePinScanner.AsteriskImage;
+    private static readonly string Asterisk = ImagePinScanner.ControlAsteriskImage;
+    private static readonly string OwnAsterisk = ImagePinScanner.OwnAsteriskImage;
     private static readonly string Sipp = ImagePinScanner.SippImage;
     private static readonly string Digest22 = "@sha256:" + new string('2', 64);
     private static readonly string Digest23 = "@sha256:" + new string('3', 64);
@@ -31,7 +33,7 @@ public sealed class ImagePinGuardTests(ITestOutputHelper output)
             "every Asterisk and SIPp image reference under docker/, .github/workflows/ and Tests/ must carry a digest, " +
             "every pinned Asterisk base must be a line of the table, and the Dockerfile must default to its 22 line and " +
             "check the base's version. Found:" + Environment.NewLine + report);
-        report.References.Should().Contain(r => r.Image == Asterisk && r.IsPinned)
+        report.References.Should().Contain(r => ImagePinScanner.AsteriskImages.Contains(r.Image) && r.IsPinned)
             .And.Contain(r => r.Image == Sipp && r.IsPinned, "a guard that matched nothing would pass on nothing");
     }
 
@@ -53,7 +55,8 @@ public sealed class ImagePinGuardTests(ITestOutputHelper output)
         var report = ImagePinScanner.Scan(tree.Root);
         output.WriteLine(report.ToString());
 
-        report.Violations.Should().Contain(v => v.StartsWith("found no reference to " + Asterisk, StringComparison.Ordinal))
+        report.Violations.Should().Contain(v => v.StartsWith("found no reference to any Asterisk image", StringComparison.Ordinal)
+                && v.Contains(OwnAsterisk, StringComparison.Ordinal) && v.Contains(Asterisk, StringComparison.Ordinal))
             .And.Contain(v => v.StartsWith("found no reference to " + Sipp, StringComparison.Ordinal));
     }
 
@@ -198,6 +201,62 @@ public sealed class ImagePinGuardTests(ITestOutputHelper output)
 
         report.Violations.Should().Contain(v => v.StartsWith(ImagePinScanner.TablePath + ":1: ", StringComparison.Ordinal)
             && v.Contains(expected, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Scan_ShouldReportTheLine_WhenATableLineNamesAnImageThatIsNotAnAdmittedAsteriskBase()
+    {
+        using var tree = GreenTree();
+        var foreign = "example" + "/" + "pbx:22.1.0@sha256:" + new string('8', 64);
+        tree.Write(ImagePinScanner.TablePath, $"22 {foreign}\n23 {Base23}\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+        output.WriteLine(report.ToString());
+
+        report.Violations.Should().Contain(v => v.StartsWith(ImagePinScanner.TablePath + ":1: ", StringComparison.Ordinal)
+            && v.Contains("does not start with", StringComparison.Ordinal)
+            && v.Contains($"'{OwnAsterisk}:22.'", StringComparison.Ordinal)
+            && v.Contains($"'{Asterisk}:22.'", StringComparison.Ordinal),
+            "a digest alone does not make an image a base the lane may build on");
+    }
+
+    [Fact]
+    public void Scan_ShouldPass_WhenATableLineNamesTheOwnBaseByTagAndDigest()
+    {
+        using var tree = GreenTree();
+        var own22 = OwnAsterisk + ":22.12.0_trixie-abc1234@sha256:" + new string('9', 64);
+        tree.Write(ImagePinScanner.TablePath, $"# version reference\n20 {Asterisk}:20.20.1_debian-trixie-0000000{Digest22}\n22 {own22}\n23 {Base23}\n");
+        tree.Write(ImagePinScanner.DockerfilePath, Dockerfile(own22, withCheck: true));
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.IsClean.Should().BeTrue("the published base is an admitted name, beside the control line's: " + report);
+        report.References.Should().Contain(r => r.Image == OwnAsterisk && r.IsPinned);
+    }
+
+    [Fact]
+    public void Scan_ShouldNameFileAndLine_WhenTheOwnBaseHasNoDigest()
+    {
+        using var tree = GreenTree();
+        tree.Write("docker/docker-compose.extra.yml", $"services:\n  asterisk:\n    image: {OwnAsterisk}:22.12.0_trixie-abc1234\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.Violations.Should().ContainSingle(v => v.StartsWith("docker/docker-compose.extra.yml:3: ", StringComparison.Ordinal)
+            && v.Contains("no @sha256 digest", StringComparison.Ordinal), "the published base follows the same rule as any other");
+    }
+
+    [Fact]
+    public void Scan_ShouldReportAPinnedOwnBaseOutsideTheTable_WhenACopyDrifts()
+    {
+        using var tree = GreenTree();
+        var drifted = OwnAsterisk + ":23.6.0_trixie-abc1234@sha256:" + new string('a', 64);
+        tree.Write("docker/docker-compose.test-23.yml", $"services:\n  asterisk:\n    build:\n      args:\n        ASTERISK_BASE_IMAGE: {drifted}\n");
+
+        var report = ImagePinScanner.Scan(tree.Root);
+
+        report.Violations.Should().ContainSingle(v => v.StartsWith("docker/docker-compose.test-23.yml:5: ", StringComparison.Ordinal)
+            && v.Contains("not a line of", StringComparison.Ordinal));
     }
 
     [Fact]

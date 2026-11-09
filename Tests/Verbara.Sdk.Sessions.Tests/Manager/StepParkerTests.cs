@@ -76,8 +76,8 @@ public sealed class StepParkerTests : IAsyncLifetime
         await arrival.WaitAsync(Bound);
 
         whileParked.Should().BeEquivalentTo(
-            new { ArrivalReturned = false, HeldById = true, IndexedByChannel = false, OnAnotherThread = true },
-            "parked at ArrivalPublished the call is published by id and linkedid but not yet by channel id, and the "
+            new { ArrivalReturned = false, HeldById = true, IndexedByChannel = true, OnAnotherThread = true },
+            "parked at ArrivalPublished the call is already published by session id, channel id and linkedid, and the "
             + "handler has not returned");
         _manager.GetByChannelId("1700000000.1").Should().NotBeNull("once let go the handler finishes the arrival");
         parker.Faults.Should().BeEmpty();

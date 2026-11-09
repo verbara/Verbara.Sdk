@@ -164,7 +164,7 @@ public sealed class AriChannelsResource : IAriChannelsResource
 
     public async ValueTask HoldAsync(string channelId, CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"channels/{Uri.EscapeDataString(channelId)}/hold");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"channels/{Uri.EscapeDataString(channelId)}/hold");
         var response = await _http.SendAsync(request, cancellationToken);
         await response.EnsureAriSuccessAsync("channel", channelId);
     }
@@ -177,17 +177,17 @@ public sealed class AriChannelsResource : IAriChannelsResource
 
     public async ValueTask MuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default)
     {
-        var url = $"channels/{Uri.EscapeDataString(channelId)}/mute";
-        if (direction is not null) url += $"?direction={Uri.EscapeDataString(direction)}";
-        using var request = new HttpRequestMessage(HttpMethod.Put, url);
+        // Asterisk declares direction optional (default both) but answers 400 without it, so null sends both.
+        var url = $"channels/{Uri.EscapeDataString(channelId)}/mute?direction={Uri.EscapeDataString(direction ?? "both")}";
+        using var request = new HttpRequestMessage(HttpMethod.Post, url);
         var response = await _http.SendAsync(request, cancellationToken);
         await response.EnsureAriSuccessAsync("channel", channelId);
     }
 
     public async ValueTask UnmuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default)
     {
-        var url = $"channels/{Uri.EscapeDataString(channelId)}/mute";
-        if (direction is not null) url += $"?direction={Uri.EscapeDataString(direction)}";
+        // As MuteAsync: Asterisk answers 400 to an unmute without direction, so null sends both.
+        var url = $"channels/{Uri.EscapeDataString(channelId)}/mute?direction={Uri.EscapeDataString(direction ?? "both")}";
         var response = await _http.DeleteAsync(url, cancellationToken);
         await response.EnsureAriSuccessAsync("channel", channelId);
     }
@@ -269,12 +269,12 @@ public sealed class AriChannelsResource : IAriChannelsResource
         if (channelId is not null) sb.Append("&channelId=").Append(Uri.EscapeDataString(channelId));
         if (otherChannelId is not null) sb.Append("&otherChannelId=").Append(Uri.EscapeDataString(otherChannelId));
         if (originator is not null) sb.Append("&originator=").Append(Uri.EscapeDataString(originator));
-        if (variables is not null)
-        {
-            foreach (var kv in variables)
-                sb.Append("&variables[").Append(Uri.EscapeDataString(kv.Key)).Append("]=").Append(Uri.EscapeDataString(kv.Value));
-        }
-        var response = await _http.PostAsync(sb.ToString(), null, cancellationToken);
+
+        // Asterisk ignores variables in the query of this route (the create returns 200 and the variable stays unset);
+        // it reads them from a JSON body. No body without an entry, so that request stays the one sent before. The
+        // values are never logged.
+        using var body = variables is { Count: > 0 } ? VariablesBody(variables) : null;
+        var response = await _http.PostAsync(sb.ToString(), body, cancellationToken);
         await response.EnsureAriSuccessAsync();
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         return JsonSerializer.Deserialize(json, AriJsonContext.Default.AriChannel)!;

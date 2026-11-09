@@ -188,16 +188,16 @@ public interface IAriChannelsResource
     /// <summary>Set a channel variable. POST /channels/{channelId}/variable</summary>
     ValueTask SetVariableAsync(string channelId, string variable, string value, CancellationToken cancellationToken = default);
 
-    /// <summary>Hold a channel. PUT /channels/{channelId}/hold</summary>
+    /// <summary>Hold a channel. POST /channels/{channelId}/hold</summary>
     ValueTask HoldAsync(string channelId, CancellationToken cancellationToken = default);
 
     /// <summary>Remove a channel from hold. DELETE /channels/{channelId}/hold</summary>
     ValueTask UnholdAsync(string channelId, CancellationToken cancellationToken = default);
 
-    /// <summary>Mute a channel. PUT /channels/{channelId}/mute</summary>
+    /// <summary>Mute a channel. POST /channels/{channelId}/mute; a <c>null</c> direction mutes both directions.</summary>
     ValueTask MuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Unmute a channel. DELETE /channels/{channelId}/mute</summary>
+    /// <summary>Unmute a channel. DELETE /channels/{channelId}/mute; a <c>null</c> direction unmutes both directions.</summary>
     ValueTask UnmuteAsync(string channelId, string? direction = null, CancellationToken cancellationToken = default);
 
     /// <summary>Send DTMF to a channel. POST /channels/{channelId}/dtmf</summary>
@@ -219,6 +219,11 @@ public interface IAriChannelsResource
     ValueTask ContinueAsync(string channelId, string? context = null, string? extension = null, int? priority = null, string? label = null, CancellationToken cancellationToken = default);
 
     /// <summary>Create a channel without dialing. POST /channels/create</summary>
+    /// <remarks>
+    /// <paramref name="variables"/>, when it holds an entry, is sent as the JSON body <c>{"variables":{…}}</c> with
+    /// <c>Content-Type: application/json</c>, and each entry is set on the created channel. No variable is written into
+    /// the query. A <see langword="null"/> or empty <paramref name="variables"/> sends no body.
+    /// </remarks>
     ValueTask<AriChannel> CreateWithoutDialAsync(string endpoint, string app, string? channelId = null, string? otherChannelId = null, string? originator = null, IReadOnlyDictionary<string, string>? variables = null, CancellationToken cancellationToken = default);
 
     /// <summary>Move channel to another Stasis app. POST /channels/{channelId}/move</summary>
@@ -260,10 +265,10 @@ public interface IAriBridgesResource
     ValueTask AddChannelAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default);
     ValueTask RemoveChannelAsync(string bridgeId, string channelId, CancellationToken cancellationToken = default);
 
-    /// <summary>Play media to a bridge. POST /bridges/{bridgeId}/play. The format parameter (Asterisk 23+) sets the Announcer channel audio format.</summary>
+    /// <summary>Play media to a bridge. POST /bridges/{bridgeId}/play. <c>format</c> is the Announcer channel's audio format (<c>announcer_format</c> on the wire).</summary>
     ValueTask<AriPlayback> PlayAsync(string bridgeId, string media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, string? format = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Record audio from a bridge. POST /bridges/{bridgeId}/record. The format parameter (Asterisk 23+) sets the Recorder channel audio format.</summary>
+    /// <summary>Record audio from a bridge. POST /bridges/{bridgeId}/record. <c>recordingFormat</c> is the recording's file format (<c>format</c> on the wire); <c>format</c> is the Recorder channel's audio format (<c>recorder_format</c> on the wire).</summary>
     ValueTask<AriLiveRecording> RecordAsync(string bridgeId, string name, string recordingFormat, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, string? format = null, CancellationToken cancellationToken = default);
 
     /// <summary>Create bridge with specific ID. POST /bridges/{bridgeId}</summary>
@@ -438,6 +443,8 @@ public interface IAriAsteriskResource
     ValueTask<AriLogChannel[]> ListLoggingAsync(CancellationToken cancellationToken = default);
     ValueTask AddLogChannelAsync(string logChannelName, string configuration, CancellationToken cancellationToken = default);
     ValueTask DeleteLogChannelAsync(string logChannelName, CancellationToken cancellationToken = default);
+
+    /// <summary>Rotate a log channel's file. PUT /asterisk/logging/{logChannelName}/rotate</summary>
     ValueTask RotateLogChannelAsync(string logChannelName, CancellationToken cancellationToken = default);
     ValueTask<AriConfigTuple[]> GetConfigAsync(string configClass, string objectType, string id, CancellationToken cancellationToken = default);
     ValueTask UpdateConfigAsync(string configClass, string objectType, string id, CancellationToken cancellationToken = default);
@@ -833,6 +840,34 @@ public enum AudioStreamState
 public interface IAudioServer
 {
     /// <summary>Observable that emits each new audio stream when a connection is established.</summary>
+    /// <remarks>
+    /// <para>
+    /// Each stream is delivered <b>synchronously</b> to the observers, in the order they subscribed, from the
+    /// handler of the connection that carries it: after that connection has been admitted and is listed in
+    /// <see cref="ActiveStreams"/> and counted in <see cref="ActiveStreamCount"/>, and never on the server's
+    /// accept loop, so other connections are accepted and served while an observer runs. Being announced does
+    /// not mean being found: a connection that presents a key another live connection holds is announced while
+    /// it waits for that key, and <see cref="GetStream(string)"/> keeps returning the earlier holder until it
+    /// takes the key over.
+    /// </para>
+    /// <para>
+    /// An observer that <b>blocks</b> holds that connection's release — its registration, its place in the
+    /// server's concurrent-stream limit and its socket — until it returns, even after the far end has hung up.
+    /// What a stop with no cancellable token does meanwhile depends on the server, and each one states it on its
+    /// own <c>OnStreamConnected</c>: <c>WebSocketAudioServer.StopAsync</c> waits for that observer to return.
+    /// <c>AudioSocketServer.StopAsync</c> does not wait for it: it ends that stream, removes its registration and
+    /// returns while the observer still runs, and the connection's place in the limit comes back only when the
+    /// observer returns.
+    /// </para>
+    /// <para>
+    /// An observer that <b>throws</b> loses that connection: the server logs the failure, releases the
+    /// connection and closes it, and observers subscribed after the throwing one do not receive that stream.
+    /// </para>
+    /// <para>
+    /// Long or blocking work belongs off the observer: hand the stream to <see cref="Task.Run(Func{Task})"/>,
+    /// or to a channel the consumer drains, and return.
+    /// </para>
+    /// </remarks>
     IObservable<IAudioStream> OnStreamConnected { get; }
 
     /// <summary>

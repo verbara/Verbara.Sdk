@@ -26,6 +26,20 @@ server.Agents.AgentStateChanged += agent =>
     Console.WriteLine($"Agent {agent.AgentId}: {agent.State}");
 ```
 
+## Pauses
+
+`server.Queues.MemberPaused` is raised for every pause or unpause Asterisk reports for a queue member the table holds,
+whatever the member's interface, after the table applied it.
+
+`server.Agents.AgentStateChanged` reports `AgentState.Paused` only for an app_agent_pool member (`Agent/<id>`, the
+prefix in any letter case), and only while every one of that agent's memberships on that server is paused; an unpause
+in any of its queues makes it `Available` again. A call and a logoff win over a pause: an agent on a call or logged off
+keeps that state. A device member (`PJSIP/…`, `SIP/…`, `Local/…`) changes no agent; read `MemberPaused` for it.
+
+A load, a reload, a login and an `Agent/<id>` member add or remove keep the pause. `OnCall` and the return from a call
+are reached only through `OnAgentConnect`/`OnAgentComplete` called by the host: Asterisk's `AgentConnect`/`AgentComplete`
+frames name no agent.
+
 ## Multi-Server
 
 ```csharp
@@ -63,6 +77,14 @@ await server.ReconcileChannelsAsync(cancellationToken);
   whose AMI session ended, or a connection that is not established, throws `AmiNotConnectedException`.
 - A `Status` that Asterisk refuses (an AMI user whose `write` has none of `system`, `call` or `reporting`) reconciles
   nothing and does not throw. It is logged at Warning the first time in an AMI session and at Debug after that.
+- Every refusal on a load, reload or reconciliation increments `live.status.refused`, tagged with
+  `live.status.reader` (`load` or `reconciliation`) and `server.id` when the pool id is known. A refusal before the
+  server enters a pool is counted without that id and is never counted again when it joins.
+- `server.LastStatusRefusal` exposes an immutable `Message` and UTC `OccurredAt`, or `null`. A later Status read in
+  full clears it even if its reconciliation is deferred; a cancelled read or one cut short by its AMI session does not.
+  The pool health check reports an otherwise healthy pool as `Degraded` while any server has a refusal. Its data adds
+  one `status-refused` string entry (`serverId: message` per refusal, separated by `; ` in ordinal server-id order),
+  while each server's own entry remains its connection state's name.
 - Each run is traced as a `live channel-reconcile` activity, tagged `live.channels` and, on a refusal,
   `live.status.refused`, and logged at Debug. It is not reported as a state load.
 

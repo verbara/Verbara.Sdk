@@ -1,13 +1,45 @@
 namespace Verbara.Sdk.Sessions.Manager;
 
 /// <summary>
-/// The points at which the manager calls its internal <see cref="CallSessionManager.StepHook"/>: where a server's
-/// handler, or a release, has found what it acts on and has not yet taken the lock that makes its next step safe —
-/// the windows a concurrent detach or release has to be correct against. Tests park a handler at one of them, never
-/// a sleep, to put a second operation inside the window on purpose.
+/// The manager's internal transition seams: a handler found its call, a decision captured its oracle, or an
+/// attachment reached a subscription or publication boundary. Each point names its lock context below. Tests put
+/// an operation at that exact boundary rather than depending on a timing sleep.
 /// </summary>
 internal enum HandlerStep
 {
+    /// <summary>The OnChannelStateChanged handler found its call, before taking that call's lock.</summary>
+    StateChangeFound,
+
+    /// <summary>The OnChannelHeld handler found its call, before taking that call's lock.</summary>
+    HoldFound,
+
+    /// <summary>The OnChannelUnheld handler found its call, before taking that call's lock.</summary>
+    UnholdFound,
+
+    /// <summary>The OnBridgeChannelEntered handler found its call, before taking that call's lock.</summary>
+    BridgeEntryFound,
+
+    /// <summary>The OnTransfer handler found its call, before taking that call's lock.</summary>
+    TransferFound,
+
+    /// <summary>The OnQueueCallerLeft handler found its call, before taking that call's lock.</summary>
+    QueueLeftFound,
+
+    /// <summary>The OnQueueCallerAbandonReported handler found its call, before taking that call's lock.</summary>
+    QueueAbandonFound,
+
+    /// <summary>The OnCallerQueueStatus handler found its call, before taking that call's lock.</summary>
+    QueueStatusFound,
+
+    /// <summary>The OnQueueCallerConnected handler found its call, before taking that call's lock.</summary>
+    QueueConnectFound,
+
+    /// <summary>The OnChannelDialBegin handler found its call, before taking that call's lock.</summary>
+    DialBeginFound,
+
+    /// <summary>The OnChannelDialEnd handler found its call, before taking that call's lock.</summary>
+    DialEndFound,
+
     /// <summary>A departing channel's call was found by the channel id, before the call's lock is taken.</summary>
     RemovalFound,
 
@@ -55,6 +87,40 @@ internal enum HandlerStep
     /// id.
     /// </summary>
     QueueJoinFound,
+
+    /// <summary>A registration join checked channel ownership, immediately before its atomic claim.</summary>
+    RegistrationJoinReady,
+
+    /// <summary>Registration passed early leg checks, before publishing linkedid or claiming legs; id is session id.</summary>
+    RegistrationClaimsReady,
+
+    /// <summary>Registration successfully claimed a leg, under its call lock; id is channel id.</summary>
+    RegistrationLegClaimed,
+
+    /// <summary>A decision captured its oracle under the call lock, before applying its generation.</summary>
+    DecisionOracleCaptured,
+
+    /// <summary>Under the bookkeeping lock: arrivals are subscribed, immediately before departures are subscribed.</summary>
+    AttachmentArrivalSubscribed,
+
+    /// <summary>Under the bookkeeping lock: one publication store is complete and the other has not yet run.</summary>
+    AttachmentPublicationStarted,
+
+    /// <summary>Successful attachment publication is complete, outside the bookkeeping lock and before iii.</summary>
+    AttachmentReadyToDecide,
+
+    /// <summary>On the admission worker, before walking any channel; no channel or call lock is held.</summary>
+    AdmissionWalkStarted,
+    /// <summary>Under the visited channel lock, before the admission's attachment gate/currentness check.</summary>
+    AdmissionVisit,
+    /// <summary>Under the channel lock, after observing no channel owner and before correlation/claim.</summary>
+    AdmissionNoOwner,
+    /// <summary>Under channel then target-call lock, immediately before the atomic channel claim.</summary>
+    AdmissionClaimReady,
+    /// <summary>Under channel then candidate-call lock, held by id but before channel/linkedid publication.</summary>
+    AdmissionCandidateHeld,
+    /// <summary>On the admission worker with its attachment gate entered, immediately before trigger (iv).</summary>
+    AdmissionClosing,
 }
 
 public sealed partial class CallSessionManager

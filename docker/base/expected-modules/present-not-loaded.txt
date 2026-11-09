@@ -1,0 +1,6 @@
+# Modules every image ships but Asterisk does not load with the sample configuration (in the andrius references
+# too): present, so they stay in expected-modules/<major>.txt, but not required to load.
+format_ogg_vorbis.so
+res_hep_pjsip.so
+res_hep_rtcp.so
+res_hep.so

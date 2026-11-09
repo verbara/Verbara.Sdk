@@ -53,7 +53,10 @@ public sealed class VerbaraServerPool : IAsyncDisposable
     /// <para>
     /// For one id, the old instance's removal finishes before its replacement's addition. An instance is never
     /// announced as added after its removal; a failed or removed start can have a removal alone.
-    /// Notifications run synchronously under the pool membership lock. A handler must not wait on another thread
+    /// Notifications run synchronously under the pool membership lock. Attaching the session engine here keeps that
+    /// membership lock through attach's wait of up to one second per busy call lock and through its synchronous
+    /// session subscribers; that limit does not bound user handlers or a prior release's completion.
+    /// A handler must not wait on another thread
     /// calling the pool. Add, remove and disposal requested on the notifying thread throw
     /// <see cref="InvalidOperationException"/> before changing membership or routing. A handler that must change the
     /// pool schedules the change off the handler; the membership lock then orders it. Each failing handler is logged
@@ -149,7 +152,7 @@ public sealed class VerbaraServerPool : IAsyncDisposable
 
         var connection = await _connectionFactory.CreateAndConnectAsync(options, cancellationToken);
         var logger = _loggerFactory.CreateLogger<VerbaraServer>();
-        var server = new VerbaraServer(connection, logger);
+        var server = new VerbaraServer(connection, logger) { PoolId = serverId };
 
         bool takenIn;
         lock (_membershipLock)
@@ -223,6 +226,7 @@ public sealed class VerbaraServerPool : IAsyncDisposable
         {
             if (!_servers.TryAdd(serverId, server))
                 throw new InvalidOperationException($"Server '{serverId}' already exists in the pool.");
+            server.PoolId = serverId;
             TrackAgentRouting(serverId, server);
             IndexAgentRouting(serverId, server);
             Announce(ServerAdded, nameof(ServerAdded), serverId, server);

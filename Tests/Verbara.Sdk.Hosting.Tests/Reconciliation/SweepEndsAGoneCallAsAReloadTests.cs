@@ -5,6 +5,7 @@ using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Sessions;
 using Verbara.Sdk.Sessions.Manager;
+using Verbara.Sdk.Tests.Shared.Sessions;
 using Xunit.Abstractions;
 
 namespace Verbara.Sdk.Hosting.Tests.Reconciliation;
@@ -171,37 +172,68 @@ public sealed class SweepEndsAGoneCallAsAReloadTests(ITestOutputHelper output) :
     }
 
     [Fact]
-    public async Task Sweep_ShouldSendNothingAndLeaveTheSession_WhenTheOnlyOldSessionHoldsNoChannel()
+    public async Task Sweep_ShouldSendNothingAndKeepCountingTheObservedCall_WhenItsRemovalHasNotReachedItsLock()
     {
-        var reconstructed = _rig.ZeroChannelSession("rebuilt");
-        _rig.Age(reconstructed);
-        var before = SweepRig.Look(reconstructed);
+        var call = _rig.CreatedCall("observed");
+        _rig.Age(call);
+        call.Unverified.Should().BeFalse();
+        _rig.Manager.IsPendingDecision(call).Should().BeFalse();
+        var before = SweepRig.Look(call);
         var sweep = _rig.BuildSweep();
-
-        await SweepRig.SweepOnceAsync(sweep);
-
-        new { Actions = _rig.ActionsSent().Values.Sum(), Session = SweepRig.Look(reconstructed) }.Should().BeEquivalentTo(
-            new { Actions = 0, Session = before },
-            "no Status can omit a channel the table does not hold, so a session with none is not a candidate: "
-            + $"nothing is asked for it and nothing ends it. Measured: {_rig.Describe()}");
+        using var parked = StepParker.Install(_rig.Manager, HandlerStep.RemovalFound, SweepRig.ServerId, call.Participants.Single().UniqueId);
+        var removal = Task.Run(() => _rig.HangUp("observed", HangupCause.NormalClearing));
+        try
+        {
+            parked.WaitUntilParked();
+            _rig.Server.Channels.GetByUniqueId(call.Participants.Single().UniqueId).Should().BeNull();
+            var tags = await SweepSwitchesAndReportsTests.SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+            _rig.Sent<StatusAction>().Should().Be(0);
+            tags["sessions.unverifiable"].Should().Be(1);
+            SweepRig.Look(call).Should().BeEquivalentTo(before);
+            _rig.EndingsOf(call).Should().Be(0);
+        }
+        finally { parked.LetGo(); await removal.WaitAsync(SweepRig.Bound); }
+        _rig.EndingsOf(call).Should().Be(1);
+        call.HangupCause.Should().Be(HangupCause.NormalClearing);
+        call.Metadata.Should().NotContainKey("cause");
+        var after = await SweepSwitchesAndReportsTests.SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+        after["sessions.unverifiable"].Should().Be(0);
+        _rig.EndingsOf(call).Should().Be(1);
+        SessionIndexInvariant.Assert(_rig.Manager);
     }
 
     [Fact]
-    public async Task Sweep_ShouldAskOnceAndLeaveTheChannelLessSession_WhenAnOrdinaryCandidateIsHeldBesideIt()
+    public async Task Sweep_ShouldAskOnceAndLeaveTheObservedChannelLessCall_WhenAnOrdinaryCandidateIsHeldBesideIt()
     {
-        var reconstructed = _rig.ZeroChannelSession("rebuilt");
-        _rig.Age(reconstructed);
+        var call = _rig.CreatedCall("observed");
+        _rig.Age(call);
+        call.Unverified.Should().BeFalse();
+        _rig.Manager.IsPendingDecision(call).Should().BeFalse();
         var ordinary = _rig.DialingCall("ordinary");
         _rig.Age(ordinary);
         _rig.AsteriskLists("ordinary");
-        var before = SweepRig.Look(reconstructed);
+        var before = SweepRig.Look(call);
         var sweep = _rig.BuildSweep();
-
-        await SweepRig.SweepOnceAsync(sweep);
-
-        new { Status = _rig.Sent<StatusAction>(), Session = SweepRig.Look(reconstructed) }.Should().BeEquivalentTo(
-            new { Status = 1, Session = before },
-            "the ordinary candidate is verified with one Status; the session that holds no channel is not a "
-            + $"candidate and the completed snapshot leaves it as it is. Measured: {_rig.Describe()}");
+        using var parked = StepParker.Install(_rig.Manager, HandlerStep.RemovalFound, SweepRig.ServerId, call.Participants.Single().UniqueId);
+        var removal = Task.Run(() => _rig.HangUp("observed", HangupCause.NormalClearing));
+        try
+        {
+            parked.WaitUntilParked();
+            _rig.Server.Channels.GetByUniqueId(call.Participants.Single().UniqueId).Should().BeNull();
+            var tags = await SweepSwitchesAndReportsTests.SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+            _rig.Sent<StatusAction>().Should().Be(1);
+            tags["sessions.unverifiable"].Should().Be(1);
+            SweepRig.Look(call).Should().BeEquivalentTo(before);
+            _rig.EndingsOf(call).Should().Be(0);
+        }
+        finally { parked.LetGo(); await removal.WaitAsync(SweepRig.Bound); }
+        _rig.EndingsOf(call).Should().Be(1);
+        call.HangupCause.Should().Be(HangupCause.NormalClearing);
+        call.Metadata.Should().NotContainKey("cause");
+        var after = await SweepSwitchesAndReportsTests.SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+        after["sessions.unverifiable"].Should().Be(0);
+        _rig.EndingsOf(call).Should().Be(1);
+        SessionIndexInvariant.Assert(_rig.Manager);
     }
+
 }

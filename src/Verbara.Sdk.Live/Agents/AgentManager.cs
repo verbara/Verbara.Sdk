@@ -70,6 +70,34 @@ public sealed class AgentManager
 
     public AgentManager(ILogger logger) => _logger = logger;
 
+    /// <summary>
+    /// What the owning server's queue table holds of an agent's memberships, set once by the server when it builds this
+    /// manager. Unset, every agent has none, so a logged-in agent reads <see cref="AgentState.Available"/>.
+    /// It is called under the agent's lock and takes no queue lock.
+    /// </summary>
+    internal Func<string, AgentMemberships>? Memberships { get; set; }
+
+    /// <summary>
+    /// Null outside deterministic tests; runs inside <see cref="OnMembershipsChanged"/> with the replacement gate held,
+    /// after the agent was looked up and before its lock is taken.
+    /// </summary>
+    internal Action<string>? MembershipsChangeLookedUp { get; set; }
+
+    /// <summary>
+    /// Null outside deterministic tests; runs inside <see cref="OnMembershipsChanged"/> under both locks, at the write,
+    /// with whether the agent written is the one the table holds for its id at that instant.
+    /// </summary>
+    internal Action<string, bool>? MembershipsChangeWriting { get; set; }
+
+    private AgentMemberships MembershipsOf(string agentId) => Memberships?.Invoke(agentId) ?? AgentMemberships.None;
+
+    // The state a logged-in agent that is not on a call reads: paused only while it holds memberships and all are paused.
+    private static AgentState Settled(AgentMemberships memberships) =>
+        memberships == AgentMemberships.AllPaused ? AgentState.Paused : AgentState.Available;
+
+    // A logoff and a call win over the memberships: only an available or paused agent follows them.
+    private static bool FollowsMemberships(AgentState state) => state is AgentState.Available or AgentState.Paused;
+
     public IEnumerable<AsteriskAgent> Agents => _agents.Values;
 
     public int AgentCount => _agents.Count;
@@ -82,7 +110,7 @@ public sealed class AgentManager
         var agent = GetOrAddAgent(agentId);
         lock (agent.SyncRoot)
         {
-            agent.State = AgentState.Available;
+            agent.State = Settled(MembershipsOf(agentId));
             agent.Channel = channel;
             agent.LoggedInAt = DateTimeOffset.UtcNow;
             agent.LastStateChangeAt = DateTimeOffset.UtcNow;
@@ -156,7 +184,7 @@ public sealed class AgentManager
         {
             lock (agent.SyncRoot)
             {
-                agent.State = AgentState.Available;
+                agent.State = Settled(MembershipsOf(agentId));
                 agent.TalkingTo = null;
                 agent.LastStateChangeAt = DateTimeOffset.UtcNow;
                 agent.CallsTaken++;
@@ -184,6 +212,49 @@ public sealed class AgentManager
             LiveMetrics.AgentStateChanges.Add(1);
             AgentStateChanged?.Invoke(agent);
         }
+    }
+
+    /// <summary>
+    /// Re-derives agent <paramref name="agentId"/>'s state after the server's queue table changed one of its memberships
+    /// (a pause applied, a member added or removed): <see cref="AgentState.Paused"/> while it holds memberships and all are
+    /// paused, <see cref="AgentState.Available"/> otherwise; a logged-off agent and one on a call stay as they are.
+    /// <see cref="AgentStateChanged"/> is raised only when the state changes. An agent the table does not hold is not added.
+    /// The replacement gate is held from the lookup through the write, so a reload's replacement is ordered wholly before
+    /// or after it and the write never lands on an agent the table no longer holds; the memberships are read under the
+    /// agent's lock, so the last derivation to take it reads the newest table. The change is raised with no lock held.
+    /// </summary>
+    internal void OnMembershipsChanged(string agentId)
+    {
+        AsteriskAgent? agent;
+        AgentState? written = null;
+        lock (_liveEvents)
+        {
+            if (!_agents.TryGetValue(agentId, out agent))
+                return;
+
+            MembershipsChangeLookedUp?.Invoke(agentId);
+            lock (agent.SyncRoot)
+            {
+                if (FollowsMemberships(agent.State))
+                {
+                    var target = Settled(MembershipsOf(agentId));
+                    MembershipsChangeWriting?.Invoke(agentId, ReferenceEquals(_agents.GetValueOrDefault(agentId), agent));
+                    if (target != agent.State)
+                    {
+                        agent.State = target;
+                        agent.LastStateChangeAt = DateTimeOffset.UtcNow;
+                        written = target;
+                    }
+                }
+            }
+        }
+
+        if (written is not { } state)
+            return;
+
+        AgentManagerLog.PauseChanged(_logger, agentId, state == AgentState.Paused);
+        LiveMetrics.AgentStateChanges.Add(1);
+        AgentStateChanged?.Invoke(agent);
     }
 
     /// <summary>Register an agent definition without logging it in (appears as LoggedOff).</summary>
@@ -297,6 +368,36 @@ public sealed class AgentManager
     }
 
     /// <summary>
+    /// Null outside deterministic tests; runs inside <see cref="SettleReplaced"/> under the agent's lock, after the
+    /// memberships were read and before the state is written.
+    /// </summary>
+    internal Action<AsteriskAgent>? ReplacedSettling { get; set; }
+
+    /// <summary>
+    /// Derives the state of an agent <see cref="ReplaceWithSnapshot"/> returned from the server's queue table, which the
+    /// load filled before it read the agents, so that <see cref="AnnounceLogin"/> announces it paused while all its
+    /// memberships are. Raises nothing: the announcement carries the state. Call it after the replacement published the
+    /// agent and before announcing it; it takes only the agent's lock, so a live derivation of the same agent is ordered
+    /// wholly before or after it, and the later of the two reads the newer table.
+    /// </summary>
+    internal void SettleReplaced(AsteriskAgent agent)
+    {
+        lock (agent.SyncRoot)
+        {
+            if (!FollowsMemberships(agent.State))
+                return;
+
+            var target = Settled(MembershipsOf(agent.AgentId));
+            ReplacedSettling?.Invoke(agent);
+            if (target == agent.State)
+                return;
+
+            agent.State = target;
+            agent.LastStateChangeAt = DateTimeOffset.UtcNow;
+        }
+    }
+
+    /// <summary>
     /// Logs and raises <see cref="AgentLoggedIn"/> for an agent <see cref="ReplaceWithSnapshot"/> reported logged in, unless
     /// a live logoff has been applied to it since: that logoff is newer than the list, and its <see cref="AgentLoggedOff"/>
     /// may already have been raised, so a login announced after it would leave subscribers holding the agent logged in.
@@ -373,6 +474,19 @@ public sealed class AsteriskAgent : LiveObjectBase
     public double AvgTalkTimeSecs => CallsTaken > 0
         ? (double)TotalTalkTimeSecs / CallsTaken
         : 0;
+}
+
+/// <summary>What a queue table holds of one agent's memberships.</summary>
+internal enum AgentMemberships
+{
+    /// <summary>No membership of the agent.</summary>
+    None,
+
+    /// <summary>At least one membership, and every one is paused.</summary>
+    AllPaused,
+
+    /// <summary>At least one membership that is not paused.</summary>
+    NotAllPaused,
 }
 
 /// <summary>Agent state.</summary>

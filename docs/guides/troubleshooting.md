@@ -439,7 +439,7 @@ or switch the sweep off with `ReconciliationInterval = Timeout.InfiniteTimeSpan`
 
 ## Multi-Server Pools
 
-**`Server b reported channel id … which the session indexes already hold for a call of server a`** (Warning, once per pair of servers, then Debug): the session manager keeps one channel-id index and one `linkedid` index for every server attached to it, so two servers that report the same id can have their calls correlated together; give every Asterisk its own `systemname` in `asterisk.conf`, or, if both server ids watch the same Asterisk, attach it once.
+**`Server b reported channel id … which the session indexes already hold for a call of server a`** (Warning, once per unordered pair of servers per session manager, then Debug): calls of the two servers are kept apart. A lookup that names no server, and a consumer keyed only by `linkedid`, cannot tell the calls apart when ids collide. Give every Asterisk its own `systemname` in `asterisk.conf`, or, if both server ids watch the same Asterisk, attach it once.
 
 ---
 

@@ -120,6 +120,40 @@ public sealed partial class AddVerbaraOptionsDeliveryTests
             $"AriClientOptions.{option} set on AddVerbara(o => o.Ari.{option} = …) is the value the client runs with");
     }
 
+    /// <summary>Every settable ARI option, the audio-server callback included.</summary>
+    public static TheoryData<string> AriOptionNamesAndTheAudioServerCallback =>
+        new(AriOptions.Keys.Append(nameof(AriClientOptions.ConfigureAudioServer)));
+
+    [Theory]
+    [MemberData(nameof(AriOptionNamesAndTheAudioServerCallback))]
+    public async Task AddVerbaraAri_ShouldDeliverEveryAriOption_WhenSetInline(string option)
+    {
+        if (option == nameof(AriClientOptions.ConfigureAudioServer))
+        {
+            Action<AudioServerOptions> configureAudioServer = a => a.AudioSocketPort = 9191;
+
+            await using var withCallback = Build(services => services.AddVerbaraAri(o => o.ConfigureAudioServer = configureAudioServer));
+
+            using (new AssertionScope())
+            {
+                withCallback.GetRequiredService<IOptions<AriClientOptions>>().Value.ConfigureAudioServer.Should().BeSameAs(configureAudioServer,
+                    "the audio-server callback set on AddVerbaraAri reaches the resolved ARI options");
+                withCallback.GetRequiredService<AudioServerOptions>().AudioSocketPort.Should().Be(9191,
+                    "the callback configures the registered audio servers, as through AddVerbara");
+            }
+
+            return;
+        }
+
+        var (_, set, get) = AriOptions[option];
+        var expected = get(Changed(set));
+
+        await using var provider = Build(services => services.AddVerbaraAri(set));
+
+        get(provider.GetRequiredService<IOptions<AriClientOptions>>().Value).Should().Be(expected,
+            $"AriClientOptions.{option} set on AddVerbaraAri(o => o.{option} = …) is the value the client runs with");
+    }
+
     [Fact]
     public async Task AddVerbara_ShouldDeliverTheAudioServerCallback_WhenSetInline()
     {
@@ -298,18 +332,19 @@ public sealed partial class AddVerbaraOptionsDeliveryTests
         var ami = provider.GetRequiredService<IOptions<AmiConnectionOptions>>().Value;
         var ari = provider.GetRequiredService<IOptions<AriClientOptions>>().Value;
         var agiPort = ((FastAgiServer)provider.GetRequiredService<IAgiServer>()).Port;
+        var healthCheckTags = provider.GetRequiredService<IOptions<VerbaraHealthCheckOptions>>().Value.Tags.ToList();
 
         using (new AssertionScope())
         {
             leaves.Should().NotBeEmpty($"{file}:{line} is a configuration block");
             foreach (var (key, text) in leaves)
             {
-                var delivered = Delivered(key, ami, ari, agiPort);
+                var delivered = Delivered(key, ami, ari, agiPort, healthCheckTags);
                 if (delivered is null)
                 {
                     Execute.Assertion.FailWith(
-                        "Expected {0} to be a key AddVerbara(configuration) reads (Asterisk:Ami:<option>, Asterisk:Ari:<option> " +
-                        "or Asterisk:AgiPort), because {1}:{2} shows it, but no option receives it.", key, file, line);
+                        "Expected {0} to be a key AddVerbara(configuration) reads (Asterisk:Ami:<option>, Asterisk:Ari:<option>, " +
+                        "Asterisk:AgiPort or Asterisk:HealthCheckTags:<index>), because {1}:{2} shows it, but no option receives it.", key, file, line);
                     continue;
                 }
 
@@ -336,11 +371,17 @@ public sealed partial class AddVerbaraOptionsDeliveryTests
         act.Should().NotThrow("the Hosting README's quick start, applied as written, is a host that starts");
     }
 
-    private static object? Delivered(string key, AmiConnectionOptions ami, AriClientOptions ari, int agiPort)
+    private static object? Delivered(
+        string key, AmiConnectionOptions ami, AriClientOptions ari, int agiPort, List<string> healthCheckTags)
     {
         var parts = key.Split(':');
         if (parts.Length == 2 && parts[0] == "Asterisk" && parts[1] == "AgiPort")
             return agiPort;
+        if (parts.Length == 3 && parts[0] == "Asterisk" && parts[1] == "HealthCheckTags")
+        {
+            return int.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out var index)
+                && index < healthCheckTags.Count ? healthCheckTags[index] : null;
+        }
         if (parts.Length != 3 || parts[0] != "Asterisk")
             return null;
         return parts[1] switch

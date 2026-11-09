@@ -17,7 +17,9 @@ public sealed partial class CallSessionManager
     /// without ending it: the call leaves every lookup and the default store, its state, legs, timestamps and metadata
     /// stay as they were, and no ending is raised or measured for it. Calls of the server that have already ended are
     /// left to their retention period. It also works for an id that is not attached, and a second release of the same
-    /// id releases nothing.</para>
+    /// id releases nothing. Once no call of the id that has not ended is still held, the release also lets go of the
+    /// server last attached under the id, so the manager keeps no reference to it; a later attach of the id works as
+    /// before.</para>
     /// <para>Before it lets go of anything, a release closes the attachment to every handler not yet started and waits
     /// for the ones already running, for at most a few seconds, then waits at most a second for each call's lock; what
     /// is still running past those limits is named in one Error entry, and a call whose lock was not obtained stays
@@ -47,13 +49,15 @@ public sealed partial class CallSessionManager
         if (t_notificationDepth > 0)
             throw ReleaseRefused(serverId);
 
-        var (closed, mark) = BeginRelease(serverId);
+        var (closed, latest, mark) = BeginRelease(serverId);
         try
         {
             // Only the attachment this release closed is waited for; an id not attached waits for nothing.
             var handlersInFlight = closed?.Gate.Drain(DrainBound) ?? 0;
             Step(HandlerStep.ReleaseWalkStarted, serverId, string.Empty);
-            return ReleaseCallsOf(serverId, handlersInFlight);
+            var released = ReleaseCallsOf(serverId, handlersInFlight);
+            LetGoOfLatestAttachment(serverId, latest);
+            return released;
         }
         finally
         {
@@ -169,18 +173,19 @@ public sealed partial class CallSessionManager
     /// </summary>
     private void ForgetEverywhere(CallSession call)
     {
-        foreach (var bridge in _bridgeToSession.Where(
+        var index = IndexOf(call.ServerId);
+        foreach (var bridge in index.BridgeToSession.Where(
             bridge => string.Equals(bridge.Value, call.SessionId, StringComparison.Ordinal)))
         {
-            _bridgeToSession.TryRemove(bridge);
+            index.BridgeToSession.TryRemove(bridge);
         }
 
         _sessions.TryRemove(new KeyValuePair<string, CallSession>(call.SessionId, call));
         Step(HandlerStep.ReleaseForgotById, call.ServerId, call.SessionId);
 
-        _byLinkedId.TryRemove(new KeyValuePair<string, CallSession>(call.LinkedId, call));
+        index.ByLinkedId.TryRemove(new KeyValuePair<string, CallSession>(call.LinkedId, call));
         foreach (var participant in call.Participants)
-            _byChannelId.TryRemove(new KeyValuePair<string, CallSession>(participant.UniqueId, call));
+            index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(participant.UniqueId, call));
 
         if (call.ConnectedAgentLegs is { } legs)
         {
@@ -213,17 +218,19 @@ public sealed partial class CallSessionManager
                 leftovers.Add($"released call {call.SessionId} still lists {legs.Count} connected leg(s)");
         }
 
-        leftovers.AddRange(_byLinkedId
-            .Where(entry => calls.Contains(entry.Value))
-            .Select(entry => $"linkedid {entry.Key} still names released call {entry.Value.SessionId}"));
-
-        leftovers.AddRange(_byChannelId
-            .Where(entry => calls.Contains(entry.Value))
-            .Select(entry => $"channel id {entry.Key} still names released call {entry.Value.SessionId}"));
-
-        leftovers.AddRange(_bridgeToSession
-            .Where(entry => sessionIds.Contains(entry.Value) && !_sessions.ContainsKey(entry.Value))
-            .Select(entry => $"bridge {entry.Key} still names released session id {entry.Value}, which no call holds"));
+        foreach (var scoped in _serverIndexes)
+        {
+            var index = scoped.Value;
+            leftovers.AddRange(index.ByLinkedId
+                .Where(entry => calls.Contains(entry.Value))
+                .Select(entry => $"linkedid {entry.Key} still names released call {entry.Value.SessionId}"));
+            leftovers.AddRange(index.ByChannelId
+                .Where(entry => calls.Contains(entry.Value))
+                .Select(entry => $"channel id {entry.Key} still names released call {entry.Value.SessionId}"));
+            leftovers.AddRange(index.BridgeToSession
+                .Where(entry => sessionIds.Contains(entry.Value) && !_sessions.ContainsKey(entry.Value))
+                .Select(entry => $"bridge {entry.Key} still names released session id {entry.Value}, which no call holds"));
+        }
 
         var recorded = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var leg in _sessions.SelectMany(held => held.Value.ConnectedAgentLegs ?? []))

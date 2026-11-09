@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Collections.Concurrent;
+using Verbara.Sdk.Live.Agents;
 using Verbara.Sdk.Live.Diagnostics;
 using Verbara.Sdk.Live.Server;
 using Microsoft.Extensions.Logging;
@@ -53,6 +55,9 @@ public sealed class QueueManager
 {
     private readonly ConcurrentDictionary<string, AsteriskQueue> _queues = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _queuesByMember = new(StringComparer.Ordinal);
+
+    // The reverse index read by a span key, so the membership query builds no string per spelling it looks up.
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>>.AlternateLookup<ReadOnlySpan<char>> _queuesByMemberSpan;
     private readonly ILogger _logger;
 
     // The snapshot windows open now: one per load reading QueueStatus. Replaced, never mutated, under _windowsLock.
@@ -89,6 +94,15 @@ public sealed class QueueManager
     public event Action<string, AsteriskQueueMember>? MemberAdded;
     public event Action<string, AsteriskQueueMember>? MemberRemoved;
     public event Action<string, AsteriskQueueMember>? MemberStatusChanged;
+
+    /// <summary>
+    /// Raised for every pause or unpause Asterisk reports (<c>QueueMemberPause</c>) for a member this manager's table
+    /// holds, after the table applied it: the queue's name and the held member, whose <see cref="AsteriskQueueMember.Paused"/>
+    /// and <see cref="AsteriskQueueMember.PausedReason"/> read as the table holds them when the handler runs. A frame for a
+    /// member the table does not hold raises nothing, and a member added already paused is announced by
+    /// <see cref="MemberAdded"/> alone: Asterisk sends no pause frame for it.
+    /// </summary>
+    public event Action<string, AsteriskQueueMember>? MemberPaused;
     public event Action<string, AsteriskQueueEntry>? CallerJoined;
     public event Action<string, AsteriskQueueEntry>? CallerLeft;
 
@@ -130,6 +144,7 @@ public sealed class QueueManager
     {
         _logger = logger;
         _events = new LiveEventOutbox(ex => QueueManagerLog.UnownedHandlerFailed(logger, ex), LiveEventOutbox.DefaultTurnWait);
+        _queuesByMemberSpan = _queuesByMember.GetAlternateLookup<ReadOnlySpan<char>>();
     }
 
     public IEnumerable<AsteriskQueue> Queues => _queues.Values;
@@ -145,6 +160,61 @@ public sealed class QueueManager
             return queues.Keys;
         return [];
     }
+
+    /// <summary>
+    /// What this table holds of app_agent_pool agent <paramref name="agentId"/>'s memberships: every member whose interface
+    /// is <c>Agent/</c>, in any letter case, followed by exactly <paramref name="agentId"/>, compared with case, as agents
+    /// are keyed. <see cref="AgentMemberships.AllPaused"/> when at least one is held and every one is paused.
+    /// Each of the 32 letter-case spellings of the prefix is one lookup in the reverse index; no queue lock is taken, so
+    /// the caller may hold an agent's lock.
+    /// </summary>
+    internal AgentMemberships AgentMembershipsOf(string agentId)
+    {
+        const string Prefix = "Agent/";
+        const int Letters = 5;
+        var length = Prefix.Length + agentId.Length;
+        char[]? rented = null;
+        var key = length <= 128 ? stackalloc char[length] : (rented = ArrayPool<char>.Shared.Rent(length)).AsSpan(0, length);
+        try
+        {
+            key[Letters] = '/';
+            agentId.AsSpan().CopyTo(key[Prefix.Length..]);
+            var held = false;
+            for (var spelling = 0; spelling < 1 << Letters; spelling++)
+            {
+                for (var i = 0; i < Letters; i++)
+                    key[i] = ((spelling >> i) & 1) != 0 ? char.ToUpperInvariant(Prefix[i]) : char.ToLowerInvariant(Prefix[i]);
+
+                if (!_queuesByMemberSpan.TryGetValue(key, out var iface, out var queueNames))
+                    continue;
+
+                foreach (var entry in queueNames)
+                {
+                    switch (HeldPauseOf(entry.Key, iface))
+                    {
+                        case false:
+                            return AgentMemberships.NotAllPaused;
+                        case true:
+                            held = true;
+                            break;
+                    }
+                }
+            }
+
+            return held ? AgentMemberships.AllPaused : AgentMemberships.None;
+        }
+        finally
+        {
+            if (rented is not null)
+                ArrayPool<char>.Shared.Return(rented);
+        }
+    }
+
+    // The pause of the membership of iface in queueName while the table holds it; null when it holds none.
+    private bool? HeldPauseOf(string queueName, string iface) =>
+        _queues.TryGetValue(queueName, out var queue) && !queue.RemovedFromTable && queue.Members.TryGetValue(iface, out var member)
+            ? member.Paused
+            : null;
 
     /// <summary>Get queue objects where a member interface is registered.</summary>
     public IEnumerable<AsteriskQueue> GetQueueObjectsForMember(string memberInterface)
@@ -287,22 +357,43 @@ public sealed class QueueManager
     /// <summary>Handle QueueMemberPaused event.</summary>
     public void OnMemberPaused(string queueName, string iface, bool paused, string? reason = null)
     {
-        lock (_windowsLock)
+        try
         {
-            foreach (var window in _windows)
-                window.OnLiveMemberPaused(queueName, iface, paused, reason);
-            if (!_queues.TryGetValue(queueName, out var queue))
-                return;
-            lock (queue.SyncRoot)
+            lock (_windowsLock)
             {
-                if (queue.RemovedFromTable || !queue.Members.TryGetValue(iface, out var member))
+                foreach (var window in _windows)
+                    window.OnLiveMemberPaused(queueName, iface, paused, reason);
+                if (!_queues.TryGetValue(queueName, out var queue))
                     return;
-                member.Paused = paused;
-                member.PausedReason = reason;
-                QueueManagerLog.MemberPaused(_logger, queueName, iface, paused, reason);
+                lock (queue.SyncRoot)
+                {
+                    if (queue.RemovedFromTable || !queue.Members.TryGetValue(iface, out var member))
+                        return;
+                    member.Paused = paused;
+                    member.PausedReason = reason;
+                    QueueManagerLog.MemberPaused(_logger, queueName, iface, paused, reason);
+                    // Logging may reenter. Announce only the lifetime that holds the pause now.
+                    if (MemberPaused is not null && IsCurrentMemberLocked(queue, member))
+                    {
+                        _events.Post(static (m, q, member) =>
+                            ((QueueManager)m).MemberPaused?.Invoke((string)q!, (AsteriskQueueMember)member!), this, queue.Name, member);
+                    }
+                }
             }
+
+            MemberPauseApplied?.Invoke();
+        }
+        finally
+        {
+            RaisePending();
         }
     }
+
+    /// <summary>
+    /// Null outside deterministic tests; runs on the thread that applied a pause to a held member, after it released the
+    /// window gate and before it drains its notifications.
+    /// </summary>
+    internal Action? MemberPauseApplied { get; set; }
 
     /// <summary>Handle QueueMemberStatus event (device state change).</summary>
     public void OnMemberStatusChanged(string queueName, string iface, int status)

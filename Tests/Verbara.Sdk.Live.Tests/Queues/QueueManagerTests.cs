@@ -1,5 +1,6 @@
 using Verbara.Sdk.Live.Queues;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Verbara.Sdk.Live.Tests.Queues;
@@ -180,5 +181,103 @@ public class QueueManagerTests
 
         _sut.GetQueuesForMember("PJSIP/agent01").Should().HaveCount(1);
         _sut.GetQueuesForMember("PJSIP/agent01").Should().Contain("support");
+    }
+
+    // --- MemberPaused: red on main by compile error (CS1061) ---
+
+    [Fact]
+    public void MemberPaused_ShouldBeRaisedOnce_WhenAHeldMemberIsPaused()
+    {
+        _sut.OnMemberAdded("sales", "PJSIP/2001", "2001", 0, false, 1);
+        var seen = new List<(string Queue, AsteriskQueueMember Member, bool Paused, string? Reason)>();
+        _sut.MemberPaused += (q, m) => seen.Add((q, m, m.Paused, m.PausedReason));
+
+        _sut.OnMemberPaused("sales", "PJSIP/2001", true, "lunch");
+
+        seen.Should().ContainSingle();
+        seen[0].Queue.Should().Be("sales");
+        seen[0].Member.Should().BeSameAs(_sut.GetByName("sales")!.Members["PJSIP/2001"], "the table's own member object");
+        seen[0].Paused.Should().BeTrue();
+        seen[0].Reason.Should().Be("lunch");
+    }
+
+    [Fact]
+    public void MemberPaused_ShouldReportTheMemberUnpaused_WhenAHeldMemberIsUnpaused()
+    {
+        _sut.OnMemberAdded("sales", "PJSIP/2001", "2001", 0, true, 1);
+        var seen = new List<bool>();
+        _sut.MemberPaused += (_, m) => seen.Add(m.Paused);
+
+        _sut.OnMemberPaused("sales", "PJSIP/2001", false);
+
+        seen.Should().Equal([false]);
+    }
+
+    [Fact]
+    public void MemberPaused_ShouldShowTheMemberAsTheTableHoldsIt_WhenAHandlerUnpausesIt()
+    {
+        _sut.OnMemberAdded("sales", "PJSIP/2001", "2001", 0, false, 1);
+        var first = new List<bool>();
+        var second = new List<bool>();
+        _sut.MemberPaused += (q, m) =>
+        {
+            first.Add(m.Paused);
+            if (m.Paused)
+                _sut.OnMemberPaused(q, m.Interface, false);
+        };
+        _sut.MemberPaused += (_, m) => second.Add(m.Paused);
+
+        _sut.OnMemberPaused("sales", "PJSIP/2001", true);
+
+        using (new AssertionScope())
+        {
+            first.Should().Equal([true, false]);
+            second.Should().Equal([false, false],
+                "the second handler reads the member as the table holds it, then receives the unpause's own notification");
+        }
+    }
+
+    [Fact]
+    public void MemberPaused_ShouldNotBeRaised_WhenNoQueueHoldsTheMember()
+    {
+        _sut.OnMemberAdded("sales", "PJSIP/2001", "2001", 0, false, 1);
+        var raised = 0;
+        _sut.MemberPaused += (_, _) => raised++;
+
+        _sut.OnMemberPaused("sales", "PJSIP/9999", true);
+
+        using (new AssertionScope())
+        {
+            raised.Should().Be(0);
+            _sut.GetByName("sales")!.Members.Keys.Should().Equal(["PJSIP/2001"], "the table is unchanged");
+            _sut.GetByName("sales")!.Members["PJSIP/2001"].Paused.Should().BeFalse();
+        }
+    }
+
+    [Fact]
+    public void MemberPaused_ShouldNotBeRaised_WhenAPauseArrivesDuringASnapshotReadBeforeTheTableHoldsTheMember()
+    {
+        var paused = 0;
+        var added = new List<bool>();
+        _sut.MemberPaused += (_, _) => paused++;
+        _sut.MemberAdded += (_, m) => added.Add(m.Paused);
+        var window = _sut.OpenSnapshotWindow();
+        try
+        {
+            _sut.OnMemberPaused("sales", "PJSIP/2001", true, "lunch");
+            _sut.OnSnapshotQueueParams(window, "sales", 0, "ringall", 0, 0, 0, 0, 0);
+            _sut.OnSnapshotMember(window, "sales", "PJSIP/2001", "2001", 0, false, 1);
+            _sut.CompleteSnapshot(window);
+        }
+        finally
+        {
+            _sut.CloseSnapshotWindow(window);
+        }
+
+        using (new AssertionScope())
+        {
+            paused.Should().Be(0, "the table did not hold the member when the pause arrived");
+            added.Should().Equal([true], "the snapshot's member is announced once, with the live pause it was read after");
+        }
     }
 }

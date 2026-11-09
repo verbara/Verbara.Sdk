@@ -10,6 +10,54 @@ namespace Verbara.Sdk.FunctionalTests.Layer5_Integration.MultiServer;
 public sealed class MultiServerConfigurationTests
 {
     [Fact]
+    public async Task WriteConfiguration_ShouldExcludeStatusWriteClassesForTheNoStatusUser_WhenTheRunIsWritten()
+    {
+        var run = new MultiServerFixture();
+        try
+        {
+            run.WriteConfiguration();
+
+            var user = MultiServerAmiUsers.All.Should().ContainSingle(u => u.Name == "nostatus").Which;
+            user.Read.Should().Be("all");
+            user.Write.Split(',').Should().NotContain(["system", "call", "reporting"]);
+            user.Write.Should().Be("originate");
+            foreach (var server in new[] { "a", "b" })
+            {
+                var manager = await File.ReadAllTextAsync(Path.Join(run.ConfigDirectory, server, "manager.conf"));
+                manager.Should().Contain("[nostatus]\nsecret = ")
+                    .And.Contain("\nread = all\nwrite = originate\n");
+            }
+        }
+        finally
+        {
+            await run.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task WriteConfiguration_ShouldProvideShortAndLongRoutes_WhenTheRunIsWritten()
+    {
+        var run = new MultiServerFixture();
+        try
+        {
+            run.WriteConfiguration();
+
+            var a = await File.ReadAllTextAsync(Path.Join(run.ConfigDirectory, "a", "extensions.conf"));
+            a.Should().Contain("[lab]\n")
+                .And.Contain("exten => short,1,Answer()\n same => n,Wait(2)\n same => n,Hangup()")
+                .And.Contain("exten => long,1,Answer()\n same => n,Wait(120)\n same => n,Hangup()");
+            var b = await File.ReadAllTextAsync(Path.Join(run.ConfigDirectory, "b", "extensions.conf"));
+            b.Should().Contain("[lab-origin]\n")
+                .And.Contain("exten => short,1,Answer()\n same => n,Wait(2)\n same => n,Hangup()")
+                .And.Contain("exten => long,1,Answer()\n same => n,Wait(120)\n same => n,Hangup()");
+        }
+        finally
+        {
+            await run.DisposeAsync();
+        }
+    }
+
+    [Fact]
     public async Task WriteConfiguration_ShouldGiveEveryUserASecretOfItsOwnRun_WhenTwoRunsAreWritten()
     {
         var first = new MultiServerFixture();
@@ -33,7 +81,7 @@ public sealed class MultiServerConfigurationTests
                 }
             }
 
-            secrets.Should().OnlyHaveUniqueItems("two runs, two servers and four users never share a secret");
+            secrets.Should().OnlyHaveUniqueItems("two runs, two servers and every user never share a secret");
             var tracked = Directory.EnumerateFiles(DockerPaths.DockerDir, "*", SearchOption.AllDirectories)
                 .Select(File.ReadAllText).ToList();
             tracked.Should().NotContain(text => secrets.Any(text.Contains), "no secret of a run is written into the tree");

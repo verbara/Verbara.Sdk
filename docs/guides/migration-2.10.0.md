@@ -5,6 +5,9 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 
 | Package | Change | Kind |
 |---|---|---|
+| `Verbara.Sdk.Sessions` | [A call is found on the server that reported it](#a-call-is-found-on-the-server-that-reported-it) | lookups, behaviour, BREAKING |
+| `Verbara.Sdk.Sessions` | [A server is never attached from inside a session notification](#a-server-is-never-attached-from-inside-a-session-notification) | behaviour, BREAKING |
+| `Verbara.Sdk.Sessions` | [A call ends only when its server holds none of its channels](#a-call-ends-only-when-its-server-holds-none-of-its-channels) | fix, new member, behaviour |
 | `Verbara.Sdk.Resilience` | [`circuit.state` reports the breaker's current state](#circuitstate-reports-the-breakers-current-state) | metric meaning, BREAKING |
 | `Verbara.Sdk.Ari` | [A client that only makes REST calls can turn its events off](#a-client-that-only-makes-rest-calls-can-turn-its-events-off) | new option, new state |
 | `Verbara.Sdk.Ari` | [An observer that throws no longer stops delivery](#an-observer-that-throws-no-longer-stops-delivery) | behaviour |
@@ -13,8 +16,120 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [A WebSocket audio stream whose connection failed ends with `Error`](#a-websocket-audio-stream-whose-connection-failed-ends-with-error) | behaviour |
 | `Verbara.Sdk.Live` | [A channel subscriber's failure stays with that subscriber](#a-channel-subscribers-failure-stays-with-that-subscriber) | behaviour, BREAKING |
 | `Verbara.Sdk.Live` | [A live channel follows its dialplan location and caller ID](#a-live-channel-follows-its-dialplan-location-and-caller-id) | fix, behaviour |
+| `Verbara.Sdk.Live` | [A refused `Status` is counted and reported by the pool health check](#a-refused-status-is-counted-and-reported-by-the-pool-health-check) | new members, health check |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
 | `Verbara.Sdk.Ami` | [`NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends](#newextenevent-and-newcalleridevent-carry-what-the-wire-sends) | fix, new members |
+
+## Sessions
+
+### A call is found on the server that reported it
+
+**What changed.** `CallSessionManager` used to keep one channel-id index, one `linkedid` index and one bridge index
+for every server attached to it. It now keeps them per server id: a channel event of one server is correlated only with
+calls of that server, and never reaches a call of another. The same channel id, `linkedid` or bridge id reported by two
+servers is two calls.
+
+The unscoped lookups stay, are not obsolete, and now answer only when the id is unambiguous:
+`GetByChannelId(uniqueId)`, `GetByLinkedId(linkedId)` and `GetByBridgeId(bridgeId)` return the call of the one server
+that holds the id, and `null` when two or more servers hold it. They used to return whichever call last wrote the
+shared index. Three scoped lookups are new, on `CallSessionManager` and on `ICallSessionManager`:
+`GetByChannelId(serverId, uniqueId)`, `GetByLinkedId(serverId, linkedId)` and `GetByBridgeId(serverId, bridgeId)`.
+Each returns the call that server's index holds for the id, or `null`.
+
+`RegisterReconstructedSession` is scoped to the session's server too. It refuses, logged at Information, a session id
+already held, a null or empty `linkedid`, a `linkedid` its server already holds, and a call carrying a leg its server
+maps to another call; a refusal leaves every index as it was. An accepted call joins the legs its server's channel
+table holds for its `linkedid`.
+
+The CHANGELOG labels this `Changed — BREAKING`: a lookup that found one call now finds none when two servers report the
+same id, and one Asterisk attached under two server ids now yields two calls per call.
+
+**Who is affected.** Nobody whose servers each have their own `systemname` and are each attached once: their ids never
+collide, and every lookup answers as before. Otherwise:
+
+- A caller of an unscoped lookup on a pool whose servers share ids (two Asterisk servers without `systemname`) gets
+  `null` where it used to get one of the calls, sometimes the wrong one.
+- A host that attaches one Asterisk under two server ids gets two sessions per call, one per id, where it got one.
+  The session engine already logged that as a misconfiguration, and still does.
+- An implementation of `ICallSessionManager` of your own keeps compiling: the three scoped lookups have a default
+  implementation that calls the unscoped lookup and keeps its answer only when the call belongs to the named server. So
+  the default returns `null` for an id two servers hold, even where your own indexes could tell the calls apart.
+  Override the three members to answer per server.
+
+**What to do.**
+
+- Where you know the server, call the scoped lookup: the server id is the one you passed to `AttachToServer`, and a
+  session carries it as `CallSession.ServerId`. A host built with `AddVerbaraSessions` attaches its one server under
+  `default`.
+- Give every Asterisk of a pool its own `systemname` in `asterisk.conf` (`[options]`), and attach each Asterisk once.
+  Calls of two servers are no longer mixed without it, but every consumer that keys a call by `linkedid` alone, the
+  unscoped lookups and `ISessionStore.GetByLinkedIdAsync` included, still cannot tell them apart. The collision Warning
+  says so.
+- Treat a `null` from an unscoped lookup as "not found or not unique", and fall back to the scoped lookup when it
+  matters which.
+
+### A server is never attached from inside a session notification
+
+**What changed.** `AttachToServer` called from inside a notification of the session engine (a subscriber of `Events`)
+or from an attachment handler now throws `InvalidOperationException` naming the server id, before it installs anything.
+That includes an attach of the instance already attached under that id, which is otherwise a no-op. In 2.9.0 only an
+attach that had to wait for a release in progress of its id was refused there. The reason: an attach now reconciles the
+calls the server left (below) under each call's lock, and a subscriber runs with one call's lock held.
+
+**Who is affected.** Code that attaches a server from a session subscriber, for example a failover that reacts to a
+notification. A subscriber that detaches with `DetachFromServer(id)` (the `Keep` form) and then attaches in the same
+callback ends up detached: the detach stands, and the attach throws.
+
+**What to do.** Catch the exception inside the subscriber, or better, never attach there: hand the attach to another
+thread and do not wait for it inside the subscriber, because it takes the lock of each call the server left, the one
+your subscriber holds included. The refusal also covers a subscriber of another session engine's notifications. Two
+neighbours have a related rule: do not call `RegisterReconstructedSession` synchronously from a subscriber, and do not
+wait there for `AdmitExistingCalls`.
+
+### A call ends only when its server holds none of its channels
+
+**What changed.** A call the engine did not observe from its start (a call registered with
+`RegisterReconstructedSession`, a call a reload or `AdmitExistingCalls` opened, or a call a server left behind when it
+was detached) used to be ended from its participant list. It is now decided against its server's channel table, by its
+`linkedid`, and only once that table is complete on its current AMI session: it ends when the table holds none of its
+channels, and is kept while it holds one. A call the engine observed from its start ends as before.
+
+`AdmitExistingCalls(serverId)` is new on `CallSessionManager` and on `ICallSessionManager`. Called after
+`AttachToServer` (and, in a failover, after `RegisterReconstructedSession`), it opens a session, as a reload does, for
+every call the server's channel table holds that no session holds, and joins the legs of calls already held, so a
+reconstructed call gains its legs. Each session it opens raises `CallStartedEvent`. A channel another call of that
+server already owns keeps its owner. Repeating the admission adds nothing. Its walk never runs on the caller's thread.
+When the server's table is not complete it first asks Asterisk for one `Status`. A detach stops it without an error. An
+id with no instance attached throws `InvalidOperationException`; the interface's default implementation admits nothing.
+
+A server that comes back under an id whose calls it left (detached with `DetachFromServer(id)` and attached again)
+reconciles those calls once its table is complete: at the attach itself if it already is, otherwise at the next
+completed `Status`. A left call of which the table holds no channel ends as a reload ends it, with
+`Metadata["cause"] == "reload"`; one with a channel still up is kept and ends by its own hangup. In 2.9.0 a left call
+whose hangup fell while its server was away stayed open for the life of the process, counted `sessions.unverifiable` on
+every tick.
+
+**Who is affected.** A host that attaches a server by hand after its start, such as a cluster's node attach: it used to
+get no session for the calls the server already held. A host that re-attaches a server under the same id. And a server
+whose AMI user may not run `Status`: there such a call is never decided, because its table never completes. That
+includes every session `AdmitExistingCalls` opens, and every call left before a re-attach of that server, which 2.9.0
+ended by its legs' observed hangups. Such calls are counted `sessions.unverifiable` on every sweep tick, and the pool
+health check reads `Degraded` (see [Live](#a-refused-status-is-counted-and-reported-by-the-pool-health-check)).
+
+**What to do.**
+
+- After attaching a server that may already carry calls, call `AdmitExistingCalls` with the same id:
+
+  ```csharp
+  sessions.AttachToServer(server, "pbx-east");
+  // A cluster's failover registers its reconstructed calls here, then admits.
+  await sessions.AdmitExistingCalls("pbx-east", cancellationToken);
+  ```
+
+- Give every server's AMI user `Status`: `system`, `call` or `reporting` in its `write` line.
+- For a server whose `Status` stays refused, release its waiting calls with
+  `DetachFromServer(id, DetachedCalls.Release)` once you know it is gone.
+- Keep an alert on `sessions.unverifiable > 0`: the calls waiting on a server whose `Status` is refused are counted there.
 
 ## ARI
 
@@ -150,6 +265,25 @@ participant's `CallerIdNum` and `CallerIdName`, keep the values read when they w
 **What to do.** For the start of the call, read the session's `Context` and `Extension`. To have channels follow their
 location, see [the cost of `dialplan`](troubleshooting.md#the-cost-of-dialplan-and-a-filter-that-removes-it): delete the
 filter's `name(Newexten)` line and accept the volume it adds.
+
+### A refused `Status` is counted and reported by the pool health check
+
+**What changed.** A `Status` that Asterisk refuses (an AMI user whose `write` has none of `system`, `call` or
+`reporting`) used to leave only a log line. Each refusal on a load, a reload or a reconciliation now adds one to
+`live.status.refused` (meter `Verbara.Sdk.Live`), tagged `live.status.reader` (`load` or `reconciliation`) and
+`server.id` when the server is in a pool. `VerbaraServer.LastStatusRefusal` is new: the last refusal's `Message` and
+its UTC `OccurredAt`, or `null`; a later `Status` read in full clears it. The `verbara-pool` health check reads
+`Degraded`, where it read `Healthy`, while every server is connected and at least one has a last refusal, and its data
+gains one `status-refused` entry: `serverId: message` per refused server, joined by `; `. Each server's own entry still
+holds its connection state.
+
+**Who is affected.** A pool with a server whose AMI user may not run `Status`: its health check moves from `Healthy` to
+`Degraded`. A reader of the check's data that expects only server ids as keys: `status-refused` is a reserved id, which
+the pool has refused as a server id since 2.9.0.
+
+**What to do.** Give the server's AMI user `Status`, or alert on `live.status.refused` and on the `Degraded` check. On
+such a server the session engine cannot decide the calls it did not see whole, see
+[above](#a-call-ends-only-when-its-server-holds-none-of-its-channels).
 
 ## AMI
 

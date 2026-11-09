@@ -73,7 +73,7 @@ public sealed class AriBridgesResource : IAriBridgesResource
         if (offsetms.HasValue) query += $"&offsetms={offsetms.Value}";
         if (skipms.HasValue) query += $"&skipms={skipms.Value}";
         if (playbackId is not null) query += $"&playbackId={Uri.EscapeDataString(playbackId)}";
-        if (format is not null) query += $"&format={Uri.EscapeDataString(format)}";
+        if (format is not null) query += $"&announcer_format={Uri.EscapeDataString(format)}";
 
         var response = await _http.PostAsync(
             $"bridges/{Uri.EscapeDataString(bridgeId)}/play?{query}", null, cancellationToken);
@@ -90,7 +90,7 @@ public sealed class AriBridgesResource : IAriBridgesResource
         if (ifExists is not null) query += $"&ifExists={Uri.EscapeDataString(ifExists)}";
         if (beep.HasValue) query += $"&beep={beep.Value.ToString().ToLowerInvariant()}";
         if (terminateOn is not null) query += $"&terminateOn={Uri.EscapeDataString(terminateOn)}";
-        if (format is not null) query += $"&announcerFormat={Uri.EscapeDataString(format)}";
+        if (format is not null) query += $"&recorder_format={Uri.EscapeDataString(format)}";
 
         var response = await _http.PostAsync(
             $"bridges/{Uri.EscapeDataString(bridgeId)}/record?{query}", null, cancellationToken);

@@ -197,6 +197,7 @@ await bus.PublishAsync(sample);
             ["Asterisk:Ari:Application"] = "canary",
             ["Asterisk:Ari:AutoReconnect"] = "false",
             ["Asterisk:AgiPort"] = "4999",
+            ["Asterisk:HealthCheckTags:0"] = "canary-voice",
         })
         .Build();
     var hostingServices = new ServiceCollection();
@@ -213,6 +214,47 @@ await bus.PublishAsync(sample);
         Console.Error.WriteLine("AOT canary: AddVerbara(IConfiguration) did not deliver the configured values.");
         return 1;
     }
+
+    // The host-wide health-check tags are read from Asterisk:HealthCheckTags by the same generated binder, and the
+    // SDK's checks are added to HealthCheckServiceOptions by a Configure that reads them.
+    var hostingHealth = hostingProvider.GetRequiredService<IOptions<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckServiceOptions>>().Value;
+    var hostingTags = string.Join(" ", hostingHealth.Registrations
+        .OrderBy(registration => registration.Name, StringComparer.Ordinal)
+        .Select(registration => $"{registration.Name}=[{string.Join(",", registration.Tags.Order(StringComparer.Ordinal))}]"));
+    Console.WriteLine($"AddVerbara(IConfiguration) health tags: {hostingTags}");
+    foreach (var checkName in new[] { "ami", "live", "agi", "ari" })
+    {
+        var registration = hostingHealth.Registrations.SingleOrDefault(r => string.Equals(r.Name, checkName, StringComparison.Ordinal));
+        if (registration is null || !registration.Tags.Contains("canary-voice"))
+        {
+            Console.Error.WriteLine($"AOT canary: the {checkName} health check does not carry the configured host-wide tag.");
+            return 1;
+        }
+    }
+}
+
+// Exercise AddVerbaraAri with the Hosting README's example as written (the callback's body is the README's), so the
+// example compiles and the ARI-only registration, its options copy and the client's factory reach ILC's analysis.
+{
+    var builder = new { Services = (IServiceCollection)new ServiceCollection() };
+    builder.Services.AddLogging();
+    builder.Services.AddVerbaraAri(options =>
+    {
+        options.BaseUrl = "http://pbx.example.com:8088";
+        options.Username = "admin";
+        options.Password = "secret";
+        options.Application = "my-app";
+        options.EventsEnabled = false;
+    });
+    await using var ariOnlyProvider = builder.Services.BuildServiceProvider();
+    var ariOnly = ariOnlyProvider.GetRequiredService<IAriClient>();
+    var ariOnlyHasAmi = ariOnlyProvider.GetService<IAmiConnection>() is not null;
+    Console.WriteLine($"AddVerbaraAri: state={ariOnly.State} ami={ariOnlyHasAmi}");
+    if (ariOnly.State != Verbara.Sdk.Enums.AriConnectionState.RestOnly || ariOnlyHasAmi)
+    {
+        Console.Error.WriteLine("AOT canary: AddVerbaraAri did not register a REST-only client alone.");
+        return 1;
+    }
 }
 
 // Exercise the multi-server sessions registration: its pool sweep is a hosted service built by an explicit factory, and
@@ -221,6 +263,7 @@ await bus.PublishAsync(sample);
     var poolServices = new ServiceCollection();
     poolServices.AddLogging();
     poolServices.AddVerbaraMultiServer();
+    poolServices.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("canary-pool"));
     var sessionsConfiguration = new ConfigurationBuilder()
         .AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -256,6 +299,21 @@ await bus.PublishAsync(sample);
     {
         Console.Error.WriteLine("AOT canary: AddVerbaraSessionsMultiServer registered no pool sweep.");
         return 1;
+    }
+
+    var poolHealth = poolProvider.GetRequiredService<IOptions<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckServiceOptions>>().Value;
+    var poolTags = string.Join(" ", poolHealth.Registrations
+        .OrderBy(registration => registration.Name, StringComparer.Ordinal)
+        .Select(registration => $"{registration.Name}=[{string.Join(",", registration.Tags.Order(StringComparer.Ordinal))}]"));
+    Console.WriteLine($"AddVerbaraMultiServer health tags: {poolTags}");
+    foreach (var checkName in new[] { "verbara-pool", "sessions" })
+    {
+        var registration = poolHealth.Registrations.SingleOrDefault(r => string.Equals(r.Name, checkName, StringComparison.Ordinal));
+        if (registration is null || !registration.Tags.Contains("canary-pool"))
+        {
+            Console.Error.WriteLine($"AOT canary: the {checkName} health check does not carry the configured host-wide tag.");
+            return 1;
+        }
     }
 }
 

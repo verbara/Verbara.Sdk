@@ -111,7 +111,8 @@ public sealed class AriAsteriskResource : IAriAsteriskResource
     public async ValueTask RotateLogChannelAsync(string logChannelName, CancellationToken cancellationToken = default)
     {
         var url = $"asterisk/logging/{Uri.EscapeDataString(logChannelName)}/rotate";
-        var response = await _http.PostAsync(url, null, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Put, url);
+        var response = await _http.SendAsync(request, cancellationToken);
         await response.EnsureAriSuccessAsync("logChannel", logChannelName);
     }
 

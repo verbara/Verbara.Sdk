@@ -259,18 +259,27 @@ no public API is added or removed, but those calls now end.
    Both together are correct (each reconciliation keeps its own read window) but send two `Status` per server per tick.
 2. **Attach each server under its id in the pool**: `AttachToServer(server, id)` with the id you gave
    `AddExistingServer` or `AddServerAsync`. The sweep picks a server's candidates by that id; a session attached under
-   any other id is never verified and is counted as `serverless`.
-3. **Give every Asterisk of the pool its own `systemname`** (`asterisk.conf`, `[options]`). The session engine finds a
-   call by the channel ids Asterisk issues, and two servers without a system name issue the same ids
-   (`<epoch>.<sequence>`) in the same second: a hangup on one server can then end a call of the other, and calls of
-   both servers can share one session. That happens on every `Hangup`, with or without the sweep; the sweep neither
-   causes nor repairs it, and what it promises holds only where channel ids are unique across the pool. The session
-   engine logs a Warning the first time two of its servers report the same id (see
-   [troubleshooting](troubleshooting.md#multi-server-pools)).
-4. **The AMI user of every server needs `Status`**: `system`, `call` or `reporting` in its `write` line (`write = all`
+   any other id is never verified and is counted as `serverless`. Never attach from inside a subscriber of the
+   session engine's `Events`: since 2.10.0 that throws `InvalidOperationException` before anything is attached.
+3. **Admit the calls a server already carries** (since 2.10.0): after `AttachToServer`, and after registering any
+   reconstructed call, call `AdmitExistingCalls(id)` with the same id. Without it, a server attached while calls are
+   up gets no session for them. It opens a session for each call the server's channel table holds that no session
+   holds, joins the legs of calls already held, and asks for one `Status` first when the table is not complete. See
+   [the 2.10.0 migration guide](migration-2.10.0.md#a-call-ends-only-when-its-server-holds-none-of-its-channels).
+4. **Give every Asterisk of the pool its own `systemname`** (`asterisk.conf`, `[options]`), and attach each Asterisk
+   once. Two servers without a system name issue the same channel ids (`<epoch>.<sequence>`) in the same second. Since
+   2.10.0 the session engine keeps those calls apart, one index per server, so a hangup on one server no longer ends a
+   call of the other. But a lookup that names no server returns `null` for an id two servers hold, and a consumer that
+   keys a call by `linkedid` alone cannot tell the calls apart: use `GetByChannelId(serverId, uniqueId)`,
+   `GetByLinkedId(serverId, linkedId)` and `GetByBridgeId(serverId, bridgeId)`. The session engine logs a Warning the
+   first time two of its servers report the same id (see [troubleshooting](troubleshooting.md#multi-server-pools)).
+5. **The AMI user of every server needs `Status`**: `system`, `call` or `reporting` in its `write` line (`write = all`
    includes them). A server whose user may not run it logs `[LIVE] Status refused: …` at Warning once per AMI session,
-   and its lost hangups stay open, as on a single server.
-5. **Detach a server removed for good with `DetachedCalls.Release`** (since 2.9.0):
+   and its lost hangups stay open, as on a single server. Since 2.10.0 each refusal also counts on
+   `live.status.refused`, the `verbara-pool` health check reads `Degraded` and names the server under `status-refused`,
+   and the calls the engine did not see whole (admitted, reconstructed or left) wait on that server until a `Status`
+   completes, counted `sessions.unverifiable` on every tick.
+6. **Detach a server removed for good with `DetachedCalls.Release`** (since 2.9.0):
    `DetachFromServer(id, DetachedCalls.Release)`. The one-argument detach keeps its calls held and counted as
    `serverless` on every tick; see [a server that leaves the pool](#a-server-that-leaves-the-pool). Keep the
    one-argument detach where another instance takes the server over. Call the release from your own code, never
@@ -284,9 +293,10 @@ The registration's `configure` delegate is the switch:
 builder.Services.AddVerbaraSessionsMultiServer(o => o.ReconciliationInterval = Timeout.InfiniteTimeSpan);
 ```
 
-No timer is started and nothing is sent. No SDK registration binds a `Sessions` configuration section (`AddVerbara`
-binds only `Asterisk:Ami` and `Asterisk:Ari`). To drive the options from configuration, bind the section inside the
-delegate yourself:
+No timer is started and nothing is sent. Since 2.9.0, `AddVerbaraSessionsMultiServer(builder.Configuration)` binds the
+`Sessions` section with generated code; see the
+[Hosting README](../../src/Verbara.Sdk.Hosting/README.md#session-options-from-configuration). Before 2.9.0 no SDK
+registration bound it, and a host bound the section inside the delegate itself:
 
 ```csharp
 var sessions = builder.Configuration.GetSection("Sessions");
@@ -332,8 +342,10 @@ its lost hangups: every lost hangup ended once, no call Asterisk still had was e
 ### A server that leaves the pool
 
 With the one-argument `DetachFromServer`, or `DetachFromServer(id, DetachedCalls.Keep)`, the sessions of a server that
-was detached and removed, or that came back as a new instance under the same id, stay held: the sweep neither verifies
-nor ends them, and counts them as `serverless` on every tick. The SDK cannot tell whether such a call is over.
+was detached and removed stay held: the sweep neither verifies nor ends them, and counts them as `serverless` on every
+tick. Since 2.10.0, when a server is attached again under that id, the same instance or a new one, the calls it left
+are decided against its channel table once that table is complete: a call of which the table holds no channel ends as
+a reload ends it, and one with a channel still up is kept. The SDK cannot tell whether such a call is over.
 `DetachFromServer` is the same call when a cluster hands a node over to another instance, which restores those calls
 from a shared store and goes on following them, and when an operator removes a node; ending the sessions on detach
 would raise false `CallEndedEvent`s and write a false ending into a store another instance is reading, and ending them
