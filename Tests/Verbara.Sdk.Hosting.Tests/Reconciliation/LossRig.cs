@@ -36,6 +36,14 @@ namespace Verbara.Sdk.Hosting.Tests.Reconciliation;
 /// a hold the rig writes an event only once the one before it was dispatched.
 /// </para>
 /// <para>
+/// <b>Answers take buffer slots too.</b> The reader hands a copy of every event of an action's answer (a <c>Status</c>
+/// list, a reload's lists) to the same two-event buffer. A copy the full buffer refuses loses nothing, but one it accepts
+/// holds a slot, and the tail written behind two of them is refused while an event is in dispatch: a loss the rig never
+/// meant, and a tail that never comes. So the rig writes the tail only once no copy can still reach the buffer: an answer
+/// written by hand is fenced before it returns (under a hold, its copies are refused), and after a reconnect the tail
+/// waits for the reload to return (its lists' barriers have dispatched through every copy).
+/// </para>
+/// <para>
 /// <b>Clocks.</b> The sweep and the manager read <see cref="Clock"/>; the server's barrier waits on
 /// <see cref="LiveClock"/>. A <c>Status</c> sent while the dispatch is held makes its barrier wait for a pump that cannot
 /// move: <see cref="RunAsync"/> sees the wait begin, advances <see cref="LiveClock"/> past the barrier's bound and lets
@@ -352,17 +360,37 @@ internal sealed class LossRig : IAsyncDisposable
             ? _seen.GetOrAdd(buffered, static _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task
             : Task.CompletedTask;
         _lastBuffered = null;
+
+        // A session logged in behind the hold reloads once the held one is delivered, and its lists' copies share the new
+        // session's buffer with the tail: the tail is written only once that reload has returned.
+        var reconnecting = Server.IsReconnectPending;
         _gate.TrySetResult();
         _holding = false;
         await last.WaitAsync(Bound);
+        if (reconnecting)
+            await ReconnectHandledAsync();
         await Peer.WriteEventAsync("PeerStatus", [new("Peer", tail), new("PeerStatus", "Reachable")]);
-        await seen.WaitAsync(Bound);
+        await DispatchedOrExplainAsync(seen, tail);
 
         // The tail's handler is signalled before it returns, and the consumer passes the drop only once it has returned.
         // It reads the next event only after that, so the next event's dispatch says the tail's has been counted.
         var after = Seen("PeerStatus", tail + "/after");
         await Peer.WriteEventAsync("PeerStatus", [new("Peer", tail + "/after"), new("PeerStatus", "Reachable")]);
-        await after.WaitAsync(Bound);
+        await DispatchedOrExplainAsync(after, tail + "/after");
+    }
+
+    // A wait for an event the rig wrote: when it runs out, the message lists what the full buffer refused.
+    private async Task DispatchedOrExplainAsync(Task dispatched, string peer)
+    {
+        try
+        {
+            await dispatched.WaitAsync(Bound);
+        }
+        catch (TimeoutException ex)
+        {
+            var refused = ConnectionLog.Entries.Select(e => e.Line).Where(l => l.Contains("Dropped", StringComparison.Ordinal));
+            throw new TimeoutException($"PeerStatus {peer} was not dispatched. Refused: [{string.Join("; ", refused)}]", ex);
+        }
     }
 
     /// <summary>Opens the held dispatch without waiting for anything.</summary>
@@ -419,8 +447,15 @@ internal sealed class LossRig : IAsyncDisposable
         return _statusIds.ElementAt(n - 1);
     }
 
-    /// <summary>Answers the <c>Status</c> <paramref name="id"/> by hand, listing <paramref name="uids"/>.</summary>
-    public Task AnswerStatusAsync(string id, params string[] uids) => AnswerAsync(Peer, id, uids);
+    /// <summary>
+    /// Answers the <c>Status</c> <paramref name="id"/> by hand, listing <paramref name="uids"/>; returns once the reader
+    /// has handed every event of the answer to the buffer, so none reaches it after a later <see cref="DeliverAsync"/>.
+    /// </summary>
+    public async Task AnswerStatusAsync(string id, params string[] uids)
+    {
+        await AnswerAsync(Peer, id, uids);
+        await FenceAsync();
+    }
 
     private async Task AnswerAsync(PipedSocket socket, string id, string[] uids)
     {
