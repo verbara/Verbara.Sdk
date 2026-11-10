@@ -67,7 +67,7 @@ internal sealed class LossRig : IAsyncDisposable
     private readonly List<Task> _served = [];
     private TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private TaskCompletionSource _loadDispatched = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _loadDispatched = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Task _serving = Task.CompletedTask;
     private volatile bool _loaded;
     private volatile bool _holding;
@@ -289,7 +289,7 @@ internal sealed class LossRig : IAsyncDisposable
                 await handler();
                 done.TrySetResult();
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 done.TrySetException(ex);
             }
@@ -387,7 +387,7 @@ internal sealed class LossRig : IAsyncDisposable
                 await handler();
                 done.TrySetResult();
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 done.TrySetException(ex);
             }

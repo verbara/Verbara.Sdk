@@ -117,14 +117,11 @@ internal static partial class StatusSenderScanner
             if (line.TrimStart().StartsWith("//", StringComparison.Ordinal))
                 continue;
 
-            foreach (Match call in Sender().Matches(line))
-            {
-                var name = call.Groups["name"].Value;
-                if (declaration.Success && declaration.Groups["name"].Value == name)
-                    continue;
-
+            var declared = declaration.Success ? declaration.Groups["name"].Value : null;
+            foreach (var name in Sender().Matches(line)
+                         .Select(call => call.Groups["name"].Value)
+                         .Where(called => called != declared))
                 yield return new Hit(new Site(relativePath, member, name), i + 1);
-            }
         }
     }
 
