@@ -5,7 +5,8 @@ using Verbara.Sdk.Ami.Actions;
 namespace Verbara.Sdk.Hosting.Tests.Reconciliation;
 
 /// <summary>
-/// When the sweep asks Asterisk and what it asks: nothing while no held call is old enough, and one
+/// When the sweep asks Asterisk and what it asks: nothing while no held call is old enough and no event was lost (the
+/// rig's connection cannot lose one), and one
 /// <c>Status</c> — no <c>QueueStatus</c>, no <c>Agents</c> — for a sweep that holds any number of candidates.
 /// </summary>
 [Collection(SweepCounterGroup.Name)]
@@ -19,7 +20,7 @@ public sealed class SweepAsksOnceTests : IAsyncLifetime
     public Task DisposeAsync() => _rig.DisposeAsync().AsTask().WaitAsync(SweepRig.Bound);
 
     [Fact]
-    public async Task Sweep_ShouldSendNothing_WhenNoHeldCallIsOlderThanTheDialingTimeout()
+    public async Task Sweep_ShouldSendNothing_WhenNoHeldCallIsOldEnoughAndNoEventWasLost()
     {
         _rig.DialingCall("young-dialing");
         _rig.ConnectedCall("young-connected");
@@ -29,7 +30,8 @@ public sealed class SweepAsksOnceTests : IAsyncLifetime
         await SweepRig.SweepOnceAsync(sweep);
 
         _rig.ActionsSent().Should().BeEmpty(
-            "no held call is older than the dialing timeout, so the sweep has nothing to verify and asks nothing");
+            "no held call is older than the dialing timeout and the connection cannot lose an event, so the sweep has "
+            + "nothing to verify and asks nothing");
     }
 
     [Fact]
