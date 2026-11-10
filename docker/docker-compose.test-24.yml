@@ -42,7 +42,7 @@ services:
         ASTERISK_VERSION: "24"
         CODEC_OPUS_VERSION: "24.0_1.3.0"
         # The 24 line of asterisk-base-images.txt; the Dockerfile refuses a base of another version.
-        ASTERISK_BASE_IMAGE: "andrius/asterisk:24.0.0_debian-trixie-PENDING_BUILD@sha256:PENDING_24_0_0"
+        ASTERISK_BASE_IMAGE: "ghcr.io/verbara/asterisk-base:24.0.0_trixie-c62758c@sha256:09d05c27812adc0ab863be12f325acd71bbba040a3d71c639f07dbdc00a7cd7f"
     container_name: asterisk-sdk-test-24
     networks:
       - sdk-test-24
@@ -70,7 +70,7 @@ services:
         ASTERISK_VERSION: "24"
         CODEC_OPUS_VERSION: "24.0_1.3.0"
         # The 24 line of asterisk-base-images.txt; the Dockerfile refuses a base of another version.
-        ASTERISK_BASE_IMAGE: "andrius/asterisk:24.0.0_debian-trixie-PENDING_BUILD@sha256:PENDING_24_0_0"
+        ASTERISK_BASE_IMAGE: "ghcr.io/verbara/asterisk-base:24.0.0_trixie-c62758c@sha256:09d05c27812adc0ab863be12f325acd71bbba040a3d71c639f07dbdc00a7cd7f"
     container_name: asterisk-sdk-test-24-pstn
     networks:
       - sdk-test-24

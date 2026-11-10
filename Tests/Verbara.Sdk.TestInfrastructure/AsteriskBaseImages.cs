@@ -5,7 +5,9 @@ namespace Verbara.Sdk.TestInfrastructure;
 /// <c>&lt;version&gt; &lt;image&gt;:&lt;build tag&gt;@&lt;digest&gt;</c> line per supported version, <c>#</c> comments.
 /// </summary>
 /// <remarks>
-/// The publisher re-publishes each version tag weekly with a new build, so a version alone does not name a server.
+/// A version alone does not name a server: each line pins one build by its per-build tag and digest. The 22, 23 and
+/// 24 lines are this repository's own base (<c>.github/workflows/asterisk-base.yml</c>), whose tags are never rebuilt
+/// over; the 20 control line is a third-party build whose version tags are re-published weekly.
 /// A version with no line fails here, before any image is built, rather than fall back to a tag.
 /// </remarks>
 public static class AsteriskBaseImages
