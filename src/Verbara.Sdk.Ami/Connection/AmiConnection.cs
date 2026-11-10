@@ -343,6 +343,46 @@ public sealed class AmiConnection : IAmiConnection
             : new AmiEventLossMark(Volatile.Read(ref _sessionOrdinal), Volatile.Read(ref _eventPump)?.DroppedUncollectedEvents ?? 0);
 
     /// <summary>
+    /// What this connection has lost now: the current AMI session and how many events its buffer has dropped because it
+    /// was full, read the same inside and outside a dispatch. Unlike <see cref="EventLossMark"/>, which inside an
+    /// observer's <c>OnNext</c> or an <c>OnEvent</c> handler is the mark the delivered event carried when it arrived, this
+    /// one counts a drop the buffer refused while that event waited. A dropped copy of an event an action had already
+    /// received is not counted, as in <see cref="EventLossMark"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The pump is read before the session, and a session start writes the session before the pump: around a session
+    /// start this mark may pair the new session with the previous pump's count, a mark no earlier read could have taken,
+    /// and never the previous session with the new pump's count.
+    /// </para>
+    /// <para>
+    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
+    /// any newer Ami.
+    /// </para>
+    /// </remarks>
+    internal AmiEventLossMark CurrentEventLossMark
+    {
+        get
+        {
+            var dropped = Volatile.Read(ref _eventPump)?.DroppedUncollectedEvents ?? 0;
+            return new AmiEventLossMark(Volatile.Read(ref _sessionOrdinal), dropped);
+        }
+    }
+
+    /// <summary>
+    /// Whether the current session's buffer has dispatched or dropped every event up to the last one it dropped because it
+    /// was full: false while an event received before that loss is still buffered or in its handler, true with no loss and
+    /// once delivery has passed it, also when no event follows it. A dropped copy of an event an action had already
+    /// received is no loss here either. One non-blocking read, no waiter and no timer; true with no session.
+    /// </summary>
+    /// <remarks>
+    /// A new session's buffer has lost nothing, so this reads only the current buffer; whether the session change itself
+    /// has been delivered is <see cref="ReconnectPending"/>'s. Called by Verbara.Sdk.Live; kept with this signature until
+    /// 3.0, because a Live package of the 2.x line runs on any newer Ami.
+    /// </remarks>
+    internal bool DeliveredThroughLastLoss => Volatile.Read(ref _eventPump)?.DeliveredThroughLastLoss ?? true;
+
+    /// <summary>
     /// Raised once for each loss of an established connection that its caller did not ask for, with what ended it:
     /// <see langword="null"/> when the stream ended (Asterisk closed it, or it was reset, which the socket transport
     /// reports the same way), a <see cref="TimeoutException"/> when the heartbeat's Ping went unanswered, or the
@@ -827,7 +867,10 @@ public sealed class AmiConnection : IAmiConnection
             };
             pump.OnDropEpisodeEnded = (count, duration) =>
                 AmiConnectionLog.DropEpisodeEnded(_logger, count, (long)duration.TotalMilliseconds);
-            _eventPump = pump;
+
+            // Published last, after the session ordinal: CurrentEventLossMark reads the pump first, so it never pairs the
+            // previous session with this pump's count.
+            Volatile.Write(ref _eventPump, pump);
 
             // The pump buffers from now on but dispatches only once the previous session's pump has been released (its
             // buffer delivered, or cut by the caller's ending): one consumer at a time, the lost session's events first.

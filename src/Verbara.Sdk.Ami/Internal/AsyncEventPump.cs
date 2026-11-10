@@ -20,6 +20,10 @@ public sealed class AsyncEventPump : IAsyncDisposable
     private long _droppedOnDispose;
     private long _droppedBeforeCurrent;
 
+    // The ordinal of the last refused event no action received; 0 before the first. The one writer moves it, on a refusal,
+    // before it counts the loss.
+    private long _lastLossOrdinal;
+
     // The overflow episode in progress: the refusals since the buffer last accepted an event, and the clock's timestamp
     // at the first of them. The one writer moves them; a release takes the episode with an exchange, so a refusal and a
     // release never report the same episode twice.
@@ -96,6 +100,32 @@ public sealed class AsyncEventPump : IAsyncDisposable
     /// even when no event follows it.
     /// </summary>
     internal long DispatchedThrough => Volatile.Read(ref _dispatchedThrough);
+
+    /// <summary>
+    /// The ordinal of the last refused event no action received (a refusal counted in
+    /// <see cref="DroppedUncollectedEvents"/>); 0 before the first. A refused copy of an event an action had received does
+    /// not move it. The refusal writes it before it counts the loss, so a reader that sees the loss counted sees its ordinal.
+    /// </summary>
+    internal long LastLossOrdinal => Volatile.Read(ref _lastLossOrdinal);
+
+    /// <summary>
+    /// Whether every event up to the last lost one (<see cref="LastLossOrdinal"/>) has been dispatched or dropped:
+    /// <see cref="DispatchedThrough"/> has reached it. False while an event received before the loss is still buffered or in
+    /// its handler; true with no loss, and once the consumer has passed the loss, also when no event follows it. One
+    /// non-blocking read: no waiter, no timer.
+    /// </summary>
+    /// <remarks>
+    /// The progress is read before the loss. Both only grow, so a true result still held when the loss was read, and a
+    /// loss refused after the progress was read reads false.
+    /// </remarks>
+    internal bool DeliveredThroughLastLoss
+    {
+        get
+        {
+            var through = Volatile.Read(ref _dispatchedThrough);
+            return through >= Volatile.Read(ref _lastLossOrdinal);
+        }
+    }
 
     /// <summary>Pending event count in the buffer.</summary>
     public int PendingCount => _channel.Reader.Count;
@@ -435,7 +465,12 @@ public sealed class AsyncEventPump : IAsyncDisposable
         {
             Interlocked.Increment(ref _droppedEvents);
             if (!collected)
+            {
+                // The ordinal before the count: a reader that sees the loss counted sees its ordinal, so it never reads a
+                // fresh loss as delivered.
+                Volatile.Write(ref _lastLossOrdinal, ordinal);
                 Interlocked.Increment(ref _droppedUncollected);
+            }
 
             // The refusal is logged, and _lastReceived published, under the lock, so the consumer returning to idle
             // either sees this drop or is seen idle here. With the consumer idle and the buffer empty, every earlier
@@ -451,9 +486,14 @@ public sealed class AsyncEventPump : IAsyncDisposable
             }
 
             Release(met, reached: true);
-            var opensEpisode = Interlocked.Increment(ref _episodeDrops) == 1;
-            if (opensEpisode)
+
+            // The episode's start before its count: a release that takes the episode once it is counted reads this
+            // refusal's start, never an earlier episode's. Only the writer raises the count from 0, so the read below
+            // decides who writes the start; a release can only lower the count.
+            if (Volatile.Read(ref _episodeDrops) == 0)
                 Volatile.Write(ref _episodeStartedAt, Clock.GetTimestamp());
+
+            var opensEpisode = Interlocked.Increment(ref _episodeDrops) == 1;
 
             OnEventDropped?.Invoke(evt);
             OnEventRefused?.Invoke(evt, opensEpisode);
