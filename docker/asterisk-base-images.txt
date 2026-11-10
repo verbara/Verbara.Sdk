@@ -1,11 +1,17 @@
 # The Asterisk base image of docker/Dockerfile.asterisk, one pinned build per supported version:
 #   <ASTERISK_VERSION> <image>:<build tag>@<registry digest>
-# The publisher re-publishes every version tag weekly with a new build; the per-build tag never moves and the digest
-# names the exact image. Testcontainers (AsteriskContainer) and the CI pre-build read the line of the ASTERISK_VERSION
-# they build; a version with no line fails before any build. The Dockerfile's default base is the 22 line, and
-# docker-compose.test-23.yml passes the 23 line: the Governance guard fails the unit lane until every copy matches.
+# The 22, 23 and 24 lines are this repository's own base: .github/workflows/asterisk-base.yml builds each line from
+# the official GPG-verified release tarball with the recipe in docker/base/, signs it (cosign) and attests its SBOM.
+# Its per-build tag (<version>_trixie-<recipe commit>) never moves: a published tag is never rebuilt or pushed over,
+# and the digest names the exact image. The 20 line is a third-party build (its publisher re-publishes version tags
+# weekly; the per-build tag never moves), kept as the measurement control.
+# Testcontainers (AsteriskContainer) and the CI pre-build read the line of the ASTERISK_VERSION they build; a version
+# with no line fails before any build. The Dockerfile's default base is the 22 line, and docker-compose.test-23.yml
+# and docker-compose.test-24.yml pass the 23 and 24 lines: the Governance guard fails the unit lane until every copy
+# matches.
 # Re-pinning is one reviewed edit here, with the new build's `asterisk -V` and digest measured first.
-# 20 is pinned for local measurement; CI runs 22 and 23.
+# 20 is pinned for local measurement; CI runs 22, 23 and 24.
 20 andrius/asterisk:20.20.1_debian-trixie-d0182a6@sha256:c202cdf0f0348ab75e6dee49967418ce8c08853644b8a5c00de91f6b4aca4dd1
-22 andrius/asterisk:22.11.0_debian-trixie-c6e8a0e@sha256:d6333b8b331563c5887b98b12da9371ef48317e657d17d81770fe085f335041d
-23 andrius/asterisk:23.5.0_debian-trixie-c6e8a0e@sha256:532e68e4194e968e866a27f321ccce03fdd66bd7e369ffa17c07e7210da0fde1
+22 ghcr.io/verbara/asterisk-base:22.12.0_trixie-c62758c@sha256:470d10b0382e9c822c7b334780f0795e1d09f61e111d798a43b959ba7e959df7
+23 ghcr.io/verbara/asterisk-base:23.6.0_trixie-c62758c@sha256:bed956493e84e22841013d7ba356ce68be529bf11fcf65ef95b59cfd0b4eb1b5
+24 ghcr.io/verbara/asterisk-base:24.0.0_trixie-c62758c@sha256:09d05c27812adc0ab863be12f325acd71bbba040a3d71c639f07dbdc00a7cd7f

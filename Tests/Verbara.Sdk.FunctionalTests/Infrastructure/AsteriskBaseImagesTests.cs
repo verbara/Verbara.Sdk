@@ -39,12 +39,13 @@ public sealed class AsteriskBaseImagesTests
         var resolve = () => AsteriskBaseImages.Resolve("99");
 
         resolve.Should().Throw<InvalidOperationException>()
-            .WithMessage("*asterisk-base-images.txt pins no Asterisk base for ASTERISK_VERSION '99'; it pins 20, 22, 23.*");
+            .WithMessage("*asterisk-base-images.txt pins no Asterisk base for ASTERISK_VERSION '99'; it pins 20, 22, 23, 24.*");
     }
 
     [Theory]
     [InlineData("22", ":22.")]
     [InlineData("23", ":23.")]
+    [InlineData("24", ":24.")]
     public void Resolve_ShouldReturnAPinnedBuildOfTheVersion_WhenTheMatrixVersionIsRead(string version, string tag)
     {
         var reference = AsteriskBaseImages.Resolve(version);

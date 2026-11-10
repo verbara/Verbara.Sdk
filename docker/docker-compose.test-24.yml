@@ -1,0 +1,86 @@
+# Parallel test stack targeting Asterisk 24 LTS.
+# Uses distinct network + container names + host ports so it can coexist
+# with docker-compose.test.yml (Asterisk 22 LTS) and docker-compose.test-23.yml (Asterisk 23). Run with:
+#
+#   docker compose -f docker/docker-compose.test-24.yml up --build --abort-on-container-exit
+#
+# All other test bits (Postgres schema, pstn-emulator config, toxiproxy) are
+# reused from the functional/ fixtures via bind mounts.
+
+networks:
+  sdk-test-24:
+    name: sdk-test-net-24
+
+services:
+  # ── PostgreSQL for Realtime ──
+  postgres:
+    image: postgres:18-alpine
+    container_name: asterisk-sdk-test-24-db
+    networks:
+      - sdk-test-24
+    environment:
+      POSTGRES_USER: asterisk
+      POSTGRES_PASSWORD: asterisk
+      POSTGRES_DB: asterisk
+    ports:
+      - "15434:5432"
+    volumes:
+      - ./functional/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asterisk"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
+
+  # ── Asterisk 24 LTS (unified image, realtime mode via PostgreSQL) ──
+  asterisk:
+    build:
+      context: .
+      dockerfile: Dockerfile.asterisk
+      args:
+        ASTERISK_VERSION: "24"
+        CODEC_OPUS_VERSION: "24.0_1.3.0"
+        # The 24 line of asterisk-base-images.txt; the Dockerfile refuses a base of another version.
+        ASTERISK_BASE_IMAGE: "ghcr.io/verbara/asterisk-base:24.0.0_trixie-c62758c@sha256:09d05c27812adc0ab863be12f325acd71bbba040a3d71c639f07dbdc00a7cd7f"
+    container_name: asterisk-sdk-test-24
+    networks:
+      - sdk-test-24
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "15042:5038"
+      - "15091:8088"
+    volumes:
+      - ./functional/asterisk-config:/etc/asterisk:ro
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show uptime"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  # ── PSTN Emulator (unified image, file-based mode) ──
+  pstn-emulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.asterisk
+      args:
+        ASTERISK_VERSION: "24"
+        CODEC_OPUS_VERSION: "24.0_1.3.0"
+        # The 24 line of asterisk-base-images.txt; the Dockerfile refuses a base of another version.
+        ASTERISK_BASE_IMAGE: "ghcr.io/verbara/asterisk-base:24.0.0_trixie-c62758c@sha256:09d05c27812adc0ab863be12f325acd71bbba040a3d71c639f07dbdc00a7cd7f"
+    container_name: asterisk-sdk-test-24-pstn
+    networks:
+      - sdk-test-24
+    ports:
+      - "15043:5038"
+    volumes:
+      - ./functional/pstn-emulator-config:/etc/asterisk:ro
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core show uptime"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
