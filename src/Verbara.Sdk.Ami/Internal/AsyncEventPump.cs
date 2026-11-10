@@ -24,6 +24,9 @@ public sealed class AsyncEventPump : IAsyncDisposable
     // before it counts the loss.
     private long _lastLossOrdinal;
 
+    // The ordinal of the event the handler is running for, or ran for last. Written by the consumer before the handler.
+    private long _currentEventOrdinal;
+
     // The overflow episode in progress: the refusals since the buffer last accepted an event, and the clock's timestamp
     // at the first of them. The one writer moves them; a release takes the episode with an exchange, so a refusal and a
     // release never report the same episode twice.
@@ -84,6 +87,12 @@ public sealed class AsyncEventPump : IAsyncDisposable
     /// in a full buffer arrived after it, and is not counted here.
     /// </summary>
     internal long DroppedBeforeCurrentEvent => Volatile.Read(ref _droppedBeforeCurrent);
+
+    /// <summary>
+    /// The ordinal of the event the handler is running for, or ran for last; 0 before the first. The consumer writes it
+    /// before it calls the handler, so a handler reads its own event's ordinal.
+    /// </summary>
+    internal long CurrentEventOrdinal => Volatile.Read(ref _currentEventOrdinal);
 
     /// <summary>
     /// The ordinal the next event handed to <see cref="TryEnqueue(ManagerEvent)"/> will carry, 1 for the first. Exact only
@@ -262,6 +271,7 @@ public sealed class AsyncEventPump : IAsyncDisposable
                     var ordinal = buffered.Ordinal;
                     Interlocked.Increment(ref _processedEvents);
                     Volatile.Write(ref _droppedBeforeCurrent, _uncollectedSeen);
+                    Volatile.Write(ref _currentEventOrdinal, ordinal);
                     var returned = false;
                     try
                     {

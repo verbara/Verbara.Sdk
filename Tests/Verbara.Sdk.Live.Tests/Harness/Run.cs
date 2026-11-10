@@ -40,7 +40,7 @@ internal sealed class Run : IAsyncDisposable
 
     private Run(BootingAsterisk firstPeer, BootingAsterisk? secondPeer, bool autoReconnect, TimeSpan reconnectInitialDelay,
         TimeSpan eventTimeout, TimeProvider? barrierClock, int maxReconnectAttempts = 0,
-        IReadOnlyList<BootingAsterisk>? laterPeers = null)
+        IReadOnlyList<BootingAsterisk>? laterPeers = null, int eventPumpCapacity = 0)
     {
         _laterPeers = laterPeers ?? [];
         FirstPeer = firstPeer;
@@ -61,6 +61,7 @@ internal sealed class Run : IAsyncDisposable
                 // No wall-clock bound inside a load by default: the test's own bound reports a load that hangs. A test
                 // of what a caller sees when the connection's own bound ends an action sets one.
                 DefaultEventTimeout = eventTimeout,
+                EventPumpCapacity = eventPumpCapacity > 0 ? eventPumpCapacity : Verbara.Sdk.Ami.Internal.AsyncEventPump.DefaultCapacity,
             }),
             _sockets,
             ConnectionLog);
@@ -108,12 +109,14 @@ internal sealed class Run : IAsyncDisposable
     /// </param>
     /// <param name="maxReconnectAttempts">The connection's <c>MaxReconnectAttempts</c>; 0, the default, never gives up.</param>
     /// <param name="laterPeers">The peers of the sockets after the second, in order.</param>
+    /// <param name="eventPumpCapacity">The connection's <c>EventPumpCapacity</c>; 0, the default, keeps the SDK's.</param>
     public static async Task<Run> ConnectAsync(BootingAsterisk firstPeer, BootingAsterisk? secondPeer = null,
         bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null, TimeSpan? eventTimeout = null,
-        TimeProvider? barrierClock = null, int maxReconnectAttempts = 0, IReadOnlyList<BootingAsterisk>? laterPeers = null)
+        TimeProvider? barrierClock = null, int maxReconnectAttempts = 0, IReadOnlyList<BootingAsterisk>? laterPeers = null,
+        int eventPumpCapacity = 0)
     {
         var run = Unconnected(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay, eventTimeout, barrierClock,
-            maxReconnectAttempts, laterPeers);
+            maxReconnectAttempts, laterPeers, eventPumpCapacity);
         try
         {
             await run.Connection.ConnectAsync().AsTask().WaitAsync(Bound);
@@ -133,10 +136,11 @@ internal sealed class Run : IAsyncDisposable
     /// </summary>
     public static Run Unconnected(BootingAsterisk firstPeer, BootingAsterisk? secondPeer = null,
         bool autoReconnect = false, TimeSpan? reconnectInitialDelay = null, TimeSpan? eventTimeout = null,
-        TimeProvider? barrierClock = null, int maxReconnectAttempts = 0, IReadOnlyList<BootingAsterisk>? laterPeers = null)
+        TimeProvider? barrierClock = null, int maxReconnectAttempts = 0, IReadOnlyList<BootingAsterisk>? laterPeers = null,
+        int eventPumpCapacity = 0)
     {
         var run = new Run(firstPeer, secondPeer, autoReconnect, reconnectInitialDelay ?? TimeSpan.FromMilliseconds(1),
-            eventTimeout ?? TimeSpan.Zero, barrierClock, maxReconnectAttempts, laterPeers);
+            eventTimeout ?? TimeSpan.Zero, barrierClock, maxReconnectAttempts, laterPeers, eventPumpCapacity);
         run._peers = run.ServePeersAsync(run._peerCts.Token);
         return run;
     }

@@ -206,6 +206,13 @@ public sealed class ChannelManager
         _channelsByName.GetValueOrDefault(name);
 
     /// <summary>
+    /// Reads the AMI session and buffer ordinal of the event being delivered, stamped on a channel a live event admits so
+    /// that a reconciliation can tell whether that event was received before its snapshot was requested; (0, 0) outside a
+    /// delivery. Null when the connection numbers no events.
+    /// </summary>
+    internal Func<(long Session, long Ordinal)>? SourceEventReader { get; set; }
+
+    /// <summary>
     /// Open the window a reload reads its channel snapshot in. The window carries the admission
     /// mark read now: every channel admitted from now on carries a stamp greater than it, so
     /// <see cref="ReconcileWithSnapshot"/> can tell "the snapshot omits it" from "the snapshot is
@@ -373,6 +380,12 @@ public sealed class ChannelManager
             AdmittedFromSnapshot = window is not null,
             AdmittedState = entry.State
         };
+        if (window is null && SourceEventReader is { } sourceReader)
+        {
+            var (sourceSession, sourceOrdinal) = sourceReader();
+            channel.SourceSession = sourceSession;
+            channel.SourceOrdinal = sourceOrdinal;
+        }
 
         lock (channel.SyncRoot)
         {
@@ -805,6 +818,11 @@ public sealed class ChannelManager
             if (held.AdmissionMark > admittedThrough)
             {
                 newerThanSnapshot++;
+
+                // Kept although its creation event was received before the snapshot was requested: the snapshot may
+                // omit it because it had already hung up, with a Hangup this table never saw.
+                if (window.ReceivedBeforeRequest(held))
+                    window.StaleKept++;
                 continue;
             }
 
@@ -950,6 +968,25 @@ internal sealed class SnapshotReadWindow : IDisposable
     internal bool IsClosed => Volatile.Read(ref _closed) != 0;
 
     /// <summary>
+    /// The AMI session and the last buffer ordinal its reader had received when the request's position was sampled,
+    /// before the request was sent; (0, 0) when unknown, which proves no channel was received before it.
+    /// </summary>
+    internal (long Session, long Ordinal) ReceivedThrough { get; set; }
+
+    /// <summary>
+    /// How many channels the snapshot omitted that the reconciliation kept as admitted after the request, although their
+    /// creation event was received before it: the snapshot may omit them because they had already hung up.
+    /// </summary>
+    internal int StaleKept { get; set; }
+
+    /// <summary>Whether <paramref name="channel"/>'s creation event was received at or before <see cref="ReceivedThrough"/>.</summary>
+    internal bool ReceivedBeforeRequest(AsteriskChannel channel)
+    {
+        var (session, ordinal) = ReceivedThrough;
+        return channel.SourceOrdinal > 0 && channel.SourceSession == session && channel.SourceOrdinal <= ordinal;
+    }
+
+    /// <summary>
     /// Close the window, dropping the departures recorded for it that no other open window needs.
     /// Safe to call more than once; only the first call closes it.
     /// </summary>
@@ -1031,6 +1068,12 @@ public sealed class AsteriskChannel : LiveObjectBase
     /// </para>
     /// </summary>
     internal long AdmissionMark { get; set; }
+
+    /// <summary>The AMI session that delivered the event this channel was admitted by; 0 for a snapshot's or unknown.</summary>
+    internal long SourceSession { get; set; }
+
+    /// <summary>That event's ordinal in its session's buffer; 0 for a snapshot's admission or unknown.</summary>
+    internal long SourceOrdinal { get; set; }
 
     // Cache the old reference-identity table-absence test. A removed instance never re-enters:
     // each admission constructs a new channel. Like a stale table lookup, a delayed flag write

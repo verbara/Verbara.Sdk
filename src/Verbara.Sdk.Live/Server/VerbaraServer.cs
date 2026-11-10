@@ -316,11 +316,121 @@ public sealed class VerbaraServer : IVerbaraServer
         return new EventLossEpoch(Interlocked.Read(ref _reconnects), mark.Session, mark.DroppedBefore);
     }
 
+    /// <summary>
+    /// The server's event-loss epoch now, read from the connection's current event buffer: inside an observer's
+    /// <c>OnNext</c> or an <c>OnEvent</c> handler as anywhere else, it counts a drop the buffer refused while the event
+    /// being delivered waited, which <see cref="ReadEventLossEpoch"/> there does not. What a channel read samples, and what
+    /// the coverage reads compare with what it covered.
+    /// </summary>
+    internal EventLossEpoch ReadCurrentEventLossEpoch()
+    {
+        var mark = _connection is AmiConnection ami ? ami.CurrentEventLossMark : default;
+        return new EventLossEpoch(Interlocked.Read(ref _reconnects), mark.Session, mark.DroppedBefore);
+    }
+
+    // The epoch the newest covering channel read sampled, with that read's opening number, so that an older sample never
+    // replaces a newer one. Null until a channel read has covered.
+    private sealed record CoveredEpoch(long Opening, EventLossEpoch Epoch);
+
+    private readonly Lock _channelReadGate = new();
+    private CoveredEpoch? _coveredEpoch;
+
+    // The channel reads of this server in flight — each counted from before it opens its read window until after it has
+    // closed it — and how many were ever counted.
+    private int _channelReadsInFlight;
+    private long _channelReadOpenings;
+
+    private enum LossState
+    {
+        None,
+        Undelivered,
+        Delivered,
+    }
+
+    // The epoch first, then the delivery, then the session's state: a refusal writes its ordinal before it counts the
+    // loss, so a counted loss is never read as delivered before its ordinal, and a session change is read as pending and
+    // undelivered from the session's end until the handlers of its return have returned.
+    private LossState ReadLossState()
+    {
+        if (_connection is not AmiConnection ami)
+            return LossState.None;
+
+        var covered = Volatile.Read(ref _coveredEpoch);
+        var current = ReadCurrentEventLossEpoch();
+        var moved = covered is null
+            ? current.DroppedBefore > 0 || current.Reconnects > 0 || current.AmiSession > 1
+            : covered.Epoch != current;
+        var delivered = ami.DeliveredThroughLastLoss;
+        if (ami.ReconnectPending || ami.State != AmiConnectionState.Connected)
+            return LossState.Undelivered;
+        if (!moved)
+            return LossState.None;
+        return delivered ? LossState.Delivered : LossState.Undelivered;
+    }
+
+    /// <summary>
+    /// Whether a loss is pending: the connection's event-loss epoch has moved since the epoch the last covering channel read
+    /// sampled (with none yet, any loss at all), or its AMI session has ended or been replaced and the handlers of its
+    /// return have not returned. Pending from the refusal itself, whatever its delivery. Always <see langword="false"/> on
+    /// a connection other than the SDK's own, which reports no loss.
+    /// </summary>
+    internal bool HasPendingLoss => ReadLossState() != LossState.None;
+
+    /// <summary>
+    /// Whether a loss is pending and the connection has not delivered through it: an event received before it is still
+    /// buffered or in its handler, or the connection's AMI session ended and its reconnect is pending.
+    /// </summary>
+    internal bool HasUndeliveredLoss => ReadLossState() == LossState.Undelivered;
+
+    /// <summary>
+    /// Whether a loss is pending and the connection has delivered through it: every event received before it has been
+    /// dispatched, and no reconnect is pending. The loss a covering channel read sent now would cover.
+    /// </summary>
+    internal bool HasDeliveredUnreconciledLoss => ReadLossState() == LossState.Delivered;
+
+    /// <summary>
+    /// Whether the channel table is complete (<see cref="ChannelTableComplete"/>) and no loss is pending since the epoch
+    /// its last covering read sampled: a table no dropped event has left untrusted.
+    /// </summary>
+    internal bool ChannelTableCovered => ChannelTableComplete && !HasPendingLoss;
+
+    // Counted before the read opens its window: overlapped when another read is in flight then.
+    private (long Opening, bool Overlapped) RaiseChannelRead()
+    {
+        lock (_channelReadGate)
+            return (++_channelReadOpenings, ++_channelReadsInFlight > 1);
+    }
+
+    // Whether another read was counted after the one opened as opening, whether or not it has ended since.
+    private bool ChannelReadRaisedSince(long opening)
+    {
+        lock (_channelReadGate)
+            return _channelReadOpenings != opening;
+    }
+
+    // Lowered after the read's window has closed.
+    private void LowerChannelRead()
+    {
+        lock (_channelReadGate)
+            _channelReadsInFlight--;
+    }
+
+    private void PublishCoveredEpoch(long opening, EventLossEpoch epoch)
+    {
+        lock (_channelReadGate)
+        {
+            if (_coveredEpoch is null || _coveredEpoch.Opening < opening)
+                Volatile.Write(ref _coveredEpoch, new CoveredEpoch(opening, epoch));
+        }
+    }
+
     public VerbaraServer(IAmiConnection connection, ILogger<VerbaraServer> logger)
     {
         _connection = connection;
         _logger = logger;
         Channels = new ChannelManager(logger);
+        if (connection is AmiConnection sourceConnection)
+            Channels.SourceEventReader = () => sourceConnection.DispatchingEvent;
         Queues = new QueueManager(logger);
         Agents = new AgentManager(logger) { Memberships = Queues.AgentMembershipsOf };
         MeetMe = new MeetMeManager(logger);
@@ -470,9 +580,12 @@ public sealed class VerbaraServer : IVerbaraServer
     internal event Action<ChannelSnapshotCompletion>? ChannelSnapshotCompleted;
     internal string? PoolId { get; set; }
 
-    /// <summary>Requests the channel-only snapshot needed by an admission on an incomplete table.</summary>
+    /// <summary>
+    /// Requests the channel-only snapshot needed by an admission on a table that is not covered
+    /// (<see cref="ChannelTableCovered"/>); returns at once on a covered one.
+    /// </summary>
     internal ValueTask RequestChannelSnapshotAsync(CancellationToken cancellationToken = default) =>
-        ChannelTableComplete ? ValueTask.CompletedTask : ReconcileChannelsAsync(cancellationToken);
+        ChannelTableCovered ? ValueTask.CompletedTask : ReconcileChannelsAsync(cancellationToken);
 
     private async void ReloadNewSession(CancellationToken cancellationToken)
 #pragma warning restore VSTHRD100
@@ -696,6 +809,34 @@ public sealed class VerbaraServer : IVerbaraServer
     private async ValueTask<List<ChannelSnapshotEntry>?> ReconcileChannelTableAsync(LoadSession? session, LoadConnectionStates states,
         Activity? activity, ChannelReader reader, Barriers barriers, CancellationToken cancellationToken)
     {
+        // Whether the read covers the loss it samples, on its span: false until it has proven it.
+        var traced = ReferenceEquals(reader, ChannelReader.Reconciliation) ? activity : null;
+        LiveActivitySource.SetReconcileCovered(traced, false);
+
+        // The loss epoch, then the reader's position, both before the read is counted and before Status is sent. In this
+        // order a dropped Hangup the epoch counts has its channel's creation event at or below the position.
+        var sampled = ReadCurrentEventLossEpoch();
+        var received = session?.Connection.ReceivedThrough ?? default;
+
+        // Counted before its window opens and until after the window has closed, so the read is counted at every instant
+        // at which it can still admit a channel another read's window would keep.
+        var count = RaiseChannelRead();
+        try
+        {
+            return await ReadAndApplyChannelSnapshotAsync(session, states, activity, traced, reader, barriers, sampled,
+                received, count, cancellationToken);
+        }
+        finally
+        {
+            LowerChannelRead();
+        }
+    }
+
+    private async ValueTask<List<ChannelSnapshotEntry>?> ReadAndApplyChannelSnapshotAsync(LoadSession? session,
+        LoadConnectionStates states, Activity? activity, Activity? traced, ChannelReader reader, Barriers barriers,
+        EventLossEpoch sampled, (long Session, long Ordinal) received, (long Opening, bool Overlapped) count,
+        CancellationToken cancellationToken)
+    {
         // Buffer first, then reconcile: a snapshot that throws, is cancelled or never completes must leave every held
         // channel alone, and it can only do that if nothing was mutated while it was being read.
         // A Status Asterisk refused yields no snapshot: a refusal is no evidence that any channel is gone, so the table
@@ -707,6 +848,7 @@ public sealed class VerbaraServer : IVerbaraServer
         var channelSession = Interlocked.Read(ref _reconnects);
         var channelConnection = (_connection as AmiConnection)?.FullyBooted;
         using var window = Channels.OpenReadWindow();
+        window.ReceivedThrough = received;
         var mark = session is not null ? new ListSnapshotMark() : null;
         var channelSnapshot = await ReadChannelSnapshotAsync(session, mark, states, activity, reader, cancellationToken);
         if (channelSnapshot is null)
@@ -718,6 +860,10 @@ public sealed class VerbaraServer : IVerbaraServer
         // Before the snapshot removes anything, the pump dispatches every event received before StatusComplete, so a
         // Hangup still queued then removes its channel first, as the hangup it is. The window stays open while it waits.
         var full = await AwaitBarrierAsync(session, mark, "Status", states, reader.Name, activity, barriers, cancellationToken);
+
+        // Overlapped when another read was in flight at this one's count, or was counted at any time before this one
+        // begins to apply: a read counted after the apply began sent its Status after this read's StatusComplete.
+        var overlapped = count.Overlapped || ChannelReadRaisedSince(count.Opening);
         Interlocked.Increment(ref _channelApplications);
         try
         {
@@ -726,6 +872,21 @@ public sealed class VerbaraServer : IVerbaraServer
             Volatile.Write(ref _channelVerifiedConnection, channelConnection);
             Interlocked.Exchange(ref _channelVerifiedSession, channelSession);
             Volatile.Write(ref _channelTableVerified, full && channelSession == Interlocked.Read(ref _reconnects) ? 1 : 0);
+
+            // The read covers its sample only when it completed on the session it began on, its wait was reached (not
+            // run out, not skipped inside a dispatch), it kept no channel received before its Status, and no other read
+            // overlapped it. Published before the completion is raised, so its handlers read the table covered.
+            var reached = full && !barriers.SkippedInDispatch && mark is { CompleteOrdinal: > 0 };
+            var covers = reached && !overlapped && window.StaleKept == 0
+                && session is { IsCurrent: true }
+                && received.Session == sampled.AmiSession
+                && session.Connection.CurrentEventLossMark.Session == sampled.AmiSession
+                && channelSession == sampled.Reconnects
+                && Interlocked.Read(ref _reconnects) == sampled.Reconnects;
+            if (covers)
+                PublishCoveredEpoch(count.Opening, sampled);
+
+            LiveActivitySource.SetReconcileCoverage(traced, covers, window.StaleKept, overlapped);
         }
         catch
         {
@@ -746,6 +907,9 @@ public sealed class VerbaraServer : IVerbaraServer
 
         /// <summary>The list whose wait ran out first, or <see langword="null"/>.</summary>
         public ListSnapshotMark? DeferredOn { get; set; }
+
+        /// <summary>Whether a wait was skipped because the reader ran inside an event dispatch, which proves nothing.</summary>
+        public bool SkippedInDispatch { get; set; }
 
         /// <summary>Whether a completed <c>Agents</c> list replaces the table, as a reload after a reconnect's does.</summary>
         public bool ReplacesAgents { get; init; }
@@ -782,6 +946,7 @@ public sealed class VerbaraServer : IVerbaraServer
         {
             StopIfRetired(session, states, readerName, list);
             VerbaraServerLog.BarrierSkippedInDispatch(_logger, list);
+            barriers.SkippedInDispatch = true;
             return true;
         }
 

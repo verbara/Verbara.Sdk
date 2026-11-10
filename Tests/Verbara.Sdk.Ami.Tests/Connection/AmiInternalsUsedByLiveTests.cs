@@ -59,6 +59,10 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// <c>AmiConnection.DeliveredThroughLastLoss</c>, a <see cref="bool"/> (since 2.10.0);
 /// </description></item>
 /// <item><description>
+/// <c>AmiConnection.DispatchingEvent</c> and <c>AmiConnection.ReceivedThrough</c>, each a tuple of two
+/// <see cref="long"/> named <c>Session</c> and <c>Ordinal</c> (since 2.10.0);
+/// </description></item>
+/// <item><description>
 /// <c>AmiConnection.StateAndWriter</c>, a tuple of <see cref="AmiConnectionState"/> and <see cref="bool"/>;
 /// </description></item>
 /// <item><description>
@@ -130,6 +134,12 @@ public sealed class AmiInternalsUsedByLiveTests
         Exactly<AmiEventLossMark>(ref currentLossMark);
         var deliveredThroughLastLoss = connection.DeliveredThroughLastLoss;
         Exactly<bool>(ref deliveredThroughLastLoss);
+
+        // AmiConnection.DispatchingEvent and ReceivedThrough: their getters, by their exact types.
+        var dispatching = connection.DispatchingEvent;
+        Exactly<(long Session, long Ordinal)>(ref dispatching);
+        var receivedThrough = connection.ReceivedThrough;
+        Exactly<(long Session, long Ordinal)>(ref receivedThrough);
 
         // new ListSnapshotMark(), its CompleteOrdinal and its wait, and the overload that fills it; bound only.
         var mark = new ListSnapshotMark();

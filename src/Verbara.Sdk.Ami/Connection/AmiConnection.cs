@@ -227,13 +227,16 @@ public sealed class AmiConnection : IAmiConnection
     private readonly AsyncLocal<DispatchFrame?> _dispatchFrame = new();
 
     /// <summary>One event's dispatch, as an ending started from it sees it.</summary>
-    private sealed class DispatchFrame(AmiEventLossMark lossMark)
+    private sealed class DispatchFrame(AmiEventLossMark lossMark, long ordinal)
     {
         // Written once, by the dispatch's own finally; read by an ending on any thread.
         public volatile bool Finished;
 
         // The session that delivered this event and what its pump had dropped when the event arrived.
         public AmiEventLossMark LossMark { get; } = lossMark;
+
+        // The event's ordinal in its session's pump.
+        public long Ordinal { get; } = ordinal;
     }
 
     // True when the current execution context runs inside a dispatch that has not returned yet. Also read by
@@ -381,6 +384,40 @@ public sealed class AmiConnection : IAmiConnection
     /// 3.0, because a Live package of the 2.x line runs on any newer Ami.
     /// </remarks>
     internal bool DeliveredThroughLastLoss => Volatile.Read(ref _eventPump)?.DeliveredThroughLastLoss ?? true;
+
+    /// <summary>
+    /// The session that delivered the event being dispatched and that event's ordinal in its session's buffer, read inside
+    /// an observer's <c>OnNext</c> or an <c>OnEvent</c> handler (or anything they call); (0, 0) anywhere else.
+    /// </summary>
+    /// <remarks>
+    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
+    /// any newer Ami.
+    /// </remarks>
+    internal (long Session, long Ordinal) DispatchingEvent =>
+        _dispatchFrame.Value is { Finished: false } frame ? (frame.LossMark.Session, frame.Ordinal) : (0, 0);
+
+    /// <summary>
+    /// The current session and the ordinal of the last event its reader handed to the buffer, read now; 0 with no
+    /// session's buffer. Every event that ordinal or an earlier one numbers was received before this read.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The buffer is read before the session, as in <see cref="CurrentEventLossMark"/>: around a session start it may
+    /// pair the new session with the previous buffer's position, never the previous session with the new buffer's.
+    /// </para>
+    /// <para>
+    /// Called by Verbara.Sdk.Live; kept with this signature until 3.0, because a Live package of the 2.x line runs on
+    /// any newer Ami.
+    /// </para>
+    /// </remarks>
+    internal (long Session, long Ordinal) ReceivedThrough
+    {
+        get
+        {
+            var received = Volatile.Read(ref _eventPump)?.LastReceived ?? 0;
+            return (Volatile.Read(ref _sessionOrdinal), received);
+        }
+    }
 
     /// <summary>
     /// Raised once for each loss of an established connection that its caller did not ask for, with what ended it:
@@ -874,7 +911,8 @@ public sealed class AmiConnection : IAmiConnection
 
             // The pump buffers from now on but dispatches only once the previous session's pump has been released (its
             // buffer delivered, or cut by the caller's ending): one consumer at a time, the lost session's events first.
-            pump.Start(evt => DispatchEventAsync(evt, new AmiEventLossMark(ordinal, pump.DroppedBeforeCurrentEvent)), _pumpReleased);
+            pump.Start(evt => DispatchEventAsync(evt, new AmiEventLossMark(ordinal, pump.DroppedBeforeCurrentEvent),
+                pump.CurrentEventOrdinal), _pumpReleased);
             _readerLoop = Task.Run(() => ReaderLoopAsync(fullyBooted, sessionToken), CancellationToken.None);
 
             if (_options.EnableHeartbeat && _options.HeartbeatInterval > TimeSpan.Zero)
@@ -2070,7 +2108,7 @@ public sealed class AmiConnection : IAmiConnection
             AmiConnectionLog.NotificationHandlerStuck(owner._logger, eventName, StuckNotificationBound.TotalSeconds);
     }
 
-    private ValueTask DispatchEventAsync(ManagerEvent evt, AmiEventLossMark lossMark)
+    private ValueTask DispatchEventAsync(ManagerEvent evt, AmiEventLossMark lossMark, long ordinal)
     {
         // The caller ended the connection from inside a dispatch, which the pump may still be finishing: the pump
         // dispatches nothing after the event in progress, and stops once that dispatch returns.
@@ -2082,7 +2120,7 @@ public sealed class AmiConnection : IAmiConnection
         // in. It is marked finished only once every handler has returned, faulted or not (AwaitHandlersAsync's
         // finally when one is still running, the finally below otherwise): a handler that awaits an ending while
         // another one is still running is inside the dispatch for as long as the dispatch waits for it.
-        var frame = new DispatchFrame(lossMark);
+        var frame = new DispatchFrame(lossMark, ordinal);
         _dispatchFrame.Value = frame;
         var handedOff = false;
         try
