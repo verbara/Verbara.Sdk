@@ -357,7 +357,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         if (Subscribe(serverId, attachment))
         {
             Step(HandlerStep.AttachmentReadyToDecide, serverId, string.Empty);
-            if (server.ChannelTableComplete)
+            if (server.ChannelTableCovered)
                 DecideCompleteTable(serverId, attachment, bounded: true);
         }
     }
@@ -763,8 +763,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     /// <summary>
     /// The value <see cref="EndingProvenanceKey"/> carries when a completed state reload proved the
-    /// call's channels gone. A consumer reads it as positive evidence that no hangup was observed —
-    /// never by noticing that <c>HangupCause</c> is null (<c>ADR-0062</c>, design D3).
+    /// call's channels gone. A consumer reads it as positive evidence that the SDK did not observe the
+    /// call's ending: the last departure it knows of was learned from a snapshot, not from a <c>Hangup</c> —
+    /// never by noticing that <c>HangupCause</c> is null.
     /// </summary>
     private const string EndingProvenanceReload = "reload";
 
@@ -861,7 +862,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     {
         if (!_serverSubs.TryGetValue(serverId, out var subs)
             || (expectedServer is not null && !ReferenceEquals(expectedServer, subs.Server))
-            || !subs.Server.ChannelTableComplete) return;
+            || !subs.Server.ChannelTableCovered) return;
         DecideCompleteTable(serverId, subs);
     }
 
@@ -948,7 +949,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (installed) ApplyPendingDemotion(call, subs);
             if (source is null && !IsPendingDecision(call, subs)) return;
             var table = subs.Server.Channels;
-            var complete = subs.Server.ChannelTableComplete;
+            var complete = subs.Server.ChannelTableCovered;
             var changed = false;
             string? removedDepartureId = null;
             if (complete)
@@ -960,12 +961,18 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                     if (participant.LeftAt.HasValue) continue;
                     var held = table.GetByUniqueId(participant.UniqueId) is not null;
                     var departing = table.IsDeparting(participant.UniqueId);
+                    if (departing) participant.FoundDeparting = true;
                     if (held || departing) continue;
                     changed = true;
                     participant.LeftAt = DateTimeOffset.UtcNow;
                     participant.HangupCause = null;
                     call.RecordDeparture(participant.UniqueId, call.GetParticipantMark(participant.UniqueId));
-                    call.LastDeparture ??= (true, null);
+                    // A leg a decision found being removed left the table before every departure recorded since, so
+                    // its retirement is ordered before them. One the table never held nor was found removing — its
+                    // Newchannel refused by the connection — is the last departure the call knows of: nothing proves
+                    // it left before the departures already recorded.
+                    if (participant.FoundDeparting) call.LastDeparture ??= (true, null);
+                    else call.LastDeparture = (true, null);
                     call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow, CallSessionEventType.ParticipantLeft,
                         participant.Channel, null, EndingProvenanceReload));
                     index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(participant.UniqueId, call));

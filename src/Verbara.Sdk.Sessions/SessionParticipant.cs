@@ -13,6 +13,12 @@ public sealed class SessionParticipant
     public DateTimeOffset JoinedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LeftAt { get; set; }
     public HangupCause? HangupCause { get; set; }
+
+    /// <summary>
+    /// Whether a decision of the call found this leg's channel being removed from its server's table: the proof that
+    /// it left before every departure the call recorded afterwards. Internal, never persisted.
+    /// </summary>
+    internal bool FoundDeparting { get; set; }
 }
 
 public enum ParticipantRole { Caller, Destination, Agent, Transfer, Conference, Internal }

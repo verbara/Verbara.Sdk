@@ -125,9 +125,9 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
         try
         {
             parked.WaitUntilParked();
-            var verified = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+            var verified = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep), withTrigger: true);
         rig.ConnectionState = AmiConnectionState.Reconnecting;
-        var skipped = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep));
+        var skipped = await SweepTagsAsync(() => SweepRig.SweepOnceAsync(sweep), withTrigger: true);
 
         new { Verified = verified, Skipped = skipped, Dropped = dropped.State }.Should().BeEquivalentTo(
             new
@@ -138,6 +138,7 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
                     ["sessions.unverifiable"] = 1,
                     ["verification"] = "run",
                     ["sessions.ended"] = 1,
+                    ["sessions.trigger"] = "age",
                 },
                 Skipped = new Dictionary<string, object?>
                 {
@@ -145,11 +146,13 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
                     ["sessions.unverifiable"] = 1,
                     ["verification"] = "skipped:not-connected",
                     ["sessions.ended"] = 0,
+                    ["sessions.trigger"] = "age",
                 },
                 Dropped = CallSessionState.Failed,
             },
-            "a sweep tags its span with the calls it would verify, the ones no snapshot can prove gone, whether it "
-            + $"verified or why not, and how many of its candidates ended. Measured: {rig.Describe()}");
+            "a sweep tags its span with the calls it would verify, what prompted the verification (their age: the "
+            + "connection cannot lose an event), the ones no snapshot can prove gone, whether it verified or why not, "
+            + $"and how many of its candidates ended. Measured: {rig.Describe()}");
             rig.EndingsOf(unheld).Should().Be(0);
         }
         finally { parked.LetGo(); await removal.WaitAsync(SweepRig.Bound); }
@@ -283,8 +286,11 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
             + "asking on its own after the reload did");
     }
 
-    /// <summary>The tags of the one <c>session reconciliation</c> span <paramref name="sweep"/> opens.</summary>
-    internal static async Task<Dictionary<string, object?>> SweepTagsAsync(Func<Task> sweep)
+    /// <summary>
+    /// The tags of the one <c>session reconciliation</c> span <paramref name="sweep"/> opens; with
+    /// <paramref name="withTrigger"/>, also what prompted its verification (<c>sessions.trigger</c>).
+    /// </summary>
+    internal static async Task<Dictionary<string, object?>> SweepTagsAsync(Func<Task> sweep, bool withTrigger = false)
     {
         var spans = new ConcurrentQueue<Activity>();
         var previous = Activity.Current;
@@ -314,7 +320,8 @@ public sealed class SweepSwitchesAndReportsTests : IAsyncLifetime
 
         spans.Should().ContainSingle("one sweep opens one reconciliation span");
         return spans.Single().TagObjects
-            .Where(tag => tag.Key is "sessions.candidates" or "sessions.unverifiable" or "verification" or "sessions.ended")
+            .Where(tag => tag.Key is "sessions.candidates" or "sessions.unverifiable" or "verification" or "sessions.ended"
+                || (withTrigger && tag.Key == "sessions.trigger"))
             .ToDictionary(tag => tag.Key, tag => tag.Value, StringComparer.Ordinal);
     }
 

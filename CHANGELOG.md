@@ -94,6 +94,42 @@ and that a lookup naming no server and a consumer keyed only by `linkedid` canno
 complete makes its server a candidate instead, and one on a server whose last `Status` was refused is counted on every
 tick.
 
+### Changed: the sweep verifies a dropped event once it is delivered, whatever the call's age (#546)
+
+When the full event buffer drops an event the server would have read, the reconciliation sweep now verifies that
+server's calls once the drop has been delivered through: the connection has dispatched every event it received up to
+the drop. Every held call with a channel the table holds is a candidate whatever its age, so a short call whose `Hangup`
+was dropped no longer stays open until it is `DialingTimeout` old. While the drop is still behind the event backlog the
+sweep adds no candidate and sends no `Status`, so the answer never lands in a full buffer; one verification per tick per
+server stays the ceiling. On a short-call workload (calls held 5–15 s, a burst of drops into a 22,000-event buffer) a
+call whose `Hangup` was dropped ended at a median of 12–32 s after its hangup, against 72–92 s before, on Asterisk 22,
+23 and 24. Under sustained overload the sweep sent snapshots only by age and none for a drop under the backlog; Live's
+drops differed by −0.65 % on average (95 % interval −2.1 % to +0.8 %, nine pairs). The `session reconciliation` span
+gains `sessions.trigger` (`age`, `table`, `event-loss` or `none`, in that precedence), and the tick's `Debug` line gains
+`trigger=` and `loss=` (`loss=pending-undelivered` while a drop is still behind the backlog). See
+[Session Reconciliation](docs/guides/high-load-tuning.md#session-reconciliation).
+
+### Fixed: a call not observed in full is decided only on a channel table no dropped event made untrusted (#546)
+
+A call the session engine has not observed in full — registered as reconstructed, admitted after a manual attach, or
+kept across a re-attach — was decided on a complete channel table even when a dropped `Newchannel` meant the table
+lacked one of its channels: a leg could be retired, or the call ended, from a table that could not see it. Such a call
+is now kept, with no leg retired, no ending and no promotion, until a channel read covers the drop. No `Status` is
+requested for it while the drop is behind the backlog, the admission of calls already up included. When the covering
+read finds none of its channels, the call ends once with `Metadata["cause"] = "reload"` and no hangup cause, even if
+another of its legs' hangups was observed before the read: the SDK did not observe that ending. A host that runs no
+sweep decides these calls through its own `ReconcileChannelsAsync` once the drop is delivered; until then they wait,
+with no time bound. See [Sessions without the sweep](docs/guides/high-load-tuning.md#session-reconciliation).
+
+### Added: a channel reconciliation says whether it covered the events lost before it (#546)
+
+The `live channel-reconcile` span gains `live.reconcile.covered`: `true` when the read's snapshot completed, its wait
+for every event received before its `Status` was reached, it kept no channel created before that `Status` and no other
+channel read of the server overlapped it. Beside a `false` it carries the reason — `live.reconcile.kept_stale`,
+`live.reconcile.overlapped`, `live.reconcile.deferred` or `live.status.refused`. A Live-only host reconciles after a
+drop by waiting until the drop is delivered and settles a server only on its own covered read; the guide's sample shows
+how.
+
 ### Fixed: a released server is let go of (#540)
 
 Once `DetachFromServer(id, DetachedCalls.Release)` leaves no call of that id held, the session manager no longer

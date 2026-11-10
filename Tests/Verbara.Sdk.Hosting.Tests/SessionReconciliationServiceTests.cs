@@ -6,8 +6,9 @@ using Verbara.Sdk.Sessions;
 namespace Verbara.Sdk.Hosting.Tests;
 
 /// <summary>
-/// The sweep leaves a call younger than the dialing timeout alone and asks nothing for it, and its loop stops when
-/// the host stops it. Built and run through the reconciliation rig's one sweep helper.
+/// The sweep leaves a call younger than the dialing timeout alone and asks nothing for it when no event was lost — the
+/// rig's connection cannot lose one — and its loop stops when the host stops it. Built and run through the
+/// reconciliation rig's one sweep helper.
 /// </summary>
 [Collection(SweepCounterGroup.Name)]
 [SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
@@ -30,7 +31,8 @@ public sealed class SessionReconciliationServiceTests : IAsyncLifetime
 
         new { Session = SweepRig.Look(session), Actions = _rig.ActionsSent().Count }.Should().BeEquivalentTo(
             new { Session = before, Actions = 0 },
-            $"a connected call younger than the dialing timeout is not a candidate. Measured: {_rig.Describe()}");
+            "a connected call younger than the dialing timeout is not a candidate on a connection that cannot lose an "
+            + $"event. Measured: {_rig.Describe()}");
         session.State.Should().Be(CallSessionState.Connected);
     }
 
@@ -45,7 +47,8 @@ public sealed class SessionReconciliationServiceTests : IAsyncLifetime
 
         new { Session = SweepRig.Look(session), Actions = _rig.ActionsSent().Count }.Should().BeEquivalentTo(
             new { Session = before, Actions = 0 },
-            $"a dialing call younger than the dialing timeout is not a candidate. Measured: {_rig.Describe()}");
+            "a dialing call younger than the dialing timeout is not a candidate on a connection that cannot lose an "
+            + $"event. Measured: {_rig.Describe()}");
         session.State.Should().Be(CallSessionState.Dialing);
     }
 

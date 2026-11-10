@@ -9,8 +9,13 @@ public sealed partial class CallSessionManager
 {
     /// <summary>Admits the calls already held by the instance attached under <paramref name="serverId"/>.</summary>
     /// <remarks>
-    /// Call after attaching and registering reconstructed calls. Only an incomplete channel table requests a Status
-    /// snapshot. Existing channel owners are preserved, and repeating the admission adds nothing. A refused snapshot
+    /// Call after attaching and registering reconstructed calls. Only a channel table that is not covered — not
+    /// complete on the current AMI session, or complete with a dropped event pending since its last covering snapshot —
+    /// requests a Status snapshot, and never while a dropped event is still behind the event backlog or a reconnect is
+    /// pending: the calls then wait for the next covering snapshot. That snapshot covers the loss only when no caller
+    /// awaits this operation from inside an AMI event handler: awaited from one, it cannot wait for the pump that
+    /// handler holds, applies without covering, and the calls wait for the next covering snapshot.
+    /// Existing channel owners are preserved, and repeating the admission adds nothing. A refused snapshot
     /// leaves calls unverified until a later completed snapshot; release them explicitly if Status stays refused.
     /// The snapshot wait and each visit are bound to this attachment; detaching stops the admission normally.
     /// The walk always runs on the thread pool. A session-event subscriber must return without waiting for this
@@ -36,7 +41,7 @@ public sealed partial class CallSessionManager
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!Current()) throw new AdmissionStoppedException();
-            if (!attachment.Server.ChannelTableComplete)
+            if (!attachment.Server.ChannelTableCovered && !attachment.Server.HasUndeliveredLoss)
             {
                 Task request;
                 if (!attachment.Gate.TryEnter()) throw new AdmissionStoppedException();

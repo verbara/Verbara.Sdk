@@ -8,9 +8,13 @@ using Microsoft.Extensions.Logging;
 namespace Verbara.Sdk.Hosting;
 
 /// <summary>
-/// One server's reconciliation pass, shared by the single-server and pool services. A complete current table first
-/// decides pending calls without Status. Otherwise pending calls waiting for completeness, and old calls whose
-/// channel ids or linkedid the table holds, cause one channel verification when its connection can be trusted.
+/// One server's reconciliation pass, shared by the single-server and pool services. A covered table — complete on its
+/// current session, with no event lost since its last covering channel read — first decides pending calls without
+/// Status. Otherwise one channel verification is sent, when the connection can be trusted, for any of: an old call
+/// whose channel ids or linkedid the table holds (<c>age</c>); a pending call waiting for a table that is not complete
+/// (<c>table</c>); and, once a lost event has been delivered through, a call holding a channel the table holds or a
+/// pending call, whatever its age (<c>event-loss</c>). While a lost event is still behind the event backlog no call
+/// qualifies through the table or the loss, and the pass does not wait for it.
 /// </summary>
 internal sealed partial class ServerSweep
 {
@@ -29,8 +33,9 @@ internal sealed partial class ServerSweep
 
     /// <summary>
     /// Decides calls against this instance, then asks for Status at most once. A pool pass also restricts calls to
-    /// its exact pool id; a single-server pass follows each call's own attachment identity. Custom managers retain
-    /// their existing participant/age verification behavior, without assuming they expose the built-in oracle.
+    /// its exact pool id; a single-server pass follows each call's own attachment identity. Custom managers keep their
+    /// participant-only channel source, without assuming they expose the built-in oracle: their calls qualify by age, and
+    /// once a lost event has been delivered through, whatever their age — never by waiting for a table.
     /// </summary>
     public async Task SweepAsync(VerbaraServer server, string? serverId, CancellationToken cancellationToken)
     {
@@ -43,7 +48,7 @@ internal sealed partial class ServerSweep
             .ToArray();
         var customHeld = _manager is CallSessionManager ? null : new HashSet<CallSession>(selected, ReferenceEqualityComparer.Instance);
         var decided = new List<CallSession>();
-        if (_manager is CallSessionManager engine && server.ChannelTableComplete && !server.IsReconnectPending)
+        if (_manager is CallSessionManager engine && server.ChannelTableCovered && !server.IsReconnectPending)
         {
             var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (var call in selected)
@@ -62,6 +67,11 @@ internal sealed partial class ServerSweep
         }
 
         var candidates = new List<CallSession>();
+        // A loss behind the backlog adds no candidate and withholds the waiting-call source: a Status sent now would
+        // wait behind, and compete with, the events the connection has not dispatched yet.
+        var undelivered = server.HasUndeliveredLoss;
+        var delivered = !undelivered && server.HasDeliveredUnreconciledLoss;
+        bool byAge = false, byTable = false, byLoss = false;
         var legacyParticipantCandidates = new HashSet<CallSession>(ReferenceEqualityComparer.Instance);
         foreach (var call in selected)
         {
@@ -69,10 +79,20 @@ internal sealed partial class ServerSweep
             {
                 if (!InScope(call, server, serverId, customHeld, out var pending, out var attached)) continue;
                 var old = now - call.CreatedAt > _options.DialingTimeout;
-                var holdsParticipant = old && HoldsParticipantChannel(server, call);
+                var looks = old || delivered;
+                var holdsParticipant = looks && HoldsParticipantChannel(server, call);
                 if (old && holdsParticipant) legacyParticipantCandidates.Add(call);
-                if ((old && (holdsParticipant || HoldsLinkedChannel(server, call, attached))) || (pending && !server.ChannelTableComplete))
+                var holds = holdsParticipant || (looks && HoldsLinkedChannel(server, call, attached));
+                var byItsAge = old && holds;
+                var byItsTable = pending && !undelivered && !server.ChannelTableComplete;
+                var byItsLoss = delivered && (holds || pending);
+                if (byItsAge || byItsTable || byItsLoss)
+                {
                     candidates.Add(call);
+                    byAge |= byItsAge;
+                    byTable |= byItsTable;
+                    byLoss |= byItsLoss;
+                }
             }
         }
 
@@ -80,6 +100,9 @@ internal sealed partial class ServerSweep
         if (serverId is not null) activity?.SetTag("server.id", serverId);
         activity?.SetTag("sessions.candidates", candidates.Count);
         activity?.SetTag("verification", verification);
+        var trigger = byAge ? "age" : byTable ? "table" : byLoss ? "event-loss" : "none";
+        activity?.SetTag("sessions.trigger", trigger);
+        var loss = undelivered ? "pending-undelivered" : "none";
         try
         {
             if (verification == "run")
@@ -88,7 +111,9 @@ internal sealed partial class ServerSweep
         finally
         {
             // Count only calls still held after both decision paths. A successful read may clear refusal even when
-            // its application was deferred; completeness and the last refusal therefore remain separate inputs.
+            // its application was deferred; coverage and the last refusal therefore remain separate inputs. A refused
+            // Status also resets completeness, so a refused server's table is never covered: the clause reads the
+            // predicate the sweep spec names rather than relying on that reset.
             if (_manager is not CallSessionManager)
                 customHeld = new HashSet<CallSession>(_manager.ActiveSessions, ReferenceEqualityComparer.Instance);
             var unverifiable = 0;
@@ -108,7 +133,7 @@ internal sealed partial class ServerSweep
                     if (HoldsParticipantChannel(server, call) || HoldsLinkedChannel(server, call, attached)) continue;
                     if (pending)
                     {
-                        if (!server.ChannelTableComplete && server.LastStatusRefusal is not null) unverifiable++;
+                        if (!server.ChannelTableCovered && server.LastStatusRefusal is not null) unverifiable++;
                     }
                     else if (now - call.CreatedAt > _options.DialingTimeout) unverifiable++;
                 }
@@ -116,8 +141,8 @@ internal sealed partial class ServerSweep
             var ended = candidates.Concat(decided).Distinct().Count(HasEnded);
             activity?.SetTag("sessions.unverifiable", unverifiable);
             activity?.SetTag("sessions.ended", ended);
-            if (serverId is null) LogSweepResult(candidates.Count, unverifiable, ended, verification);
-            else LogServerSweepResult(serverId, candidates.Count, unverifiable, ended, verification);
+            if (serverId is null) LogSweepResult(candidates.Count, unverifiable, ended, verification, trigger, loss);
+            else LogServerSweepResult(serverId, candidates.Count, unverifiable, ended, verification, trigger, loss);
         }
     }
 
@@ -170,10 +195,10 @@ internal sealed partial class ServerSweep
         || call.State is CallSessionState.Completed or CallSessionState.Failed or CallSessionState.TimedOut;
 
     [LoggerMessage(Level = LogLevel.Debug,
-        Message = "Reconciliation sweep: candidates={Candidates} unverifiable={Unverifiable} ended={Ended} verification={Verification}")]
-    private partial void LogSweepResult(int candidates, int unverifiable, int ended, string verification);
+        Message = "Reconciliation sweep: candidates={Candidates} unverifiable={Unverifiable} ended={Ended} verification={Verification} trigger={Trigger} loss={Loss}")]
+    private partial void LogSweepResult(int candidates, int unverifiable, int ended, string verification, string trigger, string loss);
 
     [LoggerMessage(Level = LogLevel.Debug,
-        Message = "Reconciliation sweep: server={ServerId} candidates={Candidates} unverifiable={Unverifiable} ended={Ended} verification={Verification}")]
-    private partial void LogServerSweepResult(string serverId, int candidates, int unverifiable, int ended, string verification);
+        Message = "Reconciliation sweep: server={ServerId} candidates={Candidates} unverifiable={Unverifiable} ended={Ended} verification={Verification} trigger={Trigger} loss={Loss}")]
+    private partial void LogServerSweepResult(string serverId, int candidates, int unverifiable, int ended, string verification, string trigger, string loss);
 }

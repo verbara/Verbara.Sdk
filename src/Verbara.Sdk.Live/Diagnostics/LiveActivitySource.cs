@@ -65,6 +65,27 @@ public static class LiveActivitySource
     internal static void SetReconcileDeferred(Activity? activity, string list) =>
         activity?.SetTag("live.reconcile.deferred", list);
 
+    /// <summary>Tags a channel reconciliation with whether it covered every event received before its <c>Status</c>.</summary>
+    internal static void SetReconcileCovered(Activity? activity, bool covered) =>
+        activity?.SetTag("live.reconcile.covered", covered);
+
+    /// <summary>
+    /// Tags a channel reconciliation that applied its snapshot: whether it covered, and why not where a reason is its own —
+    /// the channels it kept although their creation event was received before its <c>Status</c>, and another channel read
+    /// that overlapped it.
+    /// </summary>
+    internal static void SetReconcileCoverage(Activity? activity, bool covered, int keptStale, bool overlapped)
+    {
+        if (activity is null)
+            return;
+
+        activity.SetTag("live.reconcile.covered", covered);
+        if (keptStale > 0)
+            activity.SetTag("live.reconcile.kept_stale", keptStale);
+        if (overlapped)
+            activity.SetTag("live.reconcile.overlapped", true);
+    }
+
     internal static Activity? StartOriginate(string channel, string context, string extension)
     {
         var activity = Source.StartActivity($"live originate {channel}", ActivityKind.Client);

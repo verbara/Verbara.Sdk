@@ -52,6 +52,16 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// subscribes to and unsubscribes from (since 2.10.0);
 /// </description></item>
 /// <item><description><c>AmiConnection.InDispatch</c>, a <see cref="bool"/>;</description></item>
+/// <item><description><c>AmiConnection.ReconnectPending</c>, a <see cref="bool"/>;</description></item>
+/// <item><description><c>AmiConnection.EventLossMark</c>, an <see cref="AmiEventLossMark"/>;</description></item>
+/// <item><description>
+/// <c>AmiConnection.CurrentEventLossMark</c>, an <see cref="AmiEventLossMark"/>, and
+/// <c>AmiConnection.DeliveredThroughLastLoss</c>, a <see cref="bool"/> (since 2.10.0);
+/// </description></item>
+/// <item><description>
+/// <c>AmiConnection.DispatchingEvent</c> and <c>AmiConnection.ReceivedThrough</c>, each a tuple of two
+/// <see cref="long"/> named <c>Session</c> and <c>Ordinal</c> (since 2.10.0);
+/// </description></item>
 /// <item><description>
 /// <c>AmiConnection.StateAndWriter</c>, a tuple of <see cref="AmiConnectionState"/> and <see cref="bool"/>;
 /// </description></item>
@@ -114,6 +124,23 @@ public sealed class AmiInternalsUsedByLiveTests
         var stateAndWriter = connection.StateAndWriter;
         Exactly<(AmiConnectionState State, bool WrittenByCaller)>(ref stateAndWriter);
 
+        // AmiConnection.ReconnectPending, EventLossMark, CurrentEventLossMark and DeliveredThroughLastLoss: their getters,
+        // by their exact types.
+        var reconnectPending = connection.ReconnectPending;
+        Exactly<bool>(ref reconnectPending);
+        var lossMark = connection.EventLossMark;
+        Exactly<AmiEventLossMark>(ref lossMark);
+        var currentLossMark = connection.CurrentEventLossMark;
+        Exactly<AmiEventLossMark>(ref currentLossMark);
+        var deliveredThroughLastLoss = connection.DeliveredThroughLastLoss;
+        Exactly<bool>(ref deliveredThroughLastLoss);
+
+        // AmiConnection.DispatchingEvent and ReceivedThrough: their getters, by their exact types.
+        var dispatching = connection.DispatchingEvent;
+        Exactly<(long Session, long Ordinal)>(ref dispatching);
+        var receivedThrough = connection.ReceivedThrough;
+        Exactly<(long Session, long Ordinal)>(ref receivedThrough);
+
         // new ListSnapshotMark(), its CompleteOrdinal and its wait, and the overload that fills it; bound only.
         var mark = new ListSnapshotMark();
         var completeOrdinal = mark.CompleteOrdinal;
@@ -164,6 +191,10 @@ public sealed class AmiInternalsUsedByLiveTests
             outcomes.Should().HaveCount(2, "Live reads both outcomes by name");
             inDispatch.Should().BeFalse("the test does not run inside a dispatch");
             stateAndWriter.Should().Be((AmiConnectionState.Connected, true), "the caller's own ConnectAsync connected it");
+            reconnectPending.Should().BeFalse("the caller's first connect follows no loss");
+            lossMark.Should().Be(new AmiEventLossMark(1, 0), "the first session has lost nothing");
+            currentLossMark.Should().Be(lossMark, "outside a dispatch both marks read the current session now");
+            deliveredThroughLastLoss.Should().BeTrue("a session that has lost nothing has nothing to deliver through");
             completeOrdinal.Should().Be(0L, "a new mark describes no list yet");
             fullyBooted.IsCompleted.Should().BeFalse("the peer never reported FullyBooted on this session");
             received.Should().BeEmpty("the peer's list was empty");
