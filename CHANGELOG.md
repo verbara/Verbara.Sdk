@@ -94,7 +94,7 @@ and that a lookup naming no server and a consumer keyed only by `linkedid` canno
 complete makes its server a candidate instead, and one on a server whose last `Status` was refused is counted on every
 tick.
 
-### Changed: the sweep verifies a dropped event once it is delivered, whatever the call's age (#NNN)
+### Changed: the sweep verifies a dropped event once it is delivered, whatever the call's age (#546)
 
 When the full event buffer drops an event the server would have read, the reconciliation sweep now verifies that
 server's calls once the drop has been delivered through: the connection has dispatched every event it received up to
@@ -109,7 +109,7 @@ gains `sessions.trigger` (`age`, `table`, `event-loss` or `none`, in that preced
 `trigger=` and `loss=` (`loss=pending-undelivered` while a drop is still behind the backlog). See
 [Session Reconciliation](docs/guides/high-load-tuning.md#session-reconciliation).
 
-### Fixed: a call not observed in full is decided only on a channel table no dropped event made untrusted (#NNN)
+### Fixed: a call not observed in full is decided only on a channel table no dropped event made untrusted (#546)
 
 A call the session engine has not observed in full — registered as reconstructed, admitted after a manual attach, or
 kept across a re-attach — was decided on a complete channel table even when a dropped `Newchannel` meant the table
@@ -121,7 +121,7 @@ another of its legs' hangups was observed before the read: the SDK did not obser
 sweep decides these calls through its own `ReconcileChannelsAsync` once the drop is delivered; until then they wait,
 with no time bound. See [Sessions without the sweep](docs/guides/high-load-tuning.md#session-reconciliation).
 
-### Added: a channel reconciliation says whether it covered the events lost before it (#NNN)
+### Added: a channel reconciliation says whether it covered the events lost before it (#546)
 
 The `live channel-reconcile` span gains `live.reconcile.covered`: `true` when the read's snapshot completed, its wait
 for every event received before its `Status` was reached, it kept no channel created before that `Status` and no other
