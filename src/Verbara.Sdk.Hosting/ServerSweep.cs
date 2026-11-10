@@ -33,8 +33,9 @@ internal sealed partial class ServerSweep
 
     /// <summary>
     /// Decides calls against this instance, then asks for Status at most once. A pool pass also restricts calls to
-    /// its exact pool id; a single-server pass follows each call's own attachment identity. Custom managers retain
-    /// their existing participant/age verification behavior, without assuming they expose the built-in oracle.
+    /// its exact pool id; a single-server pass follows each call's own attachment identity. Custom managers keep their
+    /// participant-only channel source, without assuming they expose the built-in oracle: their calls qualify by age, and
+    /// once a lost event has been delivered through, whatever their age — never by waiting for a table.
     /// </summary>
     public async Task SweepAsync(VerbaraServer server, string? serverId, CancellationToken cancellationToken)
     {
@@ -110,7 +111,9 @@ internal sealed partial class ServerSweep
         finally
         {
             // Count only calls still held after both decision paths. A successful read may clear refusal even when
-            // its application was deferred; completeness and the last refusal therefore remain separate inputs.
+            // its application was deferred; coverage and the last refusal therefore remain separate inputs. A refused
+            // Status also resets completeness, so a refused server's table is never covered: the clause reads the
+            // predicate the sweep spec names rather than relying on that reset.
             if (_manager is not CallSessionManager)
                 customHeld = new HashSet<CallSession>(_manager.ActiveSessions, ReferenceEqualityComparer.Instance);
             var unverifiable = 0;
@@ -130,7 +133,7 @@ internal sealed partial class ServerSweep
                     if (HoldsParticipantChannel(server, call) || HoldsLinkedChannel(server, call, attached)) continue;
                     if (pending)
                     {
-                        if (!server.ChannelTableComplete && server.LastStatusRefusal is not null) unverifiable++;
+                        if (!server.ChannelTableCovered && server.LastStatusRefusal is not null) unverifiable++;
                     }
                     else if (now - call.CreatedAt > _options.DialingTimeout) unverifiable++;
                 }

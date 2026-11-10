@@ -302,6 +302,45 @@ public sealed class SweepAfterADeliveredLossTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task Sweep_ShouldCountTheLeglessWaitingCallOnEveryRefusedTick_WhenADeliveredLossLeftACompleteTableUncovered(bool pool)
+    {
+        // A pin, green on arrival: a refused Status resets completeness, so the unverifiable count's refusal clause
+        // counts this call whether it reads completeness or coverage. It guards "a call waiting for a covered table is
+        // counted on every tick while the last Status was refused" against a later change of what a refusal does to
+        // the table.
+        await using var rig = await LossRig.StartAsync();
+        await rig.HoldAndFillAsync();
+        await rig.DropUnrelatedAsync();
+        await rig.DeliverAsync();
+        var waiting = LossRig.Reconstructed("R");
+        rig.Manager.RegisterReconstructedSession(waiting).Should().BeTrue();
+        var atRegistration = rig.EndingsOf(waiting);
+        rig.RefuseNextStatus();
+        rig.RefuseNextStatus();
+
+        var first = await rig.TickAsync(pool);
+        var second = await rig.TickAsync(pool);
+        var covering = await rig.TickAsync(pool);
+        var after = await rig.TickAsync(pool);
+
+        using (new AssertionScope())
+        {
+            atRegistration.Should().Be(0, "premise: the table is complete but a delivered loss left it uncovered");
+            first.Should().BeEquivalentTo(new { Status = 1, Trigger = EventLoss, Unverifiable = 1 },
+                "the delivered loss prompts one Status; refused, the legless waiting call is counted");
+            second.Should().BeEquivalentTo(new { Status = 1, Unverifiable = 1 },
+                "a refused Status leaves the table not covered: counted again, one Status per tick");
+            covering.Should().BeEquivalentTo(new { Status = 1, Unverifiable = 0 },
+                "the completed Status covers the loss and decides the call");
+            rig.EndingsOf(waiting).Should().Be(1, $"no channel of its linkedid is listed: ended once. {rig.Describe(waiting)}");
+            waiting.Metadata.GetValueOrDefault("cause").Should().Be("reload");
+            after.Status.Should().Be(0, "nothing is left to verify");
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Sweep_ShouldSendNothingAndReportTheLossUndelivered_WhileTheReconnectIsPending(bool pool)
     {
         await using var rig = await LossRig.StartAsync(autoReconnect: true);
