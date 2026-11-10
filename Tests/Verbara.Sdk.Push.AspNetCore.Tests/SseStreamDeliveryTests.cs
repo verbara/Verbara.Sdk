@@ -709,7 +709,10 @@ public sealed class SseStreamBoundTests
 
     /// <summary>
     /// A client that stops reading after the headers while events are published far past the 1 MiB bound
-    /// and the transport's buffers (≈32 MB at 16 KB, ≈20 MB at 0.5 KB), then reads everything.
+    /// (≈32 MB at 16 KB, ≈20 MB at 0.5 KB), then reads everything. The server's writes are held by a gate
+    /// from the subscription until every event reached the stream: a reader stopped only by the transport's
+    /// buffers lets the writer through whenever the kernel grows or drains them, which reports a drop mid-publish
+    /// and lets the heartbeats that then fall due be queued between the remaining events.
     /// </summary>
     private static async Task<Episode> RunStoppedReaderEpisodeAsync(int payload, bool allowSynchronousIO, TimeSpan? heartbeat, long? boundBytes = null)
     {
@@ -728,6 +731,7 @@ public sealed class SseStreamBoundTests
         meterListener.Start();
 
         var queueDepth = new QueueDepthProbe();
+        var gate = new ResponseWriteGate();
         await using var host = await SseTestHost.StartAsync(new SseHostOptions
         {
             AllowSynchronousIO = allowSynchronousIO,
@@ -735,6 +739,7 @@ public sealed class SseStreamBoundTests
             HeartbeatInterval = heartbeat,
             PerConnectionBoundBytes = boundBytes,
             QueueDepth = queueDepth,
+            ResponseGate = gate,
         });
 
         var probe = new CountingObserver();
@@ -748,7 +753,9 @@ public sealed class SseStreamBoundTests
         var subscribed = status == HttpStatusCode.OK
             && await host.Bus.Subscribers.WaitUntilAsync(static c => c >= 2, Bound);
 
-        // The reader is stopped: nothing reads the body while the events are published.
+        // The reader is stopped: nothing reads the body, and nothing the server writes leaves it, while the
+        // events are published. The queue fills to the bound and its drops stay unreported until the reader resumes.
+        gate.Close();
         for (var i = 0; i < count; i++)
             await host.PublishAsync(LoadFrames.Topic(i), correlationId: LoadFrames.Correlation(i, pad));
 
@@ -757,6 +764,7 @@ public sealed class SseStreamBoundTests
         await host.PublishAsync("queue.0.flush", tenant: "T2");
         var busDelivered = await probe.Received.WaitUntilAsync(c => c >= count + 1, Bound);
         var busReceived = probe.Received.Value;
+        gate.Open();
 
         // The reader resumes and reads until the newest event.
         IReadOnlyList<SseFrame> frames = [];

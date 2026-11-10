@@ -379,6 +379,106 @@ public sealed record SseHostOptions
 
     /// <summary>When set, configures <see cref="SsePushStreamOptions"/> after the test's other stream settings.</summary>
     public Action<SsePushStreamOptions>? ConfigureStream { get; init; }
+
+    /// <summary>When set, every write and flush of a stream response waits while this gate is closed.</summary>
+    public ResponseWriteGate? ResponseGate { get; init; }
+}
+
+/// <summary>
+/// Holds the server's writes to a stream response while closed: a stopped reader the test controls, instead of
+/// one stopped only once the transport's buffers fill (which the kernel may grow or drain at any time).
+/// Open by default; <see cref="Open"/> is idempotent.
+/// </summary>
+public sealed class ResponseWriteGate
+{
+    private readonly Lock _lock = new();
+    private TaskCompletionSource _open = Opened();
+
+    /// <summary>From now on, writes and flushes wait until <see cref="Open"/>.</summary>
+    public void Close()
+    {
+        lock (_lock)
+        {
+            if (_open.Task.IsCompleted)
+                _open = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
+
+    /// <summary>Releases every waiting write and lets later ones through.</summary>
+    public void Open()
+    {
+        TaskCompletionSource open;
+        lock (_lock)
+            open = _open;
+        open.TrySetResult();
+    }
+
+    /// <summary>Completes once the gate is open, or faults when <paramref name="ct"/> is cancelled first.</summary>
+    public Task WhenOpenAsync(CancellationToken ct)
+    {
+        Task open;
+        lock (_lock)
+            open = _open.Task;
+        return open.WaitAsync(ct);
+    }
+
+    private static TaskCompletionSource Opened()
+    {
+        var open = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        open.SetResult();
+        return open;
+    }
+}
+
+/// <summary>A response body whose every write and flush first waits for its <see cref="ResponseWriteGate"/>.</summary>
+public sealed class GatedWriteStream(Stream inner, ResponseWriteGate gate) : Stream
+{
+    public override bool CanRead => false;
+
+    public override bool CanSeek => false;
+
+    public override bool CanWrite => true;
+
+    public override long Length => throw new NotSupportedException();
+
+    public override long Position
+    {
+        get => throw new NotSupportedException();
+        set => throw new NotSupportedException();
+    }
+
+    public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        await gate.WhenOpenAsync(cancellationToken);
+        await inner.WriteAsync(buffer, cancellationToken);
+    }
+
+    public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+        WriteAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+    public override void Write(byte[] buffer, int offset, int count)
+    {
+        gate.WhenOpenAsync(CancellationToken.None).GetAwaiter().GetResult();
+        inner.Write(buffer, offset, count);
+    }
+
+    public override async Task FlushAsync(CancellationToken cancellationToken)
+    {
+        await gate.WhenOpenAsync(cancellationToken);
+        await inner.FlushAsync(cancellationToken);
+    }
+
+    public override void Flush()
+    {
+        gate.WhenOpenAsync(CancellationToken.None).GetAwaiter().GetResult();
+        inner.Flush();
+    }
+
+    public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+    public override void SetLength(long value) => throw new NotSupportedException();
 }
 
 /// <summary>
@@ -495,6 +595,9 @@ public sealed class SseTestHost : IAsyncDisposable
                     ? fixedPrincipal
                     : principals.TryGetValue(id, out var registered) ? registered : new ClaimsPrincipal(new ClaimsIdentity());
             }
+
+            if (options.ResponseGate is { } gate && ctx.Request.Path.StartsWithSegments(StreamPath, StringComparison.Ordinal))
+                ctx.Response.Body = new GatedWriteStream(ctx.Response.Body, gate);
 
             try
             {
