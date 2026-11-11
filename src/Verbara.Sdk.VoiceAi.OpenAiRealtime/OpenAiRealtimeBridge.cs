@@ -575,7 +575,15 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     }
                     catch (JsonException ex) { SkipUnreadable(channelId, ex, baseEvt.Type); break; }
                     if (audioEvt is null) break;
-                    var pcm16Bytes = Convert.FromBase64String(audioEvt.Delta);
+                    // The vendor documents delta as a required string: a null one is an event the bridge
+                    // cannot read, and so is one the base64 decoder rejects. Only the decode is guarded.
+                    if (audioEvt.Delta is null) { SkipUnreadable(channelId, exception: null, baseEvt.Type); break; }
+                    byte[] pcm16Bytes;
+                    try
+                    {
+                        pcm16Bytes = Convert.FromBase64String(audioEvt.Delta);
+                    }
+                    catch (FormatException ex) { SkipUnreadable(channelId, ex, baseEvt.Type); break; }
                     ReadOnlyMemory<byte> pcm;
                     if (downsampler is not null)
                     {
@@ -588,6 +596,10 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     {
                         pcm = pcm16Bytes.AsMemory();
                     }
+                    // A delta that carries no audio at the caller's rate (empty, or too short to make one
+                    // sample once downsampled) is not written: the caller gets no zero-length audio frame.
+                    // It was still fed to the downsampler, which keeps its phase. Nothing is counted.
+                    if (pcm.IsEmpty) break;
                     // A caller that left no longer accepts audio. Stop these writes, but keep reading
                     // the vendor's close: its code classifies the session. The input loop's existing
                     // hangup path sends our close and bounds the answer, including after a transport
@@ -716,7 +728,11 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     /// An event that names no failure and could not be read is skipped: counted on
     /// <c>openai_realtime.frames.unparseable</c> and logged once at Warning. The call goes on.
     /// </summary>
-    private void SkipUnreadable(Guid channelId, JsonException exception, string eventType)
+    /// <param name="channelId">The call the event arrived on.</param>
+    /// <param name="exception">The decoder's failure, or <see langword="null"/> when the event decoded but a
+    /// member the vendor documents as required was null.</param>
+    /// <param name="eventType">The event's type, as far as it was read.</param>
+    private void SkipUnreadable(Guid channelId, Exception? exception, string eventType)
     {
         RealtimeMetrics.CountUnparseable(ProviderName);
         RealtimeLog.UnreadableEventSkipped(_logger, exception, channelId, eventType);

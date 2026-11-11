@@ -20,10 +20,11 @@ public sealed class ReceiveLoopCatchScopeGuardTests
     /// <summary>
     /// The decode-guarded <c>try</c> statements in scope: the Deepgram recognizer's decode and peek, the
     /// three other streaming recognizers' decode and peek (Speechmatics' greeting decode as well), the
-    /// realtime bridge's six, and the four streaming synthesizers' decode and peek plus the base64 audio
-    /// decode of Cartesia and ElevenLabs. A floor, not a count: a site added later only raises it.
+    /// realtime bridge's six plus its base64 audio decode, and the four streaming synthesizers' decode and
+    /// peek plus the base64 audio decode of Cartesia and ElevenLabs. A floor, not a count: a site added
+    /// later only raises it.
     /// </summary>
-    private const int MinimumGuardedTries = 25;
+    private const int MinimumGuardedTries = 26;
 
     private static readonly string[] SpeechPackageRoots =
     [

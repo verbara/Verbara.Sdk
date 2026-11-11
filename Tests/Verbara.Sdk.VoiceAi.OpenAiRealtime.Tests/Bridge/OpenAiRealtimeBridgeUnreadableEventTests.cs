@@ -54,6 +54,9 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
     private static readonly string AssistantAudioDeltaEvent =
         $$"""{"type":"response.output_audio.delta","delta":"{{Convert.ToBase64String(new byte[960])}}"}""";
 
+    /// <summary>The 960 bytes of <see cref="AssistantAudioDeltaEvent"/> downsampled to the caller's 8 kHz.</summary>
+    private const int ReadableDeltaBytesAt8kHz = 320;
+
     // ── (a) the audio delta's member has the wrong type ────────────────────────
 
     [Fact]
@@ -67,6 +70,66 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
         {
             AssertServedPastOneCountedSkip(seen);
             seen.UnparseableTags.Should().HaveCount(1, "one unreadable frame is one measurement, whatever pass failed");
+        }
+    }
+
+    [Fact]
+    public async Task HandleSessionAsync_ShouldCountSkipAndKeepServing_WhenAnAudioDeltaIsNotBase64()
+    {
+        const string Unreadable = """{"type":"response.output_audio.delta","delta":"invalid base64!"}""";
+
+        var seen = await ServeAsync(Frames(Unreadable));
+
+        using (new AssertionScope())
+        {
+            AssertServedPastOneCountedSkip(seen);
+            seen.UnparseableTags.Should().HaveCount(1, "one undecodable delta is one measurement");
+            seen.Log.Where(e => e.Level == LogLevel.Warning).Should().ContainSingle()
+                .Which.Exception.Should().BeOfType<FormatException>("the Warning carries the decoder's failure");
+        }
+    }
+
+    [Fact]
+    public async Task HandleSessionAsync_ShouldCountSkipAndKeepServing_WhenAnAudioDeltaIsNull()
+    {
+        const string Unreadable = """{"type":"response.output_audio.delta","delta":null}""";
+
+        var seen = await ServeAsync(Frames(Unreadable));
+
+        using (new AssertionScope())
+        {
+            AssertServedPastOneCountedSkip(seen);
+            seen.UnparseableTags.Should().HaveCount(1, "a delta the vendor's contract says is a string is unreadable when null");
+            seen.Log.Where(e => e.Level == LogLevel.Warning).Should().ContainSingle()
+                .Which.Exception.Should().BeNull("no decoder failed: the delta was absent");
+        }
+    }
+
+    /// <summary>
+    /// A delta that carries no audio once it reaches the caller's rate: an empty string, or a single byte
+    /// (<c>AA==</c>) that the 24 kHz to 8 kHz downsampler turns into no sample. The caller hears no
+    /// zero-length audio frame; the first frame it hears is the readable delta's 320 bytes.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("AA==")]
+    public async Task HandleSessionAsync_ShouldWriteNothingAndKeepServing_WhenAnAudioDeltaIsEmpty(string delta)
+    {
+        var empty = $$"""{"type":"response.output_audio.delta","delta":"{{delta}}"}""";
+
+        var seen = await ServeAsync(Frames(empty));
+
+        using (new AssertionScope())
+        {
+            seen.FaultText.Should().Be("none", $"a delta without audio fails nothing (fault: {seen.FaultText})");
+            seen.EndedWhileServed.Should().BeFalse("the session goes on while the caller is on the line");
+            seen.FinalTranscripts.Should().Equal([FinalTranscript], "the transcript after the empty delta is published");
+            seen.HeardFrameLengths.Should().Equal(
+                [ReadableDeltaBytesAt8kHz],
+                "no zero-length audio frame reaches the caller; the readable delta's 20 ms at 8 kHz does");
+            seen.Failed.Should().Be(0);
+            seen.Unparseable.Should().Be(0, "a delta without audio is not an unreadable event");
+            seen.Log.Count(e => e.Level == LogLevel.Warning).Should().Be(0);
         }
     }
 
@@ -368,6 +431,7 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
         IReadOnlyList<RealtimeEvent> Events,
         IReadOnlyList<string> FinalTranscripts,
         bool AudioReachedCaller,
+        IReadOnlyList<int> HeardFrameLengths,
         long Failed,
         long Unparseable,
         IReadOnlyList<string> UnparseableTags,
@@ -401,7 +465,8 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
         using var readCts = new CancellationTokenSource();
 
         var sessionTask = bridge.HandleSessionAsync(session, cts.Token).AsTask();
-        var audioHeard = FirstAudioAsync(client, readCts.Token);
+        var heardLengths = new List<int>();
+        var audioHeard = FirstAudioAsync(client, heardLengths, readCts.Token);
         await fakeOpenAi.SessionUpdateReceived.WaitAsync(SignalTimeout);
 
         try
@@ -425,12 +490,16 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
         }
 
         var endedWhileServed = sessionTask.IsCompleted;
+        int[] heard;
+        lock (heardLengths)
+            heard = [.. heardLengths];
         var observation = new Observation(
             Fault: sessionTask.IsFaulted ? sessionTask.Exception!.InnerException : null,
             EndedWhileServed: endedWhileServed,
             Events: collector.Events,
             FinalTranscripts: [.. collector.Events.OfType<RealtimeTranscriptEvent>().Where(t => t.IsFinal).Select(t => t.Transcript)],
             AudioReachedCaller: audioHeard.IsCompletedSuccessfully && audioHeard.Result,
+            HeardFrameLengths: heard,
             Failed: metrics.Get(Failed),
             Unparseable: metrics.Get(Unparseable),
             UnparseableTags: metrics.Tags(Unparseable),
@@ -447,13 +516,22 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
         return observation;
     }
 
-    /// <summary>True once the caller has read one audio frame; false if its stream ended or was cancelled first.</summary>
-    private static async Task<bool> FirstAudioAsync(AudioSocketClient client, CancellationToken ct)
+    /// <summary>
+    /// True once the caller has read one audio frame that carries audio; false if its stream ended or was
+    /// cancelled first. The length of every audio frame read, empty ones included, is kept in
+    /// <paramref name="heardLengths"/>.
+    /// </summary>
+    private static async Task<bool> FirstAudioAsync(AudioSocketClient client, List<int> heardLengths, CancellationToken ct)
     {
         try
         {
-            await foreach (var _ in client.ReadAudioAsync(ct))
-                return true;
+            await foreach (var chunk in client.ReadAudioAsync(ct))
+            {
+                lock (heardLengths)
+                    heardLengths.Add(chunk.Length);
+                if (chunk.Length > 0)
+                    return true;
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

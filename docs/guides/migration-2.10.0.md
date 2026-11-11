@@ -19,6 +19,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Live` | [A refused `Status` is counted and reported by the pool health check](#a-refused-status-is-counted-and-reported-by-the-pool-health-check) | new members, health check |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
 | `Verbara.Sdk.Ami` | [`NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends](#newextenevent-and-newcalleridevent-carry-what-the-wire-sends) | fix, new members |
+| `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An OpenAI Realtime audio delta that is not valid base64 no longer ends the call](#an-openai-realtime-audio-delta-that-is-not-valid-base64-no-longer-ends-the-call) | behaviour, metric, BREAKING |
 | `Verbara.Sdk.VoiceAi.Tts` | [A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis](#a-cartesia-or-elevenlabs-audio-frame-that-is-not-valid-base64-no-longer-ends-the-synthesis) | fix, behaviour, BREAKING |
 
 ## Sessions
@@ -366,6 +367,23 @@ changes nothing. Where two policies share a key, the gauge follows the one that 
 `ResilienceMetrics.SetCircuitState` keeps its signature.
 
 ## Voice AI
+
+### An OpenAI Realtime audio delta that is not valid base64 no longer ends the call
+
+**What changed.** Since 2.9.0 an event the bridge cannot decode is skipped and the call goes on, but an audio delta that
+decoded and whose `delta` was not valid base64 still ended the session: the caller was hung up under the session broker
+and the session counted in `openai_realtime.sessions.failed`. Now such a delta is skipped, logged once at Warning and
+counted on `openai_realtime.frames.unparseable` (meter `Verbara.Sdk.VoiceAi.OpenAiRealtime`, tagged `voiceai.provider` =
+`OpenAiRealtime`), and the transcript and audio that follow reach the caller. An audio delta whose `delta` is an explicit
+null, which ended the session with an `ArgumentNullException`, is now counted and skipped the same way; one whose `delta`
+is empty, or too short to make one sample at the caller's rate, is skipped without a count and no longer sends a
+zero-length audio frame to the caller. An `Events` subscriber that throws still ends the session. No signature changes.
+
+**Who is affected.** A dashboard or alert on `openai_realtime.sessions.failed`: a session with such a delta no longer counts
+there. A caller that hears a short gap where the bad delta was.
+
+**What to do.** Nothing in code. Watch `openai_realtime.frames.unparseable` for the deltas the bridge skipped. See the
+bridge's README, *When the conversation ends*.
 
 ### A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis
 
