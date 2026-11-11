@@ -76,7 +76,10 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
     private AgentSession GetOrCreate(string agentId) =>
         _agents.GetOrAdd(agentId, static (id, clock) => new AgentSession(id, clock), _timeProvider);
 
-    private void TransitionState(AgentSession agent, AgentSessionState newState, string sessionId, string serverId)
+    // Every change is caused by a session notification the tracker handled, and carries that notification's loss mark
+    // (null when the notification's was): the change says no more and no less about what the connection may have lost
+    // than its cause did.
+    private void TransitionState(AgentSession agent, AgentSessionState newState, SessionDomainEvent cause)
     {
         var previous = agent.State;
         if (previous == newState)
@@ -87,8 +90,8 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
         agent.StateChangedAt = now;
 
         _stateChanges.OnNext(new AgentSessionStateChanged(
-            sessionId, serverId, now,
-            agent.AgentId, previous, newState));
+            cause.SessionId, cause.ServerId, now,
+            agent.AgentId, previous, newState) { Epoch = cause.Epoch });
     }
 
     private void OnCallConnected(CallConnectedEvent evt)
@@ -102,7 +105,7 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
             agent.CurrentCall = _manager.GetById(evt.SessionId);
             agent.CurrentQueueName = evt.QueueName;
             agent.WrapUpClosedForSessionId = null;
-            TransitionState(agent, AgentSessionState.OnCall, evt.SessionId, evt.ServerId);
+            TransitionState(agent, AgentSessionState.OnCall, evt);
         }
     }
 
@@ -140,11 +143,11 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
             {
                 agent.CurrentCall = null;
                 agent.CurrentQueueName = null;
-                TransitionState(agent, AgentSessionState.Idle, evt.SessionId, evt.ServerId);
+                TransitionState(agent, AgentSessionState.Idle, evt);
                 return;
             }
 
-            TransitionState(agent, AgentSessionState.WrapUp, evt.SessionId, evt.ServerId);
+            TransitionState(agent, AgentSessionState.WrapUp, evt);
         }
     }
 
@@ -220,7 +223,7 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
 
             agent.CurrentCall = null;
             agent.CurrentQueueName = null;
-            TransitionState(agent, AgentSessionState.Idle, evt.SessionId, evt.ServerId);
+            TransitionState(agent, AgentSessionState.Idle, evt);
         }
     }
 
