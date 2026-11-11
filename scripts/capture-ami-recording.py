@@ -58,6 +58,7 @@ Exit codes: 0 = written; 1 = refused or failed (the reason is printed).
 from __future__ import annotations
 
 import argparse
+import base64
 import collections
 import datetime as _dt
 import hashlib
@@ -71,6 +72,9 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 SCHEMA = "verbara.ami-capture-provenance/1"
@@ -99,6 +103,10 @@ _KEPT_ADDRESSES = (b"0.0.0.0", b"127.0.0.1")
 
 class CaptureError(Exception):
     """A refusal or failure with a message meant for the operator."""
+
+
+class ConnectionClosed(CaptureError):
+    """The PBX closed the manager connection: no later step of a workload can run."""
 
 
 # --- Frames -------------------------------------------------------------------------------
@@ -320,6 +328,8 @@ class Tap:
         self.buf = b""
         self.frames = []  # parsed header dicts, in arrival order
         self.n = 0
+        self.options = {}  # workload options from the command line (e.g. sequential_calls)
+        self.ari = None  # an AriClient when the workload asked for ARI
         self.banner = self._read_banner()
 
     def _recv(self, timeout: float) -> bool:
@@ -329,7 +339,7 @@ class Tap:
         except socket.timeout:
             return False
         if not chunk:
-            raise CaptureError("the PBX closed the manager connection")
+            raise ConnectionClosed("the PBX closed the manager connection")
         self.transcript += chunk
         self.buf += chunk
         return True
@@ -730,6 +740,577 @@ def _dialplan_and_parking(tap: Tap):
     return steps
 
 
+_RENAMED_EXTENSIONS = """[general]
+static = yes
+writeprotect = no
+
+[capture]
+; a queue caller: waits in capture-q (no members) until the tap ends it; 60 s is a safety net only
+exten => queue,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=60)
+ same => n,Queue(capture-q)
+ same => n,Hangup()
+; a conference participant: stays in capture-room until the tap ends it
+exten => conf,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=60)
+ same => n,ConfBridge(capture-room)
+ same => n,Hangup()
+; a channel that only waits: Bridge's second channel, and the far leg of `dialpeer`
+exten => peer,1,Answer()
+ same => n,Wait(30)
+ same => n,Hangup()
+; the near leg of a Local pair without /n: dials a peer, so that leg is bridged
+exten => dialpeer,1,Dial(Local/peer@capture/n,10)
+ same => n,Hangup()
+; a channel that sends audio (a 1 kHz tone) for as long as it lives, and the legs that dial it, so
+; voice frames cross the Local pair in between: `dialtone` is the near leg of a waiting caller or
+; participant, `lopt` the far leg of the control pair outside both surfaces
+exten => tone,1,Answer()
+ same => n,Milliwatt()
+ same => n,Hangup()
+exten => dialtone,1,Dial(Local/tone@capture/n,30)
+ same => n,Hangup()
+exten => lopt,1,Dial(Local/tone@capture/n,30)
+ same => n,Hangup()
+; the transferer's leg of a SIP attended transfer: RT holds the Refer-To, with the Replaces of
+; the waiting leg's dialog
+exten => refer-go,1,Transfer(PJSIP/${RT})
+ same => n,UserEvent(CaptureApp,App: Transfer,Result: ${TRANSFERSTATUS})
+ same => n,Wait(5)
+ same => n,Hangup()
+; where Redirect sends a waiting caller or a participant
+exten => redirected,1,Answer()
+ same => n,Wait(30)
+ same => n,Hangup()
+; a channel that rings and never answers, and the call that dials it (the positive control's target)
+exten => ring,1,Ringing()
+ same => n,Wait(30)
+ same => n,Hangup()
+exten => dialring,1,Dial(Local/ring@capture/n,30)
+ same => n,Hangup()
+; PickupChan and Pickup against TARGET; the UserEvent fires only when the app came back without a pickup
+exten => pickchan,1,PickupChan(${TARGET})
+ same => n,UserEvent(CaptureApp,App: PickupChan,Result: returned)
+ same => n,Hangup()
+exten => pickup,1,Pickup(${TARGET})
+ same => n,UserEvent(CaptureApp,App: Pickup,Result: returned)
+ same => n,Hangup()
+; an INVITE on the PJSIP loopback whose Replaces header (RH) names an existing dialog
+exten => replace,1,Dial(PJSIP/replace-in@loop,10,b(capture-replaces^s^1))
+ same => n,Hangup()
+; the sequential calls for the inverted-leave search: one second in the queue or the room, then gone
+exten => queue-seq,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=1)
+ same => n,Queue(capture-q)
+ same => n,Hangup()
+exten => conf-seq,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=1)
+ same => n,ConfBridge(capture-room)
+ same => n,Hangup()
+
+[capture-replaces]
+exten => s,1,Set(PJSIP_HEADER(add,Replaces)=${RH})
+ same => n,Return()
+
+[capture-sip]
+; the answering legs of the PJSIP loopback calls
+exten => queue-in,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=60)
+ same => n,Queue(capture-q)
+ same => n,Hangup()
+exten => conf-in,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=60)
+ same => n,ConfBridge(capture-room)
+ same => n,Hangup()
+; the transferee's call: its answering leg (the leg the REFER arrives on) is bridged with a peer
+exten => hold-in,1,Answer()
+ same => n,Dial(Local/peer@capture/n,30)
+ same => n,Hangup()
+; reached only when an INVITE with Replaces was not taken as a replacement
+exten => replace-in,1,Answer()
+ same => n,UserEvent(CaptureApp,App: Replaces,Result: not-replaced)
+ same => n,Wait(10)
+ same => n,Hangup()
+"""
+
+_RENAMED_QUEUES = """[general]
+persistentmembers = no
+
+[capture-q]
+strategy = ringall
+joinempty = yes
+leavewhenempty = no
+announce-frequency = 0
+periodic-announce-frequency = 0
+announce-position = no
+announce-holdtime = no
+"""
+
+# The PJSIP loopback of `dialplan-and-parking`, under its own endpoint name: every INVITE the PBX
+# sends to 127.0.0.1 comes back in as `loop` and lands in `capture-sip`.
+_RENAMED_PJSIP = """[transport-loopback]
+type = transport
+protocol = udp
+bind = 127.0.0.1:5060
+
+[loop]
+type = aor
+contact = sip:127.0.0.1:5060
+
+[loop]
+type = endpoint
+transport = transport-loopback
+context = capture-sip
+disallow = all
+allow = ulaw
+aors = loop
+direct_media = no
+
+[loop]
+type = identify
+endpoint = loop
+match = 127.0.0.1
+"""
+
+_HTTP_CONF = """[general]
+enabled = yes
+bindaddr = 0.0.0.0
+bindport = {port}
+"""
+
+_ARI_CONF = """[general]
+enabled = yes
+
+[{user}]
+type = user
+read_only = no
+password = {secret}
+password_format = plain
+"""
+
+ARI_PORT = 8088
+ARI_USER = "capture"
+ARI_APP = "capture-ari"
+
+# Frame types the renamed-caller workload must see; the tap sets no event filter and the reduction
+# never drops them by default.
+RENAME_EVENTS = ("Rename", "Masquerade", "LocalOptimizationBegin", "LocalOptimizationEnd")
+
+RENAME_TRIGGERS = ("bridge", "pickupchan", "pickup", "local-optimization", "replaces", "refer", "ari-move",
+                   "redirect")
+RENAME_SURFACES = ("queue", "conference")
+
+
+class AriClient:
+    """The few ARI requests the workload sends, with HTTP basic auth; an HTTP error is a result."""
+
+    def __init__(self, base_url: str, user: str, secret: str, opener=None):
+        self.base_url = base_url.rstrip("/")
+        self._auth = "Basic " + base64.b64encode(f"{user}:{secret}".encode()).decode()
+        self._opener = opener or urllib.request.urlopen
+
+    def post(self, path: str, query=()):
+        url = self.base_url + path + ("?" + urllib.parse.urlencode(list(query)) if query else "")
+        request = urllib.request.Request(url, data=b"", method="POST",
+                                         headers={"Authorization": self._auth})
+        try:
+            with self._opener(request, timeout=10) as response:
+                return response.status, response.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as error:
+            return error.code, error.read().decode("utf-8", "replace")
+        except OSError as error:
+            return 0, str(error)
+
+
+def is_sentinel_uniqueid(uid) -> bool:
+    """An empty Uniqueid, or a placeholder such as the `<unknown>` of a failed OriginateResponse:
+    it names no channel, so two frames that carry it are not one channel under two names."""
+    return not uid or (uid.startswith("<") and uid.endswith(">"))
+
+
+def channel_names_by_uniqueid(frames):
+    """Every (Uniqueid -> [distinct names, in order]) the frames show.
+
+    A name is read from each `<prefix>Channel` header whose `<prefix>Uniqueid` sits in the same
+    frame (`Channel`/`Uniqueid`, `DestChannel`/`DestUniqueid`, ...), and from a `Rename` frame's
+    `Channel` then `Newname`. List rows count like events. A sentinel Uniqueid
+    (`is_sentinel_uniqueid`) is never read.
+    """
+    names = collections.OrderedDict()
+
+    def see(uid, name):
+        if not is_sentinel_uniqueid(uid) and name:
+            seen = names.setdefault(uid, [])
+            if name not in seen:
+                seen.append(name)
+
+    for f in frames:
+        for key, value in f.items():
+            if key.endswith("Channel"):
+                see(f.get(key[: -len("Channel")] + "Uniqueid"), value)
+        if f.get("Event") == "Rename":
+            see(f.get("Uniqueid"), f.get("Newname"))
+    return names
+
+
+def renamed_uniqueids(frames):
+    """The Uniqueids whose name changed in these frames, with or without a Rename frame."""
+    return {uid: seen for uid, seen in channel_names_by_uniqueid(frames).items() if len(seen) > 1}
+
+
+def _hangup_all(tap: Tap, timeout: float = 15.0):
+    """Hang up every Local and PJSIP channel, then wait until CoreShowChannels lists none."""
+    tap.action([("Action", "Hangup"), ("Channel", "/^(Local|PJSIP)\\//")])
+    deadline = tap.clock() + timeout
+    while True:
+        end = tap.list_action([("Action", "CoreShowChannels")])
+        if end.get("ListItems", "0") == "0" or tap.clock() > deadline:
+            return end.get("ListItems", "0")
+        tap.pump(0.5)
+
+
+def _renamed_caller_and_participant(tap: Tap):
+    """A queue caller and a ConfBridge participant that nobody renames (the negative control); a
+    rename of a channel outside any queue or room (the positive control: Action Bridge between two
+    waiting channels, and PickupChan of a ringing one); then each trigger of the search, in order,
+    on a caller waiting in `capture-q` and on a participant of `capture-room`: Action Bridge,
+    PickupChan, Pickup(), a Local pair without /n whose far leg is bridged, an INVITE with Replaces
+    naming the waiting PJSIP loopback leg, and ARI move. While the target still waits, a QueueStatus
+    or a ConfbridgeList and a ConfbridgeMute of each listed participant; then everything is hung up
+    and the leave awaited. With `sequential_calls` = N, N queue calls and N participants one after
+    another, each gone before the next joins.
+
+    The tap sets no event filter, so `Rename`, `Masquerade` and `LocalOptimization*` reach it. A
+    trigger that fails or times out is recorded, never fatal: the run is a search. Each trigger
+    ends with `UserEvent: CaptureOutcome` (its surface, trigger, the waiting channel's name and id
+    at its join, the refusals counted, the leaves and their Uniqueids, and the Uniqueids whose name
+    changed within the step); the tap's bytes stay the evidence, the outcome line only indexes them."""
+    steps = []
+    counter = iter(range(7200, 7999))
+
+    def step(name):
+        steps.append(name)
+        tap.marker(name)
+        return len(tap.frames)
+
+    def originate(channel, cid, app="Wait", data="30", variables=(), exten=None):
+        fields = [("Action", "Originate"), ("Channel", channel)]
+        if exten:
+            fields += [("Context", "capture"), ("Exten", exten), ("Priority", "1")]
+        else:
+            fields += [("Application", app), ("Data", data)]
+        fields += [("CallerID", f"Capture <{cid}>"), ("Async", "true")]
+        fields += [("Variable", v) for v in variables]
+        return tap.send(fields)
+
+    def join_event(surface):
+        return "QueueCallerJoin" if surface == "queue" else "ConfbridgeJoin"
+
+    def leave_event(surface):
+        return "QueueCallerLeave" if surface == "queue" else "ConfbridgeLeave"
+
+    def start_target(surface, mark, how="local"):
+        """Put a caller in the queue or a participant in the room; return its join frame."""
+        cid = str(next(counter))
+        exten = "queue" if surface == "queue" else "conf"
+        if how == "pjsip":
+            originate(f"PJSIP/{exten}-in@loop", cid)
+        elif how == "local-no-n":  # the near leg dials a tone, so audio crosses the pair into the target
+            originate(f"Local/{exten}@capture", cid, exten="dialtone")
+        else:
+            originate(f"Local/{exten}@capture/n", cid)
+        return tap.wait_for(lambda f: f.get("Event") == join_event(surface) and f.get("CallerIDNum") == cid,
+                            float(tap.options.get("join_timeout", 20)), mark, f"the {join_event(surface)} of {cid}")
+
+    def refused(response):
+        return 1 if response.get("Response") == "Error" else 0
+
+    def while_waiting(surface, join):
+        """The listing and the mute, sent while the target is (still) in the queue or the room."""
+        if surface == "queue":
+            tap.list_action([("Action", "QueueStatus"), ("Queue", "capture-q")])
+            return
+        mark = len(tap.frames)
+        end = tap.list_action([("Action", "ConfbridgeList"), ("Conference", "capture-room")])
+        rows = [f for f in tap.frames[mark:] if f.get("Event") == "ConfbridgeList"
+                and f.get("ActionID") == end.get("ActionID")]
+        for row in rows:
+            tap.action([("Action", "ConfbridgeMute"), ("Conference", "capture-room"),
+                        ("Channel", row.get("Channel", ""))])
+        if not rows:  # nobody listed: mute the name the join gave, so the refusal is on the wire
+            tap.action([("Action", "ConfbridgeMute"), ("Conference", "capture-room"),
+                        ("Channel", join.get("Channel", ""))])
+
+    def outcome(name, surface, trigger, mark, join, refusals, detail=""):
+        frames = tap.frames[mark:]
+        leaves = [f for f in frames if f.get("Event") == leave_event(surface)] if surface else []
+        renamed = renamed_uniqueids(frames)
+        fields = [("Action", "UserEvent"), ("UserEvent", "CaptureOutcome"), ("Step", name),
+                  ("Surface", surface or "none"), ("Trigger", trigger),
+                  ("TargetName", (join or {}).get("Channel", "")),
+                  ("TargetId", (join or {}).get("Uniqueid", "")),
+                  ("Refusals", str(refusals)), ("Leaves", str(len(leaves))),
+                  ("LeaveIds", ",".join(f.get("Uniqueid", "") for f in leaves)),
+                  ("RenamedIds", ",".join(renamed)),
+                  ("RenameFrames", str(sum(1 for f in frames if f.get("Event") == "Rename"))),
+                  ("Masquerades", str(sum(1 for f in frames if f.get("Event") == "Masquerade"))),
+                  ("LocalOptimizations", str(sum(1 for f in frames
+                                                 if f.get("Event") == "LocalOptimizationBegin")))]
+        if detail:
+            fields.append(("Detail", re.sub(r"[\r\n]+", " ", detail)[:200]))
+        tap.action(fields)
+
+    def finish(surface, mark):
+        """Hang everything up and wait for the target's leave (once is enough: it may have left)."""
+        tap.pump(0.5)
+        _hangup_all(tap)
+        if surface and not tap.count(_is(leave_event(surface)), mark):
+            try:
+                tap.wait_for(_is(leave_event(surface)), 5, mark, f"a {leave_event(surface)}")
+            except ConnectionClosed:
+                raise
+            except CaptureError:
+                pass
+        tap.pump(0.5)
+
+    def app_returned(mark, app):
+        return tap.count(lambda f: f.get("Event") == "UserEvent" and f.get("UserEvent") == "CaptureApp"
+                         and f.get("App") == app and f.get("Result") in ("returned", "not-replaced"), mark)
+
+    # -- the trigger bodies: each returns (refusals, detail) ------------------------------------
+
+    def do_bridge(target, mark):
+        cid = str(next(counter))
+        originate("Local/peer@capture/n", cid)
+        peer = tap.wait_for(lambda f: f.get("Event") == "Newexten" and f.get("Exten") == "peer"
+                            and f.get("Application") == "Wait", 20, mark, "the peer's Wait")
+        response = tap.action([("Action", "Bridge"), ("Channel1", target["Channel"]),
+                               ("Channel2", peer["Channel"]), ("Tone", "no")])
+        tap.pump(3.0)
+        return refused(response), f"Bridge: {response.get('Response')}: {response.get('Message', '')}"
+
+    def do_pickup(app, value, mark):
+        cid = str(next(counter))
+        exten = "pickchan" if app == "PickupChan" else "pickup"
+        originate(f"Local/{exten}@capture/n", cid, data="10", variables=[f"__TARGET={value}"])
+        tap.pump(3.0)
+        back = app_returned(mark, app)
+        return back, f"{app}({value}): " + ("returned without a pickup" if back else "did not return")
+
+    def do_local_optimization(surface, mark):
+        tap.pump(3.0)  # the trigger is the shape itself, with a tone crossing the pair
+        n = tap.count(_is("LocalOptimizationBegin"), mark)
+        note = "; queue unreachable by construction (Queue() is not a bridge)" if surface == "queue" else ""
+        return 0, f"LocalOptimizationBegin frames: {n}{note}"
+
+    def dialog_of(target):
+        """The waiting PJSIP leg's dialog as Replaces names it: (refusals, header or None)."""
+        values = {}
+        refusals = 0
+        for key in ("call-id", "local_tag", "remote_tag"):
+            response = tap.action([("Action", "Getvar"), ("Channel", target["Channel"]),
+                                   ("Variable", f"CHANNEL(pjsip,{key})")])
+            refusals += refused(response)
+            values[key] = response.get("Value", "")
+        if not all(values.values()):
+            return refusals or 1, None
+        return refusals, f"{values['call-id']};to-tag={values['local_tag']};from-tag={values['remote_tag']}"
+
+    def do_replaces(target, mark):
+        refusals, header = dialog_of(target)
+        if header is None:
+            return refusals, "the dialog of the waiting leg could not be read"
+        originate("Local/replace@capture/n", str(next(counter)), data="20", variables=[f"__RH={header}"])
+        tap.pump(4.0)
+        back = app_returned(mark, "Replaces")
+        return refusals + back, "INVITE with Replaces: " + ("not taken" if back else "no fallback seen")
+
+    def do_refer(target, mark, surface):
+        """A SIP attended transfer whose consultation leg is the waiting target: a second loopback
+        call (`hold-in`, its answering leg bridged with a peer) is the transferer's first call; once
+        that leg is bridged, its calling leg sends a REFER whose Refer-To carries the Replaces of
+        the target's dialog."""
+        refusals, header = dialog_of(target)
+        if header is None:
+            return refusals, "the dialog of the waiting leg could not be read"
+        action_id = originate("PJSIP/hold-in@loop", str(next(counter)))
+        answered = tap.wait_for(lambda f: f.get("Event") == "OriginateResponse"
+                                and f.get("ActionID") == action_id, 20, mark, "the transferer's call")
+        if answered.get("Response") != "Success":
+            return refusals + 1, f"the transferer's call was not answered: {answered.get('Reason', '')}"
+        leg = answered["Channel"]
+        # the answer comes before `hold-in` dials its peer; a REFER sent then finds no bridge on the
+        # transferee's side and Asterisk reports the transfer `Invalid`, so wait for that bridge
+        tap.wait_for(lambda f: f.get("Event") == "BridgeEnter" and f.get("Context") == "capture-sip"
+                     and f.get("Exten") == "hold-in", float(tap.options.get("join_timeout", 20)), mark,
+                     "the transferer's bridge")
+        exten = "queue-in" if surface == "queue" else "conf-in"
+        refer_to = f"<sip:{exten}@127.0.0.1:5060?Replaces={urllib.parse.quote(header, safe='')}>"
+        refusals += refused(tap.action([("Action", "Setvar"), ("Channel", leg), ("Variable", "RT"),
+                                        ("Value", refer_to)]))
+        response = tap.action([("Action", "Redirect"), ("Channel", leg), ("Context", "capture"),
+                               ("Exten", "refer-go"), ("Priority", "1")])
+        refusals += refused(response)
+        tap.pump(4.0)
+        transferred = tap.count(_is("AttendedTransfer"), mark)
+        status = [f.get("Result") for f in tap.frames[mark:] if f.get("Event") == "UserEvent"
+                  and f.get("UserEvent") == "CaptureApp" and f.get("App") == "Transfer"]
+        if not transferred or (status and status[-1] != "SUCCESS"):
+            refusals += 1
+        return refusals, (f"Transfer: {status[-1] if status else 'no result'}; "
+                          f"AttendedTransfer frames: {transferred}")
+
+    def do_redirect(target, _mark):
+        response = tap.action([("Action", "Redirect"), ("Channel", target["Channel"]), ("Context", "capture"),
+                               ("Exten", "redirected"), ("Priority", "1")])
+        tap.pump(2.0)
+        return refused(response), f"Redirect: {response.get('Response')}: {response.get('Message', '')}"
+
+    def do_ari_move(target, _mark):
+        if tap.ari is None:
+            return 1, "ARI unavailable"
+        status, body = tap.ari.post(f"/ari/channels/{target['Uniqueid']}/move", [("app", ARI_APP)])
+        tap.pump(2.0)
+        return (0 if 200 <= status < 300 else 1), f"ARI move: HTTP {status} {body.strip()[:120]}"
+
+    def local_optimization_control():
+        """A Local pair without /n outside both surfaces, bridged on both sides, with a tone
+        crossing it: whether this image raises LocalOptimizationBegin for the shape at all."""
+        name = "local-optimization-control"
+        mark = step(name)
+        try:
+            originate("Local/lopt@capture", str(next(counter)), exten="dialpeer")
+            tap.wait_for(lambda f: f.get("Event") == "Newexten" and f.get("Exten") == "tone"
+                         and f.get("Application") == "Milliwatt", 20, mark, "the control pair's tone")
+            refusals, detail = do_local_optimization(None, mark)
+            finish(None, mark)
+            outcome(name, None, "local-optimization", mark, None, refusals, detail)
+        except ConnectionClosed:
+            raise
+        except CaptureError as error:
+            _hangup_all(tap)
+            outcome(name, None, "local-optimization", mark, None, 0, f"error: {error}")
+
+    # -- negative control -------------------------------------------------------------------------
+
+    for surface in RENAME_SURFACES:
+        name = f"negative-{surface}"
+        mark = step(name)
+        join = None
+        try:
+            join = start_target(surface, mark)
+            tap.pump(1.0)
+            while_waiting(surface, join)
+            finish(surface, mark)
+            outcome(name, surface, "none", mark, join, 0)
+        except ConnectionClosed:
+            raise
+        except CaptureError as error:
+            _hangup_all(tap)
+            outcome(name, surface, "none", mark, join, 0, f"error: {error}")
+
+    # -- positive control: a rename outside any queue or conference -------------------------------
+
+    name = "positive-bridge"
+    mark = step(name)
+    try:
+        originate("Local/peer@capture/n", str(next(counter)))
+        first = tap.wait_for(lambda f: f.get("Event") == "Newexten" and f.get("Exten") == "peer"
+                             and f.get("Application") == "Wait", 20, mark, "the first peer's Wait")
+        second_mark = len(tap.frames)
+        originate("Local/peer@capture/n", str(next(counter)))
+        second = tap.wait_for(lambda f: f.get("Event") == "Newexten" and f.get("Exten") == "peer"
+                              and f.get("Application") == "Wait", 20, second_mark, "the second peer's Wait")
+        response = tap.action([("Action", "Bridge"), ("Channel1", first["Channel"]),
+                               ("Channel2", second["Channel"]), ("Tone", "no")])
+        tap.pump(3.0)
+        finish(None, mark)
+        outcome(name, None, "bridge", mark, first, refused(response),
+                f"Bridge: {response.get('Response')}: {response.get('Message', '')}")
+    except ConnectionClosed:
+        raise
+    except CaptureError as error:
+        _hangup_all(tap)
+        outcome(name, None, "bridge", mark, None, 0, f"error: {error}")
+
+    name = "positive-pickupchan"
+    mark = step(name)
+    try:
+        originate("Local/dialring@capture/n", str(next(counter)))
+        # the dialled leg (;1) rings and runs no dialplan, so it can be picked up; ;2 runs `ring`
+        ringing = tap.wait_for(lambda f: f.get("Event") == "Newchannel"
+                               and f.get("Channel", "").startswith("Local/ring@capture-")
+                               and f.get("Channel", "").endswith(";1"), 20, mark, "the ringing channel")
+        tap.wait_for(lambda f: f.get("Event") == "Newexten" and f.get("Exten") == "ring"
+                     and f.get("Application") == "Wait", 20, mark, "the ringing leg's Wait")
+        refusals, detail = do_pickup("PickupChan", ringing["Channel"], mark)
+        finish(None, mark)
+        outcome(name, None, "pickupchan", mark, ringing, refusals, detail)
+    except ConnectionClosed:
+        raise
+    except CaptureError as error:
+        _hangup_all(tap)
+        outcome(name, None, "pickupchan", mark, None, 0, f"error: {error}")
+
+    # -- the search -------------------------------------------------------------------------------
+
+    for trigger in RENAME_TRIGGERS:
+        if trigger == "local-optimization":
+            local_optimization_control()
+        for surface in RENAME_SURFACES:
+            name = f"{trigger}-{surface}"
+            mark = step(name)
+            join = None
+            try:
+                how = {"local-optimization": "local-no-n", "replaces": "pjsip", "refer": "pjsip"}.get(trigger, "local")
+                join = start_target(surface, mark, how)
+                tap.pump(0.5)
+                if trigger == "bridge":
+                    refusals, detail = do_bridge(join, mark)
+                elif trigger == "pickupchan":
+                    refusals, detail = do_pickup("PickupChan", join["Channel"], mark)
+                elif trigger == "pickup":
+                    exten = "queue" if surface == "queue" else "conf"
+                    refusals, detail = do_pickup("Pickup", f"{exten}@capture", mark)
+                elif trigger == "local-optimization":
+                    refusals, detail = do_local_optimization(surface, mark)
+                elif trigger == "replaces":
+                    refusals, detail = do_replaces(join, mark)
+                elif trigger == "refer":
+                    refusals, detail = do_refer(join, mark, surface)
+                elif trigger == "redirect":
+                    refusals, detail = do_redirect(join, mark)
+                else:
+                    refusals, detail = do_ari_move(join, mark)
+                step(f"{name}-waiting")
+                while_waiting(surface, join)
+                finish(surface, mark)
+                outcome(name, surface, trigger, mark, join, refusals, detail)
+            except ConnectionClosed:
+                raise
+            except CaptureError as error:
+                _hangup_all(tap)
+                outcome(name, surface, trigger, mark, join, 0, f"error: {error}")
+
+    # -- (e): sequential calls, behind --sequential-calls -----------------------------------------
+
+    calls = int(tap.options.get("sequential_calls", 0) or 0)
+    if calls:
+        for surface in RENAME_SURFACES:
+            mark = step(f"sequential-{surface}")
+            exten = "queue-seq" if surface == "queue" else "conf-seq"
+            for i in range(calls):
+                cid = str(8000 + i)
+                originate(f"Local/{exten}@capture/n", cid, data="5")
+                tap.wait_for(lambda f, c=cid: f.get("Event") == leave_event(surface)
+                             and f.get("CallerIDNum") == c, 20, mark, f"the leave of sequential call {cid}")
+            _hangup_all(tap)
+            tap.pump(0.5)
+
+    step("done")
+    return steps
+
+
 WORKLOADS = {
     "bridges-and-conference": {
         "description": "Local call; two-party bridge + BridgeList/BridgeInfo/Status; two-participant "
@@ -744,6 +1325,17 @@ WORKLOADS = {
         "files": {"extensions.conf": _PARKING_EXTENSIONS, "res_parking.conf": _PARKING_RES_PARKING,
                   "pjsip.conf": _PARKING_PJSIP},
         "run": _dialplan_and_parking,
+    },
+    "renamed-caller-and-participant": {
+        "description": "A queue caller and a ConfBridge participant nobody renames; a rename outside "
+                       "both (Bridge, PickupChan); then Bridge, PickupChan, Pickup(), a Local pair "
+                       "without /n, an INVITE with Replaces and ARI move on a waiting caller and on a "
+                       "participant, each with QueueStatus or ConfbridgeList and ConfbridgeMute while "
+                       "it waits; --sequential-calls N adds N calls per surface.",
+        "files": {"extensions.conf": _RENAMED_EXTENSIONS, "queues.conf": _RENAMED_QUEUES,
+                  "confbridge.conf": _BRIDGES_CONFBRIDGE, "pjsip.conf": _RENAMED_PJSIP},
+        "ari": True,
+        "run": _renamed_caller_and_participant,
     },
 }
 
@@ -789,7 +1381,7 @@ def _check_version_matches_tag(tag, asterisk_version):
 
 
 def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timestamps=True,
-            drop_events=(), keep_steps=(), name_prefix="labc"):
+            drop_events=(), keep_steps=(), name_prefix="labc", options=None):
     workload = WORKLOADS.get(workload_name)
     if workload is None:
         raise CaptureError(f"unknown workload {workload_name!r}; see `workloads`")
@@ -801,6 +1393,13 @@ def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timest
     files = dict(workload["files"])
     files["manager.conf"] = _MANAGER_CONF.format(
         user=MANAGER_USER, secret=secret, timestamps="yes" if timestamps else "no")
+    ports = ["-p", f"127.0.0.1::{AMI_PORT}"]
+    ari_secret = None
+    if workload.get("ari"):  # ARI on its own ephemeral loopback port, with a password made for this run
+        ari_secret = secrets.token_hex(12)
+        files["http.conf"] = _HTTP_CONF.format(port=ARI_PORT)
+        files["ari.conf"] = _ARI_CONF.format(user=ARI_USER, secret=ari_secret)
+        ports += ["-p", f"127.0.0.1::{ARI_PORT}"]
     mounts = []
     for filename, text in files.items():
         path = conf_dir / filename
@@ -809,7 +1408,7 @@ def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timest
         mounts += ["-v", f"{path}:/etc/asterisk/{filename}:ro"]
     started = False
     try:
-        _docker("run", "-d", "--name", container, "-p", f"127.0.0.1::{AMI_PORT}", *mounts, run_ref)
+        _docker("run", "-d", "--name", container, *ports, *mounts, run_ref)
         started = True
         booted = _docker("exec", container, "asterisk", "-rx", "core waitfullybooted",
                          check=False, timeout=90)
@@ -830,6 +1429,11 @@ def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timest
         sock = socket.create_connection((host.strip("[]"), int(port_number)), timeout=15)
         try:
             tap = Tap(sock)
+            tap.options = dict(options or {})
+            if ari_secret:
+                ari = _docker("port", container, f"{ARI_PORT}/tcp").stdout.strip().splitlines()[0]
+                ari_host, _, ari_port = ari.rpartition(":")
+                tap.ari = AriClient(f"http://{ari_host.strip('[]')}:{ari_port}", ARI_USER, ari_secret)
             tap.login(MANAGER_USER, secret)
             tap.action([("Action", "UserEvent"), ("UserEvent", "CaptureProvenance"),
                         ("AsteriskVersion", asterisk_version), ("Image", image),
@@ -864,7 +1468,8 @@ def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timest
     tap_path = raw_dir / f"{stem}.tap.raw"
     tap_path.write_bytes(tap_bytes)
     (raw_dir / f"{stem}.tap.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
-    written = write_recording(tap_bytes, meta, out_dir, drop_events, keep_steps, forbidden=[secret])
+    written = write_recording(tap_bytes, meta, out_dir, drop_events, keep_steps,
+                              forbidden=[v for v in (secret, ari_secret) if v])
     return tap_path, written
 
 
@@ -890,6 +1495,8 @@ def main(argv=None):
                      help="timestampevents = no (default: yes, every event carries Timestamp)")
     cap.add_argument("--drop-events", default="")
     cap.add_argument("--keep-steps", default="")
+    cap.add_argument("--sequential-calls", type=int, default=0,
+                     help="renamed-caller-and-participant only: N sequential calls per surface (default 0)")
 
     red = sub.add_parser("reduce", help="reduce a kept tap again (deterministic)")
     red.add_argument("tap", type=Path, help="<name>.tap.raw; its <name>.tap.json must be beside it")
@@ -920,7 +1527,8 @@ def main(argv=None):
         for image in args.image:
             tap_path, (raw, side, report, size) = capture(
                 image, args.workload, args.out, raw_dir, not args.no_timestamps,
-                _csv(args.drop_events), _csv(args.keep_steps))
+                _csv(args.drop_events), _csv(args.keep_steps),
+                options={"sequential_calls": args.sequential_calls})
             print(f"{image}: tap {tap_path} ({tap_path.stat().st_size} bytes, unredacted -- keep it "
                   f"out of the repository)")
             print(f"  wrote {raw.name} ({size} bytes, {report['frames_kept']}/{report['frames_in']} "
