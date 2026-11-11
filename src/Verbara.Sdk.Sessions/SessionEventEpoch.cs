@@ -37,9 +37,9 @@ namespace Verbara.Sdk.Sessions;
 /// How many events that session had dropped, because its buffer was full, before the point the notification reflects.
 /// </param>
 /// <param name="Attachment">
-/// The generation of the session engine's attachment of the server: a new, larger value at every real attach, never one
-/// an earlier attach in the same process used, by this engine or another; unchanged by a detach and by attaching the same
-/// instance again while it is attached.
+/// The session engine's attachment of the server: a new value at every real attach, one no earlier attach in the same
+/// process used, by this engine or another; unchanged by a detach and by attaching the same instance again while it is
+/// attached.
 /// </param>
 public readonly record struct SessionEventEpoch(Guid ConnectionId, long AmiSession, long DroppedBefore, long Attachment)
 {
@@ -68,6 +68,7 @@ public readonly record struct SessionEventEpoch(Guid ConnectionId, long AmiSessi
 /// <summary>
 /// What <see cref="SessionEventEpoch.LossBetween"/> can tell about the events of a server between two notifications.
 /// The default value is <see cref="Unknown"/>, so a verdict nobody computed never reads as complete.
+/// The values have no order: never combine verdicts with <c>Max</c>, <c>Min</c> or by comparing them.
 /// </summary>
 public enum SessionEventLoss
 {

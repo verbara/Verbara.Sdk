@@ -31,8 +31,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         public ServerSubscriptions? LatestAttachment;
     }
 
-    // The last attachment generation handed out by any manager in the process; see Subscribe.
-    private static long _attachGenerations;
+    // The last attachment stamp handed out by any manager in the process, read by the session mark only; the
+    // per-server generation the manager orders its own decisions by is counted apart. See Subscribe.
+    private static long _attachStamps;
 
     private ServerIndex IndexOf(string serverId) =>
         _serverIndexes.GetOrAdd(serverId, static _ => new ServerIndex());
@@ -236,7 +237,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             return null;
 
         return (sampled ?? attachment.Server.ReadSessionLossMark()) is { } mark
-            ? new SessionEventEpoch(mark.ConnectionId, mark.Session, mark.DroppedBefore, attachment.Generation)
+            ? new SessionEventEpoch(mark.ConnectionId, mark.Session, mark.DroppedBefore, attachment.EpochAttachment)
             : null;
     }
 
@@ -2207,7 +2208,13 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         public VerbaraServer Server { get; } = server;
         // Assigned once under _attachLock before this attachment can deliver a notification.
         public long Generation { get; private set; }
-        public void InitializeGeneration(long generation) => Generation = generation;
+        // The mark's attachment stamp: unique in the process, compared for equality only, never against Generation.
+        public long EpochAttachment { get; private set; }
+        public void InitializeGeneration(long generation, long epochAttachment)
+        {
+            Generation = generation;
+            EpochAttachment = epochAttachment;
+        }
         private int _hasBeenInstalled;
         // Monotonic history, separate from current membership: a captured old arrival still owns its birth stamp.
         public bool HasBeenInstalled => Volatile.Read(ref _hasBeenInstalled) != 0;

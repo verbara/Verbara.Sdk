@@ -69,10 +69,10 @@ public sealed partial class CallSessionManager
                         throw new InvalidOperationException($"Server '{serverId}' is already attached to a different instance; detach it before replacing it.");
                     }
                     var index = IndexOf(serverId);
-                    // Drawn from a counter shared by every manager in the process, so an attach by a later manager over
-                    // the same connection never repeats an earlier manager's generation; per server it still only grows.
-                    index.Generation = Interlocked.Increment(ref _attachGenerations);
-                    subscriptions.InitializeGeneration(index.Generation);
+                    // The generation orders this manager's own attachments of the server, one more at every real attach.
+                    // The mark's attachment stamp is drawn apart, from a counter shared by every manager in the process,
+                    // so an attach by a later manager over the same connection never repeats an earlier manager's stamp.
+                    subscriptions.InitializeGeneration(++index.Generation, Interlocked.Increment(ref _attachStamps));
                     subscriptions.Attach(this, serverId);
                     _serverSubs[serverId] = subscriptions;
                     subscriptions.MarkInstalled();
