@@ -41,6 +41,7 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
     private const string CallerChannel = "PJSIP/pstn-00000501";
     private const string Other = "1700000500.2";
     private const string OtherChannel = "PJSIP/pstn-00000502";
+    private const string BufferedId = "1700000500.9";
 
     [Fact]
     public async Task CallEnded_ShouldCarryADifferentDroppedCount_WhenAnEventWasDroppedBeforeTheHangup()
@@ -86,11 +87,14 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
 
         using var gate = new DispatchGate();
         using var held = run.Connection.Subscribe(gate);
+        using var buffered = new CallEventLog(BufferedId);
+        using var bufferedSeen = run.Connection.Subscribe(buffered);
         try
         {
             await peer.SendEventAsync("UserEvent", DispatchGate.Frame());
             await gate.Held.WaitAsync(Run.Bound);
-            await peer.SendEventAsync("UserEvent", [new("Privilege", "user,all"), new("UserEvent", "buffered")]);
+            await peer.SendEventAsync("UserEvent",
+                [new("Privilege", "user,all"), new("UserEvent", "buffered"), new("Uniqueid", BufferedId)]);
             await peer.SendEventAsync("UserEvent", [new("Privilege", "user,all"), new("UserEvent", "dropped")]);
             // Answered after both, so the connection has read them: one buffered, one refused.
             await run.Connection.SendActionAsync(new PingAction()).AsTask().WaitAsync(Run.Bound);
@@ -99,6 +103,9 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
             await manager.AdmitExistingCalls(ServerId).AsTask().WaitAsync(Run.Bound);
             var started = await recorder.WaitAsync<CallStartedEvent>();
             gate.Release();
+            // The pump holds one event: the hold is sent only once the buffered one has been delivered, or the full
+            // buffer refuses it too.
+            await buffered.First.WaitAsync(Run.Bound);
             await peer.SendEventAsync("Hold", Frames.Hold());
             var later = await recorder.WaitAsync<CallHeldEvent>();
 
