@@ -19,6 +19,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Live` | [A refused `Status` is counted and reported by the pool health check](#a-refused-status-is-counted-and-reported-by-the-pool-health-check) | new members, health check |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
 | `Verbara.Sdk.Ami` | [`NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends](#newextenevent-and-newcalleridevent-carry-what-the-wire-sends) | fix, new members |
+| `Verbara.Sdk.VoiceAi.Stt`, `Verbara.Sdk.VoiceAi.Tts` | [A message a recognizer or synthesizer cannot read no longer ends the session](#a-message-a-recognizer-or-synthesizer-cannot-read-no-longer-ends-the-session) | fix, behaviour, new metric, BREAKING |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An OpenAI Realtime audio delta that is not valid base64 no longer ends the call](#an-openai-realtime-audio-delta-that-is-not-valid-base64-no-longer-ends-the-call) | behaviour, metric, BREAKING |
 | `Verbara.Sdk.VoiceAi.Tts` | [A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis](#a-cartesia-or-elevenlabs-audio-frame-that-is-not-valid-base64-no-longer-ends-the-synthesis) | fix, behaviour, BREAKING |
 
@@ -367,6 +368,45 @@ changes nothing. Where two policies share a key, the gauge follows the one that 
 `ResilienceMetrics.SetCircuitState` keeps its signature.
 
 ## Voice AI
+
+### A message a recognizer or synthesizer cannot read no longer ends the session
+
+**What changed.** Seven streaming clients parsed each vendor message with nothing around the parse, so a message they
+could not read ended the session with a `JsonException` out of the caller's enumeration, a type that `StreamAsync` and
+`SynthesizeAsync` do not document. The seven are the Speechmatics, AssemblyAI and Cartesia recognizers
+(`StreamAsync`) and the Deepgram, LMNT, Cartesia and ElevenLabs synthesizers (`SynthesizeAsync`). Behind
+`VoiceAiPipeline` that was a failed transcription or synthesis. 2.9.0 made the same change on the Deepgram recognizer. Now:
+
+- A text message the vendor sends in fragments, or one larger than the 64 KiB receive buffer, is assembled and read
+  whole. This is new on the Speechmatics, AssemblyAI and Cartesia recognizers and the Deepgram and LMNT synthesizers.
+  Binary audio is still delivered per read.
+- A message that cannot be read but whose envelope names the vendor's failure ends the session with
+  `SpeechProviderFailureException` (`Signal` = `ErrorFrame`). That is the failure a readable error message raises.
+  Its message carries the raw text of what the vendor sent. A message names the failure when it passes the same test as
+  a readable failure message for that vendor:
+  - Speechmatics: `"message": "Error"`
+  - AssemblyAI, and the Deepgram synthesizer: `"type": "Error"`
+  - Cartesia: `"type": "error"`
+  - ElevenLabs: a non-empty `error` member
+  - LMNT: either of the last two
+
+  `Code` is read from the member that the readable branch reads it from, when that member is a string or a number, and
+  is otherwise null. LMNT reads no code.
+- Any other message that cannot be read, JSON or not, is skipped and counted. A recognizer counts it on
+  `stt.frames.unparseable` (meter `Verbara.Sdk.VoiceAi.Stt`). A synthesizer counts it on the new
+  `tts.frames.unparseable` (meter `Verbara.Sdk.VoiceAi.Tts`). Both counters are tagged `voiceai.provider`. The results
+  or audio before and after the skipped message are delivered. If every message in a recognition was skipped, it
+  completes with no results. If every message in a synthesis was skipped, it ends with
+  `SpeechProviderEmptyResultException`, as a synthesis that produced no audio does.
+
+No signature changes.
+
+**Who is affected.** Code that catches `JsonException` from `StreamAsync` or `SynthesizeAsync` on these clients: it no
+longer receives one. A dashboard or alert on `stt.transcriptions.failed` or `tts.syntheses.failed` behind
+`VoiceAiPipeline`: an unreadable vendor message no longer fails the transcription or synthesis.
+
+**What to do.** Catch `SpeechProviderFailureException` instead of `JsonException`; `StreamAsync` and `SynthesizeAsync`
+document it. Watch `stt.frames.unparseable` and `tts.frames.unparseable` for the messages that the clients skipped.
 
 ### An OpenAI Realtime audio delta that is not valid base64 no longer ends the call
 
