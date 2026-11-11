@@ -139,6 +139,15 @@ ids over its lifetime kept one such server per retired id. `DetachFromServer(id)
 unchanged: a kept server stays referenced while its kept calls need it, and an attach after a release behaves as
 before.
 
+### Changed: what the live channel table costs per call (#549)
+
+The live channel table now indexes calls by `linkedid`, about 50 B per call while it lives (40 B more for a call with
+two legs, 40 B for a moment at each hangup), and each channel carries 16 B more to record which event created it. At
+100,000 channels that is at most about 6.6 MB over 2.9.0, while a call arriving in Sessions allocates about 1.1 KB less
+than in 2.9.0 (#533, #546). The benchmarks now measure both: `Create1000Channels_TwoLegCalls` and the event pump's
+refusal path. The figures are in the
+[high-load tuning guide](docs/guides/high-load-tuning.md).
+
 ### Fixed — BREAKING: a message a recognizer or synthesizer cannot read no longer ends the session (#548)
 
 `SpeechRecognizer.StreamAsync` and `SpeechSynthesizer.SynthesizeAsync` document three exceptions —
