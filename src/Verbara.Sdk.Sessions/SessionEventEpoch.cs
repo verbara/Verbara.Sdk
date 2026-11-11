@@ -37,8 +37,9 @@ namespace Verbara.Sdk.Sessions;
 /// How many events that session had dropped, because its buffer was full, before the point the notification reflects.
 /// </param>
 /// <param name="Attachment">
-/// The generation of the session engine's attachment of the server: one more at every real attach; unchanged by a detach
-/// and by attaching the same instance again while it is attached.
+/// The generation of the session engine's attachment of the server: a new, larger value at every real attach, never one
+/// an earlier attach in the same process used, by this engine or another; unchanged by a detach and by attaching the same
+/// instance again while it is attached.
 /// </param>
 public readonly record struct SessionEventEpoch(Guid ConnectionId, long AmiSession, long DroppedBefore, long Attachment)
 {

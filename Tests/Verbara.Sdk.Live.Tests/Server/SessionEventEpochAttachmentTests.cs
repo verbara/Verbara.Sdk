@@ -59,6 +59,39 @@ public sealed class SessionEventEpochAttachmentTests
     }
 
     [Fact]
+    public async Task Events_ShouldDifferInAttachment_WhenANewManagerAttachesTheSameInstanceAfterTheFirstIsDisposed()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.StartAsync(peer);
+        var first = EpochRig.NewManager(new FakeTimeProvider());
+        var firstRecorder = EpochRecorder.On(first);
+        first.AttachToServer(run.Server, ServerId);
+        await peer.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Caller, CallerChannel, Caller));
+        var before = await firstRecorder.WaitAsync<CallStartedEvent>();
+        await first.DisposeAsync();
+
+        await using var second = EpochRig.NewManager(new FakeTimeProvider());
+        var secondRecorder = EpochRecorder.On(second);
+        second.AttachToServer(run.Server, ServerId);
+        await peer.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Other, OtherChannel, Other));
+        var after = await secondRecorder.WaitAsync<CallStartedEvent>();
+
+        using (new AssertionScope())
+        {
+            before.Epoch.Should().NotBeNull("premise: the first manager's call started over the SDK's connection");
+            after.Epoch.Should().NotBeNull("the second manager's call started over the same connection");
+            (after.Epoch?.ConnectionId, after.Epoch?.AmiSession, after.Epoch?.DroppedBefore).Should().Be(
+                (before.Epoch?.ConnectionId, before.Epoch?.AmiSession, before.Epoch?.DroppedBefore),
+                "premise: the same connection instance, in the same session, dropped nothing");
+            after.Epoch?.Attachment.Should().NotBe(before.Epoch?.Attachment ?? 0,
+                "no manager watched the server between the first manager's disposal and the second's attach, so the "
+                + "second attachment carries a generation no earlier attachment in the process carried");
+            SessionEventEpoch.LossBetween(before.Epoch, after.Epoch).Should().Be(SessionEventLoss.Possible,
+                "a gap no engine watched lies between the two notifications");
+        }
+    }
+
+    [Fact]
     public async Task Events_ShouldCarryEqualAttachment_WhenTheSameInstanceIsAttachedAgainWhileAttached()
     {
         var peer = new BootingAsterisk { BootedAtLogin = true };

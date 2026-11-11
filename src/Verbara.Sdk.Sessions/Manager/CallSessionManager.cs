@@ -31,6 +31,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         public ServerSubscriptions? LatestAttachment;
     }
 
+    // The last attachment generation handed out by any manager in the process; see Subscribe.
+    private static long _attachGenerations;
+
     private ServerIndex IndexOf(string serverId) =>
         _serverIndexes.GetOrAdd(serverId, static _ => new ServerIndex());
 
