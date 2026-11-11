@@ -355,7 +355,7 @@ def scan_take(data: bytes, identity_step="positive-pickupchan"):
     }
 
 
-# --- freeze-1 columns (both surfaces) and the copy-mode mutation control --------------------
+# --- join/leave columns (both surfaces) and the copy-mode mutation control -----------------
 
 
 def surface_counts(frames, surface):
@@ -404,7 +404,7 @@ def _frame(*pairs) -> bytes:
 
 
 def copy_control(data: bytes, surface: str):
-    """Freeze-1's negative control in copy mode: a copy of the first leave, Uniqueid altered, is
+    """The leave-against-join control in copy mode: a copy of the first leave, Uniqueid altered, is
     appended after it; then (separately) a copy with its Channel altered. Both must be flagged."""
     leave_ev = SURFACES[surface][1]
     span = _find_frame(data, leave_ev)
