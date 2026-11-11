@@ -149,6 +149,20 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
     /// </summary>
     public bool SendMetadataOnConnect { get; set; }
 
+    /// <summary>
+    /// When greater than zero, every text message this session sends is sent in WebSocket fragments
+    /// of this many bytes, with <c>endOfMessage: false</c> on all but the last.
+    /// </summary>
+    /// <remarks>
+    /// The knob this suite's <c>CartesiaFakeServer</c> and <c>ElevenLabsFakeServer</c> and the recognition
+    /// suite's <c>DeepgramFakeServer</c> carry. Without it this fake never produced a fragment, so a
+    /// receive loop that parsed each read as a whole message stayed green against it; the knob makes
+    /// that failure reachable without a 64 KiB fixture. Zero, the default, sends each message in one
+    /// frame. Binary audio frames are never fragmented: each is still sent in one frame, as the vendor
+    /// is measured delivering it.
+    /// </remarks>
+    public int TextFrameFragmentBytes { get; set; }
+
     /// <summary>Abort the socket abnormally after sending all frames (simulates network error).</summary>
     public bool AbortAfterSend { get; set; }
 
@@ -318,14 +332,13 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
             await TrySendTextAsync(ws, ReadFrame(FlushedFrame), ct).ConfigureAwait(false);
     }
 
-    private static async Task TrySendTextAsync(System.Net.WebSockets.WebSocket ws, string json, CancellationToken ct)
+    private async Task TrySendTextAsync(System.Net.WebSockets.WebSocket ws, string json, CancellationToken ct)
     {
         if (ws.State is not (WebSocketState.Open or WebSocketState.CloseReceived))
             return;
         try
         {
-            await ws.SendAsync(Encoding.UTF8.GetBytes(json).AsMemory(), WebSocketMessageType.Text, true, ct)
-                .ConfigureAwait(false);
+            await WebSocketTestServer.SendTextAsync(ws, json, TextFrameFragmentBytes, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
         {

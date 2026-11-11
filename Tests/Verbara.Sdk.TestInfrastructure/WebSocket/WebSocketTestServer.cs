@@ -252,6 +252,41 @@ public sealed class WebSocketTestServer : IAsyncDisposable
     }
 
     /// <summary>
+    /// Sends <paramref name="message"/> as one text message — in WebSocket fragments of
+    /// <paramref name="fragmentBytes"/> bytes, <c>endOfMessage: false</c> on all but the last, when
+    /// <paramref name="fragmentBytes"/> is greater than zero and smaller than the message.
+    /// </summary>
+    /// <remarks>
+    /// The send behind each fake's <c>TextFrameFragmentBytes</c> knob. A vendor sizes its own messages,
+    /// and one larger than the client's receive buffer, or one the vendor or an intermediary fragments,
+    /// reaches the client as several reads; a fake that only ever sends whole frames cannot fail a
+    /// receive loop that parses each read as a whole message. Zero, the knob's default, sends the
+    /// message in one frame — byte for byte what the fakes sent before the knob existed.
+    /// </remarks>
+    public static async Task SendTextAsync(
+        System.Net.WebSockets.WebSocket webSocket, string message, int fragmentBytes, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(webSocket);
+        ArgumentNullException.ThrowIfNull(message);
+
+        var bytes = Encoding.UTF8.GetBytes(message);
+
+        if (fragmentBytes <= 0 || fragmentBytes >= bytes.Length)
+        {
+            await webSocket.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            return;
+        }
+
+        for (var offset = 0; offset < bytes.Length; offset += fragmentBytes)
+        {
+            var length = Math.Min(fragmentBytes, bytes.Length - offset);
+            await webSocket.SendAsync(
+                    bytes.AsMemory(offset, length), WebSocketMessageType.Text, offset + length >= bytes.Length, ct)
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Read the HTTP/1.1 upgrade request, returning the <c>Sec-WebSocket-Key</c> header value,
     /// the full request-target (path + query) for callers that need to assert on URL params, and
     /// every request header for callers that need to assert on the credential the client sent.

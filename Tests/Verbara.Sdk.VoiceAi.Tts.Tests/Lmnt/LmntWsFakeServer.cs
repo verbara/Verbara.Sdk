@@ -139,6 +139,20 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     /// <summary>Send the recorded <c>finish</c> control frame as a text message after all audio frames.</summary>
     public bool SendFinishTerminator { get; set; } = true;
 
+    /// <summary>
+    /// When greater than zero, every text message this session sends is sent in WebSocket fragments
+    /// of this many bytes, with <c>endOfMessage: false</c> on all but the last.
+    /// </summary>
+    /// <remarks>
+    /// The knob this suite's <c>CartesiaFakeServer</c> and <c>ElevenLabsFakeServer</c> and the recognition
+    /// suite's <c>DeepgramFakeServer</c> carry. Without it this fake never produced a fragment, so a
+    /// receive loop that parsed each read as a whole message stayed green against it; the knob makes
+    /// that failure reachable without a 64 KiB fixture. Zero, the default, sends each message in one
+    /// frame. Binary audio frames are never fragmented: each is still sent in one frame, as the vendor
+    /// is measured delivering it.
+    /// </remarks>
+    public int TextFrameFragmentBytes { get; set; }
+
     /// <summary>Abort the socket abnormally after sending all frames (simulates server crash).</summary>
     public bool AbortAfterSend { get; set; }
 
@@ -245,8 +259,7 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
 
         if (ErrorFrameJson is { } errorFrame)
         {
-            var bytes = Encoding.UTF8.GetBytes(errorFrame);
-            try { await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
+            try { await WebSocketTestServer.SendTextAsync(ws, errorFrame, TextFrameFragmentBytes, ct).ConfigureAwait(false); }
             catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
             {
                 // The peer may already be gone; the close below still runs.
@@ -363,8 +376,8 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     {
         if (SendFinishTerminator && ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
-            var finish = Encoding.UTF8.GetBytes(ReadFrame(FinishFrame));
-            try { await ws.SendAsync(finish.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
+            var finish = ReadFrame(FinishFrame);
+            try { await WebSocketTestServer.SendTextAsync(ws, finish, TextFrameFragmentBytes, ct).ConfigureAwait(false); }
             catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
             {
                 // The peer may have closed mid-send; proceed to the close handshake.

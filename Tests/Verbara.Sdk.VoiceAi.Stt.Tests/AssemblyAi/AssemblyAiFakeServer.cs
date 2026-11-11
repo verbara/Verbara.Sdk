@@ -59,6 +59,19 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
     /// <summary>Messages the server emits after the <c>Begin</c> handshake.</summary>
     public List<string> ResultMessages { get; } = [];
 
+    /// <summary>
+    /// When greater than zero, every text message this session sends is sent in WebSocket fragments
+    /// of this many bytes, with <c>endOfMessage: false</c> on all but the last.
+    /// </summary>
+    /// <remarks>
+    /// The knob the synthesis suite's <c>CartesiaFakeServer</c> and <c>ElevenLabsFakeServer</c> and this
+    /// suite's <c>DeepgramFakeServer</c> carry. Without it this fake never produced a fragment, so a
+    /// receive loop that parsed each read as a whole message stayed green against it; the knob makes
+    /// that failure reachable without a 64 KiB fixture. Zero, the default, sends each message in one
+    /// frame. Binary frames are never sent by this fake.
+    /// </remarks>
+    public int TextFrameFragmentBytes { get; set; }
+
     /// <summary>Count of complete binary (audio) WebSocket messages received from the client.</summary>
     public int ReceivedFrameCount => _receivedFrameCount;
 
@@ -208,8 +221,7 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
         {
             try
             {
-                var failure = Encoding.UTF8.GetBytes(errorFrame);
-                await ws.SendAsync(failure.AsMemory(), WebSocketMessageType.Text, true, ct)
+                await WebSocketTestServer.SendTextAsync(ws, errorFrame, TextFrameFragmentBytes, ct)
                     .ConfigureAwait(false);
             }
             catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { return; }
@@ -219,16 +231,14 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
         }
 
         // Send initial Begin message (wire-protocol greeting).
-        var beginBytes = Encoding.UTF8.GetBytes(BuildBeginJson());
-        await ws.SendAsync(beginBytes.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+        await WebSocketTestServer.SendTextAsync(ws, BuildBeginJson(), TextFrameFragmentBytes, ct).ConfigureAwait(false);
 
         // Send caller-supplied Turn/Termination messages (snapshot to avoid races).
         var messages = ResultMessages.ToList();
         foreach (var msg in messages)
         {
             if (ws.State != WebSocketState.Open) return;
-            var bytes = Encoding.UTF8.GetBytes(msg);
-            await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            await WebSocketTestServer.SendTextAsync(ws, msg, TextFrameFragmentBytes, ct).ConfigureAwait(false);
         }
 
         if (AbortAfterSend)
@@ -287,10 +297,10 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
 
                 // Read before the try: a missing recording is a defect in the suite, not a peer
                 // that went away, so it must fail the session rather than close it normally.
-                var termination = Encoding.UTF8.GetBytes(BuildTerminationJson());
+                var termination = BuildTerminationJson();
                 try
                 {
-                    await ws.SendAsync(termination.AsMemory(), WebSocketMessageType.Text, true, ct)
+                    await WebSocketTestServer.SendTextAsync(ws, termination, TextFrameFragmentBytes, ct)
                         .ConfigureAwait(false);
                     await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
                         .ConfigureAwait(false);
