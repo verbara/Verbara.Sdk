@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: every session notification says whether its server's events may have been lost before it (#NNN)
+
+Every session notification (`SessionDomainEvent`, and each change on `IAgentSessionTracker.StateChanges`) carries
+`Epoch`, a `SessionEventEpoch?`: the identity of the AMI connection it came from, that connection's session ordinal,
+how many events that session had dropped before the point the notification reflects, and the attachment of the server
+it was raised under. `SessionEventEpoch.LossBetween(earlier, later)` compares two marks of the same server and answers
+`NoneKnown` when they are equal, `Possible` when a reconnect, a dropped event or a detach lies between them, and
+`Unknown` when either is `null`. Compare each notification of a call with the previous one of the same call to tell
+whether its stored history is complete. `SessionEventLoss` is `Unknown = 0`, `NoneKnown = 1`, `Possible = 2`, so a
+verdict nobody computed never reads as complete; the values have no order. The mark is a position in the server's
+event stream, not a time, and is compared for equality only. See the
+[migration guide](docs/guides/migration-2.10.0.md#knowing-whether-a-calls-events-are-complete).
+
+### Changed: record equality and `ToString` of session notifications include `Epoch` (#NNN)
+
+Two session notifications that were equal in 2.9.0 differ when their `Epoch` differs, and their `ToString` prints it.
+A consumer that deduplicates notifications by record equality, or keys them by `ToString`, compares
+`notification with { Epoch = null }` instead. The notifications of a custom `ICallSessionManager` carry `null`
+unless it sets `Epoch`, so a consumer reads `Unknown` for them.
+
 ### Changed — BREAKING: a call is found on the server that reported it (#533)
 
 `CallSessionManager` keeps its channel-id, `linkedid` and bridge indexes per server id, where it kept one of each for
