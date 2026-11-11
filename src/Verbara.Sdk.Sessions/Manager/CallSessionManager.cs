@@ -196,9 +196,20 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// that interface ever becomes public, they must.
     /// <para>Every raise counts as inside the engine's work on the raising thread, so a subscriber that asks for a
     /// release, or for an attach that would wait for one, is refused instead of waiting for its own thread.</para>
+    /// <para>Before any subscriber sees it, the notification is stamped with its server's loss mark
+    /// (<see cref="SessionDomainEvent.Epoch"/>), without a copy: <paramref name="sampled"/> when the raise carries a mark
+    /// sampled before its content was read (an admission's opening, a reload's snapshot), otherwise the mark of the
+    /// position <paramref name="attachment"/>'s server has started to deliver, read now — inside one of its events'
+    /// delivery, that event's. The mark's attachment generation is always <paramref name="attachment"/>'s, the
+    /// attachment whose handler or walk raised the notification, never one looked up by server instance: a handler of
+    /// a detached attachment keeps its own generation. A raise no attachment produced (a wrap-up, which another
+    /// server's delivery can close) passes none and reads the attachment of the notification's server installed now;
+    /// with none, or over a connection that is not the SDK's, the mark is <see langword="null"/>.</para>
     /// </summary>
-    private void Publish(SessionDomainEvent notification)
+    private void Publish(SessionDomainEvent notification, ServerSubscriptions? attachment = null,
+        SessionLossMark? sampled = null)
     {
+        notification.StampEpoch(ReadEpoch(notification.ServerId, attachment, sampled));
         EnterEngineWork();
         try
         {
@@ -209,6 +220,32 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             LeaveEngineWork();
         }
     }
+
+    /// <summary>
+    /// The mark <see cref="Publish"/> stamps: <paramref name="sampled"/> when given, else
+    /// <paramref name="attachment"/>'s server's started side; with no attachment given, that of the attachment of
+    /// <paramref name="serverId"/> installed now. <see langword="null"/> when there is none, or when the server's
+    /// connection reports no mark; never a default that reads as complete.
+    /// </summary>
+    private SessionEventEpoch? ReadEpoch(string serverId, ServerSubscriptions? attachment, SessionLossMark? sampled)
+    {
+        if (attachment is null && !_serverSubs.TryGetValue(serverId, out attachment))
+            return null;
+
+        return (sampled ?? attachment.Server.ReadSessionLossMark()) is { } mark
+            ? new SessionEventEpoch(mark.ConnectionId, mark.Session, mark.DroppedBefore, attachment.Generation)
+            : null;
+    }
+
+    /// <summary>
+    /// The mark a reload's queue snapshot sampled for <paramref name="entry"/>'s row when it was read, composed with
+    /// the identity of <paramref name="server"/>'s connection; <see langword="null"/> for a live join (raised inside its
+    /// own event's delivery), for a row carrying no sample, and over a connection that is not the SDK's.
+    /// </summary>
+    private static SessionLossMark? SnapshotRowMark(AsteriskQueueEntry entry, VerbaraServer server) =>
+        entry.FromSnapshot && entry.LossEpoch is { } row && server.ConnectionIdentity is { } connection
+            ? new SessionLossMark(connection, row.AmiSession, row.DroppedBefore)
+            : null;
 
     [LoggerMessage(EventId = 3, EventName = nameof(LogSubscriberFault), Level = LogLevel.Warning,
         Message = "A subscriber of the session events threw on {EventType} for session {SessionId}; the other "
@@ -320,22 +357,22 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         var onStateChanged = Gated<AsteriskChannel>(gate, arg => OnChannelStateChanged(arg, serverId, index));
         var onDialBegin = Gated<AsteriskChannel>(gate, arg => OnChannelDialBegin(arg, serverId, index));
         var onDialEnd = Gated<AsteriskChannel>(gate, arg => OnChannelDialEnd(arg, serverId, index));
-        var onHeld = Gated<AsteriskChannel>(gate, arg => OnChannelHeld(arg, serverId, index));
-        var onUnheld = Gated<AsteriskChannel>(gate, arg => OnChannelUnheld(arg, serverId, index));
-        var onBridgeEntered = Gated<AsteriskBridge, string>(gate, (bridge, id) => OnBridgeChannelEntered(bridge, id, serverId, index));
+        var onHeld = Gated<AsteriskChannel>(gate, arg => OnChannelHeld(arg, serverId, index, attachment));
+        var onUnheld = Gated<AsteriskChannel>(gate, arg => OnChannelUnheld(arg, serverId, index, attachment));
+        var onBridgeEntered = Gated<AsteriskBridge, string>(gate, (bridge, id) => OnBridgeChannelEntered(bridge, id, serverId, index, attachment));
         var onBridgeDestroyed = Gated<AsteriskBridge>(gate, arg => OnBridgeDestroyed(arg, serverId, index));
-        var onTransfer = Gated<BridgeTransferInfo>(gate, info => OnTransfer(info, serverId, index));
+        var onTransfer = Gated<BridgeTransferInfo>(gate, info => OnTransfer(info, serverId, index, attachment));
         var onCallerJoined = Gated<string, AsteriskQueueEntry>(gate,
-            (queueName, entry) => OnQueueCallerJoined(queueName, entry, server, serverId, index));
+            (queueName, entry) => OnQueueCallerJoined(queueName, entry, server, serverId, index, attachment));
         var onCallerLeft = Gated<QueueCallerLeaveReport>(gate, report => OnQueueCallerLeft(report, serverId, index));
         var onAbandonReported = Gated<string, string>(gate, (id, queue) => OnQueueCallerAbandonReported(id, queue, serverId, index));
         var onQueueStatus = Gated<string, string, string>(gate, (id, channel, value) => OnCallerQueueStatus(id, channel, value, serverId, index));
         var onSnapshotCompleted = Gated<QueueSnapshotCompletion>(gate, completion => OnQueueSnapshotCompleted(completion, serverId));
         var onAgentConnected = Gated<string, string?, string?>(gate,
-            (agentId, linkedId, interface_) => OnAgentConnected(agentId, linkedId, interface_, serverId, index));
+            (agentId, linkedId, interface_) => OnAgentConnected(agentId, linkedId, interface_, serverId, index, attachment));
         var onQueueCallerConnected = Gated<string?, string?, string?>(gate,
             (callerUniqueId, memberName, memberInterface) =>
-                OnQueueCallerConnected(callerUniqueId, memberName, memberInterface, serverId, index));
+                OnQueueCallerConnected(callerUniqueId, memberName, memberInterface, serverId, index, attachment));
         var onQueueCallerCompleted = Gated<QueueCallerCompletion>(gate, completion => OnQueueCallerCompleted(completion, serverId, index));
 
         Action<ChannelSnapshotCompletion> onChannelSnapshotCompleted = _ =>
@@ -575,7 +612,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             SessionMetrics.SessionsCreated.Add(1);
 
             Publish(new CallStartedEvent(session.SessionId, serverId,
-                DateTimeOffset.UtcNow, direction, channel.CallerIdNum));
+                DateTimeOffset.UtcNow, direction, channel.CallerIdNum), delivery, channel.AdmittedFrom?.Mark);
         }
 
         _ = PersistAsync(session);
@@ -1034,7 +1071,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (!HasPresentParticipant(call) && !remaining && (complete || !call.Unverified || !installed))
             {
                 var provenance = call.LastDeparture ?? (Reload: true, Cause: (HangupCause?)null);
-                FinishCall(call, provenance.Reload, provenance.Cause, removedDepartureId);
+                FinishCall(call, provenance.Reload, provenance.Cause, removedDepartureId, subs);
                 call.ClearRecordedDepartures();
             }
             else if (complete && call.Unverified && allRemainingPresent && !presentDeparting && !departingUnrecorded)
@@ -1044,7 +1081,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         finally { call.SyncRoot.Exit(); }
     }
 
-    private void FinishCall(CallSession session, bool byReload, HangupCause? observedCause, string? removedDepartureId)
+    private void FinishCall(CallSession session, bool byReload, HangupCause? observedCause, string? removedDepartureId,
+        ServerSubscriptions attachment)
     {
         var index = IndexOf(session.ServerId);
         var participants = session.ParticipantStorage;
@@ -1104,7 +1142,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             }
         }
 
-        OnSessionCompleted(session);
+        OnSessionCompleted(session, attachment);
     }
 
     [LoggerMessage(Level = LogLevel.Information,
@@ -1176,7 +1214,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         }
     }
 
-    private void OnChannelHeld(AsteriskChannel channel, string serverId, ServerIndex index)
+    private void OnChannelHeld(AsteriskChannel channel, string serverId, ServerIndex index, ServerSubscriptions attachment)
     {
         if (!index.ByChannelId.TryGetValue(channel.UniqueId, out var session)) return;
 
@@ -1192,13 +1230,13 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 session.StartHold();
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Hold, channel.Name, null, channel.HoldMusicClass));
-                Publish(new CallHeldEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow));
+                Publish(new CallHeldEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow), attachment);
                 _ = PersistAsync(session);
             }
         }
     }
 
-    private void OnChannelUnheld(AsteriskChannel channel, string serverId, ServerIndex index)
+    private void OnChannelUnheld(AsteriskChannel channel, string serverId, ServerIndex index, ServerSubscriptions attachment)
     {
         if (!index.ByChannelId.TryGetValue(channel.UniqueId, out var session)) return;
 
@@ -1214,13 +1252,14 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 session.EndHold();
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Unhold, channel.Name, null, null));
-                Publish(new CallResumedEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow));
+                Publish(new CallResumedEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow), attachment);
                 _ = PersistAsync(session);
             }
         }
     }
 
-    private void OnBridgeChannelEntered(AsteriskBridge bridge, string uniqueId, string serverId, ServerIndex index)
+    private void OnBridgeChannelEntered(AsteriskBridge bridge, string uniqueId, string serverId, ServerIndex index,
+        ServerSubscriptions attachment)
     {
         if (!index.ByChannelId.TryGetValue(uniqueId, out var session)) return;
 
@@ -1256,14 +1295,14 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 // (OnQueueCallerConnected): a member leg can enter a bridge that app_queue never
                 // connects, as a pooled agent that never acknowledges does.
                 if (session.QueueName is null)
-                    PublishConnected(session, session.AgentId);
+                    PublishConnected(session, session.AgentId, attachment);
 
                 _ = PersistAsync(session);
             }
         }
     }
 
-    private void OnTransfer(BridgeTransferInfo info, string serverId, ServerIndex index)
+    private void OnTransfer(BridgeTransferInfo info, string serverId, ServerIndex index, ServerSubscriptions attachment)
     {
         var session = GetByBridgeId(serverId, info.BridgeId);
         if (session is null) return;
@@ -1280,7 +1319,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Transfer, null, info.TargetChannel, info.TransferType));
                 Publish(new CallTransferredEvent(session.SessionId, session.ServerId,
-                    DateTimeOffset.UtcNow, info.TransferType, info.TargetChannel));
+                    DateTimeOffset.UtcNow, info.TransferType, info.TargetChannel), attachment);
                 _ = PersistAsync(session);
             }
         }
@@ -1292,7 +1331,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// entry added through Live's public join, which carries none, is resolved through Live's channel table by the
     /// channel's current name.
     /// </summary>
-    private void OnQueueCallerJoined(string queueName, AsteriskQueueEntry entry, VerbaraServer server, string serverId, ServerIndex index)
+    private void OnQueueCallerJoined(string queueName, AsteriskQueueEntry entry, VerbaraServer server, string serverId, ServerIndex index,
+        ServerSubscriptions attachment)
     {
         var uniqueId = entry.UniqueId ?? server.Channels.GetByName(entry.Channel)?.UniqueId;
         if (uniqueId is null || !index.ByChannelId.TryGetValue(uniqueId, out var session)) return;
@@ -1336,7 +1376,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             // Under the lock, so a release of the call either precedes this whole join, which then finds the call
             // no longer held, or follows its announcement: the release is the call's last notification.
             Publish(new CallQueuedEvent(session.SessionId, session.ServerId,
-                visitStartedAt, queueName, entry.Position));
+                visitStartedAt, queueName, entry.Position), attachment, SnapshotRowMark(entry, server));
         }
 
         _ = PersistAsync(session);
@@ -1604,7 +1644,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// The event's own <see cref="CallConnectedEvent.WaitTime"/> is the call's wait since it was
     /// created, whichever the case.
     /// </summary>
-    private void PublishConnected(CallSession session, string? agentId)
+    private void PublishConnected(CallSession session, string? agentId, ServerSubscriptions attachment)
     {
         var queued = session.QueueName is not null;
         if (queued)
@@ -1618,7 +1658,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         var connectedAt = _timeProvider.GetUtcNow();
         var waitSinceCreated = session.WaitTime ?? TimeSpan.Zero;
         Publish(new CallConnectedEvent(session.SessionId, session.ServerId,
-            connectedAt, agentId, session.QueueName, waitSinceCreated));
+            connectedAt, agentId, session.QueueName, waitSinceCreated), attachment);
 
         if (!queued)
             return;
@@ -1643,8 +1683,12 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// that same object (<see cref="PersistAsync"/>): once it has been released, a save would hand the
     /// store a call the SDK has let go of.
     /// </para>
+    /// <para>
+    /// <paramref name="attachment"/> is the attachment whose handler or decision ended the call; the ending carries
+    /// its server's loss mark read when it is raised.
+    /// </para>
     /// </summary>
-    private void OnSessionCompleted(CallSession session)
+    private void OnSessionCompleted(CallSession session, ServerSubscriptions attachment)
     {
         if (!session.TryMarkEndingDelivered())
         {
@@ -1680,7 +1724,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         }
 
         Publish(new CallEndedEvent(session.SessionId, session.ServerId,
-            DateTimeOffset.UtcNow, session.HangupCause, session.Duration, session.TalkTime));
+            DateTimeOffset.UtcNow, session.HangupCause, session.Duration, session.TalkTime), attachment);
 
         // After the ending, so a wrap-up it opens is never reported before it.
         EndConnectedLegsAtCallEnd(session);
@@ -1960,7 +2004,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     // --- Agent event handlers ---
 
-    private void OnAgentConnected(string agentId, string? linkedId, string? interface_, string serverId, ServerIndex index)
+    private void OnAgentConnected(string agentId, string? linkedId, string? interface_, string serverId, ServerIndex index,
+        ServerSubscriptions attachment)
     {
         if (linkedId is null || !index.ByLinkedId.TryGetValue(linkedId, out var session))
             return;
@@ -1998,7 +2043,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             // A queued call is announced once per visit, and a known agent's connect arrives before
             // app_queue's own report of it (OnQueueCallerConnected), so this is the announcement that
             // carries the agent. A call the manager never saw join a queue is published as it always was.
-            PublishConnected(session, agentId);
+            PublishConnected(session, agentId, attachment);
         }
 
         _ = PersistAsync(session);
@@ -2018,7 +2063,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// </para>
     /// </summary>
     private void OnQueueCallerConnected(string? callerUniqueId, string? memberName, string? memberInterface,
-        string serverId, ServerIndex index)
+        string serverId, ServerIndex index, ServerSubscriptions attachment)
     {
         if (callerUniqueId is null || !index.ByChannelId.TryGetValue(callerUniqueId, out var session))
             return;
@@ -2063,7 +2108,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 CountConnectedLeg(session, new WrapUpLeg(serverId, memberInterface, wrapUpKey, agentId, OpensAtCallEnd: false));
             }
 
-            PublishConnected(session, session.AgentId);
+            PublishConnected(session, session.AgentId, attachment);
         }
 
         _ = PersistAsync(session);

@@ -55,7 +55,7 @@ public sealed partial class CallSessionManager
             // Only the attachment this release closed is waited for; an id not attached waits for nothing.
             var handlersInFlight = closed?.Gate.Drain(DrainBound) ?? 0;
             Step(HandlerStep.ReleaseWalkStarted, serverId, string.Empty);
-            var released = ReleaseCallsOf(serverId, handlersInFlight);
+            var released = ReleaseCallsOf(serverId, handlersInFlight, closed);
             LetGoOfLatestAttachment(serverId, latest);
             return released;
         }
@@ -93,9 +93,11 @@ public sealed partial class CallSessionManager
     /// is not notified and is not returned. Each call let go of is announced with one <see cref="CallReleasedEvent"/>
     /// while it is still found, then leaves every lookup under the same lock hold. Returns the calls let go of, in
     /// the order they were announced. <paramref name="handlersInFlight"/> is how many handlers of the attachment were
-    /// still running when the walk began; with a skipped call, it makes the release's one Error entry.
+    /// still running when the walk began; with a skipped call, it makes the release's one Error entry. Each
+    /// <see cref="CallReleasedEvent"/> carries the loss mark of <paramref name="closed"/>, the attachment this release
+    /// closed (none when the id was not attached), read when it is raised.
     /// </summary>
-    private List<CallSession> ReleaseCallsOf(string serverId, int handlersInFlight)
+    private List<CallSession> ReleaseCallsOf(string serverId, int handlersInFlight, ServerSubscriptions? closed)
     {
         var selected = new List<CallSession>();
         foreach (var held in _sessions.Where(
@@ -132,7 +134,7 @@ public sealed partial class CallSessionManager
                 try
                 {
                     Publish(new CallReleasedEvent(call.SessionId, call.ServerId, DateTimeOffset.UtcNow,
-                        call.LinkedId, call.TenantId));
+                        call.LinkedId, call.TenantId), closed);
                 }
                 finally
                 {

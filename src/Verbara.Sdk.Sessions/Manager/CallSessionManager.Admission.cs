@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Verbara.Sdk.Live.Channels;
+using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Sessions.Diagnostics;
 using Verbara.Sdk.Sessions.Internal;
 
@@ -77,6 +78,9 @@ public sealed partial class CallSessionManager
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 Step(HandlerStep.AdmissionVisit, serverId, channel.UniqueId);
+                // The opening's mark: the applied side, sampled before the channel is read, so it never counts a drop
+                // the content it announces did not see.
+                var sampled = attachment.Server.ReadAppliedSessionLossMark();
                 if (!attachment.Gate.TryEnter()) throw new AdmissionStoppedException();
                 try
                 {
@@ -84,7 +88,7 @@ public sealed partial class CallSessionManager
                     EvictStaleCompleted();
                     ReportArrivalCollision(serverId, channel.UniqueId,
                         string.IsNullOrEmpty(channel.LinkedId) ? channel.UniqueId : channel.LinkedId);
-                    var changed = AdmitHeldChannel(channel, serverId, index, attachment, Current);
+                    var changed = AdmitHeldChannel(channel, serverId, index, attachment, sampled, Current);
                     if (changed is not null) admitted.Add(changed.SessionId);
                 }
                 finally { attachment.Gate.Exit(); }
@@ -105,7 +109,7 @@ public sealed partial class CallSessionManager
     // VisitHeld owns the channel lock. Each attempt below owns at most one call lock; a failed claim drops that
     // lock before retrying another owner. Registration need not take the channel lock, so TryAdd is the arbiter.
     private CallSession? AdmitHeldChannel(AsteriskChannel channel, string serverId, ServerIndex index,
-        ServerSubscriptions attachment, Func<bool> current)
+        ServerSubscriptions attachment, SessionLossMark? sampled, Func<bool> current)
     {
         var linkedId = string.IsNullOrEmpty(channel.LinkedId) ? channel.UniqueId : channel.LinkedId;
         while (true)
@@ -176,7 +180,7 @@ public sealed partial class CallSessionManager
                     AddAdmissionParticipant(candidate, channel, joined: false);
                     SessionMetrics.SessionsCreated.Add(1);
                     Publish(new CallStartedEvent(candidate.SessionId, serverId, DateTimeOffset.UtcNow,
-                        candidate.Direction, channel.CallerIdNum));
+                        candidate.Direction, channel.CallerIdNum), attachment, sampled);
                 }
                 finally
                 {
