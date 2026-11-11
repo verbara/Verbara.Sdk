@@ -146,6 +146,15 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
         CancellationTokenRegistration registration = default;
         bridge.InputReadStarting = token => registration = token.Register(() => inputStop.TrySetResult());
         using var metrics = new MeterCapture(Meter);
+        // Arm -1: a receive-side fault that is neither a close nor a cancel — an Events subscriber that
+        // throws on the transcript the vendor sends.
+        using var subscriber = code == -1
+            ? bridge.Events.Subscribe(e =>
+            {
+                if (e is RealtimeTranscriptEvent)
+                    throw new InvalidOperationException("thrown by a subscriber during a stalled send");
+            })
+            : null;
         var run = bridge.HandleSessionAsync(rig.Session, host.Token).AsTask();
         try
         {
@@ -155,7 +164,7 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
             await rig.Caller.SendAudioAsync(new byte[320]);
             await transport.Entered.Task.WaitAsync(Limit);
             if (code == 0) fake.Abort();
-            else if (code == -1) await fake.SendEventAsync("{\"type\":\"response.output_audio.delta\",\"delta\":\"invalid base64!\"}");
+            else if (code == -1) await fake.SendEventAsync("{\"type\":\"response.output_audio_transcript.delta\",\"delta\":\"x\"}");
             else await fake.SendCloseAsync((WebSocketCloseStatus)code, "vendor ends during permanently held send");
             await inputStop.Task.WaitAsync(Limit);
             if (code == 0)
@@ -194,7 +203,7 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
                 transport.Release.Task.IsCompleted.Should().BeFalse("only transport teardown ended the stalled write");
                 if (code == 1000) fault.Should().BeNull();
                 else if (code == 3000) fault.Should().BeOfType<SpeechProviderFailureException>().Which.Code.Should().Be("3000");
-                else fault.Should().BeOfType<FormatException>();
+                else fault.Should().BeOfType<InvalidOperationException>();
                 metrics.Get("openai_realtime.sessions.completed").Should().Be(code == 1000 ? 1 : 0);
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(code == 1000 ? 0 : 1);
                 metrics.Get("openai_realtime.sessions.cancelled").Should().Be(0);

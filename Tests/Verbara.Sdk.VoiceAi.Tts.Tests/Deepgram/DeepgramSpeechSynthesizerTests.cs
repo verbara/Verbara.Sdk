@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.TestInfrastructure.WebSocket;
@@ -323,6 +324,98 @@ public class DeepgramSpeechSynthesizerTests : IAsyncLifetime
         failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
         failure.Code.Should().Be("UNSUPPORTED_ENCODING");
         failure.Message.Should().Contain("encoding is not supported");
+    }
+
+    // ─── Whole text messages ────────────────────────────────────────────────
+
+    /// <summary>
+    /// The <c>Flushed</c> terminator sent in 16-byte fragments is one message: the loop assembles it
+    /// until its final fragment before parsing it, and the binary audio before it reaches the caller
+    /// byte for byte.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldDeliverEveryAudioByte_WhenTheFlushedMessageArrivesInFragments()
+    {
+        // Arrange
+        _server.TextFrameFragmentBytes = 16;
+        var synth = BuildSynthesizer();
+
+        // Act
+        var frames = await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        frames.SelectMany(f => f.ToArray()).ToArray().Should().Equal(RecordedAudio);
+    }
+
+    /// <summary>
+    /// A <c>Flushed</c> terminator larger than the client's 64 KiB receive buffer is parsed whole, not
+    /// as the truncated document its first read holds.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldDeliverEveryAudioByte_WhenTheFlushedMessageIsLargerThanTheReceiveBuffer()
+    {
+        // Arrange
+        var flushed = $$"""{"type":"Flushed","sequence_id":1,"padding":"{{new string('x', 70_000)}}"}""";
+        Encoding.UTF8.GetByteCount(flushed).Should().BeGreaterThan(64 * 1024, "the message must outgrow one read");
+        _server.FlushedFrameJson = flushed;
+        var synth = BuildSynthesizer();
+
+        // Act
+        var frames = await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        frames.SelectMany(f => f.ToArray()).ToArray().Should().Equal(RecordedAudio);
+    }
+
+    /// <summary>
+    /// An <c>Error</c> message sent in 16-byte fragments is the vendor's failure, read whole: the
+    /// session ends with the error-frame failure carrying its code and description.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowErrorFrameFailure_WhenTheErrorMessageArrivesInFragments()
+    {
+        // Arrange
+        _server.ErrorFrameJson =
+            """{"type":"Error","code":"UNSUPPORTED_ENCODING","description":"encoding is not supported"}""";
+        _server.TextFrameFragmentBytes = 16;
+        var synth = BuildSynthesizer();
+
+        // Act
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        // Assert
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Code.Should().Be("UNSUPPORTED_ENCODING");
+        failure.Message.Should().EndWith("encoding is not supported");
+    }
+
+    /// <summary>
+    /// An <c>Error</c> message larger than the client's 64 KiB receive buffer is the vendor's failure,
+    /// read whole: the description reaches the caller to its last character.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowErrorFrameFailure_WhenTheErrorMessageIsLargerThanTheReceiveBuffer()
+    {
+        // Arrange
+        var description = string.Concat(Enumerable.Repeat("encoding is not supported ", 3_000)) + "end";
+        var error = $$"""{"type":"Error","code":"UNSUPPORTED_ENCODING","description":"{{description}}"}""";
+        Encoding.UTF8.GetByteCount(error).Should().BeGreaterThan(64 * 1024, "the message must outgrow one read");
+        _server.ErrorFrameJson = error;
+        var synth = BuildSynthesizer();
+
+        // Act
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
+            .ToListAsync();
+
+        // Assert
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Code.Should().Be("UNSUPPORTED_ENCODING");
+        failure.Message.Should().EndWith(description);
     }
 
     /// <summary>

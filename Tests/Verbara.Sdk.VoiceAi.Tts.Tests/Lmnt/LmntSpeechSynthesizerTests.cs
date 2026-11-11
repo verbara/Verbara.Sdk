@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json;
 using Verbara.Sdk.Audio;
 using Verbara.Sdk.TestInfrastructure.Http;
@@ -386,6 +387,97 @@ public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
         failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
         failure.Provider.Should().Be("LMNT");
         failure.Message.Should().Contain("Invalid API key", "the vendor's reason is the whole evidence");
+    }
+
+    // ─── Whole text messages ────────────────────────────────────────────────
+
+    /// <summary>
+    /// The <c>finish</c> notification sent in 16-byte fragments is one message: the loop assembles it
+    /// until its final fragment before parsing it, and the binary audio before it reaches the caller
+    /// byte for byte.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldDeliverEveryAudioByte_WhenTheFinishMessageArrivesInFragments()
+    {
+        // Arrange
+        _server.TextFrameFragmentBytes = 16;
+        var synth = BuildSynthesizer();
+
+        // Act
+        var frames = await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz).ToListAsync();
+
+        // Assert
+        frames.SelectMany(f => f.ToArray()).ToArray().Should().Equal(RecordedAudio);
+    }
+
+    /// <summary>
+    /// A <c>finish</c> notification larger than the client's 64 KiB receive buffer is parsed whole,
+    /// not as the truncated document its first read holds.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldDeliverEveryAudioByte_WhenTheFinishMessageIsLargerThanTheReceiveBuffer()
+    {
+        // Arrange
+        var finish = $$"""{"type":"finish","padding":"{{new string('x', 70_000)}}"}""";
+        Encoding.UTF8.GetByteCount(finish).Should().BeGreaterThan(64 * 1024, "the message must outgrow one read");
+        _server.FinishFrameJson = finish;
+        var synth = BuildSynthesizer();
+
+        // Act
+        var frames = await synth.SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz).ToListAsync();
+
+        // Assert
+        frames.SelectMany(f => f.ToArray()).ToArray().Should().Equal(RecordedAudio);
+    }
+
+    /// <summary>
+    /// The measured rejected-credential frame, <c>{"error":"Invalid API key"}</c>, sent in 16-byte
+    /// fragments is the vendor's failure, read whole.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowErrorFrameFailure_WhenTheErrorMessageArrivesInFragments()
+    {
+        // Arrange
+        _server.ErrorFrameJson = """{"error":"Invalid API key"}""";
+        _server.TextFrameFragmentBytes = 16;
+        var synth = BuildSynthesizer();
+
+        // Act
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz)
+            .ToListAsync();
+
+        // Assert
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Provider.Should().Be("LMNT");
+        failure.Message.Should().EndWith("Invalid API key");
+    }
+
+    /// <summary>
+    /// An <c>error</c> message larger than the client's 64 KiB receive buffer is the vendor's failure,
+    /// read whole: its reason reaches the caller to its last character.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldThrowErrorFrameFailure_WhenTheErrorMessageIsLargerThanTheReceiveBuffer()
+    {
+        // Arrange
+        var reason = string.Concat(Enumerable.Repeat("Invalid API key ", 5_000)) + "end";
+        var error = $$"""{"error":"{{reason}}"}""";
+        Encoding.UTF8.GetByteCount(error).Should().BeGreaterThan(64 * 1024, "the message must outgrow one read");
+        _server.ErrorFrameJson = error;
+        var synth = BuildSynthesizer();
+
+        // Act
+        var act = async () => await synth
+            .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz)
+            .ToListAsync();
+
+        // Assert
+        var failure = (await act.Should().ThrowAsync<SpeechProviderFailureException>()).Which;
+        failure.Signal.Should().Be(SpeechProviderFailureSignal.ErrorFrame);
+        failure.Provider.Should().Be("LMNT");
+        failure.Message.Should().EndWith(reason);
     }
 
     /// <summary>

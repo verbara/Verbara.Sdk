@@ -303,6 +303,13 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
     {
         var buf = new byte[65536];
 
+        // A text message is assembled here across reads and parsed only once its final fragment is in.
+        // The vendor sizes and fragments its messages, not this client: parsing each read as a whole
+        // message handed JSON a truncated document whenever one outgrew this buffer or arrived in parts.
+        // Bytes still here when the loop leaves (a close, a fault, a cancel) are a message that never
+        // finished, and are discarded with it. No size cap: a cap would be a new way for a session to fail.
+        var message = new ArrayBufferWriter<byte>(buf.Length);
+
         // Counts messages, not transcripts, and excludes the close frame: "the vendor closed and
         // said nothing else" is precisely the case this has to report.
         var sawVendorFrame = false;
@@ -352,14 +359,40 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
                 break;
             }
 
-            sawVendorFrame = true;
+            // Every read restarts the bound, a fragment of a message still being assembled included: a
+            // vendor that is sending is not silent.
             silence.Heard();
+
+            // A partial read goes back to the top of the loop, where the socket's state and the bound
+            // are checked before the next read, rather than into an inner loop that would read on.
+            if (result.MessageType == WebSocketMessageType.Text) message.Write(buf.AsSpan(0, result.Count));
+            if (!result.EndOfMessage) continue;
+
+            // A whole message arrived. A fragment whose message never finished is not one.
+            sawVendorFrame = true;
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
-            var json = Encoding.UTF8.GetString(buf, 0, result.Count);
-            var msg = JsonSerializer.Deserialize(
-                json,
-                VoiceAiSttJsonContext.Default.AssemblyAiTurnMessage);
+            var json = Encoding.UTF8.GetString(message.WrittenSpan);
+            message.ResetWrittenCount();
+
+            // One message this client cannot read costs that message, not the session: only the parse is
+            // guarded, so nothing after it (the write to the caller's channel) is absorbed here.
+            AssemblyAiTurnMessage? msg;
+            try
+            {
+                msg = JsonSerializer.Deserialize(json, VoiceAiSttJsonContext.Default.AssemblyAiTurnMessage);
+            }
+            catch (JsonException)
+            {
+                // Judged by the loop's own failure test: an envelope that names this vendor's failure is the
+                // failure a readable error message raises, carrying the raw message because the member that
+                // failed may be the one holding the vendor's text. Anything else is counted and skipped.
+                if (NamesErrorFrame(json, out var code))
+                    throw SpeechProviderFailureException.FromErrorFrame(provider, code, json);
+
+                SttReceiveLoopMetrics.CountUnparseable(provider);
+                continue;
+            }
 
             if (msg is null) continue;
 
@@ -389,6 +422,44 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
         }
 
         return sawVendorFrame;
+    }
+
+    /// <summary>
+    /// Whether a message that failed to deserialize says <c>"type": "Error"</c> at its top level — the
+    /// test the readable branch applies — and, if so, its code from <c>error_code</c> where that is a
+    /// string or a number. A message that is not a JSON object names no failure.
+    /// </summary>
+    /// <remarks>
+    /// The parse stands alone in its <c>try</c>: reading a parsed document raises no
+    /// <see cref="JsonException"/>, and a decode catch covers the decode and nothing after it.
+    /// </remarks>
+    private static bool NamesErrorFrame(string json, out string? code)
+    {
+        code = null;
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("type", out var kind)
+                || kind.ValueKind != JsonValueKind.String
+                || !kind.ValueEquals("Error"))
+            {
+                return false;
+            }
+
+            code = SttErrorEnvelope.Code(root, "error_code");
+            return true;
+        }
     }
 
     /// <summary>

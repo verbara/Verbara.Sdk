@@ -139,6 +139,51 @@ ids over its lifetime kept one such server per retired id. `DetachFromServer(id)
 unchanged: a kept server stays referenced while its kept calls need it, and an attach after a release behaves as
 before.
 
+### Fixed — BREAKING: a message a recognizer or synthesizer cannot read no longer ends the session (#548)
+
+`SpeechRecognizer.StreamAsync` and `SpeechSynthesizer.SynthesizeAsync` document three exceptions —
+`SpeechProviderFailureException`, `SpeechProviderEmptyResultException` and `OperationCanceledException` — and seven
+streaming clients let a fourth escape: the Speechmatics, AssemblyAI and Cartesia recognizers and the Deepgram, LMNT,
+Cartesia and ElevenLabs synthesizers parsed each vendor message with nothing around the parse, so one they could not
+read ended the session with a `JsonException`. Behind `VoiceAiPipeline` that was a failed transcription or synthesis.
+2.9.0 made the same change on the Deepgram recognizer. Now:
+
+- A text message sent in fragments, or one larger than the 64 KiB receive buffer, is assembled and read whole on the
+  Speechmatics, AssemblyAI and Cartesia recognizers and the Deepgram and LMNT synthesizers, which parsed each read as a
+  whole message. An assembled message has no size cap. A partial message left behind by a close, a fault, a
+  cancellation or the end-of-input bound is discarded.
+- A message that cannot be read but whose envelope names the vendor's failure — the same test a readable failure
+  message passes for that vendor — ends the session with `SpeechProviderFailureException` (`Signal` = `ErrorFrame`),
+  carrying the raw text the vendor sent.
+- Any other unreadable message is skipped and counted, on `stt.frames.unparseable` (meter `Verbara.Sdk.VoiceAi.Stt`)
+  for a recognizer and on the new `tts.frames.unparseable` (meter `Verbara.Sdk.VoiceAi.Tts`) for a synthesizer, both
+  tagged `voiceai.provider`, and the results or audio around it are delivered. The Speechmatics recognizer's second
+  read of its `RecognitionStarted` greeting is covered too.
+- An audio message whose payload is not valid base64 — Cartesia's `data`, ElevenLabs' `audio` — is skipped and counted
+  on `tts.frames.unparseable` like any other message the synthesizer cannot read, and the audio around it is delivered;
+  it used to end the synthesis with a `FormatException`, a type `SynthesizeAsync` does not document.
+
+A synthesis whose every message was skipped ends with `SpeechProviderEmptyResultException`; a recognition completes
+with no results. Request serialization is unchanged and no signature changes. Labelled breaking because code that
+caught `JsonException` or `FormatException` from these clients no longer receives one; catch
+`SpeechProviderFailureException`. The migration guide has the sections
+([A message a recognizer or synthesizer cannot read no longer ends the session](docs/guides/migration-2.10.0.md#a-message-a-recognizer-or-synthesizer-cannot-read-no-longer-ends-the-session),
+[A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis](docs/guides/migration-2.10.0.md#a-cartesia-or-elevenlabs-audio-frame-that-is-not-valid-base64-no-longer-ends-the-synthesis)).
+
+### Changed — BREAKING: an OpenAI Realtime audio delta that is not valid base64 no longer ends the call (#548)
+
+Since 2.9.0 an event the bridge cannot decode is skipped and the call goes on, but an audio delta that decoded and
+whose `delta` was not valid base64 still ended the session, hung the caller up under the session broker and counted in
+`openai_realtime.sessions.failed` — as the 2.9.0 entry, the bridge's README and the 2.9.0 migration guide say. It is
+now skipped, logged once at Warning and counted on `openai_realtime.frames.unparseable` (tagged `voiceai.provider`),
+like any other event the bridge cannot read, and the audio that follows reaches the caller. A delta whose `delta` is
+null — an `ArgumentNullException` ending until now — is counted and skipped the same way; a delta that is empty, or
+too short to make one sample at the caller's rate, is skipped without a count and no zero-length audio frame is
+written. An `Events` subscriber that throws still ends the session. No signature changes. Labelled breaking because
+`openai_realtime.sessions.failed` stops counting these sessions. The bridge's README (*When the conversation ends*) and
+the migration guide have the section
+([An OpenAI Realtime audio delta that is not valid base64 no longer ends the call](docs/guides/migration-2.10.0.md#an-openai-realtime-audio-delta-that-is-not-valid-base64-no-longer-ends-the-call)).
+
 ### Fixed: a WebSocket audio server keeps accepting while an observer of new streams runs (#534)
 
 When a connection's upgrade request had already arrived by the time it was accepted, `WebSocketAudioServer` served it
@@ -662,7 +707,7 @@ with the same Error-level log line a decoded one gets, and is not counted as a f
 skipped, logged once at Warning and counted on `openai_realtime.frames.unparseable` (meter
 `Verbara.Sdk.VoiceAi.OpenAiRealtime`, tagged `voiceai.provider`); an undecodable function call runs no function and
 sends no answer. An event that decodes but whose handling fails — an `Events` subscriber that throws, or an audio
-delta whose `delta` is not valid base64 — still ends the session. Request serialization is unchanged and no signature
+delta whose `delta` is not valid base64 — still ends the session. (2.10.0: the base64 half no longer holds — such a delta is skipped and counted; see the 2.10.0 entry.) Request serialization is unchanged and no signature
 changes. Labelled breaking because `openai_realtime.sessions.failed` stops counting sessions that ended on an
 undecodable event, and `RealtimeErrorEvent.Message` can now be the whole frame rather than OpenAI's `error.message`.
 The bridge's README (*When the conversation ends*) and the migration guide have the section

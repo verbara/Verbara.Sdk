@@ -72,6 +72,13 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
 
     public List<string> ResultMessages { get; } = [];
 
+    /// <summary>
+    /// The reply to the client's <c>done</c>, or <see langword="null"/> — the default — for the recorded
+    /// acknowledgement. Settable so a session can be made of messages the client cannot read and
+    /// nothing else, its last one included.
+    /// </summary>
+    public string? DoneJson { get; set; }
+
     private readonly List<string> _receivedJsonMessages = [];
 
     /// <summary>
@@ -144,6 +151,19 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     /// fired, rather than only that the enumeration threw.
     /// </summary>
     public WebSocketState? SocketState => _server.SocketState;
+
+    /// <summary>
+    /// When greater than zero, every text message this session sends is sent in WebSocket fragments
+    /// of this many bytes, with <c>endOfMessage: false</c> on all but the last.
+    /// </summary>
+    /// <remarks>
+    /// The knob the synthesis suite's <c>CartesiaFakeServer</c> and <c>ElevenLabsFakeServer</c> and this
+    /// suite's <c>DeepgramFakeServer</c> carry. Without it this fake never produced a fragment, so a
+    /// receive loop that parsed each read as a whole message stayed green against it; the knob makes
+    /// that failure reachable without a 64 KiB fixture. Zero, the default, sends each message in one
+    /// frame. Binary frames are never sent by this fake.
+    /// </remarks>
+    public int TextFrameFragmentBytes { get; set; }
 
     /// <summary>If true, abort the WebSocket abnormally after sending messages.</summary>
     public bool AbortAfterSend { get; set; }
@@ -223,8 +243,7 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         {
             try
             {
-                var failure = Encoding.UTF8.GetBytes(errorFrame);
-                await ws.SendAsync(failure.AsMemory(), WebSocketMessageType.Text, true, ct)
+                await WebSocketTestServer.SendTextAsync(ws, errorFrame, TextFrameFragmentBytes, ct)
                     .ConfigureAwait(false);
             }
             catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex)) { return; }
@@ -238,8 +257,7 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         foreach (var msg in messages)
         {
             if (ws.State != WebSocketState.Open) return;
-            var bytes = Encoding.UTF8.GetBytes(msg);
-            await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+            await WebSocketTestServer.SendTextAsync(ws, msg, TextFrameFragmentBytes, ct).ConfigureAwait(false);
         }
 
         if (AbortAfterSend)
@@ -297,10 +315,10 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
 
                     // Read before the try: a missing recording is a defect in the suite, not a
                     // peer that went away, so it must fail the session rather than close it normally.
-                    var ack = Encoding.UTF8.GetBytes(ReadFrame(DoneFrame));
+                    var ack = DoneJson ?? ReadFrame(DoneFrame);
                     try
                     {
-                        await ws.SendAsync(ack.AsMemory(), WebSocketMessageType.Text, true, ct)
+                        await WebSocketTestServer.SendTextAsync(ws, ack, TextFrameFragmentBytes, ct)
                             .ConfigureAwait(false);
                         await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "done", ct)
                             .ConfigureAwait(false);

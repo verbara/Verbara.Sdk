@@ -150,6 +150,25 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
     public int TextFrameFragmentBytes { get; set; }
 
     /// <summary>
+    /// Text messages sent among the audio frames, each exactly as written and through the same send as
+    /// every other text message this session sends (fragmented when <see cref="TextFrameFragmentBytes"/>
+    /// asks for it). An entry goes out just before the audio frame at its index; one whose index is at or
+    /// past the number of frames goes out after the last of them. Empty, the default, sends the audio alone.
+    /// </summary>
+    /// <remarks>
+    /// Test-only, so a session can carry one message the client cannot read — or whose audio does not
+    /// decode — between two it can, and the test can assert that the audio around it arrives whole.
+    /// </remarks>
+    public List<(int BeforeAudioFrame, string Text)> TextFramesAmongAudio { get; } = [];
+
+    /// <summary>The <see cref="TextFramesAmongAudio"/> entries due before audio frame <paramref name="index"/> of <paramref name="count"/>.</summary>
+    private List<string> TextFramesDueBefore(int index, int count) =>
+        TextFramesAmongAudio
+            .Where(e => index < count ? e.BeforeAudioFrame == index : e.BeforeAudioFrame >= count)
+            .Select(e => e.Text)
+            .ToList();
+
+    /// <summary>
     /// Whether the client sent a WebSocket Close frame before the session finished answering.
     /// </summary>
     /// <remarks>
@@ -298,9 +317,14 @@ internal sealed class ElevenLabsFakeServer : IAsyncDisposable
         {
             // Take a snapshot of audio frames to avoid races.
             var frames = AudioFramesToSend.ToList();
-            for (int i = 0; i < frames.Count; i++)
+            for (int i = 0; i <= frames.Count; i++)
             {
                 if (ws.State is not (WebSocketState.Open or WebSocketState.CloseReceived)) break;
+
+                foreach (var text in TextFramesDueBefore(i, frames.Count))
+                    await SendTextFrameAsync(ws, text, ct).ConfigureAwait(false);
+
+                if (i == frames.Count) break;
 
                 if (Transport == ElevenLabsAudioTransport.Binary)
                 {

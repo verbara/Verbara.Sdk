@@ -30,7 +30,7 @@ internal static partial class RealtimeLog
     public static partial void OpenAiError(ILogger logger, Guid channelId, string errorMessage);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[{ChannelId}] OpenAI event '{EventType}' could not be read; skipped, the call goes on")]
-    public static partial void UnreadableEventSkipped(ILogger logger, Exception exception, Guid channelId, string eventType);
+    public static partial void UnreadableEventSkipped(ILogger logger, Exception? exception, Guid channelId, string eventType);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "[{ChannelId}] OpenAI closed the socket: {CloseStatus} {CloseDescription}")]
     public static partial void VendorClosed(ILogger logger, Guid channelId, int closeStatus, string closeDescription);

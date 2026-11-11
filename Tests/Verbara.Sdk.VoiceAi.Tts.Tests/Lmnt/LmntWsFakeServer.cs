@@ -139,6 +139,46 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     /// <summary>Send the recorded <c>finish</c> control frame as a text message after all audio frames.</summary>
     public bool SendFinishTerminator { get; set; } = true;
 
+    /// <summary>
+    /// When set, the <c>finish</c> terminator is this text instead of the recorded frame — so a test
+    /// can send one that outgrows the client's receive buffer. <see langword="null"/>, the default,
+    /// sends the recorded frame.
+    /// </summary>
+    public string? FinishFrameJson { get; set; }
+
+    /// <summary>
+    /// When greater than zero, every text message this session sends is sent in WebSocket fragments
+    /// of this many bytes, with <c>endOfMessage: false</c> on all but the last.
+    /// </summary>
+    /// <remarks>
+    /// The knob this suite's <c>CartesiaFakeServer</c> and <c>ElevenLabsFakeServer</c> and the recognition
+    /// suite's <c>DeepgramFakeServer</c> carry. Without it this fake never produced a fragment, so a
+    /// receive loop that parsed each read as a whole message stayed green against it; the knob makes
+    /// that failure reachable without a 64 KiB fixture. Zero, the default, sends each message in one
+    /// frame. Binary audio frames are never fragmented: each is still sent in one frame, as the vendor
+    /// is measured delivering it.
+    /// </remarks>
+    public int TextFrameFragmentBytes { get; set; }
+
+    /// <summary>
+    /// Text messages sent among the audio frames, each exactly as written and through the same send as
+    /// every other text message this session sends (fragmented when <see cref="TextFrameFragmentBytes"/>
+    /// asks for it). An entry goes out just before the audio frame at its index; one whose index is at or
+    /// past the number of frames goes out after the last of them. Empty, the default, sends the audio alone.
+    /// </summary>
+    /// <remarks>
+    /// Test-only, so a session can carry one message the client cannot read — or whose audio does not
+    /// decode — between two it can, and the test can assert that the audio around it arrives whole.
+    /// </remarks>
+    public List<(int BeforeAudioFrame, string Text)> TextFramesAmongAudio { get; } = [];
+
+    /// <summary>The <see cref="TextFramesAmongAudio"/> entries due before audio frame <paramref name="index"/> of <paramref name="count"/>.</summary>
+    private List<string> TextFramesDueBefore(int index, int count) =>
+        TextFramesAmongAudio
+            .Where(e => index < count ? e.BeforeAudioFrame == index : e.BeforeAudioFrame >= count)
+            .Select(e => e.Text)
+            .ToList();
+
     /// <summary>Abort the socket abnormally after sending all frames (simulates server crash).</summary>
     public bool AbortAfterSend { get; set; }
 
@@ -245,8 +285,7 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
 
         if (ErrorFrameJson is { } errorFrame)
         {
-            var bytes = Encoding.UTF8.GetBytes(errorFrame);
-            try { await ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
+            try { await WebSocketTestServer.SendTextAsync(ws, errorFrame, TextFrameFragmentBytes, ct).ConfigureAwait(false); }
             catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
             {
                 // The peer may already be gone; the close below still runs.
@@ -313,10 +352,16 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
 
     private async Task SendAudioFramesAsync(System.Net.WebSockets.WebSocket ws, CancellationToken ct)
     {
-        foreach (var frame in AudioFramesToSend.ToList())
+        var frames = AudioFramesToSend.ToList();
+        for (int i = 0; i <= frames.Count; i++)
         {
             if (ws.State is not (WebSocketState.Open or WebSocketState.CloseReceived)) break;
-            await ws.SendAsync(frame.AsMemory(), WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
+
+            foreach (var text in TextFramesDueBefore(i, frames.Count))
+                await WebSocketTestServer.SendTextAsync(ws, text, TextFrameFragmentBytes, ct).ConfigureAwait(false);
+
+            if (i == frames.Count) break;
+            await ws.SendAsync(frames[i].AsMemory(), WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
         }
     }
 
@@ -363,8 +408,8 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     {
         if (SendFinishTerminator && ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
-            var finish = Encoding.UTF8.GetBytes(ReadFrame(FinishFrame));
-            try { await ws.SendAsync(finish.AsMemory(), WebSocketMessageType.Text, true, ct).ConfigureAwait(false); }
+            var finish = FinishFrameJson ?? ReadFrame(FinishFrame);
+            try { await WebSocketTestServer.SendTextAsync(ws, finish, TextFrameFragmentBytes, ct).ConfigureAwait(false); }
             catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
             {
                 // The peer may have closed mid-send; proceed to the close handshake.

@@ -313,20 +313,29 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
     /// Whether a message that failed to deserialize says <c>"type": "Error"</c> at its top level — the
     /// test the readable branch applies. A message that is not a JSON object names no failure.
     /// </summary>
+    /// <remarks>
+    /// The parse stands alone in its <c>try</c>: reading a parsed document raises no
+    /// <see cref="JsonException"/>, and a decode catch covers the decode and nothing after it.
+    /// </remarks>
     private static bool NamesErrorFrame(string json)
     {
+        JsonDocument document;
         try
         {
-            using var document = JsonDocument.Parse(json);
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        using (document)
+        {
             var root = document.RootElement;
             return root.ValueKind == JsonValueKind.Object
                 && root.TryGetProperty("type", out var type)
                 && type.ValueKind == JsonValueKind.String
                 && type.ValueEquals("Error");
-        }
-        catch (JsonException)
-        {
-            return false;
         }
     }
 
