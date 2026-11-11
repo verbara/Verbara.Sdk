@@ -762,6 +762,26 @@ exten => peer,1,Answer()
 ; the near leg of a Local pair without /n: dials a peer, so that leg is bridged
 exten => dialpeer,1,Dial(Local/peer@capture/n,10)
  same => n,Hangup()
+; a channel that sends audio (a 1 kHz tone) for as long as it lives, and the legs that dial it, so
+; voice frames cross the Local pair in between: `dialtone` is the near leg of a waiting caller or
+; participant, `lopt` the far leg of the control pair outside both surfaces
+exten => tone,1,Answer()
+ same => n,Milliwatt()
+ same => n,Hangup()
+exten => dialtone,1,Dial(Local/tone@capture/n,30)
+ same => n,Hangup()
+exten => lopt,1,Dial(Local/tone@capture/n,30)
+ same => n,Hangup()
+; the transferer's leg of a SIP attended transfer: RT holds the Refer-To, with the Replaces of
+; the waiting leg's dialog
+exten => refer-go,1,Transfer(PJSIP/${RT})
+ same => n,UserEvent(CaptureApp,App: Transfer,Result: ${TRANSFERSTATUS})
+ same => n,Wait(5)
+ same => n,Hangup()
+; where Redirect sends a waiting caller or a participant
+exten => redirected,1,Answer()
+ same => n,Wait(30)
+ same => n,Hangup()
 ; a channel that rings and never answers, and the call that dials it (the positive control's target)
 exten => ring,1,Ringing()
  same => n,Wait(30)
@@ -801,6 +821,10 @@ exten => queue-in,1,Answer()
 exten => conf-in,1,Answer()
  same => n,Set(TIMEOUT(absolute)=60)
  same => n,ConfBridge(capture-room)
+ same => n,Hangup()
+; the transferee's call: its answering leg (the leg the REFER arrives on) is bridged with a peer
+exten => hold-in,1,Answer()
+ same => n,Dial(Local/peer@capture/n,30)
  same => n,Hangup()
 ; reached only when an INVITE with Replaces was not taken as a replacement
 exten => replace-in,1,Answer()
@@ -872,7 +896,8 @@ ARI_APP = "capture-ari"
 # never drops them by default.
 RENAME_EVENTS = ("Rename", "Masquerade", "LocalOptimizationBegin", "LocalOptimizationEnd")
 
-RENAME_TRIGGERS = ("bridge", "pickupchan", "pickup", "local-optimization", "replaces", "ari-move")
+RENAME_TRIGGERS = ("bridge", "pickupchan", "pickup", "local-optimization", "replaces", "refer", "ari-move",
+                   "redirect")
 RENAME_SURFACES = ("queue", "conference")
 
 
@@ -897,17 +922,24 @@ class AriClient:
             return 0, str(error)
 
 
+def is_sentinel_uniqueid(uid) -> bool:
+    """An empty Uniqueid, or a placeholder such as the `<unknown>` of a failed OriginateResponse:
+    it names no channel, so two frames that carry it are not one channel under two names."""
+    return not uid or (uid.startswith("<") and uid.endswith(">"))
+
+
 def channel_names_by_uniqueid(frames):
     """Every (Uniqueid -> [distinct names, in order]) the frames show.
 
     A name is read from each `<prefix>Channel` header whose `<prefix>Uniqueid` sits in the same
     frame (`Channel`/`Uniqueid`, `DestChannel`/`DestUniqueid`, ...), and from a `Rename` frame's
-    `Channel` then `Newname`. List rows count like events.
+    `Channel` then `Newname`. List rows count like events. A sentinel Uniqueid
+    (`is_sentinel_uniqueid`) is never read.
     """
     names = collections.OrderedDict()
 
     def see(uid, name):
-        if uid and name:
+        if not is_sentinel_uniqueid(uid) and name:
             seen = names.setdefault(uid, [])
             if name not in seen:
                 seen.append(name)
@@ -969,7 +1001,7 @@ def _renamed_caller_and_participant(tap: Tap):
             fields += [("Application", app), ("Data", data)]
         fields += [("CallerID", f"Capture <{cid}>"), ("Async", "true")]
         fields += [("Variable", v) for v in variables]
-        tap.send(fields)
+        return tap.send(fields)
 
     def join_event(surface):
         return "QueueCallerJoin" if surface == "queue" else "ConfbridgeJoin"
@@ -983,8 +1015,8 @@ def _renamed_caller_and_participant(tap: Tap):
         exten = "queue" if surface == "queue" else "conf"
         if how == "pjsip":
             originate(f"PJSIP/{exten}-in@loop", cid)
-        elif how == "local-no-n":
-            originate(f"Local/{exten}@capture", cid, exten="dialpeer")
+        elif how == "local-no-n":  # the near leg dials a tone, so audio crosses the pair into the target
+            originate(f"Local/{exten}@capture", cid, exten="dialtone")
         else:
             originate(f"Local/{exten}@capture/n", cid)
         return tap.wait_for(lambda f: f.get("Event") == join_event(surface) and f.get("CallerIDNum") == cid,
@@ -1065,12 +1097,14 @@ def _renamed_caller_and_participant(tap: Tap):
         back = app_returned(mark, app)
         return back, f"{app}({value}): " + ("returned without a pickup" if back else "did not return")
 
-    def do_local_optimization(_target, mark):
-        tap.pump(3.0)  # the trigger is the shape itself: the pair's far leg is already bridged
+    def do_local_optimization(surface, mark):
+        tap.pump(3.0)  # the trigger is the shape itself, with a tone crossing the pair
         n = tap.count(_is("LocalOptimizationBegin"), mark)
-        return 0, f"LocalOptimizationBegin frames: {n}"
+        note = "; queue unreachable by construction (Queue() is not a bridge)" if surface == "queue" else ""
+        return 0, f"LocalOptimizationBegin frames: {n}{note}"
 
-    def do_replaces(target, mark):
+    def dialog_of(target):
+        """The waiting PJSIP leg's dialog as Replaces names it: (refusals, header or None)."""
         values = {}
         refusals = 0
         for key in ("call-id", "local_tag", "remote_tag"):
@@ -1079,12 +1113,58 @@ def _renamed_caller_and_participant(tap: Tap):
             refusals += refused(response)
             values[key] = response.get("Value", "")
         if not all(values.values()):
-            return refusals or 1, "the dialog of the waiting leg could not be read"
-        header = f"{values['call-id']};to-tag={values['local_tag']};from-tag={values['remote_tag']}"
+            return refusals or 1, None
+        return refusals, f"{values['call-id']};to-tag={values['local_tag']};from-tag={values['remote_tag']}"
+
+    def do_replaces(target, mark):
+        refusals, header = dialog_of(target)
+        if header is None:
+            return refusals, "the dialog of the waiting leg could not be read"
         originate("Local/replace@capture/n", str(next(counter)), data="20", variables=[f"__RH={header}"])
         tap.pump(4.0)
         back = app_returned(mark, "Replaces")
         return refusals + back, "INVITE with Replaces: " + ("not taken" if back else "no fallback seen")
+
+    def do_refer(target, mark, surface):
+        """A SIP attended transfer whose consultation leg is the waiting target: a second loopback
+        call (`hold-in`, its answering leg bridged with a peer) is the transferer's first call; once
+        that leg is bridged, its calling leg sends a REFER whose Refer-To carries the Replaces of
+        the target's dialog."""
+        refusals, header = dialog_of(target)
+        if header is None:
+            return refusals, "the dialog of the waiting leg could not be read"
+        action_id = originate("PJSIP/hold-in@loop", str(next(counter)))
+        answered = tap.wait_for(lambda f: f.get("Event") == "OriginateResponse"
+                                and f.get("ActionID") == action_id, 20, mark, "the transferer's call")
+        if answered.get("Response") != "Success":
+            return refusals + 1, f"the transferer's call was not answered: {answered.get('Reason', '')}"
+        leg = answered["Channel"]
+        # the answer comes before `hold-in` dials its peer; a REFER sent then finds no bridge on the
+        # transferee's side and Asterisk reports the transfer `Invalid`, so wait for that bridge
+        tap.wait_for(lambda f: f.get("Event") == "BridgeEnter" and f.get("Context") == "capture-sip"
+                     and f.get("Exten") == "hold-in", float(tap.options.get("join_timeout", 20)), mark,
+                     "the transferer's bridge")
+        exten = "queue-in" if surface == "queue" else "conf-in"
+        refer_to = f"<sip:{exten}@127.0.0.1:5060?Replaces={urllib.parse.quote(header, safe='')}>"
+        refusals += refused(tap.action([("Action", "Setvar"), ("Channel", leg), ("Variable", "RT"),
+                                        ("Value", refer_to)]))
+        response = tap.action([("Action", "Redirect"), ("Channel", leg), ("Context", "capture"),
+                               ("Exten", "refer-go"), ("Priority", "1")])
+        refusals += refused(response)
+        tap.pump(4.0)
+        transferred = tap.count(_is("AttendedTransfer"), mark)
+        status = [f.get("Result") for f in tap.frames[mark:] if f.get("Event") == "UserEvent"
+                  and f.get("UserEvent") == "CaptureApp" and f.get("App") == "Transfer"]
+        if not transferred or (status and status[-1] != "SUCCESS"):
+            refusals += 1
+        return refusals, (f"Transfer: {status[-1] if status else 'no result'}; "
+                          f"AttendedTransfer frames: {transferred}")
+
+    def do_redirect(target, _mark):
+        response = tap.action([("Action", "Redirect"), ("Channel", target["Channel"]), ("Context", "capture"),
+                               ("Exten", "redirected"), ("Priority", "1")])
+        tap.pump(2.0)
+        return refused(response), f"Redirect: {response.get('Response')}: {response.get('Message', '')}"
 
     def do_ari_move(target, _mark):
         if tap.ari is None:
@@ -1092,6 +1172,24 @@ def _renamed_caller_and_participant(tap: Tap):
         status, body = tap.ari.post(f"/ari/channels/{target['Uniqueid']}/move", [("app", ARI_APP)])
         tap.pump(2.0)
         return (0 if 200 <= status < 300 else 1), f"ARI move: HTTP {status} {body.strip()[:120]}"
+
+    def local_optimization_control():
+        """A Local pair without /n outside both surfaces, bridged on both sides, with a tone
+        crossing it: whether this image raises LocalOptimizationBegin for the shape at all."""
+        name = "local-optimization-control"
+        mark = step(name)
+        try:
+            originate("Local/lopt@capture", str(next(counter)), exten="dialpeer")
+            tap.wait_for(lambda f: f.get("Event") == "Newexten" and f.get("Exten") == "tone"
+                         and f.get("Application") == "Milliwatt", 20, mark, "the control pair's tone")
+            refusals, detail = do_local_optimization(None, mark)
+            finish(None, mark)
+            outcome(name, None, "local-optimization", mark, None, refusals, detail)
+        except ConnectionClosed:
+            raise
+        except CaptureError as error:
+            _hangup_all(tap)
+            outcome(name, None, "local-optimization", mark, None, 0, f"error: {error}")
 
     # -- negative control -------------------------------------------------------------------------
 
@@ -1157,12 +1255,14 @@ def _renamed_caller_and_participant(tap: Tap):
     # -- the search -------------------------------------------------------------------------------
 
     for trigger in RENAME_TRIGGERS:
+        if trigger == "local-optimization":
+            local_optimization_control()
         for surface in RENAME_SURFACES:
             name = f"{trigger}-{surface}"
             mark = step(name)
             join = None
             try:
-                how = {"local-optimization": "local-no-n", "replaces": "pjsip"}.get(trigger, "local")
+                how = {"local-optimization": "local-no-n", "replaces": "pjsip", "refer": "pjsip"}.get(trigger, "local")
                 join = start_target(surface, mark, how)
                 tap.pump(0.5)
                 if trigger == "bridge":
@@ -1173,9 +1273,13 @@ def _renamed_caller_and_participant(tap: Tap):
                     exten = "queue" if surface == "queue" else "conf"
                     refusals, detail = do_pickup("Pickup", f"{exten}@capture", mark)
                 elif trigger == "local-optimization":
-                    refusals, detail = do_local_optimization(join, mark)
+                    refusals, detail = do_local_optimization(surface, mark)
                 elif trigger == "replaces":
                     refusals, detail = do_replaces(join, mark)
+                elif trigger == "refer":
+                    refusals, detail = do_refer(join, mark, surface)
+                elif trigger == "redirect":
+                    refusals, detail = do_redirect(join, mark)
                 else:
                     refusals, detail = do_ari_move(join, mark)
                 step(f"{name}-waiting")

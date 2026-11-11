@@ -595,12 +595,16 @@ class _RenamePbx:
     for it. `bridge_error`, `no_join_for` and `close_on` let a test refuse, starve or cut a step.
     """
 
-    def __init__(self, bridge_error=False, no_join_for=(), close_on=None):
+    def __init__(self, bridge_error=False, no_join_for=(), close_on=None, transfer_status="SUCCESS",
+                 transferer_bridged=True):
         self.bridge_error = bridge_error
         self.no_join_for = set(no_join_for)
         self.close_on = close_on
+        self.transfer_status = transfer_status
+        self.transferer_bridged = transferer_bridged
         self.n = 0
         self.waiting = []  # (surface, channel, uid, cid)
+        self.variables = {}  # (channel, variable) -> value, from Setvar
         self.sock = None  # set by the test, so `close_on` can hang up the manager connection
 
     def ok(self, message="Success"):
@@ -627,6 +631,8 @@ class _RenamePbx:
             "ConfbridgeList": self.confbridge_list,
             "ConfbridgeMute": [self.ok("User muted")],
             "Hangup": self.hangup,
+            "Setvar": self.setvar,
+            "Redirect": self.redirect,
             "CoreShowChannels": [b"Response: Success\r\nActionID: {id}\r\nEventList: start\r\n\r\n",
                                  b"Event: CoreShowChannelsComplete\r\nActionID: {id}\r\nEventList: Complete"
                                  b"\r\nListItems: 0\r\n\r\n"],
@@ -648,6 +654,25 @@ class _RenamePbx:
             event = "QueueCallerLeave" if surface == "queue" else "ConfbridgeLeave"
             out.append(_ev(("Event", event), ("Channel", channel), ("Uniqueid", uid), ("CallerIDNum", cid)))
         self.waiting = []
+        return out
+
+    def setvar(self, h):
+        self.variables[(h["Channel"], h["Variable"])] = h["Value"]
+        return [self.ok("Variable Set")]
+
+    def redirect(self, h):
+        """A waiting target leaves normally; the transferer's leg runs `refer-go` (its Transfer())."""
+        out = [self.ok("Redirect successful")]
+        for item in [w for w in self.waiting if w[1] == h["Channel"]]:
+            surface, channel, uid, cid = item
+            self.waiting.remove(item)
+            event = "QueueCallerLeave" if surface == "queue" else "ConfbridgeLeave"
+            out.append(_ev(("Event", event), ("Channel", channel), ("Uniqueid", uid), ("CallerIDNum", cid)))
+        if h.get("Exten") == "refer-go":
+            out += [_ev(("Event", "AttendedTransfer"), ("Result", "Success"),
+                        ("OrigTransfererChannel", "PJSIP/loop-000000ff"), ("OrigTransfererUniqueid", "1700000000.99"))]
+            out += [_ev(("Event", "UserEvent"), ("UserEvent", "CaptureApp"), ("App", "Transfer"),
+                        ("Result", self.transfer_status), ("Channel", h["Channel"]))]
         return out
 
     def originate(self, h):
@@ -681,6 +706,15 @@ class _RenamePbx:
                 if stem == "dialring" else []
             return queued + frames + [_ev(("Event", "Newexten"), ("Channel", name), ("Uniqueid", uid),
                                           ("Exten", exten), ("Application", "Wait"))]
+        if stem == "lopt":  # the control pair: its far leg dials the tone
+            return queued + [_ev(("Event", "Newexten"), ("Channel", f"Local/tone@capture-{self.n:08x};2"),
+                                 ("Uniqueid", uid + "2"), ("Exten", "tone"), ("Application", "Milliwatt"))]
+        if stem == "hold-in":  # the transferer's first call: answered, then its answering leg is bridged
+            answered = [_ev(("Event", "OriginateResponse"), ("ActionID", h["ActionID"]),
+                            ("Response", "Success"), ("Channel", name), ("Uniqueid", uid))]
+            bridged = [_ev(("Event", "BridgeEnter"), ("Channel", f"PJSIP/loop-{self.n:08x}b"), ("Uniqueid", uid + "b"),
+                           ("Context", "capture-sip"), ("Exten", "hold-in"))] if self.transferer_bridged else []
+            return queued + answered + bridged
         if stem in ("pickchan", "pickup"):
             app = "PickupChan" if stem == "pickchan" else "Pickup"
             return queued + [_ev(("Event", "UserEvent"), ("UserEvent", "CaptureApp"), ("App", app),
@@ -765,11 +799,14 @@ class RenamedCallerAndParticipantWorkloadTests(unittest.TestCase):
         self.assertEqual("on", received[0].get("Events"))
         self.assertNotIn("Filter", [h.get("Action") for h in received])
 
-    def test_run_ShouldWalkTheControlsThenEveryTriggerOnBothSurfaces_InTheCellsOrder(self):
+    def test_run_ShouldWalkTheControlsThenEveryTriggerOnBothSurfaces_InTheSearchOrder(self):
         steps, _received, _tap = self._run(ari=_FakeAri())
 
         expected = ["negative-queue", "negative-conference", "positive-bridge", "positive-pickupchan"]
-        for trigger in ("bridge", "pickupchan", "pickup", "local-optimization", "replaces", "ari-move"):
+        for trigger in ("bridge", "pickupchan", "pickup", "local-optimization", "replaces", "refer",
+                        "ari-move", "redirect"):
+            if trigger == "local-optimization":
+                expected.append("local-optimization-control")
             for surface in ("queue", "conference"):
                 expected += [f"{trigger}-{surface}", f"{trigger}-{surface}-waiting"]
         self.assertEqual(expected + ["done"], steps)
@@ -788,10 +825,13 @@ class RenamedCallerAndParticipantWorkloadTests(unittest.TestCase):
         self.assertEqual(5, len(targets))  # the ringing control, two PickupChan, two Pickup()
         self.assertTrue(targets[0].endswith(";1"), "the dialled leg rings; ;2 runs the dialplan")
         self.assertEqual(["__TARGET=queue@capture", "__TARGET=conf@capture"], targets[3:])
-        no_n = [h for h in received if h.get("Action") == "Originate" and h.get("Exten") == "dialpeer"]
-        self.assertEqual(["Local/queue@capture", "Local/conf@capture"], [h["Channel"] for h in no_n])
+        no_n = [(h["Channel"], h["Exten"]) for h in received if h.get("Action") == "Originate"
+                and h.get("Exten") in ("dialpeer", "dialtone")]
+        self.assertEqual([("Local/lopt@capture", "dialpeer"), ("Local/queue@capture", "dialtone"),
+                          ("Local/conf@capture", "dialtone")], no_n,
+                         "the control pair, then a waiting caller and a participant whose near leg hears a tone")
         getvars = [(h["Channel"], h["Variable"]) for h in received if h.get("Action") == "Getvar"]
-        self.assertEqual(6, len(getvars))
+        self.assertEqual(12, len(getvars), "Replaces and REFER read the waiting leg's dialog, on each surface")
         self.assertTrue(all(c.startswith("PJSIP/loop-") and c in joins for c, _ in getvars))
         replaces = [h["Variable"] for h in received if h.get("Variable", "").startswith("__RH=")]
         self.assertEqual(["__RH=cid-1;to-tag=lt-2;from-tag=rt-3"] * 2, replaces,
@@ -859,7 +899,97 @@ class RenamedCallerAndParticipantWorkloadTests(unittest.TestCase):
         self.assertFalse([s for s in steps if s.startswith("sequential")])
 
 
+class RenamedWorkloadAddedTriggersTests(unittest.TestCase):
+    """Audio through the Local pair, the REFER attended transfer and Redirect."""
+
+    _run = RenamedCallerAndParticipantWorkloadTests._run
+    _outcomes = staticmethod(RenamedCallerAndParticipantWorkloadTests._outcomes)
+    _NAME = RenamedCallerAndParticipantWorkloadTests._NAME
+
+    def test_files_ShouldSendATonePastTheLocalPair_AndOfferTransferAndRedirect(self):
+        extensions = cap.WORKLOADS[self._NAME]["files"]["extensions.conf"]
+
+        for line in ("exten => tone,1,Answer()", " same => n,Milliwatt()",
+                     "exten => dialtone,1,Dial(Local/tone@capture/n,30)",
+                     "exten => lopt,1,Dial(Local/tone@capture/n,30)",
+                     "exten => refer-go,1,Transfer(PJSIP/${RT})",
+                     " same => n,UserEvent(CaptureApp,App: Transfer,Result: ${TRANSFERSTATUS})",
+                     "exten => redirected,1,Answer()",
+                     "exten => hold-in,1,Answer()", " same => n,Dial(Local/peer@capture/n,30)"):
+            self.assertIn(line, extensions)
+        self.assertNotIn("Milliwatt", extensions.split("exten => peer,1")[1].split("exten =>")[0],
+                         "the Bridge triggers keep their silent peer")
+
+    def test_run_ShouldAskTheTransferersLegToReferTheWaitingLegsDialog(self):
+        _steps, received, tap = self._run(ari=_FakeAri())
+
+        holds = [h for h in received if h.get("Action") == "Originate" and h["Channel"] == "PJSIP/hold-in@loop"]
+        self.assertEqual(2, len(holds), "one transferer call per surface")
+        setvars = [h for h in received if h.get("Action") == "Setvar"]
+        self.assertEqual(["RT", "RT"], [h["Variable"] for h in setvars])
+        self.assertEqual("<sip:queue-in@127.0.0.1:5060?Replaces=cid-1%3Bto-tag%3Dlt-2%3Bfrom-tag%3Drt-3>",
+                         setvars[0]["Value"])
+        self.assertTrue(setvars[1]["Value"].startswith("<sip:conf-in@127.0.0.1:5060?Replaces="))
+        redirects = [h for h in received if h.get("Action") == "Redirect" and h.get("Exten") == "refer-go"]
+        self.assertEqual([h["Channel"] for h in setvars], [h["Channel"] for h in redirects],
+                         "the leg that holds RT is the one sent to Transfer()")
+        joins = {f["Channel"] for f in tap.frames if f.get("Event") in ("QueueCallerJoin", "ConfbridgeJoin")}
+        self.assertFalse(joins & {h["Channel"] for h in redirects}, "the transferer is not the waiting leg")
+        outcome = self._outcomes(tap)["refer-queue"]
+        self.assertEqual("0", outcome["Refusals"])
+        self.assertIn("AttendedTransfer frames: 1", outcome["Detail"])
+        self.assertIn("Transfer: SUCCESS", outcome["Detail"])
+
+    def test_run_ShouldNotRefer_UntilTheTransferersAnsweringLegIsBridged(self):
+        # an unbridged transferee leg makes Asterisk answer the REFER with `Result: Invalid`
+        _steps, received, tap = self._run(_RenamePbx(transferer_bridged=False), options={"join_timeout": 0.3},
+                                          ari=_FakeAri())
+
+        self.assertFalse([h for h in received if h.get("Action") == "Setvar"])
+        self.assertIn("error: timed out", self._outcomes(tap)["refer-queue"]["Detail"])
+        self.assertIn("the transferer's bridge", self._outcomes(tap)["refer-queue"]["Detail"])
+
+    def test_run_ShouldCountARefusal_WhenTransferDoesNotSucceed(self):
+        _steps, _received, tap = self._run(_RenamePbx(transfer_status="FAILURE"),
+                                           ari=_FakeAri())
+
+        self.assertEqual("1", self._outcomes(tap)["refer-conference"]["Refusals"])
+
+    def test_run_ShouldRedirectTheWaitingChannel_OnBothSurfaces(self):
+        _steps, received, tap = self._run(ari=_FakeAri())
+
+        joins = {f["Channel"] for f in tap.frames if f.get("Event") in ("QueueCallerJoin", "ConfbridgeJoin")}
+        redirects = [h for h in received if h.get("Action") == "Redirect" and h.get("Exten") == "redirected"]
+        self.assertEqual(2, len(redirects))
+        self.assertTrue(all(h["Channel"] in joins and h["Context"] == "capture" and h["Priority"] == "1"
+                            for h in redirects))
+        outcomes = self._outcomes(tap)
+        self.assertIn("Redirect: Success", outcomes["redirect-queue"]["Detail"])
+        self.assertEqual("1", outcomes["redirect-conference"]["Leaves"])
+
+    def test_run_ShouldRecordTheControlPairsOptimization_OutsideBothSurfaces(self):
+        _steps, _received, tap = self._run(ari=_FakeAri())
+
+        control = self._outcomes(tap)["local-optimization-control"]
+        self.assertEqual("none", control["Surface"])
+        self.assertIn("LocalOptimizationBegin frames: 0", control["Detail"])
+        self.assertIn("unreachable by construction", self._outcomes(tap)["local-optimization-queue"]["Detail"])
+
+
 class RenameDetectionTests(unittest.TestCase):
+    def test_renamed_ShouldIgnoreSentinelUniqueids_LikeAFailedOriginatesUnknown(self):
+        frames = [
+            {"Event": "OriginateResponse", "Response": "Failure", "Channel": "Local/pickchan@capture/n",
+             "Uniqueid": "<unknown>"},
+            {"Event": "OriginateResponse", "Response": "Failure", "Channel": "Local/pickup@capture/n",
+             "Uniqueid": "<unknown>"},
+            {"Event": "Newchannel", "Channel": "Local/a;1", "Uniqueid": ""},
+            {"Event": "Newchannel", "Channel": "Local/b;1", "Uniqueid": ""},
+        ]
+
+        self.assertEqual({}, cap.renamed_uniqueids(frames))
+        self.assertEqual({}, dict(cap.channel_names_by_uniqueid(frames)))
+
     def test_renamed_ShouldReportANameChangePerUniqueid_WithOrWithoutARenameFrame(self):
         frames = [
             {"Event": "QueueCallerJoin", "Channel": "PJSIP/a-1", "Uniqueid": "1.1"},
