@@ -29,9 +29,9 @@ def marker(step):
     return f(("Event", "UserEvent"), ("UserEvent", "CaptureMarker"), ("Step", step), ("ActionID", "cap-1"))
 
 
-def outcome(step, trigger):
+def outcome(step, trigger, detail=None):
     return f(("Event", "UserEvent"), ("UserEvent", "CaptureOutcome"), ("Step", step), ("Trigger", trigger),
-             ("ActionID", "cap-2"))
+             *((("Detail", detail),) if detail else ()), ("ActionID", "cap-2"))
 
 
 def ev(event, channel, uid, t, *extra):
@@ -51,7 +51,7 @@ def row(surface, channel, uid):
 
 
 def call(surface, step, trigger, name, uid, t, *, listed=True, leave=None, hangup=True, between=b"",
-         after_trigger=b""):
+         after_trigger=b"", detail=None):
     """A step whose target joins, waits through a trigger and a listing, then leaves (or not)."""
     join_ev, key = _JOIN[surface]
     leave_ev, lkey = _LEAVE[surface]
@@ -62,7 +62,7 @@ def call(surface, step, trigger, name, uid, t, *, listed=True, leave=None, hangu
         out += ev(leave_ev, lname, luid, t + 1, lkey)
     if hangup:
         out += ev("Hangup", name, uid, t + 1.2)
-    return out + outcome(step, trigger)
+    return out + outcome(step, trigger, detail)
 
 
 def take(*parts):
@@ -252,7 +252,46 @@ class TakeChecksTests(unittest.TestCase):
         got = {step: e["executed"] for step, e in scan.scan_take(data)["executed"].items()}
         self.assertEqual({"bridge-queue": True, "bridge-conference": False, "redirect-queue": True,
                           "replaces-queue": True, "refer-conference": True, "refer-queue": False,
-                          "local-optimization-control": True, "ari-move-queue": None}, got)
+                          "local-optimization-control": True, "ari-move-queue": False}, got)
+
+    def test_executed_ShouldReadThreeStates_ExecutedRefusedByAsteriskOrNotReached(self):
+        error = f(("Response", "Error"), ("ActionID", "cap-5"), ("Message", "Unable to add Channel1 to bridge: L/b;2"))
+        other_error = f(("Response", "Error"), ("ActionID", "cap-6"), ("Message", "Channel not found"))
+        returned = {app: f(("Event", "UserEvent"), ("UserEvent", "CaptureApp"), ("Channel", "L/pick;2"),
+                           ("Uniqueid", "1.90"), ("App", app), ("Result", "returned"))
+                    for app in ("PickupChan", "Pickup")}
+        picked = f(("Event", "Pickup"), ("Channel", "L/pick;2"), ("Uniqueid", "1.17"),
+                   ("TargetChannel", "L/ring;1"), ("TargetUniqueid", "1.14"))
+        data = take(
+            call("conference", "bridge-conference", "bridge", "L/b;2", "1.2", 20, between=error,
+                 detail="Bridge: Error: Unable to add Channel1 to bridge: L/b;2"),
+            call("queue", "redirect-queue", "redirect", "L/c;2", "1.3", 30, between=other_error,
+                 detail="error: the target never joined"),
+            call("queue", "pickupchan-queue", "pickupchan", "L/e;2", "1.4", 40, between=returned["PickupChan"]),
+            call("conference", "pickup-conference", "pickup", "L/g;2", "1.5", 45, between=returned["Pickup"]),
+            marker("positive-pickupchan"), picked, outcome("positive-pickupchan", "pickupchan"),
+            call("queue", "ari-move-queue", "ari-move", "L/d;2", "1.10", 60,
+                 detail='ARI move: HTTP 409 {"message":"Channel not in Stasis application"}'),
+            call("queue", "refer-queue", "refer", "P/l-8", "1.8", 55,
+                 between=f(("Event", "AttendedTransfer"), ("Result", "Invalid"), ("DestType", "Fail"))),
+            call("conference", "ari-move-conference", "ari-move", "L/h;2", "1.11", 65),
+            call("queue", "pickup-queue", "pickup", "L/i;2", "1.12", 70),
+        )
+
+        got = scan.scan_take(data)["executed"]
+        self.assertEqual({"bridge-conference": "refused", "redirect-queue": "not reached",
+                          "pickupchan-queue": "refused", "pickup-conference": "refused",
+                          "positive-pickupchan": "executed", "ari-move-queue": "refused", "refer-queue": "refused",
+                          "ari-move-conference": "not reached", "pickup-queue": "not reached"},
+                         {step: e["state"] for step, e in got.items()})
+        self.assertEqual((False, True), (got["bridge-conference"]["executed"], got["positive-pickupchan"]["executed"]))
+        self.assertIn("Response: Error (Unable to add Channel1 to bridge: L/b;2)", got["bridge-conference"]["refusal"])
+        self.assertIn("HTTP 409", got["ari-move-queue"]["refusal"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            scan.print_take("t.tap.raw", scan.scan_take(data))
+        self.assertIn("executed bridge-conference (bridge): refused by Asterisk [", out.getvalue())
+        self.assertIn("executed ari-move-conference (ari-move): not reached [", out.getvalue())
 
     def test_executed_ShouldNotReadReplacesAsExecuted_WithoutTheNewPairInARow(self):
         mute = f(("Event", "ConfbridgeMute"), ("Conference", "room"), ("Channel", "P/l-3"), ("Uniqueid", "1.5"))

@@ -48,9 +48,15 @@ Per take it also checks:
   executed          per trigger step, the trigger's own signal: Bridge and Redirect a
                     `Response: Success` with their success message; Replaces a `QueueEntry` or
                     `ConfbridgeList` row naming a pair that never joined (a leave or a mute alone
-                    is not enough); REFER an `AttendedTransfer` frame with `Result: Success`
-                    (one with `Invalid` or `Fail` is Asterisk refusing it); the Local pair a
-                    `LocalOptimizationBegin` in the control step
+                    is not enough); REFER an `AttendedTransfer` frame with `Result: Success`;
+                    PickupChan and Pickup a `Pickup` frame; ARI move a 2xx in the step's
+                    `CaptureOutcome` (ARI answers over HTTP, not on the AMI wire); the Local pair a
+                    `LocalOptimizationBegin` in the control step. Each step reads one of three
+                    states: `executed` (its signal is in the take), `refused by Asterisk` (an
+                    explicit refusal is: the `Response: Error` that the step's `CaptureOutcome`
+                    quotes for Bridge or Redirect, an `AttendedTransfer` with any other `Result`, a
+                    `CaptureApp` line saying PickupChan or Pickup returned without a pickup, an
+                    HTTP 4xx or 5xx for ARI move), or `not reached` (neither)
   reuse             per surface, channel names joined under two or more Uniqueids and leaves that
                     arrived after a later join of the same name; `not exercised` with no reuse
 
@@ -85,6 +91,8 @@ LABELS = ("renamed-leave-new-name", "renamed-leave-new-name-no-rename", "renamed
 # the end of a list requested while waiting: the rows before it are the whole answer
 LIST_ENDS = {"queue": ("QueueStatusComplete",), "conference": ("ConfbridgeListComplete",)}
 SUCCESS_MESSAGES = {"bridge": "Channels have been bridged", "redirect": "Redirect successful"}
+PICKUP_APPS = {"pickupchan": "PickupChan", "pickup": "Pickup"}
+STATES = {"executed": "executed", "refused": "refused by Asterisk", "not reached": "not reached", None: "-"}
 
 
 # --- reading ------------------------------------------------------------------------------
@@ -287,7 +295,42 @@ def _success_frames(frames, trigger, step):
         return [h for h in frames if h.get("Event") == "AttendedTransfer" and h.get("Result") == "Success"]
     if trigger == "local-optimization" and step.endswith("-control"):
         return [h for h in frames if h.get("Event") == "LocalOptimizationBegin"]
+    if trigger in PICKUP_APPS:
+        return [h for h in frames if h.get("Event") == "Pickup" and _uid_ok(h.get("TargetUniqueid"))]
     return []
+
+
+def _outcome_detail(frames, step):
+    """The `Detail` of the step's own `CaptureOutcome` line, or ""."""
+    return next((h.get("Detail", "") for h in frames if h.get("Event") == "UserEvent"
+                 and h.get("UserEvent") == "CaptureOutcome" and h.get("Step") == step), "")
+
+
+def _ari_status(detail):
+    m = re.match(r"ARI move: HTTP (\d{3})\b", detail)
+    return int(m.group(1)) if m else None
+
+
+def _refusal(frames, trigger, step):
+    """Where Asterisk explicitly refused the trigger in its step, as text; None when it did not."""
+    detail = _outcome_detail(frames, step)
+    if trigger in SUCCESS_MESSAGES:
+        # the error the step's own record quotes, so an error to another action is not read as one
+        quoted = detail.split(": Error: ", 1)[1] if ": Error: " in detail else None
+        hits = [h for h in frames if h.get("Response") == "Error" and not h["_waiting"]
+                and quoted is not None and h.get("Message", "") == quoted]
+        return f"frame {hits[0]['_i']}: Response: Error ({quoted})" if hits else None
+    if trigger == "refer":
+        hits = [h for h in frames if h.get("Event") == "AttendedTransfer" and h.get("Result") != "Success"]
+        return f"frame {hits[0]['_i']}: AttendedTransfer Result {hits[0].get('Result')}" if hits else None
+    if trigger in PICKUP_APPS:
+        hits = [h for h in frames if h.get("Event") == "UserEvent" and h.get("UserEvent") == "CaptureApp"
+                and h.get("App") == PICKUP_APPS[trigger] and h.get("Result") == "returned"]
+        return f"frame {hits[0]['_i']}: {PICKUP_APPS[trigger]} returned without a pickup" if hits else None
+    if trigger == "ari-move":
+        status = _ari_status(detail)
+        return f"HTTP {status} to ARI move (the step's CaptureOutcome)" if status and status >= 400 else None
+    return None
 
 
 # --- per take -----------------------------------------------------------------------------
@@ -309,7 +352,8 @@ def identity_change(frames, step="positive-pickupchan"):
 
 
 def executed(frames, records):
-    """step -> (trigger, signal seen, what was looked for)."""
+    """step -> trigger, signal seen (True / False / None for no reading), what was looked for, its
+    state (`executed`, `refused`, `not reached`, or None with no reading) and the refusal seen."""
     triggers = triggers_by_step(frames)
     by_step = collections.defaultdict(list)
     for h in frames:
@@ -335,11 +379,20 @@ def executed(frames, records):
             else:
                 seen = None
                 what = "read from the control step"
+        elif trigger in PICKUP_APPS:
+            seen = bool(_success_frames(fr, trigger, step))
+            what = "a Pickup frame"
+        elif trigger == "ari-move":
+            status = _ari_status(_outcome_detail(fr, step))
+            seen = status is not None and 200 <= status < 300
+            what = "an HTTP 2xx to ARI move, from the step's CaptureOutcome"
         else:
             seen, what = None, "no success signal defined"
         if trigger in ("bridge", "redirect") and step.startswith("positive-"):
             seen = None if trigger == "redirect" else seen
-        out[step] = {"trigger": trigger, "executed": seen, "signal": what}
+        refusal = None if seen is None else _refusal(fr, trigger, step)
+        state = None if seen is None else "executed" if seen else "refused" if refusal else "not reached"
+        out[step] = {"trigger": trigger, "executed": seen, "signal": what, "state": state, "refusal": refusal}
     return out
 
 
@@ -626,8 +679,8 @@ def print_take(path, take):
     missing = [c["uniqueid"] for c in take["complete"]["targets"] if not (c["newchannel"] and c["hangup"])]
     print(f"  complete: {'green' if take['complete']['green'] else 'NOT green, ' + ','.join(missing)}")
     for step, e in take["executed"].items():
-        state = {True: "executed", False: "NOT executed", None: "-"}[e["executed"]]
-        print(f"  executed {step} ({e['trigger']}): {state} [{e['signal']}]")
+        refusal = f"; refused at {e['refusal']}" if e["refusal"] else ""
+        print(f"  executed {step} ({e['trigger']}): {STATES[e['state']]} [{e['signal']}{refusal}]")
     for surface, e in take["reuse"].items():
         print(f"  ({surface}) reuse: reused_names {e['reused_names']} inverted {e['inverted']}: {e['reading']}")
 
