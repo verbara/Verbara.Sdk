@@ -72,6 +72,13 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
 
     public List<string> ResultMessages { get; } = [];
 
+    /// <summary>
+    /// The reply to the client's <c>done</c>, or <see langword="null"/> — the default — for the recorded
+    /// acknowledgement. Settable so a session can be made of messages the client cannot read and
+    /// nothing else, its last one included.
+    /// </summary>
+    public string? DoneJson { get; set; }
+
     private readonly List<string> _receivedJsonMessages = [];
 
     /// <summary>
@@ -308,7 +315,7 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
 
                     // Read before the try: a missing recording is a defect in the suite, not a
                     // peer that went away, so it must fail the session rather than close it normally.
-                    var ack = ReadFrame(DoneFrame);
+                    var ack = DoneJson ?? ReadFrame(DoneFrame);
                     try
                     {
                         await WebSocketTestServer.SendTextAsync(ws, ack, TextFrameFragmentBytes, ct)

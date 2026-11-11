@@ -60,6 +60,19 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
     public List<string> ResultMessages { get; } = [];
 
     /// <summary>
+    /// The greeting the session sends, or <see langword="null"/> — the default — for the recorded
+    /// <c>Begin</c> frame. Settable so a session can be made of messages the client cannot read and
+    /// nothing else.
+    /// </summary>
+    public string? BeginJson { get; set; }
+
+    /// <summary>
+    /// The reply to the client's terminator, or <see langword="null"/> — the default — for the recorded
+    /// <c>Termination</c> frame. Settable for the same reason as <see cref="BeginJson"/>.
+    /// </summary>
+    public string? TerminationJson { get; set; }
+
+    /// <summary>
     /// When greater than zero, every text message this session sends is sent in WebSocket fragments
     /// of this many bytes, with <c>endOfMessage: false</c> on all but the last.
     /// </summary>
@@ -231,7 +244,7 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
         }
 
         // Send initial Begin message (wire-protocol greeting).
-        await WebSocketTestServer.SendTextAsync(ws, BuildBeginJson(), TextFrameFragmentBytes, ct).ConfigureAwait(false);
+        await WebSocketTestServer.SendTextAsync(ws, BeginJson ?? BuildBeginJson(), TextFrameFragmentBytes, ct).ConfigureAwait(false);
 
         // Send caller-supplied Turn/Termination messages (snapshot to avoid races).
         var messages = ResultMessages.ToList();
@@ -297,7 +310,7 @@ internal sealed class AssemblyAiFakeServer : IAsyncDisposable
 
                 // Read before the try: a missing recording is a defect in the suite, not a peer
                 // that went away, so it must fail the session rather than close it normally.
-                var termination = BuildTerminationJson();
+                var termination = TerminationJson ?? BuildTerminationJson();
                 try
                 {
                     await WebSocketTestServer.SendTextAsync(ws, termination, TextFrameFragmentBytes, ct)

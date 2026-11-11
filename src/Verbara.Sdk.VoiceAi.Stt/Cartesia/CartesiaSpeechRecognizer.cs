@@ -286,9 +286,25 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
 
             var json = Encoding.UTF8.GetString(message.WrittenSpan);
             message.ResetWrittenCount();
-            var msg = JsonSerializer.Deserialize(
-                json,
-                VoiceAiSttJsonContext.Default.CartesiaSttTranscriptMessage);
+
+            // One message this client cannot read costs that message, not the session: only the parse is
+            // guarded, so nothing after it (the write to the caller's channel) is absorbed here.
+            CartesiaSttTranscriptMessage? msg;
+            try
+            {
+                msg = JsonSerializer.Deserialize(json, VoiceAiSttJsonContext.Default.CartesiaSttTranscriptMessage);
+            }
+            catch (JsonException)
+            {
+                // Judged by the loop's own failure test: an envelope that names this vendor's failure is the
+                // failure a readable error message raises, carrying the raw message because the member that
+                // failed may be the one holding the vendor's text. Anything else is counted and skipped.
+                if (NamesErrorFrame(json, out var code))
+                    throw SpeechProviderFailureException.FromErrorFrame(provider, code, json);
+
+                SttReceiveLoopMetrics.CountUnparseable(provider);
+                continue;
+            }
 
             if (msg is null) continue;
 
@@ -315,6 +331,44 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
         }
 
         return sawVendorFrame;
+    }
+
+    /// <summary>
+    /// Whether a message that failed to deserialize says <c>"type": "error"</c> at its top level — the
+    /// test the readable branch applies — and, if so, its code from <c>code</c> where that is a
+    /// string or a number. A message that is not a JSON object names no failure.
+    /// </summary>
+    /// <remarks>
+    /// The parse stands alone in its <c>try</c>: reading a parsed document raises no
+    /// <see cref="JsonException"/>, and a decode catch covers the decode and nothing after it.
+    /// </remarks>
+    private static bool NamesErrorFrame(string json, out string? code)
+    {
+        code = null;
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("type", out var kind)
+                || kind.ValueKind != JsonValueKind.String
+                || !kind.ValueEquals("error"))
+            {
+                return false;
+            }
+
+            code = SttErrorEnvelope.Code(root, "code");
+            return true;
+        }
     }
 
     /// <summary>

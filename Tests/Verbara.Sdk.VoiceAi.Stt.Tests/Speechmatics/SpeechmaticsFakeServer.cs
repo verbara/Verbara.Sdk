@@ -76,6 +76,13 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
     public string RecognitionStartedJson { get; set; } = BuildRecognitionStartedJson();
 
     /// <summary>
+    /// The reply to the client's <c>EndOfStream</c>, or <see langword="null"/> — the default — for the
+    /// recorded <c>EndOfTranscript</c> frame. Settable so a session can be made of messages the client
+    /// cannot read and nothing else, its last one included.
+    /// </summary>
+    public string? EndOfTranscriptJson { get; set; }
+
+    /// <summary>
     /// When greater than zero, every text message this session sends is sent in WebSocket fragments
     /// of this many bytes, with <c>endOfMessage: false</c> on all but the last.
     /// </summary>
@@ -313,7 +320,7 @@ internal sealed class SpeechmaticsFakeServer : IAsyncDisposable
 
                 // Read before the try: a missing recording is a defect in the suite, not a peer
                 // that went away, so it must fail the session rather than close it normally.
-                var endOfTranscript = BuildEndOfTranscriptJson();
+                var endOfTranscript = EndOfTranscriptJson ?? BuildEndOfTranscriptJson();
                 try
                 {
                     await WebSocketTestServer.SendTextAsync(ws, endOfTranscript, TextFrameFragmentBytes, ct)
