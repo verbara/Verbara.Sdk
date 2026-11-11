@@ -317,6 +317,39 @@ public sealed class VerbaraServer : IVerbaraServer
     }
 
     /// <summary>
+    /// The connection's loss mark at the position its delivery has started, for the session engine: inside an event's
+    /// delivery the mark of that event, anywhere else the mark of the event whose delivery started last (see
+    /// <c>AmiConnection.DeliveredLossMark</c>); never a drop still ahead of delivery. <see langword="null"/> when the
+    /// connection is not the SDK's <see cref="AmiConnection"/>, which reports no drops and no ordered session.
+    /// </summary>
+    internal SessionLossMark? ReadSessionLossMark()
+    {
+        if (_connection is not AmiConnection ami)
+            return null;
+        var mark = ami.DeliveredLossMark;
+        return new SessionLossMark(ami.Incarnation, mark.Session, mark.DroppedBefore);
+    }
+
+    /// <summary>
+    /// The connection's loss mark at the position its delivery has applied: the mark of the event whose observers all
+    /// returned last (see <c>AmiConnection.AppliedLossMark</c>), the same inside a delivery as outside it.
+    /// <see langword="null"/> when the connection is not the SDK's <see cref="AmiConnection"/>.
+    /// </summary>
+    internal SessionLossMark? ReadAppliedSessionLossMark()
+    {
+        if (_connection is not AmiConnection ami)
+            return null;
+        var mark = ami.AppliedLossMark;
+        return new SessionLossMark(ami.Incarnation, mark.Session, mark.DroppedBefore);
+    }
+
+    /// <summary>
+    /// The identity of the connection instance, drawn once when it was built, so a mark can be composed from an
+    /// <see cref="EventLossEpoch"/>; <see langword="null"/> when the connection is not the SDK's <see cref="AmiConnection"/>.
+    /// </summary>
+    internal Guid? ConnectionIdentity => (_connection as AmiConnection)?.Incarnation;
+
+    /// <summary>
     /// The server's event-loss epoch now, read from the connection's current event buffer: inside an observer's
     /// <c>OnNext</c> or an <c>OnEvent</c> handler as anywhere else, it counts a drop the buffer refused while the event
     /// being delivered waited, which <see cref="ReadEventLossEpoch"/> there does not. What a channel read samples, and what
@@ -849,6 +882,10 @@ public sealed class VerbaraServer : IVerbaraServer
         var channelConnection = (_connection as AmiConnection)?.FullyBooted;
         using var window = Channels.OpenReadWindow();
         window.ReceivedThrough = received;
+
+        // The request mark, sampled before Status is sent, so no later than any row the snapshot reports: every channel
+        // the reconciliation admits carries it. None over a connection that is not the SDK's.
+        window.Origin = ReadSessionLossMark() is { } requestMark ? new ChannelSnapshotOrigin(requestMark) : null;
         var mark = session is not null ? new ListSnapshotMark() : null;
         var channelSnapshot = await ReadChannelSnapshotAsync(session, mark, states, activity, reader, cancellationToken);
         if (channelSnapshot is null)
