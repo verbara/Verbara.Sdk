@@ -48,6 +48,20 @@ public class AsyncEventPumpBenchmark
             pump.TryEnqueue(_events[i]);
     }
 
+    // The refusal path: a pump of 1,000 slots that is never started is offered 10,000 events, so 9,000 are refused, each
+    // through the loss bookkeeping and the refusal callback, set as the connection sets it (a null delegate measures no
+    // call).
+    [Benchmark]
+    public async Task Refuse9000Of10000Events()
+    {
+        var refused = 0;
+        await using var pump = new AsyncEventPump(capacity: 1_000);
+        pump.OnEventRefused = (_, _) => refused++;
+
+        for (int i = 0; i < 10_000; i++)
+            pump.TryEnqueue(_events[i]);
+    }
+
     // The consumer's cost alone: 10,000 events buffered before the consumer starts, so no write races a read.
     [Benchmark]
     public async Task Prefill10000ThenConsume()

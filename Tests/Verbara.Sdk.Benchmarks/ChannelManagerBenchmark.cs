@@ -49,10 +49,13 @@ public class ChannelManagerBenchmark
 
     private void OnObserved(AsteriskChannel channel) => _observed++;
 
+    // The admission's source stamp is read as a live server wires it, so the row measures the call a null delegate skips.
+    private static readonly Func<(long Session, long Ordinal)> SourceEventReader = static () => (1L, 1L);
+
     [Benchmark(Baseline = true)]
     public void Create1000Channels()
     {
-        var mgr = new ChannelManager(NullLogger.Instance);
+        var mgr = new ChannelManager(NullLogger.Instance) { SourceEventReader = SourceEventReader };
         for (int i = 0; i < 1000; i++)
         {
             mgr.OnNewChannel($"{i}.1", $"SIP/{i}-{i:D8}", ChannelState.Ring);
