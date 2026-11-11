@@ -132,6 +132,10 @@
          Newtonsoft.Json 9.0.1 and System.Text.Encodings.Web 4.7.1, both carrying advisories that
          would trip dependency-review's fail-on-severity: high. -->
     <PackageVersion Include="WireMock.Net" Version="2.21.0" />
+    <!-- Transitive pin (CentralPackageTransitivePinningEnabled): WireMock.Net resolves
+         Microsoft.AspNetCore.WebUtilities 2.3.0, flagged by GHSA-6527-9fp8-r4x6 (NU1902 is an
+         error here). 2.3.14 is the patched release. Remove once WireMock.Net resolves >= 2.3.14. -->
+    <PackageVersion Include="Microsoft.AspNetCore.WebUtilities" Version="2.3.14" />
   </ItemGroup>
 
   <!-- Benchmark dependencies -->
