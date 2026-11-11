@@ -277,9 +277,10 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
         await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
         await run.StartServerAsync();
         await using var manager = EpochRig.NewManager(new FakeTimeProvider());
-        var recorder = EpochRecorder.On(manager);
+        // Subscribed before the recorder, so the count is read before the test hears of the ending.
         var reconnects = new ReconnectsAtEnding(run);
         manager.Events.Subscribe(reconnects);
+        var recorder = EpochRecorder.On(manager);
         manager.AttachToServer(run.Server, ServerId);
         await first.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Caller, CallerChannel, Caller));
         var started = await recorder.WaitAsync<CallStartedEvent>();
