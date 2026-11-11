@@ -14,6 +14,7 @@ namespace Verbara.Sdk.Ari.Tests.TestSupport;
 /// </summary>
 internal sealed class AriFarEnd : IAsyncDisposable
 {
+    private static readonly TimeSpan FirstUpgradeLimit = TimeSpan.FromSeconds(10);
     private readonly TcpListener _server = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource _stop = new();
     private readonly Lock _gate = new();
@@ -58,11 +59,16 @@ internal sealed class AriFarEnd : IAsyncDisposable
     /// <summary>Completes once <paramref name="count"/> upgrades have been answered. The caller bounds the wait.</summary>
     public Task WhenUpgraded(int count) => UpgradeSignal(count - 1).Task;
 
-    /// <summary>Sends one event of type <paramref name="type"/> on the current events connection.</summary>
-    public Task SendAsync(string type)
+    /// <summary>
+    /// Sends one event of type <paramref name="type"/> on the current events connection. It first waits for the first
+    /// upgrade to be recorded: the client's <c>ConnectAsync</c> returns once it reads the 101, which this far end writes
+    /// before it records the connection, so a send right after the connect would otherwise find none.
+    /// </summary>
+    public async Task SendAsync(string type)
     {
+        await UpgradeSignal(0).Task.WaitAsync(FirstUpgradeLimit, _stop.Token);
         var json = Encoding.UTF8.GetBytes($$"""{"type":"{{type}}","application":"test-app"}""");
-        return Current().Socket.SendAsync(json, WebSocketMessageType.Text, endOfMessage: true, _stop.Token);
+        await Current().Socket.SendAsync(json, WebSocketMessageType.Text, endOfMessage: true, _stop.Token);
     }
 
     /// <summary>Resets the current events connection, with no close frame.</summary>

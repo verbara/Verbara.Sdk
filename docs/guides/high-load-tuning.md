@@ -456,6 +456,7 @@ Key considerations:
 - **Multi-server:** Use `VerbaraServerPool` to federate N servers with agent routing
 - **Observer speed:** Keep event handlers fast (< 10ms). Offload heavy work to background queues
 - **VarSet filtering:** `VarSet` events are typically the largest single share of event volume on a busy dialplan. Filter early in observers, or better at the source, in `manager.conf`: the [`eventfilter` in Missing events](troubleshooting.md#the-cost-of-dialplan-and-a-filter-that-removes-it) drops them all except the `QUEUESTATUS` that the queue metrics read
+- **Live memory per call:** the channel table indexes calls by `linkedid`, about 50 B per call while it lives (40 B more for a call with two legs, and 40 B for a moment at each hangup), and each channel carries 16 B recording which event created it, so a reconciliation can tell whether its snapshot covers that channel. At 100,000 channels that adds at most about 6.6 MB over 2.9.0: 2.5–5 MB for the index and 1.6 MB for the stamps. In the same release a call arriving in Sessions allocates about 1.1 KB less than in 2.9.0
 - **GC tuning:** Consider `ServerGC` and `gcServer=true` in `runtimeconfig.json`
 
 ```json
