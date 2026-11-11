@@ -457,6 +457,8 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
         // A's connection drops one event; then the agent connects on A, which closes the wrap-up inside A's delivery.
         await EpochRig.DropOneEventAsync(runA, peerA);
         await peerA.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Other, OtherChannel, Other));
+        // A's pump holds one event: the connect is sent once the arrival has been delivered, so the buffer has room.
+        await recorder.WaitAsync<CallStartedEvent>(e => e.ServerId == "srv-a");
         await peerA.SendEventAsync("AgentConnect", Frames.AgentConnect(Other, OtherChannel));
         var wrapUp = await recorder.WaitAsync<CallWrapUpEvent>();
         var connectedOnA = await recorder.WaitAsync<CallConnectedEvent>(e => e.ServerId == "srv-a");
