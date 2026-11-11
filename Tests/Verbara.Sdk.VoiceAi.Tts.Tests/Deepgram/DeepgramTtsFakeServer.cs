@@ -138,6 +138,13 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
     public bool SendFlushedTerminator { get; set; } = true;
 
     /// <summary>
+    /// When set, the <c>Flushed</c> terminator is this text instead of the recorded frame — so a test
+    /// can send one the vendor's documented members still describe but that outgrows the client's
+    /// receive buffer. <see langword="null"/>, the default, sends the recorded frame.
+    /// </summary>
+    public string? FlushedFrameJson { get; set; }
+
+    /// <summary>
     /// When <see langword="true"/>, the recorded <c>Warning</c> frame is sent before audio —
     /// verifies warning frames do not break the stream.
     /// </summary>
@@ -329,7 +336,7 @@ internal sealed class DeepgramTtsFakeServer : IAsyncDisposable
     private async Task SendOptionalFlushedAsync(System.Net.WebSockets.WebSocket ws, CancellationToken ct)
     {
         if (SendFlushedTerminator)
-            await TrySendTextAsync(ws, ReadFrame(FlushedFrame), ct).ConfigureAwait(false);
+            await TrySendTextAsync(ws, FlushedFrameJson ?? ReadFrame(FlushedFrame), ct).ConfigureAwait(false);
     }
 
     private async Task TrySendTextAsync(System.Net.WebSockets.WebSocket ws, string json, CancellationToken ct)

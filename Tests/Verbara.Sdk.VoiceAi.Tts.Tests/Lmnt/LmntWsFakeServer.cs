@@ -140,6 +140,13 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     public bool SendFinishTerminator { get; set; } = true;
 
     /// <summary>
+    /// When set, the <c>finish</c> terminator is this text instead of the recorded frame — so a test
+    /// can send one that outgrows the client's receive buffer. <see langword="null"/>, the default,
+    /// sends the recorded frame.
+    /// </summary>
+    public string? FinishFrameJson { get; set; }
+
+    /// <summary>
     /// When greater than zero, every text message this session sends is sent in WebSocket fragments
     /// of this many bytes, with <c>endOfMessage: false</c> on all but the last.
     /// </summary>
@@ -376,7 +383,7 @@ internal sealed class LmntWsFakeServer : IAsyncDisposable
     {
         if (SendFinishTerminator && ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
-            var finish = ReadFrame(FinishFrame);
+            var finish = FinishFrameJson ?? ReadFrame(FinishFrame);
             try { await WebSocketTestServer.SendTextAsync(ws, finish, TextFrameFragmentBytes, ct).ConfigureAwait(false); }
             catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
             {
