@@ -148,10 +148,14 @@ notification reflects. Two marks are compared with `SessionEventEpoch.LossBetwee
   failover, a restart). The engine may have missed a hold, a transfer or a hangup.
 - `Unknown`: either mark is `null`. The SDK cannot tell.
 
+The values have no order: never combine verdicts with `Max`, `Min` or by comparing them; combine them as the example
+under *What to do* does.
+
 `SessionEventEpoch` is a new record struct with four fields: `ConnectionId` (the AMI connection instance, unique across
 processes), `AmiSession` (that connection's session ordinal), `DroppedBefore` (how many events that session had
-dropped) and `Attachment` (the generation of the server's attachment to the engine). `AgentSessionStateChanged`, on
-`IAgentSessionTracker.StateChanges`, carries the `Epoch` of the session notification that caused it.
+dropped) and `Attachment` (the engine's attachment of the server: a number no earlier attach in the process used).
+`AgentSessionStateChanged`, on `IAgentSessionTracker.StateChanges`, carries the `Epoch` of the session notification
+that caused it.
 
 In 2.9.0 a consumer had only `IAmiConnection.StateChanged` and `Reconnected`, which are not ordered with the event
 pump, so the first notifications of a new AMI session could reach it before it heard of the reconnect. A dropped
