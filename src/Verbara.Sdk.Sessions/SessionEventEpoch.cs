@@ -14,6 +14,13 @@ namespace Verbara.Sdk.Sessions;
 /// <see cref="SessionDomainEvent.Epoch"/> is <see langword="null"/>, which means cannot tell, never complete.
 /// </para>
 /// <para>
+/// To learn whether a call's record is complete, compare each of its notifications with the previous one of the same
+/// call: a loss between the call's first and last notification shows as <see cref="SessionEventLoss.Possible"/> on at
+/// least one pair, and a call queued from a reload's snapshot may show it on the pair before its queued notification
+/// instead of the one after. A mark is a wire position, not a time, so a loss after a call's last notification shows on
+/// no pair of that call.
+/// </para>
+/// <para>
 /// The field set is closed until the next major version: a positional record struct cannot gain a field without breaking
 /// its constructor and <c>Deconstruct</c>.
 /// </para>

@@ -8,6 +8,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Sessions` | [A call is found on the server that reported it](#a-call-is-found-on-the-server-that-reported-it) | lookups, behaviour, BREAKING |
 | `Verbara.Sdk.Sessions` | [A server is never attached from inside a session notification](#a-server-is-never-attached-from-inside-a-session-notification) | behaviour, BREAKING |
 | `Verbara.Sdk.Sessions` | [A call ends only when its server holds none of its channels](#a-call-ends-only-when-its-server-holds-none-of-its-channels) | fix, new member, behaviour |
+| `Verbara.Sdk.Sessions` | [Knowing whether a call's events are complete](#knowing-whether-a-calls-events-are-complete) | new members, equality |
 | `Verbara.Sdk.Resilience` | [`circuit.state` reports the breaker's current state](#circuitstate-reports-the-breakers-current-state) | metric meaning, BREAKING |
 | `Verbara.Sdk.Ari` | [A client that only makes REST calls can turn its events off](#a-client-that-only-makes-rest-calls-can-turn-its-events-off) | new option, new state |
 | `Verbara.Sdk.Ari` | [An observer that throws no longer stops delivery](#an-observer-that-throws-no-longer-stops-delivery) | behaviour |
@@ -133,6 +134,89 @@ health check reads `Degraded` (see [Live](#a-refused-status-is-counted-and-repor
 - For a server whose `Status` stays refused, release its waiting calls with
   `DetachFromServer(id, DetachedCalls.Release)` once you know it is gone.
 - Keep an alert on `sessions.unverifiable > 0`: the calls waiting on a server whose `Status` is refused are counted there.
+
+### Knowing whether a call's events are complete
+
+**What changed.** Every notification of the session engine (`ICallSessionManager.Events`) carries `Epoch`, a
+`SessionEventEpoch?`: what the SDK may have lost of that notification's own server's events before the point the
+notification reflects. Two marks are compared with `SessionEventEpoch.LossBetween(earlier, later)`, which returns a
+`SessionEventLoss`:
+
+- `NoneKnown`: the marks are equal. The SDK missed no event of that server it could know of between the two.
+- `Possible`: the marks differ. Between the two the connection reconnected, dropped an event because its buffer was
+  full, or the server was detached and attached again, or the two came from different connection instances (a
+  failover, a restart). The engine may have missed a hold, a transfer or a hangup.
+- `Unknown`: either mark is `null`. The SDK cannot tell.
+
+`SessionEventEpoch` is a new record struct with four fields: `ConnectionId` (the AMI connection instance, unique across
+processes), `AmiSession` (that connection's session ordinal), `DroppedBefore` (how many events that session had
+dropped) and `Attachment` (the generation of the server's attachment to the engine). `AgentSessionStateChanged`, on
+`IAgentSessionTracker.StateChanges`, carries the `Epoch` of the session notification that caused it.
+
+In 2.9.0 a consumer had only `IAmiConnection.StateChanged` and `Reconnected`, which are not ordered with the event
+pump, so the first notifications of a new AMI session could reach it before it heard of the reconnect. A dropped
+event was only counted (`ami.events.dropped`).
+
+What a mark means:
+
+- `null` means the engine could not read a mark, never that nothing was lost. It is `null` when the server's
+  connection is not the SDK's AMI connection (a wrapper or a fake of `IAmiConnection`), and on a wrap-up raised after
+  its server was detached.
+- Compare marks for equality only, through `LossBetween`. The fields have no order. Do not compare two nullable marks
+  with `==`: two `null` marks are equal there, which would read as complete.
+- A mark is a position on the wire, not a time. A notification raised while one of its server's events is delivered
+  carries that event's mark, so the first notification of a new AMI session carries the new session even while a
+  `StateChanged` handler is still running. A notification raised outside a delivery (the wrap-up timer, a reload or
+  sweep that ends a call, `AdmitExistingCalls`, a detach that releases calls, `RegisterReconstructedSession`) carries
+  a mark taken no later than its content when it opens a call's record, and no earlier when it closes one.
+- Compare each notification with the previous one of the same call. A loss between a call's first and last
+  notification shows as `Possible` on at least one pair. A call queued from a reload's snapshot may show it on the
+  pair before its `CallQueuedEvent` instead of the one after.
+- A loss after a call's last notification shows on no pair of that call.
+- A real `AttachToServer` changes `Attachment`, so a detach and re-attach reads `Possible`. Attaching the same instance
+  again while it is attached changes nothing.
+- The field set of `SessionEventEpoch` is closed until the next major version.
+
+**Who is affected.** Nobody has to change code. Two kinds of consumer see a difference:
+
+- A consumer that compares notifications by record equality or by `ToString`, for example to drop duplicates: both
+  now include `Epoch`, so two notifications that were equal in 2.9.0 can differ by their marks.
+- An implementation of `ICallSessionManager` of your own: its notifications carry `null` unless it sets `Epoch`, so a
+  consumer reads `Unknown` for them.
+
+**What to do.**
+
+- To know whether a stored call is complete, store `Epoch` (its four fields, or `null`) beside each notification and
+  compare each one with the previous one of the same call:
+
+```csharp
+using Verbara.Sdk.Sessions;
+
+// The notifications stored for one call, in the order they were raised.
+static SessionEventLoss Completeness(IReadOnlyList<SessionDomainEvent> call)
+{
+    if (call.Count == 0 || call[0].Epoch is null)
+        return SessionEventLoss.Unknown;
+
+    var verdict = SessionEventLoss.NoneKnown;
+    for (var i = 1; i < call.Count; i++)
+    {
+        var loss = SessionEventEpoch.LossBetween(call[i - 1].Epoch, call[i].Epoch);
+        if (loss == SessionEventLoss.Possible)
+            return SessionEventLoss.Possible;   // the SDK may have missed one of this call's events
+        if (loss == SessionEventLoss.Unknown)
+            verdict = SessionEventLoss.Unknown; // cannot tell, never complete
+    }
+
+    return verdict;
+}
+
+// Two notifications that differ only by their marks, compared as 2.9.0 compared them.
+static bool SameNotification(SessionDomainEvent a, SessionDomainEvent b) =>
+    a with { Epoch = null } == b with { Epoch = null };
+```
+
+- Where you drop duplicate notifications by equality, compare them without `Epoch`, as `SameNotification` does.
 
 ## ARI
 
