@@ -35,6 +35,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     // per-server generation the manager orders its own decisions by is counted apart. See Subscribe.
     private static long _attachStamps;
 
+    /// <summary>Draws the next attachment stamp from the counter every manager in the process shares.</summary>
+    private static long NextAttachStamp() => Interlocked.Increment(ref _attachStamps);
+
     private ServerIndex IndexOf(string serverId) =>
         _serverIndexes.GetOrAdd(serverId, static _ => new ServerIndex());
 
@@ -204,9 +207,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// (<see cref="SessionDomainEvent.Epoch"/>), without a copy: <paramref name="sampled"/> when the raise carries a mark
     /// sampled before its content was read (an admission's opening, a reload's snapshot), otherwise the mark of the
     /// position <paramref name="attachment"/>'s server has started to deliver, read now — inside one of its events'
-    /// delivery, that event's. The mark's attachment generation is always <paramref name="attachment"/>'s, the
+    /// delivery, that event's. The mark's attachment stamp is always <paramref name="attachment"/>'s, the
     /// attachment whose handler or walk raised the notification, never one looked up by server instance: a handler of
-    /// a detached attachment keeps its own generation. A raise no attachment produced (a wrap-up, which another
+    /// a detached attachment keeps its own stamp. A raise no attachment produced (a wrap-up, which another
     /// server's delivery can close) passes none and reads the attachment of the notification's server installed now;
     /// with none, or over a connection that is not the SDK's, the mark is <see langword="null"/>.</para>
     /// </summary>
