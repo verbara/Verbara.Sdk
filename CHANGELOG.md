@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added: every session notification says whether its server's events may have been lost before it (#NNN)
+### Added: every session notification says whether its server's events may have been lost before it (#553)
 
 Every session notification (`SessionDomainEvent`, and each change on `IAgentSessionTracker.StateChanges`) carries
 `Epoch`, a `SessionEventEpoch?`: the identity of the AMI connection it came from, that connection's session ordinal,
@@ -17,7 +17,7 @@ verdict nobody computed never reads as complete; the values have no order. The m
 event stream, not a time, and is compared for equality only. See the
 [migration guide](docs/guides/migration-2.10.0.md#knowing-whether-a-calls-events-are-complete).
 
-### Changed: record equality and `ToString` of session notifications include `Epoch` (#NNN)
+### Changed: record equality and `ToString` of session notifications include `Epoch` (#553)
 
 Two session notifications that were equal in 2.9.0 differ when their `Epoch` differs, and their `ToString` prints it.
 A consumer that deduplicates notifications by record equality, or keys them by `ToString`, compares
