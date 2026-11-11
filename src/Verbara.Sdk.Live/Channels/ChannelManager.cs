@@ -56,6 +56,9 @@ public sealed class ChannelManager
     // one may still owe entries an earlier call left behind.
     private readonly LiveEventOutbox _events;
 
+    /// <summary>The outbox of this manager's events, exposed for deterministic tests.</summary>
+    internal LiveEventOutbox Events => _events;
+
     /// <summary>
     /// Orders admissions and departures on one scale. Every admission takes the next value, and so
     /// does every departure recorded while a read window is open, so "admitted after a window's
