@@ -190,6 +190,7 @@ public sealed class SessionEventEpochReconnectTests
                     "nothing was dropped in the first session between the call's start and its hold");
                 SessionEventEpoch.LossBetween(started.Epoch, heldCall.Epoch).Should().Be(SessionEventLoss.NoneKnown,
                     "the hold was delivered from the session the call started in, with no drop between them");
+                resumed.Epoch.Should().NotBeNull("the second session's Unhold was raised over the SDK's connection");
                 resumed.Epoch?.AmiSession.Should().Be(2, "the second session's Unhold carries the second session");
             }
         }

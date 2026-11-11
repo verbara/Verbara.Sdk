@@ -62,7 +62,7 @@ public sealed class AmiConnectionDeliveredAndAppliedMarkTests
     [Fact]
     public async Task DeliveredLossMark_ShouldReadTheLastDeliveredEvent_WhenADropIsStillAhead()
     {
-        // D5's B/X/E shape on a capacity-1 buffer: H is being dispatched, B is buffered behind it, X is refused.
+        // A drop still ahead of delivery, on a capacity-1 buffer: H is being dispatched, B is buffered behind it, X is refused.
         await using var rig = await Rig.StartAsync(capacity: 1);
         var held = rig.HoldInHandler("HOLD/ahead");
         await rig.Peer.WriteEventAsync("PeerStatus", [new("Peer", "HOLD/ahead")]);
