@@ -63,6 +63,10 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// <see cref="long"/> named <c>Session</c> and <c>Ordinal</c> (since 2.10.0);
 /// </description></item>
 /// <item><description>
+/// <c>AmiConnection.Incarnation</c>, a <see cref="Guid"/>, and <c>AmiConnection.DeliveredLossMark</c> and
+/// <c>AmiConnection.AppliedLossMark</c>, each an <see cref="AmiEventLossMark"/> (since 2.10.0);
+/// </description></item>
+/// <item><description>
 /// <c>AmiConnection.StateAndWriter</c>, a tuple of <see cref="AmiConnectionState"/> and <see cref="bool"/>;
 /// </description></item>
 /// <item><description>
@@ -141,6 +145,14 @@ public sealed class AmiInternalsUsedByLiveTests
         var receivedThrough = connection.ReceivedThrough;
         Exactly<(long Session, long Ordinal)>(ref receivedThrough);
 
+        // AmiConnection.Incarnation, DeliveredLossMark and AppliedLossMark: their getters, by their exact types.
+        var incarnation = connection.Incarnation;
+        Exactly<Guid>(ref incarnation);
+        var deliveredLossMark = connection.DeliveredLossMark;
+        Exactly<AmiEventLossMark>(ref deliveredLossMark);
+        var appliedLossMark = connection.AppliedLossMark;
+        Exactly<AmiEventLossMark>(ref appliedLossMark);
+
         // new ListSnapshotMark(), its CompleteOrdinal and its wait, and the overload that fills it; bound only.
         var mark = new ListSnapshotMark();
         var completeOrdinal = mark.CompleteOrdinal;
@@ -194,6 +206,9 @@ public sealed class AmiInternalsUsedByLiveTests
             reconnectPending.Should().BeFalse("the caller's first connect follows no loss");
             lossMark.Should().Be(new AmiEventLossMark(1, 0), "the first session has lost nothing");
             currentLossMark.Should().Be(lossMark, "outside a dispatch both marks read the current session now");
+            incarnation.Should().NotBe(Guid.Empty, "the connection drew its identity when it was built");
+            deliveredLossMark.Should().Be(new AmiEventLossMark(1, 0), "the first session has dispatched and lost nothing");
+            appliedLossMark.Should().Be(deliveredLossMark, "nothing was dispatched, so both sides read the session with no drops");
             deliveredThroughLastLoss.Should().BeTrue("a session that has lost nothing has nothing to deliver through");
             completeOrdinal.Should().Be(0L, "a new mark describes no list yet");
             fullyBooted.IsCompleted.Should().BeFalse("the peer never reported FullyBooted on this session");
