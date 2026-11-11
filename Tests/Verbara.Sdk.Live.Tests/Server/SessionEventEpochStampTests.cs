@@ -256,15 +256,17 @@ public sealed class SessionEventEpochStampTests
 
         await server.StartAsync().WaitAsync(Run.Bound);
         var started = await recorder.WaitAsync<CallStartedEvent>();
+        // Read into non-null values first, so each assertion below reads a value of its own.
         var call = manager.GetById(started.SessionId);
-        var state = call?.State;
-        var origin = call is { } admitted ? admitted.Metadata.GetValueOrDefault("origin") : null;
+        var admitted = call is not null;
+        var state = call is null ? CallSessionState.Created : call.State;
+        var origin = (call is null ? null : call.Metadata.GetValueOrDefault("origin")) ?? "<none>";
 
         using (new AssertionScope())
         {
             started.Epoch.Should().BeNull(
                 "a connection that is not the SDK's yields no request mark, and no default mark stands in for one");
-            call.Should().NotBeNull("premise: the snapshot admitted the call");
+            admitted.Should().BeTrue("premise: the snapshot admitted the call");
             state.Should().Be(CallSessionState.Connected, "the call keeps the state the snapshot reported");
             origin.Should().Be("reload", "the call keeps its reload provenance");
         }
