@@ -30,9 +30,14 @@ Each target gets exactly one label:
 
 and the facts a reading needs: every name the Uniqueid carried, its `Rename` frames, its leave, its
 `Hangup` (and whether it came before the leave, or before the other pair's leave), the rows and
-mutes that name it or its join name while it waited, the frames that carry both U1 and U2, whether
-the other pair kept the join's name, and for a left-unannounced target the seconds from the trigger
-to its `Hangup` and whether a `BridgeEnter` of it came first.
+mutes that name it or any name it carried while it waited, the frames that carry both U1 and U2,
+whether the other pair kept the join's name, and for a left-unannounced target the seconds from the
+trigger to its `Hangup` and whether a `BridgeEnter` of it came first. The trigger's time is the first stamped
+frame from the trigger's own success frame on (the `executed` signal below); only a trigger with no
+such frame falls back to the first stamped frame after the `-waiting` marker, and the record says
+which (`trigger_to_hangup_from`). The rows are read under every name the Uniqueid carried, under any
+Uniqueid: for a renamed target `rows_disagree_kinds` names a row with another name under the join's
+Uniqueid, and a row with a carried name under another Uniqueid.
 
 Per take it also checks:
 
@@ -41,8 +46,9 @@ Per take it also checks:
                     `Hangup`, and the picker's `BridgeEnter`
   complete          each target has at least one `Newchannel` and one `Hangup`
   executed          per trigger step, the trigger's own signal: Bridge and Redirect a
-                    `Response: Success` with their success message; Replaces a row naming a pair
-                    that never joined; REFER an `AttendedTransfer` frame with `Result: Success`
+                    `Response: Success` with their success message; Replaces a `QueueEntry` or
+                    `ConfbridgeList` row naming a pair that never joined (a leave or a mute alone
+                    is not enough); REFER an `AttendedTransfer` frame with `Result: Success`
                     (one with `Invalid` or `Fail` is Asterisk refusing it); the Local pair a
                     `LocalOptimizationBegin` in the control step
   reuse             per surface, channel names joined under two or more Uniqueids and leaves that
@@ -179,7 +185,8 @@ def _target(frames, step_frames, names, joined, surface, join, leave_ev, row_evs
     step_leaves = [h for h in in_step if h.get("Event") == leave_ev and "ActionID" not in h]
     rows = [h for h in in_step if h.get("Event") in row_evs + mute_evs]
     rows_naming = [(h.get("Event"), h.get("Channel", ""), h.get("Uniqueid", "")) for h in rows
-                   if h.get("Uniqueid") == u1 or h.get("Channel") == n1]
+                   if h.get("Uniqueid") == u1 or h.get("Channel") in carried]
+    row_pairs = [(h.get("Channel", ""), h.get("Uniqueid")) for h in in_step if h.get("Event") in row_evs]
     waiting = [h for h in in_step if h["_waiting"]]
     requested_after = any(h.get("Event") in LIST_ENDS[surface] or
                           (h.get("Response") == "Error" and surface == "conference"
@@ -205,14 +212,15 @@ def _target(frames, step_frames, names, joined, surface, join, leave_ev, row_evs
         "leave_before_hangup": (leave["_i"] < hangup["_i"]) if (leave and hangup) else None,
         "rows_naming": rows_naming,
         "other_pairs": [list(p) for p in others],
+        "other_pairs_in_rows": [list(p) for p in others if p in row_pairs],
         "other_keeps_name": any(n2 == n1 for n2, _ in others),
         "linking_frames": linking,
         "hangup_in_step": bool(hangup and step_frames and hangup["_i"] <= step_frames[-1]["_i"]),
         "hangup_before_other_leave": None,
         "listed_after_trigger": listed_after if requested_after else None,
-        "trigger_to_hangup_s": None, "bridge_enter_before_hangup": None,
+        "trigger_to_hangup_s": None, "trigger_to_hangup_from": None, "bridge_enter_before_hangup": None,
         "newchannel": any(h.get("Event") == "Newchannel" and h.get("Uniqueid") == u1 for h in frames),
-        "rows_disagree_with_leave": False,
+        "rows_disagree_with_leave": False, "rows_disagree_kinds": [],
     }
     renamed = len(carried) > 1
     if renamed:
@@ -223,12 +231,17 @@ def _target(frames, step_frames, names, joined, surface, join, leave_ev, row_evs
                 label = "renamed-leave-new-name" if renames else "renamed-leave-new-name-no-rename"
             else:
                 label = "unclassified"
-            rec["rows_disagree_with_leave"] = any(u == u1 and c != leave.get("Channel")
-                                                  for _e, c, u in rows_naming)
         elif any(h.get("Uniqueid") != u1 for h in step_leaves):
             label = "renamed-leave-other-uniqueid"
         else:
             label = "unclassified"
+        kinds = []
+        if leave and any(u == u1 and c != leave.get("Channel") for _e, c, u in rows_naming):
+            kinds.append("another name under the join's Uniqueid")
+        if any(u != u1 and c in carried for _e, c, u in rows_naming):
+            kinds.append("a carried name under another Uniqueid")
+        rec["rows_disagree_kinds"] = kinds
+        rec["rows_disagree_with_leave"] = bool(kinds)
     elif leave:
         label = "normal"
     elif others:
@@ -241,8 +254,18 @@ def _target(frames, step_frames, names, joined, surface, join, leave_ev, row_evs
     elif rec["listed_after_trigger"] is False:
         label = "left-unannounced"
         if hangup:
-            # the trigger's time: the first stamped frame after the `-waiting` marker (else the join)
-            t0 = next((_ts(h) for h in waiting if _ts(h) is not None), _ts(join))
+            # the trigger's time: the first stamped frame from the trigger's own success frame on;
+            # failing that, the first stamped frame after the `-waiting` marker; failing that, the join
+            success = _success_frames(in_step, rec["trigger"], join["_step"])
+            t0, rec["trigger_to_hangup_from"] = None, None
+            if success:
+                t0 = next((_ts(h) for h in in_step if h["_i"] >= success[0]["_i"] and _ts(h) is not None), None)
+                rec["trigger_to_hangup_from"] = "trigger success" if t0 is not None else None
+            if t0 is None:
+                t0 = next((_ts(h) for h in waiting if _ts(h) is not None), None)
+                rec["trigger_to_hangup_from"] = "waiting marker (fallback)" if t0 is not None else None
+            if t0 is None:
+                t0, rec["trigger_to_hangup_from"] = _ts(join), "join (fallback)"
             t1 = _ts(hangup)
             rec["trigger_to_hangup_s"] = round(t1 - t0, 3) if (t0 is not None and t1 is not None) else None
             rec["bridge_enter_before_hangup"] = any(
@@ -252,6 +275,19 @@ def _target(frames, step_frames, names, joined, surface, join, leave_ev, row_evs
         label = "unclassified"
     rec["label"] = label
     return rec
+
+
+def _success_frames(frames, trigger, step):
+    """The frames among `frames` that are the trigger's own success signal (see `executed`), in
+    order; empty for a trigger with none, or one read elsewhere (Replaces, the Local pair)."""
+    if trigger in SUCCESS_MESSAGES:
+        return [h for h in frames if h.get("Response") == "Success"
+                and h.get("Message", "") == SUCCESS_MESSAGES[trigger]]
+    if trigger == "refer":
+        return [h for h in frames if h.get("Event") == "AttendedTransfer" and h.get("Result") == "Success"]
+    if trigger == "local-optimization" and step.endswith("-control"):
+        return [h for h in frames if h.get("Event") == "LocalOptimizationBegin"]
+    return []
 
 
 # --- per take -----------------------------------------------------------------------------
@@ -282,20 +318,19 @@ def executed(frames, records):
     for step, trigger in triggers.items():
         fr = by_step.get(step, [])
         if trigger in SUCCESS_MESSAGES:
-            seen = any(h.get("Response") == "Success" and h.get("Message", "") == SUCCESS_MESSAGES[trigger]
-                       for h in fr)
+            seen = bool(_success_frames(fr, trigger, step))
             what = f"Response: Success ({SUCCESS_MESSAGES[trigger]})"
         elif trigger == "replaces":
-            seen = any(r["step"] == step and r["other_pairs"] for r in records)
-            what = "a row naming a pair that never joined"
+            seen = any(r["step"] == step and r["other_pairs_in_rows"] for r in records)
+            what = "a QueueEntry or ConfbridgeList row naming a pair that never joined"
         elif trigger == "refer":
             transfers = [h for h in fr if h.get("Event") == "AttendedTransfer"]
-            seen = any(h.get("Result") == "Success" for h in transfers)
+            seen = bool(_success_frames(fr, trigger, step))
             what = "AttendedTransfer with Result: Success; seen: " + (
                 ", ".join(f"Result {h.get('Result')} DestType {h.get('DestType')}" for h in transfers) or "none")
         elif trigger == "local-optimization":
             if step.endswith("-control"):
-                seen = any(h.get("Event") == "LocalOptimizationBegin" for h in fr)
+                seen = bool(_success_frames(fr, trigger, step))
                 what = "LocalOptimizationBegin on the control pair"
             else:
                 seen = None
@@ -569,14 +604,15 @@ def print_take(path, take):
           f"{len(take['renamed_uniqueids'])}")
     print("step surface label join_name uniqueid names rename_frames leave leave_before_hangup "
           "other_pairs keeps_name linking hangup_before_other_leave listed_after trigger_to_hangup_s "
-          "bridge_enter_first")
+          "bridge_enter_first t0_from")
     for r in take["targets"]:
         leave = f"{r['leave']['name']}|{r['leave']['uniqueid']}" if r["leave"] else "-"
         others = ",".join(f"{n}|{u}" for n, u in r["other_pairs"]) or "-"
         print(r["step"], r["surface"], r["label"], r["join_name"], r["uniqueid"], ",".join(r["names"]),
               r["rename_frames"], leave, r["leave_before_hangup"], others, r["other_keeps_name"],
               len(r["linking_frames"]), r["hangup_before_other_leave"], r["listed_after_trigger"],
-              r["trigger_to_hangup_s"], r["bridge_enter_before_hangup"])
+              r["trigger_to_hangup_s"], r["bridge_enter_before_hangup"],
+              (r["trigger_to_hangup_from"] or "-").replace(" ", "-"))
     counts = collections.Counter((r["surface"], r["label"]) for r in take["targets"])
     for (surface, label), n in sorted(counts.items()):
         print(f"  {surface} {label}: {n}")

@@ -145,6 +145,48 @@ class LabelTests(unittest.TestCase):
         self.assertTrue(rec["bridge_enter_before_hangup"])
         self.assertIsNotNone(rec["trigger_to_hangup_s"])
 
+    def test_classify_ShouldTimeLeftUnannounced_FromTheTriggersOwnSuccessFrame_NotTheWaitingMarker(self):
+        # the Bridge succeeds at 10.3; the driver's -waiting marker is stamped 13.0; the Hangup comes at 13.5
+        ok_bridge = f(("Response", "Success"), ("ActionID", "cap-5"), ("Message", "Channels have been bridged"))
+        between = ok_bridge + f(("Event", "BridgeCreate"), ("Timestamp", "10.300000")) + \
+            ev("BridgeEnter", "Local/q-8;2", "1.19", 10.31)
+        after = f(("Event", "VarSet"), ("Timestamp", "13.000000")) + ev("Hangup", "Local/q-8;2", "1.19", 13.5)
+        data = take(call("queue", "bridge-queue", "bridge", "Local/q-8;2", "1.19", 10, listed=False, leave=False,
+                         hangup=False, between=between, after_trigger=after))
+
+        rec = target(data, "bridge-queue")
+        self.assertEqual("left-unannounced", rec["label"])
+        self.assertEqual(3.2, rec["trigger_to_hangup_s"])
+        self.assertEqual("trigger success", rec["trigger_to_hangup_from"])
+
+    def test_classify_ShouldTimeLeftUnannounced_FromTheWaitingMarker_AsALabelledFallback(self):
+        after = f(("Event", "VarSet"), ("Timestamp", "13.000000")) + ev("Hangup", "Local/q-8;2", "1.19", 13.5)
+        data = take(call("queue", "pickup-queue", "pickup", "Local/q-8;2", "1.19", 10, listed=False, leave=False,
+                         hangup=False, after_trigger=after))
+
+        rec = target(data, "pickup-queue")
+        self.assertEqual(0.5, rec["trigger_to_hangup_s"])
+        self.assertEqual("waiting marker (fallback)", rec["trigger_to_hangup_from"])
+
+    def test_classify_ShouldReadF_FromEveryNameTheCallCarried_UnderAnyUniqueid(self):
+        # renamed while waiting; the only row names the new name under another Uniqueid
+        seen = ev("Newstate", "PJSIP/b-2", "1.1", 10.5)
+        data = take(call("queue", "t-queue", "x", "PJSIP/a-1", "1.1", 10, listed=False, between=seen,
+                         after_trigger=row("queue", "PJSIP/b-2", "1.77"), leave=("PJSIP/b-2", "1.1")))
+
+        rec = target(data, "t-queue")
+        self.assertEqual("renamed-leave-new-name-no-rename", rec["label"])
+        self.assertIn(("QueueEntry", "PJSIP/b-2", "1.77"), [tuple(x) for x in rec["rows_naming"]])
+        self.assertTrue(rec["rows_disagree_with_leave"])
+        self.assertEqual(["a carried name under another Uniqueid"], rec["rows_disagree_kinds"])
+
+    def test_classify_ShouldNameTheMismatchUnderTheJoinsUniqueid_AsItsOwnKind(self):
+        rename = f(("Event", "Rename"), ("Channel", "Local/q-1;2"), ("Newname", "Local/q-1;2<M>"), ("Uniqueid", "1.1"))
+        data = take(call("queue", "t-queue", "x", "Local/q-1;2", "1.1", 10, between=rename,
+                         leave=("Local/q-1;2<M>", "1.1")))
+
+        self.assertEqual(["another name under the join's Uniqueid"], target(data, "t-queue")["rows_disagree_kinds"])
+
     def test_classify_ShouldLeaveUnclassified_WhenNoLeaveAndStillListed(self):
         data = take(call("queue", "t-queue", "x", "Local/q;2", "1.1", 10, listed=True, leave=False))
 
@@ -211,6 +253,18 @@ class TakeChecksTests(unittest.TestCase):
         self.assertEqual({"bridge-queue": True, "bridge-conference": False, "redirect-queue": True,
                           "replaces-queue": True, "refer-conference": True, "refer-queue": False,
                           "local-optimization-control": True, "ari-move-queue": None}, got)
+
+    def test_executed_ShouldNotReadReplacesAsExecuted_WithoutTheNewPairInARow(self):
+        mute = f(("Event", "ConfbridgeMute"), ("Conference", "room"), ("Channel", "P/l-3"), ("Uniqueid", "1.5"))
+        data = take(
+            call("queue", "replaces-queue", "replaces", "P/l-1", "1.4", 40, listed=False, leave=("P/l-3", "1.5")),
+            call("conference", "replaces-conference", "replaces", "P/l-6", "1.6", 50, listed=False, leave=False,
+                 after_trigger=mute),
+        )
+
+        got = scan.scan_take(data)["executed"]
+        self.assertEqual((False, False), (got["replaces-queue"]["executed"], got["replaces-conference"]["executed"]))
+        self.assertIn("QueueEntry or ConfbridgeList", got["replaces-queue"]["signal"])
 
     def test_reuse_ShouldPrintNotExercised_WithoutAReusedName_AndFindAnInvertedLeave(self):
         once = take(call("queue", "s", "x", "L/a;2", "1.1", 10), call("queue", "s2", "x", "L/b;2", "1.2", 20))
