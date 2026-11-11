@@ -313,12 +313,76 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
     /// </exception>
     private static byte[]? DecodeAudioFrame(ReadOnlySpan<byte> utf8Json, string provider)
     {
-        var frame = JsonSerializer.Deserialize(utf8Json, VoiceAiTtsJsonContext.Default.ElevenLabsAudioOutput);
+        // One message this client cannot read costs that message, not the synthesis: only the parse is
+        // guarded, so nothing after it is absorbed here.
+        ElevenLabsAudioOutput? frame;
+        try
+        {
+            frame = JsonSerializer.Deserialize(utf8Json, VoiceAiTtsJsonContext.Default.ElevenLabsAudioOutput);
+        }
+        catch (JsonException)
+        {
+            // Judged by the loop's own failure test, the bare `error` member: a failure so named is the one
+            // a readable failure frame raises, carrying the raw message because the member that failed may
+            // be the one holding the vendor's text. Anything else is counted and skipped.
+            var json = Encoding.UTF8.GetString(utf8Json);
+            if (NamesErrorFrame(json, out var code))
+                throw SpeechProviderFailureException.FromErrorFrame(provider, code, json);
+
+            TtsReceiveLoopMetrics.CountUnparseable(provider);
+            return null;
+        }
 
         if (frame?.Error is { Length: > 0 } error)
             throw SpeechProviderFailureException.FromErrorFrame(provider, error, frame.Message);
 
-        return frame?.Audio is { Length: > 0 } base64 ? Convert.FromBase64String(base64) : null;
+        if (frame?.Audio is not { Length: > 0 } base64) return null;
+
+        // The audio is the message's second pass: Door 1 above has run on the typed frame and named no
+        // failure, so audio that does not decode makes this an unreadable message like any other —
+        // counted and skipped, nothing written for it. Only the decode is guarded.
+        try
+        {
+            return Convert.FromBase64String(base64);
+        }
+        catch (FormatException)
+        {
+            TtsReceiveLoopMetrics.CountUnparseable(provider);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Whether a message that failed to deserialize carries an <c>error</c> member that is present, not
+    /// <see langword="null"/> and not empty — the test the readable branch applies, on a vendor whose
+    /// failure frame has no discriminator at all — and, if so, its code from <c>error</c> where that is a
+    /// string or a number. A message that is not a JSON object names no failure.
+    /// </summary>
+    /// <remarks>
+    /// The parse stands alone in its <c>try</c>: reading a parsed document raises no
+    /// <see cref="JsonException"/>, and a decode catch covers the decode and nothing after it.
+    /// </remarks>
+    private static bool NamesErrorFrame(string json, out string? code)
+    {
+        code = null;
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || !TtsErrorEnvelope.HasErrorMember(root)) return false;
+
+            code = TtsErrorEnvelope.Code(root, "error");
+            return true;
+        }
     }
 
     private Uri BuildUri()

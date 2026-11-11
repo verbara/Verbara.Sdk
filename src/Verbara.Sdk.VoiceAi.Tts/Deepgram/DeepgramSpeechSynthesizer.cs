@@ -318,9 +318,24 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
     /// <exception cref="SpeechProviderFailureException">The message reported a failure.</exception>
     private static bool HandleTextFrame(string json, string provider)
     {
-        var control = JsonSerializer.Deserialize(
-            json,
-            VoiceAiTtsJsonContext.Default.DeepgramTtsServerMessage);
+        // One message this client cannot read costs that message, not the synthesis: only the parse is
+        // guarded, so nothing after it is absorbed here.
+        DeepgramTtsServerMessage? control;
+        try
+        {
+            control = JsonSerializer.Deserialize(json, VoiceAiTtsJsonContext.Default.DeepgramTtsServerMessage);
+        }
+        catch (JsonException)
+        {
+            // Judged by the loop's own failure test: an envelope that names this vendor's failure is the
+            // failure a readable Error raises, carrying the raw message because the member that failed may
+            // be the one holding the vendor's text. Anything else is counted and skipped.
+            if (NamesErrorFrame(json, out var code))
+                throw SpeechProviderFailureException.FromErrorFrame(provider, code, json);
+
+            TtsReceiveLoopMetrics.CountUnparseable(provider);
+            return false;
+        }
 
         if (control is null) return false;
 
@@ -351,6 +366,44 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Whether a message that failed to deserialize says <c>"type": "Error"</c> at its top level — the
+    /// test the readable branch applies — and, if so, its code from <c>code</c> where that is a string or
+    /// a number. A message that is not a JSON object names no failure.
+    /// </summary>
+    /// <remarks>
+    /// The parse stands alone in its <c>try</c>: reading a parsed document raises no
+    /// <see cref="JsonException"/>, and a decode catch covers the decode and nothing after it.
+    /// </remarks>
+    private static bool NamesErrorFrame(string json, out string? code)
+    {
+        code = null;
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("type", out var kind)
+                || kind.ValueKind != JsonValueKind.String
+                || !kind.ValueEquals("Error"))
+            {
+                return false;
+            }
+
+            code = TtsErrorEnvelope.Code(root, "code");
+            return true;
+        }
     }
 
     private Uri BuildUri(AudioFormat outputFormat)

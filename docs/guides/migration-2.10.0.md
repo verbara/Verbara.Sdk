@@ -19,6 +19,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Live` | [A refused `Status` is counted and reported by the pool health check](#a-refused-status-is-counted-and-reported-by-the-pool-health-check) | new members, health check |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
 | `Verbara.Sdk.Ami` | [`NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends](#newextenevent-and-newcalleridevent-carry-what-the-wire-sends) | fix, new members |
+| `Verbara.Sdk.VoiceAi.Tts` | [A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis](#a-cartesia-or-elevenlabs-audio-frame-that-is-not-valid-base64-no-longer-ends-the-synthesis) | fix, behaviour, BREAKING |
 
 ## Sessions
 
@@ -363,3 +364,20 @@ A health check that observes the gauge through a `MeterListener` can call
 changes nothing. Where two policies share a key, the gauge follows the one that reported the key last, and each policy's
 `GetCircuitState` keeps reading its own circuit. No code needs to change: the member is additive, and
 `ResilienceMetrics.SetCircuitState` keeps its signature.
+
+## Voice AI
+
+### A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis
+
+**What changed.** `CartesiaSpeechSynthesizer` and `ElevenLabsSpeechSynthesizer` decoded the base64 audio of each text
+frame with nothing around the decode, so a frame whose `data` or `audio` was not valid base64 ended the synthesis with a
+`FormatException` out of the caller's enumeration, a type `SynthesizeAsync` does not document; behind `VoiceAiPipeline`
+that was a failed synthesis. Now the frame is skipped and counted on `tts.frames.unparseable` (meter
+`Verbara.Sdk.VoiceAi.Tts`, tagged `voiceai.provider`), and the audio around it is delivered. A session whose every frame
+was such a frame ends with `SpeechProviderEmptyResultException`, as a session that produced no audio does. No signature
+changes.
+
+**Who is affected.** Code that catches `FormatException` from `SynthesizeAsync`: it no longer receives one.
+
+**What to do.** Catch the three exceptions `SynthesizeAsync` documents. To see the frames the synthesizer skipped, watch
+`tts.frames.unparseable`.

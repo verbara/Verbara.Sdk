@@ -18,11 +18,12 @@ namespace Verbara.Sdk.Governance.Tests;
 public sealed class ReceiveLoopCatchScopeGuardTests
 {
     /// <summary>
-    /// The decode-guarded <c>try</c> statements in scope when the guard landed: the Deepgram recognizer's
-    /// decode and peek, the three other streaming recognizers' decode and peek (Speechmatics' greeting
-    /// decode as well), and the realtime bridge's six. A floor, not a count: the synthesizers add theirs.
+    /// The decode-guarded <c>try</c> statements in scope: the Deepgram recognizer's decode and peek, the
+    /// three other streaming recognizers' decode and peek (Speechmatics' greeting decode as well), the
+    /// realtime bridge's six, and the four streaming synthesizers' decode and peek plus the base64 audio
+    /// decode of Cartesia and ElevenLabs. A floor, not a count: a site added later only raises it.
     /// </summary>
-    private const int MinimumGuardedTries = 15;
+    private const int MinimumGuardedTries = 25;
 
     private static readonly string[] SpeechPackageRoots =
     [

@@ -403,9 +403,26 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
                 // LMNT may send JSON notifications (e.g. buffer_empty, error).
                 var json = Encoding.UTF8.GetString(message.WrittenSpan);
                 message.ResetWrittenCount();
-                var notification = JsonSerializer.Deserialize(
-                    json,
-                    VoiceAiTtsJsonContext.Default.LmntServerNotification);
+
+                // One message this client cannot read costs that message, not the synthesis: only the parse
+                // is guarded, so nothing after it is absorbed here.
+                LmntServerNotification? notification;
+                try
+                {
+                    notification = JsonSerializer.Deserialize(json, VoiceAiTtsJsonContext.Default.LmntServerNotification);
+                }
+                catch (JsonException)
+                {
+                    // Judged by the loop's own failure test — both spellings, the bare `error` member and
+                    // `type: "error"` — and a failure so named is the one a readable frame raises, carrying
+                    // the raw message because the member that failed may be the one holding the vendor's
+                    // text. Anything else is counted and skipped.
+                    if (NamesErrorFrame(json))
+                        throw SpeechProviderFailureException.FromErrorFrame(provider, null, json);
+
+                    TtsReceiveLoopMetrics.CountUnparseable(provider);
+                    continue;
+                }
 
                 if (notification is null) continue;
 
@@ -428,6 +445,40 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
 
                 // buffer_empty and anything else: server flushed buffered audio; continue receiving.
             }
+        }
+    }
+
+    /// <summary>
+    /// Whether a message that failed to deserialize names a failure by either of the tests the readable
+    /// branch applies: an <c>error</c> member that is present, not <see langword="null"/> and not empty, or
+    /// <c>"type": "error"</c> at its top level. A message that is not a JSON object names no failure. No code
+    /// is read: the readable branch reads none on this vendor.
+    /// </summary>
+    /// <remarks>
+    /// The parse stands alone in its <c>try</c>: reading a parsed document raises no
+    /// <see cref="JsonException"/>, and a decode catch covers the decode and nothing after it.
+    /// </remarks>
+    private static bool NamesErrorFrame(string json)
+    {
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return false;
+            if (TtsErrorEnvelope.HasErrorMember(root)) return true;
+
+            return root.TryGetProperty("type", out var kind)
+                && kind.ValueKind == JsonValueKind.String
+                && kind.ValueEquals("error");
         }
     }
 

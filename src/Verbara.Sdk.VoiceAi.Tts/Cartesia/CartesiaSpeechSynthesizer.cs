@@ -307,9 +307,27 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
                 continue;
             }
 
-            var message = JsonSerializer.Deserialize(
-                assembled.WrittenSpan,
-                VoiceAiTtsJsonContext.Default.CartesiaTtsServerMessage);
+            // One message this client cannot read costs that message, not the synthesis: only the parse is
+            // guarded, so nothing after it (the write to the caller's channel) is absorbed here.
+            CartesiaTtsServerMessage? message;
+            try
+            {
+                message = JsonSerializer.Deserialize(assembled.WrittenSpan, VoiceAiTtsJsonContext.Default.CartesiaTtsServerMessage);
+            }
+            catch (JsonException)
+            {
+                // Judged by the loop's own failure test: an envelope that names this vendor's failure is the
+                // failure a readable error frame raises, carrying the raw message because the member that
+                // failed may be the one holding the vendor's text. Anything else is counted and skipped.
+                var json = Encoding.UTF8.GetString(assembled.WrittenSpan);
+                assembled.Clear();
+                if (NamesErrorFrame(json, out var code))
+                    throw SpeechProviderFailureException.FromErrorFrame(provider, code, json);
+
+                TtsReceiveLoopMetrics.CountUnparseable(provider);
+                continue;
+            }
+
             assembled.Clear();
 
             if (message is null) continue;
@@ -317,8 +335,22 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
             if (string.Equals(message.Type, "chunk", StringComparison.Ordinal) &&
                 message.Data is { Length: > 0 } base64)
             {
-                await writer.WriteAsync(Convert.FromBase64String(base64).AsMemory(), ct)
-                    .ConfigureAwait(false);
+                // The audio is the message's second pass: by now the failure test has run on the typed
+                // frame and named no failure, so audio that does not decode makes this an unreadable
+                // message like any other — counted and skipped, nothing written for it. Only the decode
+                // is guarded; the write stays outside, as the parse's does.
+                byte[] audio;
+                try
+                {
+                    audio = Convert.FromBase64String(base64);
+                }
+                catch (FormatException)
+                {
+                    TtsReceiveLoopMetrics.CountUnparseable(provider);
+                    continue;
+                }
+
+                await writer.WriteAsync(audio.AsMemory(), ct).ConfigureAwait(false);
                 continue;
             }
 
@@ -342,6 +374,44 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
             // unrecognised type is not evidence of one, and a vendor adding a benign lifecycle
             // message must not start breaking sessions. What no longer happens is a *failure*
             // falling in here, which is what the allow-list above used to do.
+        }
+    }
+
+    /// <summary>
+    /// Whether a message that failed to deserialize says <c>"type": "error"</c> at its top level — the
+    /// test the readable branch applies — and, if so, its code from <c>status_code</c> where that is a
+    /// string or a number. A message that is not a JSON object names no failure.
+    /// </summary>
+    /// <remarks>
+    /// The parse stands alone in its <c>try</c>: reading a parsed document raises no
+    /// <see cref="JsonException"/>, and a decode catch covers the decode and nothing after it.
+    /// </remarks>
+    private static bool NamesErrorFrame(string json, out string? code)
+    {
+        code = null;
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("type", out var kind)
+                || kind.ValueKind != JsonValueKind.String
+                || !kind.ValueEquals("error"))
+            {
+                return false;
+            }
+
+            code = TtsErrorEnvelope.Code(root, "status_code");
+            return true;
         }
     }
 
