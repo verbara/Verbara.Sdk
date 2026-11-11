@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -233,6 +234,14 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
     {
         var buf = new byte[65536];
 
+        // A text message is assembled here across reads and parsed only once its final fragment is in.
+        // The vendor sizes and fragments its messages, not this client: parsing each read as a whole
+        // message handed JSON a truncated document whenever one outgrew this buffer or arrived in parts.
+        // Bytes still here when the loop leaves (a close, a fault, a cancel) are a message that never
+        // finished, and are discarded with it. No size cap: a cap would be a new way for a session to fail.
+        // Binary audio is not assembled: each read is the caller's as it arrives.
+        var message = new ArrayBufferWriter<byte>(buf.Length);
+
         while (true)
         {
             // The bound can run out inside the read that returned the vendor's last frame: that read
@@ -274,7 +283,8 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
                 break;
             }
 
-            // Every frame restarts the bound, whatever its type: a vendor that is sending is not silent.
+            // Every read restarts the bound, whatever its type and a fragment of a message still being
+            // assembled included: a vendor that is sending is not silent.
             silence.Heard();
 
             if (result.MessageType == WebSocketMessageType.Binary)
@@ -287,23 +297,45 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
 
             if (result.MessageType == WebSocketMessageType.Text)
             {
-                var done = HandleTextFrame(buf, result.Count, provider);
+                // A partial read goes back to the top of the loop, where the socket's state and the
+                // bound are checked before the next read, rather than into an inner loop that would
+                // read on.
+                message.Write(buf.AsSpan(0, result.Count));
+                if (!result.EndOfMessage) continue;
+
+                var json = Encoding.UTF8.GetString(message.WrittenSpan);
+                message.ResetWrittenCount();
+                var done = HandleTextFrame(json, provider);
                 if (done) return;
             }
         }
     }
 
     /// <summary>
-    /// Parses a server text frame and returns <see langword="true"/> when the stream is complete
-    /// (<c>Flushed</c> message received).
+    /// Parses a whole server text message and returns <see langword="true"/> when the stream is
+    /// complete (<c>Flushed</c> message received).
     /// </summary>
-    /// <exception cref="SpeechProviderFailureException">The frame reported a failure.</exception>
-    private static bool HandleTextFrame(byte[] buf, int count, string provider)
+    /// <exception cref="SpeechProviderFailureException">The message reported a failure.</exception>
+    private static bool HandleTextFrame(string json, string provider)
     {
-        var json = Encoding.UTF8.GetString(buf, 0, count);
-        var control = JsonSerializer.Deserialize(
-            json,
-            VoiceAiTtsJsonContext.Default.DeepgramTtsServerMessage);
+        // One message this client cannot read costs that message, not the synthesis: only the parse is
+        // guarded, so nothing after it is absorbed here.
+        DeepgramTtsServerMessage? control;
+        try
+        {
+            control = JsonSerializer.Deserialize(json, VoiceAiTtsJsonContext.Default.DeepgramTtsServerMessage);
+        }
+        catch (JsonException)
+        {
+            // Judged by the loop's own failure test: an envelope that names this vendor's failure is the
+            // failure a readable Error raises, carrying the raw message because the member that failed may
+            // be the one holding the vendor's text. Anything else is counted and skipped.
+            if (NamesErrorFrame(json, out var code))
+                throw SpeechProviderFailureException.FromErrorFrame(provider, code, json);
+
+            TtsReceiveLoopMetrics.CountUnparseable(provider);
+            return false;
+        }
 
         if (control is null) return false;
 
@@ -334,6 +366,44 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Whether a message that failed to deserialize says <c>"type": "Error"</c> at its top level — the
+    /// test the readable branch applies — and, if so, its code from <c>code</c> where that is a string or
+    /// a number. A message that is not a JSON object names no failure.
+    /// </summary>
+    /// <remarks>
+    /// The parse stands alone in its <c>try</c>: reading a parsed document raises no
+    /// <see cref="JsonException"/>, and a decode catch covers the decode and nothing after it.
+    /// </remarks>
+    private static bool NamesErrorFrame(string json, out string? code)
+    {
+        code = null;
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("type", out var kind)
+                || kind.ValueKind != JsonValueKind.String
+                || !kind.ValueEquals("Error"))
+            {
+                return false;
+            }
+
+            code = TtsErrorEnvelope.Code(root, "code");
+            return true;
+        }
     }
 
     private Uri BuildUri(AudioFormat outputFormat)

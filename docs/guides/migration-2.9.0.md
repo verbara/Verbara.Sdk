@@ -722,7 +722,9 @@ Now the call goes on:
   transcript and audio that follow it reach the caller.
 
 No signature changes. An event that is decoded but whose handling fails, such as an `Events` subscriber that throws or
-an audio delta whose `delta` is not valid base64, still ends the session as before.
+an audio delta whose `delta` is not valid base64, still ends the session as before. *(2.10.0: an audio delta whose
+`delta` is not valid base64 is now skipped and counted like any other event the bridge cannot decode — see
+[the 2.10.0 guide](migration-2.10.0.md#an-openai-realtime-audio-delta-that-is-not-valid-base64-no-longer-ends-the-call).)*
 
 **Who is affected.** A dashboard or alert on `openai_realtime.sessions.failed`: an event whose JSON cannot be decoded no
 longer counts there. Code that reads `RealtimeErrorEvent.Message` as OpenAI's `error.message`: for an `error` event

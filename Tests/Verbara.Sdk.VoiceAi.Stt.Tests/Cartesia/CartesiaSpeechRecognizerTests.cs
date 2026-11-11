@@ -607,6 +607,46 @@ public class CartesiaSpeechRecognizerTests : IAsyncLifetime
         new Uri($"ws://localhost{_server.RequestUri}").AbsolutePath.Should().Be("/stt/websocket");
     }
 
+    /// <summary>
+    /// A transcript message the vendor sends in 16-byte fragments is one result carrying the whole
+    /// transcript: the loop assembles the message until its final fragment before parsing it.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldYieldOneWholeResult_WhenTheTranscriptMessageArrivesInFragments()
+    {
+        // Arrange
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(CartesiaFakeServer.BuildTranscriptJson("hola mundo desde muy lejos", 0.95f, isFinal: true));
+        _server.TextFrameFragmentBytes = 16;
+
+        // Act
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        results.Should().ContainSingle().Which.Transcript.Should().Be("hola mundo desde muy lejos");
+    }
+
+    /// <summary>
+    /// One transcript message larger than the client's 64 KiB receive buffer is delivered whole, not
+    /// parsed as the truncated document its first read holds.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldYieldTheWholeTranscript_WhenOneMessageIsLargerThanTheReceiveBuffer()
+    {
+        // Arrange
+        var transcript = string.Join(' ', Enumerable.Repeat("palabra", 10_000));
+        var message = CartesiaFakeServer.BuildTranscriptJson(transcript, 0.95f, isFinal: true);
+        Encoding.UTF8.GetByteCount(message).Should().BeGreaterThan(64 * 1024, "the message must outgrow one read");
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(message);
+
+        // Act
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        results.Should().ContainSingle().Which.Transcript.Should().Be(transcript);
+    }
+
     private Task SessionEndedAsync() => _server.SessionCompleted.WaitAsync(TimeSpan.FromSeconds(10));
 
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()

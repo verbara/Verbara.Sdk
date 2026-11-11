@@ -149,6 +149,13 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     /// <summary>Send the recorded <c>done</c> control frame as a text message after all audio frames.</summary>
     public bool SendDoneTerminator { get; set; } = true;
 
+    /// <summary>
+    /// When set, the <c>done</c> terminator is this text instead of the recorded frame — so a session can
+    /// be made of messages the client cannot read and nothing else, its last one included.
+    /// <see langword="null"/>, the default, sends the recorded frame.
+    /// </summary>
+    public string? DoneFrameJson { get; set; }
+
     /// <summary>Abort the socket abnormally after sending all frames (simulates error).</summary>
     public bool AbortAfterSend { get; set; }
 
@@ -198,6 +205,25 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
     /// fixture.
     /// </remarks>
     public int TextFrameFragmentBytes { get; set; }
+
+    /// <summary>
+    /// Text messages sent among the audio frames, each exactly as written and through the same send as
+    /// every other text message this session sends (fragmented when <see cref="TextFrameFragmentBytes"/>
+    /// asks for it). An entry goes out just before the audio frame at its index; one whose index is at or
+    /// past the number of frames goes out after the last of them. Empty, the default, sends the audio alone.
+    /// </summary>
+    /// <remarks>
+    /// Test-only, so a session can carry one message the client cannot read — or whose audio does not
+    /// decode — between two it can, and the test can assert that the audio around it arrives whole.
+    /// </remarks>
+    public List<(int BeforeAudioFrame, string Text)> TextFramesAmongAudio { get; } = [];
+
+    /// <summary>The <see cref="TextFramesAmongAudio"/> entries due before audio frame <paramref name="index"/> of <paramref name="count"/>.</summary>
+    private List<string> TextFramesDueBefore(int index, int count) =>
+        TextFramesAmongAudio
+            .Where(e => index < count ? e.BeforeAudioFrame == index : e.BeforeAudioFrame >= count)
+            .Select(e => e.Text)
+            .ToList();
 
     /// <summary>
     /// Whether the client sent a WebSocket Close frame before the session finished answering.
@@ -310,9 +336,15 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         else
         {
             var frames = AudioFramesToSend.ToList();
-            foreach (var frame in frames)
+            for (int i = 0; i <= frames.Count; i++)
             {
                 if (ws.State is not (WebSocketState.Open or WebSocketState.CloseReceived)) break;
+
+                foreach (var text in TextFramesDueBefore(i, frames.Count))
+                    await SendTextFrameAsync(ws, text, ct).ConfigureAwait(false);
+
+                if (i == frames.Count) break;
+                var frame = frames[i];
 
                 if (Transport == CartesiaAudioTransport.Binary)
                 {
@@ -342,7 +374,7 @@ internal sealed class CartesiaFakeServer : IAsyncDisposable
         {
             try
             {
-                await SendTextFrameAsync(ws, ReadFrame(DoneFrame), ct).ConfigureAwait(false);
+                await SendTextFrameAsync(ws, DoneFrameJson ?? ReadFrame(DoneFrame), ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (WebSocketTestServer.IsSessionEnding(ex))
             {

@@ -657,6 +657,46 @@ public class AssemblyAiSpeechRecognizerTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// A transcript message the vendor sends in 16-byte fragments is one result carrying the whole
+    /// transcript: the loop assembles the message until its final fragment before parsing it.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldYieldOneWholeResult_WhenTheTranscriptMessageArrivesInFragments()
+    {
+        // Arrange
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(AssemblyAiFakeServer.BuildTurnJson("hola mundo desde muy lejos", endOfTurn: true));
+        _server.TextFrameFragmentBytes = 16;
+
+        // Act
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        results.Should().ContainSingle().Which.Transcript.Should().Be("hola mundo desde muy lejos");
+    }
+
+    /// <summary>
+    /// One transcript message larger than the client's 64 KiB receive buffer is delivered whole, not
+    /// parsed as the truncated document its first read holds.
+    /// </summary>
+    [Fact]
+    public async Task StreamAsync_ShouldYieldTheWholeTranscript_WhenOneMessageIsLargerThanTheReceiveBuffer()
+    {
+        // Arrange
+        var transcript = string.Join(' ', Enumerable.Repeat("palabra", 10_000));
+        var message = AssemblyAiFakeServer.BuildTurnJson(transcript, endOfTurn: true);
+        Encoding.UTF8.GetByteCount(message).Should().BeGreaterThan(64 * 1024, "the message must outgrow one read");
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(message);
+
+        // Act
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        // Assert
+        results.Should().ContainSingle().Which.Transcript.Should().Be(transcript);
+    }
+
+    /// <summary>
     /// Wait for the fake's session handler to return before asserting on what the client sent last.
     /// <c>StreamAsync</c> returns as soon as the server closes, which can be before the server has
     /// read the frames the client sent just before that — so without this join point a half-close

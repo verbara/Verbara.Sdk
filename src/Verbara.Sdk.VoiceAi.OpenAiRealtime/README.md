@@ -74,8 +74,11 @@ This cleanup does not replace the vendor's close code or the receive failure tha
 An event whose JSON the bridge cannot decode does not end the conversation. An `error` event whose JSON cannot be
 decoded is published as a `RealtimeErrorEvent` carrying the raw frame, as a decoded one is published with its message;
 any other such event is skipped, logged at Warning and counted on `openai_realtime.frames.unparseable` (tagged
-`voiceai.provider`), and the call goes on. An event that decodes but cannot be handled still ends the session: an
-audio delta whose `delta` is not valid base64 counts in `openai_realtime.sessions.failed`.
+`voiceai.provider`), and the call goes on. An audio delta whose `delta` is null or not valid base64 is skipped, logged
+at Warning and counted on `openai_realtime.frames.unparseable` like any other event the bridge cannot read; one whose
+`delta` is empty, or too short to make one sample at the caller's rate, carries no audio and is skipped without a count;
+the call goes on either way. An event that decodes but whose handling fails — an `Events` subscriber that throws —
+still ends the session and counts in `openai_realtime.sessions.failed`.
 
 Every session the bridge starts is counted in exactly one of `openai_realtime.sessions.completed`, `.failed` or
 `.cancelled`. A session is `cancelled` only when the token handed to the bridge was cancelled (the host, a stop that
