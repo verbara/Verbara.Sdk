@@ -587,5 +587,320 @@ class DialplanAndParkingWorkloadTests(unittest.TestCase):
         self.assertIn(" same => n,Wait(8)", flash_in.split("\n\n")[0])
 
 
+class _RenamePbx:
+    """The answers a PBX gives the renamed-caller-and-participant workload, in a fake's script shape.
+
+    Each originate that lands in the queue or the room joins with the originate's caller number;
+    the regex Hangup ends whoever is waiting, with a leave under the name and id the fake holds
+    for it. `bridge_error`, `no_join_for` and `close_on` let a test refuse, starve or cut a step.
+    """
+
+    def __init__(self, bridge_error=False, no_join_for=(), close_on=None):
+        self.bridge_error = bridge_error
+        self.no_join_for = set(no_join_for)
+        self.close_on = close_on
+        self.n = 0
+        self.waiting = []  # (surface, channel, uid, cid)
+        self.sock = None  # set by the test, so `close_on` can hang up the manager connection
+
+    def ok(self, message="Success"):
+        return b"Response: Success\r\nActionID: {id}\r\nMessage: " + message.encode() + b"\r\n\r\n"
+
+    def script(self):
+        return {
+            "Login": [self.ok("Authentication accepted")],
+            "UserEvent": lambda h: [self.ok("Event Sent"),
+                                    _ev(*[(k, v) for k, v in h.items() if k != "Action"],
+                                        ("Event", "UserEvent"))],
+            "Originate": self.originate,
+            "Bridge": lambda h: [b"Response: Error\r\nActionID: {id}\r\nMessage: Unable to add Channel1\r\n\r\n"]
+            if self.bridge_error else [self.ok("Channels have been bridged")],
+            "Getvar": lambda h: [b"Response: Success\r\nActionID: {id}\r\nVariable: " + h["Variable"].encode()
+                                 + b"\r\nValue: " + {"CHANNEL(pjsip,call-id)": b"cid-1",
+                                                     "CHANNEL(pjsip,local_tag)": b"lt-2",
+                                                     "CHANNEL(pjsip,remote_tag)": b"rt-3"}[h["Variable"]]
+                                 + b"\r\n\r\n"],
+            "QueueStatus": lambda h: [self.ok("Queue status will follow")] + [
+                _ev(("Event", "QueueEntry"), ("Queue", "capture-q"), ("Channel", c), ("Uniqueid", u),
+                    ("ActionID", h["ActionID"])) for s, c, u, _ in self.waiting if s == "queue"] + [
+                b"Event: QueueStatusComplete\r\nActionID: {id}\r\nEventList: Complete\r\n\r\n"],
+            "ConfbridgeList": self.confbridge_list,
+            "ConfbridgeMute": [self.ok("User muted")],
+            "Hangup": self.hangup,
+            "CoreShowChannels": [b"Response: Success\r\nActionID: {id}\r\nEventList: start\r\n\r\n",
+                                 b"Event: CoreShowChannelsComplete\r\nActionID: {id}\r\nEventList: Complete"
+                                 b"\r\nListItems: 0\r\n\r\n"],
+            "Logoff": [b"Response: Goodbye\r\nActionID: {id}\r\n\r\n"],
+        }
+
+    def confbridge_list(self, h):
+        rows = [(c, u) for s, c, u, _ in self.waiting if s == "conference"]
+        if not rows:
+            return [b"Response: Error\r\nActionID: {id}\r\nMessage: No active conferences.\r\n\r\n"]
+        return [self.ok("Confbridge user list will follow")] + [
+            _ev(("Event", "ConfbridgeList"), ("Conference", "capture-room"), ("Channel", c), ("Uniqueid", u),
+                ("ActionID", h["ActionID"])) for c, u in rows] + [
+            b"Event: ConfbridgeListComplete\r\nActionID: {id}\r\nEventList: Complete\r\n\r\n"]
+
+    def hangup(self, h):
+        out = [self.ok("Channels hung up will follow")]
+        for surface, channel, uid, cid in self.waiting:
+            event = "QueueCallerLeave" if surface == "queue" else "ConfbridgeLeave"
+            out.append(_ev(("Event", event), ("Channel", channel), ("Uniqueid", uid), ("CallerIDNum", cid)))
+        self.waiting = []
+        return out
+
+    def originate(self, h):
+        if self.close_on and h["Channel"].startswith(self.close_on):
+            self.sock.shutdown(socket.SHUT_RDWR)
+            raise OSError("the fake PBX hangs up the manager connection")
+        self.n += 1
+        channel, cid = h["Channel"], h["CallerID"].split("<")[1].rstrip(">")
+        queued = [self.ok("Originate successfully queued")]
+        stem = channel.split("/")[1].split("@")[0]
+        uid = f"1700000000.{self.n}"
+        if channel.startswith("PJSIP/"):
+            name = f"PJSIP/loop-{self.n:08x}"
+        else:
+            name = f"Local/{stem}@capture-{self.n:08x};2"
+        surface = {"queue": "queue", "queue-in": "queue", "queue-seq": "queue",
+                   "conf": "conference", "conf-in": "conference", "conf-seq": "conference"}.get(stem)
+        if surface and cid not in self.no_join_for:
+            event = "QueueCallerJoin" if surface == "queue" else "ConfbridgeJoin"
+            join = _ev(("Event", event), ("Channel", name), ("Uniqueid", uid), ("CallerIDNum", cid))
+            if stem.endswith("-seq"):  # one second in, then gone
+                leave = "QueueCallerLeave" if surface == "queue" else "ConfbridgeLeave"
+                return queued + [join, _ev(("Event", leave), ("Channel", name), ("Uniqueid", uid),
+                                           ("CallerIDNum", cid))]
+            self.waiting.append((surface, name, uid, cid))
+            return queued + [join]
+        if stem in ("peer", "dialring"):
+            exten = "peer" if stem == "peer" else "ring"
+            ring = f"Local/ring@capture-{self.n:08x};1"
+            frames = [_ev(("Event", "Newchannel"), ("Channel", ring), ("Uniqueid", uid + "1"))] \
+                if stem == "dialring" else []
+            return queued + frames + [_ev(("Event", "Newexten"), ("Channel", name), ("Uniqueid", uid),
+                                          ("Exten", exten), ("Application", "Wait"))]
+        if stem in ("pickchan", "pickup"):
+            app = "PickupChan" if stem == "pickchan" else "Pickup"
+            return queued + [_ev(("Event", "UserEvent"), ("UserEvent", "CaptureApp"), ("App", app),
+                                 ("Result", "returned"), ("Channel", name), ("Uniqueid", uid))]
+        return queued
+
+
+class _FakeAri:
+    def __init__(self, status=409, body='{"message":"Channel not in Stasis application"}'):
+        self.status, self.body, self.calls = status, body, []
+
+    def post(self, path, query=()):
+        self.calls.append((path, list(query)))
+        return self.status, self.body
+
+
+class RenamedCallerAndParticipantWorkloadTests(unittest.TestCase):
+    _NAME = "renamed-caller-and-participant"
+
+    def _run(self, pbx_state=None, options=None, ari=None):
+        pbx_state = pbx_state or _RenamePbx()
+        ours, theirs = socket.socketpair()
+        pbx_state.sock = theirs
+        pbx = _FakePbx(theirs, pbx_state.script())
+        pbx.start()
+        try:
+            tap = cap.Tap(ours)
+            tap.pump = lambda seconds: cap.Tap.pump(tap, min(seconds, 0.02))
+            tap.options = dict(options or {})
+            tap.ari = ari
+            tap.login("capture", "secret")
+            steps = cap.WORKLOADS[self._NAME]["run"](tap)
+            tap.logoff()
+        finally:
+            ours.close()
+            theirs.close()
+            pbx.join(2)
+        return steps, pbx.received, tap
+
+    @staticmethod
+    def _outcomes(tap):
+        return {f["Step"]: f for f in tap.frames
+                if f.get("Event") == "UserEvent" and f.get("UserEvent") == "CaptureOutcome"}
+
+    def test_workloads_ShouldOfferRenamedCallerAndParticipant_WithAri(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(0, cap.main(["workloads"]))
+
+        self.assertIn(self._NAME + ":", out.getvalue())
+        self.assertTrue(cap.WORKLOADS[self._NAME]["ari"])
+        self.assertFalse(cap.WORKLOADS["dialplan-and-parking"].get("ari"))
+
+    def test_files_ShouldConfigureAQueueARoomTheReplacesHeaderAndALoopbackPjsipChannel(self):
+        files = cap.WORKLOADS[self._NAME]["files"]
+
+        self.assertEqual({"extensions.conf", "queues.conf", "confbridge.conf", "pjsip.conf"}, set(files))
+        self.assertIn("joinempty = yes", files["queues.conf"], "a caller must wait in a queue with no members")
+        self.assertIn("leavewhenempty = no", files["queues.conf"])
+        extensions = files["extensions.conf"]
+        for app in ("Queue(capture-q)", "ConfBridge(capture-room)", "PickupChan(${TARGET})", "Pickup(${TARGET})",
+                    "Set(PJSIP_HEADER(add,Replaces)=${RH})", "b(capture-replaces^s^1)",
+                    "Dial(Local/peer@capture/n,10)"):
+            self.assertIn(app, extensions)
+        pjsip = files["pjsip.conf"]
+        self.assertIn("bind = 127.0.0.1:5060", pjsip, "SIP stays inside the container")
+        self.assertNotIn("0.0.0.0", pjsip)
+        for text in files.values():
+            text.encode("ascii")  # capture() writes them as ascii
+        self.assertIn("password = s3cr3t", cap._ARI_CONF.format(user="capture", secret="s3cr3t"))
+        self.assertIn("bindport = 8088", cap._HTTP_CONF.format(port=cap.ARI_PORT))
+
+    def test_tap_ShouldLeaveTheEventFilterOpen_ForRenameMasqueradeAndLocalOptimization(self):
+        self.assertFalse(set(cap.RENAME_EVENTS) & set(cap.ALWAYS_DROPPED))
+        self.assertNotIn("eventfilter", cap._MANAGER_CONF)
+        tap_bytes = _BANNER + b"".join(frame(("Event", e), ("Channel", "Local/x@y-1;2"), ("Uniqueid", "1.1"))
+                                       for e in cap.RENAME_EVENTS)
+        recording, _ = cap.reduce_stream(tap_bytes)
+        for event in cap.RENAME_EVENTS:
+            self.assertIn(f"Event: {event}\r\n".encode(), recording)
+        _steps, received, _tap = self._run(ari=_FakeAri())
+        self.assertEqual("on", received[0].get("Events"))
+        self.assertNotIn("Filter", [h.get("Action") for h in received])
+
+    def test_run_ShouldWalkTheControlsThenEveryTriggerOnBothSurfaces_InTheCellsOrder(self):
+        steps, _received, _tap = self._run(ari=_FakeAri())
+
+        expected = ["negative-queue", "negative-conference", "positive-bridge", "positive-pickupchan"]
+        for trigger in ("bridge", "pickupchan", "pickup", "local-optimization", "replaces", "ari-move"):
+            for surface in ("queue", "conference"):
+                expected += [f"{trigger}-{surface}", f"{trigger}-{surface}-waiting"]
+        self.assertEqual(expected + ["done"], steps)
+
+    def test_run_ShouldSendEachTriggerAtTheWaitingChannel(self):
+        ari = _FakeAri()
+        _steps, received, tap = self._run(ari=ari)
+
+        joins = {f["Channel"]: f["Uniqueid"] for f in tap.frames
+                 if f.get("Event") in ("QueueCallerJoin", "ConfbridgeJoin")}
+        bridged = [h["Channel1"] for h in received if h.get("Action") == "Bridge"]
+        self.assertEqual(3, len(bridged), "the positive control, then the caller and the participant")
+        self.assertTrue(all(c in joins for c in bridged[1:]))
+        targets = [h["Variable"] for h in received if h.get("Action") == "Originate"
+                   and h.get("Variable", "").startswith("__TARGET=")]
+        self.assertEqual(5, len(targets))  # the ringing control, two PickupChan, two Pickup()
+        self.assertTrue(targets[0].endswith(";1"), "the dialled leg rings; ;2 runs the dialplan")
+        self.assertEqual(["__TARGET=queue@capture", "__TARGET=conf@capture"], targets[3:])
+        no_n = [h for h in received if h.get("Action") == "Originate" and h.get("Exten") == "dialpeer"]
+        self.assertEqual(["Local/queue@capture", "Local/conf@capture"], [h["Channel"] for h in no_n])
+        getvars = [(h["Channel"], h["Variable"]) for h in received if h.get("Action") == "Getvar"]
+        self.assertEqual(6, len(getvars))
+        self.assertTrue(all(c.startswith("PJSIP/loop-") and c in joins for c, _ in getvars))
+        replaces = [h["Variable"] for h in received if h.get("Variable", "").startswith("__RH=")]
+        self.assertEqual(["__RH=cid-1;to-tag=lt-2;from-tag=rt-3"] * 2, replaces,
+                         "to-tag is the waiting leg's own tag, from-tag the far end's")
+        self.assertEqual(2, len(ari.calls))
+        for path, query in ari.calls:
+            self.assertIn(path.split("/")[3], joins.values())
+            self.assertEqual([("app", cap.ARI_APP)], query)
+
+    def test_run_ShouldListAndMuteWhileTheTargetWaits(self):
+        _steps, received, _tap = self._run(ari=_FakeAri())
+
+        step, seen = None, []
+        for h in received:
+            if h.get("Action") == "UserEvent" and h.get("UserEvent") == "CaptureMarker":
+                step = h["Step"]
+            elif h.get("Action") in ("QueueStatus", "ConfbridgeList", "ConfbridgeMute"):
+                seen.append((step, h["Action"]))
+        self.assertIn(("bridge-queue-waiting", "QueueStatus"), seen)
+        self.assertIn(("replaces-conference-waiting", "ConfbridgeList"), seen)
+        self.assertIn(("replaces-conference-waiting", "ConfbridgeMute"), seen)
+        self.assertNotIn(("bridge-queue-waiting", "ConfbridgeMute"), seen)
+
+    def test_run_ShouldRecordEachOutcome_AndCountRefusals(self):
+        _steps, _received, tap = self._run(_RenamePbx(bridge_error=True), ari=_FakeAri())
+
+        outcomes = self._outcomes(tap)
+        self.assertEqual("1", outcomes["bridge-queue"]["Refusals"])
+        self.assertIn("Unable to add Channel1", outcomes["bridge-queue"]["Detail"])
+        self.assertEqual("1", outcomes["pickupchan-conference"]["Refusals"], "PickupChan came back")
+        self.assertEqual("1", outcomes["ari-move-queue"]["Refusals"])
+        self.assertIn("HTTP 409", outcomes["ari-move-queue"]["Detail"])
+        self.assertEqual("0", outcomes["negative-queue"]["Refusals"])
+        self.assertEqual("1", outcomes["negative-conference"]["Leaves"])
+        negative = outcomes["negative-queue"]
+        self.assertEqual(negative["TargetId"], negative["LeaveIds"])
+        self.assertEqual("", negative["RenamedIds"])
+
+    def test_run_ShouldRecordARefusal_WhenAriIsUnavailable(self):
+        _steps, _received, tap = self._run(ari=None)
+
+        self.assertEqual("ARI unavailable", self._outcomes(tap)["ari-move-conference"]["Detail"])
+
+    def test_run_ShouldGoOn_WhenATriggerStepTimesOut(self):
+        # 7206 is the caller number of the first trigger's target (bridge-queue; the controls took 7200-7205)
+        _steps, _received, tap = self._run(_RenamePbx(no_join_for={"7206"}), options={"join_timeout": 0.3},
+                                           ari=_FakeAri())
+
+        outcomes = self._outcomes(tap)
+        self.assertIn("error: timed out", outcomes["bridge-queue"]["Detail"])
+        self.assertNotIn("error", outcomes["bridge-conference"].get("Detail", ""))
+        self.assertIn("ari-move-conference", outcomes)
+
+    def test_run_ShouldStop_WhenThePbxClosesTheConnection(self):
+        with self.assertRaises(cap.ConnectionClosed):
+            self._run(_RenamePbx(close_on="Local/peer"), ari=_FakeAri())
+
+    def test_run_ShouldAddSequentialCallsPerSurface_OnlyWhenAsked(self):
+        steps, received, _tap = self._run(options={"sequential_calls": 3}, ari=_FakeAri())
+
+        self.assertEqual(["sequential-queue", "sequential-conference", "done"], steps[-3:])
+        seq = [h["Channel"] for h in received if h.get("Action") == "Originate" and "-seq@" in h["Channel"]]
+        self.assertEqual(["Local/queue-seq@capture/n"] * 3 + ["Local/conf-seq@capture/n"] * 3, seq)
+        steps, received, _tap = self._run(ari=_FakeAri())
+        self.assertFalse([s for s in steps if s.startswith("sequential")])
+
+
+class RenameDetectionTests(unittest.TestCase):
+    def test_renamed_ShouldReportANameChangePerUniqueid_WithOrWithoutARenameFrame(self):
+        frames = [
+            {"Event": "QueueCallerJoin", "Channel": "PJSIP/a-1", "Uniqueid": "1.1"},
+            {"Event": "Newstate", "Channel": "PJSIP/b-2", "Uniqueid": "1.1"},  # no Rename frame
+            {"Event": "Rename", "Channel": "PJSIP/c-3", "Newname": "PJSIP/d-4", "Uniqueid": "1.2"},
+            {"Event": "DialBegin", "DestChannel": "Local/x;1", "DestUniqueid": "1.3",
+             "Channel": "PJSIP/e-5", "Uniqueid": "1.4"},
+            {"Event": "Hangup", "Channel": "Local/x;1", "Uniqueid": "1.3"},
+        ]
+
+        self.assertEqual({"1.1": ["PJSIP/a-1", "PJSIP/b-2"], "1.2": ["PJSIP/c-3", "PJSIP/d-4"]},
+                         cap.renamed_uniqueids(frames))
+        self.assertEqual(["Local/x;1"], cap.channel_names_by_uniqueid(frames)["1.3"])
+
+    def test_renamed_ShouldReportNothing_WhenANameMovesWithItsUniqueid(self):
+        frames = [{"Event": "Newchannel", "Channel": "Local/a;2", "Uniqueid": "1.1"},
+                  {"Event": "Hangup", "Channel": "Local/a;2", "Uniqueid": "1.1"},
+                  {"Event": "Newchannel", "Channel": "Local/a;2", "Uniqueid": "1.9"}]
+
+        self.assertEqual({}, cap.renamed_uniqueids(frames))
+
+
+class AriClientTests(unittest.TestCase):
+    def test_post_ShouldSendBasicAuthAndTheQuery_AndReturnAnHttpErrorAsAResult(self):
+        import urllib.error
+        seen = []
+
+        def opener(request, timeout):
+            seen.append((request.full_url, request.get_method(), request.get_header("Authorization"), timeout))
+            raise urllib.error.HTTPError(request.full_url, 409, "Conflict", {},
+                                         io.BytesIO(b'{"message":"Channel not in Stasis application"}'))
+
+        client = cap.AriClient("http://127.0.0.1:49152/", "capture", "pw", opener=opener)
+        status, body = client.post("/ari/channels/1.2/move", [("app", "capture-ari")])
+
+        self.assertEqual(409, status)
+        self.assertIn("not in Stasis", body)
+        self.assertEqual("http://127.0.0.1:49152/ari/channels/1.2/move?app=capture-ari", seen[0][0])
+        self.assertEqual("POST", seen[0][1])
+        self.assertEqual("Basic Y2FwdHVyZTpwdw==", seen[0][2])
+
+
 if __name__ == "__main__":
     unittest.main()
