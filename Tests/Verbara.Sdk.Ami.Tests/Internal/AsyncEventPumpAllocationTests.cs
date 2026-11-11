@@ -10,7 +10,9 @@ namespace Verbara.Sdk.Ami.Tests.Internal;
 /// What numbering the buffered events costs the pump in heap bytes. Bytes, not time: the allocation counter is exact
 /// and per thread, so these bounds hold on any machine. Every measured window runs on one thread, whose id is checked
 /// at both ends where the window is on the consumer, and holds no <c>await</c> and no signalling: completing a waiter
-/// allocates on the thread that completes it, so every capture precedes the signal.
+/// allocates on the thread that completes it, so every capture precedes the signal. A handler that runs inside a window
+/// is not <c>async</c>: a Debug build lowers an async lambda's state machine to a class, one object per call, so such a
+/// handler would put its own bytes in the window. The bounds therefore hold in a Debug build as well as a Release one.
 /// </summary>
 public sealed class AsyncEventPumpAllocationTests
 {
@@ -208,17 +210,15 @@ public sealed class AsyncEventPumpAllocationTests
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        pump.Start(async _ =>
+        // Only the held event starts an async method, and its object is allocated at the call, before the window opens.
+        // Every other event completes without one, so the window holds the pump's bytes and none of the handler's.
+        pump.Start(_ =>
         {
             var n = ++dispatched;
             if (n == 8)
-            {
-                entered.TrySetResult();
-                await gate.Task.ConfigureAwait(false);
-                start = GC.GetAllocatedBytesForCurrentThread();
-                startThread = Environment.CurrentManagedThreadId;
-            }
-            else if (n == 9)
+                return new ValueTask(HoldThenOpenWindowAsync());
+
+            if (n == 9)
             {
                 stamp = pump.DroppedBeforeCurrentEvent;
             }
@@ -228,6 +228,8 @@ public sealed class AsyncEventPumpAllocationTests
                 endThread = Environment.CurrentManagedThreadId;
                 done.TrySetResult();
             }
+
+            return ValueTask.CompletedTask;
         });
         await entered.Task.WaitAsync(Bound);
         for (var i = 108; i < 116; i++)
@@ -237,5 +239,13 @@ public sealed class AsyncEventPumpAllocationTests
         await done.Task.WaitAsync(Bound);
 
         return (end - start, startThread, endThread, stamp);
+
+        async Task HoldThenOpenWindowAsync()
+        {
+            entered.TrySetResult();
+            await gate.Task.ConfigureAwait(false);
+            start = GC.GetAllocatedBytesForCurrentThread();
+            startThread = Environment.CurrentManagedThreadId;
+        }
     }
 }
