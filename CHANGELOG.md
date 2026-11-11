@@ -139,7 +139,7 @@ ids over its lifetime kept one such server per retired id. `DetachFromServer(id)
 unchanged: a kept server stays referenced while its kept calls need it, and an attach after a release behaves as
 before.
 
-### Fixed — BREAKING: a message a recognizer or synthesizer cannot read no longer ends the session (#NNN)
+### Fixed — BREAKING: a message a recognizer or synthesizer cannot read no longer ends the session (#548)
 
 `SpeechRecognizer.StreamAsync` and `SpeechSynthesizer.SynthesizeAsync` document three exceptions —
 `SpeechProviderFailureException`, `SpeechProviderEmptyResultException` and `OperationCanceledException` — and seven
@@ -170,7 +170,7 @@ caught `JsonException` or `FormatException` from these clients no longer receive
 ([A message a recognizer or synthesizer cannot read no longer ends the session](docs/guides/migration-2.10.0.md#a-message-a-recognizer-or-synthesizer-cannot-read-no-longer-ends-the-session),
 [A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis](docs/guides/migration-2.10.0.md#a-cartesia-or-elevenlabs-audio-frame-that-is-not-valid-base64-no-longer-ends-the-synthesis)).
 
-### Changed — BREAKING: an OpenAI Realtime audio delta that is not valid base64 no longer ends the call (#NNN)
+### Changed — BREAKING: an OpenAI Realtime audio delta that is not valid base64 no longer ends the call (#548)
 
 Since 2.9.0 an event the bridge cannot decode is skipped and the call goes on, but an audio delta that decoded and
 whose `delta` was not valid base64 still ended the session, hung the caller up under the session broker and counted in
