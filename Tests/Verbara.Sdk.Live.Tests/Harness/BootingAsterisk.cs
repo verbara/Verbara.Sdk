@@ -266,6 +266,12 @@ internal sealed class BootingAsterisk
     /// <summary>Runs after the queue rows are written and before their completion, to order unsolicited events on the wire.</summary>
     public Func<Task>? BeforeQueueStatusComplete { get; set; }
 
+    /// <summary>
+    /// Runs after the <c>Status</c> rows are written and before their <c>StatusComplete</c>, to order unsolicited events
+    /// on the wire inside the list. The peer answers nothing else while it runs. Settable between two loads.
+    /// </summary>
+    public Func<Task>? BeforeStatusComplete { get; set; }
+
     /// <summary>A final refusal after partial queue rows, instead of a successful completion.</summary>
     public string? QueueStatusRefusalAfterRows { get; set; }
 
@@ -685,6 +691,9 @@ internal sealed class BootingAsterisk
             socket.CloseFromPeer();
             return false;
         }
+
+        if (BeforeStatusComplete is { } beforeComplete)
+            await beforeComplete();
 
         await socket.WriteEventAsync("StatusComplete",
         [

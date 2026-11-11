@@ -595,6 +595,81 @@ public sealed class AgentSessionTrackerTests : IDisposable
             + "that wrap-up's close still moves it to Idle");
     }
 
+    // An agent state change carries the loss mark of the session notification that caused it. The notifications below
+    // are written by hand with three marks that differ, so a change that carried another notification's mark (the
+    // call's connect, or the last mark the tracker saw) reads wrong; the end-to-end case over the SDK's connection is in
+    // Verbara.Sdk.Live.Tests.
+
+    [Fact]
+    public void StateChanges_ShouldCarryEachCausingNotificationsEpoch_WhenTheCallConnectsEndsAndItsWrapUpCloses()
+    {
+        var session = CreateCallSession("sess-1");
+        _manager.GetById("sess-1").Returns(session);
+        var changes = new List<AgentSessionStateChanged>();
+        using var subscription = _sut.StateChanges.Subscribe(new StateChangeObserver(changes));
+        var connected = new CallConnectedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow,
+            "agent-1", "queue-1", TimeSpan.Zero) { Epoch = MarkOf(dropped: 0) };
+        var ended = new CallEndedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow,
+            HangupCause.NormalClearing, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(4)) { Epoch = MarkOf(dropped: 1) };
+        var wrapUp = new CallWrapUpEvent("sess-1", "srv-1", DateTimeOffset.UtcNow,
+            "agent-1", "queue-1", TimeSpan.FromSeconds(30)) { Epoch = MarkOf(dropped: 2) };
+
+        _events.OnNext(connected);
+        _events.OnNext(ended);
+        _events.OnNext(wrapUp);
+
+        changes.Select(c => (c.NewState, c.Epoch)).Should().Equal(
+            [
+                (AgentSessionState.OnCall, connected.Epoch),
+                (AgentSessionState.WrapUp, ended.Epoch),
+                (AgentSessionState.Idle, wrapUp.Epoch),
+            ],
+            "each agent state change carries the mark of the session notification that caused it");
+    }
+
+    [Fact]
+    public void StateChanges_ShouldCarryTheEndingsEpoch_WhenAReloadEndedTheCallAndTheAgentGoesIdle()
+    {
+        var session = CreateCallSession("sess-1");
+        _manager.GetById("sess-1").Returns(session);
+        var changes = new List<AgentSessionStateChanged>();
+        using var subscription = _sut.StateChanges.Subscribe(new StateChangeObserver(changes));
+        _events.OnNext(new CallConnectedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow,
+            "agent-1", "queue-1", TimeSpan.Zero) { Epoch = MarkOf(dropped: 0) });
+        session.SetMetadata("cause", "reload");
+        var ended = new CallEndedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow,
+            HangupCause.NormalClearing, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(4)) { Epoch = MarkOf(dropped: 1) };
+
+        _events.OnNext(ended);
+
+        changes.Should().HaveCount(2, "premise: the agent went on call, then idle at the reload's ending");
+        changes[^1].NewState.Should().Be(AgentSessionState.Idle, "premise: a reload's ending opens no wrap-up");
+        changes[^1].Epoch.Should().Be(ended.Epoch, "the agent went idle because of the ending, so it carries its mark");
+    }
+
+    [Fact]
+    public void StateChanges_ShouldCarryANullEpoch_WhenTheCausingNotificationCarriesNone()
+    {
+        _manager.GetById("sess-1").Returns(CreateCallSession("sess-1"));
+        _manager.GetById("sess-2").Returns(CreateCallSession("sess-2"));
+        var changes = new List<AgentSessionStateChanged>();
+        using var subscription = _sut.StateChanges.Subscribe(new StateChangeObserver(changes));
+        _events.OnNext(new CallConnectedEvent("sess-1", "srv-1", DateTimeOffset.UtcNow,
+            "agent-1", "queue-1", TimeSpan.Zero) { Epoch = MarkOf(dropped: 0) });
+
+        _events.OnNext(new CallConnectedEvent("sess-2", "srv-1", DateTimeOffset.UtcNow,
+            "agent-2", "queue-1", TimeSpan.Zero));
+
+        changes.Should().HaveCount(2, "premise: both agents went on call");
+        changes[0].Epoch.Should().NotBeNull("premise: the first connect carried a mark");
+        changes[1].Epoch.Should().BeNull(
+            "the second agent's connect carried no mark, so the engine could not tell, and no other mark stands in for it");
+    }
+
+    private static readonly Guid MarkConnection = new("6f1d2c3b-0000-4000-8000-000000000001");
+
+    private static SessionEventEpoch MarkOf(long dropped) => new(MarkConnection, 1, dropped, 1);
+
     private static CallSession CreateCallSession(string sessionId) =>
         new(sessionId, $"linked-{sessionId}", "srv-1", CallDirection.Inbound);
 

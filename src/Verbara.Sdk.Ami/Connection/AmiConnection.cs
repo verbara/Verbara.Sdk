@@ -172,6 +172,13 @@ public sealed class AmiConnection : IAmiConnection
     // The ordinal of the current AMI session's event pump: 1 for the first session, one more at each session started.
     // Written under _endingLock by StartSession; read without it.
     private long _sessionOrdinal;
+
+    // The frame of the event whose dispatch started most recently, and of the event whose observers all returned most
+    // recently, in any session. Written by the pump's dispatch only (one at a time: the pump awaits each dispatch, and a
+    // new session's pump dispatches only once the previous one is released); read without a lock by DeliveredLossMark
+    // and AppliedLossMark. Both only move forward along the delivered stream.
+    private DispatchFrame? _lastStarted;
+    private DispatchFrame? _lastApplied;
     private Task? _readerLoop;
     private Task? _heartbeatTask;
     private CancellationTokenSource? _cts;
@@ -344,6 +351,42 @@ public sealed class AmiConnection : IAmiConnection
         _dispatchFrame.Value is { Finished: false } frame
             ? frame.LossMark
             : new AmiEventLossMark(Volatile.Read(ref _sessionOrdinal), Volatile.Read(ref _eventPump)?.DroppedUncollectedEvents ?? 0);
+
+    /// <summary>
+    /// This connection instance's identity, drawn once when it is built and unique across processes: a session ordinal
+    /// restarts at 1 for every instance, so a reader that compares loss marks of two instances tells them apart by it.
+    /// </summary>
+    /// <remarks>Called by Verbara.Sdk.Live; kept with this signature until 3.0.</remarks>
+    internal Guid Incarnation { get; } = Guid.NewGuid();
+
+    /// <summary>
+    /// The loss mark of the position delivery has started: inside an observer's <c>OnNext</c> or an <c>OnEvent</c>
+    /// handler (or anything they call), the mark of the event being dispatched, as <see cref="EventLossMark"/> reads
+    /// there; anywhere else, the mark of the event whose dispatch started most recently, whether or not its observers and
+    /// handlers have returned, and whatever the connection's state. Before anything was dispatched, the current session
+    /// with no drops — (0, 0) before the first session. Unlike <see cref="EventLossMark"/> read outside a dispatch, it
+    /// never counts a drop the reader refused after the event it names arrived: such a drop is still ahead of delivery.
+    /// </summary>
+    /// <remarks>
+    /// "Delivered" here means a dispatch has started; <see cref="DeliveredThroughLastLoss"/> reads whether the pump has
+    /// dispatched through its last loss. One volatile read outside a dispatch, no lock and no retry. Called by
+    /// Verbara.Sdk.Live; kept with this signature until 3.0.
+    /// </remarks>
+    internal AmiEventLossMark DeliveredLossMark =>
+        _dispatchFrame.Value is { Finished: false } frame
+            ? frame.LossMark
+            : Volatile.Read(ref _lastStarted)?.LossMark ?? new AmiEventLossMark(Volatile.Read(ref _sessionOrdinal), 0);
+
+    /// <summary>
+    /// The loss mark of the position delivery has applied: the mark of the event whose observers' <c>OnNext</c> all
+    /// returned most recently, read the same inside and outside a dispatch (never the running dispatch's frame while its
+    /// observers run). It lags <see cref="DeliveredLossMark"/> while an observer of the event being dispatched has not
+    /// returned, and equals it once every observer has, also while that event's <c>OnEvent</c> handlers still run. Before
+    /// anything was dispatched, the current session with no drops — (0, 0) before the first session.
+    /// </summary>
+    /// <remarks>One volatile read, no lock and no retry. Called by Verbara.Sdk.Live; kept with this signature until 3.0.</remarks>
+    internal AmiEventLossMark AppliedLossMark =>
+        Volatile.Read(ref _lastApplied)?.LossMark ?? new AmiEventLossMark(Volatile.Read(ref _sessionOrdinal), 0);
 
     /// <summary>
     /// What this connection has lost now: the current AMI session and how many events its buffer has dropped because it
@@ -2122,6 +2165,7 @@ public sealed class AmiConnection : IAmiConnection
         // another one is still running is inside the dispatch for as long as the dispatch waits for it.
         var frame = new DispatchFrame(lossMark, ordinal);
         _dispatchFrame.Value = frame;
+        Volatile.Write(ref _lastStarted, frame);
         var handedOff = false;
         try
         {
@@ -2142,6 +2186,9 @@ public sealed class AmiConnection : IAmiConnection
                     RecordObserverFault(evt, ex);
                 }
             }
+
+            // Every observer has returned: this event is applied, before its OnEvent handlers start.
+            Volatile.Write(ref _lastApplied, frame);
 
             AmiMetrics.EventsDispatched.Add(1);
             AmiMetrics.EventDispatchMs.Record(Stopwatch.GetElapsedTime(sw).TotalMilliseconds);

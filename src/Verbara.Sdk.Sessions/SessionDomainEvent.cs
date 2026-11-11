@@ -2,7 +2,33 @@ using Verbara.Sdk.Enums;
 
 namespace Verbara.Sdk.Sessions;
 
-public abstract record SessionDomainEvent(string SessionId, string ServerId, DateTimeOffset Timestamp);
+public abstract record SessionDomainEvent(string SessionId, string ServerId, DateTimeOffset Timestamp)
+{
+    // Written once by the session engine before any subscriber sees the notification, without a copy of the record.
+    private SessionEventEpoch? _epoch;
+
+    /// <summary>
+    /// The loss mark of the notification's own server at the point the notification reflects: compare it with another
+    /// notification's of the same server through <see cref="SessionEventEpoch.LossBetween"/> to learn whether the SDK may
+    /// have missed an event of that server between the two. Set by the session engine before any subscriber receives the
+    /// notification, and never changed after.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see langword="null"/> means the engine could not read a mark — the server's connection is not the SDK's AMI
+    /// connection, or the server was no longer attached when a notification no attachment raised was raised (a wrap-up
+    /// after a detach) — and means cannot tell, never complete. A notification raised while one of its server's events
+    /// is delivered carries that event's mark; one raised outside a delivery carries a mark no later than its content
+    /// when it opens a call's record, and no earlier when it closes one. The mark is a wire position, not a time.
+    /// </para>
+    /// <para>
+    /// The mark is part of the notification's value: two notifications that differ only by it are not equal.
+    /// </para>
+    /// </remarks>
+    public SessionEventEpoch? Epoch { get => _epoch; init => _epoch = value; }
+
+    internal void StampEpoch(SessionEventEpoch? epoch) => _epoch = epoch;
+}
 
 /// <summary>
 /// Reports a new call, raised once while the session engine holds the call's lock, after the call is found by its

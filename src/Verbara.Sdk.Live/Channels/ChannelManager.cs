@@ -56,6 +56,9 @@ public sealed class ChannelManager
     // one may still owe entries an earlier call left behind.
     private readonly LiveEventOutbox _events;
 
+    /// <summary>The outbox of this manager's events, exposed for deterministic tests.</summary>
+    internal LiveEventOutbox Events => _events;
+
     /// <summary>
     /// Orders admissions and departures on one scale. Every admission takes the next value, and so
     /// does every departure recorded while a read window is open, so "admitted after a window's
@@ -378,6 +381,7 @@ public sealed class ChannelManager
             Priority = entry.Priority,
             LinkedId = entry.LinkedId,
             AdmittedFromSnapshot = window is not null,
+            AdmittedFrom = window?.Origin,
             AdmittedState = entry.State
         };
         if (window is null && SourceEventReader is { } sourceReader)
@@ -974,6 +978,13 @@ internal sealed class SnapshotReadWindow : IDisposable
     internal (long Session, long Ordinal) ReceivedThrough { get; set; }
 
     /// <summary>
+    /// The loss mark sampled for this read before its request was sent, which every channel the reconciliation admits
+    /// carries; <see langword="null"/> when no sample was taken (a window opened by anything but the server's read, or a
+    /// connection that is not the SDK's).
+    /// </summary>
+    internal ChannelSnapshotOrigin? Origin { get; set; }
+
+    /// <summary>
     /// How many channels the snapshot omitted that the reconciliation kept as admitted after the request, although their
     /// creation event was received before it: the snapshot may omit them because they had already hung up.
     /// </summary>
@@ -1105,6 +1116,14 @@ public sealed class AsteriskChannel : LiveObjectBase
     /// </para>
     /// </summary>
     internal bool AdmittedFromSnapshot { get; init; }
+
+    /// <summary>
+    /// The loss mark sampled when the reconciliation that admitted this channel opened its read window, before
+    /// <c>Status</c> was sent; <see langword="null"/> for a live arrival, and for a snapshot admission with no sample (a
+    /// connection that is not the SDK's). Independent of <see cref="AdmittedFromSnapshot"/>, which says where the channel
+    /// came from whether or not a mark could be read.
+    /// </summary>
+    internal ChannelSnapshotOrigin? AdmittedFrom { get; init; }
 
     /// <summary>
     /// The state reported at admission, captured before the channel is visible. Unlike the live

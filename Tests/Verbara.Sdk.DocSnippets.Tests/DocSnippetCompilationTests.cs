@@ -114,26 +114,47 @@ public sealed class DocSnippetCompilationTests
             .ToList();
     }
 
+    /// <summary>
+    /// The Markdown files whose <c>```csharp</c> blocks <see cref="Snippet_ShouldCompile"/> compiles. A file that is not
+    /// listed here is never compiled, so its snippets can drift without any test failing.
+    /// </summary>
+    private static readonly string[] _snippetSources =
+    [
+        "README.md",
+        "docs/README-technical.md",
+        "docs/guides/ami-connection-state-and-health-migration.md",
+        "docs/guides/asterisk-version-compatibility.md",
+        "docs/guides/conference-participants-migration.md",
+        "docs/guides/high-load-tuning.md",
+        "docs/guides/migration-2.9.0.md",
+        "docs/guides/migration-2.10.0.md",
+        "docs/guides/obsolete-ami-events-removal-migration.md",
+        "docs/guides/session-store-backends.md",
+        "docs/guides/troubleshooting.md",
+    ];
+
+    /// <summary>
+    /// A release's migration guide is where a reader copies code from, so every one of them has its snippets compiled:
+    /// a new guide that is not added to <see cref="_snippetSources"/> fails here instead of shipping uncompiled.
+    /// </summary>
+    [Fact]
+    public void SnippetSources_ShouldListEveryReleaseMigrationGuide_WhenTheGuidesFolderHoldsOne()
+    {
+        var guides = Directory.EnumerateFiles(Path.Join(GetRepoRoot(), "docs", "guides"), "migration-*.md")
+            .Select(full => "docs/guides/" + Path.GetFileName(full))
+            .ToList();
+
+        guides.Should().NotBeEmpty(because: "premise: the release migration guides live in docs/guides");
+        _snippetSources.Should().Contain(guides,
+            because: "a release migration guide's snippets are copied by readers, so each guide is compiled");
+    }
+
     public static TheoryData<string, int, string> GetSnippets()
     {
         var data = new TheoryData<string, int, string>();
         var repoRoot = GetRepoRoot();
 
-        var sources = new[]
-        {
-            "README.md",
-            "docs/README-technical.md",
-            "docs/guides/ami-connection-state-and-health-migration.md",
-            "docs/guides/asterisk-version-compatibility.md",
-            "docs/guides/conference-participants-migration.md",
-            "docs/guides/high-load-tuning.md",
-            "docs/guides/migration-2.9.0.md",
-            "docs/guides/obsolete-ami-events-removal-migration.md",
-            "docs/guides/session-store-backends.md",
-            "docs/guides/troubleshooting.md",
-        };
-
-        foreach (var relativePath in sources)
+        foreach (var relativePath in _snippetSources)
         {
             var fullPath = Path.Join(repoRoot, relativePath);
             if (!File.Exists(fullPath)) continue;
