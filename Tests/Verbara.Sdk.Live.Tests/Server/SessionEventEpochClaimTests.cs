@@ -68,6 +68,7 @@ public sealed class SessionEventEpochClaimTests
             {
                 parkedWhenAdopted.Should().BeTrue("premise: the reconciliation was still parked after its post when the arrival was raised");
                 requestMark.Should().NotBeNull("premise: the server runs over the SDK's connection");
+                other.Epoch.Should().NotBeNull("premise: the claiming event was delivered over the SDK's connection");
                 other.Epoch?.DroppedBefore.Should().Be(1, "premise: the claiming event was received after the drop");
                 started.Epoch.Should().NotBeNull("the call was admitted from the snapshot over the SDK's connection");
                 started.Epoch?.DroppedBefore.Should().Be(0,

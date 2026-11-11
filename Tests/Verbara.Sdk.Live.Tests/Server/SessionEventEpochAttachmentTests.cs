@@ -7,11 +7,12 @@ using Verbara.Sdk.Sessions.Manager;
 namespace Verbara.Sdk.Live.Tests.Server;
 
 /// <summary>
-/// The attachment generation a session notification's loss mark carries (<see cref="SessionEventEpoch.Attachment"/>):
-/// a server detached keeping its calls and attached again with the same instance carries a new generation, so a
-/// notification of the new attachment differs from one of the old across the detach gap; attaching the same instance
-/// again while it is still attached changes nothing; and a handler of the detached attachment that raises its
-/// notification after the re-attach keeps its own generation, never one looked up by server id or instance.
+/// The attachment stamp a session notification's loss mark carries (<see cref="SessionEventEpoch.Attachment"/>):
+/// a server detached keeping its calls and attached again with the same instance carries a new stamp, so a
+/// notification of the new attachment differs from one of the old across the detach gap; a later manager attaching the
+/// same instance never repeats an earlier manager's stamp; attaching the same instance again while it is still attached
+/// changes nothing; and a handler of the detached attachment that raises its notification after the re-attach keeps its
+/// own stamp, never one looked up by server id or instance.
 /// </summary>
 /// <remarks>
 /// A real <see cref="Verbara.Sdk.Ami.Connection.AmiConnection"/> over <see cref="Run"/>: every frame goes over the wire
@@ -52,7 +53,7 @@ public sealed class SessionEventEpochAttachmentTests
                 "premise: the same connection instance, in the same session, dropped nothing");
             ended.Epoch?.Attachment.Should().NotBe(started.Epoch?.Attachment ?? 0,
                 "a detach and a real re-attach of the same instance leave a gap the engine did not watch, so the new "
-                + "attachment's notification carries a new generation");
+                + "attachment's notification carries a new stamp");
             SessionEventEpoch.LossBetween(started.Epoch, ended.Epoch).Should().Be(SessionEventLoss.Possible,
                 "the engine was detached from the server between the call's start and its end");
         }
@@ -85,7 +86,7 @@ public sealed class SessionEventEpochAttachmentTests
                 "premise: the same connection instance, in the same session, dropped nothing");
             after.Epoch?.Attachment.Should().NotBe(before.Epoch?.Attachment ?? 0,
                 "no manager watched the server between the first manager's disposal and the second's attach, so the "
-                + "second attachment carries a generation no earlier attachment in the process carried");
+                + "second attachment carries a stamp no earlier attachment in the process carried");
             SessionEventEpoch.LossBetween(before.Epoch, after.Epoch).Should().Be(SessionEventLoss.Possible,
                 "a gap no engine watched lies between the two notifications");
         }
@@ -124,7 +125,7 @@ public sealed class SessionEventEpochAttachmentTests
         await using var manager = EpochRig.NewManager(new FakeTimeProvider());
         var recorder = EpochRecorder.On(manager);
         manager.AttachToServer(run.Server, ServerId);
-        // A call raised by the first attachment, for its generation.
+        // A call raised by the first attachment, for its stamp.
         await peer.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Other, OtherChannel, Other));
         var reference = await recorder.WaitAsync<CallStartedEvent>();
 
@@ -159,7 +160,7 @@ public sealed class SessionEventEpochAttachmentTests
                 started.Epoch.Should().NotBeNull("the parked arrival raised over the SDK's connection");
                 started.Epoch?.Attachment.Should().Be(reference.Epoch?.Attachment ?? -1,
                     "the arrival is a handler of the detached attachment, so its notification carries that attachment's "
-                    + "generation, also when it is raised after the re-attach");
+                    + "stamp, also when it is raised after the re-attach");
                 started.Epoch.Should().Be(reference.Epoch,
                     "the same attachment, connection and session, with no drop between the two arrivals");
                 ended.Epoch.Should().NotBeNull("the new attachment raised the ending over the SDK's connection");
@@ -167,7 +168,7 @@ public sealed class SessionEventEpochAttachmentTests
                     (started.Epoch?.ConnectionId, started.Epoch?.AmiSession, started.Epoch?.DroppedBefore),
                     "premise: the same connection instance, in the same session, dropped nothing");
                 ended.Epoch?.Attachment.Should().NotBe(started.Epoch?.Attachment ?? 0,
-                    "the ending was raised by the new attachment, whose generation differs from the detached one's");
+                    "the ending was raised by the new attachment, whose stamp differs from the detached one's");
                 SessionEventEpoch.LossBetween(started.Epoch, ended.Epoch).Should().Be(SessionEventLoss.Possible,
                     "the engine was detached from the server between the call's start and its end");
             }

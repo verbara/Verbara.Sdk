@@ -302,6 +302,7 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
 
         using (new AssertionScope())
         {
+            started.Epoch.Should().NotBeNull("premise: the call started over the SDK's connection");
             started.Epoch?.AmiSession.Should().Be(1, "premise: the call started in the first AMI session");
             ended.Epoch.Should().NotBeNull("the call ended over the SDK's connection");
             ended.Epoch?.AmiSession.Should().Be(2, "the new session's notification carries the new session");
@@ -473,6 +474,7 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
         using (new AssertionScope())
         {
             wrapUp.ServerId.Should().Be("srv-b", "premise: the wrap-up is of B's call");
+            connectedOnA.Epoch.Should().NotBeNull("premise: the connect on A was delivered over the SDK's connection");
             connectedOnA.Epoch?.ConnectionId.Should().Be(runA.Server.ConnectionIdentity!.Value,
                 "premise: the connect that closed the wrap-up was delivered by A's connection");
             connectedOnA.Epoch?.DroppedBefore.Should().Be(1, "premise: A's connection dropped one event before the connect");
