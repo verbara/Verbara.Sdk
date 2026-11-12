@@ -541,6 +541,7 @@ public sealed class VerbaraServer : IVerbaraServer
         {
             amiConnection.Lost += OnConnectionLost;
             amiConnection.CallerReconnected += OnCallerReconnected;
+            amiConnection.ReconnectSettled += OnReconnectSettled;
         }
 
         // Register observable gauges for live state (all typed as long for consistent metric reporting)
@@ -580,6 +581,26 @@ public sealed class VerbaraServer : IVerbaraServer
     }
 
     private void OnReconnected() => ReloadNewSession(_disposing.Token);
+
+    // The pending reconnect is the one input of ChannelTableCovered that turns true with no channel read completing after
+    // it: a covering read that completed while the reconnect was pending found the table uncovered, and raised its
+    // completion then. Its end is announced here, so that the decisions waiting on a covered table are taken again.
+    private void OnReconnectSettled(long session)
+    {
+        // The delivery reads its handlers once, so a disposal that began after that read does not unhook this one.
+        if (_disposing.IsCancellationRequested || !ChannelTableCovered)
+            return;
+        ChannelTableSettled?.Invoke(new ChannelSnapshotCompletion(this, Interlocked.Read(ref _reconnects),
+            (_connection as AmiConnection)?.FullyBooted));
+    }
+
+    /// <summary>
+    /// Raised on the connection's notification queue when the end of a pending reconnect finds the channel table covered
+    /// (<see cref="ChannelTableCovered"/>): the moment a table the last channel read left uncovered only because the
+    /// reconnect was pending becomes covered. Never raised once the server is being disposed. Separate from
+    /// <see cref="ChannelSnapshotCompleted"/>, which a channel read raises when it completes.
+    /// </summary>
+    internal event Action<ChannelSnapshotCompletion>? ChannelTableSettled;
 
     /// <summary>
     /// The session a caller's own connect brought back after a loss. The connection delivers it behind that loss, for
@@ -2139,6 +2160,7 @@ public sealed class VerbaraServer : IVerbaraServer
             {
                 amiConnection.Lost -= OnConnectionLost;
                 amiConnection.CallerReconnected -= OnCallerReconnected;
+                amiConnection.ReconnectSettled -= OnReconnectSettled;
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

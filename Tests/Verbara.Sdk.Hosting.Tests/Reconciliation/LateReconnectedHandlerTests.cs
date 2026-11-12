@@ -52,6 +52,55 @@ public sealed class LateReconnectedHandlerTests
         }
     }
 
+    /// <summary>
+    /// The call the end of the pending reconnect decided is decided again — by a sweep tick and by the host's own channel
+    /// read — and nothing changes: one ending at most, and no second notification.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Reload_ShouldNotifyNothingMore_WhenTheSweepAndTheHostsReadDecideTheSettledCallAgain(bool endDuringTheOutage)
+    {
+        await using var rig = await LossRig.StartAsync(attach: false, autoReconnect: true);
+        var notified = new NotificationCounter();
+        using var subscription = rig.Manager.Events.Subscribe(notified);
+        var run = await ReconnectWithALateHandlerAsync(rig, endDuringTheOutage);
+        var atTheDecision = notified.Of(run.Call.SessionId);
+        var endingsAtTheDecision = rig.EndingsOf(run.Call);
+
+        await rig.TickAsync(pool: false);
+        await rig.ReconcileAsync();
+
+        using (new AssertionScope())
+        {
+            run.Decided.Should().BeTrue("premise: the end of the pending reconnect decided the call");
+            endingsAtTheDecision.Should().Be(endDuringTheOutage ? 1 : 0, "premise: " + rig.Describe(run.Call));
+            rig.EndingsOf(run.Call).Should().Be(endingsAtTheDecision, "a call is ended at most once");
+            notified.Of(run.Call.SessionId).Should().Be(atTheDecision, "a later decision of a decided call notifies nothing");
+            if (!endDuringTheOutage)
+                run.Call.Unverified.Should().BeFalse("premise: the settle verified the call. " + rig.Describe(run.Call));
+        }
+    }
+
+    private sealed class NotificationCounter : IObserver<SessionDomainEvent>
+    {
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _counts = new(StringComparer.Ordinal);
+
+        public int Of(string sessionId) => _counts.GetValueOrDefault(sessionId);
+
+        public void OnNext(SessionDomainEvent value) => _counts.AddOrUpdate(value.SessionId, 1, static (_, n) => n + 1);
+
+        public void OnError(Exception error)
+        {
+            // The manager's subject never faults; nothing to record.
+        }
+
+        public void OnCompleted()
+        {
+            // Completed when the manager is disposed; nothing to record.
+        }
+    }
+
     internal sealed record Run(CallSession Call, bool Unverified, bool Pending, bool Decided);
 
     /// <summary>
