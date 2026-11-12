@@ -79,6 +79,7 @@ public sealed class AriChannelWireTests
     [InlineData("Rsrvd", AriChannelState.Rsrvd)]
     [InlineData("OffHook", AriChannelState.OffHook)]
     [InlineData("Dialing", AriChannelState.Dialing)]
+    [InlineData("Mute", AriChannelState.Mute)]
     public void ParseEvent_ShouldDeliverTheStateChange_WithEveryStateAsteriskWrites(string wire, AriChannelState expected)
     {
         var evt = AriClient.ParseEvent(WithState(CapturedChannelStateChange, "Busy", wire));
@@ -102,6 +103,73 @@ public sealed class AriChannelWireTests
         start.Channel.Id.Should().Be("lab-rtp-0");
         start.Channel.Name.Should().Be("PJSIP/loop-00000014");
         start.Application.Should().Be("cap");
+    }
+
+    [Fact]
+    public void Deserialize_ShouldReadMute_FromACapturedChannelReply()
+    {
+        var channel = JsonSerializer.Deserialize(
+            WithState(CapturedChannelReply, "Up", "Mute"), AriJsonContext.Default.AriChannel);
+
+        channel!.State.Should().Be(AriChannelState.Mute);
+        channel.Id.Should().Be("lab-rtp-0");
+    }
+
+    [Fact]
+    public void AriChannelState_ShouldKeepEveryEarlierValue_AndAppendMute()
+    {
+        Enum.GetValues<AriChannelState>().Select(s => (s, (int)s)).Should().Equal(
+            (AriChannelState.Down, 0), (AriChannelState.Rsrvd, 1), (AriChannelState.OffHook, 2),
+            (AriChannelState.Dialing, 3), (AriChannelState.Ring, 4), (AriChannelState.Ringing, 5),
+            (AriChannelState.Up, 6), (AriChannelState.Busy, 7), (AriChannelState.DialingOffhook, 8),
+            (AriChannelState.PreRing, 9), (AriChannelState.Unknown, 10), (AriChannelState.Mute, 11));
+    }
+
+    [Theory]
+    [InlineData("""{"id":"c","state":7}""")]
+    [InlineData("""{"id":"c","state":null}""")]
+    [InlineData("""{"id":"c","state":true}""")]
+    [InlineData("""{"id":"c","state":{"name":"Up","code":6}}""")]
+    [InlineData("""{"id":"c","state":["Up"]}""")]
+    public void Deserialize_ShouldReadUnknown_AndTheRestOfTheChannel_WhenTheStateIsNotAString(string json)
+    {
+        var channel = JsonSerializer.Deserialize(json, AriJsonContext.Default.AriChannel);
+
+        channel!.State.Should().Be(AriChannelState.Unknown);
+        channel.Id.Should().Be("c");
+    }
+
+    [Fact]
+    public void Deserialize_ShouldReadTheMembersAfterAnObjectState()
+    {
+        var channel = JsonSerializer.Deserialize(
+            """{"id":"c","state":{"name":"Up","nested":{"x":[1,2]}},"name":"PJSIP/x","language":"en"}""",
+            AriJsonContext.Default.AriChannel);
+
+        channel!.State.Should().Be(AriChannelState.Unknown);
+        channel.Name.Should().Be("PJSIP/x");
+        channel.Language.Should().Be("en");
+    }
+
+    [Theory]
+    [InlineData(AriChannelState.Down, "Down")]
+    [InlineData(AriChannelState.Rsrvd, "Rsrvd")]
+    [InlineData(AriChannelState.OffHook, "OffHook")]
+    [InlineData(AriChannelState.Dialing, "Dialing")]
+    [InlineData(AriChannelState.Ring, "Ring")]
+    [InlineData(AriChannelState.Ringing, "Ringing")]
+    [InlineData(AriChannelState.Up, "Up")]
+    [InlineData(AriChannelState.Busy, "Busy")]
+    [InlineData(AriChannelState.DialingOffhook, "Dialing Offhook")]
+    [InlineData(AriChannelState.PreRing, "Pre-ring")]
+    [InlineData(AriChannelState.Unknown, "Unknown")]
+    [InlineData(AriChannelState.Mute, "Mute")]
+    public void Serialize_ShouldWriteAsterisksSpelling_AndReadItBack(AriChannelState state, string wire)
+    {
+        var json = JsonSerializer.Serialize(new AriChannel { Id = "c", State = state }, AriJsonContext.Default.AriChannel);
+
+        json.Should().Contain($"\"state\":\"{wire}\"");
+        JsonSerializer.Deserialize(json, AriJsonContext.Default.AriChannel)!.State.Should().Be(state);
     }
 
     [Fact]

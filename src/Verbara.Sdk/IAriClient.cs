@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Verbara.Sdk.Enums;
 
 namespace Verbara.Sdk;
@@ -464,7 +465,14 @@ public interface IAriMailboxesResource
 // Models
 // ---------------------------------------------------------------------------
 
-/// <summary>ARI channel state.</summary>
+/// <summary>ARI channel state, as Asterisk's <c>ast_state2str</c> writes it.</summary>
+/// <remarks>
+/// The SDK's ARI reader maps Asterisk's spellings to these members: <c>"Dialing Offhook"</c> to
+/// <see cref="DialingOffhook"/>, <c>"Pre-ring"</c> to <see cref="PreRing"/>, and both <c>"Rsrvd"</c> and the
+/// schema's <c>"Rsrved"</c> to <see cref="Rsrvd"/>. A state string it has no member for, including Asterisk's
+/// <c>"Unknown (N)"</c>, reads as <see cref="Unknown"/>, and the event or reply that carries it is still
+/// delivered. Members keep their values; <see cref="Mute"/> was added after <see cref="Unknown"/>.
+/// </remarks>
 public enum AriChannelState
 {
     Down,
@@ -477,7 +485,13 @@ public enum AriChannelState
     Busy,
     DialingOffhook,
     PreRing,
-    Unknown
+    Unknown,
+
+    /// <summary>
+    /// <c>"Mute"</c>, Asterisk's <c>AST_STATE_MUTE</c>. Written by channel drivers other than PJSIP (analog, DAHDI);
+    /// never observed on a PJSIP channel.
+    /// </summary>
+    Mute,
 }
 
 /// <summary>ARI channel model.</summary>
@@ -485,6 +499,9 @@ public sealed class AriChannel
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    /// <summary>
+    /// The channel's state. A state string the SDK has no member for reads as <see cref="AriChannelState.Unknown"/>.
+    /// </summary>
     public AriChannelState State { get; set; } = AriChannelState.Unknown;
     public AriCallerId? Caller { get; set; }
     public AriCallerId? Connected { get; set; }
@@ -492,7 +509,15 @@ public sealed class AriChannel
     public AriDialplanCep? Dialplan { get; set; }
     public string? Language { get; set; }
     public string? Creationtime { get; set; }
+    /// <summary>The channel driver's protocol id (for PJSIP, the SIP Call-ID), read from <c>protocol_id</c>.</summary>
+    [JsonPropertyName("protocol_id")]
     public string? Protocol { get; set; }
+
+    /// <summary>
+    /// The channel variables <c>ari.conf</c>'s <c>channelvars</c> names, read from <c>channelvars</c>; null when none
+    /// is configured.
+    /// </summary>
+    [JsonPropertyName("channelvars")]
     public Dictionary<string, string>? ChannelVars { get; set; }
 }
 
@@ -661,6 +686,9 @@ public sealed class AriConfigInfo
     public double? MaxChannels { get; set; }
     public double? MaxOpenFiles { get; set; }
     public double? MaxLoad { get; set; }
+
+    /// <summary>The user and group Asterisk runs as, read from <c>setid</c>.</summary>
+    [JsonPropertyName("setid")]
     public AriSetId? SetId { get; set; }
 }
 
@@ -720,7 +748,11 @@ public sealed class AriConfigTuple
     public string Value { get; set; } = string.Empty;
 }
 
-/// <summary>ARI RTP statistics.</summary>
+/// <summary>ARI RTP statistics, as Asterisk writes a <c>GET /channels/{channelId}/rtp_statistics</c> reply.</summary>
+/// <remarks>
+/// Times are in seconds. The jitter, loss-deviation and round-trip figures are reals; the SSRCs and the octet
+/// counts are unsigned 32-bit integers, and a far end may pick an SSRC from 2^31 up.
+/// </remarks>
 public sealed class AriRtpStats
 {
     public int? Txcount { get; set; }
@@ -729,16 +761,108 @@ public sealed class AriRtpStats
     public double? Rxjitter { get; set; }
     public int? Txploss { get; set; }
     public int? Rxploss { get; set; }
-    public int? Rtt { get; set; }
+
+    /// <summary>The round-trip time Asterisk computed from RTCP, in seconds (<c>rtt</c>).</summary>
+    public double? Rtt { get; set; }
+
+    /// <summary>The largest round-trip time, in seconds (<c>maxrtt</c>).</summary>
+    public double? Maxrtt { get; set; }
+
+    /// <summary>The smallest round-trip time, in seconds (<c>minrtt</c>).</summary>
+    public double? Minrtt { get; set; }
+
+    /// <summary>The mean round-trip time, in seconds (<c>normdevrtt</c>).</summary>
+    public double? Normdevrtt { get; set; }
+
+    /// <summary>The standard deviation of the round-trip time, in seconds (<c>stdevrtt</c>).</summary>
+    public double? Stdevrtt { get; set; }
+
     public string? ChannelUniqueid { get; set; }
-    public int? LocalSsrc { get; set; }
-    public int? RemoteSsrc { get; set; }
+
+    /// <summary>The SSRC this side sends (<c>local_ssrc</c>), an unsigned 32-bit identifier.</summary>
+    public uint? LocalSsrc { get; set; }
+
+    /// <summary>
+    /// The SSRC the far end sends (<c>remote_ssrc</c>), an unsigned 32-bit identifier that may be 2^31 or more.
+    /// </summary>
+    public uint? RemoteSsrc { get; set; }
+
+    /// <summary>The octets sent (<c>txoctetcount</c>).</summary>
+    public uint? Txoctetcount { get; set; }
+
+    /// <summary>The octets received (<c>rxoctetcount</c>).</summary>
+    public uint? Rxoctetcount { get; set; }
+
     public double? LocalMaxjitter { get; set; }
     public double? LocalMinjitter { get; set; }
     public double? LocalNormdevjitter { get; set; }
     public double? LocalStdevjitter { get; set; }
-    public int? LocalMaxrxploss { get; set; }
-    public int? LocalMinrxploss { get; set; }
+
+    /// <summary>The largest jitter the far end reported (<c>remote_maxjitter</c>).</summary>
+    public double? RemoteMaxjitter { get; set; }
+
+    /// <summary>The smallest jitter the far end reported (<c>remote_minjitter</c>).</summary>
+    public double? RemoteMinjitter { get; set; }
+
+    /// <summary>The mean jitter the far end reported (<c>remote_normdevjitter</c>).</summary>
+    public double? RemoteNormdevjitter { get; set; }
+
+    /// <summary>The standard deviation of the jitter the far end reported (<c>remote_stdevjitter</c>).</summary>
+    public double? RemoteStdevjitter { get; set; }
+
+    /// <summary>The largest receive packet loss on this side (<c>local_maxrxploss</c>), a real.</summary>
+    public double? LocalMaxrxploss { get; set; }
+
+    /// <summary>The smallest receive packet loss on this side (<c>local_minrxploss</c>), a real.</summary>
+    public double? LocalMinrxploss { get; set; }
+
+    /// <summary>The mean receive packet loss on this side (<c>local_normdevrxploss</c>).</summary>
+    public double? LocalNormdevrxploss { get; set; }
+
+    /// <summary>The standard deviation of the receive packet loss on this side (<c>local_stdevrxploss</c>).</summary>
+    public double? LocalStdevrxploss { get; set; }
+
+    /// <summary>The largest receive packet loss the far end reported (<c>remote_maxrxploss</c>).</summary>
+    public double? RemoteMaxrxploss { get; set; }
+
+    /// <summary>The smallest receive packet loss the far end reported (<c>remote_minrxploss</c>).</summary>
+    public double? RemoteMinrxploss { get; set; }
+
+    /// <summary>The mean receive packet loss the far end reported (<c>remote_normdevrxploss</c>).</summary>
+    public double? RemoteNormdevrxploss { get; set; }
+
+    /// <summary>The standard deviation of the receive packet loss the far end reported (<c>remote_stdevrxploss</c>).</summary>
+    public double? RemoteStdevrxploss { get; set; }
+
+    /// <summary>The media experience score of what this side sends (<c>txmes</c>).</summary>
+    public double? Txmes { get; set; }
+
+    /// <summary>The media experience score of what this side receives (<c>rxmes</c>).</summary>
+    public double? Rxmes { get; set; }
+
+    /// <summary>The largest media experience score the far end reported (<c>remote_maxmes</c>).</summary>
+    public double? RemoteMaxmes { get; set; }
+
+    /// <summary>The smallest media experience score the far end reported (<c>remote_minmes</c>).</summary>
+    public double? RemoteMinmes { get; set; }
+
+    /// <summary>The mean media experience score the far end reported (<c>remote_normdevmes</c>).</summary>
+    public double? RemoteNormdevmes { get; set; }
+
+    /// <summary>The standard deviation of the media experience score the far end reported (<c>remote_stdevmes</c>).</summary>
+    public double? RemoteStdevmes { get; set; }
+
+    /// <summary>The largest media experience score on this side (<c>local_maxmes</c>).</summary>
+    public double? LocalMaxmes { get; set; }
+
+    /// <summary>The smallest media experience score on this side (<c>local_minmes</c>).</summary>
+    public double? LocalMinmes { get; set; }
+
+    /// <summary>The mean media experience score on this side (<c>local_normdevmes</c>).</summary>
+    public double? LocalNormdevmes { get; set; }
+
+    /// <summary>The standard deviation of the media experience score on this side (<c>local_stdevmes</c>).</summary>
+    public double? LocalStdevmes { get; set; }
 }
 
 // ---------------------------------------------------------------------------

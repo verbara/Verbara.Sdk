@@ -97,7 +97,7 @@ public class AriClientParseEventTests
     [Fact]
     public void ParseEvent_ShouldReturnChannelHoldEvent()
     {
-        const string json = """{"type":"ChannelHold","channel":{"id":"ch-1"},"music_class":"default"}""";
+        const string json = """{"type":"ChannelHold","channel":{"id":"ch-1"},"musicclass":"default"}""";
 
         var evt = AriClient.ParseEvent(json);
 
@@ -217,7 +217,7 @@ public class AriClientParseEventTests
     [Fact]
     public void ParseEvent_ShouldReturnBridgeBlindTransferEvent()
     {
-        const string json = """{"type":"BridgeBlindTransfer","result":"Success","transferer":{"id":"ch-1"},"bridge":{"id":"br-1"},"context":"default","exten":"5000","is_external":true}""";
+        const string json = """{"type":"BridgeBlindTransfer","result":"Success","channel":{"id":"ch-1"},"bridge":{"id":"br-1"},"context":"default","exten":"5000","is_external":true}""";
 
         var evt = AriClient.ParseEvent(json);
 

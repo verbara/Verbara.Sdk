@@ -29,7 +29,7 @@ public sealed class AriRtpStatsWireTests
         """;
 
     // Captured verbatim from Asterisk 20.20.1: the far end is a test peer that sends SSRC 0xF0000001, which
-    // Asterisk reports, unsigned, as remote_ssrc. rtt is 0.0: no RTCP round trip was measured on this leg.
+    // Asterisk reports, unsigned, as remote_ssrc. rtt reads 0.0 on this leg.
     private const string CapturedPeerReply =
         """
         {"txcount":600,"rxcount":600,"txploss":0,"rxploss":0,"local_ssrc":282801893,"remote_ssrc":4026531841,"txoctetcount":96000,"rxoctetcount":96000,"channel_uniqueid":"lab-peer-0","txjitter":0.0,"rxjitter":0.0,"remote_maxjitter":0.0,"remote_minjitter":0.0,"remote_normdevjitter":0.0,"remote_stdevjitter":0.0,"local_maxjitter":0.0,"local_minjitter":0.0,"local_normdevjitter":0.0,"local_stdevjitter":0.0,"remote_maxrxploss":0.0,"remote_minrxploss":0.0,"remote_normdevrxploss":0.0,"remote_stdevrxploss":0.0,"local_maxrxploss":0.0,"local_minrxploss":0.0,"local_normdevrxploss":0.0,"local_stdevrxploss":0.0,"rtt":0.0,"maxrtt":0.0,"minrtt":0.0,"normdevrtt":0.0,"stdevrtt":0.0,"txmes":88,"rxmes":0,"remote_maxmes":0.0,"remote_minmes":0.0,"remote_normdevmes":0.0,"remote_stdevmes":0.0,"local_maxmes":88.087887367500016,"local_minmes":88.087887367500016,"local_normdevmes":88.087887367500016,"local_stdevmes":0.0}
@@ -49,11 +49,11 @@ public sealed class AriRtpStatsWireTests
         var stats = JsonSerializer.Deserialize(CapturedLoopReply, AriJsonContext.Default.AriRtpStats);
 
         stats.Should().NotBeNull();
-        ((double?)stats!.Rtt).Should().Be(6.0999999999999999e-5);
-        ((double?)stats.LocalMaxrxploss).Should().Be(0.0);
-        ((double?)stats.LocalMinrxploss).Should().Be(0.0);
-        ((long?)stats.LocalSsrc).Should().Be(2099359027L);
-        ((long?)stats.RemoteSsrc).Should().Be(589869326L);
+        stats!.Rtt.Should().Be(6.0999999999999999e-5);
+        stats.LocalMaxrxploss.Should().Be(0.0);
+        stats.LocalMinrxploss.Should().Be(0.0);
+        stats.LocalSsrc.Should().Be(2099359027u);
+        stats.RemoteSsrc.Should().Be(589869326u);
         stats.Txcount.Should().Be(600);
         stats.Rxcount.Should().Be(599);
         stats.ChannelUniqueid.Should().Be("lab-rtp-0");
@@ -64,8 +64,8 @@ public sealed class AriRtpStatsWireTests
     {
         var stats = JsonSerializer.Deserialize(CapturedLoopReply24, AriJsonContext.Default.AriRtpStats);
 
-        ((double?)stats!.Rtt).Should().Be(9.1000000000000003e-5);
-        ((long?)stats.LocalSsrc).Should().Be(1035118775L);
+        stats!.Rtt.Should().Be(9.1000000000000003e-5);
+        stats.LocalSsrc.Should().Be(1035118775u);
     }
 
     [Fact]
@@ -73,9 +73,9 @@ public sealed class AriRtpStatsWireTests
     {
         var stats = JsonSerializer.Deserialize(CapturedPeerReply, AriJsonContext.Default.AriRtpStats);
 
-        ((long?)stats!.RemoteSsrc).Should().Be(4026531841L);
-        ((long?)stats.LocalSsrc).Should().Be(282801893L);
-        ((double?)stats.Rtt).Should().Be(0.0);
+        stats!.RemoteSsrc.Should().Be(4026531841u);
+        stats.LocalSsrc.Should().Be(282801893u);
+        stats.Rtt.Should().Be(0.0);
     }
 
     [Fact]
@@ -89,9 +89,62 @@ public sealed class AriRtpStatsWireTests
 
         stats.Txcount.Should().Be(600);
         stats.Rxcount.Should().Be(600);
-        ((long?)stats.RemoteSsrc).Should().Be(4026531841L);
+        stats.RemoteSsrc.Should().Be(4026531841u);
         handler.LastMethod.Should().Be(HttpMethod.Get);
         handler.LastRequestUri.Should().EndWith("channels/lab-peer-0/rtp_statistics");
+    }
+
+    [Fact]
+    public void Deserialize_ShouldFillTheMembersTheModelLacked_FromACapturedReply()
+    {
+        var stats = JsonSerializer.Deserialize(CapturedLoopReply, AriJsonContext.Default.AriRtpStats)!;
+
+        stats.Txoctetcount.Should().Be(96000u);
+        stats.Rxoctetcount.Should().Be(95840u);
+        stats.Maxrtt.Should().Be(9.1000000000000003e-5);
+        stats.Minrtt.Should().Be(6.0999999999999999e-5);
+        stats.Normdevrtt.Should().Be(7.6000000000000004e-5);
+        stats.Stdevrtt.Should().Be(1.5000000000000004e-5);
+        stats.Txmes.Should().Be(88);
+        stats.Rxmes.Should().Be(88);
+        stats.RemoteMaxmes.Should().Be(88.087135886029188);
+        stats.RemoteMinmes.Should().Be(88.08698755312318);
+        stats.RemoteNormdevmes.Should().Be(88.087061719576184);
+        stats.RemoteStdevmes.Should().Be(7.4166453003954302e-5);
+        stats.LocalMaxmes.Should().Be(88.087887367500016);
+        stats.LocalMinmes.Should().Be(88.08698755312318);
+        stats.LocalNormdevmes.Should().Be(88.087437460311605);
+        stats.LocalStdevmes.Should().Be(0.00044990718842186084);
+        stats.RemoteMaxjitter.Should().Be(0.0);
+        stats.RemoteMinjitter.Should().Be(0.0);
+        stats.RemoteNormdevjitter.Should().Be(0.0);
+        stats.RemoteStdevjitter.Should().Be(0.0);
+        stats.RemoteMaxrxploss.Should().Be(0.0);
+        stats.RemoteMinrxploss.Should().Be(0.0);
+        stats.RemoteNormdevrxploss.Should().Be(0.0);
+        stats.RemoteStdevrxploss.Should().Be(0.0);
+        stats.LocalNormdevrxploss.Should().Be(0.0);
+        stats.LocalStdevrxploss.Should().Be(0.0);
+    }
+
+    [Fact]
+    public void Deserialize_ShouldReadAnIntegerMediaExperienceScore_OfACapturedPeerReply()
+    {
+        var stats = JsonSerializer.Deserialize(CapturedPeerReply, AriJsonContext.Default.AriRtpStats)!;
+
+        stats.Txmes.Should().Be(88);
+        stats.Rxmes.Should().Be(0);
+        stats.LocalMaxmes.Should().Be(88.087887367500016);
+    }
+
+    [Fact]
+    public void Deserialize_ShouldBindTheLargestSsrc_AndRefuseOneNoWireCanCarry()
+    {
+        var largest = JsonSerializer.Deserialize("""{"remote_ssrc":4294967295}""", AriJsonContext.Default.AriRtpStats);
+        var act = () => JsonSerializer.Deserialize("""{"remote_ssrc":4294967296}""", AriJsonContext.Default.AriRtpStats);
+
+        largest!.RemoteSsrc.Should().Be(uint.MaxValue);
+        act.Should().Throw<JsonException>();
     }
 
     [Theory]
@@ -121,8 +174,8 @@ public sealed class AriRtpStatsWireTests
 
         var stats = JsonSerializer.Deserialize(json, AriJsonContext.Default.AriRtpStats);
 
-        ((double?)stats!.Rtt).Should().Be(42);
-        ((long?)stats.LocalSsrc).Should().Be(111111L);
-        ((long?)stats.RemoteSsrc).Should().Be(222222L);
+        stats!.Rtt.Should().Be(42);
+        stats.LocalSsrc.Should().Be(111111u);
+        stats.RemoteSsrc.Should().Be(222222u);
     }
 }

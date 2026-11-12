@@ -268,7 +268,7 @@ public sealed class AriEventDeserializationTests
         {
             "type": "BridgeBlindTransfer",
             "result": "Success",
-            "transferer": { "id": "ch-1" },
+            "channel": { "id": "ch-1" },
             "bridge": { "id": "br-1" },
             "transferee": { "id": "ch-2" },
             "replace_channel": { "id": "ch-3" },

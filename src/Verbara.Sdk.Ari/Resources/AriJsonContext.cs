@@ -1,16 +1,20 @@
 using System.Text.Json.Serialization;
 using Verbara.Sdk;
 using Verbara.Sdk.Ari.Events;
+using Verbara.Sdk.Ari.Internal;
 
 namespace Verbara.Sdk.Ari.Resources;
 
 /// <summary>
 /// Source-generated JSON context for AOT-compatible serialization of ARI models.
 /// </summary>
+// A channel's state is read by its own converter, which takes precedence over the string-enum one: Asterisk's
+// spellings are not the member names, and a state the SDK does not know must not fail the frame.
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
     PropertyNameCaseInsensitive = true,
-    UseStringEnumConverter = true)]
+    UseStringEnumConverter = true,
+    Converters = [typeof(AriChannelStateConverter)])]
 [JsonSerializable(typeof(AriChannel))]
 [JsonSerializable(typeof(AriChannel[]))]
 [JsonSerializable(typeof(AriBridge))]
