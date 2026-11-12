@@ -403,9 +403,9 @@ public sealed partial class WebhookDeliveryService : BackgroundService
         if (circuit is null)
             return;
 
-        var wasOpen = circuit.IsOpen;
-        circuit.RecordFailure(_options.CircuitBreakerFailureThreshold, _timeProvider);
-        if (!wasOpen && circuit.IsOpen)
+        // Count and log on the one failure that opened the circuit, from closed or from a failed probe: deliveries to one
+        // URL fail together, and reading IsOpen around the failure would count one opening several times, or none.
+        if (circuit.RecordFailureReportingTrip(_options.CircuitBreakerFailureThreshold, _timeProvider))
         {
             _metrics.CircuitOpened.Add(1);
             LogCircuitOpened(_logger, sub.TargetUrl.AbsoluteUri, _options.CircuitBreakerFailureThreshold);
