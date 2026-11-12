@@ -42,6 +42,36 @@ allocates a capturing factory (88 B per params report, 96 B per member added or 
 subscribed to allocates nothing beyond the member or entry it stores, and a caller's join and leave costs 168 B with no
 subscriber and 520 B with one, down from 264 B and 616 B.
 
+### Changed — BREAKING: the types of dead Asterisk modules deprecated with `VSDK0005` in 2.9.0 are removed (#NNN)
+
+The 49 types and one member that 2.9.0 marked `[Obsolete]` with `VSDK0005` are removed, as that release
+announced. From `Verbara.Sdk.Ami`: the 28 actions and 3 responses of chan_sip, res_monitor, app_meetme, Skype for
+Asterisk, the Zaptel names, chan_agent and app_setcdruserfield; `MeetMeEventBase` and `MeetmeCompatibility`;
+`ChannelReloadEvent` (chan_sip), `AgentCallbackLoginEvent` and `AgentCallbackLogoffEvent` (chan_agent); and the
+event types whose wire names Asterisk 10 or 12 renamed or removed (`QueueMemberPausedEvent`, `MusicOnHoldEvent`,
+`FaxReceivedEvent`, `DtmfEvent`, `TransferEvent`, `ChannelUpdateEvent`, `JabberEventEvent`, `AgiExecEvent`,
+`AsyncAgiEvent`, `SendFaxStatusEvent`, `BridgeExecEvent`, `ModuleLoadReportEvent`). From `Verbara.Sdk.Agi`:
+`MeetmeCommand`. From `Verbara.Sdk.Activities`: `MeetmeActivity.UseConfBridge`; the activity now always runs
+ConfBridge. No pinned image of a supported Asterisk registers the removed actions or sends the removed events. An
+event whose type was removed still reaches every subscriber, as a base `ManagerEvent` with its name in `EventType` and every header in
+`RawFields`; `AsyncAGI` is no longer a `ResponseEvent`. `VerbaraServer` no longer reads `QueueMemberPaused`, which
+only Asterisk 11 and earlier send; `QueueMemberPause` is unchanged. Recompile against 2.10.0, and move every
+`Verbara.Sdk.*` package to 2.10.0 together: a 2.9.0 package next to a 2.10.0 `Verbara.Sdk.Ami` fails to load the
+removed types. The `VSDK0005` warning's link still opens the replacement for each symbol; the migration guide has
+the rest ([The types deprecated with `VSDK0005` are removed](docs/guides/migration-2.10.0.md#the-types-deprecated-with-vsdk0005-are-removed)).
+
+### Changed: `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` name their removal release, 2.11.0 (#NNN)
+
+The warning message of the six `StatusEvent` members (`VSDK0002`), `AudioStreamMetrics.BufferUnderruns`
+(`VSDK0003`), `SendXonAsync`, `SendXoffAsync`, `ChanWebSocketHangup`, `ChanWebSocketMediaBuffering` and
+`ChanWebSocketDtmf.DurationMs` (`VSDK0004`), and `SessionMetrics.SessionsTimedOut` and `SessionsOrphaned`
+(`VSDK0006`) now ends "Removed in Verbara.Sdk 2.11.0." Nothing is removed in 2.10.0, and nothing else changes: the
+ids, the replacements the messages name, and the published instruments are as in 2.9.0. In 2.11.0 the three
+`VSDK0003`/`VSDK0006` fields leave, and with them their instruments leave the meter. `audio.buffer.underruns` never
+recorded a measurement; the SDK has recorded nothing on `sessions.timed_out` or `sessions.orphaned` since 2.7.0
+(through 2.6.x the reconciliation sweep added to both, so a stored series keeps that history)
+([guide](docs/guides/migration-2.10.0.md#vsdk0002-vsdk0003-vsdk0004-and-vsdk0006-name-their-removal-release)).
+
 ### Changed — BREAKING: a call is found on the server that reported it (#533)
 
 `CallSessionManager` keeps its channel-id, `linkedid` and bridge indexes per server id, where it kept one of each for
