@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed: the `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` warnings link to their migration-guide section (#NNN-T3D)
+### Changed: the `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` warnings link to their migration-guide section (#560)
 
 The 14 members marked obsolete under these ids carry a documentation link: the warning a consumer's build reports,
 and the rule's help link in a SARIF log, open that id's heading in the
