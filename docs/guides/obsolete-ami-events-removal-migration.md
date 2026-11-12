@@ -291,8 +291,9 @@ The commercial fax module's `FaxLicenseListAction`, `FaxLicenseStatusAction` and
 ### Zaptel action names (use the DAHDI names)
 
 Asterisk 1.6 replaced chan_zap with chan_dahdi, which registers these actions under `DAHDI*` names
-only. The SDK types only `DahdiShowChannelsAction`; send the other `DAHDI*` actions by name. chan_dahdi
-is not loaded in the pinned images, so none of these replacements is measured.
+only. The SDK types only `DahdiShowChannelsAction` and sends only the actions it types, so it has no way
+to send the other `DAHDI*` actions. chan_dahdi is not loaded in the pinned images, so none of these
+replacements is measured.
 
 | Symbol | Module or wire-name status | Use instead |
 |---|---|---|

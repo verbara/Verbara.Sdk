@@ -545,7 +545,9 @@ They are removed:
   which was already its default.
 
 The [VSDK0005 tables](obsolete-ami-events-removal-migration.md#vsdk0005) list every symbol and its replacement; the
-link in each 2.9.0 warning opens them. No supported Asterisk registers a removed action or sends a removed event.
+link in each 2.9.0 warning opens them. No pinned image of a supported Asterisk registers a removed action or sends a
+removed event. app_meetme, which registers `MeetmeMute` and `MeetmeUnmute`, is still in the Asterisk tree, deprecated
+and not built by default.
 
 What the wire still carries is not lost:
 
@@ -558,9 +560,10 @@ What the wire still carries is not lost:
   `MusicOnHoldStartEvent`. Those types keep their own wire names, which every supported Asterisk sends.
 - **`VerbaraServer` no longer reads `QueueMemberPaused`.** Only Asterisk 11 and earlier send it; on those versions a
   member's pause state no longer follows it. `QueueMemberPause`, which every supported version sends, is unchanged.
-- **A consumer's own `ManagerAction` subclass does not replace a removed action.** The SDK's generated serializer
-  writes such a subclass as its type name without `Action` and with none of its properties. Every supported Asterisk
-  answers the removed actions with `Invalid/unknown command`, so the SDK adds no raw-action route for them.
+- **The SDK sends only the actions it types.** A consumer's own `ManagerAction` subclass is not a route to
+  another action: the generated serializer writes it as its type name without `Action`, with none of its
+  properties and none of its extra fields. So this release has no way to send the `DAHDI*` actions the Zaptel
+  rows name, nor `MeetmeMute` and `MeetmeUnmute` on a server built with app_meetme.
 
 **Who is affected.** Code that names a removed type or `UseConfBridge`: it no longer compiles. A removed type reports
 `CS0246`, or `CS0234` when written fully qualified; `UseConfBridge` reports `CS0117` in an object initializer and
