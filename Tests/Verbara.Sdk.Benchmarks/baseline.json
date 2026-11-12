@@ -191,11 +191,11 @@
       "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.JoinLeave_NoSubscriber": {
-      "bytes": 264,
+      "bytes": 168,
       "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.JoinLeave_OneSubscriber": {
-      "bytes": 616,
+      "bytes": 520,
       "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark.Mute_NoSubscriber": {
