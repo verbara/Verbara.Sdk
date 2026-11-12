@@ -187,8 +187,11 @@ public sealed class NatsBridgeReleaseTests
         var executeError = await Record.ExceptionAsync(() => bridge.ExecuteTask!.WaitAsync(Fence));
 
         new[] { disposeError, executeError }.Should().ContainSingle(
-            e => e is OutOfMemoryException, "the process cannot go on, so no release hides it");
+            e => e is OutOfMemoryException,
+            "the caller of the disposal, or the host watching the execute task, receives it, so no release hides it");
         rig.Log.Count("NATS bridge failed to dispose").Should().Be(0, "an out-of-memory is not a failed release");
+        (rig.Subscriber.Disposals, rig.Publisher.Disposals)
+            .Should().Be((1, 1), "an out-of-memory in one release does not leave the other resource unreleased");
     }
 
     [Fact]
