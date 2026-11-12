@@ -2,6 +2,7 @@ using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Verbara.Sdk.Live.MeetMe;
+using static Verbara.Sdk.Live.Tests.Harness.AllocationReadings;
 
 namespace Verbara.Sdk.Live.Tests.MeetMe;
 
@@ -15,8 +16,6 @@ namespace Verbara.Sdk.Live.Tests.MeetMe;
 public sealed class MeetMeManagerAllocationTests
 {
     private const int Participants = 1_000;
-    private const int WarmUpRounds = 3;
-    private const int MaxReadings = 20;
     private const string Room = "100";
 
     // One queued entry, one drain frame and the two execution-context copies the drain's frame switch makes, with
@@ -69,19 +68,23 @@ public sealed class MeetMeManagerAllocationTests
 
     // A join allocates the participant it stores, whether or not anyone hears it. It is measured against a control
     // manager doing the same joins with a handler subscribed, less the price of the notifications that handler
-    // received, read on the mute path, which allocates nothing else. Each round joins again the participants the room
-    // holds, so every join replaces one and announces the new one.
+    // received, read on the mute path, which allocates nothing else; all three are read in the same passes. Each round
+    // joins again the participants the room holds, so every join replaces one and announces the new one.
     [Fact]
     public void OnUserJoined_ShouldAllocateNothingForTheEvent_WhenNoHandlerIsSubscribed()
     {
         var manager = WithParticipants();
         var control = WithParticipants();
         control.UserJoined += Count;
+        var priced = WithParticipants();
+        priced.UserStateChanged += Count;
 
-        var allocated = Measure(() => Join(manager));
-        var observed = MeasureObserved(() => Join(control));
+        var readings = MeasureTogether(
+            () => Join(manager),
+            Observed(() => Join(control)),
+            Observed(() => Flip(priced, Field.Muted)));
 
-        (allocated - (observed - NotificationPrice())).Should().Be(0, "a join nobody is subscribed to queues nothing");
+        (readings[0] - (readings[1] - readings[2])).Should().Be(0, "a join nobody is subscribed to queues nothing");
     }
 
     // One participant stays, so the room outlives every round and only the participants' leaves are measured.
@@ -120,15 +123,6 @@ public sealed class MeetMeManagerAllocationTests
     private int HoldingValue(MeetMeManager manager, Field field) =>
         manager.GetRoom(Room)!.Users.Values.Count(user => (field == Field.Muted ? user.Muted : user.Talking) == _value);
 
-    // What one round of reports costs a manager when each one queues one notification to a subscribed handler. The
-    // mute path allocates nothing else (OnUserStateChange_ShouldAllocateNothing_WhenNoHandlerIsSubscribed).
-    private long NotificationPrice()
-    {
-        var manager = WithParticipants();
-        manager.UserStateChanged += Count;
-        return MeasureObserved(() => Flip(manager, Field.Muted));
-    }
-
     private static void Join(MeetMeManager manager)
     {
         foreach (var channel in ChannelNames)
@@ -136,17 +130,21 @@ public sealed class MeetMeManagerAllocationTests
     }
 
     // Measures one round and checks it reached the handler once per report.
-    private long MeasureObserved(Action round)
+    private long MeasureObserved(Action round) => Measure(Observed(round));
+
+    // The round, checked to reach the handler once per report. The check allocates nothing unless it fails, so it can
+    // run inside the reading.
+    private Action Observed(Action round) => () =>
     {
-        var observedBefore = 0;
-        var allocated = Measure(() =>
+        var observedBefore = _observed;
+        round();
+        var observed = _observed - observedBefore;
+        if (observed != Participants)
         {
-            observedBefore = _observed;
-            round();
-        });
-        (_observed - observedBefore).Should().Be(Participants, "every report reaches the subscribed handler");
-        return allocated;
-    }
+            throw new Xunit.Sdk.XunitException(string.Create(CultureInfo.InvariantCulture,
+                $"every report reaches the subscribed handler: expected {Participants}, observed {observed}"));
+        }
+    };
 
     private static MeetMeManager WithParticipants()
     {
@@ -154,34 +152,4 @@ public sealed class MeetMeManagerAllocationTests
         Join(manager);
         return manager;
     }
-
-    // As Measure, with the state each round consumes put back, unmeasured, before it.
-    private static long MeasureAfter(Action setUp, Action round)
-    {
-        for (var i = 0; i < WarmUpRounds; i++)
-        {
-            setUp();
-            round();
-        }
-
-        // A round costs the same bytes every time, but a reading taken while a background collection runs can be a few
-        // bytes to a few kilobytes off, either way. Two readings in a row that agree are what the round cost.
-        long? previous = null;
-        for (var reading = 0; reading < MaxReadings; reading++)
-        {
-            setUp();
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            round();
-            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            if (allocated == previous)
-                return allocated;
-            previous = allocated;
-        }
-
-        throw new Xunit.Sdk.XunitException(string.Create(CultureInfo.InvariantCulture,
-            $"no two of {MaxReadings} readings of the same round agreed; the last read {previous} bytes"));
-    }
-
-    // Warm-up rounds first, so tiering stubs and one-time initialisation fall before the measured rounds.
-    private static long Measure(Action round) => MeasureAfter(static () => { }, round);
 }

@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Verbara.Sdk.Live.Queues;
 using Verbara.Sdk.Live.Server;
+using static Verbara.Sdk.Live.Tests.Harness.AllocationReadings;
 
 namespace Verbara.Sdk.Live.Tests.Queues;
 
@@ -19,8 +20,6 @@ namespace Verbara.Sdk.Live.Tests.Queues;
 public sealed class QueueManagerAllocationTests
 {
     private const int Members = 1_000;
-    private const int WarmUpRounds = 3;
-    private const int MaxReadings = 20;
     private const string Queue = "sales";
 
     // One queued entry, one drain frame and the two execution-context copies the drain's frame switch makes, with
@@ -221,6 +220,21 @@ public sealed class QueueManagerAllocationTests
             .Should().Be(0, "a member added nobody is subscribed to queues nothing");
     }
 
+    // A member added again to a queue the table holds costs the member it stores and nothing else: the queue and the
+    // device's index entry are looked up with factories that capture nothing. The second round builds the same members
+    // into an array, so they escape as the stored ones do; the two are read in the same passes.
+    [Fact]
+    public void OnMemberAdded_ShouldAllocateOnlyTheMember_WhenTheQueueIsHeldAndNoHandlerIsSubscribed()
+    {
+        var manager = WithMembers();
+        var built = new AsteriskQueueMember[Members];
+
+        var readings = MeasureTogether(() => AddMembers(manager), () => BuildMembers(built));
+
+        readings[1].Should().BePositive("premise: building the members allocates them");
+        (readings[0] - readings[1]).Should().Be(0, "a member added to a queue the table holds allocates only the member");
+    }
+
     [Fact]
     public void OnMemberRemoved_ShouldAllocateNothing_WhenNoHandlerIsSubscribed()
     {
@@ -247,6 +261,23 @@ public sealed class QueueManagerAllocationTests
 
         UnheardEventCost(() => JoinAndLeave(manager), () => JoinAndLeave(control))
             .Should().Be(0, "a caller's join nobody is subscribed to queues nothing");
+    }
+
+    // A join of a caller the queue already holds keeps the held entry; it costs the entry the report is read into and
+    // nothing else: the queue is looked up with a factory that captures nothing. The second round builds the same
+    // entries into an array, so they escape as the reported ones do; the two are read in the same passes.
+    [Fact]
+    public void OnCallerJoined_ShouldAllocateOnlyTheReportedEntry_WhenTheCallerIsHeldAndNoHandlerIsSubscribed()
+    {
+        var manager = new QueueManager(NullLogger.Instance);
+        JoinCallers(manager);
+        var built = new AsteriskQueueEntry[Members];
+
+        var readings = MeasureTogether(() => JoinCallers(manager), () => BuildEntries(built));
+
+        manager.GetByName(Queue)!.Entries.Should().HaveCount(Members, "every join in the round was a held caller's");
+        readings[1].Should().BePositive("premise: building the entries allocates them");
+        (readings[0] - readings[1]).Should().Be(0, "a join of a held caller allocates only the entry it was read into");
     }
 
     [Fact]
@@ -330,6 +361,24 @@ public sealed class QueueManagerAllocationTests
             manager.OnMemberAdded(Queue, iface, iface, penalty: 0, paused: false, (int)QueueMemberState.DeviceNotInUse);
     }
 
+    private static void BuildMembers(AsteriskQueueMember[] into)
+    {
+        for (var i = 0; i < Members; i++)
+        {
+            into[i] = new AsteriskQueueMember
+            {
+                Interface = Interfaces[i], MemberName = Interfaces[i], Penalty = 0, Paused = false,
+                Status = QueueMemberState.DeviceNotInUse,
+            };
+        }
+    }
+
+    private static void BuildEntries(AsteriskQueueEntry[] into)
+    {
+        for (var i = 0; i < Members; i++)
+            into[i] = new AsteriskQueueEntry { Channel = Channels[i], CallerId = null, Position = 1, JoinedAt = DateTimeOffset.UtcNow };
+    }
+
     private static void JoinCallers(QueueManager manager)
     {
         for (var i = 0; i < Members; i++)
@@ -396,68 +445,4 @@ public sealed class QueueManagerAllocationTests
                 $"every report reaches the subscribed handler: expected {Members}, observed {observed}"));
         }
     };
-
-    // Reads rounds that are compared with one another in one pass, each on its own counter reading, until two passes in
-    // a row agree on every round. What a manager's own bookkeeping costs depends on the compiled code running it: a
-    // tier-up or an on-stack replacement can stack-allocate an object that does not escape, and it lands whenever the
-    // runtime installs it. Read one after the other, a round measured before it and one measured after it disagree by
-    // that object's bytes per report; read together, a pass that straddles it disagrees with the next and is read
-    // again.
-    private static long[] MeasureTogether(params Action[] rounds)
-    {
-        for (var i = 0; i < WarmUpRounds; i++)
-        {
-            foreach (var round in rounds)
-                round();
-        }
-
-        long[]? previous = null;
-        for (var reading = 0; reading < MaxReadings; reading++)
-        {
-            var readings = new long[rounds.Length];
-            for (var r = 0; r < rounds.Length; r++)
-            {
-                var before = GC.GetAllocatedBytesForCurrentThread();
-                rounds[r]();
-                readings[r] = GC.GetAllocatedBytesForCurrentThread() - before;
-            }
-
-            if (previous is not null && previous.AsSpan().SequenceEqual(readings))
-                return readings;
-            previous = readings;
-        }
-
-        throw new Xunit.Sdk.XunitException(string.Create(CultureInfo.InvariantCulture,
-            $"no two of {MaxReadings} passes over the same rounds agreed; the last read {string.Join(", ", previous!)}"));
-    }
-
-    // As Measure, with the state each round consumes put back, unmeasured, before it.
-    private static long MeasureAfter(Action setUp, Action round)
-    {
-        for (var i = 0; i < WarmUpRounds; i++)
-        {
-            setUp();
-            round();
-        }
-
-        // A round costs the same bytes every time, but a reading taken while a background collection runs can be a few
-        // bytes to a few kilobytes off, either way. Two readings in a row that agree are what the round cost.
-        long? previous = null;
-        for (var reading = 0; reading < MaxReadings; reading++)
-        {
-            setUp();
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            round();
-            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            if (allocated == previous)
-                return allocated;
-            previous = allocated;
-        }
-
-        throw new Xunit.Sdk.XunitException(string.Create(CultureInfo.InvariantCulture,
-            $"no two of {MaxReadings} readings of the same round agreed; the last read {previous} bytes"));
-    }
-
-    // Warm-up rounds first, so tiering stubs and one-time initialisation fall before the measured rounds.
-    private static long Measure(Action round) => MeasureAfter(static () => { }, round);
 }
