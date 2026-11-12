@@ -385,7 +385,8 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
     public async Task StopAsync_ShouldNotThrow_WhenTheServiceWasDisposedAndTheStopTokenIsAlreadyCancelled()
     {
         await using var manager = CreateCallSessionManager(new PendingSaveStore(), new RecordingLogger());
-        var sut = new SessionManagerHostedService(manager, _server);
+        // Disposed again at the end of the scope, a no-op: also when the start throws before the disposal under test.
+        using var sut = new SessionManagerHostedService(manager, _server);
         await sut.StartAsync(CancellationToken.None);
         sut.Dispose();
         using var withdrawn = new CancellationTokenSource();
@@ -402,7 +403,8 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
     public async Task StopTokenCancel_ShouldNotThrow_WhenTheStopCameAfterTheDisposal()
     {
         await using var manager = CreateCallSessionManager(new PendingSaveStore(), new RecordingLogger());
-        var sut = new SessionManagerHostedService(manager, _server);
+        // Disposed again at the end of the scope, a no-op: also when the start throws before the disposal under test.
+        using var sut = new SessionManagerHostedService(manager, _server);
         await sut.StartAsync(CancellationToken.None);
         sut.Dispose();
         using var stop = new CancellationTokenSource();

@@ -151,6 +151,47 @@ public sealed class NatsBridgeReleaseTests
     }
 
     [Fact]
+    public async Task Dispose_ShouldLogAndReleaseThePublisher_WhenTheSubscribersDisposalFails()
+    {
+        var rig = new Rig();
+        rig.Subscriber.DisposeFault = new InvalidOperationException("subscriber dispose failed");
+        rig.Publisher.DisposeFault = new InvalidOperationException("publisher dispose failed");
+        using var bridge = rig.Build(subscribe: true);
+
+        await bridge.StartAsync(CancellationToken.None);
+        await rig.Subscriber.Subscribed.WaitAsync(Fence);
+
+        var dispose = () => bridge.Dispose();
+        dispose.Should().NotThrow("a failed release is the resource's, logged, and the bridge releases the rest");
+
+        (rig.Subscriber.Disposals, rig.Publisher.Disposals, rig.Log.Count("NATS bridge failed to dispose"))
+            .Should().Be((1, 1, 2), "each failed disposal is logged once and does not stop the next one");
+    }
+
+    [Theory]
+    [InlineData("subscriber")]
+    [InlineData("publisher")]
+    public async Task Dispose_ShouldLetOutOfMemoryThrough_WhenADisposalThrowsIt(string failing)
+    {
+        var rig = new Rig();
+        if (failing == "subscriber") rig.Subscriber.DisposeFault = OutOfMemory();
+        else rig.Publisher.DisposeFault = OutOfMemory();
+        using var bridge = rig.Build(subscribe: true);
+
+        await bridge.StartAsync(CancellationToken.None);
+        await rig.Subscriber.Subscribed.WaitAsync(Fence);
+
+        // The disposal cancels the stopping token, so the release runs in the disposal or in the ending of
+        // ExecuteAsync, whichever takes it first: the out-of-memory surfaces from the one that ran it.
+        var disposeError = Record.Exception(() => bridge.Dispose());
+        var executeError = await Record.ExceptionAsync(() => bridge.ExecuteTask!.WaitAsync(Fence));
+
+        new[] { disposeError, executeError }.Should().ContainSingle(
+            e => e is OutOfMemoryException, "the process cannot go on, so no release hides it");
+        rig.Log.Count("NATS bridge failed to dispose").Should().Be(0, "an out-of-memory is not a failed release");
+    }
+
+    [Fact]
     public void Dispose_ShouldCallNoFactory_WhenTheBridgeNeverStarted()
     {
         var rig = new Rig();
@@ -336,6 +377,11 @@ public sealed class NatsBridgeReleaseTests
             new CountingBus(), options, new DefaultNatsPayloadSerializer(options), new DefaultNatsPayloadDeserializer(), log);
     }
 
+    // Only the runtime may throw it; a test has to raise it itself.
+#pragma warning disable CA1859, CA2201, MA0012
+    private static Exception OutOfMemory() => new OutOfMemoryException();
+#pragma warning restore CA1859, CA2201, MA0012
+
     /// <summary>One bridge's fakes, counters and gates.</summary>
     private sealed class Rig(bool parkPublisher = false, bool parkSubscriber = false, bool parkPublisherDispose = false)
     {
@@ -410,6 +456,9 @@ public sealed class NatsBridgeReleaseTests
         public ValueTask PublishAsync(string subject, byte[] payload, CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;
 
+        /// <summary>What the disposal throws once it has counted itself; nothing when null.</summary>
+        public Exception? DisposeFault { get; set; }
+
         public async ValueTask DisposeAsync()
         {
             Interlocked.Increment(ref _disposals);
@@ -419,6 +468,7 @@ public sealed class NatsBridgeReleaseTests
                 await _disposeGate.Task;
             }
             Interlocked.Increment(ref _disposalsCompleted);
+            if (DisposeFault is { } fault) throw fault;
         }
     }
 
@@ -449,10 +499,13 @@ public sealed class NatsBridgeReleaseTests
             yield break;
         }
 
+        /// <summary>What the disposal throws once it has counted itself; nothing when null.</summary>
+        public Exception? DisposeFault { get; set; }
+
         public ValueTask DisposeAsync()
         {
             Interlocked.Increment(ref _disposals);
-            return ValueTask.CompletedTask;
+            return DisposeFault is { } fault ? ValueTask.FromException(fault) : ValueTask.CompletedTask;
         }
     }
 

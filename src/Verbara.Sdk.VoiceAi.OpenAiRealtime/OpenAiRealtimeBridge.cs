@@ -324,7 +324,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                 if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
                     await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
             }
-            catch { /* ignore close errors */ }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { /* ignore close errors */ }
             finally { if (closeLockHeld) wsWriteLock.Release(); }
 
             // A pending input implies the input loop exists.

@@ -234,11 +234,8 @@ public sealed partial class WebhookDeliveryService : BackgroundService
         // A non-empty topic path that does not parse throws here and is logged by DispatchEventAsync.
         var name = WebhookTopicResolver.Resolve(evt);
         var selfUserId = evt.Metadata?.UserId;
-        foreach (var sub in subs)
+        foreach (var sub in subs.Where(s => name.IsMatchedBy(s.TopicPattern, selfUserId)))
         {
-            if (!name.IsMatchedBy(sub.TopicPattern, selfUserId))
-                continue;
-
             _ = DeliverAsync(sub, evt, ct);
         }
     }

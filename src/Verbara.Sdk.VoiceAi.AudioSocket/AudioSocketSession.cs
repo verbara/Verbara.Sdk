@@ -344,7 +344,7 @@ public sealed class AudioSocketSession : IAsyncDisposable
             }
         }
         catch (OperationCanceledException) { /* normal shutdown */ }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // A write may have met the same failure and reported it already.
             if (Interlocked.Exchange(ref _transportFailureReported, 1) == 0)

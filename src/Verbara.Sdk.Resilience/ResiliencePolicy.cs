@@ -74,9 +74,9 @@ public sealed class ResiliencePolicy
             : null;
 
         var maxAttempts = _retryMaxAttempts ?? 1;
-        Exception? lastException = null;
 
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        // Ends only by returning or throwing: the last failed attempt rethrows its exception from the catch below.
+        for (var attempt = 1; ; attempt++)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -136,10 +136,8 @@ public sealed class ResiliencePolicy
                 // Caller-initiated cancellation: propagate unchanged, do not count as failure.
                 throw;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                lastException = ex;
-
                 // Count on the win alone: a success may close the circuit right after it, and the trip still happened.
                 if (state is not null
                     && _circuitThreshold is int threshold
@@ -151,25 +149,22 @@ public sealed class ResiliencePolicy
                     ResilienceMetrics.TrackCircuit(state, _circuitOpenDuration, _time);
                 }
 
-                // If there are retries left, count this attempt and back off; otherwise rethrow below.
-                if (attempt < maxAttempts)
-                {
-                    ResilienceMetrics.RetryAttempts.Add(
-                        1,
-                        new KeyValuePair<string, object?>("key", key));
+                // Retries exhausted: the last attempt's exception reaches the caller with its own stack trace.
+                if (attempt >= maxAttempts)
+                    throw;
 
-                    var delay = ComputeBackoff(attempt);
-                    if (delay > TimeSpan.Zero)
-                    {
-                        await Task.Delay(delay, _time, ct).ConfigureAwait(false);
-                    }
+                // Retries left: count this attempt and back off.
+                ResilienceMetrics.RetryAttempts.Add(
+                    1,
+                    new KeyValuePair<string, object?>("key", key));
+
+                var delay = ComputeBackoff(attempt);
+                if (delay > TimeSpan.Zero)
+                {
+                    await Task.Delay(delay, _time, ct).ConfigureAwait(false);
                 }
             }
         }
-
-        // Retries exhausted — rethrow the last observed exception.
-        // lastException is non-null here because we only exit the loop via return or after a catch.
-        throw lastException!;
     }
 
     /// <summary>

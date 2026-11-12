@@ -680,7 +680,7 @@ public sealed class VerbaraServer : IVerbaraServer
         {
             // The server was disposed while the reload waited for the event pump: nothing is reloaded into it.
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             VerbaraServerLog.ReconnectReloadFailed(_logger, ex);
         }
@@ -1970,12 +1970,17 @@ public sealed class VerbaraServer : IVerbaraServer
         /// and the start does not vouch for it, although a session it logs in does reload: over an
         /// <see cref="AmiConnection"/> the stop reads who wrote the state with it; over any other connection it cannot tell.
         /// </summary>
-        public bool ReconnectWillReload => AtStop is { } stop
-            && !(AtStopWrittenByCaller && stop is AmiConnectionState.Connecting or AmiConnectionState.Connected)
-            && (AtStart == AmiConnectionState.Reconnecting
-                || (AtStart == AmiConnectionState.Connected
-                    && stop is AmiConnectionState.Reconnecting or AmiConnectionState.Connecting
-                        or AmiConnectionState.Connected));
+        public bool ReconnectWillReload => AtStop is { } stop && !CallerConnectStopped(stop) && LoopOwnedTheStop(stop);
+
+        // The caller's own connect wrote the state the load stopped in: nothing retries that connect.
+        private bool CallerConnectStopped(AmiConnectionState stop) =>
+            AtStopWrittenByCaller && stop is AmiConnectionState.Connecting or AmiConnectionState.Connected;
+
+        // The load began while the loop was reconnecting, or on a session the loop owned when the load stopped.
+        private bool LoopOwnedTheStop(AmiConnectionState stop) =>
+            AtStart == AmiConnectionState.Reconnecting
+            || (AtStart == AmiConnectionState.Connected
+                && stop is AmiConnectionState.Reconnecting or AmiConnectionState.Connecting or AmiConnectionState.Connected);
 
         /// <summary>
         /// Records the state now, as the one the load stopped in, and returns the exception the load stops with: the
