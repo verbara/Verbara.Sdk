@@ -24,7 +24,7 @@ A consumer that deduplicates notifications by record equality, or keys them by `
 `notification with { Epoch = null }` instead. The notifications of a custom `ICallSessionManager` carry `null`
 unless it sets `Epoch`, so a consumer reads `Unknown` for them.
 
-### Fixed: a queue report nobody is subscribed to allocates nothing (#NNN)
+### Fixed: a queue report nobody is subscribed to allocates nothing (#555)
 
 `QueueManager`: a queue params report, a member added or a caller's join on a queue the table already holds no longer
 allocates a capturing factory (88 B per params report, 96 B per member added or caller joined). A report no handler is
