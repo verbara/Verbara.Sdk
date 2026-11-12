@@ -1,13 +1,10 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO.Pipelines;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using Verbara.Sdk;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Connection;
-using Verbara.Sdk.Ami.Internal;
 using Verbara.Sdk.Ami.Transport;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -110,11 +107,9 @@ public sealed class AmiConnectionUnwritableActionTests : IAsyncLifetime
     {
         _clientToServer.Writer.UnflushedBytes.Should().Be(0, "no byte of the refused action may reach the transport");
         _clientToServer.Reader.TryRead(out _).Should().BeFalse("no byte of the refused action may reach the transport");
-        PendingActions(_sut).Should().BeEmpty("a refused action must not stay registered for a response");
-        PendingEventActions(_sut).Should().BeEmpty("a refused action must not stay registered for events");
-        ActionNames(_sut).Should().BeEmpty("a refused action must not leave its ActionID behind");
-        WriteLock(_sut).CurrentCount.Should().Be(1, "the write lock must be released");
 
+        // A held write lock or a stale registration would stall or misroute this ping; the line-break tests pin
+        // the internals of the same refusal path directly.
         var server = Task.Run(async () =>
         {
             var text = await ReadActionAsync(_clientToServer.Reader, ct);
@@ -165,18 +160,6 @@ public sealed class AmiConnectionUnwritableActionTests : IAsyncLifetime
 
         return new AmiConnection(options, socketFactory, NullLogger<AmiConnection>.Instance);
     }
-
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_pendingActions")]
-    private static extern ref ConcurrentDictionary<string, TaskCompletionSource<AmiMessage>> PendingActions(AmiConnection connection);
-
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_pendingEventActions")]
-    private static extern ref ConcurrentDictionary<string, ResponseEventCollector> PendingEventActions(AmiConnection connection);
-
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_actionNames")]
-    private static extern ref ConcurrentDictionary<string, string> ActionNames(AmiConnection connection);
-
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_writeLock")]
-    private static extern ref SemaphoreSlim WriteLock(AmiConnection connection);
 
     private async Task SimulateSuccessfulLoginAsync(CancellationToken ct)
     {

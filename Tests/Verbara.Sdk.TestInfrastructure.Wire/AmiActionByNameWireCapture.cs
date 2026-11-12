@@ -83,16 +83,16 @@ public static class AmiActionByNameWireCapture
         var suffix = "-1-" + frame + "\r\n";
         var text = Encoding.Latin1.GetString(stream);
         var picked = new StringBuilder();
-        foreach (var message in text.Split("\r\n\r\n"))
-        {
-            if (message.Length == 0)
-                continue;
-            var line = message.Split("\r\n").FirstOrDefault(l => l.StartsWith("ActionID: c27-", StringComparison.Ordinal));
-            if (line is not null && (line + "\r\n").EndsWith(suffix, StringComparison.Ordinal))
-                picked.Append(message).Append("\r\n\r\n");
-        }
+        foreach (var message in text.Split("\r\n\r\n").Where(m => IsOfFrame(m, suffix)))
+            picked.Append(message).Append("\r\n\r\n");
 
         return Encoding.Latin1.GetBytes(picked.ToString());
+    }
+
+    private static bool IsOfFrame(string message, string suffix)
+    {
+        var line = message.Split("\r\n").FirstOrDefault(l => l.StartsWith("ActionID: c27-", StringComparison.Ordinal));
+        return line is not null && (line + "\r\n").EndsWith(suffix, StringComparison.Ordinal);
     }
 
     private static byte[] Load(string version, string side)
