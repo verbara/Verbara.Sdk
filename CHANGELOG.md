@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: an out-of-memory no longer leaves a client, a reload or a session ending unreported (#NNN)
+
+`AriClient`: an out-of-memory in the events loop, while receiving or in a reconnect attempt, ends the client
+`Faulted` with one `Error` line (`[ARI] Out of memory in the events loop…`) and releases its socket. A reconnect attempt
+that runs out of memory is no longer retried: connect again. Before, the client could stay `Connected` with no events
+loop, or `Reconnecting` for good, and a later `DisposeAsync` threw that exception and left its clean-up half done. An
+ARI event frame that cannot be read is skipped with its warning whatever exception it fails with. `VerbaraServer`: an
+out-of-memory in the reload after a reconnect is logged as a failed reload and no longer ends the process.
+AudioSocket: an out-of-memory in a session's read loop is logged once at `Error`. `NatsBridge`: an out-of-memory raised
+while releasing the subscriber or the publisher now surfaces from `StopAsync` and `Dispose`, after both are released.
+
 ### Added: every session notification says whether its server's events may have been lost before it (#553)
 
 Every session notification (`SessionDomainEvent`, and each change on `IAgentSessionTracker.StateChanges`) carries
