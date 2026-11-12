@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: an out-of-memory no longer leaves a client, a reload or a session ending unreported (#NNN)
+### Fixed: an out-of-memory no longer leaves a client, a reload or a session ending unreported (#554)
 
 `AriClient`: an out-of-memory in the events loop, while receiving or in a reconnect attempt, ends the client
 `Faulted` with one `Error` line (`[ARI] Out of memory in the events loop…`) and releases its socket. A reconnect attempt
