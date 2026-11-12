@@ -1,0 +1,93 @@
+Response: Success
+ActionID: c27-a20-1-i
+Ping: Pong
+Timestamp: 1794501264.006449
+
+Response: Success
+ActionID: c27-a20-1-ii
+Message: Reloaded the logger and rotated log files
+
+Response: Success
+ActionID: c27-a20-1-iii
+Category-000000: general
+Category-000001: c27
+
+Response: Success
+ActionID: c27-a20-1-iv
+EventList: start
+Message: Peer status list will follow
+
+Event: PeerlistComplete
+ActionID: c27-a20-1-iv
+EventList: Complete
+ListItems: 0
+
+Response: Success
+ActionID: c27-a20-1-v
+EventList: start
+Message: Device State Changes will follow
+
+Event: DeviceStateChange
+ActionID: c27-a20-1-v
+Device: MWI:1234@devices@myaliases
+State: NOT_INUSE
+
+Event: DeviceStateChange
+ActionID: c27-a20-1-v
+Device: MWI:1234@other
+State: NOT_INUSE
+
+Event: DeviceStateChange
+ActionID: c27-a20-1-v
+Device: MWI:1234@default
+State: NOT_INUSE
+
+Event: DeviceStateListComplete
+ActionID: c27-a20-1-v
+EventList: Complete
+ListItems: 3
+
+Response: Success
+ActionID: c27-a20-1-vi
+EventList: start
+Message: Device State Changes will follow
+
+Event: DeviceStateChange
+ActionID: c27-a20-1-vi
+Device: MWI:1234@devices@myaliases
+State: NOT_INUSE
+
+Event: DeviceStateChange
+ActionID: c27-a20-1-vi
+Device: MWI:1234@other
+State: NOT_INUSE
+
+Event: DeviceStateChange
+ActionID: c27-a20-1-vi
+Device: MWI:1234@default
+State: NOT_INUSE
+
+Event: DeviceStateListComplete
+ActionID: c27-a20-1-vi
+EventList: Complete
+ListItems: 3
+
+Response: Error
+ActionID: c27-a20-1-vii
+Message: Invalid/unknown command: DAHDIDNDon. Use Action: ListCommands to show available commands.
+
+Response: Error
+ActionID: c27-a20-1-viii
+Message: Invalid/unknown command: VerbaraNoSuchAction. Use Action: ListCommands to show available commands.
+
+Response: Success
+ActionID: c27-a20-1-ix
+EventList: Start
+Message: FAXSessionsEntry event list will follow
+
+Event: FAXSessionsComplete
+ActionID: c27-a20-1-ix
+EventList: Complete
+ListItems: 0
+Total: 0
+

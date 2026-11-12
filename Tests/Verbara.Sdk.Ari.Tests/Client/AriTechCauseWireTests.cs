@@ -173,6 +173,39 @@ public sealed class AriTechCauseWireTests
         warning.Message.Should().Contain("event_type=ChannelDestroyed");
     }
 
+    // Every way a frame can fail the parse still ends as a skipped frame with one warning, never as an exception
+    // that reaches the receive loop.
+    [Theory]
+    [InlineData("""{"type":"StasisStart",""")]                         // truncated JSON
+    [InlineData("""[{"type":"StasisStart"}]""")]                       // a root that is not an object
+    [InlineData("""42""")]                                             // a root that is a number
+    [InlineData("""{"type":5}""")]                                     // a type that is not a string
+    [InlineData("""{"type":"Unknown","application":7}""")]             // a fallback member of the wrong kind
+    [InlineData("""{"type":"StasisStart","channel":"not-an-object"}""")] // a typed member of the wrong kind
+    [InlineData("""{"type":"StasisStart","args":"\ud800"}""")]          // a lone surrogate escape
+    public void ParseEvent_ShouldSkipTheFrameWithOneWarning_WhenTheFrameCannotBeRead(string json)
+    {
+        var logger = new CapturingLogger<AriClient>();
+
+        var evt = AriClient.ParseEvent(json, logger);
+
+        evt.Should().BeNull();
+        logger.Entries.Should().ContainSingle().Which.Level.Should().Be(LogLevel.Warning);
+    }
+
+    [Fact]
+    public void ParseEvent_ShouldSkipTheFrameWithOneWarning_WhenTheTextIsNotValidUtf16()
+    {
+        // A lone surrogate in the text itself, which the parser cannot transcode to UTF-8.
+        var json = "{\"type\":\"StasisStart\",\"application\":\"" + '\ud800' + "\"}";
+        var logger = new CapturingLogger<AriClient>();
+
+        var evt = AriClient.ParseEvent(json, logger);
+
+        evt.Should().BeNull();
+        logger.Entries.Should().ContainSingle().Which.Level.Should().Be(LogLevel.Warning);
+    }
+
     [Theory]
     [InlineData("486", "\"tech_cause\":\"486\"")]
     [InlineData(null, "\"tech_cause\":null")]

@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Verbara.Sdk;
 using Verbara.Sdk.Enums;
+using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Diagnostics;
 using Verbara.Sdk.Ami.Generated;
 using Verbara.Sdk.Ami.Internal;
@@ -330,9 +331,22 @@ public sealed class AmiConnection : IAmiConnection
     /// or one the caller logged in for its <see cref="CallerReconnected"/> handlers: true from that login — while the lost
     /// session's buffered events may still be delivered, for the loop's — until those handlers have returned; false after
     /// a caller's connect that queued no notice. A notice that reaches delivery for a session no longer current clears
-    /// nothing. Read by Verbara.Sdk.Live.
+    /// nothing. Read by Verbara.Sdk.Live, which hears it become false through <see cref="ReconnectSettled"/>.
     /// </summary>
     internal bool ReconnectPending => Volatile.Read(ref _reconnectPendingFor) != 0;
+
+    /// <summary>
+    /// Raised on the notification queue, with the session's ordinal, right after the delivery of a session's
+    /// <see cref="Reconnected"/> or <see cref="CallerReconnected"/> has ended its pending reconnect: once for that session,
+    /// after its last handler returned and <see cref="ReconnectPending"/> became false. A delivery that ended nothing — for
+    /// a session no longer current, or after the caller ended the connection — raises nothing. A subscriber's failure is
+    /// logged as a handler's is.
+    /// </summary>
+    /// <remarks>
+    /// Subscribed to by Verbara.Sdk.Live (since 2.10.0); kept with this signature until 3.0, because a Live package of the
+    /// 2.x line runs on any newer Ami.
+    /// </remarks>
+    internal event Action<long>? ReconnectSettled;
 
     /// <summary>
     /// What this connection may have lost before the event being delivered, for a reader that compares two such marks
@@ -1293,11 +1307,12 @@ public sealed class AmiConnection : IAmiConnection
 
         try
         {
-            // Use source-generated serializer for AOT-compatible action dispatch
-            var actionName = GeneratedActionSerializer.GetActionName(action);
+            // A raw action carries its name and fields; every other action goes through the source-generated
+            // serializer, which refuses a type it does not declare before anything is written.
+            var (actionName, actionFields) = ResolveAction(action);
             using var activity = AmiActivitySource.StartAction(actionName, actionId);
 
-            var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
+            var fields = MaterializeAndLogFields(actionId, actionName, actionFields);
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
@@ -1337,10 +1352,10 @@ public sealed class AmiConnection : IAmiConnection
 
         try
         {
-            var actionName = GeneratedActionSerializer.GetActionName(action);
+            var (actionName, actionFields) = ResolveAction(action);
             using var activity = AmiActivitySource.StartAction(actionName, actionId);
 
-            var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
+            var fields = MaterializeAndLogFields(actionId, actionName, actionFields);
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
@@ -1484,10 +1499,10 @@ public sealed class AmiConnection : IAmiConnection
 
         try
         {
-            var actionName = GeneratedActionSerializer.GetActionName(action);
+            var (actionName, actionFields) = ResolveAction(action);
             using var activity = AmiActivitySource.StartAction(actionName, actionId);
 
-            var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
+            var fields = MaterializeAndLogFields(actionId, actionName, actionFields);
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
@@ -1522,6 +1537,17 @@ public sealed class AmiConnection : IAmiConnection
             _actionNames.TryRemove(actionId, out _);
         }
     }
+
+    /// <summary>
+    /// Resolves the name and the fields an action is written with: a <see cref="RawAction"/> carries its own, and
+    /// every other action is resolved by the source-generated serializer, which throws
+    /// <see cref="ArgumentException"/> for a type the SDK does not declare. Called inside each send path's
+    /// <see langword="try"/>, before any byte is written, so a refusal leaves no registration behind.
+    /// </summary>
+    private static (string Name, IEnumerable<KeyValuePair<string, string>> Fields) ResolveAction(ManagerAction action) =>
+        action is RawAction raw
+            ? (raw.Name, raw.Fields)
+            : (GeneratedActionSerializer.GetActionName(action), GeneratedActionSerializer.Serialize(action));
 
     private IEnumerable<KeyValuePair<string, string>> MaterializeAndLogFields(
         string actionId, string actionName, IEnumerable<KeyValuePair<string, string>> fields)
@@ -2050,10 +2076,29 @@ public sealed class AmiConnection : IAmiConnection
             finally
             {
                 // Only this session's delivery ends its pending reconnect; a newer session's is left as it is.
+                var settled = false;
                 lock (_endingLock)
                 {
                     if (Volatile.Read(ref _reconnectPendingFor) == session)
-                        Volatile.Write(ref _reconnectPendingFor, 0);
+                    {
+                        // A full fence: a channel read that publishes its coverage and whose completion then reads this
+                        // flag, and the ReconnectSettled subscriber that reads that coverage after this clear, never both
+                        // miss the other.
+                        Interlocked.Exchange(ref _reconnectPendingFor, 0);
+                        settled = true;
+                    }
+                }
+
+                if (settled)
+                {
+                    try
+                    {
+                        ReconnectSettled?.Invoke(session);
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        AmiConnectionLog.ReconnectHandlerError(_logger, ex);
+                    }
                 }
             }
         });

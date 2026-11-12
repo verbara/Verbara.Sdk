@@ -25,7 +25,7 @@ public sealed class StatusEvent : ResponseEvent
     /// <para>
     /// Measured on the Status replies of Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1: no frame carries
     /// a <c>CallerID</c> header, so the member is never assigned.
-    /// It still compiles, and the generated deserializer still binds it; nothing is taken away.
+    /// It still compiles, and the generated deserializer still binds it; it is removed in 2.11.0.
     /// </para>
     /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can
@@ -34,8 +34,9 @@ public sealed class StatusEvent : ResponseEvent
     /// </para>
     /// </remarks>
     [Obsolete(
-        "No supported Asterisk version sends a CallerID header on a Status frame, so this is always null. Read CallerIdNum (number) or CallerIdName (name).",
-        DiagnosticId = "VSDK0002")]
+        "No supported Asterisk version sends a CallerID header on a Status frame, so this is always null. Read CallerIdNum (number) or CallerIdName (name). Removed in Verbara.Sdk 2.11.0.",
+        DiagnosticId = "VSDK0002",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0002")]
     public string? CallerId { get; set; }
 
     public string? AccountCode { get; set; }
@@ -45,7 +46,7 @@ public sealed class StatusEvent : ResponseEvent
     /// <para>
     /// Measured on the Status replies of Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1: no frame carries
     /// an <c>Account</c> header, so the member is never assigned.
-    /// It still compiles, and the generated deserializer still binds it; nothing is taken away.
+    /// It still compiles, and the generated deserializer still binds it; it is removed in 2.11.0.
     /// </para>
     /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can
@@ -54,8 +55,9 @@ public sealed class StatusEvent : ResponseEvent
     /// </para>
     /// </remarks>
     [Obsolete(
-        "No supported Asterisk version sends an Account header on a Status frame, so this is always null. Read AccountCode.",
-        DiagnosticId = "VSDK0002")]
+        "No supported Asterisk version sends an Account header on a Status frame, so this is always null. Read AccountCode. Removed in Verbara.Sdk 2.11.0.",
+        DiagnosticId = "VSDK0002",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0002")]
     public string? Account { get; set; }
 
     /// <summary>Always null: no supported Asterisk version sends a <c>State</c> header on a Status frame. Read <see cref="ChannelStateDesc"/> (text) or <see cref="ChannelState"/> (numeric).</summary>
@@ -63,7 +65,7 @@ public sealed class StatusEvent : ResponseEvent
     /// <para>
     /// Measured on the Status replies of Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1: no frame carries
     /// a <c>State</c> header, so the member is never assigned.
-    /// It still compiles, and the generated deserializer still binds it; nothing is taken away.
+    /// It still compiles, and the generated deserializer still binds it; it is removed in 2.11.0.
     /// </para>
     /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can
@@ -72,8 +74,9 @@ public sealed class StatusEvent : ResponseEvent
     /// </para>
     /// </remarks>
     [Obsolete(
-        "No supported Asterisk version sends a State header on a Status frame, so this is always null. Read ChannelStateDesc (text) or ChannelState (numeric).",
-        DiagnosticId = "VSDK0002")]
+        "No supported Asterisk version sends a State header on a Status frame, so this is always null. Read ChannelStateDesc (text) or ChannelState (numeric). Removed in Verbara.Sdk 2.11.0.",
+        DiagnosticId = "VSDK0002",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0002")]
     public string? State { get; set; }
 
     /// <summary>The channel's dialplan extension, from the <c>Exten</c> header (for example <c>100</c>).</summary>
@@ -93,7 +96,7 @@ public sealed class StatusEvent : ResponseEvent
     /// <para>
     /// Measured on the Status replies of Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1: no frame carries
     /// a <c>BridgedChannel</c> header, so the member is never assigned.
-    /// It still compiles, and the generated deserializer still binds it; nothing is taken away.
+    /// It still compiles, and the generated deserializer still binds it; it is removed in 2.11.0.
     /// </para>
     /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can
@@ -102,8 +105,9 @@ public sealed class StatusEvent : ResponseEvent
     /// </para>
     /// </remarks>
     [Obsolete(
-        "No supported Asterisk version sends a BridgedChannel header on a Status frame, so this is always null. Read BridgeId: a Status frame names the bridge, never the peer channel.",
-        DiagnosticId = "VSDK0002")]
+        "No supported Asterisk version sends a BridgedChannel header on a Status frame, so this is always null. Read BridgeId: a Status frame names the bridge, never the peer channel. Removed in Verbara.Sdk 2.11.0.",
+        DiagnosticId = "VSDK0002",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0002")]
     public string? BridgedChannel { get; set; }
 
     /// <summary>Always null: no supported Asterisk version sends a <c>Link</c> header on a Status frame. Read <see cref="BridgeId"/>: a Status frame names the bridge, never the peer channel.</summary>
@@ -111,7 +115,7 @@ public sealed class StatusEvent : ResponseEvent
     /// <para>
     /// Measured on the Status replies of Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1: no frame carries
     /// a <c>Link</c> header, so the member is never assigned.
-    /// It still compiles, and the generated deserializer still binds it; nothing is taken away.
+    /// It still compiles, and the generated deserializer still binds it; it is removed in 2.11.0.
     /// </para>
     /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can
@@ -120,8 +124,9 @@ public sealed class StatusEvent : ResponseEvent
     /// </para>
     /// </remarks>
     [Obsolete(
-        "No supported Asterisk version sends a Link header on a Status frame, so this is always null. Read BridgeId: a Status frame names the bridge, never the peer channel.",
-        DiagnosticId = "VSDK0002")]
+        "No supported Asterisk version sends a Link header on a Status frame, so this is always null. Read BridgeId: a Status frame names the bridge, never the peer channel. Removed in Verbara.Sdk 2.11.0.",
+        DiagnosticId = "VSDK0002",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0002")]
     public string? Link { get; set; }
 
     /// <summary>Always null: no supported Asterisk version sends a <c>BridgedUniqueId</c> header on a Status frame. Read <see cref="BridgeId"/>: a Status frame names the bridge, never the peer channel.</summary>
@@ -129,7 +134,7 @@ public sealed class StatusEvent : ResponseEvent
     /// <para>
     /// Measured on the Status replies of Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1: no frame carries
     /// a <c>BridgedUniqueId</c> header, so the member is never assigned.
-    /// It still compiles, and the generated deserializer still binds it; nothing is taken away.
+    /// It still compiles, and the generated deserializer still binds it; it is removed in 2.11.0.
     /// </para>
     /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can
@@ -138,8 +143,9 @@ public sealed class StatusEvent : ResponseEvent
     /// </para>
     /// </remarks>
     [Obsolete(
-        "No supported Asterisk version sends a BridgedUniqueId header on a Status frame, so this is always null. Read BridgeId: a Status frame names the bridge, never the peer channel.",
-        DiagnosticId = "VSDK0002")]
+        "No supported Asterisk version sends a BridgedUniqueId header on a Status frame, so this is always null. Read BridgeId: a Status frame names the bridge, never the peer channel. Removed in Verbara.Sdk 2.11.0.",
+        DiagnosticId = "VSDK0002",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0002")]
     public string? BridgedUniqueId { get; set; }
 
     public string? LinkedId { get; set; }

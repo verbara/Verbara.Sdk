@@ -203,9 +203,16 @@ public sealed class AriOutboundConnection : IAsyncDisposable
         {
             ExitCompletion(previous);
             _completionPublished.TrySetResult();
-            if (Volatile.Read(ref _released) != 0)
-                _eventSubject.Dispose();
+            DisposeSubjectOnceReleasedAndPublished();
         }
+    }
+
+    // The subject goes once both the release and the completion's publication happened, by whichever of the two
+    // ends last: the publisher, when a release was requested while it ran, or the release, after the publication.
+    private void DisposeSubjectOnceReleasedAndPublished()
+    {
+        if (Volatile.Read(ref _released) != 0 && _completionPublished.Task.IsCompleted)
+            _eventSubject.Dispose();
     }
 
     // Listener shutdown releases all transports before invoking completion observers. A callback
@@ -227,7 +234,6 @@ public sealed class AriOutboundConnection : IAsyncDisposable
         _webSocket.Dispose();
         // A different callback may have requested this release while our publisher was active.
         // The publisher performs deferred release; its signal also covers a release racing its end.
-        if (_completionPublished.Task.IsCompleted)
-            _eventSubject.Dispose();
+        DisposeSubjectOnceReleasedAndPublished();
     }
 }

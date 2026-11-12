@@ -41,7 +41,7 @@ The 26 legacy event types this section used to list — app_meetme, Monitor, the
 
 An event that no longer has a typed class still arrives, as a `ManagerEvent` (see [Fallback Behavior](#fallback-behavior)).
 
-The actions, responses and events of chan_sip, res_monitor, app_meetme, Skype for Asterisk, the Zaptel action names, chan_agent's callback login, app_setcdruserfield and the event names Asterisk 10 and 12 renamed or removed are deprecated in 2.9.0 under the `VSDK0005` warning and removed in 2.10.0: see [VSDK0005](obsolete-ami-events-removal-migration.md#vsdk0005).
+The actions, responses and events of chan_sip, res_monitor, app_meetme, Skype for Asterisk, the Zaptel action names, chan_agent's callback login, app_setcdruserfield and the event names Asterisk 10 and 12 renamed or removed were deprecated in 2.9.0 under the `VSDK0005` warning and are removed in 2.10.0; a removed event name arrives as a `ManagerEvent`. See [VSDK0005](obsolete-ami-events-removal-migration.md#vsdk0005) for each replacement.
 
 ## An AMI Event Held Until the Client Writes (before 20.21.0, 22.11.0 and 23.5.0)
 
@@ -88,7 +88,7 @@ static async Task PrintChannelsAsync(AmiConnection connection)
 </PropertyGroup>
 ```
 
-**The six members stay.** They still compile and still bind; nothing is removed, and no release is scheduled to remove them. A program compiled against an earlier release keeps running against 2.9.0 without recompiling, and reads null from them, as it always did.
+**The six members stay until 2.11.0.** They still compile and still bind in 2.9.0 and 2.10.0, and a program compiled against an earlier release keeps running without recompiling, reading null from them as it always did. From 2.10.0 the warning's message ends `Removed in Verbara.Sdk 2.11.0.`: 2.11.0 removes them.
 
 **`Extension` reads `Exten`.** Every measured version sends the dialplan extension under the header `Exten`, never `Extension`, so before 2.9.0 `StatusEvent.Extension` was always null. It now reads `Exten`, also for a program compiled against an earlier release, because the binding lives in `Verbara.Sdk.Ami`. A leg whose `Exten` is empty, such as the dialled leg of a `Dial()` that is running `AppDial`, reads `""`, not null.
 

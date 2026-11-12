@@ -344,11 +344,18 @@ public sealed class AudioSocketSession : IAsyncDisposable
             }
         }
         catch (OperationCanceledException) { /* normal shutdown */ }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             // A write may have met the same failure and reported it already.
             if (Interlocked.Exchange(ref _transportFailureReported, 1) == 0)
                 AudioSocketLog.ReadLoopEnded(_logger, ex, ChannelId);
+        }
+        catch (OutOfMemoryException ex)
+        {
+            // Caught here, unlike in the catches that have a caller above them: nothing awaits this task, so an
+            // exception that leaves it is seen by nobody. It is not the transport's failure and does not take that
+            // report's place; the finally ends the session as it does for every ending.
+            AudioSocketLog.ReadLoopOutOfMemory(_logger, ex, ChannelId);
         }
         finally
         {

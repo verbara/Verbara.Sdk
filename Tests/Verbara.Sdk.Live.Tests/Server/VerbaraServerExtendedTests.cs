@@ -276,9 +276,8 @@ public sealed class VerbaraServerExtendedTests : IAsyncLifetime
         _sut.Queues.GetByName("sales")!.MemberCount.Should().Be(0);
     }
 
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
-    public async Task EventObserver_ShouldRouteQueueMemberPausedEvent()
+    public async Task EventObserver_ShouldRouteQueueMemberPauseEventWithItsReason()
     {
         await _sut.StartAsync();
 
@@ -286,16 +285,17 @@ public sealed class VerbaraServerExtendedTests : IAsyncLifetime
         {
             Queue = "sales", Interface = "PJSIP/2000", MemberName = "Agent 2000"
         });
-        _capturedObserver.OnNext(new QueueMemberPausedEvent
+        _capturedObserver.OnNext(new QueueMemberPauseEvent
         {
-            Queue = "sales", Interface = "PJSIP/2000", Paused = true, Reason = "Break"
+            Paused = true,
+            Pausedreason = "Break",
+            RawFields = new Dictionary<string, string> { ["Queue"] = "sales", ["Interface"] = "PJSIP/2000" },
         });
 
         var member = _sut.Queues.GetByName("sales")!.Members["PJSIP/2000"];
         member.Paused.Should().BeTrue();
         member.PausedReason.Should().Be("Break");
     }
-#pragma warning restore VSDK0005
 
     [Fact]
     public async Task EventObserver_ShouldRouteQueueMemberStatusEvent()
