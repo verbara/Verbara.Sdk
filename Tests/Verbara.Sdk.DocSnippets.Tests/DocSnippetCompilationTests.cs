@@ -128,7 +128,6 @@ public sealed class DocSnippetCompilationTests
         "docs/guides/high-load-tuning.md",
         "docs/guides/migration-2.9.0.md",
         "docs/guides/migration-2.10.0.md",
-        "docs/guides/migration-2.11.0.md",
         "docs/guides/obsolete-ami-events-removal-migration.md",
         "docs/guides/session-store-backends.md",
         "docs/guides/troubleshooting.md",
