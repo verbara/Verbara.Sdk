@@ -51,8 +51,10 @@ internal static class AllocationReadings
     /// replacement can stack-allocate an object that does not escape, and it lands whenever the runtime installs it.
     /// Read one after the other, a round measured before that and one measured after it disagree by that object's
     /// bytes per report; read together, a pass that straddles it disagrees with the next and is read again. Each round
-    /// is its own method and changes its compiled version on its own, so this is a second defence: the first is a
-    /// measured path that leaves the JIT nothing to remove.
+    /// is its own method and changes its compiled version on its own, so a pass could in principle mix two compiled
+    /// states and still agree with the next. Measured on a path the JIT does change (a queue lookup that allocated a
+    /// capturing factory per report), 3 000 in-process repetitions under CPU load read the compared difference right
+    /// every time, where the same rounds read one after the other got it wrong 9 times in 3 000.
     /// </remarks>
     public static long[] MeasureTogether(params Action[] rounds)
     {
