@@ -417,10 +417,12 @@ public sealed class AudioSocketSessionTests : IAsyncLifetime
 
         await session.HungUp.WaitAsync(TimeSpan.FromSeconds(5));
 
+        using var scope = new AssertionScope();
         Volatile.Read(ref hangups.Count).Should().Be(1, "the session still ends and raises its hangup once");
+        logger.Entries.Should().ContainSingle(e => e.Exception is OutOfMemoryException)
+            .Which.Level.Should().Be(LogLevel.Error, "nothing awaits the read loop, so this entry is the only record of it");
         logger.Entries.Should().NotContain(
-            e => e.Exception is OutOfMemoryException,
-            "the process cannot go on: an out-of-memory is not the session's transport failure, and no catch hides it");
+            e => e.Level == LogLevel.Warning, "an out-of-memory is not reported as the session's transport failure");
     }
 
     private static async Task<(AudioSocketSession Session, HangupCount Hangups, IAsyncDisposable Release)>
