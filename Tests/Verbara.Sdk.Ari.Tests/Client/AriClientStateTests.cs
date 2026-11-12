@@ -193,6 +193,92 @@ public sealed class AriClientStateTests
     }
 
     [Fact]
+    public async Task ReconnectLoop_ShouldEndFaultedAndReportOnce_WhenAReconnectAttemptThrowsOutOfMemory()
+    {
+        using var server = new TcpListener(IPAddress.Loopback, 0);
+        server.Start();
+        var port = ((IPEndPoint)server.LocalEndpoint).Port;
+
+        // The reconnect dial's bound is the first thing an attempt asks the clock for, so a clock armed once the
+        // loop announces its first attempt fails that attempt, and no other.
+        var clock = new ArmableClock();
+        var logger = new ArmingLogger(clock, "Reconnecting");
+        var sut = new AriClient(Options.Create(new AriClientOptions
+        {
+            BaseUrl = $"http://127.0.0.1:{port}",
+            Username = "asterisk",
+            Password = "asterisk",
+            Application = "test-app",
+            ReconnectInitialDelay = TimeSpan.FromMilliseconds(20),
+            ReconnectMaxDelay = TimeSpan.FromMilliseconds(20),
+            // Backstop: a loop that took the out-of-memory for a failed attempt ends here, through ReconnectGaveUp.
+            MaxReconnectAttempts = 2
+        }), logger)
+        {
+            TimeProvider = clock,
+        };
+
+        // Accept the events socket, complete the upgrade, then drop it: the client starts reconnecting.
+        var firstConnection = Task.Run(async () =>
+        {
+            using var accepted = await server.AcceptTcpClientAsync();
+            var stream = accepted.GetStream();
+            var (wsKey, _) = await WebSocketAudioServer.ReadUpgradeRequestAsync(stream, CancellationToken.None);
+            await WebSocketAudioServer.SendUpgradeResponseAsync(stream, wsKey!, CancellationToken.None);
+        });
+        await sut.ConnectAsync();
+        await firstConnection;
+
+        try
+        {
+            // Nothing awaits the events loop for its outcome, so it ends without throwing and the state carries it.
+            await sut.EventLoop!.WaitAsync(WaitLimit);
+
+            using (new AssertionScope())
+            {
+                sut.State.Should().Be(AriConnectionState.Faulted, "no loop is left to reconnect, and the state says so");
+                // The drop of the first connection is a socket error of its own; the out-of-memory is not reported as one.
+                logger.Entries.Should().ContainSingle(e => e.Exception is OutOfMemoryException)
+                    .Which.EventId.Name.Should().Be("EventLoopOutOfMemory", "it is reported once, as what it is");
+                logger.Entries.Count(e => e.EventId.Name == "Reconnecting").Should().Be(1, "it is not retried");
+                logger.Entries.Should().NotContain(e => e.EventId.Name == "ReconnectGaveUp");
+            }
+        }
+        finally
+        {
+            clock.Disarm(); // the disposal's own bounds run on the same clock
+            await sut.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task EventLoop_ShouldEndFaultedAndReportOnce_WhenOutOfMemoryIsRaisedWhileReceiving()
+    {
+        // The first event's log line is the seam: the logger throws out-of-memory on it, inside the receive loop of the
+        // first connection, not a reconnect.
+        var logger = new ThrowOnceLogger("EventReceived");
+        await using var peer = new ClosePeer(answerClose: true);
+        var sut = new AriClient(CloseOptions(peer.Port), logger);
+        await sut.ConnectAsync();
+        var loop = sut.EventLoop!;
+
+        await loop.WaitAsync(WaitLimit)
+            .ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+
+        using (new AssertionScope())
+        {
+            loop.Status.Should().Be(TaskStatus.RanToCompletion, "nothing awaits the events loop for its outcome");
+            sut.State.Should().Be(AriConnectionState.Faulted, "a client whose events loop is gone does not say Connected");
+            logger.Entries.Should().ContainSingle(e => e.Exception is OutOfMemoryException)
+                .Which.EventId.Name.Should().Be("EventLoopOutOfMemory", "it is reported once, as what it is");
+        }
+
+        var dispose = async () => await sut.DisposeAsync();
+        await dispose.Should().NotThrowAsync("the loop's ending was already reported, and the clean-up runs to its end");
+        sut.State.Should().Be(AriConnectionState.Disconnected);
+    }
+
+    [Fact]
     public async Task ConnectAsync_ShouldFaultAndStopReconnecting_WhenTheRefusedDialIsNotTheCurrentSocket()
     {
         using var server = new TcpListener(IPAddress.Loopback, 0);
@@ -1865,6 +1951,74 @@ public sealed class AriClientStateTests
     /// <summary>
     /// Keeps what the client logged. <see cref="Entries"/> hands out a copy taken under the write lock.
     /// </summary>
+    // Only the runtime may throw it; a test has to raise it itself.
+#pragma warning disable CA1859, CA2201, MA0012
+    private static Exception OutOfMemory() => new OutOfMemoryException();
+#pragma warning restore CA1859, CA2201, MA0012
+
+    /// <summary>The system clock until <see cref="Arm"/>; from then on every timer it is asked for throws out-of-memory.</summary>
+    private sealed class ArmableClock : TimeProvider
+    {
+        private int _armed;
+
+        public void Arm() => Volatile.Write(ref _armed, 1);
+
+        public void Disarm() => Volatile.Write(ref _armed, 0);
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
+            Volatile.Read(ref _armed) != 0
+                ? throw OutOfMemory()
+                : System.CreateTimer(callback, state, dueTime, period);
+    }
+
+    /// <summary>Records like <see cref="RecordingLogger"/>, and throws out-of-memory the first time it logs the event named <paramref name="throwOn"/>.</summary>
+    private sealed class ThrowOnceLogger(string throwOn) : ILogger<AriClient>
+    {
+        private readonly RecordingLogger _inner = new();
+        private int _thrown;
+
+        public IReadOnlyList<LogEntry> Entries => _inner.Entries;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            _inner.Log(logLevel, eventId, state, exception, formatter);
+            if (eventId.Name == throwOn && Interlocked.Exchange(ref _thrown, 1) == 0)
+                throw OutOfMemory();
+        }
+    }
+
+    /// <summary>Records like <see cref="RecordingLogger"/>, and arms <paramref name="clock"/> on the event named <paramref name="armOn"/>.</summary>
+    private sealed class ArmingLogger(ArmableClock clock, string armOn) : ILogger<AriClient>
+    {
+        private readonly RecordingLogger _inner = new();
+
+        public IReadOnlyList<LogEntry> Entries => _inner.Entries;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            _inner.Log(logLevel, eventId, state, exception, formatter);
+            if (eventId.Name == armOn) clock.Arm();
+        }
+    }
+
     private sealed class RecordingLogger : ILogger<AriClient>
     {
         private readonly List<LogEntry> _entries = [];

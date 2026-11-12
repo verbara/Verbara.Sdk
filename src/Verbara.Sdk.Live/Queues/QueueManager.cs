@@ -229,7 +229,7 @@ public sealed class QueueManager
     /// <summary>Handle QueueParams event (queue configuration snapshot).</summary>
     public void OnQueueParams(string queueName, int max, string? strategy, int calls, int holdTime, int talkTime, int completed, int abandoned)
     {
-        var queue = _queues.GetOrAdd(queueName, _ => new AsteriskQueue { Name = queueName });
+        var queue = _queues.GetOrAdd(queueName, static name => new AsteriskQueue { Name = name });
         lock (queue.SyncRoot)
         {
             queue.Max = max;
@@ -298,7 +298,7 @@ public sealed class QueueManager
     {
         while (true)
         {
-            var queue = _queues.GetOrAdd(queueName, _ => new AsteriskQueue { Name = queueName });
+            var queue = _queues.GetOrAdd(queueName, static name => new AsteriskQueue { Name = name });
             lock (queue.SyncRoot)
             {
                 if (queue.RemovedFromTable)
@@ -751,7 +751,7 @@ public sealed class QueueManager
             bool inserted;
             while (true)
             {
-                var queue = _queues.GetOrAdd(queueName, _ => new AsteriskQueue { Name = queueName });
+                var queue = _queues.GetOrAdd(queueName, static name => new AsteriskQueue { Name = name });
                 lock (queue.SyncRoot)
                 {
                     // Taken out of the table after GetOrAdd returned it (a snapshot that omitted it, or RemoveQueue): the
