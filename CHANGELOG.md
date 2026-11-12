@@ -449,7 +449,8 @@ reporting is ignored. The SDK's own subscribers, the session engine included, ar
 troubleshooting guide documented the first failure as rethrown from the call that made the change: code that catches
 around a direct `ChannelManager.On*` call, or alerts on `[AMI_EVENT] Observer threw` / `ami.events.observer_faults` for a
 channel handler's failure, should read the new counter instead. `QueueManager` and `MeetMeManager` keep their rule. A
-delivery allocates nothing per subscriber. See the [migration guide](docs/guides/migration-2.10.0.md).
+delivery allocates nothing per subscriber. See the
+[migration guide](docs/guides/migration-2.10.0.md#a-channel-subscribers-failure-stays-with-that-subscriber).
 
 ### Fixed: a live channel follows its dialplan location and caller ID (#516)
 
@@ -587,7 +588,8 @@ has been admitted since, `0` otherwise, with no later call needed.
 What breaks: an alert, a dashboard or a health check that needs an unbroken `2`. That run was unbroken only because it was
 stale: under traffic the circuit cycles, so a rule such as "`circuit.state` is 2 for five minutes" may not fire during the
 outage it was written for, and a timer started at the last state change is reset the same way. Move it to `circuit.opened`,
-which counts trips; see the [migration guide](docs/guides/migration-2.10.0.md).
+which counts trips; see the
+[migration guide](docs/guides/migration-2.10.0.md#circuitstate-reports-the-breakers-current-state).
 
 ### Added: `ResiliencePolicy.GetCircuitState` (#509)
 
@@ -636,10 +638,10 @@ attribute counts fall back to `OTEL_ATTRIBUTE_COUNT_LIMIT`; scope attributes fro
 `OTEL_ATTRIBUTE_COUNT_LIMIT`; blobs that an earlier version wrote to the experimental disk-retry storage are not resent.
 The SDK's own telemetry triggers none of these. No public API change.
 
-### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.20 (#474, #508)
+### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.31 (#474, #508, #538)
 
-`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.20` instead of `>= 3.3.1`, and its
-`Microsoft.Extensions.*` dependencies rise from `>= 10.0.5` to `>= 10.0.13`, the floor 3.4.20 sets. Since 3.4.0, StackExchange.Redis opens a separate
+`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.31` instead of `>= 3.3.1`, and its
+`Microsoft.Extensions.*` dependencies rise from `>= 10.0.5` to `>= 10.0.13`, the floor 3.4.31 sets. Since 3.4.0, StackExchange.Redis opens a separate
 subscription connection under RESP3, as it always did under RESP2, so the interactive connection is no longer subject
 to the server's much tighter `client-output-buffer-limit pubsub`. Measured on 3.4.5 against Redis 7 with default settings, a
 store registered with `UseRedis(o => o.ConfigurationString = ...)` now holds two client connections per server
@@ -647,6 +649,19 @@ instead of one; the second carries only the library's configuration channel. All
 connection-count alerts. To keep one connection, add `sharedSubscriptionConnection=true` to the configuration string,
 after checking the server's pub/sub output-buffer limit against your largest replies. A store given its own
 `IConnectionMultiplexer` follows the application's StackExchange.Redis version. No public API change.
+
+### Added: Asterisk 24 LTS is supported (#543, #544, #562)
+
+2.10.0 is the first release that supports Asterisk 24. CI runs the Functional and Integration suites on 24.0.0, the
+first generally available 24 build (2026-11-05), alongside 22.12.0 and 23.6.0, each pinned by digest. Asterisk 22 and 24
+are the primary lines and 23 the secondary one until its end of life on 2027-10-15. See the
+[version matrix](docs/guides/asterisk-version-matrix.md).
+
+### Changed: `Verbara.Sdk.Push.Nats` and `Verbara.Sdk.VoiceAi.TurnDetection` raise a dependency floor (#538)
+
+`Verbara.Sdk.Push.Nats` now declares `NATS.Client.Core >= 3.3.2` instead of `>= 3.3.1`, and
+`Verbara.Sdk.VoiceAi.TurnDetection` declares `Microsoft.ML.OnnxRuntime >= 1.31.1` instead of `>= 1.31.0`. Both are
+patch releases of the same library. No public API change.
 
 ## [2.9.0] - 2026-10-28
 
