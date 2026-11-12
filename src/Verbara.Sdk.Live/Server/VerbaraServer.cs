@@ -257,6 +257,12 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>Observes the actual list/deferred fence selected immediately before its wait; null in production.</summary>
     internal Action<string, long>? FenceWaitObserved { get; set; }
 
+    /// <summary>
+    /// Null in production; observes a channel application after it wrote the verified flag and before it leaves. Its
+    /// argument says whether the application applied in full.
+    /// </summary>
+    internal Action<bool>? ChannelApplicationWritten { get; set; }
+
     /// <summary>Null in production; observes collection of a queue row without publishing a queue event.</summary>
     internal Action? QueueRowBuffered { get; set; }
 
@@ -541,6 +547,7 @@ public sealed class VerbaraServer : IVerbaraServer
         {
             amiConnection.Lost += OnConnectionLost;
             amiConnection.CallerReconnected += OnCallerReconnected;
+            amiConnection.ReconnectSettled += OnReconnectSettled;
         }
 
         // Register observable gauges for live state (all typed as long for consistent metric reporting)
@@ -580,6 +587,29 @@ public sealed class VerbaraServer : IVerbaraServer
     }
 
     private void OnReconnected() => ReloadNewSession(_disposing.Token);
+
+    private void OnReconnectSettled(long session) => AnnounceSettledTable();
+
+    // A table can become covered at a moment no channel read's own completion announces: the end of a pending reconnect,
+    // and the exit of an application that waited out its bound behind one that verified the table while it was still
+    // counted. Announced here, so that the decisions waiting on a covered table are taken again.
+    private void AnnounceSettledTable()
+    {
+        // A delivery reads its handlers once, so a disposal that began after that read does not unhook this one.
+        if (_disposing.IsCancellationRequested || !ChannelTableCovered)
+            return;
+        ChannelTableSettled?.Invoke(new ChannelSnapshotCompletion(this, Interlocked.Read(ref _reconnects),
+            (_connection as AmiConnection)?.FullyBooted));
+    }
+
+    /// <summary>
+    /// Raised when the channel table becomes covered (<see cref="ChannelTableCovered"/>) at a moment no channel read's
+    /// own completion announces: at the end of a pending reconnect, on the connection's notification queue, and when a
+    /// channel application that waited out its bound is the last to leave behind one that verified the table, on that
+    /// reader's thread. Never raised once the server is being disposed. Separate from
+    /// <see cref="ChannelSnapshotCompleted"/>, which a channel read that applied in full raises when it completes.
+    /// </summary>
+    internal event Action<ChannelSnapshotCompletion>? ChannelTableSettled;
 
     /// <summary>
     /// The session a caller's own connect brought back after a loss. The connection delivers it behind that loss, for
@@ -916,6 +946,7 @@ public sealed class VerbaraServer : IVerbaraServer
             Volatile.Write(ref _channelVerifiedConnection, channelConnection);
             Interlocked.Exchange(ref _channelVerifiedSession, channelSession);
             Volatile.Write(ref _channelTableVerified, full && channelSession == Interlocked.Read(ref _reconnects) ? 1 : 0);
+            ChannelApplicationWritten?.Invoke(full);
 
             // The read covers its sample only when it completed on the session it began on, its wait was reached (not
             // run out, not skipped inside a dispatch), it kept no channel received before its Status, and no other read
@@ -940,6 +971,8 @@ public sealed class VerbaraServer : IVerbaraServer
         finally { Interlocked.Decrement(ref _channelApplications); }
         if (full && ChannelTableComplete)
             ChannelSnapshotCompleted?.Invoke(new ChannelSnapshotCompletion(this, channelSession, channelConnection));
+        else if (!full)
+            AnnounceSettledTable();
         return channelSnapshot;
     }
 
@@ -2151,6 +2184,7 @@ public sealed class VerbaraServer : IVerbaraServer
             {
                 amiConnection.Lost -= OnConnectionLost;
                 amiConnection.CallerReconnected -= OnCallerReconnected;
+                amiConnection.ReconnectSettled -= OnReconnectSettled;
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

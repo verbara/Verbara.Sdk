@@ -2226,6 +2226,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         public void Attach(CallSessionManager manager, string serverId)
         {
             Server.ChannelSnapshotCompleted += onChannelSnapshotCompleted;
+            Server.ChannelTableSettled += onChannelSnapshotCompleted;
             Server.Channels.ChannelAdded += onAdded;
             manager.Step(HandlerStep.AttachmentArrivalSubscribed, serverId, string.Empty);
             Server.Channels.ChannelRemoved += onRemoved;
@@ -2255,6 +2256,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         {
             _detached.TrySetResult();
             Server.ChannelSnapshotCompleted -= onChannelSnapshotCompleted;
+            Server.ChannelTableSettled -= onChannelSnapshotCompleted;
             Server.Channels.ChannelAdded -= onAdded;
             Server.Channels.ChannelRemoved -= onRemoved;
             Server.Channels.ChannelStateChanged -= onStateChanged;

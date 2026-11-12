@@ -330,9 +330,22 @@ public sealed class AmiConnection : IAmiConnection
     /// or one the caller logged in for its <see cref="CallerReconnected"/> handlers: true from that login — while the lost
     /// session's buffered events may still be delivered, for the loop's — until those handlers have returned; false after
     /// a caller's connect that queued no notice. A notice that reaches delivery for a session no longer current clears
-    /// nothing. Read by Verbara.Sdk.Live.
+    /// nothing. Read by Verbara.Sdk.Live, which hears it become false through <see cref="ReconnectSettled"/>.
     /// </summary>
     internal bool ReconnectPending => Volatile.Read(ref _reconnectPendingFor) != 0;
+
+    /// <summary>
+    /// Raised on the notification queue, with the session's ordinal, right after the delivery of a session's
+    /// <see cref="Reconnected"/> or <see cref="CallerReconnected"/> has ended its pending reconnect: once for that session,
+    /// after its last handler returned and <see cref="ReconnectPending"/> became false. A delivery that ended nothing — for
+    /// a session no longer current, or after the caller ended the connection — raises nothing. A subscriber's failure is
+    /// logged as a handler's is.
+    /// </summary>
+    /// <remarks>
+    /// Subscribed to by Verbara.Sdk.Live (since 2.10.0); kept with this signature until 3.0, because a Live package of the
+    /// 2.x line runs on any newer Ami.
+    /// </remarks>
+    internal event Action<long>? ReconnectSettled;
 
     /// <summary>
     /// What this connection may have lost before the event being delivered, for a reader that compares two such marks
@@ -2050,10 +2063,29 @@ public sealed class AmiConnection : IAmiConnection
             finally
             {
                 // Only this session's delivery ends its pending reconnect; a newer session's is left as it is.
+                var settled = false;
                 lock (_endingLock)
                 {
                     if (Volatile.Read(ref _reconnectPendingFor) == session)
-                        Volatile.Write(ref _reconnectPendingFor, 0);
+                    {
+                        // A full fence: a channel read that publishes its coverage and whose completion then reads this
+                        // flag, and the ReconnectSettled subscriber that reads that coverage after this clear, never both
+                        // miss the other.
+                        Interlocked.Exchange(ref _reconnectPendingFor, 0);
+                        settled = true;
+                    }
+                }
+
+                if (settled)
+                {
+                    try
+                    {
+                        ReconnectSettled?.Invoke(session);
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
+                    {
+                        AmiConnectionLog.ReconnectHandlerError(_logger, ex);
+                    }
                 }
             }
         });
