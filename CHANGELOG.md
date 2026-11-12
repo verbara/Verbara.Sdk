@@ -42,7 +42,7 @@ allocates a capturing factory (88 B per params report, 96 B per member added or 
 subscribed to allocates nothing beyond the member or entry it stores, and a caller's join and leave costs 168 B with no
 subscriber and 520 B with one, down from 264 B and 616 B.
 
-### Added: an AMI action the SDK does not type is sent by name with `RawAction` (#NNN-RAW)
+### Added: an AMI action the SDK does not type is sent by name with `RawAction` (#561)
 
 `new RawAction("DAHDIDNDon").Add("DAHDIChannel", "1")` is sent through any `IAmiConnection` send method as
 `Action: DAHDIDNDon`, its `ActionID` and its fields in the order they were added, repeated keys kept. The name must be
@@ -51,7 +51,7 @@ holds no CR or LF. Each is checked where the action is built and throws `Argumen
 value. The response is read as the typed action of the same name would be, or as a base `ManagerResponse` with
 `RawFields`. This makes the 2.9.0 `Zap*` migration instruction ("send the DAHDI… action") one you can follow.
 
-### Changed — BREAKING: an action the SDK cannot write is refused instead of being sent under its class name (#NNN-RAW)
+### Changed — BREAKING: an action the SDK cannot write is refused instead of being sent under its class name (#561)
 
 A `ManagerAction` subclass of your own used to be written as its class name without `Action`, with none of its
 properties or extra fields. It now throws `ArgumentException` naming its type and `RawAction`, before any byte is
