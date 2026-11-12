@@ -102,11 +102,8 @@ internal static class DeadModuleDeprecationScanner
             if (key is null)
                 continue;
 
-            foreach (var candidate in key.Split('|'))
-            {
-                if (inPackage.Contains(candidate))
-                    violations.Add($"{relative}:{Line(node)}: {candidate} is declared again; it was removed in 2.10.0");
-            }
+            foreach (var candidate in key.Split('|').Where(inPackage.Contains))
+                violations.Add($"{relative}:{Line(node)}: {candidate} is declared again; it was removed in 2.10.0");
         }
     }
 
@@ -150,12 +147,11 @@ internal static class DeadModuleDeprecationScanner
             }
         }
 
-        foreach (var pragma in root.DescendantTrivia(descendIntoTrivia: true)
-                     .Select(t => t.GetStructure()).OfType<PragmaWarningDirectiveTriviaSyntax>())
-        {
-            if (pragma.ErrorCodes.Any(c => string.Equals(c.ToString().Trim(), DiagnosticId, StringComparison.Ordinal)))
-                violations.Add($"{relative}:{Line(pragma)}: a #pragma warning names the retired id {DiagnosticId}");
-        }
+        var namingPragmas = root.DescendantTrivia(descendIntoTrivia: true)
+            .Select(t => t.GetStructure()).OfType<PragmaWarningDirectiveTriviaSyntax>()
+            .Where(p => p.ErrorCodes.Any(c => string.Equals(c.ToString().Trim(), DiagnosticId, StringComparison.Ordinal)));
+        foreach (var pragma in namingPragmas)
+            violations.Add($"{relative}:{Line(pragma)}: a #pragma warning names the retired id {DiagnosticId}");
     }
 
     /// <summary>(b), in build configuration: any project, props, targets, editorconfig, globalconfig or response file naming the id.</summary>
