@@ -11,7 +11,9 @@ namespace Verbara.Sdk.Resilience;
 /// <remarks>
 /// Execution order when all three primitives are configured:
 /// <list type="number">
-///   <item>Circuit check (throws <see cref="CircuitBreakerOpenException"/> if open).</item>
+///   <item>Circuit check (throws <see cref="CircuitBreakerOpenException"/> if open, or if half-open with its one
+///     probe already admitted). Past the open window the first call is the probe; a failed probe re-opens the
+///     circuit, so a retry after it is rejected too.</item>
 ///   <item>Per-attempt timeout (linked <see cref="CancellationTokenSource"/>).</item>
 ///   <item>Action invocation.</item>
 ///   <item>On failure: record + retry with exponential backoff (if configured).</item>
@@ -58,7 +60,7 @@ public sealed class ResiliencePolicy
     /// <param name="key">Logical key identifying the circuit bucket (per-node, per-provider, etc.).</param>
     /// <param name="action">The operation to execute. Receives the effective cancellation token (includes timeout linkage when configured).</param>
     /// <param name="ct">Caller cancellation token.</param>
-    /// <exception cref="CircuitBreakerOpenException">The circuit for <paramref name="key"/> is open.</exception>
+    /// <exception cref="CircuitBreakerOpenException">The circuit for <paramref name="key"/> is open, or half-open with its probe in flight.</exception>
     /// <exception cref="TimeoutException">A per-attempt timeout elapsed (and retries, if any, are exhausted).</exception>
     /// <exception cref="OperationCanceledException">Caller token cancelled; propagated unchanged.</exception>
     public async ValueTask<T> ExecuteAsync<T>(
@@ -115,12 +117,11 @@ public sealed class ResiliencePolicy
                     result = await action(ct).ConfigureAwait(false);
                 }
 
-                // Success path — clear circuit if it was previously trending to open.
+                // Success path — close the circuit; count the close on the one success that moved it out of open
+                // or half-open, so a successful probe counts and concurrent successes count once.
                 if (state is not null)
                 {
-                    var wasOpen = state.IsOpen;
-                    state.RecordSuccess();
-                    if (wasOpen)
+                    if (state.RecordSuccessReportingClose())
                     {
                         ResilienceMetrics.CircuitClosed.Add(
                             1,
@@ -141,6 +142,7 @@ public sealed class ResiliencePolicy
                 lastException = ex;
 
                 // Count on the win alone: a success may close the circuit right after it, and the trip still happened.
+                // A failed probe re-opens a half-open circuit and wins too.
                 if (state is not null
                     && _circuitThreshold is int threshold
                     && state.RecordFailureReportingTrip(threshold, _time))
