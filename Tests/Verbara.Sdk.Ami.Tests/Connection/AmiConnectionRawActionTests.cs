@@ -192,6 +192,48 @@ public sealed class AmiConnectionRawActionTests
             "every captured entry is yielded, in the order received");
     }
 
+    /// <summary>The nine captured frames as a consumer writes them, independently of the fixture's bytes.</summary>
+    private static RawAction CapturedWorkload(string frame) => frame switch
+    {
+        "i" => new RawAction("Ping"),
+        "ii" => new RawAction("LoggerRotate"),
+        "iii" => new RawAction("ListCategories").Add("Filename", "manager.conf"),
+        "iv" => new RawAction("IAXpeers"),
+        "v" => new RawAction("DeviceStateList"),
+        "vi" => new RawAction("devicestatelist"),
+        "vii" => new RawAction("DAHDIDNDon").Add("DAHDIChannel", "1"),
+        "viii" => new RawAction("VerbaraNoSuchAction"),
+        "ix" => new RawAction("FAXSessions"),
+        _ => throw new ArgumentOutOfRangeException(nameof(frame), frame, "Unknown frame."),
+    };
+
+    public static TheoryData<string, string> CapturedFrames()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var version in AmiActionByNameWireCapture.Versions)
+        {
+            foreach (var frame in AmiActionByNameWireCapture.Frames)
+                data.Add(version, frame);
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(CapturedFrames))]
+    public async Task SendActionAsync_ShouldWriteTheCapturedClientBytes_WhenTheCapturedWorkloadIsSentAsRawActions(
+        string version, string frame)
+    {
+        await using var rig = await Rig.ConnectAsync();
+        var action = CapturedWorkload(frame);
+        action.ActionId = AmiActionByNameWireCapture.CapturedActionId(version, frame);
+
+        var (sent, _) = await rig.SendAsync(action, id => AmiActionByNameWireCapture.Reply(version, frame, id));
+
+        Encoding.Latin1.GetBytes(sent).Should().Equal(AmiActionByNameWireCapture.ClientFrame(version, frame),
+            "the SDK writes, byte for byte, what a raw-socket client wrote to Asterisk {0}", version);
+    }
+
     private static IReadOnlyList<string> HeaderKeys(byte[] message) =>
     [
         .. Encoding.Latin1.GetString(message).Split("\r\n")
