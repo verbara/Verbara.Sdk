@@ -8,13 +8,16 @@ namespace Verbara.Sdk.Governance.Tests;
 /// id, and the migration guide keeps the one heading that the 2.9.0 binaries' warning links open.
 /// </summary>
 /// <remarks>
-/// The first case reads the real tree. The others build small fixture trees, so each failure the guard exists to catch
-/// is shown to turn it red. Attributes and pragmas in the fixtures are assembled from parts so this file never holds
-/// one the real scan could read.
+/// These controls run the family guard, <see cref="DeprecationIdScanner"/>, under a register holding only the retired
+/// <c>VSDK0005</c> row, so each check of the removal reads as it did before the family guard took it over. The first
+/// case reads the real tree under the real register, so it holds the whole family, not only <c>VSDK0005</c>. The
+/// others build small fixture trees, so each failure the guard exists to catch is shown to turn it red. Attributes and
+/// pragmas in the fixtures are assembled from parts so this file never holds one the real scan could read.
 /// </remarks>
 public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
 {
-    private const string Id = DeadModuleDeprecationScanner.DiagnosticId;
+    private const string Id = "VSDK0005";
+    private const string GuidePath = DeprecationIdRegister.RemovalGuide2_9;
     private static readonly string Pragma = "#" + "pragma warning";
 
     private static readonly RemovedSymbol RemovedType = new("Pkg", "GoneAction");
@@ -23,19 +26,20 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
     [Fact]
     public void Tree_ShouldHoldNoneOfTheRemovedSetAndNoUseOfTheRetiredId_WhenScanned()
     {
-        var report = DeadModuleDeprecationScanner.Scan(RepoRoot(), DeadModuleDeprecationScanner.RemovedSet);
+        var report = DeprecationIdScanner.Scan(RepoRoot(), DeprecationIdRegister.Rows);
         output.WriteLine(report.ToString());
 
         report.SourceFiles.Should().BeGreaterThan(0, "a guard that read no source would pass on nothing");
         report.IsClean.Should().BeTrue(
             "none of the 49 types and the member is declared again; nothing in src/, Tests/ or the build configuration " +
-            $"uses \"{Id}\"; the guide holds one heading for it. Found:" + Environment.NewLine + report);
+            $"uses \"{Id}\"; the guide holds one heading for it; and every other id of DeprecationIdRegister holds. Found:" +
+            Environment.NewLine + report);
     }
 
     [Fact]
     public void RemovedSet_ShouldHoldFortyNineTypesAndOneMember_WhenRead()
     {
-        var set = DeadModuleDeprecationScanner.RemovedSet;
+        var set = DeprecationIdRegister.Row(Id).RemovedSet;
 
         set.Should().HaveCount(50).And.OnlyHaveUniqueItems();
         set.Count(s => s.Key.Contains('.', StringComparison.Ordinal)).Should().Be(1, "one member: MeetmeActivity.UseConfBridge");
@@ -47,7 +51,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
     {
         using var tree = GreenTree();
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, [RemovedType, RemovedMember]);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.IsClean.Should().BeTrue(report.ToString());
     }
@@ -56,9 +60,9 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
     public void Scan_ShouldFail_WhenNoSourceFileIsFound()
     {
         using var tree = new FixtureTree();
-        tree.Write(DeadModuleDeprecationScanner.GuidePath, "# Guide\n\n## " + Id + "\n");
+        tree.Write(GuidePath, "# Guide\n\n## " + Id + "\n");
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, []);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([]));
 
         report.Violations.Should().Contain(v => v.StartsWith("found no source file under src/", StringComparison.Ordinal));
     }
@@ -69,7 +73,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
         using var tree = GreenTree();
         tree.Write("src/Pkg/Elsewhere/Gone.cs", "namespace Pkg;\n\npublic sealed class GoneAction { }\n");
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, [RemovedType, RemovedMember]);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.Violations.Should().ContainSingle(v => v == "src/Pkg/Elsewhere/Gone.cs:3: GoneAction is declared again; it was removed in 2.10.0");
     }
@@ -80,7 +84,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
         using var tree = GreenTree();
         tree.Write("src/Other/Gone.cs", "namespace Other;\n\npublic sealed class GoneAction { }\n");
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, [RemovedType, RemovedMember]);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.IsClean.Should().BeTrue(report.ToString());
     }
@@ -92,7 +96,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
         tree.Write("src/Pkg/Activity.cs",
             "namespace Pkg;\n\npublic sealed class Activity\n{\n    public bool UseOld { get; init; } = true;\n}\n");
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, [RemovedType, RemovedMember]);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.Violations.Should().ContainSingle(v => v == "src/Pkg/Activity.cs:5: Activity.UseOld is declared again; it was removed in 2.10.0");
     }
@@ -105,7 +109,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
         using var tree = GreenTree();
         tree.Write(path, "namespace Pkg;\n\n[System.Obsolete(\"m\", DiagnosticId = \"" + Id + "\")]\npublic sealed class AliveAction { }\n");
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, [RemovedType, RemovedMember]);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.Violations.Should().ContainSingle(v => v == $"{path}:3: an [Obsolete] carries the retired id {Id}");
     }
@@ -119,7 +123,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
         tree.Write("Tests/Some/SiteTests.cs",
             "namespace Pkg;\n\npublic static class Site\n{\n" + Pragma + " " + verb + " " + Id + " // a reason\n    public static object Make() => new object();\n}\n");
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, [RemovedType, RemovedMember]);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.Violations.Should().ContainSingle(v => v == $"Tests/Some/SiteTests.cs:5: a #pragma warning names the retired id {Id}");
     }
@@ -131,7 +135,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
         tree.Write("Tests/Some/TextTests.cs",
             "namespace Pkg;\n\npublic static class Text\n{\n    public const string Id = \"" + Id + "\";\n}\n");
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, [RemovedType, RemovedMember]);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.IsClean.Should().BeTrue(report.ToString());
     }
@@ -143,7 +147,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
         tree.Write("Tests/Some/GlobalSuppressions.cs",
             "[assembly: System.Diagnostics.CodeAnalysis.SuppressMessage(\"Usage\", \"" + Id + "\", Justification = \"x\")]\n");
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, [RemovedType, RemovedMember]);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.Violations.Should().ContainSingle(v => v == $"Tests/Some/GlobalSuppressions.cs:1: an assembly-wide SuppressMessage names the retired id {Id}");
     }
@@ -160,7 +164,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
         using var tree = GreenTree();
         tree.Write(path, text);
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, [RemovedType, RemovedMember]);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.Violations.Should().ContainSingle(v => v.StartsWith(path + ":", StringComparison.Ordinal)
             && v.EndsWith($"build configuration names the retired id {Id}", StringComparison.Ordinal));
@@ -175,9 +179,9 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
     public void Scan_ShouldFail_WhenTheGuideDoesNotHoldExactlyOneHeadingForTheId(string guide, int headings)
     {
         using var tree = GreenTree();
-        tree.Write(DeadModuleDeprecationScanner.GuidePath, guide);
+        tree.Write(GuidePath, guide);
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, [RemovedType, RemovedMember]);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.Violations.Should().ContainSingle(v => v.Contains($"holds {headings} headings whose text is \"{Id}\"", StringComparison.Ordinal));
     }
@@ -188,9 +192,9 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
     public void Scan_ShouldPass_WhenTheGuideHoldsOneHeadingForTheIdAtAnyLevelOutsideCode(string guide)
     {
         using var tree = GreenTree();
-        tree.Write(DeadModuleDeprecationScanner.GuidePath, guide);
+        tree.Write(GuidePath, guide);
 
-        var report = DeadModuleDeprecationScanner.Scan(tree.Root, [RemovedType, RemovedMember]);
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.IsClean.Should().BeTrue(report.ToString());
     }
@@ -200,15 +204,19 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
     [InlineData("Deprecated in 2.9.0 (VSDK0005)", "deprecated-in-290-vsdk0005")]
     public void Slug_ShouldMatchGitHubsAnchor_WhenGivenAHeading(string heading, string slug)
     {
-        DeadModuleDeprecationScanner.Slug(heading).Should().Be(slug);
+        DeprecationIdScanner.Slug(heading).Should().Be(slug);
     }
 
     [Fact]
     public void UrlFormat_ShouldEndInTheSlugOfTheGuideHeading_WhenRead()
     {
-        DeadModuleDeprecationScanner.UrlFormat.Should().EndWith("#" + DeadModuleDeprecationScanner.Slug(Id))
+        DeprecationIdRegister.Row(Id).Link.Should().EndWith("#" + DeprecationIdScanner.Slug(Id))
             .And.NotContain("{0}", "one anchor serves the whole id");
     }
+
+    /// <summary>A fixture register holding only the retired id, with its guide and the given removed set.</summary>
+    private static IReadOnlyList<DeprecationIdRow> Register(IReadOnlyList<RemovedSymbol> removedSet) =>
+        [new(Id, DeprecationIdState.Retired, "2.10.0", GuidePath, [], removedSet)];
 
     private static FixtureTree GreenTree()
     {
@@ -216,7 +224,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
         tree.Write("src/Pkg/Kept.cs", "namespace Pkg;\n\npublic sealed class KeptAction { }\n");
         tree.Write("src/Pkg/Activity.cs", "namespace Pkg;\n\npublic sealed class Activity\n{\n    public string? Room { get; init; }\n}\n");
         tree.Write("src/Pkg/Pkg.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\" />\n");
-        tree.Write(DeadModuleDeprecationScanner.GuidePath, "# Guide\n\n## " + Id + "\n\nDeprecated in 2.9.0, removed in 2.10.0.\n");
+        tree.Write(GuidePath, "# Guide\n\n## " + Id + "\n\nDeprecated in 2.9.0, removed in 2.10.0.\n");
         return tree;
     }
 

@@ -44,6 +44,8 @@ public sealed partial class StatusEventObsoletionShapeTests
         obsolete.Should().NotBeNull($"no supported Asterisk version sends {member}, so reading it is reported");
         using var scope = new AssertionScope();
         obsolete!.DiagnosticId.Should().Be("VSDK0002");
+        obsolete.UrlFormat.Should().Be("https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0002",
+            "the warning's help link opens the id's heading of the 2.10.0 migration guide, not the compiler's CS0618 page");
         obsolete.Message.Should().Contain(replacement, "the message names the member that carries the value");
         obsolete.Message.Should().EndWith("Removed in Verbara.Sdk 2.11.0.", "the message names the release that removes the member");
         VersionNumber().Matches(obsolete.Message!).Select(static m => m.Value).Should().Equal(["2.11.0"],

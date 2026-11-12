@@ -16,6 +16,7 @@ namespace Verbara.Sdk.Ari.Tests.Audio;
 public partial class ChanWebSocketDeprecationTests
 {
     private const string DeprecationId = "VSDK0004";
+    private const string DeprecationLink = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004";
 
     [Theory]
     [InlineData(nameof(IChanWebSocketSession.SendXonAsync))]
@@ -32,6 +33,8 @@ public partial class ChanWebSocketDeprecationTests
         // Assert
         obsolete.Should().NotBeNull("chan_websocket has no XON/XOFF command in any spelling");
         obsolete!.DiagnosticId.Should().Be(DeprecationId);
+        obsolete.UrlFormat.Should().Be(DeprecationLink,
+            "the warning's help link opens the id's heading of the 2.10.0 migration guide, not the compiler's CS0618 page");
         obsolete.IsError.Should().BeFalse("a deprecation warns; it does not break a build without TreatWarningsAsErrors");
         obsolete.Message.Should().Contain("NotSupportedException")
             .And.Contain(nameof(ChanWebSocketMediaXoff))
@@ -50,6 +53,8 @@ public partial class ChanWebSocketDeprecationTests
         // Assert
         obsolete.Should().NotBeNull("a hangup is a close frame, never a text message, so nothing publishes this record");
         obsolete!.DiagnosticId.Should().Be(DeprecationId);
+        obsolete.UrlFormat.Should().Be(DeprecationLink,
+            "the warning's help link opens the id's heading of the 2.10.0 migration guide, not the compiler's CS0618 page");
         obsolete.IsError.Should().BeFalse();
         obsolete.Message.Should().Contain(nameof(IAudioStream.StateChanges));
     }
@@ -65,6 +70,8 @@ public partial class ChanWebSocketDeprecationTests
         // Assert
         obsolete.Should().NotBeNull("no chan_websocket message reports a buffer fill in bytes");
         obsolete!.DiagnosticId.Should().Be(DeprecationId);
+        obsolete.UrlFormat.Should().Be(DeprecationLink,
+            "the warning's help link opens the id's heading of the 2.10.0 migration guide, not the compiler's CS0618 page");
         obsolete.IsError.Should().BeFalse();
         obsolete.Message.Should().Contain(nameof(ChanWebSocketMediaXoff))
             .And.Contain(nameof(ChanWebSocketMediaXon))
@@ -168,6 +175,8 @@ public partial class ChanWebSocketDeprecationTests
         // Assert
         obsolete.Should().NotBeNull("DTMF_END carries digit and channel_id only, so the duration is always 0");
         obsolete!.DiagnosticId.Should().Be(DeprecationId);
+        obsolete.UrlFormat.Should().Be(DeprecationLink,
+            "the warning's help link opens the id's heading of the 2.10.0 migration guide, not the compiler's CS0618 page");
         obsolete.IsError.Should().BeFalse();
         obsolete.Message.Should().Contain("0")
             .And.Contain("ChannelDtmfReceived")
