@@ -36,6 +36,9 @@ internal static partial class AudioSocketLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] Read loop ended for channel {ChannelId}")]
     public static partial void ReadLoopEnded(ILogger logger, Exception exception, Guid channelId);
 
+    [LoggerMessage(Level = LogLevel.Error, Message = "[AudioSocket] Out of memory in the read loop for channel {ChannelId}: the session ends")]
+    public static partial void ReadLoopOutOfMemory(ILogger logger, Exception exception, Guid channelId);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] Write failed on the transport for channel {ChannelId}, ending the session")]
     public static partial void WriteTransportFailed(ILogger logger, Exception exception, Guid channelId);
 

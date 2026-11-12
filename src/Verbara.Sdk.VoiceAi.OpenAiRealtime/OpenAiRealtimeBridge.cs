@@ -316,16 +316,9 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             // Clean close — never on ct, which may already be cancelled. There is one terminal
             // close site, under the session's write discipline, and a failed attempt cannot replace
             // the output's already classified ending. The bound abort also ends a blocked send.
-            var closeLockHeld = false;
-            try
-            {
-                await wsWriteLock.WaitAsync(terminalBound?.Token ?? CancellationToken.None).ConfigureAwait(false);
-                closeLockHeld = true;
-                if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
-                    await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
-            }
-            catch { /* ignore close errors */ }
-            finally { if (closeLockHeld) wsWriteLock.Release(); }
+            // Best effort, and awaited without its outcome: whatever the attempt ends with, this block goes on.
+            await CloseOutputUnderTheWriteLockAsync(ws, wsWriteLock, terminalBound?.Token ?? CancellationToken.None)
+                .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
             // A pending input implies the input loop exists.
             if (pendingInput && output is not null)
@@ -389,6 +382,22 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         public bool Delivered => Volatile.Read(ref _delivered) != 0;
 
         public void MarkDelivered() => Volatile.Write(ref _delivered, 1);
+    }
+
+    // The terminal close attempt: the write lock, then the close frame if the socket can still take one.
+    private static async Task CloseOutputUnderTheWriteLockAsync(
+        ClientWebSocket ws, SemaphoreSlim wsWriteLock, CancellationToken bound)
+    {
+        await wsWriteLock.WaitAsync(bound).ConfigureAwait(false);
+        try
+        {
+            if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
+                await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).ConfigureAwait(false);
+        }
+        finally
+        {
+            wsWriteLock.Release();
+        }
     }
 
     // Releases the two sources only a session's loops use, in this order, each only if it was made.
