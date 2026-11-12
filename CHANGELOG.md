@@ -177,7 +177,7 @@ gains `sessions.trigger` (`age`, `table`, `event-loss` or `none`, in that preced
 `trigger=` and `loss=` (`loss=pending-undelivered` while a drop is still behind the backlog). See
 [Session Reconciliation](docs/guides/high-load-tuning.md#session-reconciliation).
 
-### Fixed: a call not observed in full is decided only on a channel table no dropped event made untrusted (#546)
+### Fixed: a call not observed in full is decided only on a channel table no dropped event made untrusted (#546, #NNN)
 
 A call the session engine has not observed in full — registered as reconstructed, admitted after a manual attach, or
 kept across a re-attach — was decided on a complete channel table even when a dropped `Newchannel` meant the table
@@ -187,7 +187,10 @@ requested for it while the drop is behind the backlog, the admission of calls al
 read finds none of its channels, the call ends once with `Metadata["cause"] = "reload"` and no hangup cause, even if
 another of its legs' hangups was observed before the read: the SDK did not observe that ending. A host that runs no
 sweep decides these calls through its own `ReconcileChannelsAsync` once the drop is delivered; until then they wait,
-with no time bound. See [Sessions without the sweep](docs/guides/high-load-tuning.md#session-reconciliation).
+with no time bound. A call waiting on the read that follows a reconnect is decided once the reconnect's handlers
+have returned, without waiting for the sweep, even when an application's `Reconnected` handler outlives that read; and
+a call waiting while two channel reads overlap is decided when the last of them leaves the table covered (#NNN). See
+[Sessions without the sweep](docs/guides/high-load-tuning.md#session-reconciliation).
 
 ### Added: a channel reconciliation says whether it covered the events lost before it (#546)
 
