@@ -36,7 +36,8 @@ namespace Verbara.Sdk.Ari.Diagnostics;
 /// <para>
 /// One public instrument is not emitted: <see cref="BufferUnderruns"/> (<c>audio.buffer.underruns</c>).
 /// The SDK has no write pump, since audio goes out when the caller writes it, so nothing can observe
-/// an underrun. The field is obsolete with <c>VSDK0003</c>, and the instrument stays published.
+/// an underrun. The field is obsolete with <c>VSDK0003</c>, and the instrument stays published until 2.11.0, which
+/// removes the field and, with it, the instrument.
 /// </para>
 /// </summary>
 public static class AudioStreamMetrics
@@ -105,7 +106,8 @@ public static class AudioStreamMetrics
     /// <para>
     /// The SDK has no write pump. Audio goes out when the caller writes it, so the SDK never sees the far
     /// end starve, and <c>audio.buffer.underruns</c> stays at zero. The instrument is still published on the
-    /// meter under the same name, and the field still compiles: deprecating it removes nothing.
+    /// meter under the same name, and the field still compiles. 2.11.0 removes the field; it is the instrument's
+    /// only creation, so the instrument leaves the meter with it.
     /// </para>
     /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can
@@ -114,8 +116,9 @@ public static class AudioStreamMetrics
     /// </para>
     /// </remarks>
     [Obsolete(
-        "Not emitted: nothing records audio.buffer.underruns. The SDK has no write pump; audio goes out when the caller writes it, so the SDK never sees the far end starve.",
-        DiagnosticId = "VSDK0003")]
+        "Not emitted: nothing records audio.buffer.underruns. The SDK has no write pump; audio goes out when the caller writes it, so the SDK never sees the far end starve. Removed in Verbara.Sdk 2.11.0.",
+        DiagnosticId = "VSDK0003",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0003")]
     public static readonly Counter<long> BufferUnderruns =
         Meter.CreateCounter<long>("audio.buffer.underruns", "underruns",
             "Write pump starved - no audio to send");

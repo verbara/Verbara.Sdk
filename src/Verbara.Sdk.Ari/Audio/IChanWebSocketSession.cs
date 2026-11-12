@@ -125,7 +125,7 @@ public interface IChanWebSocketSession : IAudioStream
     /// <para>
     /// Measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, in both control formats: Asterisk answers
     /// every XON/XOFF spelling with <c>command unknown</c> and acts on none. The method still compiles and stays on the
-    /// interface; nothing is taken away.
+    /// interface until 2.11.0, which removes it.
     /// </para>
     /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
@@ -137,8 +137,9 @@ public interface IChanWebSocketSession : IAudioStream
     /// Always: Asterisk accepts no such command. Thrown synchronously, before anything is written.
     /// </exception>
     [Obsolete(
-        "Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: 'command unknown', no reply), so this method throws NotSupportedException and writes nothing. Flow control is Asterisk's to send: read ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages.",
-        DiagnosticId = "VSDK0004")]
+        "Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: 'command unknown', no reply), so this method throws NotSupportedException and writes nothing. Flow control is Asterisk's to send: read ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages. Removed in Verbara.Sdk 2.11.0.",
+        DiagnosticId = "VSDK0004",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
     ValueTask SendXonAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -151,7 +152,7 @@ public interface IChanWebSocketSession : IAudioStream
     /// <para>
     /// Measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, in both control formats: Asterisk answers
     /// every XON/XOFF spelling with <c>command unknown</c> and acts on none. The method still compiles and stays on the
-    /// interface; nothing is taken away.
+    /// interface until 2.11.0, which removes it.
     /// </para>
     /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
@@ -163,8 +164,9 @@ public interface IChanWebSocketSession : IAudioStream
     /// Always: Asterisk accepts no such command. Thrown synchronously, before anything is written.
     /// </exception>
     [Obsolete(
-        "Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: 'command unknown', no reply), so this method throws NotSupportedException and writes nothing. Flow control is Asterisk's to send: read ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages.",
-        DiagnosticId = "VSDK0004")]
+        "Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: 'command unknown', no reply), so this method throws NotSupportedException and writes nothing. Flow control is Asterisk's to send: read ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages. Removed in Verbara.Sdk 2.11.0.",
+        DiagnosticId = "VSDK0004",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
     ValueTask SendXoffAsync(CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -140,17 +140,14 @@ public class ActivityTests
         await _channel.Received(1).ExecAsync("ConfBridge", "100", Arg.Any<CancellationToken>());
     }
 
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
-    public async Task MeetmeActivity_WithLegacyMeetMe()
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test code: reads the public properties of a type of this assembly set, never trimmed here.")]
+    public void MeetmeActivity_ShouldOfferNoMeetMeSwitch_WhenItAlwaysRunsConfBridge()
     {
-        var activity = new MeetmeActivity(_channel) { RoomNumber = "100", UseConfBridge = false };
-
-        await activity.StartAsync();
-
-        await _channel.Received(1).ExecAsync("MeetMe", "100", Arg.Any<CancellationToken>());
+        // Named by string, so the fact compiles with and without the property.
+        typeof(MeetmeActivity).GetProperties().Select(static p => p.Name).Should().NotContain("UseConfBridge",
+            "the activity always runs ConfBridge; MeetMe is reached through IAgiChannel.ExecAsync(\"MeetMe\", ...)");
     }
-#pragma warning restore VSDK0005
 
     [Fact]
     public async Task VoicemailActivity_ShouldCallVoiceMail()

@@ -411,4 +411,33 @@ public sealed class ResiliencePolicyTests
         (await act.Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should().Be("non-retriable");
     }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task ExecuteAsync_ShouldKeepTheActionsStackTrace_WhenTheLastAttemptFails(int maxAttempts)
+    {
+        var policy = new ResiliencePolicyBuilder()
+            .WithRetry(maxAttempts, baseDelay: TimeSpan.Zero)
+            .WithCircuitBreaker(threshold: 10, openDuration: TimeSpan.FromSeconds(30))
+            .Build();
+        var attempts = 0;
+
+        var act = async () => await policy.ExecuteAsync<int>(
+            "k",
+            _ =>
+            {
+                attempts++;
+                return FailingAction();
+            },
+            CancellationToken.None);
+
+        var thrown = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
+        attempts.Should().Be(maxAttempts);
+        thrown.StackTrace.Should().Contain(
+            nameof(FailingAction),
+            "the exception reaches the caller as the action threw it, not restarted at the policy's rethrow");
+    }
+
+    private static ValueTask<int> FailingAction() => throw new InvalidOperationException("the action's own failure");
 }

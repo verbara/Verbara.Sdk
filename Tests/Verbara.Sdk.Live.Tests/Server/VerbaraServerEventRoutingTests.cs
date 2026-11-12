@@ -169,59 +169,6 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
     }
 
     // ==========================================================================
-    // QueueMemberPausedEvent -> QueueManager
-    // ==========================================================================
-
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public async Task EventObserver_ShouldRouteQueueMemberPausedEvent_ToQueueManager()
-    {
-        await StartAndGetObserverAsync();
-        CreateQueueWithMember("support", "PJSIP/2000");
-
-        _observer!.OnNext(new QueueMemberPausedEvent
-        {
-            Queue = "support",
-            Interface = "PJSIP/2000",
-            Paused = true,
-            Reason = "lunch break"
-        });
-
-        var member = _sut.Queues.GetByName("support")!.Members["PJSIP/2000"];
-        member.Paused.Should().BeTrue();
-        member.PausedReason.Should().Be("lunch break");
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task EventObserver_ShouldShowTheMembersPause_WhenQueueMemberPausedArrivesAsAsterisk11SendsIt(bool paused)
-    {
-        // Asterisk 11 named the member by Location, not Interface; no supported version sends this event, and the
-        // queue member must still show what it carried until the type leaves.
-        await StartAndGetObserverAsync();
-        CreateQueueWithMember("support", "SIP/2000");
-        _sut.Queues.GetByName("support")!.Members["SIP/2000"].Paused = !paused;
-
-        _observer!.OnNext(new QueueMemberPausedEvent
-        {
-            Queue = "support",
-            Location = "SIP/2000",
-            MemberName = "Agent 2000",
-            Paused = paused,
-            Reason = "lunch",
-        });
-
-        var member = _sut.Queues.GetByName("support")!.Members["SIP/2000"];
-        using (new AssertionScope())
-        {
-            member.Paused.Should().Be(paused, "QueueMemberPaused carried Paused = {0}", paused);
-            member.PausedReason.Should().Be("lunch");
-        }
-    }
-#pragma warning restore VSDK0005
-
-    // ==========================================================================
     // QueueMemberPauseEvent -> QueueManager
     // ==========================================================================
 
@@ -1082,25 +1029,6 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
         }
     }
 
-#pragma warning disable VSDK0005 // the pre-12 frame name is routed the same way until the type leaves
-    [Fact]
-    public async Task EventObserver_ShouldPauseTheAgent_WhenTheObsoleteQueueMemberPausedNamesAnAgent()
-    {
-        await StartAndGetObserverAsync();
-        LoginAgent("1001");
-        AddMember("sales", "Agent/1001");
-        var changes = RecordStateChanges("1001");
-
-        _observer!.OnNext(new QueueMemberPausedEvent { Queue = "sales", Interface = "Agent/1001", Paused = true });
-
-        using (new AssertionScope())
-        {
-            StateOf("1001").Should().Be(AgentState.Paused);
-            changes.Should().Equal([AgentState.Paused]);
-        }
-    }
-#pragma warning restore VSDK0005
-
     [Fact]
     public async Task EventObserver_ShouldKeepTheAgentAvailable_WhenOnlyOneOfItsTwoMembershipsIsPaused()
     {
@@ -1411,20 +1339,18 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
 
     // --- Tests that name QueueManager.MemberPaused: red on main by compile error (CS1061) ---
 
-#pragma warning disable VSDK0005 // the pre-12 frame name is announced the same way until the type leaves
     [Fact]
-    public async Task EventObserver_ShouldAnnounceTheMemberPaused_WhenTheObsoleteQueueMemberPausedArrives()
+    public async Task EventObserver_ShouldAnnounceTheMemberPausedWithItsReason_WhenQueueMemberPauseArrives()
     {
         await StartAndGetObserverAsync();
         CreateQueueWithMember("support", "PJSIP/2000");
         var seen = new List<(string Queue, string Interface, bool Paused, string? Reason)>();
         _sut.Queues.MemberPaused += (q, m) => seen.Add((q, m.Interface, m.Paused, m.PausedReason));
 
-        _observer!.OnNext(new QueueMemberPausedEvent { Queue = "support", Interface = "PJSIP/2000", Paused = true, Reason = "lunch" });
+        PauseMember("support", "PJSIP/2000", paused: true, reason: "lunch");
 
         seen.Should().Equal([("support", "PJSIP/2000", true, "lunch")]);
     }
-#pragma warning restore VSDK0005
 
     [Fact]
     public async Task EventObserver_ShouldRaiseThreeMemberPausedAndOneAgentStateChanged_WhenEachOfThreeMembershipsIsPaused()

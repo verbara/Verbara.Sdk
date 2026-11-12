@@ -221,13 +221,13 @@ public sealed partial class NatsBridge : BackgroundService
             if (Interlocked.Exchange(ref _subscriber, null) is { } s)
             {
                 try { await s.DisposeAsync().ConfigureAwait(false); }
-                catch (Exception ex) { LogDisposeFailed(_logger, ex); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { LogDisposeFailed(_logger, ex); }
             }
 
             if (Interlocked.Exchange(ref _publisher, null) is { } p)
             {
                 try { await p.DisposeAsync().ConfigureAwait(false); }
-                catch (Exception ex) { LogDisposeFailed(_logger, ex); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { LogDisposeFailed(_logger, ex); }
             }
         }
         finally
@@ -408,17 +408,16 @@ public sealed partial class NatsBridge : BackgroundService
         // must take both factories from the same call. The publisher owns the lifetime;
         // the subscriber is created with ownsConnection: false, so its Dispose leaves
         // the connection for the publisher to close.
-        NatsConnection? shared = null;
-        var gate = new SemaphoreSlim(1, 1);
+        var sharing = new ConnectionSharing();
         var logger = loggerFactory.CreateLogger<NatsBridge>();
 
         async ValueTask<NatsConnection> GetOrConnectAsync(NatsBridgeOptions opts, CancellationToken ct)
         {
-            if (shared is { } existing) return existing;
-            await gate.WaitAsync(ct).ConfigureAwait(false);
+            if (sharing.Shared is { } existing) return existing;
+            await sharing.Gate.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                if (shared is { } raced) return raced;
+                if (sharing.Shared is { } raced) return raced;
 
                 var natsOpts = NatsOpts.Default with
                 {
@@ -449,12 +448,12 @@ public sealed partial class NatsBridge : BackgroundService
                     if (!connected) await CloseAbandonedAsync(connection, logger).ConfigureAwait(false);
                 }
 
-                shared = connection;
+                sharing.Shared = connection;
                 return connection;
             }
             finally
             {
-                gate.Release();
+                sharing.Gate.Release();
             }
         }
 
@@ -467,6 +466,18 @@ public sealed partial class NatsBridge : BackgroundService
                 ownsConnection: false);
 
         return (publisherFactory, subscriberFactory);
+    }
+
+    /// <summary>
+    /// The one connection a pair of default factories shares, and the gate that lets one connect run at a time. It
+    /// lives as long as the two factories. The gate is never waited on through its wait handle, so it holds nothing
+    /// that needs releasing.
+    /// </summary>
+    private sealed class ConnectionSharing
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+
+        public NatsConnection? Shared { get; set; }
     }
 
     /// <summary>Disposes a connection whose connect was abandoned; logs a failed dispose, never throws.</summary>
