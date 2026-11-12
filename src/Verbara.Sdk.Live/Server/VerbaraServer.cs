@@ -2302,23 +2302,6 @@ public sealed class VerbaraServer : IVerbaraServer
                     break;
                 }
 
-#pragma warning disable VSDK0005 // Asterisk 11 and earlier send QueueMemberPaused; no supported version does
-                case QueueMemberPausedEvent qmp:
-                {
-                    var iface = qmp.Location ?? qmp.Interface ?? "";
-                    try
-                    {
-                        server.Queues.OnMemberPaused(qmp.Queue ?? "", iface, qmp.Paused ?? false, qmp.Reason);
-                    }
-                    finally
-                    {
-                        server.SettleAgentMember(iface);
-                    }
-
-                    break;
-                }
-#pragma warning restore VSDK0005
-
                 case QueueMemberStatusEvent qms:
                     server.Queues.OnMemberStatusChanged(
                         qms.Queue ?? "",

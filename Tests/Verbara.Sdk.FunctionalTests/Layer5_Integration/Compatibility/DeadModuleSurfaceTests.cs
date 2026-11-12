@@ -9,12 +9,13 @@ using FluentAssertions.Execution;
 using AmiConnection = Verbara.Sdk.Ami.Connection.AmiConnection;
 
 /// <summary>
-/// The AMI surface of dead Asterisk modules, against the pinned image. The SDK marks obsolete the actions of
+/// The AMI surface of dead Asterisk modules, against the pinned image. The SDK removed in 2.10.0 the actions of
 /// chan_sip, res_monitor, app_meetme, the Zaptel names, chan_agent's <c>AgentCallbackLogin</c>,
-/// app_setcdruserfield and Skype for Asterisk, and the events whose wire name Asterisk 10 or 12 renamed or removed. This
-/// guard pins the premise of each mark on the image the lane runs: none of the marked names is registered or listed,
-/// and every replacement whose module the image loads is. A re-pinned image that brings a marked name back fails
-/// here, naming it, so the item is re-ruled before the image is pinned.
+/// app_setcdruserfield and Skype for Asterisk, and the event types whose wire name Asterisk 10 or 12 renamed or removed;
+/// a removed event name now arrives as a base event. This guard pins the premise of each removal on the image the lane
+/// runs: none of the removed names is registered or listed, and every replacement whose module the image loads is. A
+/// re-pinned image that brings a removed name back fails here, naming it, so the item is re-ruled before the image is
+/// pinned.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -33,7 +34,7 @@ using AmiConnection = Verbara.Sdk.Ami.Connection.AmiConnection;
 [Trait("Category", "Functional")]
 public sealed class DeadModuleSurfaceTests : FunctionalTestBase
 {
-    /// <summary>The AMI names the 28 marked action types send (their <c>VerbaraMapping</c>).</summary>
+    /// <summary>The AMI names the 28 action types removed in 2.10.0 sent (their <c>VerbaraMapping</c>).</summary>
     private static readonly string[] MarkedActions =
     [
         "SIPPeers", "SIPShowPeer", "SipShowRegistry", "SipNotify",
@@ -46,7 +47,7 @@ public sealed class DeadModuleSurfaceTests : FunctionalTestBase
         "SkypeLicenseStatus", "SkypeRemoveBuddy",
     ];
 
-    /// <summary>The replacement actions the marks name, whose module the image loads.</summary>
+    /// <summary>The replacement actions the removed types named, whose module the image loads.</summary>
     private static readonly string[] ReplacementActions =
     [
         "PJSIPShowEndpoints", "PJSIPShowEndpoint", "PJSIPShowRegistrationsOutbound", "PJSIPNotify",
@@ -55,7 +56,7 @@ public sealed class DeadModuleSurfaceTests : FunctionalTestBase
         "SetVar",
     ];
 
-    /// <summary>The wire names of the marked event types.</summary>
+    /// <summary>The wire names of the event types removed in 2.10.0.</summary>
     private static readonly string[] MarkedEvents =
     [
         "QueueMemberPaused", "AgentCallbackLogin", "AgentCallbackLogoff", "ChannelReload", "Transfer", "MusicOnHold",

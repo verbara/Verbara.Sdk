@@ -9,9 +9,9 @@ using FluentAssertions.Execution;
 namespace Verbara.Sdk.Ami.Tests.Events;
 
 /// <summary>
-/// The 26 AMI event types that no supported Asterisk sends are gone from the generated registry: none of their
-/// mapping names resolves to a typed class, the deserializer turns each into a base <see cref="ManagerEvent"/>, and
-/// the registry holds exactly the mapped types that are not among them. <c>PeerEntry</c> stays typed, and carries no
+/// The AMI event types that no supported Asterisk sends are gone from the generated registry: the 26 removed in 2.9.0
+/// and the 15 removed in 2.10.0. None of their mapping names resolves to a typed class, the deserializer turns each
+/// into a base <see cref="ManagerEvent"/>, and the registry holds exactly the mapped types that are not among them. <c>PeerEntry</c> stays typed, and carries no
 /// <c>[Obsolete]</c>, because IAX still answers <c>IAXpeerlist</c> and <c>IAXpeers</c> with it.
 /// </summary>
 public sealed class RemovedEventMappingTests
@@ -27,7 +27,20 @@ public sealed class RemovedEventMappingTests
         "ZapShowChannels", "ZapShowChannelsComplete",
     ];
 
+    /// <summary>
+    /// The mapping names of the 15 types removed in 2.10.0: dead modules' events, and names Asterisk 10 or 12 renamed
+    /// or dropped. Named by string, so the list compiles with and without the types.
+    /// </summary>
+    private static readonly string[] NamesRemovedIn2100 =
+    [
+        "AgentCallbackLogin", "AgentCallbackLogoff", "ChannelReload",
+        "QueueMemberPaused", "MusicOnHold", "FaxReceived", "Dtmf", "Transfer", "ChannelUpdate", "JabberEvent",
+        "AgiExec", "AsyncAgi", "SendFaxStatus", "BridgeExec", "ModuleLoadReport",
+    ];
+
     public static TheoryData<string> RemovedNames => new(Names);
+
+    public static TheoryData<string> RemovedIn2100Names => new(NamesRemovedIn2100);
 
     [Fact]
     public void RemovedNames_ShouldNameTwentySixDistinctTypes_WhenListed()
@@ -36,8 +49,20 @@ public sealed class RemovedEventMappingTests
         Names.Distinct(StringComparer.OrdinalIgnoreCase).Should().HaveCount(26);
     }
 
+    [Fact]
+    public void RemovedIn2100Names_ShouldNameFifteenDistinctTypesNotInTheFirstList_WhenListed()
+    {
+        using (new AssertionScope())
+        {
+            NamesRemovedIn2100.Distinct(StringComparer.OrdinalIgnoreCase).Should().HaveCount(15);
+            NamesRemovedIn2100.Intersect(Names, StringComparer.OrdinalIgnoreCase).Should().BeEmpty(
+                "each list counts its own removal");
+        }
+    }
+
     [Theory]
     [MemberData(nameof(RemovedNames))]
+    [MemberData(nameof(RemovedIn2100Names))]
     public void Registry_ShouldResolveNoTypedClass_WhenGivenARemovedMappingName(string name)
     {
         var created = GeneratedEventRegistry.Create(name);
@@ -57,10 +82,10 @@ public sealed class RemovedEventMappingTests
     /// reason moves both sides alike: only a removed name still mapped in the assembly can make it fail.
     /// </summary>
     [Fact]
-    public void Registry_ShouldHoldTwentySixEntriesFewer_WhenTheRemovedTypesAreGone()
+    public void Registry_ShouldHoldFortyOneEntriesFewer_WhenTheRemovedTypesAreGone()
     {
         var mapped = MappedEventNames();
-        var removed = new HashSet<string>(Names, StringComparer.OrdinalIgnoreCase);
+        var removed = new HashSet<string>([.. Names, .. NamesRemovedIn2100], StringComparer.OrdinalIgnoreCase);
         var kept = mapped.Count(name => !removed.Contains(name));
 
         using (new AssertionScope())
@@ -68,7 +93,7 @@ public sealed class RemovedEventMappingTests
             mapped.Should().HaveCount(GeneratedEventRegistry.Count,
                 "the registry holds one entry per event mapping of the Ami assembly (the reading's control)");
             GeneratedEventRegistry.Count.Should().Be(kept,
-                "the registry holds the mapped event types that are not among the 26 removed ones, and nothing else; "
+                "the registry holds the mapped event types that are not among the 41 removed ones, and nothing else; "
                 + "still mapped: {0}", string.Join(", ", mapped.Where(removed.Contains)));
         }
     }

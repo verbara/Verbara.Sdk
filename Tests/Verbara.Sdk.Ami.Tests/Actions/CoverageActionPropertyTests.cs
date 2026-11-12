@@ -162,18 +162,6 @@ public sealed class CoverageActionPropertyTests
         action.Options.Should().Be("r");
     }
 
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public void MonitorAction_ShouldHaveProperties()
-    {
-        var action = new MonitorAction { Channel = "SIP/100", File = "test", Format = "wav", Mix = true };
-        action.Channel.Should().Be("SIP/100");
-        action.File.Should().Be("test");
-        action.Format.Should().Be("wav");
-        action.Mix.Should().BeTrue();
-    }
-#pragma warning restore VSDK0005
-
     [Fact]
     public void PlayDtmfAction_ShouldHaveProperties()
     {

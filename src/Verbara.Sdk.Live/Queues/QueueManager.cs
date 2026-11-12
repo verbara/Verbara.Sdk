@@ -354,7 +354,7 @@ public sealed class QueueManager
         }
     }
 
-    /// <summary>Handle QueueMemberPaused event.</summary>
+    /// <summary>Handle a QueueMemberPause event: the member's pause state and reason.</summary>
     public void OnMemberPaused(string queueName, string iface, bool paused, string? reason = null)
     {
         try
