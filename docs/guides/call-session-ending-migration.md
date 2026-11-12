@@ -170,8 +170,9 @@ session read back from a store may still carry `cause=orphaned`; the SDK no long
 `SessionMetrics.SessionsTimedOut` and `SessionMetrics.SessionsOrphaned` are marked `[Obsolete]` with the diagnostic
 id `VSDK0006`: code that reads either field gets a warning, or `error VSDK0006` when it builds with
 `TreatWarningsAsErrors`. Both instruments are still published on the `Verbara.Sdk.Sessions` meter until 2.11.0,
-which removes both fields and, with them, the instruments; neither ever recorded a measurement, so an exporter
-that subscribes by meter name is not affected. To keep reading a field, add
+which removes both fields and, with them, the instruments. The SDK has recorded neither since 2.7.0 (through 2.6.x
+the sweep moved both, as the table above says), so an exporter that subscribes by meter name receives no new point
+from either, and a series it stored from 2.6.x or earlier keeps that history. To keep reading a field, add
 `<NoWarn>$(NoWarn);VSDK0006</NoWarn>` to the project, which silences this deprecation and no other.
 
 ### What you have to do

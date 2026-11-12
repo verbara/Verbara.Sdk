@@ -600,8 +600,10 @@ instruments are as in 2.9.0.
 **Who is affected.** Code that reads one of these members: the warning it already reported now names 2.11.0. For
 `VSDK0003` and `VSDK0006`, a dashboard or exporter that lists the meter's instruments: each field is its instrument's
 only creation, so in 2.11.0 `audio.buffer.underruns`, `sessions.timed_out` and `sessions.orphaned` leave the meter
-with their fields. None of them ever recorded a measurement, so no exporter has emitted a point under those names
-and no panel changes.
+with their fields. `audio.buffer.underruns` never recorded a measurement, so no exporter has emitted a point under
+that name. The SDK has recorded nothing on `sessions.timed_out` or `sessions.orphaned` since 2.7.0; through 2.6.x the
+reconciliation sweep added to both, so a series an exporter stored from 2.6.x or earlier keeps that history, and a
+panel that reads it has shown no new point since 2.7.0.
 
 **What to do.** Move to what each message names before 2.11.0. A `NoWarn` you keep for one of these ids keeps working
 in 2.10.0.
