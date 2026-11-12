@@ -37,7 +37,7 @@ public sealed class DeferredReadLeavesLastTests
             run.Call.Unverified.Should().BeFalse(
                 "the table became covered when B left: the waiting call is verified, with no sweep. " + rig.Describe(run.Call));
             rig.EndingsOf(run.Call).Should().Be(0);
-            rig.StatusAsked.Should().Be(run.StatusAskedAfterB, "no further channel read took part");
+            rig.StatusAsked.Should().Be(run.StatusAskedWhileBCounted, "no further channel read took part");
         }
     }
 
@@ -57,7 +57,7 @@ public sealed class DeferredReadLeavesLastTests
                 "the table became covered when B left: the call whose legs are gone ends, with no sweep. " + rig.Describe(run.Call));
             run.Call.Metadata.GetValueOrDefault("cause").Should().Be("reload");
             run.Call.HangupCause.Should().BeNull();
-            rig.StatusAsked.Should().Be(run.StatusAskedAfterB, "no further channel read took part");
+            rig.StatusAsked.Should().Be(run.StatusAskedWhileBCounted, "no further channel read took part");
         }
     }
 
@@ -174,12 +174,21 @@ public sealed class DeferredReadLeavesLastTests
             await a.WaitAsync(LossRig.Bound);
         }
 
+        // A has returned and B is held past its own Status: both Status actions were answered, so the rig counted them.
+        // The baseline is taken here, before B leaves and the decision runs on B's thread.
         var completeWhileBCounted = rig.Server.ChannelTableComplete;
         var completionsWhileBCounted = Volatile.Read(ref completions);
+        var settledWhileBCounted = Volatile.Read(ref settled);
+        var statusAskedWhileBCounted = rig.StatusAsked;
         bGo.Set();
         await b.WaitAsync(LossRig.Bound);
+
+        // The peer answers actions in order: once a Ping sent now is answered, any Status sent while B left and the
+        // decision ran has been counted.
+        await rig.FenceAsync();
         var run = new Run(call, completeBeforeB, unverifiedAtAdmission, pendingLoss, completeWhileBCounted,
-            completionsWhileBCounted, rig.Server.ChannelTableCovered, rig.StatusAsked);
+            completionsWhileBCounted, settledWhileBCounted, statusAskedWhileBCounted, rig.Server.ChannelTableCovered,
+            Volatile.Read(ref completions), Volatile.Read(ref settled), rig.StatusAsked);
         if (deliveredLoss) rig.Release();
         return run;
     }
@@ -205,7 +214,8 @@ public sealed class DeferredReadLeavesLastTests
     }
 
     private sealed record Run(CallSession Call, bool CompleteBeforeB, bool UnverifiedAtAdmission, bool PendingLoss,
-        bool CompleteWhileBCounted, int CompletionsWhileBCounted, bool CoveredAfterB, int StatusAskedAfterB)
+        bool CompleteWhileBCounted, int CompletionsWhileBCounted, int SettledWhileBCounted, int StatusAskedWhileBCounted,
+        bool CoveredAfterB, int CompletionsAfterB, int SettledAfterB, int StatusAskedAfterB)
     {
         public void AssertPremises(bool deliveredLoss)
         {
@@ -223,6 +233,11 @@ public sealed class DeferredReadLeavesLastTests
             CompleteWhileBCounted.Should().BeFalse("premise: B is still counted when A returns");
             CompletionsWhileBCounted.Should().Be(0, "premise: A left before B and did not announce the table");
             CoveredAfterB.Should().BeTrue("premise: the table reads covered once B has left");
+            SettledWhileBCounted.Should().Be(0, "nothing announced the table before B left");
+            SettledAfterB.Should().Be(1, "B, leaving last, announced the covered table once, and the call was decided by it");
+            CompletionsAfterB.Should().Be(0, "no read that applied in full announced the table");
+            StatusAskedAfterB.Should().Be(StatusAskedWhileBCounted,
+                "B leaving and the decision it announced sent no further Status");
         }
     }
 }
