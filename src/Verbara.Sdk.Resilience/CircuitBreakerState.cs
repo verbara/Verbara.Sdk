@@ -235,19 +235,33 @@ public sealed class CircuitBreakerState
 
         var failures = Interlocked.Increment(ref _consecutiveFailures);
 
-        if (Volatile.Read(ref _phase) == HalfOpen)
+        while (Volatile.Read(ref _phase) == HalfOpen)
         {
-            // Read the clock before anything changes: a clock that throws here leaves the circuit as it was.
+            // The probe time names the half-open phase this failure acts on, and the clock is read after it, so the
+            // sample is never older than that phase. Read the clock before anything changes: a clock that throws here
+            // leaves the circuit as it was.
+            var probeAtTicks = Interlocked.Read(ref _probeAtTicks);
             var reopenedAtTicks = time.GetUtcNow().UtcTicks;
 
+            if (probeAtTicks != NullTicksSentinel)
+            {
+                // Clear the probe time from the value read, so only one failure re-opens this phase. A failure whose
+                // read is out of date, after a re-open, a new claim or a hand-over, loses here and reads again.
+                if (Interlocked.CompareExchange(ref _probeAtTicks, NullTicksSentinel, probeAtTicks) != probeAtTicks)
+                    continue;
+            }
+
             // The new opening time first, so open is never seen with the old, elapsed one; then clear the probe
-            // time, so the next claim is the only one; then the phase.
+            // time, so the next claim is the only one; then the phase. With no probe time read, a claim is between
+            // its swap and its probe-time write, or another result is moving the circuit.
             RaiseOpenedAt(reopenedAtTicks);
-            Interlocked.Exchange(ref _probeAtTicks, NullTicksSentinel);
+            if (probeAtTicks == NullTicksSentinel)
+                Interlocked.Exchange(ref _probeAtTicks, NullTicksSentinel);
             if (Interlocked.CompareExchange(ref _phase, Open, HalfOpen) == HalfOpen)
                 return true;
 
             // A success or another failure moved the circuit first: this failure follows the closed rule.
+            break;
         }
 
         if (failures < threshold)
