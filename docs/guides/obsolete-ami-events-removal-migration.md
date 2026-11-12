@@ -291,19 +291,20 @@ The commercial fax module's `FaxLicenseListAction`, `FaxLicenseStatusAction` and
 ### Zaptel action names (use the DAHDI names)
 
 Asterisk 1.6 replaced chan_zap with chan_dahdi, which registers these actions under `DAHDI*` names
-only. The SDK types only `DahdiShowChannelsAction` and sends only the actions it types, so it has no way
-to send the other `DAHDI*` actions. chan_dahdi is not loaded in the pinned images, so none of these
-replacements is measured.
+only. The SDK types only `DahdiShowChannelsAction`; from 2.10.0 every other `DAHDI*` action is sent by name
+as a `RawAction`, for example `new RawAction("DAHDIDNDon").Add("DAHDIChannel", "1")`. chan_dahdi is not loaded in
+the pinned images, so none of these replacements is measured: an image without it answers
+`Response: Error` with `Invalid/unknown command`.
 
 | Symbol | Module or wire-name status | Use instead |
 |---|---|---|
-| `ZapDialOffhookAction` | `ZapDialOffhook`: renamed `DAHDIDialOffhook` in Asterisk 1.6 | the `DAHDIDialOffhook` action (not typed) |
-| `ZapDndOffAction` | `ZapDNDoff`: renamed `DAHDIDNDoff` in Asterisk 1.6 | the `DAHDIDNDoff` action (not typed) |
-| `ZapDndOnAction` | `ZapDNDon`: renamed `DAHDIDNDon` in Asterisk 1.6 | the `DAHDIDNDon` action (not typed) |
-| `ZapHangupAction` | `ZapHangup`: renamed `DAHDIHangup` in Asterisk 1.6 | the `DAHDIHangup` action (not typed) |
-| `ZapRestartAction` | `ZapRestart`: renamed `DAHDIRestart` in Asterisk 1.6 | the `DAHDIRestart` action (not typed) |
+| `ZapDialOffhookAction` | `ZapDialOffhook`: renamed `DAHDIDialOffhook` in Asterisk 1.6 | `RawAction("DAHDIDialOffhook")` (2.10.0) |
+| `ZapDndOffAction` | `ZapDNDoff`: renamed `DAHDIDNDoff` in Asterisk 1.6 | `RawAction("DAHDIDNDoff")` (2.10.0) |
+| `ZapDndOnAction` | `ZapDNDon`: renamed `DAHDIDNDon` in Asterisk 1.6 | `RawAction("DAHDIDNDon")` (2.10.0) |
+| `ZapHangupAction` | `ZapHangup`: renamed `DAHDIHangup` in Asterisk 1.6 | `RawAction("DAHDIHangup")` (2.10.0) |
+| `ZapRestartAction` | `ZapRestart`: renamed `DAHDIRestart` in Asterisk 1.6 | `RawAction("DAHDIRestart")` (2.10.0) |
 | `ZapShowChannelsAction` | `ZapShowChannels`: renamed `DAHDIShowChannels` in Asterisk 1.6 | `DahdiShowChannelsAction` |
-| `ZapTransferAction` | `ZapTransfer`: renamed `DAHDITransfer` in Asterisk 1.6 | the `DAHDITransfer` action (not typed) |
+| `ZapTransferAction` | `ZapTransfer`: renamed `DAHDITransfer` in Asterisk 1.6 | `RawAction("DAHDITransfer")` (2.10.0) |
 
 ### chan_agent and app_setcdruserfield
 

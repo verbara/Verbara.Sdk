@@ -20,6 +20,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Live` | [A refused `Status` is counted and reported by the pool health check](#a-refused-status-is-counted-and-reported-by-the-pool-health-check) | new members, health check |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
 | `Verbara.Sdk.Ami` | [`NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends](#newextenevent-and-newcalleridevent-carry-what-the-wire-sends) | fix, new members |
+| `Verbara.Sdk.Ami` | [An action the SDK does not type is sent with `RawAction`](#an-action-the-sdk-does-not-type-is-sent-with-rawaction) | new type, behaviour, BREAKING |
 | `Verbara.Sdk.VoiceAi.Stt`, `Verbara.Sdk.VoiceAi.Tts` | [A message a recognizer or synthesizer cannot read no longer ends the session](#a-message-a-recognizer-or-synthesizer-cannot-read-no-longer-ends-the-session) | fix, behaviour, new metric, BREAKING |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An OpenAI Realtime audio delta that is not valid base64 no longer ends the call](#an-openai-realtime-audio-delta-that-is-not-valid-base64-no-longer-ends-the-call) | behaviour, metric, BREAKING |
 | `Verbara.Sdk.VoiceAi.Tts` | [A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis](#a-cartesia-or-elevenlabs-audio-frame-that-is-not-valid-base64-no-longer-ends-the-synthesis) | fix, behaviour, BREAKING |
@@ -405,6 +406,25 @@ starts with, or null when it starts with none; both were always null. A number a
 
 **What to do.** Read the typed members.
 
+### An action the SDK does not type is sent with `RawAction`
+
+**What changed.** `RawAction` (`Verbara.Sdk.Ami.Actions`) sends an AMI action by its name and its fields through
+every send method of `IAmiConnection`: `Action: <name>`, the connection's `ActionID`, then each field in the order it
+was added. The name must be ASCII letters and digits; a key ASCII letters, digits, `-`, `_`, `(` or `)`, and not
+`Action` or `ActionID`; a value holds no CR or LF; each is checked where the action is built. The answer is read by
+the name, as for a typed action.
+
+A `ManagerAction` subclass the SDK does not declare used to be written as its class name without `Action`, with none
+of its properties and none of its extra fields. The connection now throws `ArgumentException` naming its type and
+`RawAction`, before any byte is written; the connection stays usable.
+
+**Who is affected.** Code that sends its own `ManagerAction` subclass: it compiles, and throws at the send. No
+signature changed.
+
+**What to do.** Replace `new MyAction { Foo = "x" }` with `new RawAction("<ActionName>").Add("Foo", "x")`, where
+`<ActionName>` is the name Asterisk registers (`manager show commands`). This is also the route for the `DAHDI*`
+actions that replace the removed `Zap*` types (`new RawAction("DAHDIDNDon").Add("DAHDIChannel", "1")`).
+
 ## Resilience
 
 ### `circuit.state` reports the breaker's current state
@@ -560,10 +580,11 @@ What the wire still carries is not lost:
   `MusicOnHoldStartEvent`. Those types keep their own wire names, which every supported Asterisk sends.
 - **`VerbaraServer` no longer reads `QueueMemberPaused`.** Only Asterisk 11 and earlier send it; on those versions a
   member's pause state no longer follows it. `QueueMemberPause`, which every supported version sends, is unchanged.
-- **The SDK sends only the actions it types.** A consumer's own `ManagerAction` subclass is not a route to
-  another action: the generated serializer writes it as its type name without `Action`, with none of its
-  properties and none of its extra fields. So this release has no way to send the `DAHDI*` actions the Zaptel
-  rows name, nor `MeetmeMute` and `MeetmeUnmute` on a server built with app_meetme.
+- **An action the SDK does not type is sent as a `RawAction`.** A consumer's own `ManagerAction` subclass is not
+  a route to another action: the connection refuses it with `ArgumentException` (see
+  [An action the SDK does not type is sent with `RawAction`](#an-action-the-sdk-does-not-type-is-sent-with-rawaction)).
+  The `DAHDI*` actions the Zaptel rows name, and `MeetmeMute` and `MeetmeUnmute` on a server built with
+  app_meetme, are sent by name: `new RawAction("DAHDIDNDon").Add("DAHDIChannel", "1")`.
 
 **Who is affected.** Code that names a removed type or `UseConfBridge`: it no longer compiles. A removed type reports
 `CS0246`, or `CS0234` when written fully qualified; `UseConfBridge` reports `CS0117` in an object initializer and
@@ -591,14 +612,37 @@ on `QueueMemberPaused` for a member's pause state.
 Nothing is removed in 2.10.0, and nothing else changes: the ids, the replacements the messages name and the published
 instruments are as in 2.9.0.
 
+From 2.10.0 each of these warnings links to its id's heading below, not to the compiler's generic `CS0618` page.
+
+#### VSDK0002
+
 | Id | Member | Removed in |
 |---|---|---|
 | `VSDK0002` | `StatusEvent.State`, `CallerId`, `Account`, `BridgedChannel`, `Link`, `BridgedUniqueId` | 2.11.0 |
+
+#### VSDK0003
+
+| Id | Member | Removed in |
+|---|---|---|
 | `VSDK0003` | `AudioStreamMetrics.BufferUnderruns` (`audio.buffer.underruns`) | 2.11.0 |
+
+The instrument leaves the meter with its field; see **Who is affected** below.
+
+#### VSDK0004
+
+| Id | Member | Removed in |
+|---|---|---|
 | `VSDK0004` | `IChanWebSocketSession.SendXonAsync`, `SendXoffAsync` | 2.11.0 |
 | `VSDK0004` | `ChanWebSocketHangup`, `ChanWebSocketMediaBuffering` | 2.11.0 |
 | `VSDK0004` | `ChanWebSocketDtmf.DurationMs` | 2.11.0 |
+
+#### VSDK0006
+
+| Id | Member | Removed in |
+|---|---|---|
 | `VSDK0006` | `SessionMetrics.SessionsTimedOut` (`sessions.timed_out`), `SessionsOrphaned` (`sessions.orphaned`) | 2.11.0 |
+
+The instruments leave the meter with their fields; see **Who is affected** below.
 
 **Who is affected.** Code that reads one of these members: the warning it already reported now names 2.11.0. For
 `VSDK0003` and `VSDK0006`, a dashboard or exporter that lists the meter's instruments: each field is its instrument's

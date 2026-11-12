@@ -22,3 +22,6 @@
 # Captured AMI Status replies (the StatusEvent wire fixture). CRLF is the AMI framing, so the bytes
 # must never be line-ending converted or textually diffed.
 Tests/Verbara.Sdk.TestInfrastructure.Wire/AmiStatus/*.raw binary
+
+# Captured AMI actions written by name and their replies (AmiActionByNameWireCapture). CRLF is the AMI framing.
+Tests/Verbara.Sdk.TestInfrastructure.Wire/AmiActionByName/*.raw binary

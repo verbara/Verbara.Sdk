@@ -138,7 +138,8 @@ public interface IChanWebSocketSession : IAudioStream
     /// </exception>
     [Obsolete(
         "Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: 'command unknown', no reply), so this method throws NotSupportedException and writes nothing. Flow control is Asterisk's to send: read ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0004")]
+        DiagnosticId = "VSDK0004",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
     ValueTask SendXonAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -164,7 +165,8 @@ public interface IChanWebSocketSession : IAudioStream
     /// </exception>
     [Obsolete(
         "Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: 'command unknown', no reply), so this method throws NotSupportedException and writes nothing. Flow control is Asterisk's to send: read ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0004")]
+        DiagnosticId = "VSDK0004",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
     ValueTask SendXoffAsync(CancellationToken cancellationToken = default);
 
     /// <summary>

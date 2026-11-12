@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: the `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` warnings link to their migration-guide section (#560)
+
+The 14 members marked obsolete under these ids carry a documentation link: the warning a consumer's build reports,
+and the rule's help link in a SARIF log, open that id's heading in the
+[2.10.0 migration guide](docs/guides/migration-2.10.0.md#vsdk0002) instead of the compiler's generic `CS0618` page. No
+message, id, signature or removal release changes: the members still leave in 2.11.0.
+
 ### Fixed: an out-of-memory no longer leaves a client, a reload or a session ending unreported (#554)
 
 `AriClient`: an out-of-memory in the events loop, while receiving or in a reconnect attempt, ends the client
@@ -41,6 +48,23 @@ unless it sets `Epoch`, so a consumer reads `Unknown` for them.
 allocates a capturing factory (88 B per params report, 96 B per member added or caller joined). A report no handler is
 subscribed to allocates nothing beyond the member or entry it stores, and a caller's join and leave costs 168 B with no
 subscriber and 520 B with one, down from 264 B and 616 B.
+
+### Added: an AMI action the SDK does not type is sent by name with `RawAction` (#561)
+
+`new RawAction("DAHDIDNDon").Add("DAHDIChannel", "1")` is sent through any `IAmiConnection` send method as
+`Action: DAHDIDNDon`, its `ActionID` and its fields in the order they were added, repeated keys kept. The name must be
+ASCII letters and digits; a key ASCII letters, digits, `-`, `_`, `(` or `)`, and not `Action` or `ActionID`; a value
+holds no CR or LF. Each is checked where the action is built and throws `ArgumentException`, which never echoes the
+value. The response is read as the typed action of the same name would be, or as a base `ManagerResponse` with
+`RawFields`. This makes the 2.9.0 `Zap*` migration instruction ("send the DAHDI… action") one you can follow.
+
+### Changed — BREAKING: an action the SDK cannot write is refused instead of being sent under its class name (#561)
+
+A `ManagerAction` subclass of your own used to be written as its class name without `Action`, with none of its
+properties or extra fields. It now throws `ArgumentException` naming its type and `RawAction`, before any byte is
+written; the connection stays usable. No signature changed, but code that ran in 2.9.0 throws in 2.10.0. Migration:
+replace `new MyAction { Foo = "x" }` with `new RawAction("<ActionName>").Add("Foo", "x")`. See
+[the migration guide](docs/guides/migration-2.10.0.md#an-action-the-sdk-does-not-type-is-sent-with-rawaction).
 
 ### Changed — BREAKING: the types of dead Asterisk modules deprecated with `VSDK0005` in 2.9.0 are removed (#558)
 

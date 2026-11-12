@@ -169,7 +169,8 @@ public sealed record ChanWebSocketMediaXon : ChanWebSocketControlMessage
 /// <param name="Bytes">Never set by the SDK.</param>
 [Obsolete(
     "Never published: no chan_websocket message reports a buffer fill in bytes. Flow control arrives as ChanWebSocketMediaXoff / ChanWebSocketMediaXon; the queue length is ChanWebSocketStatus.QueueLength, the reply to SendGetStatusAsync. Removed in Verbara.Sdk 2.11.0.",
-    DiagnosticId = "VSDK0004")]
+    DiagnosticId = "VSDK0004",
+    UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
 public sealed record ChanWebSocketMediaBuffering(int Bytes) : ChanWebSocketControlMessage;
 
 /// <summary>
@@ -219,7 +220,8 @@ public sealed record ChanWebSocketDtmf(
     [property: JsonPropertyName("duration_ms")]
     [property: Obsolete(
         "Always 0: chan_websocket's DTMF_END carries digit and channel_id only, on every supported version and in both control formats. Read the duration from the bridged peer channel's ARI ChannelDtmfReceived event (ChannelDtmfReceivedEvent.DurationMs; seen when the peer is in Stasis or the application subscribes to all) or from AMI DTMFEnd on the peer (DtmfEndEvent.DurationMs), never from the WebSocket channel's. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0004")]
+        DiagnosticId = "VSDK0004",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
     int DurationMs) : ChanWebSocketControlMessage
 {
     /// <summary>The frame's <c>channel_id</c>: the call the digit was sent on.</summary>
@@ -329,7 +331,8 @@ public sealed record ChanWebSocketQueueDrained : ChanWebSocketControlMessage
 /// <param name="Cause">Never set by the SDK.</param>
 [Obsolete(
     "Never published: chan_websocket signals a hangup with a WebSocket close frame, never a text message (measured on 22.10.1 through 24.0.0-rc2, every hangup path). Read the session's ending on IAudioStream.StateChanges. Removed in Verbara.Sdk 2.11.0.",
-    DiagnosticId = "VSDK0004")]
+    DiagnosticId = "VSDK0004",
+    UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
 public sealed record ChanWebSocketHangup(string? Cause) : ChanWebSocketControlMessage;
 
 // ---------------------------------------------------------------------------
