@@ -562,7 +562,9 @@ What the wire still carries is not lost:
   writes such a subclass as its type name without `Action` and with none of its properties. Every supported Asterisk
   answers the removed actions with `Invalid/unknown command`, so the SDK adds no raw-action route for them.
 
-**Who is affected.** Code that names a removed type or `UseConfBridge`: it no longer compiles (`CS0246`, `CS0117`).
+**Who is affected.** Code that names a removed type or `UseConfBridge`: it no longer compiles. A removed type reports
+`CS0246`, or `CS0234` when written fully qualified; `UseConfBridge` reports `CS0117` in an object initializer and
+`CS1061` when read.
 A binary built against 2.9.0 or earlier that names one fails to load it (`TypeLoadException`, `MissingMethodException`).
 Code that matched `AsyncAgiEvent` or `ResponseEvent` for `AsyncAGI`. Live users on Asterisk 11 or earlier who relied
 on `QueueMemberPaused` for a member's pause state.

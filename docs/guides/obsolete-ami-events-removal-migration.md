@@ -199,7 +199,8 @@ These 49 types and one member were marked `[Obsolete]` in 2.9.0 with the diagnos
 2.10.0 removes them. Each one reached only an Asterisk module that is gone or deprecated upstream, a
 module whose publisher discontinued it, or a wire name Asterisk renamed or removed in version 10 or 12.
 On 2.9.0, naming one reports the `VSDK0005` **warning**, and its message links here. On 2.10.0 the
-compiler reports `CS0246` for a removed type and `CS0117` for `UseConfBridge`. The last column of each
+compiler reports `CS0246` for a removed type (`CS0234` when it is written fully qualified), and
+`CS0117` for `UseConfBridge` in an object initializer (`CS1061` when it is read). The last column of each
 table below is the replacement. The id is retired: no later deprecation reuses it.
 
 **What changes at run time in 2.10.0.** Nothing the wire carries is lost. An event whose type was removed
