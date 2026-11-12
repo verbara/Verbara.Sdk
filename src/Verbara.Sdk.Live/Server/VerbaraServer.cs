@@ -50,6 +50,9 @@ internal static partial class VerbaraServerLog
         Message = "[LIVE] Status refused: {Message}; the channel table was not reconciled, so no held channel was removed and no call was ended. The AMI user needs 'system', 'call' or 'reporting' in write for a load to reconcile the channels")]
     public static partial void StatusRefused(ILogger logger, string message);
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[LIVE] Queues reconciled: queues={Queues} queue_status_refused={Refused}")]
+    public static partial void QueuesReconciled(ILogger logger, int queues, bool refused);
+
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "[LIVE] Status refused again in this AMI session: {Message}; the channel table was not reconciled")]
     public static partial void StatusRefusedAgain(ILogger logger, string message);
@@ -821,15 +824,78 @@ public sealed class VerbaraServer : IVerbaraServer
         LiveActivitySource.SetChannelReconcileResult(activity, Channels.ChannelCount);
     }
 
-    /// <summary>Seam for the queues-only refresh; not implemented yet.</summary>
-    public ValueTask ReconcileQueuesAsync(CancellationToken cancellationToken = default) =>
-        _connection is null ? throw new InvalidOperationException() : ValueTask.CompletedTask;
+    /// <summary>
+    /// Asks Asterisk for its queue snapshot (<c>QueueStatus</c>), reads it to completion and reconciles the queue table
+    /// against it: the queue part of <see cref="RequestInitialStateAsync"/>, and nothing else. It requests neither the
+    /// channels, the bridges, the conference rooms nor the agents, does not reconnect, and clears no manager.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asterisk sends no event when a queue is created after Live's load, by a reload of its static configuration or a
+    /// realtime insert, so Live does not hold such a queue until it lists the queues again. This is the explicit way to
+    /// do that without reconnecting: a queue the completed snapshot lists and the table does not hold is admitted with
+    /// its parameters, its members and its waiting callers, the callers as snapshot entries
+    /// (<see cref="Queues.AsteriskQueueEntry.FromSnapshot"/>, with the <c>Wait</c> Asterisk reported). Nothing here
+    /// discovers a queue Asterisk never lists, and no caller's earlier wait is invented.
+    /// </para>
+    /// <para>
+    /// The reconciliation holds to the rules of a load's queues. A held caller the snapshot still lists keeps its entry
+    /// and its <see cref="Queues.AsteriskQueueEntry.JoinedAt"/>, and no join is counted for it again. A held caller the
+    /// completed snapshot omits, and whose join was handled before the snapshot was asked for, leaves the table counted
+    /// left with no wait sample (<see cref="Queues.AsteriskQueueEntry.LeaveNotObserved"/>); a queue the snapshot omits is
+    /// removed once it holds no caller; a member a listed queue holds and the snapshot omits is removed. A caller who
+    /// joined, or a member added, after the request is kept, and one seen leaving after the request is not brought back.
+    /// A session manager attached to this server is told of the completed snapshot, as after a load.
+    /// </para>
+    /// <para>
+    /// A snapshot that did not complete reconciles nothing: one the token cancelled throws
+    /// <see cref="OperationCanceledException"/>, and one whose AMI session ended throws
+    /// <see cref="AmiNotConnectedException"/>. A <c>QueueStatus</c> Asterisk refused reconciles nothing and does not throw.
+    /// Over an <see cref="AmiConnection"/>, before the completed snapshot removes anything, it waits, for at most 10 s,
+    /// until the connection has delivered to its handlers every event it received before <c>QueueStatusComplete</c>; when
+    /// that runs out it only admits what the snapshot lists, removes nothing, logs a <c>Warning</c>, and announces the
+    /// callers it admitted once the delivery has caught up. Called from inside an event handler it does not wait. It is
+    /// not serialized with a load or another call of itself: each read keeps its own window. Its result is logged at
+    /// <c>Debug</c>; it is never reported as a state load.
+    /// </para>
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the read; a cancelled read reconciles nothing.</param>
+    /// <exception cref="AmiNotConnectedException">
+    /// The connection is not established, or its AMI session ended before the snapshot could be reconciled.
+    /// </exception>
+    public async ValueTask ReconcileQueuesAsync(CancellationToken cancellationToken = default)
+    {
+        var states = new LoadConnectionStates(_connection);
+        var session = _connection is AmiConnection ami ? new LoadSession(ami, TimeProvider) : null;
+        var barriers = new Barriers { Session = session };
+        var transferred = false;
+        bool applied;
+        try
+        {
+            applied = await LoadQueuesAsync(session, states, activity: null, barriers, QueueReconcileReader, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            transferred = true;
+        }
+        catch (AmiNotConnectedException) when (states.AtStop is null && states.BeganOnASession)
+        {
+            throw states.Stop($"the {QueueReconcileReader} could not send QueueStatus, because its AMI session had ended");
+        }
+        finally
+        {
+            if (!transferred)
+                barriers.QueueReports?.Dispose();
+        }
 
-    /// <summary>Seam: the targeted discovery in flight for <paramref name="queueName"/>, or a completed task.</summary>
-    internal Task PendingQueueDiscovery(string queueName) => _connection is null ? Task.FromResult(queueName) : Task.CompletedTask;
+        // A wait that ran out leaves the callers it admitted to be announced once the pump has caught up; no full reload
+        // is scheduled, since this refresh asks for the queues alone.
+        if (barriers.QueueReports is not null)
+            ScheduleDeferredOwner(barriers, reload: false);
 
-    /// <summary>Seam: how many targeted discoveries are in flight.</summary>
-    internal int PendingQueueDiscoveryCount => _connection is null ? 1 : 0;
+        VerbaraServerLog.QueuesReconciled(_logger, Queues.QueueCount, refused: !applied);
+    }
+
+    /// <summary>What a <see cref="ReconcileQueuesAsync"/> is called in the exceptions and logs of its read.</summary>
+    private const string QueueReconcileReader = "live queue reconciliation";
 
     /// <summary>Who reads a channel snapshot: a load, or <see cref="ReconcileChannelsAsync"/>.</summary>
     /// <param name="Name">What the reader is called in the exception a session ending under it throws.</param>
@@ -1110,6 +1176,15 @@ public sealed class VerbaraServer : IVerbaraServer
             return;
         }
 
+        ScheduleDeferredOwner(barriers, reload: true);
+    }
+
+    /// <summary>
+    /// Hands a read's retained queue reports, and with <paramref name="reload"/> one full reload, to an owner the disposal
+    /// waits for. On a server already being disposed the reports are released instead.
+    /// </summary>
+    private void ScheduleDeferredOwner(Barriers barriers, bool reload)
+    {
         lock (_deferredLoadsGate)
         {
             if (_disposing.IsCancellationRequested)
@@ -1117,10 +1192,12 @@ public sealed class VerbaraServer : IVerbaraServer
                 barriers.QueueReports?.Dispose();
                 return;
             }
-            VerbaraServerLog.DeferredReloadScheduled(_logger);
-            var owner = Task.Run(() => RunDeferredReloadAsync(barriers, reload: true), CancellationToken.None);
+            if (reload)
+                VerbaraServerLog.DeferredReloadScheduled(_logger);
+            var owner = Task.Run(() => RunDeferredReloadAsync(barriers, reload), CancellationToken.None);
             _deferredLoads.Add(owner);
-            ScheduledReload = owner;
+            if (reload)
+                ScheduledReload = owner;
             _ = owner.ContinueWith(completed =>
             {
                 lock (_deferredLoadsGate)
@@ -1243,7 +1320,7 @@ public sealed class VerbaraServer : IVerbaraServer
             }
 
             request = "QueueStatus";
-            await LoadQueuesAsync(session, states, activity, barriers, cancellationToken);
+            await LoadQueuesAsync(session, states, activity, barriers, ChannelReader.Load.Name, cancellationToken);
 
             request = "Agents";
             await PopulateAgentsAsync(session, states, activity, barriers, cancellationToken);
@@ -1270,8 +1347,13 @@ public sealed class VerbaraServer : IVerbaraServer
     private sealed record QueueEntryRow(string Queue, string Channel, string? UniqueId, string? CallerId,
         int Position, long? Wait, DateTimeOffset ReadAt, EventLossEpoch LossEpoch) : QueueRow;
 
-    private async ValueTask LoadQueuesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
-        Barriers barriers, CancellationToken cancellationToken)
+    /// <summary>
+    /// The queue half shared by a load and <see cref="ReconcileQueuesAsync"/>: open the queue read window, read the
+    /// <c>QueueStatus</c> snapshot inside it and reconcile the table against it. Returns <see langword="false"/> when
+    /// Asterisk refused the <c>QueueStatus</c>, which reconciles nothing.
+    /// </summary>
+    private async ValueTask<bool> LoadQueuesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
+        Barriers barriers, string readerName, CancellationToken cancellationToken)
     {
         using (var owner = new QueueSnapshotOwner(Queues.OpenSnapshotWindow()))
         {
@@ -1303,8 +1385,8 @@ public sealed class VerbaraServer : IVerbaraServer
             }
             cancellationToken.ThrowIfCancellationRequested();
             if (asked.Refused)
-                return;
-            var full = await AwaitBarrierAsync(session, mark, "QueueStatus", states, ChannelReader.Load.Name, activity,
+                return false;
+            var full = await AwaitBarrierAsync(session, mark, "QueueStatus", states, readerName, activity,
                 barriers, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             var reports = new List<(string Queue, AsteriskQueueEntry Entry)>();
@@ -1332,6 +1414,8 @@ public sealed class VerbaraServer : IVerbaraServer
             else
                 owner.TransferTo(barriers, mark!, reports);
         }
+
+        return true;
     }
 
     /// <summary>

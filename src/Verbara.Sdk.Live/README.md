@@ -92,6 +92,32 @@ The session engine's reconciliation sweep calls it: `AddVerbaraSessions` for the
 `AddVerbaraSessionsMultiServer` for every server of the pool. A host can also call it on a schedule of its own; on a
 multi-server host, switch the pool sweep off first, or each server receives two `Status` per interval.
 
+## Refreshing the queues
+
+Asterisk sends no event when it creates a queue after Live's load: a `queue reload` that adds one to `queues.conf`, or
+a row inserted into a realtime queue table. Live does not hold such a queue until it lists the queues again.
+`VerbaraServer.ReconcileQueuesAsync()` is that listing without a reconnect: it asks Asterisk for its queue snapshot
+(`QueueStatus`), reads it to the end and reconciles the queue table against it, the queue part of a state load and
+nothing else. It asks for no channel, bridge, conference or agent state.
+
+```csharp
+// After adding a queue to Asterisk's configuration and reloading it:
+await server.ReconcileQueuesAsync(cancellationToken);
+var sales = server.Queues.GetByName("sales"); // its parameters, members and waiting callers
+```
+
+- A queue, member or waiting caller the snapshot lists and the table lacks is admitted as reported; a caller is held as
+  a snapshot entry with the wait Asterisk reported. No earlier join or leave is invented.
+- A caller the table already holds and the snapshot still lists keeps its entry and its `JoinedAt`, and no join is
+  counted for it again. One the completed snapshot no longer lists leaves as after a reload: counted left with no wait
+  sample and marked `LeaveNotObserved`. A queue the snapshot no longer lists is removed once it holds no caller.
+- A caller or member that changes while the snapshot is being read is left as the live events made it.
+- A snapshot that did not complete reconciles nothing: a cancelled read throws `OperationCanceledException`, and a read
+  whose AMI session ended, or a connection that is not established, throws `AmiNotConnectedException`. A `QueueStatus`
+  that Asterisk refuses reconciles nothing and does not throw.
+- It is logged at Debug and never reported as a state load. Nothing calls it for you: a queue Asterisk creates without
+  an event is found by this call, or by the reload after the next reconnect.
+
 ## Documentation
 
 - [High-Load Tuning Guide](../../docs/guides/high-load-tuning.md)
