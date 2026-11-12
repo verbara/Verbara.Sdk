@@ -1,9 +1,15 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Verbara.Sdk.Ami;
+using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Queues;
 using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Live.Tests.Harness;
 using Verbara.Sdk.Live.Tests.Queues;
+using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Extensions;
+using Verbara.Sdk.Sessions.Manager;
 using FluentAssertions;
 using FluentAssertions.Execution;
 
@@ -20,7 +26,7 @@ namespace Verbara.Sdk.Live.Tests.Server;
 /// Each test runs a real <see cref="Verbara.Sdk.Ami.Connection.AmiConnection"/> and a <see cref="VerbaraServer"/> through
 /// <see cref="Run"/>, over a <see cref="BootingAsterisk"/> that has finished starting. On the AMI wire a queue created by
 /// a static reload and one inserted in realtime answer <c>QueueStatus</c> the same way, so the peer plays both as a queue
-/// listed after the load; which of them Asterisk does list is measured on the real substrate (task 3.0). In the counter
+/// listed after the load; which of them a real Asterisk does list is a separate measurement. In the counter
 /// collection, because the tests count joins and leaves exactly.
 /// </remarks>
 [Collection(LiveCountersGroup.Name)]
@@ -178,6 +184,117 @@ public sealed class VerbaraServerReconcileQueuesTests
         }
     }
 
+    [Fact]
+    public async Task ReconcileQueuesAsync_ShouldOnlyAdmitAndAnnounceLaterWithoutAFullReload_WhenItsWaitForThePumpRunsOut()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true, QueueEntries = [HeldCaller] };
+        await using var run = await Run.StartAsync(peer);
+        using var gate = new DispatchGate();
+        using var subscription = run.Connection.Subscribe(gate);
+        var barrierClock = new FakeTimeProvider(run.Clock.GetUtcNow());
+        run.Server.BarrierClock = barrierClock;
+        var announced = new TaskCompletionSource<AsteriskQueueEntry>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Action<string, AsteriskQueueEntry> onJoined = (queue, entry) =>
+        {
+            if (queue == Sales)
+                announced.TrySetResult(entry);
+        };
+        run.Server.Queues.CallerJoined += onJoined;
+        try
+        {
+            var reloadBefore = run.Server.ScheduledReload;
+            var asked = Asks(peer);
+            using var counters = new LiveCounters();
+
+            // The pump is held on an event received before the listing, so the refresh's wait for it runs out.
+            await peer.SendEventAsync("UserEvent", DispatchGate.Frame());
+            await gate.Held.WaitAsync(Run.Bound);
+            peer.MainQueueListed = false;
+            peer.OtherQueues = [new ListedQueue(Sales, ["PJSIP/2001"], [Waiting])];
+            var refresh = run.Server.ReconcileQueuesAsync().AsTask();
+            var timer = await barrierClock.TimersCreated.ReadAsync().AsTask().WaitAsync(Run.Bound);
+            barrierClock.Advance(timer.DueTime);
+            await refresh.WaitAsync(Run.Bound);
+
+            using (new AssertionScope())
+            {
+                Held(run, Sales, "a wait that ran out still admits what the listing holds").Entries.Keys
+                    .Should().Equal([Waiting.Channel]);
+                var main = Held(run, BootingAsterisk.QueueName, "a wait that ran out removes no queue the listing omits");
+                main.Entries.Should().ContainKey(HeldCaller.Channel, "nor a caller");
+                main.Members.Should().ContainKey(BootingAsterisk.MemberLocation, "nor a member");
+                counters.Left.Should().Be(0, "no caller is counted left");
+                announced.Task.IsCompleted.Should().BeFalse("the admitted caller is announced only once the pump caught up");
+                run.Server.ScheduledReload.Should().BeSameAs(reloadBefore, "a queue refresh schedules no full reload");
+                run.ServerLog.Entries.Should().NotContain(e => e.Line.Contains("[LIVE] A load's wait for the event pump ran out"),
+                    "and does not announce one");
+                run.ServerLog.Entries.Should().Contain(e => e.Level == Microsoft.Extensions.Logging.LogLevel.Warning
+                    && e.Line.Contains("QueueStatus barrier ran out"), "the wait that ran out is a Warning");
+            }
+
+            gate.Release();
+            var entry = await announced.Task.WaitAsync(Run.Bound);
+
+            using (new AssertionScope())
+            {
+                entry.Channel.Should().Be(Waiting.Channel, "the admitted caller is announced once the pump caught up");
+                entry.FromSnapshot.Should().BeTrue();
+                Asks(peer).Should().Be(asked with { QueueStatus = asked.QueueStatus + 1 },
+                    "nothing but QueueStatus was asked: no Status, BridgeList, ConfbridgeListRooms or Agents");
+                run.Server.ScheduledReload.Should().BeSameAs(reloadBefore);
+                peer.Fault.Should().BeNull("the peer served the session without failing");
+            }
+        }
+        finally
+        {
+            run.Server.Queues.CallerJoined -= onJoined;
+            gate.Release();
+        }
+    }
+
+    [Fact]
+    public async Task ReconcileQueuesAsync_ShouldCloseOnlyTheVisitItNoLongerLists_WhenASessionManagerIsAttached()
+    {
+        const string GoneUid = "1790633900.21";
+        const string GoneChannel = "PJSIP/far-00000021";
+        const string StillUid = "1790633900.22";
+        const string StillChannel = "PJSIP/far-00000022";
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.StartAsync(peer);
+        await using var manager = new CallSessionManager(Options.Create(new SessionOptions()),
+            NullLogger<CallSessionManager>.Instance, new NullStore(), run.Clock);
+        manager.AttachToServer(run.Server, "srv-queue-refresh");
+        var left = new System.Collections.Concurrent.ConcurrentQueue<QueueVisitSignal>();
+        manager.VisitLeft += left.Enqueue;
+        var tail = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var tailSubscription = run.Connection.Subscribe(new TailObserver("visits-open", tail));
+
+        // Two callers join the load's queue live, each with an open visit.
+        await peer.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(GoneUid, GoneChannel, GoneUid));
+        await peer.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(StillUid, StillChannel, StillUid));
+        await peer.SendEventAsync("QueueCallerJoin", AsteriskFrames.QueueCallerJoin(GoneUid, GoneChannel, BootingAsterisk.QueueName, 1, 1));
+        await peer.SendEventAsync("QueueCallerJoin", AsteriskFrames.QueueCallerJoin(StillUid, StillChannel, BootingAsterisk.QueueName, 2, 2));
+        await peer.SendEventAsync("UserEvent", [new("Privilege", "user,all"), new("UserEvent", "visits-open")]);
+        await tail.Task.WaitAsync(Run.Bound);
+        var gone = manager.GetByChannelId(GoneUid);
+        var still = manager.GetByChannelId(StillUid);
+        gone.Should().NotBeNull("the manager opened a session for the first caller");
+        still.Should().NotBeNull("and for the second");
+
+        // The refresh lists the second caller only: the first left while no leave reached Live.
+        peer.QueueEntries = [new QueueCaller(StillChannel, StillUid, Position: 1, Wait: 3)];
+        await run.Server.ReconcileQueuesAsync().AsTask().WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            left.Should().ContainSingle("a completed refresh closes the visit it no longer lists, and only that one")
+                .Which.Should().Match<QueueVisitSignal>(v => v.SessionId == gone!.SessionId && v.LeaveMissed
+                    && v.EventsMayHaveBeenLost && v.QueueName == BootingAsterisk.QueueName);
+            Held(run, BootingAsterisk.QueueName, "the queue is still listed").Entries.Keys.Should().Equal([StillChannel]);
+            peer.Fault.Should().BeNull("the peer served the session without failing");
+        }
+    }
+
     private static void AssertNothingRemoved(Run run, BootingAsterisk peer, LiveCounters counters, Exception? outcome,
         Type? expectFailure)
     {
@@ -216,5 +333,23 @@ public sealed class VerbaraServerReconcileQueuesTests
         {
             return false;
         }
+    }
+
+    private sealed class TailObserver(string userEvent, TaskCompletionSource reached) : IObserver<ManagerEvent>
+    {
+        public void OnNext(ManagerEvent value)
+        {
+            if (value is UserEventEvent { UserEvent: var name } && name == userEvent)
+                reached.TrySetResult();
+        }
+
+        public void OnError(Exception error) { }
+        public void OnCompleted() { }
+    }
+
+    private sealed class NullStore : SessionStoreBase
+    {
+        public override ValueTask SaveAsync(CallSession session, CancellationToken ct) => ValueTask.CompletedTask;
+        public override ValueTask<CallSession?> GetAsync(string sessionId, CancellationToken ct) => ValueTask.FromResult<CallSession?>(null);
     }
 }

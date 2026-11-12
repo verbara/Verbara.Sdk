@@ -845,7 +845,8 @@ public sealed class VerbaraServer : IVerbaraServer
     /// left with no wait sample (<see cref="Queues.AsteriskQueueEntry.LeaveNotObserved"/>); a queue the snapshot omits is
     /// removed once it holds no caller; a member a listed queue holds and the snapshot omits is removed. A caller who
     /// joined, or a member added, after the request is kept, and one seen leaving after the request is not brought back.
-    /// A session manager attached to this server is told of the completed snapshot, as after a load.
+    /// A session manager attached to this server is told of the completed snapshot, as after a load, once the snapshot
+    /// was applied in full.
     /// </para>
     /// <para>
     /// A snapshot that did not complete reconciles nothing: one the token cancelled throws
