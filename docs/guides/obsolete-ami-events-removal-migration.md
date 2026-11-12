@@ -18,9 +18,9 @@ can reach:
 longer `[Obsolete]`.
 A `#pragma warning disable CS0618` you kept around it can go.
 
-2.9.0 also **deprecates**, without removing, 49 types and one member that only a dead Asterisk module
-or a renamed wire name can reach. They compile with the `VSDK0005` warning and are removed in 2.10.0;
-see [VSDK0005](#vsdk0005).
+2.9.0 also **deprecated**, without removing, 49 types and one member that only a dead Asterisk module
+or a renamed wire name can reach. They compiled with the `VSDK0005` warning in 2.9.0 and are removed in
+2.10.0; see [VSDK0005](#vsdk0005).
 
 ## What you have to do
 
@@ -195,20 +195,26 @@ built against an earlier version keeps working; only the next compile fails, wit
 
 Deprecated in 2.9.0, removed in 2.10.0.
 
-These 49 types and one member stay in 2.9.0, marked `[Obsolete]` with the diagnostic id `VSDK0005`.
-Each one reaches only an Asterisk module that is gone or deprecated upstream, a module whose publisher
-discontinued it, or a wire name Asterisk renamed or removed in version 10 or 12. Naming one in your code
-reports the `VSDK0005` **warning**, never an error; the warning's message says what to use instead.
+These 49 types and one member were marked `[Obsolete]` in 2.9.0 with the diagnostic id `VSDK0005`, and
+2.10.0 removes them. Each one reached only an Asterisk module that is gone or deprecated upstream, a
+module whose publisher discontinued it, or a wire name Asterisk renamed or removed in version 10 or 12.
+On 2.9.0, naming one reports the `VSDK0005` **warning**, and its message links here. On 2.10.0 the
+compiler reports `CS0246` for a removed type and `CS0117` for `UseConfBridge`. The last column of each
+table below is the replacement. The id is retired: no later deprecation reuses it.
 
-**Nothing changes at run time.** Every marked action still serializes and is sent as before, every
-marked response and event is still parsed when Asterisk sends it, and the SDK maps each wire name to
-the same type as in 2.8.0. `UseConfBridge = false` still runs MeetMe. Only the compiler output changes.
+**What changes at run time in 2.10.0.** Nothing the wire carries is lost. An event whose type was removed
+reaches every subscriber as a base `ManagerEvent`, with its name, spelled as Asterisk sent it, in
+`EventType`, and every header in `RawFields`. `AsyncAGI` is therefore no longer a `ResponseEvent`; it still
+reaches the sequence of the action whose `ActionID` it carries. `DTMF`, `Transfer` and `MusicOnHold` are
+not turned into `DtmfEndEvent`, `BlindTransferEvent` or `MusicOnHoldStartEvent`, which keep their own wire
+names. `VerbaraServer` no longer reads `QueueMemberPaused`, which only Asterisk 11 and earlier send.
+`MeetmeActivity` always runs ConfBridge. The [2.10.0 migration guide](migration-2.10.0.md) has the rest.
 
-### Silencing it
+### Moving off it
 
-Replace each use with the type in the last column before 2.10.0. Until then, if you build with
-`TreatWarningsAsErrors`, you can opt out of this deprecation alone, without silencing `CS0618` across
-your project:
+Replace each use with the type in the last column before you move to 2.10.0. On 2.9.0, if you build with
+`TreatWarningsAsErrors`, you can opt out of this deprecation alone while you do, without silencing
+`CS0618` across your project:
 
 ```xml
 <PropertyGroup>
@@ -216,8 +222,7 @@ your project:
 </PropertyGroup>
 ```
 
-To keep the warning elsewhere, wrap only the line that needs the type in
-`#pragma warning disable VSDK0005` / `#pragma warning restore VSDK0005`.
+Remove that line when you move to 2.10.0: the id no longer reports anything.
 
 ### chan_sip (use PJSIP)
 
@@ -256,10 +261,10 @@ not built by default and it needs DAHDI. None of the pinned images ships it.
 | `MeetMeEventBase` | app_meetme, deprecated since Asterisk 19; no event derives from it since 2.9.0 | `ConfbridgeEventBase` |
 | `MeetmeCompatibility` | app_meetme, deprecated since Asterisk 19 | none |
 | `MeetmeCommand` (`Verbara.Sdk.Agi`) | `EXEC MeetMe`: app_meetme, deprecated since Asterisk 19 | `ConfbridgeCommand` |
-| `MeetmeActivity.UseConfBridge` (`Verbara.Sdk.Activities`) | `false` runs MeetMe: app_meetme, deprecated since Asterisk 19 | none: ConfBridge is the default, so remove the assignment. From 2.10.0 `MeetmeActivity` runs ConfBridge only |
+| `MeetmeActivity.UseConfBridge` (`Verbara.Sdk.Activities`) | `false` ran MeetMe: app_meetme, deprecated since Asterisk 19 | none: remove the assignment; `MeetmeActivity` runs ConfBridge only. For MeetMe, `IAgiChannel.ExecAsync("MeetMe", args)` |
 
 `MeetmeActivity` itself, `MeetMeManager`, `MeetMeRoom`, `MeetMeUser` and `MeetMeUserState` are not
-deprecated: they carry a MeetMe name, but ConfBridge feeds them.
+deprecated and stay: they carry a MeetMe name, but ConfBridge feeds them.
 
 ### Skype for Asterisk (discontinued)
 
@@ -327,8 +332,8 @@ name, or no longer send it. A handler written against the old type never fires o
 | `BridgeExecEvent` | `BridgeExec`: removed in Asterisk 12; `BridgeCreate`, `BridgeEnter` and `BridgeLeave` carry what it reported | `BridgeCreateEvent`, `BridgeEnterEvent`, `BridgeLeaveEvent` |
 | `ModuleLoadReportEvent` | `ModuleLoadReport`: removed in Asterisk 12 | none |
 
-`QueueMemberPausedEvent` and `QueueMemberPauseEvent` are two types: the live `QueueMemberPause` still
-parses as `QueueMemberPauseEvent`, which is not deprecated.
+`QueueMemberPausedEvent` and `QueueMemberPauseEvent` were two types: the live `QueueMemberPause` still
+parses as `QueueMemberPauseEvent`, which is not deprecated and stays.
 
 ## Moved from the compatibility guide
 

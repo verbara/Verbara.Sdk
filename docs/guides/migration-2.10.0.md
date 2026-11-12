@@ -23,6 +23,8 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.VoiceAi.Stt`, `Verbara.Sdk.VoiceAi.Tts` | [A message a recognizer or synthesizer cannot read no longer ends the session](#a-message-a-recognizer-or-synthesizer-cannot-read-no-longer-ends-the-session) | fix, behaviour, new metric, BREAKING |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An OpenAI Realtime audio delta that is not valid base64 no longer ends the call](#an-openai-realtime-audio-delta-that-is-not-valid-base64-no-longer-ends-the-call) | behaviour, metric, BREAKING |
 | `Verbara.Sdk.VoiceAi.Tts` | [A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis](#a-cartesia-or-elevenlabs-audio-frame-that-is-not-valid-base64-no-longer-ends-the-synthesis) | fix, behaviour, BREAKING |
+| `Verbara.Sdk.Ami`, `Verbara.Sdk.Agi`, `Verbara.Sdk.Activities`, `Verbara.Sdk.Live` | [The types deprecated with `VSDK0005` are removed](#the-types-deprecated-with-vsdk0005-are-removed) | removed types and member, behaviour, BREAKING |
+| `Verbara.Sdk.Ami`, `Verbara.Sdk.Ari`, `Verbara.Sdk.Sessions` | [`VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` name their removal release](#vsdk0002-vsdk0003-vsdk0004-and-vsdk0006-name-their-removal-release) | warning text |
 
 ## Sessions
 
@@ -527,3 +529,77 @@ changes.
 
 **What to do.** Catch the three exceptions `SynthesizeAsync` documents. To see the frames the synthesizer skipped, watch
 `tts.frames.unparseable`.
+
+## Deprecated surface
+
+### The types deprecated with `VSDK0005` are removed
+
+**What changed.** 2.9.0 marked 49 types and one member `[Obsolete]` with `VSDK0005` and said they leave in 2.10.0.
+They are removed:
+
+- from `Verbara.Sdk.Ami`, the 28 actions and 3 responses of chan_sip, res_monitor, app_meetme, Skype for Asterisk,
+  the Zaptel action names, chan_agent and app_setcdruserfield, `MeetMeEventBase`, `MeetmeCompatibility`, and the 15
+  event types of dead modules or of wire names Asterisk 10 or 12 renamed or removed;
+- from `Verbara.Sdk.Agi`, `MeetmeCommand`;
+- from `Verbara.Sdk.Activities`, `MeetmeActivity.UseConfBridge`. `MeetmeActivity` stays and always runs ConfBridge,
+  which was already its default.
+
+The [VSDK0005 tables](obsolete-ami-events-removal-migration.md#vsdk0005) list every symbol and its replacement; the
+link in each 2.9.0 warning opens them. No supported Asterisk registers a removed action or sends a removed event.
+
+What the wire still carries is not lost:
+
+- **An event whose type was removed arrives as a base `ManagerEvent`.** Its name, spelled as Asterisk sent it, is in
+  `EventType`, and every header is in `RawFields`. Every subscriber and `OnEvent` handler still receives it; nothing
+  is dropped, and nothing is logged above Debug.
+- **`AsyncAGI` is no longer a `ResponseEvent`.** An `AsyncAGI` that carries the `ActionID` of an event-generating
+  action still reaches that action's sequence, untyped. Code that matched it as `ResponseEvent` no longer does.
+- **`DTMF`, `Transfer` and `MusicOnHold` are not rewritten** into `DtmfEndEvent`, `BlindTransferEvent` or
+  `MusicOnHoldStartEvent`. Those types keep their own wire names, which every supported Asterisk sends.
+- **`VerbaraServer` no longer reads `QueueMemberPaused`.** Only Asterisk 11 and earlier send it; on those versions a
+  member's pause state no longer follows it. `QueueMemberPause`, which every supported version sends, is unchanged.
+- **A consumer's own `ManagerAction` subclass does not replace a removed action.** The SDK's generated serializer
+  writes such a subclass as its type name without `Action` and with none of its properties. Every supported Asterisk
+  answers the removed actions with `Invalid/unknown command`, so the SDK adds no raw-action route for them.
+
+**Who is affected.** Code that names a removed type or `UseConfBridge`: it no longer compiles (`CS0246`, `CS0117`).
+A binary built against 2.9.0 or earlier that names one fails to load it (`TypeLoadException`, `MissingMethodException`).
+Code that matched `AsyncAgiEvent` or `ResponseEvent` for `AsyncAGI`. Live users on Asterisk 11 or earlier who relied
+on `QueueMemberPaused` for a member's pause state.
+
+**What to do.**
+
+1. **Move every `Verbara.Sdk.*` package to 2.10.0 together.** `Verbara.Sdk.Live` 2.9.0 names `QueueMemberPausedEvent`
+   in its event router, so loaded next to `Verbara.Sdk.Ami` 2.10.0 it cannot resolve it.
+2. **Recompile**, and replace each use with the replacement in the
+   [VSDK0005 tables](obsolete-ami-events-removal-migration.md#vsdk0005). Remove any `NoWarn` or pragma you kept for
+   `VSDK0005`; the id no longer reports anything.
+3. **Read a removed event by name** if your Asterisk still sends one: match `EventType` and read `RawFields`, as the
+   [2.9.0 removal guide](obsolete-ami-events-removal-migration.md#if-your-asterisk-still-sends-one-of-these-events)
+   shows for the event types removed then.
+4. **Remove `UseConfBridge = …`** from a `MeetmeActivity`. To join an app_meetme room on an Asterisk that still builds
+   it, call `IAgiChannel.ExecAsync("MeetMe", args)`, the call the activity made.
+
+### `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` name their removal release
+
+**What changed.** The warning message of these 14 members keeps its text and now ends `Removed in Verbara.Sdk 2.11.0.`
+Nothing is removed in 2.10.0, and nothing else changes: the ids, the replacements the messages name and the published
+instruments are as in 2.9.0.
+
+| Id | Member | Removed in |
+|---|---|---|
+| `VSDK0002` | `StatusEvent.State`, `CallerId`, `Account`, `BridgedChannel`, `Link`, `BridgedUniqueId` | 2.11.0 |
+| `VSDK0003` | `AudioStreamMetrics.BufferUnderruns` (`audio.buffer.underruns`) | 2.11.0 |
+| `VSDK0004` | `IChanWebSocketSession.SendXonAsync`, `SendXoffAsync` | 2.11.0 |
+| `VSDK0004` | `ChanWebSocketHangup`, `ChanWebSocketMediaBuffering` | 2.11.0 |
+| `VSDK0004` | `ChanWebSocketDtmf.DurationMs` | 2.11.0 |
+| `VSDK0006` | `SessionMetrics.SessionsTimedOut` (`sessions.timed_out`), `SessionsOrphaned` (`sessions.orphaned`) | 2.11.0 |
+
+**Who is affected.** Code that reads one of these members: the warning it already reported now names 2.11.0. For
+`VSDK0003` and `VSDK0006`, a dashboard or exporter that lists the meter's instruments: each field is its instrument's
+only creation, so in 2.11.0 `audio.buffer.underruns`, `sessions.timed_out` and `sessions.orphaned` leave the meter
+with their fields. None of them ever recorded a measurement, so no exporter has emitted a point under those names
+and no panel changes.
+
+**What to do.** Move to what each message names before 2.11.0. A `NoWarn` you keep for one of these ids keeps working
+in 2.10.0.
