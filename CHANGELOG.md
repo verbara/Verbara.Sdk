@@ -42,7 +42,7 @@ allocates a capturing factory (88 B per params report, 96 B per member added or 
 subscribed to allocates nothing beyond the member or entry it stores, and a caller's join and leave costs 168 B with no
 subscriber and 520 B with one, down from 264 B and 616 B.
 
-### Changed — BREAKING: the types of dead Asterisk modules deprecated with `VSDK0005` in 2.9.0 are removed (#NNN)
+### Changed — BREAKING: the types of dead Asterisk modules deprecated with `VSDK0005` in 2.9.0 are removed (#558)
 
 The 49 types and one member that 2.9.0 marked `[Obsolete]` with `VSDK0005` are removed, as that release
 announced. From `Verbara.Sdk.Ami`: the 28 actions and 3 responses of chan_sip, res_monitor, app_meetme, Skype for
@@ -60,7 +60,7 @@ only Asterisk 11 and earlier send; `QueueMemberPause` is unchanged. Recompile ag
 removed types. The `VSDK0005` warning's link still opens the replacement for each symbol; the migration guide has
 the rest ([The types deprecated with `VSDK0005` are removed](docs/guides/migration-2.10.0.md#the-types-deprecated-with-vsdk0005-are-removed)).
 
-### Changed: `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` name their removal release, 2.11.0 (#NNN)
+### Changed: `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` name their removal release, 2.11.0 (#558)
 
 The warning message of the six `StatusEvent` members (`VSDK0002`), `AudioStreamMetrics.BufferUnderruns`
 (`VSDK0003`), `SendXonAsync`, `SendXoffAsync`, `ChanWebSocketHangup`, `ChanWebSocketMediaBuffering` and
