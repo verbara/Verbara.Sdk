@@ -505,3 +505,8 @@ Verbara.Sdk.Ami.Events.NewExtenEvent.Priority.set -> void
 *REMOVED*Verbara.Sdk.Ami.Responses.SkypeLicenseStatusResponse.CallsLicensed.set -> void
 *REMOVED*Verbara.Sdk.Ami.Responses.SkypeLicenseStatusResponse.SkypeLicenseStatusResponse() -> void
 *REMOVED*static Verbara.Sdk.Ami.Internal.MeetmeCompatibility.GetMeetMeEquivalent(string! confBridgeEventType) -> string?
+Verbara.Sdk.Ami.Actions.RawAction
+Verbara.Sdk.Ami.Actions.RawAction.Add(string! key, string! value) -> Verbara.Sdk.Ami.Actions.RawAction!
+Verbara.Sdk.Ami.Actions.RawAction.Fields.get -> System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<string!, string!>>!
+Verbara.Sdk.Ami.Actions.RawAction.Name.get -> string!
+Verbara.Sdk.Ami.Actions.RawAction.RawAction(string! name) -> void
