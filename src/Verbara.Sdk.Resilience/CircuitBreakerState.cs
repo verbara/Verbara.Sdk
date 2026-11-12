@@ -118,7 +118,9 @@ public sealed class CircuitBreakerState
             return false;
 
         // A failed probe may have re-opened the circuit after the opening time above was read: that newer window
-        // has not elapsed, so hand it back. A result recorded meanwhile has already moved the phase, and wins.
+        // has not elapsed, so hand it back. No failure moves the opening time inside this claim, because the probe
+        // time is written below, after this check, and a failure that reads none moves nothing; one that finds a
+        // probe time an earlier claim left behind is the exclusion the spec names.
         if (Interlocked.Read(ref _openedAtTicks) != openedAtTicks)
         {
             Interlocked.CompareExchange(ref _phase, Open, HalfOpen);
@@ -237,30 +239,29 @@ public sealed class CircuitBreakerState
 
         while (Volatile.Read(ref _phase) == HalfOpen)
         {
-            // The probe time names the half-open phase this failure acts on, and the clock is read after it, so the
-            // sample is never older than that phase. Read the clock before anything changes: a clock that throws here
-            // leaves the circuit as it was.
+            // The probe time names the half-open phase this failure acts on. With none, no probe is admitted yet: a
+            // claim is between its swap and its probe-time write, or another result is moving the circuit. This
+            // failure then moves nothing here, as on an open circuit, and follows the closed rule.
             var probeAtTicks = Interlocked.Read(ref _probeAtTicks);
+            if (probeAtTicks == NullTicksSentinel)
+                break;
+
+            // The clock is read after the probe time, so the sample is never older than that phase, and before
+            // anything changes: a clock that throws here leaves the circuit as it was.
             var reopenedAtTicks = time.GetUtcNow().UtcTicks;
 
-            // Clear the probe time from the value read, so only one failure re-opens this phase. A failure whose read is
-            // out of date, after a re-open, a new claim or a hand-over, loses here and reads again.
-            if (probeAtTicks != NullTicksSentinel
-                && Interlocked.CompareExchange(ref _probeAtTicks, NullTicksSentinel, probeAtTicks) != probeAtTicks)
-            {
+            // Clear the probe time from the value read, so only one failure re-opens this phase. A failure whose
+            // read is out of date, after a re-open, a new claim or a hand-over, loses here and reads again.
+            if (Interlocked.CompareExchange(ref _probeAtTicks, NullTicksSentinel, probeAtTicks) != probeAtTicks)
                 continue;
-            }
 
-            // The new opening time first, so open is never seen with the old, elapsed one; then clear the probe
-            // time, so the next claim is the only one; then the phase. With no probe time read, a claim is between
-            // its swap and its probe-time write, or another result is moving the circuit.
+            // The new opening time first, so open is never seen with the old, elapsed one; then the phase.
             RaiseOpenedAt(reopenedAtTicks);
-            if (probeAtTicks == NullTicksSentinel)
-                Interlocked.Exchange(ref _probeAtTicks, NullTicksSentinel);
             if (Interlocked.CompareExchange(ref _phase, Open, HalfOpen) == HalfOpen)
                 return true;
 
-            // A success or another failure moved the circuit first: this failure follows the closed rule.
+            // A success moved the circuit first, or a claim handed it back to open over a probe time an earlier
+            // claim left behind: this failure follows the closed rule.
             break;
         }
 
