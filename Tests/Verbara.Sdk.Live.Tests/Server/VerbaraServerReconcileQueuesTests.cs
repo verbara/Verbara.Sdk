@@ -46,17 +46,15 @@ public sealed class VerbaraServerReconcileQueuesTests
         ];
         await run.Server.ReconcileQueuesAsync().AsTask().WaitAsync(Run.Bound);
 
-        var sales = run.Server.Queues.GetByName(Sales);
-        var support = run.Server.Queues.GetByName(Support);
+        var sales = Held(run, Sales, "the refresh holds the queue Asterisk lists and Live did not");
+        var support = Held(run, Support, "the second created queue is held too");
         using (new AssertionScope())
         {
-            sales.Should().NotBeNull("the refresh holds the queue Asterisk lists and Live did not");
-            sales?.Strategy.Should().Be("rrmemory", "with the configuration the listing reports");
-            sales?.Members.Keys.Should().BeEquivalentTo(["PJSIP/2001", "PJSIP/2002"], "and its listed members");
-            sales?.Entries.Keys.Should().Equal([Waiting.Channel], "and the caller waiting in it");
-            support.Should().NotBeNull("the second created queue is held too");
-            support?.Strategy.Should().Be("leastrecent");
-            support?.Members.Keys.Should().Equal(["PJSIP/3001"]);
+            sales.Strategy.Should().Be("rrmemory", "with the configuration the listing reports");
+            sales.Members.Keys.Should().BeEquivalentTo(["PJSIP/2001", "PJSIP/2002"], "and its listed members");
+            sales.Entries.Keys.Should().Equal([Waiting.Channel], "and the caller waiting in it");
+            support.Strategy.Should().Be("leastrecent");
+            support.Members.Keys.Should().Equal(["PJSIP/3001"]);
             run.Server.Queues.GetByName(BootingAsterisk.QueueName).Should().NotBeNull("the queue of the load is kept");
             Asks(peer).Should().Be(asked with { QueueStatus = asked.QueueStatus + 1 },
                 "the refresh asks QueueStatus once and nothing else: no Status, BridgeList, ConfbridgeListRooms or Agents");
@@ -173,8 +171,8 @@ public sealed class VerbaraServerReconcileQueuesTests
         using (new AssertionScope())
         {
             outcome.Should().BeOfType<AmiNotConnectedException>("a read its session cut short reconciles nothing");
-            run.Server.Queues.GetByName(BootingAsterisk.QueueName)?.Entries.Should().ContainKey(HeldCaller.Channel);
-            run.Server.Queues.GetByName(BootingAsterisk.QueueName)?.Members.Should().ContainKey(BootingAsterisk.MemberLocation);
+            Held(run, BootingAsterisk.QueueName, "a cut-short read removes nothing").Entries.Should().ContainKey(HeldCaller.Channel);
+            Held(run, BootingAsterisk.QueueName, "a cut-short read removes nothing").Members.Should().ContainKey(BootingAsterisk.MemberLocation);
             counters.Left.Should().Be(0, "no caller is counted left");
             run.Server.Queues.ActiveSnapshotWindowCount.Should().Be(0, "the read's window is closed");
         }
@@ -183,21 +181,24 @@ public sealed class VerbaraServerReconcileQueuesTests
     private static void AssertNothingRemoved(Run run, BootingAsterisk peer, LiveCounters counters, Exception? outcome,
         Type? expectFailure)
     {
-        var queue = run.Server.Queues.GetByName(BootingAsterisk.QueueName);
+        var queue = Held(run, BootingAsterisk.QueueName, "an unfinished response is no evidence that the queue is gone");
         using (new AssertionScope())
         {
             if (expectFailure is null)
                 outcome.Should().BeNull("a refused QueueStatus does not make the refresh throw");
             else
                 outcome.Should().BeAssignableTo(expectFailure);
-            queue.Should().NotBeNull("an unfinished response is no evidence that the queue is gone");
-            queue?.Entries.Should().ContainKey(HeldCaller.Channel, "nor that its caller left");
-            queue?.Members.Should().ContainKey(BootingAsterisk.MemberLocation, "nor that its member was removed");
+            queue.Entries.Should().ContainKey(HeldCaller.Channel, "nor that its caller left");
+            queue.Members.Should().ContainKey(BootingAsterisk.MemberLocation, "nor that its member was removed");
             counters.Left.Should().Be(0, "no caller is counted left");
             run.Server.Queues.ActiveSnapshotWindowCount.Should().Be(0, "the read's window is closed");
             peer.Fault.Should().BeNull("the peer served the session without failing");
         }
     }
+
+    /// <summary>The queue the table holds under <paramref name="name"/>; fails the test, saying why, when it holds none.</summary>
+    private static AsteriskQueue Held(Run run, string name, string because) =>
+        run.Server.Queues.GetByName(name) ?? throw new Xunit.Sdk.XunitException($"Expected queue {name} to be held: {because}.");
 
     private static AskCounts Asks(BootingAsterisk peer) => new(peer.Asked("Status"), peer.Asked("BridgeList"),
         peer.Asked("ConfbridgeListRooms"), peer.Asked("QueueStatus"), peer.Asked("Agents"));
