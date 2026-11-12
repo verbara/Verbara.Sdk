@@ -773,6 +773,12 @@ internal sealed class BootingAsterisk
         {
             if (BeforeQueueStatusComplete is { } beforeOthersComplete)
                 await beforeOthersComplete();
+            if (QueueStatusRefusalAfterRows is { } othersRefusal)
+            {
+                await socket.RespondAsync("Error", id, [new("Message", othersRefusal)]);
+                return;
+            }
+
             await socket.WriteEventAsync("QueueStatusComplete",
             [
                 new("ActionID", id), new("EventList", "Complete"),
