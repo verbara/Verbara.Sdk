@@ -178,6 +178,21 @@ public sealed class CircuitBreakerState
     private static bool WindowHasElapsed(long sinceTicks, TimeSpan openDuration, long nowTicks) =>
         nowTicks - sinceTicks >= openDuration.Ticks;
 
+    // Moves the opening time forward to a failed probe's sample, never back: two failures racing on a half-open circuit
+    // leave the later sample, so the one that loses after a stall cannot shorten the window the other opened. A time a
+    // success has cleared stays cleared.
+    private void RaiseOpenedAt(long ticks)
+    {
+        var current = Interlocked.Read(ref _openedAtTicks);
+        while (current != NullTicksSentinel && current < ticks)
+        {
+            var seen = Interlocked.CompareExchange(ref _openedAtTicks, ticks, current);
+            if (seen == current)
+                return;
+            current = seen;
+        }
+    }
+
     /// <summary>Resets the failure counter and closes the circuit, from open or half-open.</summary>
     public void RecordSuccess() => RecordSuccessReportingClose();
 
@@ -227,7 +242,7 @@ public sealed class CircuitBreakerState
 
             // The new opening time first, so open is never seen with the old, elapsed one; then clear the probe
             // time, so the next claim is the only one; then the phase.
-            Interlocked.Exchange(ref _openedAtTicks, reopenedAtTicks);
+            RaiseOpenedAt(reopenedAtTicks);
             Interlocked.Exchange(ref _probeAtTicks, NullTicksSentinel);
             if (Interlocked.CompareExchange(ref _phase, Open, HalfOpen) == HalfOpen)
                 return true;
