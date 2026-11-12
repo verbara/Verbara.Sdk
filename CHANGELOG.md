@@ -24,6 +24,13 @@ A consumer that deduplicates notifications by record equality, or keys them by `
 `notification with { Epoch = null }` instead. The notifications of a custom `ICallSessionManager` carry `null`
 unless it sets `Epoch`, so a consumer reads `Unknown` for them.
 
+### Fixed: a queue report nobody is subscribed to allocates nothing (#NNN)
+
+`QueueManager`: a queue params report, a member added or a caller's join on a queue the table already holds no longer
+allocates a capturing factory (88 B per params report, 96 B per member added or caller joined). A report no handler is
+subscribed to allocates nothing beyond the member or entry it stores, and a caller's join and leave costs 168 B with no
+subscriber and 520 B with one, down from 264 B and 616 B.
+
 ### Changed — BREAKING: a call is found on the server that reported it (#533)
 
 `CallSessionManager` keeps its channel-id, `linkedid` and bridge indexes per server id, where it kept one of each for
