@@ -8,7 +8,8 @@ namespace Verbara.Sdk.Ami.Tests.Events.StatusWire;
 
 /// <summary>
 /// The shape of the obsoletion on the six <see cref="StatusEvent"/> members no supported version sends: one
-/// diagnostic id, a message that says where the value is, and no promise of a removal. Read by reflection over the
+/// diagnostic id, a message that says where the value is and, from 2.10.0, the one release that removes the member.
+/// Read by reflection over the
 /// member's name as a string, so this file compiles whether or not the members carry the attribute.
 /// </summary>
 public sealed partial class StatusEventObsoletionShapeTests
@@ -23,7 +24,7 @@ public sealed partial class StatusEventObsoletionShapeTests
         { "BridgedUniqueId", "BridgeId" },
     };
 
-    [GeneratedRegex(@"\d+\.\d+")]
+    [GeneratedRegex(@"\d+\.\d+(?:\.\d+)?")]
     private static partial Regex VersionNumber();
 
     private static ObsoleteAttribute? ObsoleteOf(string member) =>
@@ -44,8 +45,9 @@ public sealed partial class StatusEventObsoletionShapeTests
         using var scope = new AssertionScope();
         obsolete!.DiagnosticId.Should().Be("VSDK0002");
         obsolete.Message.Should().Contain(replacement, "the message names the member that carries the value");
-        obsolete.Message.Should().NotContainEquivalentOf("remov", "an obsoletion says where the value is, never when the member goes");
-        VersionNumber().IsMatch(obsolete.Message!).Should().BeFalse("the message names no release");
+        obsolete.Message.Should().EndWith("Removed in Verbara.Sdk 2.11.0.", "the message names the release that removes the member");
+        VersionNumber().Matches(obsolete.Message!).Select(static m => m.Value).Should().Equal(["2.11.0"],
+            "the message names that one release and no other");
     }
 
     [Fact]
