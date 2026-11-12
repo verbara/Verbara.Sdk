@@ -8,7 +8,8 @@ namespace Verbara.Sdk.Ari.Tests.Audio;
 
 /// <summary>
 /// The chan_websocket control surface that says something Asterisk never sends or acts on is deprecated with one id,
-/// <c>VSDK0004</c>, and nothing is removed. Reading the attribute is the point of each fact: a consumer building with
+/// <c>VSDK0004</c>, and nothing is removed before 2.11.0, the release each message names. Reading the attribute is the
+/// point of each fact: a consumer building with
 /// <c>TreatWarningsAsErrors</c> gets <c>VSDK0004</c>, not a blanket <c>CS0618</c>, and the message says what to read
 /// instead.
 /// </summary>
@@ -71,6 +72,22 @@ public partial class ChanWebSocketDeprecationTests
             .And.Contain(nameof(IChanWebSocketSession.SendGetStatusAsync));
         obsolete.Message.Replace(nameof(IChanWebSocketSession.SendGetStatusAsync), string.Empty, StringComparison.Ordinal)
             .Should().NotContain("GetStatusAsync", "the session sends GET_STATUS and the reply arrives on ControlMessages; no GetStatusAsync exists");
+    }
+
+    /// <summary>An SDK release named in a message; the Asterisk versions a message cites as measured are not one.</summary>
+    [GeneratedRegex(@"Verbara\.Sdk \d+\.\d+(?:\.\d+)?", RegexOptions.CultureInvariant)]
+    private static partial Regex SdkRelease();
+
+    [Fact]
+    public void DeprecationMessages_ShouldEachNameTheirRemovalReleaseAndNoOther_WhenRead()
+    {
+        var messages = Vsdk0004Messages();
+
+        messages.Should().HaveCount(5, "SendXonAsync, SendXoffAsync, ChanWebSocketHangup, ChanWebSocketMediaBuffering and ChanWebSocketDtmf.DurationMs");
+        messages.Should().OnlyContain(m => m.Message.EndsWith("Removed in Verbara.Sdk 2.11.0.", StringComparison.Ordinal),
+            "each message names the release that removes its member");
+        messages.Should().OnlyContain(m => SdkRelease().Matches(m.Message).All(v => v.Value == "Verbara.Sdk 2.11.0"),
+            "each message names that one SDK release and no other");
     }
 
     public static TheoryData<string> DeprecatedControlSurfaceMembers()

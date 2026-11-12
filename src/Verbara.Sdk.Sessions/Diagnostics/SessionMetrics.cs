@@ -19,8 +19,9 @@ public static class SessionMetrics
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Kept, and still published, so that code and dashboards that read it keep binding: the instrument is still
-    /// created on the meter under the same name, and deprecating the field removes nothing.
+    /// Kept, and still published until 2.11.0, so that code and dashboards that read it keep binding: the instrument
+    /// is still created on the meter under the same name. 2.11.0 removes the field; it is the instrument's only
+    /// creation, so the instrument leaves the meter with it.
     /// </para>
     /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
@@ -29,7 +30,7 @@ public static class SessionMetrics
     /// </para>
     /// </remarks>
     [Obsolete(
-        "Not emitted: nothing in the SDK records sessions.timed_out. The reconciliation sweep ends a call it finds gone as a reload ends it and counts it in sessions.completed or sessions.failed; nothing in the SDK counts a call as timed out.",
+        "Not emitted: nothing in the SDK records sessions.timed_out. The reconciliation sweep ends a call it finds gone as a reload ends it and counts it in sessions.completed or sessions.failed; nothing in the SDK counts a call as timed out. Removed in Verbara.Sdk 2.11.0.",
         DiagnosticId = "VSDK0006")]
     public static readonly Counter<long> SessionsTimedOut =
         Meter.CreateCounter<long>("sessions.timed_out", "sessions", "Total sessions timed out");
@@ -41,8 +42,9 @@ public static class SessionMetrics
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Kept, and still published, so that code and dashboards that read it keep binding: the instrument is still
-    /// created on the meter under the same name, and deprecating the field removes nothing.
+    /// Kept, and still published until 2.11.0, so that code and dashboards that read it keep binding: the instrument
+    /// is still created on the meter under the same name. 2.11.0 removes the field; it is the instrument's only
+    /// creation, so the instrument leaves the meter with it.
     /// </para>
     /// <para>
     /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
@@ -51,7 +53,7 @@ public static class SessionMetrics
     /// </para>
     /// </remarks>
     [Obsolete(
-        "Not emitted: nothing in the SDK records sessions.orphaned. The reconciliation sweep ends a call it finds gone as a reload ends it and counts it in sessions.completed or sessions.failed; nothing in the SDK counts a call as orphaned.",
+        "Not emitted: nothing in the SDK records sessions.orphaned. The reconciliation sweep ends a call it finds gone as a reload ends it and counts it in sessions.completed or sessions.failed; nothing in the SDK counts a call as orphaned. Removed in Verbara.Sdk 2.11.0.",
         DiagnosticId = "VSDK0006")]
     public static readonly Counter<long> SessionsOrphaned =
         Meter.CreateCounter<long>("sessions.orphaned", "sessions", "Orphaned sessions detected");

@@ -6,7 +6,7 @@ namespace Verbara.Sdk.Governance.Tests;
 /// <summary>
 /// The action serializer and the response deserializer suppress an obsolete diagnostic only for an obsolete type they
 /// bind: one <c>#pragma warning disable</c> per distinct diagnostic (<c>CS0618</c>, or the <c>DiagnosticId</c> of an
-/// <c>[Obsolete]</c>), and none when they bind no obsolete type. The last two cases check that the two event generators
+/// do the same for an event type marked with a custom deprecation id (a synthetic one, outside the SDK's own series).
 /// do the same for an event type marked with the deprecation id the SDK's dead-module marks carry.
 /// </summary>
 /// <remarks>
@@ -21,7 +21,7 @@ public sealed class ObsoleteActionResponsePragmaTests
     private const string Responses = nameof(ResponseDeserializerGenerator);
     private const string Registry = nameof(EventRegistryGenerator);
     private const string Deserializer = nameof(EventDeserializerGenerator);
-    private const string DeprecationId = "VSDK0005";
+    private const string DeprecationId = "PROBE0001";
 
     /// <summary>What a bare <c>#pragma warning disable</c>, with no id, reads as: it silences every diagnostic.</summary>
     private const string Bare = "(bare: every diagnostic)";
@@ -84,7 +84,7 @@ public sealed class ObsoleteActionResponsePragmaTests
             public string? Channel { get; set; }
         }
 
-        [Obsolete("Asterisk 12 renamed this event.", DiagnosticId = "VSDK0005", UrlFormat = "https://example.invalid/guide#vsdk0005")]
+        [Obsolete("Asterisk 12 renamed this event.", DiagnosticId = "PROBE0001", UrlFormat = "https://example.invalid/guide#probe0001")]
         [VerbaraMapping("ProbeGone")]
         public sealed class ProbeGoneEvent : ManagerEvent
         {

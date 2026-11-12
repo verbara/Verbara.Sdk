@@ -364,14 +364,13 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         secondHalfDigits.Should().Equal(expectedSequence, "the ;2 half must report the digits in the order SendDTMF sent them");
     }
 
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     /// <summary>
     /// Originates to ext 155 which runs Read() (waits for a digit).
     /// Sends DTMF "7" via PlayDtmf. The channel running Read reports the digit as a DtmfEnd event, and Read()
     /// consumes it into its variable.
     /// </summary>
     [Fact]
-    public async Task DtmfConsumedByRead_ShouldFireDtmfEvent()
+    public async Task DtmfConsumedByRead_ShouldFireDtmfEndEvent()
     {
         // VarSet belongs to the dialplan class, which the default test user does not read.
         await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
@@ -488,5 +487,4 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         public void OnError(Exception error) { }
         public void OnCompleted() { }
     }
-#pragma warning restore VSDK0005
 }

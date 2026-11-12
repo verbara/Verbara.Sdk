@@ -55,11 +55,11 @@ public sealed partial class SessionMetricsDeprecationTests : IAsyncLifetime
     [Theory]
     [InlineData("SessionsTimedOut", "sessions.timed_out")]
     [InlineData("SessionsOrphaned", "sessions.orphaned")]
-    public void Field_ShouldBeObsoleteWithVsdk0006SayingItIsNotEmittedAndNamingNoVersion_WhenAConsumerReadsIt(
+    public void Field_ShouldBeObsoleteWithVsdk0006SayingItIsNotEmittedAndNamingItsRemovalRelease_WhenAConsumerReadsIt(
         string fieldName, string instrumentName)
     {
         // Reading the attribute is the point: a consumer building with TreatWarningsAsErrors gets VSDK0006, not a
-        // blanket CS0618, and the message says the instrument is never recorded, without promising when it goes.
+        // blanket CS0618, and the message says the instrument is never recorded and names the release that removes it.
         var field = typeof(SessionMetrics).GetField(fieldName, BindingFlags.Public | BindingFlags.Static);
         field.Should().NotBeNull("the field stays published; deprecating it removes nothing");
 
@@ -69,8 +69,9 @@ public sealed partial class SessionMetricsDeprecationTests : IAsyncLifetime
         obsolete!.DiagnosticId.Should().Be("VSDK0006");
         obsolete.IsError.Should().BeFalse("a deprecation warns; it does not break a build without TreatWarningsAsErrors");
         obsolete.Message.Should().ContainEquivalentOf("not emitted").And.Contain(instrumentName);
-        VersionLike().IsMatch(obsolete.Message!).Should().BeFalse(
-            "the message names no version (no digit-dot-digit): a removal is a later ruling, not a promise made here");
+        obsolete.Message.Should().EndWith("Removed in Verbara.Sdk 2.11.0.", "the message names the release that removes the field");
+        VersionLike().Matches(obsolete.Message!).Select(static m => m.Value).Should().Equal(["2.11.0"],
+            "the message names that one release and no other");
         YearLike().IsMatch(obsolete.Message!).Should().BeFalse("the message names no date");
     }
 
@@ -147,7 +148,7 @@ public sealed partial class SessionMetricsDeprecationTests : IAsyncLifetime
         session.State.Should().Be(CallSessionState.Completed, $"premise: '{tag}' ended with both legs hung up");
     }
 
-    [GeneratedRegex(@"\d\.\d")]
+    [GeneratedRegex(@"\d+\.\d+(?:\.\d+)?")]
     private static partial Regex VersionLike();
 
     [GeneratedRegex(@"\b(19|20)\d{2}\b")]

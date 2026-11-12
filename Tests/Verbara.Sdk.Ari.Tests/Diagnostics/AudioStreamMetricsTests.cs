@@ -1,12 +1,28 @@
 using System.Diagnostics.Metrics;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Verbara.Sdk.Ari.Diagnostics;
 using FluentAssertions;
 
 namespace Verbara.Sdk.Ari.Tests.Diagnostics;
 
-public sealed class AudioStreamMetricsTests
+public sealed partial class AudioStreamMetricsTests
 {
+    [GeneratedRegex(@"\d+\.\d+(?:\.\d+)?")]
+    private static partial Regex VersionNumber();
+
+    [Fact]
+    public void BufferUnderruns_ShouldNameItsRemovalReleaseAndNoOther_WhenItsObsoletionIsRead()
+    {
+        var obsolete = typeof(AudioStreamMetrics).GetField("BufferUnderruns", BindingFlags.Public | BindingFlags.Static)?
+            .GetCustomAttribute<ObsoleteAttribute>();
+
+        obsolete.Should().NotBeNull();
+        obsolete!.Message.Should().EndWith("Removed in Verbara.Sdk 2.11.0.", "the message names the release that removes the field");
+        VersionNumber().Matches(obsolete.Message!).Select(static m => m.Value).Should().Equal(["2.11.0"],
+            "the message names that one release and no other");
+    }
+
     [Fact]
     public void Meter_ShouldHaveCorrectName()
     {

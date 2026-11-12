@@ -94,6 +94,9 @@ public sealed class AmiConnectionDeliveredAndAppliedMarkTests
         await rig.Peer.WriteEventAsync("Newstate", [new("Channel", "PJSIP/lost-d"), new("Uniqueid", "7.3")]);
         await rig.FenceAsync();
         held.Release();
+        // The pump holds one event: the probe is sent only once the buffered B has been taken out and handled, or the
+        // full buffer refuses the probe too.
+        await rig.HandledAsync("BUFFERED/B");
         await rig.Peer.WriteEventAsync("PeerStatus", [new("Peer", "PROBE")]);
         var probe = await rig.ProbeHandled.WaitAsync(Bound);
 

@@ -103,15 +103,6 @@ public sealed class CoverageActionPropertyTests2
         action.Direction.Should().Be("both");
     }
 
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public void PauseMonitorAction_ShouldHaveProperties()
-    {
-        var action = new PauseMonitorAction { Channel = "SIP/100" };
-        action.Channel.Should().Be("SIP/100");
-    }
-#pragma warning restore VSDK0005
-
     [Fact]
     public void PJSIPNotifyAction_ShouldHaveProperties()
     {
@@ -160,45 +151,6 @@ public sealed class CoverageActionPropertyTests2
         action.Queue.Should().Be("sales");
         action.Caller.Should().Be("SIP/100-001");
     }
-
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public void SetCdrUserFieldAction_ShouldHaveProperties()
-    {
-        var action = new SetCdrUserFieldAction { Channel = "SIP/100", UserField = "custom", Append = true };
-        action.Channel.Should().Be("SIP/100");
-        action.UserField.Should().Be("custom");
-        action.Append.Should().BeTrue();
-    }
-
-    [Fact]
-    public void SipNotifyAction_ShouldHaveProperties()
-    {
-        var action = new SipNotifyAction { Channel = "SIP/100" };
-        action.Channel.Should().Be("SIP/100");
-    }
-
-    [Fact]
-    public void SipShowPeerAction_ShouldHaveProperties()
-    {
-        var action = new SipShowPeerAction { Peer = "100" };
-        action.Peer.Should().Be("100");
-    }
-
-    [Fact]
-    public void StopMonitorAction_ShouldHaveProperties()
-    {
-        var action = new StopMonitorAction { Channel = "SIP/100" };
-        action.Channel.Should().Be("SIP/100");
-    }
-
-    [Fact]
-    public void UnpauseMonitorAction_ShouldHaveProperties()
-    {
-        var action = new UnpauseMonitorAction { Channel = "SIP/100" };
-        action.Channel.Should().Be("SIP/100");
-    }
-#pragma warning restore VSDK0005
 
     [Fact]
     public void VoicemailBoxSummaryAction_ShouldHaveProperties()
@@ -250,90 +202,4 @@ public sealed class CoverageActionPropertyTests2
         action.ID.Should().Be("msg001");
     }
 
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public void SkypeAccountPropertyAction_ShouldHaveProperties()
-    {
-        var action = new SkypeAccountPropertyAction { User = "skypeuser" };
-        action.User.Should().Be("skypeuser");
-    }
-
-    [Fact]
-    public void SkypeAddBuddyAction_ShouldHaveProperties()
-    {
-        var action = new SkypeAddBuddyAction { User = "me", Buddy = "friend", AuthMsg = "Hi there" };
-        action.User.Should().Be("me");
-        action.Buddy.Should().Be("friend");
-        action.AuthMsg.Should().Be("Hi there");
-    }
-
-    [Fact]
-    public void SkypeBuddiesAction_ShouldHaveProperties()
-    {
-        var action = new SkypeBuddiesAction { User = "skypeuser" };
-        action.User.Should().Be("skypeuser");
-        action.Should().BeAssignableTo<IEventGeneratingAction>();
-    }
-
-    [Fact]
-    public void SkypeBuddyAction_ShouldHaveProperties()
-    {
-        var action = new SkypeBuddyAction { User = "me", Buddy = "friend" };
-        action.User.Should().Be("me");
-        action.Buddy.Should().Be("friend");
-    }
-
-    [Fact]
-    public void SkypeChatSendAction_ShouldHaveProperties()
-    {
-        var action = new SkypeChatSendAction { Skypename = "chat1", User = "me", Message = "Hello" };
-        action.Skypename.Should().Be("chat1");
-        action.User.Should().Be("me");
-        action.Message.Should().Be("Hello");
-    }
-
-    [Fact]
-    public void SkypeRemoveBuddyAction_ShouldHaveProperties()
-    {
-        var action = new SkypeRemoveBuddyAction { User = "me", Buddy = "friend" };
-        action.User.Should().Be("me");
-        action.Buddy.Should().Be("friend");
-    }
-
-    [Fact]
-    public void ZapDialOffhookAction_ShouldHaveProperties()
-    {
-        var action = new ZapDialOffhookAction { ZapChannel = 1, Number = "5551234" };
-        action.ZapChannel.Should().Be(1);
-        action.Number.Should().Be("5551234");
-    }
-
-    [Fact]
-    public void ZapDndOffAction_ShouldHaveProperties()
-    {
-        var action = new ZapDndOffAction { ZapChannel = 1 };
-        action.ZapChannel.Should().Be(1);
-    }
-
-    [Fact]
-    public void ZapDndOnAction_ShouldHaveProperties()
-    {
-        var action = new ZapDndOnAction { ZapChannel = 1 };
-        action.ZapChannel.Should().Be(1);
-    }
-
-    [Fact]
-    public void ZapHangupAction_ShouldHaveProperties()
-    {
-        var action = new ZapHangupAction { ZapChannel = 1 };
-        action.ZapChannel.Should().Be(1);
-    }
-
-    [Fact]
-    public void ZapTransferAction_ShouldHaveProperties()
-    {
-        var action = new ZapTransferAction { ZapChannel = 1 };
-        action.ZapChannel.Should().Be(1);
-    }
-#pragma warning restore VSDK0005
 }
