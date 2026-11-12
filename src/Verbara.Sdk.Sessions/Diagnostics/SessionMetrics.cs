@@ -31,7 +31,8 @@ public static class SessionMetrics
     /// </remarks>
     [Obsolete(
         "Not emitted: nothing in the SDK records sessions.timed_out. The reconciliation sweep ends a call it finds gone as a reload ends it and counts it in sessions.completed or sessions.failed; nothing in the SDK counts a call as timed out. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0006")]
+        DiagnosticId = "VSDK0006",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0006")]
     public static readonly Counter<long> SessionsTimedOut =
         Meter.CreateCounter<long>("sessions.timed_out", "sessions", "Total sessions timed out");
 
@@ -54,7 +55,8 @@ public static class SessionMetrics
     /// </remarks>
     [Obsolete(
         "Not emitted: nothing in the SDK records sessions.orphaned. The reconciliation sweep ends a call it finds gone as a reload ends it and counts it in sessions.completed or sessions.failed; nothing in the SDK counts a call as orphaned. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0006")]
+        DiagnosticId = "VSDK0006",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0006")]
     public static readonly Counter<long> SessionsOrphaned =
         Meter.CreateCounter<long>("sessions.orphaned", "sessions", "Orphaned sessions detected");
 
