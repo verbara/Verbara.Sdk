@@ -86,18 +86,19 @@ public sealed class QueueManagerAllocationTests
         var manager = WithMembers();
         var control = WithIndexedMembersGone();
 
-        var allocated = Measure(() =>
-        {
-            foreach (var iface in Interfaces)
-                manager.OnDeviceStateChanged(iface, "INUSE");
-        });
-        var baseline = Measure(() =>
-        {
-            foreach (var iface in Interfaces)
-                control.OnDeviceStateChanged(iface, "INUSE");
-        });
+        var readings = MeasureTogether(
+            () =>
+            {
+                foreach (var iface in Interfaces)
+                    manager.OnDeviceStateChanged(iface, "INUSE");
+            },
+            () =>
+            {
+                foreach (var iface in Interfaces)
+                    control.OnDeviceStateChanged(iface, "INUSE");
+            });
 
-        (allocated - baseline).Should().Be(0, "a device's member status nobody is subscribed to queues nothing");
+        (readings[0] - readings[1]).Should().Be(0, "a device's member status nobody is subscribed to queues nothing");
     }
 
     [Fact]
@@ -107,18 +108,19 @@ public sealed class QueueManagerAllocationTests
         manager.MemberStatusChanged += CountMember;
         var control = WithIndexedMembersGone();
 
-        var allocated = MeasureObserved(() =>
-        {
-            foreach (var iface in Interfaces)
-                manager.OnDeviceStateChanged(iface, "INUSE");
-        });
-        var baseline = Measure(() =>
-        {
-            foreach (var iface in Interfaces)
-                control.OnDeviceStateChanged(iface, "INUSE");
-        });
+        var readings = MeasureTogether(
+            Observed(() =>
+            {
+                foreach (var iface in Interfaces)
+                    manager.OnDeviceStateChanged(iface, "INUSE");
+            }),
+            () =>
+            {
+                foreach (var iface in Interfaces)
+                    control.OnDeviceStateChanged(iface, "INUSE");
+            });
 
-        (allocated - baseline).Should().BeLessThanOrEqualTo((long)ObservedEventBound * Members,
+        (readings[0] - readings[1]).Should().BeLessThanOrEqualTo((long)ObservedEventBound * Members,
             "an observed device status costs one queued entry and its drain, nothing captured per report");
     }
 
@@ -182,10 +184,20 @@ public sealed class QueueManagerAllocationTests
             "an observed abandon costs one queued entry and its drain, nothing captured per report");
     }
 
-    // A path that allocates for its own bookkeeping (a new member or caller entry, a capturing queue factory, a
-    // snapshot's completion) is measured against a control manager doing the same work with a handler subscribed,
-    // less the price of the notifications that handler received, read on the abandon path, which allocates nothing
-    // else. What is left is what the event costs when nobody hears it.
+    // Params for a queue the table holds create nothing: the queue is looked up with a factory that captures nothing.
+    [Fact]
+    public void OnQueueParams_ShouldAllocateNothing_WhenTheQueueIsHeldAndNoHandlerIsSubscribed()
+    {
+        var manager = WithQueues();
+
+        var allocated = Measure(() => Params(manager));
+
+        allocated.Should().Be(0, "params for a queue the table holds neither create it nor queue anything");
+    }
+
+    // A path that allocates for its own bookkeeping (a new member or caller entry, a snapshot's completion) is measured
+    // against a control manager doing the same work with a handler subscribed, less the price of the notifications that
+    // handler received, all three read in the same passes. What is left is what the event costs when nobody hears it.
     [Fact]
     public void OnQueueParams_ShouldAllocateNothingForTheEvent_WhenNoHandlerIsSubscribed()
     {
@@ -193,10 +205,8 @@ public sealed class QueueManagerAllocationTests
         var control = WithQueues();
         control.QueueUpdated += CountQueue;
 
-        var allocated = Measure(() => Params(manager));
-        var observed = MeasureObserved(() => Params(control));
-
-        (allocated - (observed - NotificationPrice())).Should().Be(0, "queue params nobody is subscribed to queue nothing");
+        UnheardEventCost(() => Params(manager), () => Params(control))
+            .Should().Be(0, "queue params nobody is subscribed to queue nothing");
     }
 
     // Each round adds again the members the queue holds: every add replaces the member and announces the new one.
@@ -207,10 +217,8 @@ public sealed class QueueManagerAllocationTests
         var control = WithMembers();
         control.MemberAdded += CountMember;
 
-        var allocated = Measure(() => AddMembers(manager));
-        var observed = MeasureObserved(() => AddMembers(control));
-
-        (allocated - (observed - NotificationPrice())).Should().Be(0, "a member added nobody is subscribed to queues nothing");
+        UnheardEventCost(() => AddMembers(manager), () => AddMembers(control))
+            .Should().Be(0, "a member added nobody is subscribed to queues nothing");
     }
 
     [Fact]
@@ -237,10 +245,8 @@ public sealed class QueueManagerAllocationTests
         var control = new QueueManager(NullLogger.Instance);
         control.CallerJoined += CountCaller;
 
-        var allocated = Measure(() => JoinAndLeave(manager));
-        var observed = MeasureObserved(() => JoinAndLeave(control));
-
-        (allocated - (observed - NotificationPrice())).Should().Be(0, "a caller's join nobody is subscribed to queues nothing");
+        UnheardEventCost(() => JoinAndLeave(manager), () => JoinAndLeave(control))
+            .Should().Be(0, "a caller's join nobody is subscribed to queues nothing");
     }
 
     [Fact]
@@ -280,10 +286,8 @@ public sealed class QueueManagerAllocationTests
         var control = new QueueManager(NullLogger.Instance);
         control.QueueSnapshotCompleted += CountCompletion;
 
-        var allocated = Measure(() => CompleteSnapshots(manager));
-        var observed = MeasureObserved(() => CompleteSnapshots(control));
-
-        (allocated - (observed - NotificationPrice())).Should().Be(0, "a completed snapshot nobody is subscribed to queues nothing");
+        UnheardEventCost(() => CompleteSnapshots(manager), () => CompleteSnapshots(control))
+            .Should().Be(0, "a completed snapshot nobody is subscribed to queues nothing");
     }
 
     private void CountMember(string queue, AsteriskQueueMember member) => _observed++;
@@ -298,17 +302,20 @@ public sealed class QueueManagerAllocationTests
 
     private void CountCompletion(QueueSnapshotCompletion completion) => _observed++;
 
-    // What one round of reports costs a manager when each one queues one notification to a subscribed handler. The
-    // abandon path allocates nothing else (OnCallerAbandonReported_ShouldAllocateNothing_WhenNoHandlerIsSubscribed).
-    private long NotificationPrice()
+    // What a round of an event nobody hears costs beyond its bookkeeping: the unheard round, less the heard round on a
+    // control manager, less the price of the notifications the control's handler received. That price is read on the
+    // abandon path, which allocates nothing else
+    // (OnCallerAbandonReported_ShouldAllocateNothing_WhenNoHandlerIsSubscribed).
+    private long UnheardEventCost(Action unheard, Action heard)
     {
-        var manager = new QueueManager(NullLogger.Instance);
-        manager.CallerAbandonReported += CountAbandon;
-        return MeasureObserved(() =>
+        var priced = new QueueManager(NullLogger.Instance);
+        priced.CallerAbandonReported += CountAbandon;
+        var readings = MeasureTogether(unheard, Observed(heard), Observed(() =>
         {
             foreach (var uniqueId in UniqueIds)
-                manager.OnCallerAbandonReported(uniqueId, Queue);
-        });
+                priced.OnCallerAbandonReported(uniqueId, Queue);
+        }));
+        return readings[0] - (readings[1] - readings[2]);
     }
 
     private static void Params(QueueManager manager)
@@ -374,16 +381,54 @@ public sealed class QueueManagerAllocationTests
     }
 
     // Measures one round and checks it reached the handler once per report.
-    private long MeasureObserved(Action round)
+    private long MeasureObserved(Action round) => Measure(Observed(round));
+
+    // The round, checked to reach the handler once per report. The check allocates nothing unless it fails, so it can
+    // run inside the reading.
+    private Action Observed(Action round) => () =>
     {
-        var observedBefore = 0;
-        var allocated = Measure(() =>
+        var observedBefore = _observed;
+        round();
+        var observed = _observed - observedBefore;
+        if (observed != Members)
         {
-            observedBefore = _observed;
-            round();
-        });
-        (_observed - observedBefore).Should().Be(Members, "every report reaches the subscribed handler");
-        return allocated;
+            throw new Xunit.Sdk.XunitException(string.Create(CultureInfo.InvariantCulture,
+                $"every report reaches the subscribed handler: expected {Members}, observed {observed}"));
+        }
+    };
+
+    // Reads rounds that are compared with one another in one pass, each on its own counter reading, until two passes in
+    // a row agree on every round. What a manager's own bookkeeping costs depends on the compiled code running it: a
+    // tier-up or an on-stack replacement can stack-allocate an object that does not escape, and it lands whenever the
+    // runtime installs it. Read one after the other, a round measured before it and one measured after it disagree by
+    // that object's bytes per report; read together, a pass that straddles it disagrees with the next and is read
+    // again.
+    private static long[] MeasureTogether(params Action[] rounds)
+    {
+        for (var i = 0; i < WarmUpRounds; i++)
+        {
+            foreach (var round in rounds)
+                round();
+        }
+
+        long[]? previous = null;
+        for (var reading = 0; reading < MaxReadings; reading++)
+        {
+            var readings = new long[rounds.Length];
+            for (var r = 0; r < rounds.Length; r++)
+            {
+                var before = GC.GetAllocatedBytesForCurrentThread();
+                rounds[r]();
+                readings[r] = GC.GetAllocatedBytesForCurrentThread() - before;
+            }
+
+            if (previous is not null && previous.AsSpan().SequenceEqual(readings))
+                return readings;
+            previous = readings;
+        }
+
+        throw new Xunit.Sdk.XunitException(string.Create(CultureInfo.InvariantCulture,
+            $"no two of {MaxReadings} passes over the same rounds agreed; the last read {string.Join(", ", previous!)}"));
     }
 
     // As Measure, with the state each round consumes put back, unmeasured, before it.
