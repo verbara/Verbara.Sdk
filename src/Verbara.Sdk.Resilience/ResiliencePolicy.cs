@@ -13,7 +13,8 @@ namespace Verbara.Sdk.Resilience;
 /// <list type="number">
 ///   <item>Circuit check (throws <see cref="CircuitBreakerOpenException"/> if open, or if half-open with its one
 ///     probe already admitted). Past the open window the first call is the probe; a failed probe re-opens the
-///     circuit, so a retry after it is rejected too.</item>
+///     circuit, so a retry that reaches this check within the re-opened window is rejected too, and one whose
+///     backoff outlasts that window is admitted as the next probe.</item>
 ///   <item>Per-attempt timeout (linked <see cref="CancellationTokenSource"/>).</item>
 ///   <item>Action invocation.</item>
 ///   <item>On failure: record + retry with exponential backoff (if configured).</item>
