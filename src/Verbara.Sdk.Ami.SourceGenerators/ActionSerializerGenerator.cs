@@ -225,7 +225,7 @@ public sealed class ActionSerializerGenerator : IIncrementalGenerator
         {
             sb.AppendLine($"        {action.FullyQualifiedTypeName} => \"{EscapeString(action.MappingName)}\",");
         }
-        sb.AppendLine("        _ => action.GetType().Name.Replace(\"Action\", \"\")");
+        sb.AppendLine("        _ => throw Unwritable(action)");
         sb.AppendLine("    };");
         sb.AppendLine();
 
@@ -244,8 +244,18 @@ public sealed class ActionSerializerGenerator : IIncrementalGenerator
                 sb.AppendLine($"        {action.FullyQualifiedTypeName} a => Serialize{action.ClassName}(a),");
             }
         }
-        sb.AppendLine("        _ => Array.Empty<KeyValuePair<string, string>>()");
+        sb.AppendLine("        _ => throw Unwritable(action)");
         sb.AppendLine("    };");
+        sb.AppendLine();
+
+        // The fallback refuses a type it has no arm for: it never guesses a name from the class name and never
+        // drops the fields. The message names the raw action as text, so this output compiles where no concrete
+        // Verbara.Sdk.Ami type exists.
+        sb.AppendLine("    /// <summary>The refusal of an action type this serializer has no arm for.</summary>");
+        sb.AppendLine("    private static ArgumentException Unwritable(ManagerAction action) => new(");
+        sb.AppendLine("        \"The SDK cannot write an action of type '\" + action.GetType().FullName + \"': it is not an action type the SDK declares. \" +");
+        sb.AppendLine("        \"Send it as Verbara.Sdk.Ami.Actions.RawAction, built from its AMI action name and its fields.\",");
+        sb.AppendLine("        nameof(action));");
         sb.AppendLine();
 
         // Per-action serialization methods (actions with nothing to write map to Array.Empty above)

@@ -128,7 +128,7 @@ internal static class GeneratorHarness
                 result.Generator.GetGeneratorType().Name, file.HintName, file.SourceText.ToString())))
             .ToImmutableArray();
 
-        return new GeneratorRun(generated, generatorDiagnostics, output.GetDiagnostics());
+        return new GeneratorRun(generated, generatorDiagnostics, output.GetDiagnostics(), output);
     }
 
     /// <summary>Every assembly of the running runtime's own directory: the framework, and nothing of the SDK.</summary>
@@ -150,11 +150,15 @@ internal static class GeneratorHarness
 /// <summary>One file a generator added: the generator's type name, the file's hint name and its text.</summary>
 internal sealed record GeneratedFile(string Generator, string HintName, string Text);
 
-/// <summary>What one <see cref="GeneratorHarness.Run"/> produced.</summary>
+/// <summary>
+/// What one <see cref="GeneratorHarness.Run"/> produced; <see cref="Output"/> is the compilation with the generated
+/// files added, for a test that emits and runs it.
+/// </summary>
 internal sealed record GeneratorRun(
     ImmutableArray<GeneratedFile> Files,
     ImmutableArray<Diagnostic> GeneratorDiagnostics,
-    ImmutableArray<Diagnostic> CompilationDiagnostics)
+    ImmutableArray<Diagnostic> CompilationDiagnostics,
+    Compilation Output)
 {
     /// <summary>The one file <paramref name="generator"/> added; fails when it added none or several.</summary>
     public GeneratedFile Single(string generator) => Files.Single(f => f.Generator == generator);

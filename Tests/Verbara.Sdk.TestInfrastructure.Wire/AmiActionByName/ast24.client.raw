@@ -1,0 +1,29 @@
+Action: Ping
+ActionID: c27-g24-1-i
+
+Action: LoggerRotate
+ActionID: c27-g24-1-ii
+
+Action: ListCategories
+ActionID: c27-g24-1-iii
+Filename: manager.conf
+
+Action: IAXpeers
+ActionID: c27-g24-1-iv
+
+Action: DeviceStateList
+ActionID: c27-g24-1-v
+
+Action: devicestatelist
+ActionID: c27-g24-1-vi
+
+Action: DAHDIDNDon
+ActionID: c27-g24-1-vii
+DAHDIChannel: 1
+
+Action: VerbaraNoSuchAction
+ActionID: c27-g24-1-viii
+
+Action: FAXSessions
+ActionID: c27-g24-1-ix
+

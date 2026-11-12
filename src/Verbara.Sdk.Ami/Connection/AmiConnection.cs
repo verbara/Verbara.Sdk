@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Verbara.Sdk;
 using Verbara.Sdk.Enums;
+using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Diagnostics;
 using Verbara.Sdk.Ami.Generated;
 using Verbara.Sdk.Ami.Internal;
@@ -1306,11 +1307,12 @@ public sealed class AmiConnection : IAmiConnection
 
         try
         {
-            // Use source-generated serializer for AOT-compatible action dispatch
-            var actionName = GeneratedActionSerializer.GetActionName(action);
+            // A raw action carries its name and fields; every other action goes through the source-generated
+            // serializer, which refuses a type it does not declare before anything is written.
+            var (actionName, actionFields) = ResolveAction(action);
             using var activity = AmiActivitySource.StartAction(actionName, actionId);
 
-            var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
+            var fields = MaterializeAndLogFields(actionId, actionName, actionFields);
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
@@ -1350,10 +1352,10 @@ public sealed class AmiConnection : IAmiConnection
 
         try
         {
-            var actionName = GeneratedActionSerializer.GetActionName(action);
+            var (actionName, actionFields) = ResolveAction(action);
             using var activity = AmiActivitySource.StartAction(actionName, actionId);
 
-            var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
+            var fields = MaterializeAndLogFields(actionId, actionName, actionFields);
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
@@ -1497,10 +1499,10 @@ public sealed class AmiConnection : IAmiConnection
 
         try
         {
-            var actionName = GeneratedActionSerializer.GetActionName(action);
+            var (actionName, actionFields) = ResolveAction(action);
             using var activity = AmiActivitySource.StartAction(actionName, actionId);
 
-            var fields = MaterializeAndLogFields(actionId, actionName, GeneratedActionSerializer.Serialize(action));
+            var fields = MaterializeAndLogFields(actionId, actionName, actionFields);
 
             _actionNames[actionId] = actionName;
             AmiConnectionLog.ActionSending(_logger, actionId, actionName);
@@ -1535,6 +1537,17 @@ public sealed class AmiConnection : IAmiConnection
             _actionNames.TryRemove(actionId, out _);
         }
     }
+
+    /// <summary>
+    /// Resolves the name and the fields an action is written with: a <see cref="RawAction"/> carries its own, and
+    /// every other action is resolved by the source-generated serializer, which throws
+    /// <see cref="ArgumentException"/> for a type the SDK does not declare. Called inside each send path's
+    /// <see langword="try"/>, before any byte is written, so a refusal leaves no registration behind.
+    /// </summary>
+    private static (string Name, IEnumerable<KeyValuePair<string, string>> Fields) ResolveAction(ManagerAction action) =>
+        action is RawAction raw
+            ? (raw.Name, raw.Fields)
+            : (GeneratedActionSerializer.GetActionName(action), GeneratedActionSerializer.Serialize(action));
 
     private IEnumerable<KeyValuePair<string, string>> MaterializeAndLogFields(
         string actionId, string actionName, IEnumerable<KeyValuePair<string, string>> fields)
