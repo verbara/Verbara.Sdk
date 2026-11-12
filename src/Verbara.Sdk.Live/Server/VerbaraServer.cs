@@ -588,12 +588,14 @@ public sealed class VerbaraServer : IVerbaraServer
 
     private void OnReconnected() => ReloadNewSession(_disposing.Token);
 
-    // The pending reconnect is the one input of ChannelTableCovered that turns true with no channel read completing after
-    // it: a covering read that completed while the reconnect was pending found the table uncovered, and raised its
-    // completion then. Its end is announced here, so that the decisions waiting on a covered table are taken again.
-    private void OnReconnectSettled(long session)
+    private void OnReconnectSettled(long session) => AnnounceSettledTable();
+
+    // A table can become covered at a moment no channel read's own completion announces: the end of a pending reconnect,
+    // and the exit of an application that waited out its bound behind one that verified the table while it was still
+    // counted. Announced here, so that the decisions waiting on a covered table are taken again.
+    private void AnnounceSettledTable()
     {
-        // The delivery reads its handlers once, so a disposal that began after that read does not unhook this one.
+        // A delivery reads its handlers once, so a disposal that began after that read does not unhook this one.
         if (_disposing.IsCancellationRequested || !ChannelTableCovered)
             return;
         ChannelTableSettled?.Invoke(new ChannelSnapshotCompletion(this, Interlocked.Read(ref _reconnects),
@@ -601,10 +603,11 @@ public sealed class VerbaraServer : IVerbaraServer
     }
 
     /// <summary>
-    /// Raised on the connection's notification queue when the end of a pending reconnect finds the channel table covered
-    /// (<see cref="ChannelTableCovered"/>): the moment a table the last channel read left uncovered only because the
-    /// reconnect was pending becomes covered. Never raised once the server is being disposed. Separate from
-    /// <see cref="ChannelSnapshotCompleted"/>, which a channel read raises when it completes.
+    /// Raised when the channel table becomes covered (<see cref="ChannelTableCovered"/>) at a moment no channel read's
+    /// own completion announces: at the end of a pending reconnect, on the connection's notification queue, and when a
+    /// channel application that waited out its bound is the last to leave behind one that verified the table, on that
+    /// reader's thread. Never raised once the server is being disposed. Separate from
+    /// <see cref="ChannelSnapshotCompleted"/>, which a channel read that applied in full raises when it completes.
     /// </summary>
     internal event Action<ChannelSnapshotCompletion>? ChannelTableSettled;
 
@@ -968,6 +971,8 @@ public sealed class VerbaraServer : IVerbaraServer
         finally { Interlocked.Decrement(ref _channelApplications); }
         if (full && ChannelTableComplete)
             ChannelSnapshotCompleted?.Invoke(new ChannelSnapshotCompletion(this, channelSession, channelConnection));
+        else if (!full)
+            AnnounceSettledTable();
         return channelSnapshot;
     }
 
