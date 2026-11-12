@@ -821,6 +821,16 @@ public sealed class VerbaraServer : IVerbaraServer
         LiveActivitySource.SetChannelReconcileResult(activity, Channels.ChannelCount);
     }
 
+    /// <summary>Seam for the queues-only refresh; not implemented yet.</summary>
+    public ValueTask ReconcileQueuesAsync(CancellationToken cancellationToken = default) =>
+        _connection is null ? throw new InvalidOperationException() : ValueTask.CompletedTask;
+
+    /// <summary>Seam: the targeted discovery in flight for <paramref name="queueName"/>, or a completed task.</summary>
+    internal Task PendingQueueDiscovery(string queueName) => _connection is null ? Task.FromResult(queueName) : Task.CompletedTask;
+
+    /// <summary>Seam: how many targeted discoveries are in flight.</summary>
+    internal int PendingQueueDiscoveryCount => _connection is null ? 1 : 0;
+
     /// <summary>Who reads a channel snapshot: a load, or <see cref="ReconcileChannelsAsync"/>.</summary>
     /// <param name="Name">What the reader is called in the exception a session ending under it throws.</param>
     /// <param name="MetricName">The load or reconciliation label carried by the refusal counter.</param>

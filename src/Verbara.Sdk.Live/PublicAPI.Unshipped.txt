@@ -9,3 +9,4 @@ Verbara.Sdk.Live.Queues.AsteriskQueueEntry.LeaveNotObserved.get -> bool
 Verbara.Sdk.Live.Channels.ChannelManager.OnNewCallerId(string! uniqueId, string? callerIdNum, string? callerIdName) -> void
 Verbara.Sdk.Live.Channels.ChannelManager.OnNewExten(string! uniqueId, string? context, string? exten, int? priority) -> void
 Verbara.Sdk.Live.Queues.QueueManager.MemberPaused -> System.Action<string!, Verbara.Sdk.Live.Queues.AsteriskQueueMember!>?
+Verbara.Sdk.Live.Server.VerbaraServer.ReconcileQueuesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask

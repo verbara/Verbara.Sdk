@@ -96,6 +96,14 @@ public enum ConferenceListing
 /// <param name="Wait">The <c>Wait</c> header: seconds the caller had waited when Asterisk answered.</param>
 internal sealed record QueueCaller(string Channel, string UniqueId, int Position, long Wait = 0);
 
+/// <summary>A queue besides <see cref="BootingAsterisk.QueueName"/> the peer lists on <c>QueueStatus</c>.</summary>
+/// <param name="Name">The queue's name.</param>
+/// <param name="Members">The <c>Location</c> of each static member.</param>
+/// <param name="Callers">The callers waiting in it.</param>
+/// <param name="Strategy">Its strategy.</param>
+internal sealed record ListedQueue(string Name, IReadOnlyList<string> Members, IReadOnlyList<QueueCaller> Callers,
+    string Strategy = "rrmemory");
+
 /// <summary>
 /// Plays, over one <see cref="PipedSocket"/> session, an Asterisk that accepted the AMI login before its modules
 /// had finished loading.
@@ -221,6 +229,31 @@ internal sealed class BootingAsterisk
     /// Settable between two loads.
     /// </summary>
     public IReadOnlyList<QueueCaller> QueueEntries { get; set; } = [];
+
+    /// <summary>
+    /// The queues the peer lists on <c>QueueStatus</c> after <see cref="QueueName"/>, as Asterisk lists a queue created
+    /// after the load: by a reload of its static configuration or a realtime insert, with no event announcing it.
+    /// </summary>
+    public IReadOnlyList<ListedQueue> OtherQueues { get; set; } = [];
+
+    /// <summary>Whether the peer lists <see cref="QueueName"/> at all; a queue Asterisk no longer has is not listed.</summary>
+    public bool MainQueueListed { get; set; } = true;
+
+    /// <summary>
+    /// The <c>Queue</c> header of every <c>QueueStatus</c> the peer read, in order: <see langword="null"/> for one that
+    /// asked for every queue.
+    /// </summary>
+    public IReadOnlyList<string?> QueueStatusFilters
+    {
+        get
+        {
+            lock (_filtersGate)
+                return [.. _queueStatusFilters];
+        }
+    }
+
+    private readonly Lock _filtersGate = new();
+    private readonly List<string?> _queueStatusFilters = [];
 
     /// <summary>The channels the peer lists on <c>Status</c>. Settable between two loads.</summary>
     public IReadOnlyList<StatusChannel> StatusChannels { get; set; } = [];
@@ -498,7 +531,10 @@ internal sealed class BootingAsterisk
             if (!IsBooted || !HasAppQueue)
                 return await RefuseAsync(socket, id, name);
 
-            await AnswerQueueStatusAsync(socket, id);
+            var filter = HeaderOf(action, "Queue");
+            lock (_filtersGate)
+                _queueStatusFilters.Add(filter);
+            await AnswerQueueStatusAsync(socket, id, filter);
             return true;
         }
 
@@ -723,11 +759,28 @@ internal sealed class BootingAsterisk
         ]);
     }
 
-    private async Task AnswerQueueStatusAsync(PipedSocket socket, string id)
+    private async Task AnswerQueueStatusAsync(PipedSocket socket, string id, string? filter)
     {
-        var entries = QueueEntries;
+        // Asterisk compares the Queue header with each queue's name ignoring case, and lists only the one it names.
+        bool Asked(string queue) => filter is null || string.Equals(filter, queue, StringComparison.OrdinalIgnoreCase);
+        var main = MainQueueListed && Asked(QueueName);
+        var entries = main ? QueueEntries : [];
+        var others = OtherQueues.Where(q => Asked(q.Name)).ToList();
         await socket.RespondAsync("Success", id,
             [new("EventList", "start"), new("Message", "Queue status will follow")]);
+        var otherItems = await WriteOtherQueuesAsync(socket, id, others);
+        if (!main)
+        {
+            if (BeforeQueueStatusComplete is { } beforeOthersComplete)
+                await beforeOthersComplete();
+            await socket.WriteEventAsync("QueueStatusComplete",
+            [
+                new("ActionID", id), new("EventList", "Complete"),
+                new("ListItems", otherItems.ToString(CultureInfo.InvariantCulture)),
+            ]);
+            return;
+        }
+
         if (QueueParamsIncluded)
             await socket.WriteEventAsync("QueueParams",
         [
@@ -773,8 +826,48 @@ internal sealed class BootingAsterisk
         await socket.WriteEventAsync("QueueStatusComplete",
         [
             new("ActionID", id), new("EventList", "Complete"),
-            new("ListItems", ((QueueParamsIncluded ? 1 : 0) + memberCount + entries.Count).ToString(CultureInfo.InvariantCulture)),
+            new("ListItems", (otherItems + (QueueParamsIncluded ? 1 : 0) + memberCount + entries.Count).ToString(CultureInfo.InvariantCulture)),
         ]);
+    }
+
+    /// <summary>Writes the rows of <paramref name="queues"/>, as Asterisk does for each queue; returns how many.</summary>
+    private static async Task<int> WriteOtherQueuesAsync(PipedSocket socket, string id, IReadOnlyList<ListedQueue> queues)
+    {
+        var items = 0;
+        foreach (var queue in queues)
+        {
+            await socket.WriteEventAsync("QueueParams",
+            [
+                new("ActionID", id), new("Queue", queue.Name), new("Max", "0"), new("Strategy", queue.Strategy),
+                new("Calls", queue.Callers.Count.ToString(CultureInfo.InvariantCulture)), new("Holdtime", "0"),
+                new("TalkTime", "0"), new("Completed", "0"), new("Abandoned", "0"),
+            ]);
+            items++;
+            foreach (var location in queue.Members)
+            {
+                await socket.WriteEventAsync("QueueMember",
+                [
+                    new("ActionID", id), new("Queue", queue.Name), new("Name", location), new("Location", location),
+                    new("StateInterface", location), new("Penalty", "0"), new("Status", "1"), new("Paused", "0"),
+                ]);
+                items++;
+            }
+
+            foreach (var caller in queue.Callers)
+            {
+                await socket.WriteEventAsync("QueueEntry",
+                [
+                    new("Queue", queue.Name), new("Position", caller.Position.ToString(CultureInfo.InvariantCulture)),
+                    new("Channel", caller.Channel), new("Uniqueid", caller.UniqueId), new("CallerIDNum", "5552102"),
+                    new("CallerIDName", "QRB"), new("ConnectedLineNum", "unknown"), new("ConnectedLineName", "unknown"),
+                    new("Wait", caller.Wait.ToString(CultureInfo.InvariantCulture)), new("Priority", "0"),
+                    new("ActionID", id),
+                ]);
+                items++;
+            }
+        }
+
+        return items;
     }
 
     private async Task<bool> AnswerAgentsAsync(PipedSocket socket, string id)
