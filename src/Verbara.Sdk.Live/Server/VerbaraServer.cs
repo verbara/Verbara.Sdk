@@ -257,6 +257,12 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>Observes the actual list/deferred fence selected immediately before its wait; null in production.</summary>
     internal Action<string, long>? FenceWaitObserved { get; set; }
 
+    /// <summary>
+    /// Null in production; observes a channel application after it wrote the verified flag and before it leaves. Its
+    /// argument says whether the application applied in full.
+    /// </summary>
+    internal Action<bool>? ChannelApplicationWritten { get; set; }
+
     /// <summary>Null in production; observes collection of a queue row without publishing a queue event.</summary>
     internal Action? QueueRowBuffered { get; set; }
 
@@ -937,6 +943,7 @@ public sealed class VerbaraServer : IVerbaraServer
             Volatile.Write(ref _channelVerifiedConnection, channelConnection);
             Interlocked.Exchange(ref _channelVerifiedSession, channelSession);
             Volatile.Write(ref _channelTableVerified, full && channelSession == Interlocked.Read(ref _reconnects) ? 1 : 0);
+            ChannelApplicationWritten?.Invoke(full);
 
             // The read covers its sample only when it completed on the session it began on, its wait was reached (not
             // run out, not skipped inside a dispatch), it kept no channel received before its Status, and no other read
