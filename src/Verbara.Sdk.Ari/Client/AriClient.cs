@@ -52,6 +52,11 @@ internal static partial class AriClientLog
     [LoggerMessage(Level = LogLevel.Error, Message = "[ARI] Reconnect backoff failed: the reconnect loop ends")]
     public static partial void ReconnectBackoffFailed(ILogger logger, Exception exception);
 
+    // An out-of-memory reached the events loop's task: the client stops, Faulted, instead of dying where nobody sees it.
+    // Tests match it by its event name.
+    [LoggerMessage(Level = LogLevel.Error, Message = "[ARI] Out of memory in the events loop: the client stops receiving and does not reconnect")]
+    public static partial void EventLoopOutOfMemory(ILogger logger, Exception exception);
+
     // The caller's DisconnectAsync or DisposeAsync left buffered events undelivered. Not "[ARI] Event dropped": a full
     // buffer, whose action (a larger buffer or a faster observer) is the wrong one for a caller's close.
     [LoggerMessage(Level = LogLevel.Warning, Message = "[ARI] Discarded on caller ending: count={Count}")]
@@ -115,7 +120,8 @@ public sealed class AriClient : IAriClient
 
     /// <summary>
     /// The events loop started by <see cref="ConnectAsync"/>, reconnects included. It completes only when
-    /// the client will neither receive nor dial again: cancelled, auto-reconnect off, given up, or refused.
+    /// the client will neither receive nor dial again: cancelled, auto-reconnect off, given up, refused, or out of
+    /// memory.
     /// Tests wait on it instead of a clock.
     /// </summary>
     internal Task? EventLoop => _eventLoop;
@@ -293,7 +299,7 @@ public sealed class AriClient : IAriClient
 
         // Reached only when the dial connected, so the source is still this attempt's and undisposed.
         var loopToken = cts!.Token;
-        _eventLoop = Task.Run(() => EventLoopAsync(pump, loopToken), CancellationToken.None);
+        _eventLoop = Task.Run(() => RunEventLoopAsync(pump, loopToken), CancellationToken.None);
 
         AriClientLog.Connected(_logger, _options.BaseUrl, _options.Application);
     }
@@ -339,6 +345,24 @@ public sealed class AriClient : IAriClient
         finally
         {
             frame.Finished = true;
+        }
+    }
+
+    // The task ConnectAsync starts. Nothing awaits it for its outcome, so nothing above this frame can be told of an
+    // out-of-memory: the catches below it let one through (it is not a failed frame, a socket error or a failed
+    // attempt, and is not retried), and it ends here as a give-up does, once and loudly, with the socket released.
+    // Not rethrown: a faulted task nobody reads would only hide it again.
+    private async Task RunEventLoopAsync(AriEventPump pump, CancellationToken ct)
+    {
+        try
+        {
+            await EventLoopAsync(pump, ct);
+        }
+        catch (OutOfMemoryException ex)
+        {
+            _webSocket?.Dispose();
+            AriClientLog.EventLoopOutOfMemory(_logger, ex);
+            SetState(AriConnectionState.Faulted);
         }
     }
 
