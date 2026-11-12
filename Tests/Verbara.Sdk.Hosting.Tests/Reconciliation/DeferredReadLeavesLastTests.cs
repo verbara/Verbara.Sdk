@@ -61,6 +61,36 @@ public sealed class DeferredReadLeavesLastTests
         }
     }
 
+    [Fact]
+    public async Task Reconcile_ShouldLeaveTheCallWaiting_WhenTheOnlyReadWaitedOutItsBound()
+    {
+        await using var rig = await LossRig.StartAsync(attach: false);
+        await rig.NewChannelAsync("X", "L");
+        await rig.NewChannelAsync("Y", "L");
+        rig.Attach();
+        await rig.HoldAsync();
+        await rig.ReconcileAsync();
+        await rig.AdmitAsync();
+        var call = rig.Manager.GetByLinkedId("L")!;
+        var unverifiedAtAdmission = call.Unverified;
+        var settled = 0;
+        rig.Server.ChannelTableSettled += _ => Interlocked.Increment(ref settled);
+
+        var waitedOut = await rig.RunAsync(() => rig.Server.ReconcileChannelsAsync().AsTask());
+
+        using (new AssertionScope())
+        {
+            unverifiedAtAdmission.Should().BeTrue("premise: an earlier read and the admission's own read waited out their bound");
+            waitedOut.Should().BeTrue("premise: the read's barrier ran out");
+            rig.Server.ChannelTableCovered.Should().BeFalse("a read that waited out its bound leaves the table incomplete");
+            settled.Should().Be(0);
+            call.Unverified.Should().BeTrue("nothing covered the table: the call waits. " + rig.Describe(call));
+            rig.EndingsOf(call).Should().Be(0);
+        }
+
+        rig.Release();
+    }
+
     // A call with legs X and Y not observed in full; B held after its flag write; A run to its end; B released.
     private static async Task<Run> RunAsync(LossRig rig, bool deliveredLoss, bool legsGone)
     {

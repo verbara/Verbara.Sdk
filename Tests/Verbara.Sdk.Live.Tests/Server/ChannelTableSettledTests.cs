@@ -180,6 +180,120 @@ public sealed class ChannelTableSettledTests
         }
     }
 
+    /// <summary>
+    /// Two channel reads apply at once: B, whose barrier ran out, writes the verified flag down and is held before it
+    /// leaves; A, whose wait was met, writes it up and leaves while B is still counted, so A's own completion is not
+    /// raised. B, leaving last, finds the table covered and announces it.
+    /// </summary>
+    [Fact]
+    public async Task ChannelTableSettled_ShouldBeRaisedOnceWithTheTableCovered_WhenADeferredApplyLeavesLastBehindAFullOne()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.StartAsync(peer);
+        var watched = Watch(run.Server);
+        using var gate = new DispatchGate();
+        using var subscription = run.Connection.Subscribe(gate);
+        using var bWritten = new ManualResetEventSlim();
+        using var bGo = new ManualResetEventSlim();
+        run.Server.ChannelApplicationWritten = full =>
+        {
+            if (full || bWritten.IsSet) return;
+            bWritten.Set();
+            bGo.Wait(Run.Bound * 3);
+        };
+
+        var b = await StartDeferredAsync(run, peer, gate, bWritten);
+        gate.Release();
+        await run.Server.ReconcileChannelsAsync().AsTask().WaitAsync(Run.Bound);
+        var completeWhileBCounted = run.Server.ChannelTableComplete;
+        var settledWhileBCounted = watched.Settled.Count;
+        bGo.Set();
+        await b.WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            completeWhileBCounted.Should().BeFalse("premise: B is still counted when A leaves");
+            settledWhileBCounted.Should().Be(0, "premise: nothing announced the table while B was counted");
+            watched.Completions.Should().BeEmpty("A left while B was counted, and B did not apply in full");
+            watched.Settled.Should().Equal([true], "B, leaving last, announces the covered table once");
+        }
+    }
+
+    /// <summary>
+    /// The same two reads with the exits the other way round: B leaves while A is still applying, and A, leaving last,
+    /// raises its own completion. B announces nothing.
+    /// </summary>
+    [Fact]
+    public async Task ChannelTableSettled_ShouldNotBeRaised_WhenTheDeferredApplyLeavesBeforeTheFullOne()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true, StatusChannels = [] };
+        await using var run = await Run.StartAsync(peer);
+        var watched = Watch(run.Server);
+        using var gate = new DispatchGate();
+        using var subscription = run.Connection.Subscribe(gate);
+        using var bWritten = new ManualResetEventSlim();
+        using var bGo = new ManualResetEventSlim();
+        using var aApplying = new ManualResetEventSlim();
+        using var aGo = new ManualResetEventSlim();
+        run.Server.ChannelApplicationWritten = full =>
+        {
+            if (full || bWritten.IsSet) return;
+            bWritten.Set();
+            bGo.Wait(Run.Bound * 3);
+        };
+        run.Server.Channels.ChannelAdded += channel =>
+        {
+            if (channel.UniqueId != "a" || aApplying.IsSet) return;
+            aApplying.Set();
+            aGo.Wait(Run.Bound * 3);
+        };
+
+        var b = await StartDeferredAsync(run, peer, gate, bWritten);
+        gate.Release();
+        peer.StatusChannels = [new StatusChannel("a", "PJSIP/a", LinkedId: "call")];
+        var a = Task.Run(async () => await run.Server.ReconcileChannelsAsync());
+        aApplying.Wait(Run.Bound).Should().BeTrue("premise: A began to apply while B was held");
+        bGo.Set();
+        await b.WaitAsync(Run.Bound);
+        var settledAfterB = watched.Settled.Count;
+        aGo.Set();
+        await a.WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            settledAfterB.Should().Be(0, "B left while A was counted: the table did not read covered");
+            watched.Completions.Should().Equal([true], "A, leaving last, raises its own completion once");
+            watched.Settled.Should().BeEmpty();
+            run.Server.ChannelTableCovered.Should().BeTrue();
+        }
+    }
+
+    [Fact]
+    public async Task ChannelTableSettled_ShouldNotBeRaised_WhenADeferredApplyLeavesAlone()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.StartAsync(peer);
+        var watched = Watch(run.Server);
+        using var gate = new DispatchGate();
+        using var subscription = run.Connection.Subscribe(gate);
+        using var written = new ManualResetEventSlim();
+        run.Server.ChannelApplicationWritten = full =>
+        {
+            if (!full) written.Set();
+        };
+
+        var b = await StartDeferredAsync(run, peer, gate, written);
+        await b.WaitAsync(Run.Bound);
+        gate.Release();
+
+        using (new AssertionScope())
+        {
+            run.Server.ChannelTableCovered.Should().BeFalse("a read that waited out its bound leaves the table incomplete");
+            watched.Completions.Should().BeEmpty();
+            watched.Settled.Should().BeEmpty("a deferred apply alone leaves no covered table to announce");
+        }
+    }
+
     // ---- The rig ----
 
     private sealed class Watched
@@ -230,6 +344,31 @@ public sealed class ChannelTableSettledTests
             .GetProperty("PendingNotifications", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(connection)!;
         await pending.WaitAsync(Run.Bound);
+    }
+
+    /// <summary>
+    /// Holds the dispatch, starts a channel read, runs its barrier out on the run's clock and returns once the read has
+    /// written its verified flag (<paramref name="written"/> is set by the test's seam handler).
+    /// </summary>
+    private static async Task<Task> StartDeferredAsync(Run run, BootingAsterisk peer, DispatchGate gate,
+        ManualResetEventSlim written)
+    {
+        await peer.SendEventAsync("UserEvent", DispatchGate.Frame());
+        await gate.Held.WaitAsync(Run.Bound);
+        while (run.Clock.TimersCreated.TryRead(out _))
+        {
+            // Only the barrier of this read is run out.
+        }
+
+        var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        run.Server.FenceWaitObserved = (_, _) => waiting.TrySetResult();
+        var read = Task.Run(async () => await run.Server.ReconcileChannelsAsync());
+        await waiting.Task.WaitAsync(Run.Bound);
+        run.Server.FenceWaitObserved = null;
+        await run.Clock.TimersCreated.ReadAsync().AsTask().WaitAsync(Run.Bound);
+        _ = Task.Run(() => run.Clock.Advance(VerbaraServer.BarrierBound + TimeSpan.FromSeconds(1)));
+        written.Wait(Run.Bound).Should().BeTrue("premise: the read whose barrier ran out wrote its flag");
+        return read;
     }
 
     private static async Task<bool> CompletesWithinBoundAsync(Task task)
