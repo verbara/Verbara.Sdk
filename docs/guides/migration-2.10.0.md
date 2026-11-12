@@ -20,6 +20,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Live` | [A refused `Status` is counted and reported by the pool health check](#a-refused-status-is-counted-and-reported-by-the-pool-health-check) | new members, health check |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
 | `Verbara.Sdk.Ami` | [`NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends](#newextenevent-and-newcalleridevent-carry-what-the-wire-sends) | fix, new members |
+| `Verbara.Sdk.Ami` | [An action the SDK does not type is sent with `RawAction`](#an-action-the-sdk-does-not-type-is-sent-with-rawaction) | new type, behaviour, BREAKING |
 | `Verbara.Sdk.VoiceAi.Stt`, `Verbara.Sdk.VoiceAi.Tts` | [A message a recognizer or synthesizer cannot read no longer ends the session](#a-message-a-recognizer-or-synthesizer-cannot-read-no-longer-ends-the-session) | fix, behaviour, new metric, BREAKING |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An OpenAI Realtime audio delta that is not valid base64 no longer ends the call](#an-openai-realtime-audio-delta-that-is-not-valid-base64-no-longer-ends-the-call) | behaviour, metric, BREAKING |
 | `Verbara.Sdk.VoiceAi.Tts` | [A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis](#a-cartesia-or-elevenlabs-audio-frame-that-is-not-valid-base64-no-longer-ends-the-synthesis) | fix, behaviour, BREAKING |
@@ -405,6 +406,25 @@ starts with, or null when it starts with none; both were always null. A number a
 
 **What to do.** Read the typed members.
 
+### An action the SDK does not type is sent with `RawAction`
+
+**What changed.** `RawAction` (`Verbara.Sdk.Ami.Actions`) sends an AMI action by its name and its fields through
+every send method of `IAmiConnection`: `Action: <name>`, the connection's `ActionID`, then each field in the order it
+was added. The name must be ASCII letters and digits; a key ASCII letters, digits, `-`, `_`, `(` or `)`, and not
+`Action` or `ActionID`; a value holds no CR or LF; each is checked where the action is built. The answer is read by
+the name, as for a typed action.
+
+A `ManagerAction` subclass the SDK does not declare used to be written as its class name without `Action`, with none
+of its properties and none of its extra fields. The connection now throws `ArgumentException` naming its type and
+`RawAction`, before any byte is written; the connection stays usable.
+
+**Who is affected.** Code that sends its own `ManagerAction` subclass: it compiles, and throws at the send. No
+signature changed.
+
+**What to do.** Replace `new MyAction { Foo = "x" }` with `new RawAction("<ActionName>").Add("Foo", "x")`, where
+`<ActionName>` is the name Asterisk registers (`manager show commands`). This is also the route for the `DAHDI*`
+actions that replace the removed `Zap*` types (`new RawAction("DAHDIDNDon").Add("DAHDIChannel", "1")`).
+
 ## Resilience
 
 ### `circuit.state` reports the breaker's current state
@@ -560,10 +580,11 @@ What the wire still carries is not lost:
   `MusicOnHoldStartEvent`. Those types keep their own wire names, which every supported Asterisk sends.
 - **`VerbaraServer` no longer reads `QueueMemberPaused`.** Only Asterisk 11 and earlier send it; on those versions a
   member's pause state no longer follows it. `QueueMemberPause`, which every supported version sends, is unchanged.
-- **The SDK sends only the actions it types.** A consumer's own `ManagerAction` subclass is not a route to
-  another action: the generated serializer writes it as its type name without `Action`, with none of its
-  properties and none of its extra fields. So this release has no way to send the `DAHDI*` actions the Zaptel
-  rows name, nor `MeetmeMute` and `MeetmeUnmute` on a server built with app_meetme.
+- **An action the SDK does not type is sent as a `RawAction`.** A consumer's own `ManagerAction` subclass is not
+  a route to another action: the connection refuses it with `ArgumentException` (see
+  [An action the SDK does not type is sent with `RawAction`](#an-action-the-sdk-does-not-type-is-sent-with-rawaction)).
+  The `DAHDI*` actions the Zaptel rows name, and `MeetmeMute` and `MeetmeUnmute` on a server built with
+  app_meetme, are sent by name: `new RawAction("DAHDIDNDon").Add("DAHDIChannel", "1")`.
 
 **Who is affected.** Code that names a removed type or `UseConfBridge`: it no longer compiles. A removed type reports
 `CS0246`, or `CS0234` when written fully qualified; `UseConfBridge` reports `CS0117` in an object initializer and

@@ -53,6 +53,10 @@ public interface IAmiConnection : IAsyncDisposable
     /// break (CR or LF), which would split one action into several on the wire. Nothing of the action
     /// is sent, no response is awaited, and the connection stays usable. The message names the field
     /// but never includes its value.
+    /// The same exception, thrown the same way, refuses an action of a type the SDK does not declare, such as a
+    /// consumer's own <see cref="ManagerAction"/> subclass, and names that type: the SDK never writes an action
+    /// under a name guessed from its class name. Send such an action as a <c>RawAction</c>
+    /// (<c>Verbara.Sdk.Ami.Actions</c>), built from its AMI action name and its fields.
     /// </exception>
     /// <exception cref="AsteriskException">
     /// An <c>AmiNotConnectedException</c>, naming the connection's state: the connection is not connected when the call
@@ -70,6 +74,10 @@ public interface IAmiConnection : IAsyncDisposable
     /// break (CR or LF), which would split one action into several on the wire. Nothing of the action
     /// is sent, no response is awaited, and the connection stays usable. The message names the field
     /// but never includes its value.
+    /// The same exception, thrown the same way, refuses an action of a type the SDK does not declare, such as a
+    /// consumer's own <see cref="ManagerAction"/> subclass, and names that type: the SDK never writes an action
+    /// under a name guessed from its class name. Send such an action as a <c>RawAction</c>
+    /// (<c>Verbara.Sdk.Ami.Actions</c>), built from its AMI action name and its fields.
     /// </exception>
     /// <exception cref="AsteriskException">
     /// An <c>AmiNotConnectedException</c>, naming the connection's state: the connection is not connected when the call
@@ -104,6 +112,10 @@ public interface IAmiConnection : IAsyncDisposable
     /// split one action into several on the wire. Nothing of the action is sent, no events are
     /// awaited, and the connection stays usable. The message names the field but never includes its
     /// value.
+    /// The same exception, thrown the same way, refuses an action of a type the SDK does not declare, such as a
+    /// consumer's own <see cref="ManagerAction"/> subclass, and names that type: the SDK never writes an action
+    /// under a name guessed from its class name. Send such an action as a <c>RawAction</c>
+    /// (<c>Verbara.Sdk.Ami.Actions</c>), built from its AMI action name and its fields.
     /// </exception>
     /// <exception cref="AsteriskException">
     /// Surfaced by the first <c>MoveNextAsync</c> of the returned sequence: an <c>AmiNotConnectedException</c>, naming
