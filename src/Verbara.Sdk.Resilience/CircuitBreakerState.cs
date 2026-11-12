@@ -243,12 +243,12 @@ public sealed class CircuitBreakerState
             var probeAtTicks = Interlocked.Read(ref _probeAtTicks);
             var reopenedAtTicks = time.GetUtcNow().UtcTicks;
 
-            if (probeAtTicks != NullTicksSentinel)
+            // Clear the probe time from the value read, so only one failure re-opens this phase. A failure whose read is
+            // out of date, after a re-open, a new claim or a hand-over, loses here and reads again.
+            if (probeAtTicks != NullTicksSentinel
+                && Interlocked.CompareExchange(ref _probeAtTicks, NullTicksSentinel, probeAtTicks) != probeAtTicks)
             {
-                // Clear the probe time from the value read, so only one failure re-opens this phase. A failure whose
-                // read is out of date, after a re-open, a new claim or a hand-over, loses here and reads again.
-                if (Interlocked.CompareExchange(ref _probeAtTicks, NullTicksSentinel, probeAtTicks) != probeAtTicks)
-                    continue;
+                continue;
             }
 
             // The new opening time first, so open is never seen with the old, elapsed one; then clear the probe
