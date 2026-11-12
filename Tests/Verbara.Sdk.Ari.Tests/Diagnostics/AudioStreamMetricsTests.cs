@@ -80,6 +80,8 @@ public sealed partial class AudioStreamMetricsTests
 
         obsolete.Should().NotBeNull("nothing records audio.buffer.underruns, so the field is deprecated");
         obsolete!.DiagnosticId.Should().Be("VSDK0003");
+        obsolete.UrlFormat.Should().Be("https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0003",
+            "the warning's help link opens the id's heading of the 2.10.0 migration guide, not the compiler's CS0618 page");
         obsolete.IsError.Should().BeFalse("a deprecation warns; it does not break a build without TreatWarningsAsErrors");
         obsolete.Message.Should().ContainEquivalentOf("not emitted")
             .And.Contain("audio.buffer.underruns");

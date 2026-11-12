@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: the `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` warnings link to their migration-guide section (#560)
+
+The 14 members marked obsolete under these ids carry a documentation link: the warning a consumer's build reports,
+and the rule's help link in a SARIF log, open that id's heading in the
+[2.10.0 migration guide](docs/guides/migration-2.10.0.md#vsdk0002) instead of the compiler's generic `CS0618` page. No
+message, id, signature or removal release changes: the members still leave in 2.11.0.
+
 ### Fixed: an out-of-memory no longer leaves a client, a reload or a session ending unreported (#554)
 
 `AriClient`: an out-of-memory in the events loop, while receiving or in a reconnect attempt, ends the client

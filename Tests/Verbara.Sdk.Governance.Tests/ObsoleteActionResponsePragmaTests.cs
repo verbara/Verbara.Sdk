@@ -6,8 +6,8 @@ namespace Verbara.Sdk.Governance.Tests;
 /// <summary>
 /// The action serializer and the response deserializer suppress an obsolete diagnostic only for an obsolete type they
 /// bind: one <c>#pragma warning disable</c> per distinct diagnostic (<c>CS0618</c>, or the <c>DiagnosticId</c> of an
+/// <c>[Obsolete]</c>), and none when they bind no obsolete type. The last two cases check that the two event generators
 /// do the same for an event type marked with a custom deprecation id (a synthetic one, outside the SDK's own series).
-/// do the same for an event type marked with the deprecation id the SDK's dead-module marks carry.
 /// </summary>
 /// <remarks>
 /// Each generated file names every mapped type it binds (the serializer's <c>switch</c> arms, the deserializer's

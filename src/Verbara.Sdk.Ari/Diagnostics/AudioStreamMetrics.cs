@@ -117,7 +117,8 @@ public static class AudioStreamMetrics
     /// </remarks>
     [Obsolete(
         "Not emitted: nothing records audio.buffer.underruns. The SDK has no write pump; audio goes out when the caller writes it, so the SDK never sees the far end starve. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0003")]
+        DiagnosticId = "VSDK0003",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0003")]
     public static readonly Counter<long> BufferUnderruns =
         Meter.CreateCounter<long>("audio.buffer.underruns", "underruns",
             "Write pump starved - no audio to send");

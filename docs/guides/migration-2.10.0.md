@@ -591,14 +591,37 @@ on `QueueMemberPaused` for a member's pause state.
 Nothing is removed in 2.10.0, and nothing else changes: the ids, the replacements the messages name and the published
 instruments are as in 2.9.0.
 
+From 2.10.0 each of these warnings links to its id's heading below, not to the compiler's generic `CS0618` page.
+
+#### VSDK0002
+
 | Id | Member | Removed in |
 |---|---|---|
 | `VSDK0002` | `StatusEvent.State`, `CallerId`, `Account`, `BridgedChannel`, `Link`, `BridgedUniqueId` | 2.11.0 |
+
+#### VSDK0003
+
+| Id | Member | Removed in |
+|---|---|---|
 | `VSDK0003` | `AudioStreamMetrics.BufferUnderruns` (`audio.buffer.underruns`) | 2.11.0 |
+
+The instrument leaves the meter with its field; see **Who is affected** below.
+
+#### VSDK0004
+
+| Id | Member | Removed in |
+|---|---|---|
 | `VSDK0004` | `IChanWebSocketSession.SendXonAsync`, `SendXoffAsync` | 2.11.0 |
 | `VSDK0004` | `ChanWebSocketHangup`, `ChanWebSocketMediaBuffering` | 2.11.0 |
 | `VSDK0004` | `ChanWebSocketDtmf.DurationMs` | 2.11.0 |
+
+#### VSDK0006
+
+| Id | Member | Removed in |
+|---|---|---|
 | `VSDK0006` | `SessionMetrics.SessionsTimedOut` (`sessions.timed_out`), `SessionsOrphaned` (`sessions.orphaned`) | 2.11.0 |
+
+The instruments leave the meter with their fields; see **Who is affected** below.
 
 **Who is affected.** Code that reads one of these members: the warning it already reported now names 2.11.0. For
 `VSDK0003` and `VSDK0006`, a dashboard or exporter that lists the meter's instruments: each field is its instrument's
