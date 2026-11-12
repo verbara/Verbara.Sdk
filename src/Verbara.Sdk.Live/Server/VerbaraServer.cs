@@ -684,6 +684,13 @@ public sealed class VerbaraServer : IVerbaraServer
         {
             VerbaraServerLog.ReconnectReloadFailed(_logger, ex);
         }
+        catch (OutOfMemoryException ex)
+        {
+            // Caught here, unlike in the catches that have a caller above them: this method is async void, so
+            // nothing is above this frame and an exception that leaves it ends the process. The reload is abandoned
+            // as any failed one is, and the next reconnect reloads again.
+            VerbaraServerLog.ReconnectReloadFailed(_logger, ex);
+        }
         finally
         {
             lock (_deferredLoadsGate)
