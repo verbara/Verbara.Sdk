@@ -650,6 +650,13 @@ connection-count alerts. To keep one connection, add `sharedSubscriptionConnecti
 after checking the server's pub/sub output-buffer limit against your largest replies. A store given its own
 `IConnectionMultiplexer` follows the application's StackExchange.Redis version. No public API change.
 
+### Added: Asterisk 24 LTS is supported (#543, #544, #562)
+
+2.10.0 is the first release that supports Asterisk 24. CI runs the Functional and Integration suites on 24.0.0, the
+first generally available 24 build (2026-11-05), alongside 22.12.0 and 23.6.0, each pinned by digest. Asterisk 22 and 24
+are the primary lines and 23 the secondary one until its end of life on 2027-10-15. See the
+[version matrix](docs/guides/asterisk-version-matrix.md).
+
 ### Changed: `Verbara.Sdk.Push.Nats` and `Verbara.Sdk.VoiceAi.TurnDetection` raise a dependency floor (#538)
 
 `Verbara.Sdk.Push.Nats` now declares `NATS.Client.Core >= 3.3.2` instead of `>= 3.3.1`, and
