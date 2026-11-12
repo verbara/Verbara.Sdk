@@ -633,12 +633,12 @@ public sealed class AriClient : IAriClient
             evt.RawJson = json;
             return evt;
         }
-        // What a frame can fail the parse with: JSON that does not parse or does not fit the event's type
-        // (JsonException), a root or a "type" of the wrong JSON kind (InvalidOperationException), text that
-        // cannot be transcoded to UTF-8 (ArgumentException) and a member the serializer cannot read
-        // (NotSupportedException).
-        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException
-            or NotSupportedException)
+        // One frame that cannot be read is skipped, whatever it failed with. Known today: JSON that does not parse or
+        // does not fit the event's type (JsonException), a root or a "type" of the wrong JSON kind
+        // (InvalidOperationException), text that cannot be transcoded to UTF-8 (ArgumentException) and a member the
+        // serializer cannot read (NotSupportedException). The list is not the filter: a type it misses would end the
+        // events loop over one frame. An out-of-memory is not the frame's, and ends the loop through its task's entry.
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             if (logger is not null)
                 AriClientLog.EventParseFailed(logger, ex, type, json.Length);
