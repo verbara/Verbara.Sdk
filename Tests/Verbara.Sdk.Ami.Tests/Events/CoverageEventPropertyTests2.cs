@@ -33,6 +33,7 @@ public sealed class CoverageEventPropertyTests2
         evt.ListContexts.Should().Be(3);
     }
 
+#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
     [Fact]
     public void RtpReceiverStatEvent_ShouldHaveAllProperties()
     {
@@ -45,6 +46,7 @@ public sealed class CoverageEventPropertyTests2
         evt.RrCount.Should().Be(10);
         evt.AccountCode.Should().Be("acc1");
     }
+#pragma warning restore VSDK0007
 
     [Fact]
     public void VoicemailUserEntryEvent_ShouldHaveAllProperties()
@@ -274,12 +276,14 @@ public sealed class CoverageEventPropertyTests2
         evt.Address.Should().Be("192.168.1.100:5060");
     }
 
+#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
     [Fact]
     public void PriEventEvent_ShouldHaveAllProperties()
     {
         var evt = new PriEventEvent { PriEvent = "RING" };
         evt.PriEvent.Should().Be("RING");
     }
+#pragma warning restore VSDK0007
 
     [Fact]
     public void DndStateEvent_ShouldHaveAllProperties()
@@ -305,6 +309,7 @@ public sealed class CoverageEventPropertyTests2
         evt.Enabled.Should().BeTrue();
     }
 
+#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
     [Fact]
     public void MasqueradeEvent_ShouldHaveAllProperties()
     {
@@ -320,6 +325,7 @@ public sealed class CoverageEventPropertyTests2
         evt.OriginalState.Should().Be(6);
         evt.OriginalStateDesc.Should().Be("Up");
     }
+#pragma warning restore VSDK0007
 
     [Fact]
     public void NewCallerIdEvent_ShouldHaveAllProperties()
