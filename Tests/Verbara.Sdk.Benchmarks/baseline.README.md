@@ -68,8 +68,9 @@ level sizes its lock array by `Environment.ProcessorCount`, so `ChannelManagerBe
 allocates 64,512 B more per operation on a 24-core workstation than on the 4-core hosted runner, on
 the same code, to the byte. So `bytes` are read from a hosted run of this workflow (its uploaded
 report carries `HostEnvironmentInfo.LogicalCoreCount`), or locally under `DOTNET_PROCESSOR_COUNT=4`,
-which reproduces the hosted figure exactly — never from an unpinned workstation run. One run, then
-confirmed by the next. A row may carry `bytes` alone, without `mean_ns`/`tolerance_pct`, until
+which reproduces the hosted figure exactly — never from an unpinned workstation run. A pinned local
+report still records the machine's own `LogicalCoreCount`, so its breach message names that count, not
+the pin. One run, then confirmed by the next. A row may carry `bytes` alone, without `mean_ns`/`tolerance_pct`, until
 two weekly runs give its time band: it is then gated on bytes and reports its time.
 
 A row whose allocation is **not** deterministic gets no `bytes` entry: a bimodal row (for example
@@ -149,7 +150,7 @@ Measured but not baselined today, on purpose:
 
 - `TurnDetectionBenchmark` — `sources._turn_detection_note`.
 - Time only, bytes gated: `ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber`
-  (`_channel_manager_one_subscriber_note`), the two deterministic `AsyncEventPumpBenchmark` rows and
+  (`_channel_manager_one_subscriber_note`), `ChannelManagerBenchmark.Create1000Channels_TwoLegCalls`, the two deterministic `AsyncEventPumpBenchmark` rows and
   every `QueueManagerBenchmark` and `MeetMeManagerBenchmark` row. Their time bands come from two
   weekly runs.
 - `AsyncEventPumpBenchmark.EnqueueAndConsume1000Events` — neither: bimodal bytes, `_bytes_note`.
