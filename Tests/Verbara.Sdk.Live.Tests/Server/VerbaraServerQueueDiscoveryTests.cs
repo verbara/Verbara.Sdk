@@ -304,7 +304,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
 
         await peer.SendEventAsync("QueueMemberAdded", AsteriskFrames.QueueMember(Sales, "PJSIP/2001"));
         var refused = await DiscoveredAsync(run, peer, Sales);
-        var afterRefusal = run.Server.Queues.GetByName(Sales)?.Strategy;
+        var configuredAfterRefusal = run.Server.Queues.GetByName(Sales)?.Strategy is not null;
 
         peer.QueueStatusRefusalAfterRows = null;
         await peer.SendEventAsync("QueueMemberStatus", AsteriskFrames.QueueMember(Sales, "PJSIP/2001", status: 2));
@@ -314,7 +314,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
         using (new AssertionScope())
         {
             refused.Should().BeTrue("the first event asked");
-            afterRefusal.Should().BeNull("a refused listing admits nothing");
+            configuredAfterRefusal.Should().BeFalse("a refused listing admits nothing");
             second.Should().BeTrue("the next event naming the still-unlisted queue asks again");
             peer.QueueStatusFilters.Should().Equal([null, Sales, Sales]);
             Held(run, Sales).Strategy.Should().Be("rrmemory", "the second listing admits the queue");
