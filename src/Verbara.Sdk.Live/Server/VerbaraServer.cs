@@ -53,6 +53,10 @@ internal static partial class VerbaraServerLog
     [LoggerMessage(Level = LogLevel.Debug, Message = "[LIVE] Queues reconciled: queues={Queues} queue_status_refused={Refused}")]
     public static partial void QueuesReconciled(ILogger logger, int queues, bool refused);
 
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "[LIVE] An agent state handler failed while a queue listing that had already failed settled the agents it changed")]
+    public static partial void AgentSettleFailedAfterListingFailure(ILogger logger, Exception exception);
+
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "[LIVE] Status refused again in this AMI session: {Message}; the channel table was not reconciled")]
     public static partial void StatusRefusedAgain(ILogger logger, string message);
@@ -493,6 +497,35 @@ public sealed class VerbaraServer : IVerbaraServer
             Agents.OnMembershipsChanged(memberInterface[AgentTechnology.Length..]);
     }
 
+    /// <summary>
+    /// Settles, as a live member event does, every member interface a queue listing applied or removed. Each in its own
+    /// attempt, so a handler of <see cref="AgentManager.AgentStateChanged"/> that throws for one agent does not skip the
+    /// next. Returns what the handlers threw: <see langword="null"/>, the one failure, or an
+    /// <see cref="AggregateException"/> of several.
+    /// </summary>
+    private Exception? SettleAgentMembers(HashSet<string> memberInterfaces)
+    {
+        List<Exception>? failures = null;
+        foreach (var memberInterface in memberInterfaces)
+        {
+            try
+            {
+                SettleAgentMember(memberInterface);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                (failures ??= []).Add(ex);
+            }
+        }
+
+        return failures switch
+        {
+            null => null,
+            [var single] => single,
+            _ => new AggregateException(failures),
+        };
+    }
+
     private void OnChannelRemoved(AsteriskChannel channel)
     {
         if (channel.RemovedByReload)
@@ -908,9 +941,14 @@ public sealed class VerbaraServer : IVerbaraServer
         var barriers = new Barriers { Session = session };
         var transferred = false;
         bool applied;
+        // The member interfaces the read applied or removed, collected as each write commits: a load settles its agents
+        // in its own agents step, this refresh has none, so it settles them itself once the table writes are done.
+        var touched = new HashSet<string>(StringComparer.Ordinal);
+        Exception? settleFailure;
         try
         {
-            applied = await LoadQueuesAsync(session, states, activity: null, barriers, QueueReconcileReader, cancellationToken);
+            applied = await LoadQueuesAsync(session, states, activity: null, barriers, QueueReconcileReader,
+                cancellationToken, touched);
             cancellationToken.ThrowIfCancellationRequested();
             transferred = true;
         }
@@ -922,6 +960,16 @@ public sealed class VerbaraServer : IVerbaraServer
         {
             if (!transferred)
                 barriers.QueueReports?.Dispose();
+
+            // Also when a queue handler, a row or the completion threw: what was committed before is settled. Outside
+            // every queue lock and the window gate, as the live member routes settle.
+            settleFailure = SettleAgentMembers(touched);
+            if (settleFailure is not null && !transferred)
+            {
+                // The read's own failure leaves the call; the agent handler's is not lost.
+                VerbaraServerLog.AgentSettleFailedAfterListingFailure(_logger, settleFailure);
+                settleFailure = null;
+            }
         }
 
         // A wait that ran out leaves the callers it admitted to be announced once the pump has caught up; no full reload
@@ -930,6 +978,8 @@ public sealed class VerbaraServer : IVerbaraServer
             ScheduleDeferredOwner(barriers, reload: false);
 
         VerbaraServerLog.QueuesReconciled(_logger, Queues.QueueCount, refused: !applied);
+        if (settleFailure is not null)
+            ExceptionDispatchInfo.Capture(settleFailure).Throw();
     }
 
     /// <summary>What a <see cref="ReconcileQueuesAsync"/> is called in the exceptions and logs of its read.</summary>
@@ -1393,8 +1443,14 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <c>QueueStatus</c> snapshot inside it and reconcile the table against it. Returns <see langword="false"/> when
     /// Asterisk refused the <c>QueueStatus</c>, which reconciles nothing.
     /// </summary>
+    /// <remarks>
+    /// <c>touched</c> is null for a load, whose agents step settles every agent. Otherwise it collects every member
+    /// interface a listed row applied, added before the row is applied, and every one the completion removed, added under
+    /// the window gate before its notifications are raised: a handler that throws leaves it complete for what was
+    /// committed.
+    /// </remarks>
     private async ValueTask<bool> LoadQueuesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
-        Barriers barriers, string readerName, CancellationToken cancellationToken)
+        Barriers barriers, string readerName, CancellationToken cancellationToken, HashSet<string>? touched = null)
     {
         using (var owner = new QueueSnapshotOwner(Queues.OpenSnapshotWindow()))
         {
@@ -1440,6 +1496,7 @@ public sealed class VerbaraServer : IVerbaraServer
                             qp.HoldTime, qp.TalkTime, qp.Completed, qp.Abandoned);
                         break;
                     case QueueMemberRow qm:
+                        touched?.Add(qm.Interface);
                         Queues.OnSnapshotMember(window, qm.Queue, qm.Interface, qm.Name, qm.Penalty, qm.Paused, qm.Status);
                         break;
                     case QueueEntryRow qe:
@@ -1451,7 +1508,7 @@ public sealed class VerbaraServer : IVerbaraServer
                 }
             }
             if (full)
-                Queues.CompleteSnapshot(window);
+                Queues.CompleteSnapshot(window, touched);
             else
                 owner.TransferTo(barriers, mark!, reports);
         }

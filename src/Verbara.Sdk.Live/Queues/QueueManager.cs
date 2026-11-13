@@ -556,14 +556,19 @@ public sealed class QueueManager
     /// snapshot while it was read. No event is raised for it, as none was when a reconnect cleared the table.</item>
     /// </list>
     /// A caller who joined after the request, and a member added after it, are kept: the snapshot could not list them.
+    /// <para>
+    /// <paramref name="removedMembers"/>, when given, receives the interface of every member removed, from a listed queue
+    /// or with a removed queue, under the window gate where it is removed and before any notification is raised: a
+    /// handler that throws leaves it complete.
+    /// </para>
     /// </summary>
-    internal void CompleteSnapshot(QueueSnapshotWindow window)
+    internal void CompleteSnapshot(QueueSnapshotWindow window, ISet<string>? removedMembers = null)
     {
         ArgumentNullException.ThrowIfNull(window);
         lock (window.Gate)
         {
             foreach (var queue in _queues.Values)
-                ApplySnapshot(queue, window.TableView());
+                ApplySnapshot(queue, window.TableView(), removedMembers);
             var completion = window.Complete();
             if (QueueSnapshotCompleted is not null)
             {
@@ -574,7 +579,7 @@ public sealed class QueueManager
         RaisePending();
     }
 
-    private void ApplySnapshot(AsteriskQueue queue, QueueSnapshotTableView view)
+    private void ApplySnapshot(AsteriskQueue queue, QueueSnapshotTableView view, ISet<string>? removedMembers)
     {
         var listed = view.ListsQueue(queue.Name);
         List<AsteriskQueueEntry>? gone = null;
@@ -603,6 +608,7 @@ public sealed class QueueManager
                 {
                     _queuesByMember.GetValueOrDefault(iface)?.TryRemove(queue.Name, out _);
                     (membersGone ??= []).Add(iface);
+                    removedMembers?.Add(iface);
                 }
             }
 
@@ -616,7 +622,10 @@ public sealed class QueueManager
                 removeQueue = _queues.TryRemove(new KeyValuePair<string, AsteriskQueue>(queue.Name, queue));
                 queue.RemovedFromTable = removeQueue;
                 if (removeQueue)
+                {
                     ForgetMembers(queue);
+                    removedMembers?.UnionWith(queue.Members.Keys);
+                }
             }
         }
 
