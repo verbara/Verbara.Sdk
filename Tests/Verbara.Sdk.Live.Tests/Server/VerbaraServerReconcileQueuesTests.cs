@@ -260,6 +260,63 @@ public sealed class VerbaraServerReconcileQueuesTests
     }
 
     [Fact]
+    public async Task ReconcileQueuesAsync_ShouldReturnAndStillAnnounceWhatItAdmitted_WhenItsTokenIsCancelledAfterTheSnapshotWasApplied()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.StartAsync(peer);
+        using var gate = new DispatchGate();
+        using var subscription = run.Connection.Subscribe(gate);
+        var barrierClock = new FakeTimeProvider(run.Clock.GetUtcNow());
+        run.Server.BarrierClock = barrierClock;
+        using var cts = new CancellationTokenSource();
+        var announced = new TaskCompletionSource<AsteriskQueueEntry>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Action<string, AsteriskQueueEntry> onJoined = (queue, entry) =>
+        {
+            if (queue == Sales)
+                announced.TrySetResult(entry);
+        };
+        // The token is cancelled while the snapshot is applied, after the last check that could still stop it.
+        Action<string, AsteriskQueueMember> onMember = (queue, _) =>
+        {
+            if (queue == Sales)
+                cts.Cancel();
+        };
+        run.Server.Queues.CallerJoined += onJoined;
+        run.Server.Queues.MemberAdded += onMember;
+        try
+        {
+            using var counters = new LiveCounters();
+            // The pump is held, so the refresh's wait for it runs out: it admits now and announces once the pump catches up.
+            await peer.SendEventAsync("UserEvent", DispatchGate.Frame());
+            await gate.Held.WaitAsync(Run.Bound);
+            peer.OtherQueues = [new ListedQueue(Sales, ["PJSIP/2001"], [Waiting])];
+            var refresh = run.Server.ReconcileQueuesAsync(cts.Token).AsTask();
+            var timer = await barrierClock.TimersCreated.ReadAsync().AsTask().WaitAsync(Run.Bound);
+            barrierClock.Advance(timer.DueTime);
+            var outcome = await Record.ExceptionAsync(() => refresh.WaitAsync(Run.Bound));
+            gate.Release();
+            var entry = await CompletesWithinBoundAsync(announced.Task) ? await announced.Task : null;
+
+            using (new AssertionScope())
+            {
+                cts.IsCancellationRequested.Should().BeTrue("the token was cancelled while the snapshot was applied");
+                outcome.Should().BeNull("a snapshot already applied is not reported as a cancelled read");
+                Held(run, Sales, "the applied snapshot stays applied").Entries.Keys.Should().Equal([Waiting.Channel]);
+                entry.Should().NotBeNull("the caller it admitted is announced once the pump caught up");
+                entry?.Channel.Should().Be(Waiting.Channel);
+                counters.Joined.Should().Be(1, "and counted joined once");
+                HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
+            }
+        }
+        finally
+        {
+            run.Server.Queues.CallerJoined -= onJoined;
+            run.Server.Queues.MemberAdded -= onMember;
+            gate.Release();
+        }
+    }
+
+    [Fact]
     public async Task ReconcileQueuesAsync_ShouldCloseOnlyTheVisitItNoLongerLists_WhenASessionManagerIsAttached()
     {
         const string GoneUid = "1790633900.21";
