@@ -44,6 +44,22 @@ public sealed class QueueManagerAllocationTests
 
     private static readonly EventLossEpoch LossEpoch = new(Reconnects: 0, AmiSession: 1, DroppedBefore: 0);
 
+    // Uniqueids no queue holds: what almost every Hangup of a connection reports.
+    private static readonly string[] HungUpIds = Enumerable.Range(0, Members)
+        .Select(i => string.Create(CultureInfo.InvariantCulture, $"1792109999.{i}"))
+        .ToArray();
+
+    // Callers that wait in a queue while others join it and leave it again, one at a time.
+    private const int Waiting = 250;
+
+    private static readonly string[] WaitingIds = Enumerable.Range(0, Waiting)
+        .Select(i => string.Create(CultureInfo.InvariantCulture, $"1792100000.{i}"))
+        .ToArray();
+
+    private static readonly string[] WaitingChannels = Enumerable.Range(0, Waiting)
+        .Select(i => string.Create(CultureInfo.InvariantCulture, $"PJSIP/waiting-{i}"))
+        .ToArray();
+
     private int _observed;
 
     [Fact]
@@ -309,6 +325,47 @@ public sealed class QueueManagerAllocationTests
         allocated.Should().Be(0, "a reported leave nobody is subscribed to queues nothing, not even its report");
     }
 
+    // Every queue a load configured is in the table, waiting callers or not; the waiting ones sit in four of them. A
+    // Hangup of a Uniqueid none of them holds is almost every Hangup of the connection, and costs the table nothing.
+    [Fact]
+    public void OnChannelHungUp_ShouldAllocateNothing_WhenNoQueueHoldsItsUniqueId()
+    {
+        var manager = new QueueManager(NullLogger.Instance);
+        for (var q = 0; q < 200; q++)
+            manager.OnQueueParams(QueueNames[q], max: 0, "ringall", calls: 0, holdTime: 0, talkTime: 0, completed: 0, abandoned: 0);
+        for (var i = 0; i < Members; i++)
+            manager.OnCallerJoined(QueueNames[i % 4], Channels[i], callerId: null, position: 1, UniqueIds[i], LossEpoch);
+
+        var allocated = Measure(() =>
+        {
+            foreach (var uniqueId in HungUpIds)
+                manager.OnChannelHungUp(uniqueId);
+        });
+
+        manager.QueueCount.Should().Be(200, "premise: every configured queue is in the table");
+        manager.Queues.Sum(queue => queue.EntryCount).Should().Be(Members, "a Hangup no queue holds removes nobody");
+        allocated.Should().Be(0, "a Hangup of a Uniqueid no queue holds walks no queue, whatever the table holds");
+    }
+
+    // A caller joining with its Uniqueid, then leaving, in a queue where others wait and in one where nobody does, read
+    // in the same passes: what is left is what the others cost the join, which a held Uniqueid only would justify.
+    [Fact]
+    public void OnCallerJoined_ShouldAllocateOnlyItsEntry_WhenOtherCallersWaitInItsQueue()
+    {
+        var crowded = new QueueManager(NullLogger.Instance);
+        for (var i = 0; i < Waiting; i++)
+            crowded.OnCallerJoined(Queue, WaitingChannels[i], callerId: null, position: 1, WaitingIds[i], LossEpoch);
+        var alone = new QueueManager(NullLogger.Instance);
+        alone.OnQueueParams(Queue, max: 0, "ringall", calls: 0, holdTime: 0, talkTime: 0, completed: 0, abandoned: 0);
+
+        var readings = MeasureTogether(() => JoinAndLeaveWithUniqueIds(crowded), () => JoinAndLeaveWithUniqueIds(alone));
+
+        crowded.GetByName(Queue)!.EntryCount.Should().Be(Waiting, "premise: the others still wait after the round");
+        readings[1].Should().BePositive("premise: a join allocates its entry");
+        (readings[0] - readings[1]).Should().Be(0,
+            "a join whose Uniqueid no entry holds looks for nobody among the callers already waiting");
+    }
+
     // Each snapshot opens a window and copies what it listed into its completion, whether or not anyone hears it.
     [Fact]
     public void CompleteSnapshot_ShouldAllocateNothingForTheEvent_WhenNoHandlerIsSubscribed()
@@ -391,6 +448,15 @@ public sealed class QueueManagerAllocationTests
         {
             manager.OnCallerJoined(Queue, channel, callerId: null, position: 1);
             manager.OnCallerLeft(Queue, channel);
+        }
+    }
+
+    private static void JoinAndLeaveWithUniqueIds(QueueManager manager)
+    {
+        for (var i = 0; i < Members; i++)
+        {
+            manager.OnCallerJoined(Queue, Channels[i], callerId: null, position: 1, UniqueIds[i], LossEpoch);
+            manager.OnCallerLeft(Queue, Channels[i]);
         }
     }
 
