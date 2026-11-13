@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: the `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` warnings link to their migration-guide section (#560)
+
+The 14 members marked obsolete under these ids carry a documentation link: the warning a consumer's build reports,
+and the rule's help link in a SARIF log, open that id's heading in the
+[2.10.0 migration guide](docs/guides/migration-2.10.0.md#vsdk0002) instead of the compiler's generic `CS0618` page. No
+message, id, signature or removal release changes: the members still leave in 2.11.0.
+
+### Fixed: an out-of-memory no longer leaves a client, a reload or a session ending unreported (#554)
+
+`AriClient`: an out-of-memory in the events loop, while receiving or in a reconnect attempt, ends the client
+`Faulted` with one `Error` line (`[ARI] Out of memory in the events loop…`) and releases its socket. A reconnect attempt
+that runs out of memory is no longer retried: connect again. Before, the client could stay `Connected` with no events
+loop, or `Reconnecting` for good, and a later `DisposeAsync` threw that exception and left its clean-up half done. An
+ARI event frame that cannot be read is skipped with its warning whatever exception it fails with. `VerbaraServer`: an
+out-of-memory in the reload after a reconnect is logged as a failed reload and no longer ends the process.
+AudioSocket: an out-of-memory in a session's read loop is logged once at `Error`. `NatsBridge`: an out-of-memory raised
+while releasing the subscriber or the publisher now surfaces from `StopAsync` and `Dispose`, after both are released.
+
 ### Added: every session notification says whether its server's events may have been lost before it (#553)
 
 Every session notification (`SessionDomainEvent`, and each change on `IAgentSessionTracker.StateChanges`) carries
@@ -23,6 +41,125 @@ Two session notifications that were equal in 2.9.0 differ when their `Epoch` dif
 A consumer that deduplicates notifications by record equality, or keys them by `ToString`, compares
 `notification with { Epoch = null }` instead. The notifications of a custom `ICallSessionManager` carry `null`
 unless it sets `Epoch`, so a consumer reads `Unknown` for them.
+
+### Fixed: a waiting caller that leaves a queue with no leave event leaves Live's queue table at its hangup (#567)
+
+A waiting caller that leaves a queue without a `QueueCallerLeave` (relieved by an attended transfer or an `INVITE`
+with `Replaces`, or taken out by `Action: Bridge`) now leaves Live's queue table when Asterisk reports its `Hangup`,
+instead of staying counted as waiting until the next reload. `CallerLeft` is raised for it with
+`LeaveNotObserved == true`; no wait sample is recorded and `CallerLeaveReported` is not raised. A queue leave Asterisk
+sent after the caller's `Hangup` would now read as not observed: none of 640 did on Asterisk 20.20.1, 22.11.0, 23.5.0
+and 24.0.0-rc2, not measured under load. A conference participant's `Hangup` still removes nothing.
+`AsteriskQueue.Entries` is read-only by contract: Live keeps an index of the callers it holds next to it, so a caller
+removed there directly costs each later hangup of its `Uniqueid` one look through every queue and keeps its key until
+`QueueManager.Clear`, and a caller added there directly is not removed by its hangup.
+
+### Changed: a queue join no longer copies its queue, and a hangup no queue holds looks through none (#567)
+
+A caller joining a queue no longer copies that queue's entries to look for itself: with 1,000 callers waiting a join
+allocates 208 B instead of 2,248 B and takes about 0.19 µs instead of about 4.6 µs. A hangup of a call no queue holds
+no longer looks through the queues: 0 B and about 6 ns at 200 queues.
+
+### Fixed: a queue report nobody is subscribed to allocates nothing (#555)
+
+`QueueManager`: a queue params report, a member added or a caller's join on a queue the table already holds no longer
+allocates a capturing factory (88 B per params report, 96 B per member added or caller joined). A report no handler is
+subscribed to allocates nothing beyond the member or entry it stores, and a caller's join and leave costs 168 B with no
+subscriber and 520 B with one, down from 264 B and 616 B.
+
+### Added: an AMI action the SDK does not type is sent by name with `RawAction` (#561)
+
+`new RawAction("DAHDIDNDon").Add("DAHDIChannel", "1")` is sent through any `IAmiConnection` send method as
+`Action: DAHDIDNDon`, its `ActionID` and its fields in the order they were added, repeated keys kept. The name must be
+ASCII letters and digits; a key ASCII letters, digits, `-`, `_`, `(` or `)`, and not `Action` or `ActionID`; a value
+holds no CR or LF. Each is checked where the action is built and throws `ArgumentException`, which never echoes the
+value. The response is read as the typed action of the same name would be, or as a base `ManagerResponse` with
+`RawFields`. This makes the 2.9.0 `Zap*` migration instruction ("send the DAHDI… action") one you can follow.
+
+### Changed — BREAKING: an action the SDK cannot write is refused instead of being sent under its class name (#561)
+
+A `ManagerAction` subclass of your own used to be written as its class name without `Action`, with none of its
+properties or extra fields. It now throws `ArgumentException` naming its type and `RawAction`, before any byte is
+written; the connection stays usable. No signature changed, but code that ran in 2.9.0 throws in 2.10.0. Migration:
+replace `new MyAction { Foo = "x" }` with `new RawAction("<ActionName>").Add("Foo", "x")`. See
+[the migration guide](docs/guides/migration-2.10.0.md#an-action-the-sdk-does-not-type-is-sent-with-rawaction).
+
+### Changed — BREAKING: the types of dead Asterisk modules deprecated with `VSDK0005` in 2.9.0 are removed (#558)
+
+The 49 types and one member that 2.9.0 marked `[Obsolete]` with `VSDK0005` are removed, as that release
+announced. From `Verbara.Sdk.Ami`: the 28 actions and 3 responses of chan_sip, res_monitor, app_meetme, Skype for
+Asterisk, the Zaptel names, chan_agent and app_setcdruserfield; `MeetMeEventBase` and `MeetmeCompatibility`;
+`ChannelReloadEvent` (chan_sip), `AgentCallbackLoginEvent` and `AgentCallbackLogoffEvent` (chan_agent); and the
+event types whose wire names Asterisk 10 or 12 renamed or removed (`QueueMemberPausedEvent`, `MusicOnHoldEvent`,
+`FaxReceivedEvent`, `DtmfEvent`, `TransferEvent`, `ChannelUpdateEvent`, `JabberEventEvent`, `AgiExecEvent`,
+`AsyncAgiEvent`, `SendFaxStatusEvent`, `BridgeExecEvent`, `ModuleLoadReportEvent`). From `Verbara.Sdk.Agi`:
+`MeetmeCommand`. From `Verbara.Sdk.Activities`: `MeetmeActivity.UseConfBridge`; the activity now always runs
+ConfBridge. No pinned image of a supported Asterisk registers the removed actions or sends the removed events. An
+event whose type was removed still reaches every subscriber, as a base `ManagerEvent` with its name in `EventType` and every header in
+`RawFields`; `AsyncAGI` is no longer a `ResponseEvent`. `VerbaraServer` no longer reads `QueueMemberPaused`, which
+only Asterisk 11 and earlier send; `QueueMemberPause` is unchanged. Recompile against 2.10.0, and move every
+`Verbara.Sdk.*` package to 2.10.0 together: a 2.9.0 package next to a 2.10.0 `Verbara.Sdk.Ami` fails to load the
+removed types. The `VSDK0005` warning's link still opens the replacement for each symbol; the migration guide has
+the rest ([The types deprecated with `VSDK0005` are removed](docs/guides/migration-2.10.0.md#the-types-deprecated-with-vsdk0005-are-removed)).
+
+### Changed — BREAKING: seven AMI types whose wire name no Asterisk knows are deprecated with `VSDK0007` (#563)
+
+`DbPrefixGetAction` and `ExecAction` name actions no Asterisk registers (`DBPrefixGet`, `exec`): use
+`DbGetTreeAction`, and `CommandAction` or `RawAction`. `JitterBufStatsEvent`, `MasqueradeEvent`, `PriEventEvent`,
+`RtpReceiverStatEvent` and `RtpSenderStatEvent` name events no supported Asterisk emits, read in the whole upstream
+source of 22.12.0, 23.6.0 and 24.0.0. Each warning names its replacement where one exists, links to its heading in
+the migration guide and says the type is removed in 2.11.0. A warning, not an error: a build with
+TreatWarningsAsErrors that names one of them fails until it moves or suppresses `VSDK0007`. Nothing changes at run
+time ([guide](docs/guides/migration-2.10.0.md#vsdk0007)).
+
+### Changed: `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` name their removal release, 2.11.0 (#558)
+
+The warning message of the six `StatusEvent` members (`VSDK0002`), `AudioStreamMetrics.BufferUnderruns`
+(`VSDK0003`), `SendXonAsync`, `SendXoffAsync`, `ChanWebSocketHangup`, `ChanWebSocketMediaBuffering` and
+`ChanWebSocketDtmf.DurationMs` (`VSDK0004`), and `SessionMetrics.SessionsTimedOut` and `SessionsOrphaned`
+(`VSDK0006`) now ends "Removed in Verbara.Sdk 2.11.0." Nothing is removed in 2.10.0, and nothing else changes: the
+ids, the replacements the messages name, and the published instruments are as in 2.9.0. In 2.11.0 the three
+`VSDK0003`/`VSDK0006` fields leave, and with them their instruments leave the meter. `audio.buffer.underruns` never
+recorded a measurement; the SDK has recorded nothing on `sessions.timed_out` or `sessions.orphaned` since 2.7.0
+(through 2.6.x the reconciliation sweep added to both, so a stored series keeps that history)
+([guide](docs/guides/migration-2.10.0.md#vsdk0002-vsdk0003-vsdk0004-and-vsdk0006-name-their-removal-release)).
+
+### Changed — BREAKING: `AriRtpStats` reads a real `rtp_statistics` reply (#566)
+
+`Channels.GetRtpStatisticsAsync` threw `JsonException` on every reply a real Asterisk sends. `AriRtpStats.Rtt`,
+`LocalMaxrxploss` and `LocalMinrxploss` are now `double?` (Asterisk writes them as reals; `Rtt` is in seconds), and
+`LocalSsrc` and `RemoteSsrc` are `uint?` (a far end may pick an SSRC from 2^31 up). Code that reads these members into
+an `int` no longer compiles; code that reads `Rtt` into `var` or a `double` compiles and gets seconds. See the
+[migration guide](docs/guides/migration-2.10.0.md#arirtpstats-reads-a-real-reply-and-a-channel-state-never-drops-an-event).
+
+### Added: the 26 RTP statistics Asterisk sends and `AriRtpStats` lacked (#566)
+
+`Txoctetcount` and `Rxoctetcount` (`uint?`), the `Remote*jitter` and `Remote*rxploss` figures,
+`LocalNormdevrxploss`, `LocalStdevrxploss`, `Maxrtt`, `Minrtt`, `Normdevrtt`, `Stdevrtt`, and the media experience
+scores `Txmes`, `Rxmes`, `Remote*mes` and `Local*mes` (`double?`).
+
+### Added: `AriChannelStateConverter` (#566)
+
+The reader and writer of `AriChannelState`, public in `Verbara.Sdk` and declared on the enum with `[JsonConverter]`, so
+the SDK's serializer and a consumer's own source-generated context or `JsonSerializerOptions` read Asterisk's state
+spellings and write them, as a property and as a dictionary key. Options whose `Converters` list an enum converter of
+their own, such as a global `JsonStringEnumConverter`, keep using it: a converter in the options wins over one declared
+on the type, so they write the member name (`"PreRing"`) as in 2.9.0 and cannot read `"Pre-ring"`; remove that
+converter, or insert `new AriChannelStateConverter()` ahead of it. The SDK's own serializer now writes `"Pre-ring"` and
+`"Dialing Offhook"` where 2.9.0 wrote `"PreRing"` and `"DialingOffhook"`. Code that serializes an `AriChannel` with its
+own options and no enum converter now writes the state as Asterisk's text (`"state": "Up"`) where 2.9.0 wrote its
+number (`"state": 6`); a stored number from 0 to 11 still reads as its member. See the
+[migration guide](docs/guides/migration-2.10.0.md#arirtpstats-reads-a-real-reply-and-a-channel-state-never-drops-an-event).
+
+### Fixed: a channel state never drops an ARI event, and five members carry what Asterisk sends (#566)
+
+A channel whose `state` is `"Dialing Offhook"`, `"Pre-ring"`, `"Mute"`, `"Rsrved"` or `"Unknown (N)"` no longer drops
+the whole event, nor makes a REST call that returns it throw: the first two read as `DialingOffhook` and `PreRing`,
+`"Mute"` as the new `AriChannelState.Mute` (appended, value 11; no existing value changes), `"Rsrved"` as `Rsrvd`, and
+any state the SDK has no member for as `Unknown`; a number from 0 to 11 reads as that member, any other number as
+`Unknown`. `AriChannel.Protocol` reads `protocol_id`, `AriChannel.ChannelVars`
+reads `channelvars`, `ChannelHoldEvent.MusicClass` reads `musicclass`, `AriConfigInfo.SetId` reads `setid`, and
+`BridgeBlindTransferEvent.Transferer` reads the transferring channel from `channel`; each was always empty before.
 
 ### Changed — BREAKING: a call is found on the server that reported it (#533)
 
@@ -129,7 +266,7 @@ gains `sessions.trigger` (`age`, `table`, `event-loss` or `none`, in that preced
 `trigger=` and `loss=` (`loss=pending-undelivered` while a drop is still behind the backlog). See
 [Session Reconciliation](docs/guides/high-load-tuning.md#session-reconciliation).
 
-### Fixed: a call not observed in full is decided only on a channel table no dropped event made untrusted (#546)
+### Fixed: a call not observed in full is decided only on a channel table no dropped event made untrusted (#546, #559)
 
 A call the session engine has not observed in full — registered as reconstructed, admitted after a manual attach, or
 kept across a re-attach — was decided on a complete channel table even when a dropped `Newchannel` meant the table
@@ -139,7 +276,10 @@ requested for it while the drop is behind the backlog, the admission of calls al
 read finds none of its channels, the call ends once with `Metadata["cause"] = "reload"` and no hangup cause, even if
 another of its legs' hangups was observed before the read: the SDK did not observe that ending. A host that runs no
 sweep decides these calls through its own `ReconcileChannelsAsync` once the drop is delivered; until then they wait,
-with no time bound. See [Sessions without the sweep](docs/guides/high-load-tuning.md#session-reconciliation).
+with no time bound. A call waiting on the read that follows a reconnect is decided once the reconnect's handlers
+have returned, without waiting for the sweep, even when an application's `Reconnected` handler outlives that read; and
+a call waiting while two channel reads overlap is decided when the last of them leaves the table covered (#559). See
+[Sessions without the sweep](docs/guides/high-load-tuning.md#session-reconciliation).
 
 ### Added: a channel reconciliation says whether it covered the events lost before it (#546)
 
@@ -374,7 +514,8 @@ reporting is ignored. The SDK's own subscribers, the session engine included, ar
 troubleshooting guide documented the first failure as rethrown from the call that made the change: code that catches
 around a direct `ChannelManager.On*` call, or alerts on `[AMI_EVENT] Observer threw` / `ami.events.observer_faults` for a
 channel handler's failure, should read the new counter instead. `QueueManager` and `MeetMeManager` keep their rule. A
-delivery allocates nothing per subscriber. See the [migration guide](docs/guides/migration-2.10.0.md).
+delivery allocates nothing per subscriber. See the
+[migration guide](docs/guides/migration-2.10.0.md#a-channel-subscribers-failure-stays-with-that-subscriber).
 
 ### Fixed: a live channel follows its dialplan location and caller ID (#516)
 
@@ -512,7 +653,8 @@ has been admitted since, `0` otherwise, with no later call needed.
 What breaks: an alert, a dashboard or a health check that needs an unbroken `2`. That run was unbroken only because it was
 stale: under traffic the circuit cycles, so a rule such as "`circuit.state` is 2 for five minutes" may not fire during the
 outage it was written for, and a timer started at the last state change is reset the same way. Move it to `circuit.opened`,
-which counts trips; see the [migration guide](docs/guides/migration-2.10.0.md).
+which counts trips; see the
+[migration guide](docs/guides/migration-2.10.0.md#circuitstate-reports-the-breakers-current-state).
 
 ### Added: `ResiliencePolicy.GetCircuitState` (#509)
 
@@ -561,10 +703,10 @@ attribute counts fall back to `OTEL_ATTRIBUTE_COUNT_LIMIT`; scope attributes fro
 `OTEL_ATTRIBUTE_COUNT_LIMIT`; blobs that an earlier version wrote to the experimental disk-retry storage are not resent.
 The SDK's own telemetry triggers none of these. No public API change.
 
-### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.20 (#474, #508)
+### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.31 (#474, #508, #538)
 
-`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.20` instead of `>= 3.3.1`, and its
-`Microsoft.Extensions.*` dependencies rise from `>= 10.0.5` to `>= 10.0.13`, the floor 3.4.20 sets. Since 3.4.0, StackExchange.Redis opens a separate
+`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.31` instead of `>= 3.3.1`, and its
+`Microsoft.Extensions.*` dependencies rise from `>= 10.0.5` to `>= 10.0.13`, the floor 3.4.31 sets. Since 3.4.0, StackExchange.Redis opens a separate
 subscription connection under RESP3, as it always did under RESP2, so the interactive connection is no longer subject
 to the server's much tighter `client-output-buffer-limit pubsub`. Measured on 3.4.5 against Redis 7 with default settings, a
 store registered with `UseRedis(o => o.ConfigurationString = ...)` now holds two client connections per server
@@ -572,6 +714,19 @@ instead of one; the second carries only the library's configuration channel. All
 connection-count alerts. To keep one connection, add `sharedSubscriptionConnection=true` to the configuration string,
 after checking the server's pub/sub output-buffer limit against your largest replies. A store given its own
 `IConnectionMultiplexer` follows the application's StackExchange.Redis version. No public API change.
+
+### Added: Asterisk 24 LTS is supported (#543, #544, #562)
+
+2.10.0 is the first release that supports Asterisk 24. CI runs the Functional and Integration suites on 24.0.0, the
+first generally available 24 build (2026-11-05), alongside 22.12.0 and 23.6.0, each pinned by digest. Asterisk 22 and 24
+are the primary lines and 23 the secondary one until its end of life on 2027-10-15. See the
+[version matrix](docs/guides/asterisk-version-matrix.md).
+
+### Changed: `Verbara.Sdk.Push.Nats` and `Verbara.Sdk.VoiceAi.TurnDetection` raise a dependency floor (#538)
+
+`Verbara.Sdk.Push.Nats` now declares `NATS.Client.Core >= 3.3.2` instead of `>= 3.3.1`, and
+`Verbara.Sdk.VoiceAi.TurnDetection` declares `Microsoft.ML.OnnxRuntime >= 1.31.1` instead of `>= 1.31.0`. Both are
+patch releases of the same library. No public API change.
 
 ## [2.9.0] - 2026-10-28
 

@@ -8,13 +8,15 @@ namespace Verbara.Sdk.Ari.Tests.Audio;
 
 /// <summary>
 /// The chan_websocket control surface that says something Asterisk never sends or acts on is deprecated with one id,
-/// <c>VSDK0004</c>, and nothing is removed. Reading the attribute is the point of each fact: a consumer building with
+/// <c>VSDK0004</c>, and nothing is removed before 2.11.0, the release each message names. Reading the attribute is the
+/// point of each fact: a consumer building with
 /// <c>TreatWarningsAsErrors</c> gets <c>VSDK0004</c>, not a blanket <c>CS0618</c>, and the message says what to read
 /// instead.
 /// </summary>
 public partial class ChanWebSocketDeprecationTests
 {
     private const string DeprecationId = "VSDK0004";
+    private const string DeprecationLink = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004";
 
     [Theory]
     [InlineData(nameof(IChanWebSocketSession.SendXonAsync))]
@@ -31,6 +33,8 @@ public partial class ChanWebSocketDeprecationTests
         // Assert
         obsolete.Should().NotBeNull("chan_websocket has no XON/XOFF command in any spelling");
         obsolete!.DiagnosticId.Should().Be(DeprecationId);
+        obsolete.UrlFormat.Should().Be(DeprecationLink,
+            "the warning's help link opens the id's heading of the 2.10.0 migration guide, not the compiler's CS0618 page");
         obsolete.IsError.Should().BeFalse("a deprecation warns; it does not break a build without TreatWarningsAsErrors");
         obsolete.Message.Should().Contain("NotSupportedException")
             .And.Contain(nameof(ChanWebSocketMediaXoff))
@@ -49,6 +53,8 @@ public partial class ChanWebSocketDeprecationTests
         // Assert
         obsolete.Should().NotBeNull("a hangup is a close frame, never a text message, so nothing publishes this record");
         obsolete!.DiagnosticId.Should().Be(DeprecationId);
+        obsolete.UrlFormat.Should().Be(DeprecationLink,
+            "the warning's help link opens the id's heading of the 2.10.0 migration guide, not the compiler's CS0618 page");
         obsolete.IsError.Should().BeFalse();
         obsolete.Message.Should().Contain(nameof(IAudioStream.StateChanges));
     }
@@ -64,6 +70,8 @@ public partial class ChanWebSocketDeprecationTests
         // Assert
         obsolete.Should().NotBeNull("no chan_websocket message reports a buffer fill in bytes");
         obsolete!.DiagnosticId.Should().Be(DeprecationId);
+        obsolete.UrlFormat.Should().Be(DeprecationLink,
+            "the warning's help link opens the id's heading of the 2.10.0 migration guide, not the compiler's CS0618 page");
         obsolete.IsError.Should().BeFalse();
         obsolete.Message.Should().Contain(nameof(ChanWebSocketMediaXoff))
             .And.Contain(nameof(ChanWebSocketMediaXon))
@@ -71,6 +79,22 @@ public partial class ChanWebSocketDeprecationTests
             .And.Contain(nameof(IChanWebSocketSession.SendGetStatusAsync));
         obsolete.Message.Replace(nameof(IChanWebSocketSession.SendGetStatusAsync), string.Empty, StringComparison.Ordinal)
             .Should().NotContain("GetStatusAsync", "the session sends GET_STATUS and the reply arrives on ControlMessages; no GetStatusAsync exists");
+    }
+
+    /// <summary>An SDK release named in a message; the Asterisk versions a message cites as measured are not one.</summary>
+    [GeneratedRegex(@"Verbara\.Sdk \d+\.\d+(?:\.\d+)?", RegexOptions.CultureInvariant)]
+    private static partial Regex SdkRelease();
+
+    [Fact]
+    public void DeprecationMessages_ShouldEachNameTheirRemovalReleaseAndNoOther_WhenRead()
+    {
+        var messages = Vsdk0004Messages();
+
+        messages.Should().HaveCount(5, "SendXonAsync, SendXoffAsync, ChanWebSocketHangup, ChanWebSocketMediaBuffering and ChanWebSocketDtmf.DurationMs");
+        messages.Should().OnlyContain(m => m.Message.EndsWith("Removed in Verbara.Sdk 2.11.0.", StringComparison.Ordinal),
+            "each message names the release that removes its member");
+        messages.Should().OnlyContain(m => SdkRelease().Matches(m.Message).All(v => v.Value == "Verbara.Sdk 2.11.0"),
+            "each message names that one SDK release and no other");
     }
 
     public static TheoryData<string> DeprecatedControlSurfaceMembers()
@@ -151,6 +175,8 @@ public partial class ChanWebSocketDeprecationTests
         // Assert
         obsolete.Should().NotBeNull("DTMF_END carries digit and channel_id only, so the duration is always 0");
         obsolete!.DiagnosticId.Should().Be(DeprecationId);
+        obsolete.UrlFormat.Should().Be(DeprecationLink,
+            "the warning's help link opens the id's heading of the 2.10.0 migration guide, not the compiler's CS0618 page");
         obsolete.IsError.Should().BeFalse();
         obsolete.Message.Should().Contain("0")
             .And.Contain("ChannelDtmfReceived")

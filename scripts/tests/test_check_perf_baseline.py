@@ -108,7 +108,8 @@ class CheckPerfBaselineTests(unittest.TestCase):
         with open(self.baseline_path, "w", encoding="utf-8") as handle:
             json.dump(doc, handle)
 
-    def _write_report(self, entries, subdir="fake", type_name=_TYPE, results=True, raw=None):
+    def _write_report(self, entries, subdir="fake", type_name=_TYPE, results=True, raw=None,
+                      cores=None):
         directory = os.path.join(self.root, subdir)
         if results:
             directory = os.path.join(directory, "results")
@@ -118,10 +119,12 @@ class CheckPerfBaselineTests(unittest.TestCase):
             if raw is not None:
                 handle.write(raw)
             else:
+                host = {"BenchmarkDotNetVersion": "0.15.8", "ProcessorName": "AMD EPYC 7763"}
+                if cores is not None:
+                    host["LogicalCoreCount"] = cores
                 handle.write(json.dumps({
                     "Title": "FakeBenchmark",
-                    "HostEnvironmentInfo": {"BenchmarkDotNetVersion": "0.15.8",
-                                            "ProcessorName": "AMD EPYC 7763"},
+                    "HostEnvironmentInfo": host,
                     "Benchmarks": entries,
                 }))
         return path
@@ -302,10 +305,10 @@ class CheckPerfBaselineTests(unittest.TestCase):
 
     # ---- bytes decide, time informs -------------------------------------
     def _bytes_fixture(self, alpha_bytes=168, gamma_bytes=525994, isa="x86-64-v3", log=True,
-                       alpha_memory=True):
+                       alpha_memory=True, cores=None):
         self._write_baseline(_BYTES_BASELINE)
         self._write_report([_entry(_ALPHA, 1010.0, allocated=alpha_bytes, memory=alpha_memory),
-                            _entry(_GAMMA, 287000.0, allocated=gamma_bytes)])
+                            _entry(_GAMMA, 287000.0, allocated=gamma_bytes)], cores=cores)
         if log:
             with open(os.path.join(self.root, "fake", "FakeBenchmark-20261029.log"), "w",
                       encoding="utf-8") as handle:
@@ -345,6 +348,36 @@ class CheckPerfBaselineTests(unittest.TestCase):
         self.assertEqual(0, result.returncode)
         self.assertEqual("breach", self._outputs().get("status"))
         self.assertIn("::warning::", result.stdout)
+
+    def test_Main_ShouldNameTheCoreCount_WhenABytesRowBreaches(self):
+        # A default ConcurrentDictionary sizes its locks by the core count, so a bytes breach is
+        # the code only against a baseline read on the same count. The message used to say bytes
+        # "do not depend on the runner" and "this is the code", which a 24-core baseline read on
+        # the 4-core hosted runner disproved.
+        self._bytes_fixture(alpha_bytes=169, cores=4)
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("measured on 4 logical cores", result.stdout)
+        self.assertIn("only if the baseline was read on the same core count", result.stdout)
+        self.assertNotIn("do not depend on the runner", result.stdout)
+
+    def test_Main_ShouldSayTheCoreCountIsUnrecorded_WhenTheReportOmitsIt(self):
+        self._bytes_fixture(alpha_bytes=169)
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("a logical core count the report does not record", result.stdout)
+
+    def test_Main_ShouldPrintBytesInFull_WhenAValueHasSevenDigits(self):
+        # `:g` printed 1046656 as 1.04666e+06 and a +8 B change disappeared in the rounding.
+        self._bytes_fixture(gamma_bytes=1_046_656, cores=4)
+        result = self._run()
+        self.assertIn("allocates 1046656 B per operation", result.stdout)
+        self.assertIn("(+520662 B)", result.stdout)
+        self.assertNotIn("e+06", result.stdout)
+        with open(self.markdown, encoding="utf-8") as handle:
+            body = handle.read()
+        self.assertIn("| 525994 | 1046656 | +520662 | ±1024 |", body)
+        self.assertNotIn("e+06", body)
 
     def test_Main_ShouldBreach_WhenABytesRowCarriesNoMemoryDiagnoserOutput(self):
         # A removed [MemoryDiagnoser] would otherwise switch the bytes gate off in silence.

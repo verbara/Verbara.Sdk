@@ -33,6 +33,7 @@ public sealed class CoverageEventPropertyTests2
         evt.ListContexts.Should().Be(3);
     }
 
+#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
     [Fact]
     public void RtpReceiverStatEvent_ShouldHaveAllProperties()
     {
@@ -45,6 +46,7 @@ public sealed class CoverageEventPropertyTests2
         evt.RrCount.Should().Be(10);
         evt.AccountCode.Should().Be("acc1");
     }
+#pragma warning restore VSDK0007
 
     [Fact]
     public void VoicemailUserEntryEvent_ShouldHaveAllProperties()
@@ -124,25 +126,6 @@ public sealed class CoverageEventPropertyTests2
         evt.LinkedId.Should().Be("linked-1");
     }
 
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public void FaxReceivedEvent_ShouldHaveAllProperties()
-    {
-        var evt = new FaxReceivedEvent
-        {
-            CallerId = "5551234", RemoteStationId = "remote", LocalStationId = "local",
-            PagesTransferred = 3, Resolution = 200, TransferRate = 14400, Filename = "/tmp/fax.tif"
-        };
-        evt.CallerId.Should().Be("5551234");
-        evt.RemoteStationId.Should().Be("remote");
-        evt.LocalStationId.Should().Be("local");
-        evt.PagesTransferred.Should().Be(3);
-        evt.Resolution.Should().Be(200);
-        evt.TransferRate.Should().Be(14400);
-        evt.Filename.Should().Be("/tmp/fax.tif");
-    }
-#pragma warning restore VSDK0005
-
     [Fact]
     public void PeerEntryEvent_ShouldHaveAllProperties()
     {
@@ -208,23 +191,6 @@ public sealed class CoverageEventPropertyTests2
         evt.Locked.Should().BeFalse();
         evt.Muted.Should().Be("No");
     }
-
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public void ChannelReloadEvent_ShouldHaveAllProperties()
-    {
-        var evt = new ChannelReloadEvent
-        {
-            ChannelType = "SIP", ReloadReason = "RELOAD", UserCount = 10,
-            PeerCount = 5, RegistryCount = 2
-        };
-        evt.ChannelType.Should().Be("SIP");
-        evt.ReloadReason.Should().Be("RELOAD");
-        evt.UserCount.Should().Be(10);
-        evt.PeerCount.Should().Be(5);
-        evt.RegistryCount.Should().Be(2);
-    }
-#pragma warning restore VSDK0005
 
     [Fact]
     public void FullyBootedEvent_ShouldHaveAllProperties()
@@ -310,12 +276,14 @@ public sealed class CoverageEventPropertyTests2
         evt.Address.Should().Be("192.168.1.100:5060");
     }
 
+#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
     [Fact]
     public void PriEventEvent_ShouldHaveAllProperties()
     {
         var evt = new PriEventEvent { PriEvent = "RING" };
         evt.PriEvent.Should().Be("RING");
     }
+#pragma warning restore VSDK0007
 
     [Fact]
     public void DndStateEvent_ShouldHaveAllProperties()
@@ -341,6 +309,7 @@ public sealed class CoverageEventPropertyTests2
         evt.Enabled.Should().BeTrue();
     }
 
+#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
     [Fact]
     public void MasqueradeEvent_ShouldHaveAllProperties()
     {
@@ -356,17 +325,7 @@ public sealed class CoverageEventPropertyTests2
         evt.OriginalState.Should().Be(6);
         evt.OriginalStateDesc.Should().Be("Up");
     }
-
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public void ModuleLoadReportEvent_ShouldHaveAllProperties()
-    {
-        var evt = new ModuleLoadReportEvent { ModuleLoadStatus = "Done", ModuleCount = 150, ModuleSelection = "All" };
-        evt.ModuleLoadStatus.Should().Be("Done");
-        evt.ModuleCount.Should().Be(150);
-        evt.ModuleSelection.Should().Be("All");
-    }
-#pragma warning restore VSDK0005
+#pragma warning restore VSDK0007
 
     [Fact]
     public void NewCallerIdEvent_ShouldHaveAllProperties()
@@ -588,17 +547,6 @@ public sealed class CoverageEventPropertyTests2
         evt.EndpointName.Should().Be("100");
     }
 
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public void AgentCallbackLogoffEvent_ShouldHaveAllProperties()
-    {
-        var evt = new AgentCallbackLogoffEvent { LoginChan = "SIP/100", Reason = "logout", LoginTime = 3600 };
-        evt.LoginChan.Should().Be("SIP/100");
-        evt.Reason.Should().Be("logout");
-        evt.LoginTime.Should().Be(3600);
-    }
-#pragma warning restore VSDK0005
-
     [Fact]
     public void OriginateResponseEvent_ShouldHaveAllProperties()
     {
@@ -635,28 +583,6 @@ public sealed class CoverageEventPropertyTests2
         evt.Wait.Should().Be(30);
         evt.CallerIDNum.Should().Be("5551234");
     }
-
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public void TransferEvent_ShouldHaveAllProperties()
-    {
-        var evt = new TransferEvent
-        {
-            TransferMethod = "SIP", TransferType = "Blind",
-            TargetChannel = "SIP/200-001", TargetUniqueId = "uid-2",
-            SipCallId = "call-1", TransferExten = "200",
-            TransferContext = "default", Transfer2Parking = false
-        };
-        evt.TransferMethod.Should().Be("SIP");
-        evt.TransferType.Should().Be("Blind");
-        evt.TargetChannel.Should().Be("SIP/200-001");
-        evt.TargetUniqueId.Should().Be("uid-2");
-        evt.SipCallId.Should().Be("call-1");
-        evt.TransferExten.Should().Be("200");
-        evt.TransferContext.Should().Be("default");
-        evt.Transfer2Parking.Should().BeFalse();
-    }
-#pragma warning restore VSDK0005
 
     [Fact]
     public void ListDialplanEvent_ShouldHaveAllProperties()

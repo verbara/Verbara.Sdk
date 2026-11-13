@@ -174,15 +174,4 @@ public class AmiFlowIntegrationTests
         tracker.ActiveBridges.Should().BeEmpty();
     }
 
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public async Task MeetmeCompatibility_ShouldMapConfbridgeToMeetMe()
-    {
-        MeetmeCompatibility.GetMeetMeEquivalent("ConfbridgeJoin").Should().Be("MeetMeJoin");
-        MeetmeCompatibility.GetMeetMeEquivalent("ConfbridgeLeave").Should().Be("MeetMeLeave");
-        MeetmeCompatibility.GetMeetMeEquivalent("ConfbridgeEnd").Should().Be("MeetMeEnd");
-        MeetmeCompatibility.GetMeetMeEquivalent("ConfbridgeTalking").Should().Be("MeetMeTalking");
-        MeetmeCompatibility.GetMeetMeEquivalent("SomeOtherEvent").Should().BeNull();
-    }
-#pragma warning restore VSDK0005
 }

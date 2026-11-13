@@ -430,8 +430,8 @@ public class AriResourceTests
             "dialplan": { "context": "default", "exten": "100", "priority": 1, "app_name": "Stasis", "app_data": "myapp" },
             "language": "en",
             "creationtime": "2026-03-04T10:30:00+00:00",
-            "protocol": "PJSIP",
-            "channel_vars": { "CDR(src)": "2000" }
+            "protocol_id": "2f35cd8c-23d4-4c50-956d-481bb1612f70",
+            "channelvars": { "CDR(src)": "2000" }
         }
         """;
         using var handler = new FakeHttpHandler(json);
@@ -455,7 +455,7 @@ public class AriResourceTests
         result.Dialplan.AppName.Should().Be("Stasis");
         result.Language.Should().Be("en");
         result.Creationtime.Should().NotBeNull();
-        result.Protocol.Should().Be("PJSIP");
+        result.Protocol.Should().Be("2f35cd8c-23d4-4c50-956d-481bb1612f70");
         result.ChannelVars.Should().ContainKey("CDR(src)");
     }
 

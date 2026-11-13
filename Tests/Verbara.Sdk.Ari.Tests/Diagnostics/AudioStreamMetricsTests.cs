@@ -1,12 +1,28 @@
 using System.Diagnostics.Metrics;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Verbara.Sdk.Ari.Diagnostics;
 using FluentAssertions;
 
 namespace Verbara.Sdk.Ari.Tests.Diagnostics;
 
-public sealed class AudioStreamMetricsTests
+public sealed partial class AudioStreamMetricsTests
 {
+    [GeneratedRegex(@"\d+\.\d+(?:\.\d+)?")]
+    private static partial Regex VersionNumber();
+
+    [Fact]
+    public void BufferUnderruns_ShouldNameItsRemovalReleaseAndNoOther_WhenItsObsoletionIsRead()
+    {
+        var obsolete = typeof(AudioStreamMetrics).GetField("BufferUnderruns", BindingFlags.Public | BindingFlags.Static)?
+            .GetCustomAttribute<ObsoleteAttribute>();
+
+        obsolete.Should().NotBeNull();
+        obsolete!.Message.Should().EndWith("Removed in Verbara.Sdk 2.11.0.", "the message names the release that removes the field");
+        VersionNumber().Matches(obsolete.Message!).Select(static m => m.Value).Should().Equal(["2.11.0"],
+            "the message names that one release and no other");
+    }
+
     [Fact]
     public void Meter_ShouldHaveCorrectName()
     {
@@ -64,6 +80,8 @@ public sealed class AudioStreamMetricsTests
 
         obsolete.Should().NotBeNull("nothing records audio.buffer.underruns, so the field is deprecated");
         obsolete!.DiagnosticId.Should().Be("VSDK0003");
+        obsolete.UrlFormat.Should().Be("https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0003",
+            "the warning's help link opens the id's heading of the 2.10.0 migration guide, not the compiler's CS0618 page");
         obsolete.IsError.Should().BeFalse("a deprecation warns; it does not break a build without TreatWarningsAsErrors");
         obsolete.Message.Should().ContainEquivalentOf("not emitted")
             .And.Contain("audio.buffer.underruns");

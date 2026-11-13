@@ -391,6 +391,106 @@ public sealed class AudioSocketSessionTests : IAsyncLifetime
         Volatile.Read(ref releases).Should().Be(1, "the release runs, so the server gives back the entry and the place");
     }
 
+    // ── A read that fails ends the session ───────────────────────────────────
+
+    [Fact]
+    public async Task ReadLoop_ShouldReportTheFailureOnceAndEndTheSession_WhenTheReadThrows()
+    {
+        var logger = new RecordingSessionLogger();
+        var failure = new IOException("the transport failed");
+        var (session, hangups, release) = await StartOnFailingReaderAsync(failure, logger);
+        await using var _ = release;
+
+        await session.HungUp.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Volatile.Read(ref hangups.Count).Should().Be(1, "the loop's ending raises the hangup once");
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning)
+            .Which.Exception.Should().BeSameAs(failure, "the read's failure is reported once, with its exception");
+    }
+
+    [Fact]
+    public async Task ReadLoop_ShouldNotReportOutOfMemoryAsATransportFailure_WhenTheReadThrowsIt()
+    {
+        var logger = new RecordingSessionLogger();
+        var (session, hangups, release) = await StartOnFailingReaderAsync(OutOfMemory(), logger);
+        await using var _ = release;
+
+        await session.HungUp.WaitAsync(TimeSpan.FromSeconds(5));
+
+        using var scope = new AssertionScope();
+        Volatile.Read(ref hangups.Count).Should().Be(1, "the session still ends and raises its hangup once");
+        logger.Entries.Should().ContainSingle(e => e.Exception is OutOfMemoryException)
+            .Which.Level.Should().Be(LogLevel.Error, "nothing awaits the read loop, so this entry is the only record of it");
+        logger.Entries.Should().NotContain(
+            e => e.Level == LogLevel.Warning, "an out-of-memory is not reported as the session's transport failure");
+    }
+
+    private static async Task<(AudioSocketSession Session, HangupCount Hangups, IAsyncDisposable Release)>
+        StartOnFailingReaderAsync(Exception failure, ILogger logger)
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var peer = new System.Net.Sockets.TcpClient();
+        await peer.ConnectAsync(System.Net.IPAddress.Loopback, ((System.Net.IPEndPoint)listener.LocalEndpoint).Port);
+        var accepted = await listener.AcceptTcpClientAsync();
+        var session = new AudioSocketSession(
+            Guid.NewGuid(), accepted, new FailingPipeReader(failure), new AudioSocketOptions().DefaultFormat, logger);
+        var hangups = new HangupCount();
+        session.OnHangup += () => Interlocked.Increment(ref hangups.Count);
+        session.StartReadLoop();
+        return (session, hangups, new Releaser(session, peer, listener));
+    }
+
+    // Only the runtime may throw it; a test has to raise it itself.
+#pragma warning disable CA1859, CA2201, MA0012
+    private static Exception OutOfMemory() => new OutOfMemoryException();
+#pragma warning restore CA1859, CA2201, MA0012
+
+    private sealed class HangupCount
+    {
+        public int Count;
+    }
+
+    private sealed class Releaser(AudioSocketSession session, System.Net.Sockets.TcpClient peer, System.Net.Sockets.TcpListener listener)
+        : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await session.DisposeAsync();
+            peer.Dispose();
+            listener.Dispose();
+        }
+    }
+
+    /// <summary>A reader whose every read throws <paramref name="failure"/>.</summary>
+    private sealed class FailingPipeReader(Exception failure) : System.IO.Pipelines.PipeReader
+    {
+        public override ValueTask<System.IO.Pipelines.ReadResult> ReadAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<System.IO.Pipelines.ReadResult>(failure);
+
+        public override bool TryRead(out System.IO.Pipelines.ReadResult result)
+        {
+            result = default;
+            return false;
+        }
+
+        public override void AdvanceTo(System.SequencePosition consumed)
+        {
+        }
+
+        public override void AdvanceTo(System.SequencePosition consumed, System.SequencePosition examined)
+        {
+        }
+
+        public override void CancelPendingRead()
+        {
+        }
+
+        public override void Complete(Exception? exception = null)
+        {
+        }
+    }
+
     // ── A write that fails on its transport ends the session ─────────────────
 
     /// <summary>

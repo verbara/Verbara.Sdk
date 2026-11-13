@@ -30,11 +30,16 @@ skip. "We did not measure it" never reads as "it is fine".
 
 BYTES DECIDE, TIME INFORMS. A baseline entry may also carry `bytes` (BenchmarkDotNet's
 `Memory.BytesAllocatedPerOperation`) and `bytes_tolerance` (an absolute two-sided bound in bytes,
-default 0 = exact). Allocated bytes do not depend on the CPU, its vector width or the runner fleet:
-measured identical with the JIT targeting x86-64-v3 and x86-64-v4 on every synchronous row of this
-suite, where the same pair moved time by at most about 5% on that host (the spread across hosted
-runners is measured by a re-calibration under the ISA pin). So a row whose allocation is deterministic is
-gated on its bytes, exactly or within a stated bound, and a row may be baselined on bytes alone
+default 0 = exact). Allocated bytes do not depend on the CPU model or its vector width: measured
+identical with the JIT targeting x86-64-v3 and x86-64-v4 on every synchronous row of this suite,
+where the same pair moved time by at most about 5% on that host (the spread across hosted runners is
+measured by a re-calibration under the ISA pin). They DO depend on the logical core count wherever the
+code sizes a structure by it: a ConcurrentDictionary built without a concurrency level allocates more
+lock objects on more cores, so ChannelManagerBenchmark.Create1000Channels reads 64,512 B more per
+operation on 24 cores than on the hosted runner's 4. A row's bytes are therefore read on the hosted
+runner (or locally under DOTNET_PROCESSOR_COUNT=4), and every bytes breach names the core count it
+was measured on. So a row whose allocation is deterministic is gated on its bytes, exactly or within
+a stated bound, and a row may be baselined on bytes alone
 (no `mean_ns`/`tolerance_pct`) until its hosted-runner time spread has been observed. A baselined
 row with bytes but no `Memory.BytesAllocatedPerOperation` in its report is a structural failure:
 the memory diagnoser was removed, and the gate would otherwise stop measuring bytes in silence.
@@ -276,8 +281,25 @@ def collect_observed(artifacts_root, sources):
                     f"[{type_name}] report '{report}' entry #{index} has no \"FullName\" — "
                     f"malformed report, refusing to read it as green.")
                 continue
-            observed[entry["FullName"]] = (entry, report)
+            observed[entry["FullName"]] = (entry, report, _logical_cores(doc))
     return observed, structural
+
+
+def _logical_cores(doc):
+    """The report's HostEnvironmentInfo.LogicalCoreCount, or None when it is absent."""
+    host = doc.get("HostEnvironmentInfo")
+    value = host.get("LogicalCoreCount") if isinstance(host, dict) else None
+    return int(value) if _is_number(value) and value > 0 else None
+
+
+def _bytes_text(value, sign=False):
+    """Bytes in full. `:g` printed 1046656 as 1.04666e+06, which hides the very digits a bytes
+    gate is about."""
+    if value is None:
+        return None
+    if float(value).is_integer():
+        return f"{int(value):+d}" if sign else f"{int(value)}"
+    return f"{value:+g}" if sign else f"{value:g}"
 
 
 def _observed_bytes(entry):
@@ -309,13 +331,13 @@ def evaluate(baseline, observed):
             if mean_ns is not None:
                 wanted.append(f"{mean_ns:g} ns +/- {band_pct:g}%")
             if want_bytes is not None:
-                wanted.append(f"{want_bytes:g} B +/- {bytes_bound:g} B")
+                wanted.append(f"{_bytes_text(want_bytes)} B +/- {_bytes_text(bytes_bound)} B")
             structural.append(
                 f"[{full_name}] is in baseline.json but absent from the parsed results. The "
                 f"benchmark was removed, renamed, or never ran. Baseline expected "
                 f"{' and '.join(wanted)}.")
             continue
-        entry, report = observed[full_name]
+        entry, report, cores = observed[full_name]
         stats = entry.get("Statistics")
         if not isinstance(stats, dict) or "Mean" not in stats:
             structural.append(
@@ -356,10 +378,17 @@ def evaluate(baseline, observed):
             if abs(bytes_delta) > bytes_bound:
                 direction = "MORE-BYTES" if bytes_delta > 0 else "FEWER-BYTES"
                 verdicts.append(f"BREACH ({direction})")
+                measured_on = (f"{cores} logical cores" if cores is not None
+                               else "a logical core count the report does not record")
                 breaches.append(
-                    f"[{full_name}] allocates {actual_bytes:g} B per operation against a baseline "
-                    f"of {want_bytes:g} B ({bytes_delta:+g} B), outside the +/-{bytes_bound:g} B "
-                    f"bound. Bytes do not depend on the runner or its ISA: this is the code.")
+                    f"[{full_name}] allocates {_bytes_text(actual_bytes)} B per operation against "
+                    f"a baseline of {_bytes_text(want_bytes)} B "
+                    f"({_bytes_text(bytes_delta, sign=True)} B), outside the "
+                    f"+/-{_bytes_text(bytes_bound)} B bound, measured on {measured_on}. Bytes do "
+                    f"not move with the CPU model or the JIT ISA, but they do move with the core "
+                    f"count wherever the code sizes a structure by it (a ConcurrentDictionary "
+                    f"built without a concurrency level does): this is the code only if the "
+                    f"baseline was read on the same core count.")
 
         rows.append({
             "name": full_name,
@@ -396,8 +425,9 @@ def render_markdown(rows, breaches, structural, extras, enforce):
     mode = "ENFORCING" if enforce else "OBSERVING (reports, does not fail the job — §2.5)"
     out = ["## Perf regression vs `Tests/Verbara.Sdk.Benchmarks/baseline.json`", "",
            f"Mode: **{mode}**", "",
-           "Bytes decide, time informs: allocated bytes per operation do not depend on the runner "
-           "or its ISA.", ""]
+           "Bytes decide, time informs: allocated bytes per operation do not move with the CPU "
+           "model or its ISA, but can move with the logical core count, so a row's bytes are "
+           "read on the hosted runner.", ""]
     if structural:
         out += [f"### Structural failures ({len(structural)})", "",
                 "A benchmark that never ran is not a pass (ADR-0042 D4).", ""]
@@ -416,9 +446,10 @@ def render_markdown(rows, breaches, structural, extras, enforce):
                 f"{row['observed_ns']:.2f} | {_fmt(row['delta_pct'], '+.2f')}"
                 f"{'' if row['delta_pct'] is None else '%'} | "
                 f"{'—' if row['band_pct'] is None else '±' + format(row['band_pct'], 'g') + '%'} | "
-                f"{_fmt(row['baseline_bytes'], 'g')} | {_fmt(row['observed_bytes'], 'g')} | "
-                f"{_fmt(row['bytes_delta'], '+g')} | "
-                f"{'—' if row['bytes_tolerance'] is None else '±' + format(row['bytes_tolerance'], 'g')} | "
+                f"{_bytes_text(row['baseline_bytes']) or '—'} | "
+                f"{_bytes_text(row['observed_bytes']) or '—'} | "
+                f"{_bytes_text(row['bytes_delta'], sign=True) or '—'} | "
+                f"{'—' if row['bytes_tolerance'] is None else '±' + _bytes_text(row['bytes_tolerance'])} | "
                 f"{row['verdict']} |")
         out.append("")
     if extras:
@@ -426,7 +457,7 @@ def render_markdown(rows, breaches, structural, extras, enforce):
                 "Not a failure. Add a `benchmarks` entry once its hosted-runner spread is "
                 "observed — see `baseline.README.md`.", "",
                 "| benchmark | observed (ns) | observed (B) |", "|---|--:|--:|"]
-        out += [f"| `{name}` | {_fmt(mean, '.2f')} | {_fmt(allocated, 'g')} |"
+        out += [f"| `{name}` | {_fmt(mean, '.2f')} | {_bytes_text(allocated) or '—'} |"
                 for name, mean, allocated in extras] + [""]
     if not breaches and not structural:
         out += ["All baselined benchmarks are inside their bands.", ""]
@@ -454,8 +485,9 @@ def main(argv):
         band = "-" if row["band_pct"] is None else f"{row['band_pct']:.0f}%"
         print(f"{_short(row['name']):<62} {_fmt(row['baseline_ns'], '.2f', '-'):>12} "
               f"{row['observed_ns']:>12.2f} {delta:>9} {band:>7} "
-              f"{_fmt(row['baseline_bytes'], 'g', '-'):>10} {_fmt(row['observed_bytes'], 'g', '-'):>10} "
-              f"{_fmt(row['bytes_delta'], '+g', '-'):>8}  {row['verdict']}")
+              f"{_bytes_text(row['baseline_bytes']) or '-':>10} "
+              f"{_bytes_text(row['observed_bytes']) or '-':>10} "
+              f"{_bytes_text(row['bytes_delta'], sign=True) or '-':>8}  {row['verdict']}")
 
     level = "error" if enforce else "warning"
     for item in structural:

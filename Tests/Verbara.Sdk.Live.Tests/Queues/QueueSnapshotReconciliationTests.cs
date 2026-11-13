@@ -19,6 +19,7 @@ public sealed class QueueSnapshotReconciliationTests
     private static readonly string[] KeptMembers = ["PJSIP/agent-1", "PJSIP/agent-3"];
     private static readonly string[] RenamedKeys = ["PJSIP/new-1"];
     private static readonly string[] JoinedDuringRemoval = ["PJSIP/b-1"];
+    private static readonly string[] ReplacedKeys = ["PJSIP/c-1"];
 
     private readonly QueueManager _queues = new(NullLogger.Instance);
 
@@ -148,6 +149,45 @@ public sealed class QueueSnapshotReconciliationTests
         }.Should().BeEquivalentTo(
             new { Keys = RenamedKeys, JoinedAt = joinedAt, Position = 1, Joined = 0L, Left = 0L },
             "the same caller (same Uniqueid) under its new name is a replacement: re-keyed, join time kept, nothing counted");
+    }
+
+    [Fact]
+    public void OnCallerJoined_ShouldReplaceTheHeldCaller_WhenItCarriesNoUniqueIdAndTheJoinCarriesOne()
+    {
+        // Held through the public overload, with no Uniqueid: the count does not hold the joining Uniqueid either.
+        _queues.OnCallerJoined(Queue, "PJSIP/c-1", "400", 2);
+        var held = _queues.GetByName(Queue)!.Entries["PJSIP/c-1"];
+        var left = new List<AsteriskQueueEntry>();
+        _queues.CallerLeft += (_, e) => left.Add(e);
+        using var counters = new LiveCounters();
+
+        _queues.OnCallerJoined(Queue, "PJSIP/c-1", "400", 1, "u6", Epoch);
+
+        var entries = _queues.GetByName(Queue)!.Entries;
+        new
+        {
+            Keys = entries.Keys.ToArray(),
+            SameInstance = ReferenceEquals(entries["PJSIP/c-1"], held),
+            entries["PJSIP/c-1"].Position,
+            LeftCount = left.Count,
+            held.LeaveNotObserved,
+            counters.Joined,
+            counters.Left,
+            Held = _queues.HeldUniqueIdCounts().Count,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                Keys = ReplacedKeys,
+                SameInstance = true,
+                Position = 1,
+                LeftCount = 0,
+                LeaveNotObserved = false,
+                Joined = 0L,
+                Left = 0L,
+                Held = 0,
+            },
+            "the channel's held entry is the same caller when either carries no Uniqueid: the by-channel check runs "
+            + "before the count is read, so the caller is replaced in place, nothing is counted and nobody leaves");
     }
 
     [Fact]

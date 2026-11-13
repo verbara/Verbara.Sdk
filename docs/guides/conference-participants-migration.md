@@ -150,11 +150,27 @@ reached through a Local channel's `Dial` kept its name from join to leave. Aster
 ConfBridge participant with `Action: Bridge` (`Unable to add Channel1 to bridge`), and no `Rename` or
 masquerade frame reached a participant on any exit those versions allowed.
 
-What was not measured: a masquerade that does take a participant out of a conference, and SIP
-participants (attended transfer, call pickup). If one of those produced a leave under another channel
-name, the participant would stay held until `ConfbridgeEnd` for its conference removes it, raising
-`UserLeft` then. If that end is missed too, for example while the AMI connection is down, the
-reload after the reconnect removes it (next section).
+What was measured on Asterisk 20.20.1, 22.11.0, 23.5.0 and 24.0.0-rc2, with SIP participants, ten
+runs per version and transfer:
+
+- An attended transfer of a participant by `REFER` is announced: a `ConfbridgeLeave` for the
+  participant, with its own channel and `Uniqueid`, and a `ConfbridgeJoin` for the channel that takes
+  its place.
+- An `INVITE` with `Replaces` is not announced. The participant that joined only hangs up, and the
+  channel that takes its place sends no `ConfbridgeJoin`. The old participant stays held, counted and
+  keeping its room alive, until `ConfbridgeEnd` for its conference removes it, raising `UserLeft`
+  then; the new one appears only at the next reload. If that end is missed too, for example while
+  the AMI connection is down, the reload after the reconnect removes the old one (next section).
+- A `ConfbridgeLeave` can arrive after its channel's `Hangup`: one leave of 760 did, 1.1 ms after it,
+  on 23.5.0. So Live does not treat a participant's `Hangup` as its leave, and applies the
+  `ConfbridgeLeave` that follows as observed.
+- No frame renamed a participant on any of these exits, nor on a `Redirect` out of the conference.
+  Asterisk refused to move a participant with `Action: Bridge`, `PickupChan`, `Pickup()` and an ARI
+  move.
+
+What was not measured: a masquerade that does take a participant out of a conference. If one
+produced a leave under another channel name, the participant would stay held until `ConfbridgeEnd`
+or the next reload removes it, as above.
 
 ## Reconnect
 

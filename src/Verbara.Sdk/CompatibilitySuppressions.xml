@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Verbara.Sdk.AriRtpStats.get_LocalMaxrxploss</Target>
+    <Left>lib/net10.0/Verbara.Sdk.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Verbara.Sdk.AriRtpStats.get_LocalMinrxploss</Target>
+    <Left>lib/net10.0/Verbara.Sdk.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Verbara.Sdk.AriRtpStats.get_LocalSsrc</Target>
+    <Left>lib/net10.0/Verbara.Sdk.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Verbara.Sdk.AriRtpStats.get_RemoteSsrc</Target>
+    <Left>lib/net10.0/Verbara.Sdk.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Verbara.Sdk.AriRtpStats.get_Rtt</Target>
+    <Left>lib/net10.0/Verbara.Sdk.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

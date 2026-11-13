@@ -52,6 +52,9 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
     /// <summary>Runs while the fake answers <c>Agents</c>, before its rows: a live event the list is older than.</summary>
     private Action? _duringAgentsRead;
 
+    /// <summary>What a <see cref="SnapshotEnding.ThrowsMidway"/> snapshot throws; a socket error when not set.</summary>
+    private Exception? _midwayFailure;
+
     private enum SnapshotEnding
     {
         /// <summary>The enumeration runs out normally — a snapshot that can be trusted.</summary>
@@ -115,7 +118,7 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
                 continue;
 
             if (_ending == SnapshotEnding.ThrowsMidway)
-                throw new IOException("the AMI socket died halfway through the Status snapshot");
+                throw _midwayFailure ?? new IOException("the AMI socket died halfway through the Status snapshot");
 
             if (_ending == SnapshotEnding.TruncatesOnCancellation)
             {
@@ -264,6 +267,30 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
             "OnReconnected swallows the exception into a log line — that line is the only evidence "
             + "a consumer or an operator gets that the reload failed");
     }
+
+    // The reload runs in an async void handler, with nothing above it: an out-of-memory that left it would end the
+    // process (before the fix this test aborted the test host instead of failing). It is logged as any failed reload.
+    [Fact]
+    public async Task OnReconnected_ShouldLogAndRemoveNothing_WhenTheReloadRunsOutOfMemory()
+    {
+        await GivenAStartedServerHolding((HeldUid, HeldName), ("1700000000.2", "PJSIP/3000-0002"));
+        _ending = SnapshotEnding.ThrowsMidway;
+        _midwayFailure = OutOfMemory();
+
+        await WhenTheConnectionReconnects(
+            Leg(HeldUid, HeldName),
+            Leg("1700000000.2", "PJSIP/3000-0002"));
+
+        _removed.Should().BeEmpty($"a failed reload ends nothing, whatever it failed with. Measured: {Describe()}");
+        _log.ReloadFailed.Task.IsCompleted.Should().BeTrue(
+            "the log line is the only record of a reload that failed in an async void handler");
+        _log.ToString().Should().Contain(nameof(OutOfMemoryException), "the line carries the exception");
+    }
+
+    // Only the runtime may throw it; a test has to raise it itself.
+#pragma warning disable CA1859, CA2201, MA0012
+    private static Exception OutOfMemory() => new OutOfMemoryException();
+#pragma warning restore CA1859, CA2201, MA0012
 
     [Fact]
     public async Task RequestInitialStateAsync_ShouldThrowAndRemoveNothing_WhenTheSnapshotEnumerationThrowsMidway()

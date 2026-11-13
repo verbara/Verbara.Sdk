@@ -15,14 +15,20 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [`OriginateAsync` with an extension runs the dialplan](#originateasync-with-an-extension-runs-the-dialplan) | fix, behaviour |
 | `Verbara.Sdk.Ari` | [`STATUS`, `MEDIA_BUFFERING_COMPLETED` and `QUEUE_DRAINED` read as typed records](#status-media_buffering_completed-and-queue_drained-read-as-typed-records) | behaviour, new records |
 | `Verbara.Sdk.Ari` | [A WebSocket audio stream whose connection failed ends with `Error`](#a-websocket-audio-stream-whose-connection-failed-ends-with-error) | behaviour |
+| `Verbara.Sdk`, `Verbara.Sdk.Ari` | [`AriRtpStats` reads a real reply, and a channel state never drops an event](#arirtpstats-reads-a-real-reply-and-a-channel-state-never-drops-an-event) | fix, changed types, new members, BREAKING |
 | `Verbara.Sdk.Live` | [A channel subscriber's failure stays with that subscriber](#a-channel-subscribers-failure-stays-with-that-subscriber) | behaviour, BREAKING |
 | `Verbara.Sdk.Live` | [A live channel follows its dialplan location and caller ID](#a-live-channel-follows-its-dialplan-location-and-caller-id) | fix, behaviour |
 | `Verbara.Sdk.Live` | [A refused `Status` is counted and reported by the pool health check](#a-refused-status-is-counted-and-reported-by-the-pool-health-check) | new members, health check |
+| `Verbara.Sdk.Live` | [A waiting caller that only hangs up leaves the queue table](#a-waiting-caller-that-only-hangs-up-leaves-the-queue-table) | fix, behaviour |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
 | `Verbara.Sdk.Ami` | [`NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends](#newextenevent-and-newcalleridevent-carry-what-the-wire-sends) | fix, new members |
+| `Verbara.Sdk.Ami` | [An action the SDK does not type is sent with `RawAction`](#an-action-the-sdk-does-not-type-is-sent-with-rawaction) | new type, behaviour, BREAKING |
 | `Verbara.Sdk.VoiceAi.Stt`, `Verbara.Sdk.VoiceAi.Tts` | [A message a recognizer or synthesizer cannot read no longer ends the session](#a-message-a-recognizer-or-synthesizer-cannot-read-no-longer-ends-the-session) | fix, behaviour, new metric, BREAKING |
 | `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An OpenAI Realtime audio delta that is not valid base64 no longer ends the call](#an-openai-realtime-audio-delta-that-is-not-valid-base64-no-longer-ends-the-call) | behaviour, metric, BREAKING |
 | `Verbara.Sdk.VoiceAi.Tts` | [A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis](#a-cartesia-or-elevenlabs-audio-frame-that-is-not-valid-base64-no-longer-ends-the-synthesis) | fix, behaviour, BREAKING |
+| `Verbara.Sdk.Ami`, `Verbara.Sdk.Agi`, `Verbara.Sdk.Activities`, `Verbara.Sdk.Live` | [The types deprecated with `VSDK0005` are removed](#the-types-deprecated-with-vsdk0005-are-removed) | removed types and member, behaviour, BREAKING |
+| `Verbara.Sdk.Ami`, `Verbara.Sdk.Ari`, `Verbara.Sdk.Sessions` | [`VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` name their removal release](#vsdk0002-vsdk0003-vsdk0004-and-vsdk0006-name-their-removal-release) | warning text |
+| `Verbara.Sdk.Ami` | [Seven AMI types whose wire name no Asterisk knows are deprecated](#seven-ami-types-whose-wire-name-no-asterisk-knows-are-deprecated) | new warning, BREAKING |
 
 ## Sessions
 
@@ -316,6 +322,65 @@ AudioSocket error frame produces, or that waits for `Disconnected` as the first 
 **What to do.** Handle `Error` as "the connection failed" and keep waiting for `Disconnected` as the last state, as an
 AudioSocket stream already required. AudioSocket streams are unchanged.
 
+### `AriRtpStats` reads a real reply, and a channel state never drops an event
+
+**What changed.** `Channels.GetRtpStatisticsAsync` threw `JsonException` on every reply a real Asterisk sends: Asterisk
+writes `rtt`, `local_maxrxploss` and `local_minrxploss` as reals, and an SSRC as an unsigned 32-bit integer, while
+`AriRtpStats` typed all five as `int?`. Captured on 20.20.1, 22.11.0, 23.5.0 and the 22.12, 23.6 and 24.0 release
+candidates, no reply bound. Now:
+
+| Member | 2.9.0 | 2.10.0 |
+|---|---|---|
+| `Rtt` | `int?` | `double?`, in seconds |
+| `LocalMaxrxploss`, `LocalMinrxploss` | `int?` | `double?` |
+| `LocalSsrc`, `RemoteSsrc` | `int?` | `uint?` |
+
+`AriRtpStats` also gains the 26 statistics Asterisk sends and the model lacked: `Txoctetcount` and `Rxoctetcount`
+(`uint?`), the `Remote*jitter` and `Remote*rxploss` figures, `LocalNormdevrxploss`, `LocalStdevrxploss`, `Maxrtt`,
+`Minrtt`, `Normdevrtt`, `Stdevrtt`, and the media experience scores `Txmes`, `Rxmes`, `Remote*mes` and `Local*mes`
+(`double?`).
+
+A channel's `state` is read as Asterisk writes it. `"Dialing Offhook"` and `"Pre-ring"` read as `DialingOffhook` and
+`PreRing`; `"Mute"` reads as the new `AriChannelState.Mute`, appended after `Unknown` so no existing value changes its
+number; `"Rsrvd"` and `"Rsrved"` read as `Rsrvd`; and `"Unknown (N)"`, or any state the SDK has no member for, reads as
+`Unknown`. In 2.9.0 each of those strings except `"Rsrvd"`, which is the member's own name, dropped the whole event, or
+made a REST call that returns a channel throw. These states come from analog and DAHDI channels, not PJSIP. The reader
+is the new public `AriChannelStateConverter`, declared on `AriChannelState` itself. It writes Asterisk's spelling, so
+the SDK's own serializer now writes `"Pre-ring"` and `"Dialing Offhook"` where 2.9.0 wrote `"PreRing"` and
+`"DialingOffhook"`. It reads a number from 0 to 11 as that member (as 2.9.0 did) and any other number as `Unknown`,
+and it handles a state used as a dictionary key the same way. It also applies to a consumer's own source-generated
+context or `JsonSerializerOptions`, unless those options list an enum converter of their own, such as a global
+`JsonStringEnumConverter`: a converter in the options' `Converters` wins over one declared on the type.
+
+Five members that were always empty now carry what Asterisk sends: `AriChannel.Protocol` (from `protocol_id`),
+`AriChannel.ChannelVars` (from `channelvars`, when `ari.conf` names channel variables), `ChannelHoldEvent.MusicClass`
+(from `musicclass`), `AriConfigInfo.SetId` (from `setid`) and `BridgeBlindTransferEvent.Transferer` (from `channel`,
+the transferring channel; Asterisk never writes `transferer`). No property is renamed.
+
+**Who is affected.** Code that reads `Rtt`, `LocalMaxrxploss`, `LocalMinrxploss`, `LocalSsrc` or `RemoteSsrc` into an
+`int`, or assigns them from one: it no longer compiles. Code that reads `Rtt` into `var`, a `double` or an arithmetic
+expression compiles unchanged, and gets seconds: check what unit it assumed. Code with a `switch` over `AriChannelState` and no default arm,
+which now sees `Mute`. Code that built its own JSON with the old names (`protocol`, `channel_vars`, `music_class`,
+`set_id`, `transferer`) and read it through the SDK: those names are no longer read. Code that serializes an
+`AriChannel` or an `AriChannelState` with its own `JsonSerializerOptions` or its own source-generated context and no
+enum converter of its own: the state is now written as Asterisk's text (`"state": "Pre-ring"`), where 2.9.0 wrote its
+number (`"state": 9`). Code whose options list a `JsonStringEnumConverter` keeps 2.9.0's behaviour: it writes the
+member name (`"PreRing"`), as 2.9.0 did, and still cannot read `"Pre-ring"`, `"Dialing Offhook"`, `"Rsrved"` or
+`"Unknown (N)"`.
+
+**What to do.**
+
+- Read the round-trip time as seconds: `stats.Rtt * 1000` is milliseconds. Do not cast it to `int`, which truncates every
+  value Asterisk measured on a LAN to 0.
+- Hold an SSRC as `uint` (or `long`). A cast to `int` turns any SSRC from 2^31 up negative; Asterisk generates its own
+  below 2^31, but a far end that is not Asterisk may not.
+- Handle `AriChannelState.Mute`, and treat `Unknown` as "a state the SDK has no name for": the event is delivered.
+- Feed the SDK the names Asterisk sends, if you build test frames by hand.
+- If you store channels with your own serializer, expect the state as text in what you write from now on. Nothing to
+  convert: a state stored as a number by 2.9.0 still reads back as its member.
+- If your options carry a global `JsonStringEnumConverter` and you read ARI channels through them, remove it, or insert
+  `new AriChannelStateConverter()` into the options' `Converters` ahead of it.
+
 ## Live
 
 ### A channel subscriber's failure stays with that subscriber
@@ -376,6 +441,32 @@ the pool has refused as a server id since 2.9.0.
 such a server the session engine cannot decide the calls it did not see whole, see
 [above](#a-call-ends-only-when-its-server-holds-none-of-its-channels).
 
+### A waiting caller that only hangs up leaves the queue table
+
+**What changed.** A caller that another channel relieves while it waits in a queue (an attended transfer, an `INVITE`
+with `Replaces`), or that `Action: Bridge` takes out of the queue, gets no `QueueCallerLeave` from Asterisk: it only
+hangs up. Live used to keep it in `AsteriskQueue.Entries`, counted as waiting with its `JoinedAt`, until the next reload,
+which without a reconnect could be the life of the connection. Now, when Asterisk reports the `Hangup` of a `Uniqueid` a
+queue holds, Live removes that caller: `live.queue.calls.left` advances, no `live.queue.wait_time` sample is recorded,
+and `CallerLeft` is raised with `LeaveNotObserved` reading `true`, as for a caller a reload removes. A caller held
+without a `Uniqueid` (added through the public `OnCallerJoined`) is not matched. A conference participant's `Hangup`
+still removes nothing: Asterisk can send its `ConfbridgeLeave` after the `Hangup`.
+
+**Who is affected.** A `CallerLeft` handler, which now hears these callers at their hangup instead of at a reload, and a
+reader of `Entries` or `EntryCount`, which stop counting them. After a relief the channel that took the caller's place
+never sent a `QueueCallerJoin`, so from the caller's `Hangup` until that channel leaves the table holds one caller fewer
+than the queue. A queue leave that Asterisk sent after the caller's `Hangup` would now read `LeaveNotObserved == true`:
+none of 640 did on Asterisk 20.20.1, 22.11.0, 23.5.0 and 24.0.0-rc2, measured on an idle server, not under load.
+
+**What to do.** Nothing, if your `CallerLeft` handler already handles `LeaveNotObserved == true`. A bridged-out caller
+stays counted until its bridged call ends.
+
+**`AsteriskQueue.Entries` is read-only by contract.** From 2.10.0 Live keeps an index of the callers it holds next to
+`Entries`, a count by `Uniqueid` that a `Hangup` reads before it looks through the queues. Read `Entries`; do not add or
+remove callers in it. A caller removed directly leaves a stale count: each later `Hangup` of its `Uniqueid` looks
+through every queue once, finding nothing, and its key stays in the index until `QueueManager.Clear` (`RemoveQueue`
+does not free it). A caller added directly is not in the index, so its `Hangup` does not remove it.
+
 ## AMI
 
 ### A parking event names its channel and where it is parked
@@ -402,6 +493,25 @@ starts with, or null when it starts with none; both were always null. A number a
 **Who is affected.** Code that read `RawFields["Context"]` or `RawFields["Priority"]` of a `Newexten`: it still works.
 
 **What to do.** Read the typed members.
+
+### An action the SDK does not type is sent with `RawAction`
+
+**What changed.** `RawAction` (`Verbara.Sdk.Ami.Actions`) sends an AMI action by its name and its fields through
+every send method of `IAmiConnection`: `Action: <name>`, the connection's `ActionID`, then each field in the order it
+was added. The name must be ASCII letters and digits; a key ASCII letters, digits, `-`, `_`, `(` or `)`, and not
+`Action` or `ActionID`; a value holds no CR or LF; each is checked where the action is built. The answer is read by
+the name, as for a typed action.
+
+A `ManagerAction` subclass the SDK does not declare used to be written as its class name without `Action`, with none
+of its properties and none of its extra fields. The connection now throws `ArgumentException` naming its type and
+`RawAction`, before any byte is written; the connection stays usable.
+
+**Who is affected.** Code that sends its own `ManagerAction` subclass: it compiles, and throws at the send. No
+signature changed.
+
+**What to do.** Replace `new MyAction { Foo = "x" }` with `new RawAction("<ActionName>").Add("Foo", "x")`, where
+`<ActionName>` is the name Asterisk registers (`manager show commands`). This is also the route for the `DAHDI*`
+actions that replace the removed `Zap*` types (`new RawAction("DAHDIDNDon").Add("DAHDIChannel", "1")`).
 
 ## Resilience
 
@@ -527,3 +637,135 @@ changes.
 
 **What to do.** Catch the three exceptions `SynthesizeAsync` documents. To see the frames the synthesizer skipped, watch
 `tts.frames.unparseable`.
+
+## Deprecated surface
+
+### The types deprecated with `VSDK0005` are removed
+
+**What changed.** 2.9.0 marked 49 types and one member `[Obsolete]` with `VSDK0005` and said they leave in 2.10.0.
+They are removed:
+
+- from `Verbara.Sdk.Ami`, the 28 actions and 3 responses of chan_sip, res_monitor, app_meetme, Skype for Asterisk,
+  the Zaptel action names, chan_agent and app_setcdruserfield, `MeetMeEventBase`, `MeetmeCompatibility`, and the 15
+  event types of dead modules or of wire names Asterisk 10 or 12 renamed or removed;
+- from `Verbara.Sdk.Agi`, `MeetmeCommand`;
+- from `Verbara.Sdk.Activities`, `MeetmeActivity.UseConfBridge`. `MeetmeActivity` stays and always runs ConfBridge,
+  which was already its default.
+
+The [VSDK0005 tables](obsolete-ami-events-removal-migration.md#vsdk0005) list every symbol and its replacement; the
+link in each 2.9.0 warning opens them. No pinned image of a supported Asterisk registers a removed action or sends a
+removed event. app_meetme, which registers `MeetmeMute` and `MeetmeUnmute`, is still in the Asterisk tree, deprecated
+and not built by default.
+
+What the wire still carries is not lost:
+
+- **An event whose type was removed arrives as a base `ManagerEvent`.** Its name, spelled as Asterisk sent it, is in
+  `EventType`, and every header is in `RawFields`. Every subscriber and `OnEvent` handler still receives it; nothing
+  is dropped, and nothing is logged above Debug.
+- **`AsyncAGI` is no longer a `ResponseEvent`.** An `AsyncAGI` that carries the `ActionID` of an event-generating
+  action still reaches that action's sequence, untyped. Code that matched it as `ResponseEvent` no longer does.
+- **`DTMF`, `Transfer` and `MusicOnHold` are not rewritten** into `DtmfEndEvent`, `BlindTransferEvent` or
+  `MusicOnHoldStartEvent`. Those types keep their own wire names, which every supported Asterisk sends.
+- **`VerbaraServer` no longer reads `QueueMemberPaused`.** Only Asterisk 11 and earlier send it; on those versions a
+  member's pause state no longer follows it. `QueueMemberPause`, which every supported version sends, is unchanged.
+- **An action the SDK does not type is sent as a `RawAction`.** A consumer's own `ManagerAction` subclass is not
+  a route to another action: the connection refuses it with `ArgumentException` (see
+  [An action the SDK does not type is sent with `RawAction`](#an-action-the-sdk-does-not-type-is-sent-with-rawaction)).
+  The `DAHDI*` actions the Zaptel rows name, and `MeetmeMute` and `MeetmeUnmute` on a server built with
+  app_meetme, are sent by name: `new RawAction("DAHDIDNDon").Add("DAHDIChannel", "1")`.
+
+**Who is affected.** Code that names a removed type or `UseConfBridge`: it no longer compiles. A removed type reports
+`CS0246`, or `CS0234` when written fully qualified; `UseConfBridge` reports `CS0117` in an object initializer and
+`CS1061` when read.
+A binary built against 2.9.0 or earlier that names one fails to load it (`TypeLoadException`, `MissingMethodException`).
+Code that matched `AsyncAgiEvent` or `ResponseEvent` for `AsyncAGI`. Live users on Asterisk 11 or earlier who relied
+on `QueueMemberPaused` for a member's pause state.
+
+**What to do.**
+
+1. **Move every `Verbara.Sdk.*` package to 2.10.0 together.** `Verbara.Sdk.Live` 2.9.0 names `QueueMemberPausedEvent`
+   in its event router, so loaded next to `Verbara.Sdk.Ami` 2.10.0 it cannot resolve it.
+2. **Recompile**, and replace each use with the replacement in the
+   [VSDK0005 tables](obsolete-ami-events-removal-migration.md#vsdk0005). Remove any `NoWarn` or pragma you kept for
+   `VSDK0005`; the id no longer reports anything.
+3. **Read a removed event by name** if your Asterisk still sends one: match `EventType` and read `RawFields`, as the
+   [2.9.0 removal guide](obsolete-ami-events-removal-migration.md#if-your-asterisk-still-sends-one-of-these-events)
+   shows for the event types removed then.
+4. **Remove `UseConfBridge = …`** from a `MeetmeActivity`. To join an app_meetme room on an Asterisk that still builds
+   it, call `IAgiChannel.ExecAsync("MeetMe", args)`, the call the activity made.
+
+### `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` name their removal release
+
+**What changed.** The warning message of these 14 members keeps its text and now ends `Removed in Verbara.Sdk 2.11.0.`
+Nothing is removed in 2.10.0, and nothing else changes: the ids, the replacements the messages name and the published
+instruments are as in 2.9.0.
+
+From 2.10.0 each of these warnings links to its id's heading below, not to the compiler's generic `CS0618` page.
+
+#### VSDK0002
+
+| Id | Member | Removed in |
+|---|---|---|
+| `VSDK0002` | `StatusEvent.State`, `CallerId`, `Account`, `BridgedChannel`, `Link`, `BridgedUniqueId` | 2.11.0 |
+
+#### VSDK0003
+
+| Id | Member | Removed in |
+|---|---|---|
+| `VSDK0003` | `AudioStreamMetrics.BufferUnderruns` (`audio.buffer.underruns`) | 2.11.0 |
+
+The instrument leaves the meter with its field; see **Who is affected** below.
+
+#### VSDK0004
+
+| Id | Member | Removed in |
+|---|---|---|
+| `VSDK0004` | `IChanWebSocketSession.SendXonAsync`, `SendXoffAsync` | 2.11.0 |
+| `VSDK0004` | `ChanWebSocketHangup`, `ChanWebSocketMediaBuffering` | 2.11.0 |
+| `VSDK0004` | `ChanWebSocketDtmf.DurationMs` | 2.11.0 |
+
+#### VSDK0006
+
+| Id | Member | Removed in |
+|---|---|---|
+| `VSDK0006` | `SessionMetrics.SessionsTimedOut` (`sessions.timed_out`), `SessionsOrphaned` (`sessions.orphaned`) | 2.11.0 |
+
+The instruments leave the meter with their fields; see **Who is affected** below.
+
+**Who is affected.** Code that reads one of these members: the warning it already reported now names 2.11.0. For
+`VSDK0003` and `VSDK0006`, a dashboard or exporter that lists the meter's instruments: each field is its instrument's
+only creation, so in 2.11.0 `audio.buffer.underruns`, `sessions.timed_out` and `sessions.orphaned` leave the meter
+with their fields. `audio.buffer.underruns` never recorded a measurement, so no exporter has emitted a point under
+that name. The SDK has recorded nothing on `sessions.timed_out` or `sessions.orphaned` since 2.7.0; through 2.6.x the
+reconciliation sweep added to both, so a series an exporter stored from 2.6.x or earlier keeps that history, and a
+panel that reads it has shown no new point since 2.7.0.
+
+**What to do.** Move to what each message names before 2.11.0. A `NoWarn` you keep for one of these ids keeps working
+in 2.10.0.
+
+### Seven AMI types whose wire name no Asterisk knows are deprecated
+
+**What changed.** Seven types of `Verbara.Sdk.Ami` are marked `[Obsolete]` with `VSDK0007`, a warning, and leave in
+2.11.0. Each one names an AMI action that no Asterisk registers, or an event that no supported Asterisk (22, 23, 24)
+emits, read in the whole upstream source of 22.12.0, 23.6.0 and 24.0.0. Sending one of the two actions is answered
+with an error; a handler for one of the five events never runs.
+
+#### VSDK0007
+
+| Type | Wire name | What to use | Removed in |
+|---|---|---|---|
+| `DbPrefixGetAction` | `DBPrefixGet`, never registered | `DbGetTreeAction` (`DBGetTree`): the entries of a family, optionally under a key | 2.11.0 |
+| `ExecAction` | `exec`, never registered | `CommandAction` to run a CLI command; `RawAction` to send an action by its name | 2.11.0 |
+| `JitterBufStatsEvent` | `JitterBufStats`, last emitted by chan_iax2 in Asterisk 11 | nothing: no supported Asterisk sends it | 2.11.0 |
+| `MasqueradeEvent` | `Masquerade`, last emitted by the core in Asterisk 11 | nothing: no supported Asterisk sends it | 2.11.0 |
+| `PriEventEvent` | `PRIEvent`, emitted by chan_dahdi in Asterisk 1.6, gone by 11 | nothing: no supported Asterisk sends it | 2.11.0 |
+| `RtpReceiverStatEvent` | `RTPReceiverStat`, emitted by the core in Asterisk 1.6, gone by 11 | nothing: no supported Asterisk sends it | 2.11.0 |
+| `RtpSenderStatEvent` | `RTPSenderStat`, emitted by the core in Asterisk 1.6, gone by 11 | nothing: no supported Asterisk sends it | 2.11.0 |
+
+**Who is affected.** Code that names one of these types. A build with TreatWarningsAsErrors fails on `VSDK0007`
+until the code moves or suppresses the id; any other build shows the warning. Nothing changes at run time.
+
+**What to do.** Replace the two actions as the table says. Delete a handler or a type check for one of the five
+events: it never ran against a supported Asterisk. If you cannot move before upgrading, suppress `VSDK0007` where you
+name the type (`#pragma warning disable VSDK0007`, or `NoWarn` in the project); the suppression works until 2.11.0
+removes the types.

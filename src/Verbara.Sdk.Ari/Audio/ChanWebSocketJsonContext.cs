@@ -24,12 +24,12 @@ namespace Verbara.Sdk.Ari.Audio;
 [JsonSerializable(typeof(ChanWebSocketMediaStart))]
 [JsonSerializable(typeof(ChanWebSocketMediaXoff))]
 [JsonSerializable(typeof(ChanWebSocketMediaXon))]
-#pragma warning disable VSDK0004 // the shipped context keeps its row and getter for the deprecated record; nothing is removed
+#pragma warning disable VSDK0004 // the shipped context keeps its row and getter for the deprecated record until 2.11.0
 [JsonSerializable(typeof(ChanWebSocketMediaBuffering))]
 #pragma warning restore VSDK0004
 [JsonSerializable(typeof(ChanWebSocketMediaMarkProcessed))]
 [JsonSerializable(typeof(ChanWebSocketDtmf))]
-#pragma warning disable VSDK0004 // the shipped context keeps its row and getter for the deprecated record; nothing is removed
+#pragma warning disable VSDK0004 // the shipped context keeps its row and getter for the deprecated record until 2.11.0
 [JsonSerializable(typeof(ChanWebSocketHangup))]
 #pragma warning restore VSDK0004
 [JsonSerializable(typeof(ChanWebSocketMarkMedia))]

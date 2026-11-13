@@ -153,13 +153,12 @@ public sealed class EventDeserializerPipelineTests
         typed.CauseTxt.Should().Be("Normal Clearing");
     }
 
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
     [Fact]
     public void Deserialize_ShouldHandleIntermediateBaseWithMixedTypes()
     {
-        // QueueMemberPausedEvent -> QueueMemberEventBase -> ManagerEvent
+        // QueueMemberPauseEvent -> QueueMemberEventBase -> ManagerEvent
         // QueueMemberEventBase has string, int?, and bool? properties
-        var msg = CreateMessage("QueueMemberPaused", new Dictionary<string, string>
+        var msg = CreateMessage("QueueMemberPause", new Dictionary<string, string>
         {
             // QueueMemberEventBase properties (intermediate base with mixed types)
             ["Queue"] = "support",
@@ -172,13 +171,13 @@ public sealed class EventDeserializerPipelineTests
             ["Ringinuse"] = "false",
             ["LastCall"] = "1616161616",
             // Leaf property
-            ["Reason"] = "Break",
+            ["PausedReason"] = "Break",
         });
 
         var evt = GeneratedEventDeserializer.Deserialize(msg);
 
-        evt.Should().BeOfType<QueueMemberPausedEvent>();
-        var typed = (QueueMemberPausedEvent)evt;
+        evt.Should().BeOfType<QueueMemberPauseEvent>();
+        var typed = (QueueMemberPauseEvent)evt;
 
         // QueueMemberEventBase properties
         typed.Queue.Should().Be("support");
@@ -191,9 +190,28 @@ public sealed class EventDeserializerPipelineTests
         typed.LastCall.Should().Be(1_616_161_616);
 
         // Leaf property
-        typed.Reason.Should().Be("Break");
+        typed.Pausedreason.Should().Be("Break");
     }
-#pragma warning restore VSDK0005
+
+    [Fact]
+    public void Deserialize_ShouldReturnABaseManagerEvent_WhenTheNameIsQueueMemberPaused()
+    {
+        // Asterisk 11 and earlier sent QueueMemberPaused; its type was removed in 2.10.0, so the name has no typed
+        // class and every header is kept as sent.
+        var msg = CreateMessage("QueueMemberPaused", new Dictionary<string, string>
+        {
+            ["Queue"] = "support",
+            ["Location"] = "SIP/agent-1001",
+            ["Paused"] = "1",
+            ["Reason"] = "Break",
+        });
+
+        var evt = GeneratedEventDeserializer.Deserialize(msg);
+
+        evt.GetType().Should().Be<ManagerEvent>();
+        evt.EventType.Should().Be("QueueMemberPaused");
+        evt.RawFields.Should().Contain("Reason", "Break");
+    }
 
     [Fact]
     public void Deserialize_CdrEvent_ShouldMapAll18Fields()

@@ -134,3 +134,5 @@ static Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.operator !=(Verbara.Sdk.Ari.Aud
 static Verbara.Sdk.Ari.Audio.ChanWebSocketStatus.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketStatus? left, Verbara.Sdk.Ari.Audio.ChanWebSocketStatus? right) -> bool
 static Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? left, Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? right) -> bool
 static Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? left, Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? right) -> bool
+~Verbara.Sdk.Ari.Resources.AriJsonContext.NullableUInt32.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<uint?>
+~Verbara.Sdk.Ari.Resources.AriJsonContext.UInt32.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<uint>

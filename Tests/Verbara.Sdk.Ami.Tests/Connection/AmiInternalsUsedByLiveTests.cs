@@ -51,6 +51,10 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// <c>AmiConnection.CallerReconnected</c>, an event of <see cref="Action{T}"/> of a <see cref="long"/>, which Live
 /// subscribes to and unsubscribes from (since 2.10.0);
 /// </description></item>
+/// <item><description>
+/// <c>AmiConnection.ReconnectSettled</c>, an event of <see cref="Action{T}"/> of a <see cref="long"/>, which Live
+/// subscribes to and unsubscribes from (since 2.10.0);
+/// </description></item>
 /// <item><description><c>AmiConnection.InDispatch</c>, a <see cref="bool"/>;</description></item>
 /// <item><description><c>AmiConnection.ReconnectPending</c>, a <see cref="bool"/>;</description></item>
 /// <item><description><c>AmiConnection.EventLossMark</c>, an <see cref="AmiEventLossMark"/>;</description></item>
@@ -121,6 +125,11 @@ public sealed class AmiInternalsUsedByLiveTests
         Action<long> onCallerReconnected = _ => { };
         connection.CallerReconnected += onCallerReconnected;
         connection.CallerReconnected -= onCallerReconnected;
+
+        // AmiConnection.ReconnectSettled: the same, with a handler declared exactly as Live's is.
+        Action<long> onReconnectSettled = _ => { };
+        connection.ReconnectSettled += onReconnectSettled;
+        connection.ReconnectSettled -= onReconnectSettled;
 
         // AmiConnection.InDispatch and AmiConnection.StateAndWriter: their getters, by their exact types.
         var inDispatch = connection.InDispatch;
@@ -198,6 +207,7 @@ public sealed class AmiInternalsUsedByLiveTests
             sendWithin.Should().NotBeNull("the overload binds to the delegate OriginateAsync's call site needs");
             onLost.Should().NotBeNull("the event takes the handler type Live's call site declares");
             onCallerReconnected.Should().NotBeNull("the event takes the handler type Live's call site declares");
+            onReconnectSettled.Should().NotBeNull("the event takes the handler type Live's call site declares");
             wait.Should().NotBeNull("the mark's wait binds to the delegate Live's call site needs");
             sendMarked.Should().NotBeNull("the overload binds to the delegate Live's load needs");
             outcomes.Should().HaveCount(2, "Live reads both outcomes by name");

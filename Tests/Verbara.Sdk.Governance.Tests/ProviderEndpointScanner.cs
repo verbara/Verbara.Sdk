@@ -235,8 +235,10 @@ internal static class ProviderEndpointScanner
     /// <summary>
     /// True when the node is the <c>UrlFormat</c> argument of an <c>[Obsolete]</c> attribute: the
     /// documentation link the compiler prints next to the deprecation diagnostic. It is metadata a
-    /// reader follows, never a route a client dials, and an attribute argument cannot name a constant
-    /// from another package, so "declare it once" has no shape to take there. Only that one named
+    /// reader follows, never a route a client dials. It is written as a literal on each mark, not
+    /// declared once as a constant, because the deprecation-id guard reads only literals: an id or a
+    /// link behind a constant is a violation there (<see cref="DeprecationIdScanner"/>), and
+    /// <see cref="DeprecationIdRegister"/> is the one place that declares each link. Only that one named
     /// argument is excused: a URL in the attribute's message, or in any other attribute, still reports.
     /// </summary>
     private static bool IsDeprecationLink(SyntaxNode node)

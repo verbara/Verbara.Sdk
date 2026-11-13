@@ -1,11 +1,12 @@
 # Recordings — asterisk-ami
 
 Byte captures of the AMI stream a real Asterisk PBX sent to one manager client, one capture per
-Asterisk version for each of six sets: twelve call shapes (`call-shapes-*`), seventeen queue
+Asterisk version for each of seven sets: twelve call shapes (`call-shapes-*`), seventeen queue
 shapes (`queue-shapes-*`), four queue calls with the PBX's own state snapshots taken while they
 waited (`queue-reload-*`), and, read with the `dialplan` class, one call for each way of leaving a
-queue (`queue-exits-*`) and one timeout loop (`queue-loop-*`), and the dialplan and parking events of one
-workload (`dialplan-and-parking-*`). This suite replays them through the SDK's own parsing path, so a
+queue (`queue-exits-*`) and one timeout loop (`queue-loop-*`), the dialplan and parking events of one
+workload (`dialplan-and-parking-*`), and transfers and bridges of a waiting caller and of a conference participant
+(`renamed-caller-and-participant-*`). This suite replays them through the SDK's own parsing path, so a
 call-session assertion made here is checked against what Asterisk actually sent rather than against
 what a test author believed it sends.
 
@@ -30,6 +31,11 @@ what a test author believed it sends.
 | `dialplan-and-parking-asterisk-22.11.0.raw` | 22.11.0 | `Asterisk Call Manager/11.0.0` | 92 744 |
 | `dialplan-and-parking-asterisk-23.5.0.raw` | 23.5.0 | `Asterisk Call Manager/12.0.0` | 92 742 |
 | `dialplan-and-parking-asterisk-24.0.0-rc2.raw` | 24.0.0-rc2 | `Asterisk Call Manager/13.0.0` | 92 742 |
+| `renamed-caller-and-participant-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 213 287 |
+| `renamed-caller-and-participant-asterisk-22.11.0.raw` | 22.11.0 | `Asterisk Call Manager/11.0.0` | 213 288 |
+| `renamed-caller-and-participant-asterisk-23.5.0.raw` | 23.5.0 | `Asterisk Call Manager/12.0.0` | 213 464 |
+| `renamed-caller-and-participant-asterisk-24.0.0-rc2.raw` | 24.0.0-rc2 | `Asterisk Call Manager/13.0.0` | 213 286 |
+| `renamed-caller-and-participant-refer-conference-asterisk-23.5.0.raw` | 23.5.0 | `Asterisk Call Manager/12.0.0` | 19 719 |
 
 The call and queue shapes were captured 2026-09-27, the reload, exit and loop captures 2026-09-28. The
 `.gitattributes` rule `**/Recordings/**/*.raw binary` keeps the CRLF framing byte-exact; never open
@@ -906,6 +912,33 @@ Each file keeps 267 frames: `Newexten` 31, `NewCallerid` 17, `NewConnectedLine` 
 `Newstate` 14, `ParkedCall` 4 (two of them the answer to the tap's `ParkedCalls`), and one each of `UnParkedCall`,
 `ParkedCallTimeOut` and `ParkedCallGiveUp`, among others. The reduction is the script's (below); it replaced 2 UUIDs per
 file and no address.
+
+## The transfer and bridge captures
+
+One run of the `renamed-caller-and-participant` workload of `scripts/capture-ami-recording.py` on each of the four
+images of [The dialplan-and-parking captures](#the-dialplan-and-parking-captures), by the same digests, captured
+2026-11-12. The workload ran ten takes per image; each `renamed-caller-and-participant-asterisk-<version>.raw` is the
+first take, reduced with `--keep-steps` to the steps of its closed list (every step but the sequential calls), because
+the whole take reduces to about 300 KB, over the 256 KiB cap. The reduction also dropped `ChannelHungup`,
+`CoreShowChannel`, `DeviceStateChange`, `DialBegin`, `DialEnd`, `DialState`, `HangupRequest`, `LocalBridge`,
+`NewCallerid`, `NewConnectedLine`, `Newexten`, `Newstate`, `SoftHangupRequest` and `VarSet`, and replaced 33 UUIDs per
+file and no address. `renamed-caller-and-participant-refer-conference-asterisk-23.5.0.raw` is the `refer-conference`
+step of the ninth take on 23.5.0, reduced the same way to that step alone (5 UUIDs replaced): it is kept on purpose, as
+the one conference leave of the forty takes that Asterisk sent after its participant's `Hangup`.
+
+Each step runs behind its own `CaptureMarker`; a test replays one step through the server
+(`AmiCaptureReplay.ReplayStepsAsync`). What these files pin about the wire, on all four versions:
+
+- **No rename.** No frame renames a channel that joined the queue or the conference.
+- **A caller relieved in the queue gets no `QueueCallerLeave`.** In `replaces-queue` (an `INVITE` with `Replaces`) and
+  `refer-queue` (an attended transfer by `REFER`), another channel, which never sent a `QueueCallerJoin`, takes the
+  caller's place and later leaves; the caller that joined only hangs up, and its `Hangup` comes first. `REFER` links the
+  two in one `AttendedTransfer` frame; `Replaces` links nothing.
+- **`Action: Bridge` takes a waiting caller out of the queue with no `QueueCallerLeave`** (`bridge-queue`); the caller
+  hangs up when the bridged call ends.
+- **A normal queue leave arrives before the caller's `Hangup`** (`negative-queue` and the other steps).
+- **In the conference that order is not guaranteed.** In the `refer-conference` file the participant
+  `Local/peer@capture-00000024;1` hangs up 1.1 ms before its `ConfbridgeLeave`.
 
 ## Capturing on a new Asterisk build
 

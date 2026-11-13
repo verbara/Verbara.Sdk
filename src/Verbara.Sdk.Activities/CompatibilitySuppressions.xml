@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Verbara.Sdk.Activities.Activities.MeetmeActivity.get_UseConfBridge</Target>
+    <Left>lib/net10.0/Verbara.Sdk.Activities.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.Activities.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:Verbara.Sdk.Activities.Activities.MeetmeActivity.set_UseConfBridge(System.Boolean)</Target>
+    <Left>lib/net10.0/Verbara.Sdk.Activities.dll</Left>
+    <Right>lib/net10.0/Verbara.Sdk.Activities.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>

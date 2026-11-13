@@ -162,18 +162,6 @@ public sealed class CoverageActionPropertyTests
         action.Options.Should().Be("r");
     }
 
-#pragma warning disable VSDK0005 // pins the deprecated surface until its removal in 2.10.0
-    [Fact]
-    public void MonitorAction_ShouldHaveProperties()
-    {
-        var action = new MonitorAction { Channel = "SIP/100", File = "test", Format = "wav", Mix = true };
-        action.Channel.Should().Be("SIP/100");
-        action.File.Should().Be("test");
-        action.Format.Should().Be("wav");
-        action.Mix.Should().BeTrue();
-    }
-#pragma warning restore VSDK0005
-
     [Fact]
     public void PlayDtmfAction_ShouldHaveProperties()
     {
@@ -198,12 +186,14 @@ public sealed class CoverageActionPropertyTests
         action.Queue.Should().Be("sales");
     }
 
+#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
     [Fact]
     public void ExecAction_ShouldHaveProperties()
     {
         var action = new ExecAction { Command = "Playback(hello-world)" };
         action.Command.Should().Be("Playback(hello-world)");
     }
+#pragma warning restore VSDK0007
 
     [Fact]
     public void AbsoluteTimeoutAction_ShouldHaveProperties()

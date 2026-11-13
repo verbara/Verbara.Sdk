@@ -27,6 +27,8 @@
   <ItemGroup>
     <!-- The captured AMI Status replies AmiStatusWireCapture serves, byte for byte (see that type). -->
     <EmbeddedResource Include="AmiStatus\*.raw" LogicalName="AmiStatus/%(Filename)%(Extension)" />
+    <!-- Nine actions written by name and the replies of four versions, AmiActionByNameWireCapture serves them (see that type). -->
+    <EmbeddedResource Include="AmiActionByName\*.raw" LogicalName="AmiActionByName/%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
