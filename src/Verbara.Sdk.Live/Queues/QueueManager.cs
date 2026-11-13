@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk.Live.Agents;
 using Verbara.Sdk.Live.Diagnostics;
 using Verbara.Sdk.Live.Server;
@@ -64,6 +65,15 @@ public sealed class QueueManager
     private readonly Lock _windowsLock = new();
     internal Lock SnapshotGate => _windowsLock;
     private QueueSnapshotWindow[] _windows = [];
+
+    // Uniqueid -> how many entries of the whole table carry it; an entry with no Uniqueid is never counted. Raised
+    // before an entry is visible and lowered after it was taken out, both under the queue's lock (StoreEntryLocked,
+    // TakeEntryLocked), so it never reads lower than the table: a Hangup of a Uniqueid it does not hold has nobody to
+    // remove and walks no queue. A count, not a flag: one Uniqueid can be held in two queues.
+    private readonly ConcurrentDictionary<string, int> _heldByUniqueId = new(StringComparer.Ordinal);
+
+    /// <summary>A copy of the count of held Uniqueids, for deterministic tests.</summary>
+    internal Dictionary<string, int> HeldUniqueIdCounts() => new(_heldByUniqueId, StringComparer.Ordinal);
 
     /// <summary>The actual open read windows, exposed internally for deterministic ownership/cleanup checks.</summary>
     internal int ActiveSnapshotWindowCount => Volatile.Read(ref _windows).Length;
@@ -580,7 +590,7 @@ public sealed class QueueManager
                     continue;
                 }
 
-                if (queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
+                if (TakeEntryLocked(queue, key, entry))
                     (gone ??= []).Add(entry);
             }
 
@@ -681,7 +691,7 @@ public sealed class QueueManager
                     var onChannel = entry.UniqueId is { } held
                         ? string.Equals(held, uniqueId, StringComparison.Ordinal)
                         : string.Equals(entry.Channel, channelName, StringComparison.Ordinal);
-                    if (onChannel && queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
+                    if (onChannel && TakeEntryLocked(queue, key, entry))
                         (gone ??= []).Add(entry);
                 }
 
@@ -738,6 +748,10 @@ public sealed class QueueManager
 
     private void RemoveHungUp(string uniqueId)
     {
+        // No entry carries it: almost every Hangup of the connection. The count never reads lower than the table.
+        if (!_heldByUniqueId.ContainsKey(uniqueId))
+            return;
+
         // Read without the queue's lock, which is taken only for a caller on this Uniqueid: the removal takes out exactly
         // the entry read, and is posted under the lock, so a later join of the same caller is announced after this leave.
         // The table is enumerated directly: its Values property takes every lock of the dictionary and copies it.
@@ -750,7 +764,7 @@ public sealed class QueueManager
 
                 lock (queue.SyncRoot)
                 {
-                    if (queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
+                    if (TakeEntryLocked(queue, key, entry))
                         LeftUnobserved(queue.Name, entry, "hangup", announce: true);
                 }
             }
@@ -842,7 +856,7 @@ public sealed class QueueManager
     }
 
     /// <summary>The table half of <see cref="Join"/>, under the queue's lock. Returns whether the caller was inserted.</summary>
-    private static bool JoinLocked(AsteriskQueue queue, AsteriskQueueEntry reported, string channel, int position,
+    private bool JoinLocked(AsteriskQueue queue, AsteriskQueueEntry reported, string channel, int position,
         bool fromSnapshot, long? snapshotOrderPoint, out AsteriskQueueEntry? displaced)
     {
         displaced = null;
@@ -858,18 +872,72 @@ public sealed class QueueManager
             // caller's leave finds it, with everything else kept.
             if (!string.Equals(held.Channel, channel, StringComparison.Ordinal))
             {
-                queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(held.Channel, held));
-                displaced = queue.Entries.GetValueOrDefault(channel);
-                queue.Entries[channel] = held.RenamedTo(channel);
+                // Stored under the new name before it is taken from the old one, so the count never dips to zero
+                // for a caller that is still held.
+                displaced = StoreEntryLocked(queue, channel, held.RenamedTo(channel));
+                TakeEntryLocked(queue, held.Channel, held);
             }
 
             return false;
         }
 
         // Another caller held under this channel name (one whose Uniqueid differs): it is no longer there.
-        displaced = queue.Entries.GetValueOrDefault(channel);
-        queue.Entries[channel] = reported;
+        displaced = StoreEntryLocked(queue, channel, reported);
         return true;
+    }
+
+    /// <summary>
+    /// Stores <paramref name="entry"/> under <paramref name="key"/>, under the queue's lock: its Uniqueid is counted
+    /// before the entry is visible. Returns the entry it replaced, if any, taken out of the count after it is gone.
+    /// Every write that puts an entry in a queue goes through here; a guard keeps it so.
+    /// </summary>
+    private AsteriskQueueEntry? StoreEntryLocked(AsteriskQueue queue, string key, AsteriskQueueEntry entry)
+    {
+        if (entry.UniqueId is { } uniqueId)
+            _heldByUniqueId.AddOrUpdate(uniqueId, 1, static (_, held) => held + 1);
+        var replaced = queue.Entries.GetValueOrDefault(key);
+        queue.Entries[key] = entry;
+        ReleaseUniqueId(replaced);
+        return replaced;
+    }
+
+    /// <summary>
+    /// Takes out exactly <paramref name="entry"/> stored under <paramref name="key"/>, under the queue's lock; its
+    /// Uniqueid leaves the count after the entry is gone. Every write that takes an entry out goes through here.
+    /// </summary>
+    private bool TakeEntryLocked(AsteriskQueue queue, string key, AsteriskQueueEntry entry)
+    {
+        if (!queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
+            return false;
+        ReleaseUniqueId(entry);
+        return true;
+    }
+
+    /// <summary>As <see cref="TakeEntryLocked(AsteriskQueue, string, AsteriskQueueEntry)"/>, whatever entry the key holds.</summary>
+    private bool TakeEntryLocked(AsteriskQueue queue, string key, [NotNullWhen(true)] out AsteriskQueueEntry? entry)
+    {
+        if (!queue.Entries.TryRemove(key, out entry))
+            return false;
+        ReleaseUniqueId(entry);
+        return true;
+    }
+
+    // Lowers the count of an entry taken out of the table, removing the key at zero. Two queues can release the same
+    // Uniqueid at once, each under its own lock, hence the compare-and-swap; a key already gone is left gone.
+    private void ReleaseUniqueId(AsteriskQueueEntry? entry)
+    {
+        if (entry?.UniqueId is not { } uniqueId)
+            return;
+
+        while (_heldByUniqueId.TryGetValue(uniqueId, out var held))
+        {
+            if (held <= 1
+                    ? _heldByUniqueId.TryRemove(new KeyValuePair<string, int>(uniqueId, held))
+                    : _heldByUniqueId.TryUpdate(uniqueId, held - 1, held))
+            {
+                return;
+            }
+        }
     }
 
     /// <summary>
@@ -907,7 +975,7 @@ public sealed class QueueManager
         bool removed;
         lock (queue.SyncRoot)
         {
-            removed = queue.Entries.TryRemove(channel, out entry);
+            removed = TakeEntryLocked(queue, channel, out entry);
             if (removed && entry is not null)
                 PostCallerLeft(queueName, entry);
         }
@@ -1045,7 +1113,7 @@ public sealed class QueueManager
                 queue.RemovedFromTable = true;
                 foreach (var (key, entry) in queue.Entries)
                 {
-                    if (queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
+                    if (TakeEntryLocked(queue, key, entry))
                         gone.Add(entry);
                 }
                 // Finish old-instance cleanup before a log/event can re-create the same queue name.
@@ -1085,7 +1153,7 @@ public sealed class QueueManager
                     queue.RemovedFromTable = true;
                     foreach (var (key, entry) in queue.Entries)
                     {
-                        if (queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
+                        if (TakeEntryLocked(queue, key, entry))
                             entry.MarkLeaveNotObserved();
                     }
                 }
@@ -1115,6 +1183,14 @@ public sealed class AsteriskQueue
     public int Completed { get; set; }
     public int Abandoned { get; set; }
     public ConcurrentDictionary<string, AsteriskQueueMember> Members { get; } = new();
+
+    /// <summary>
+    /// The callers waiting in this queue, by channel name, as Live's queue table holds them. Read it; do not change it:
+    /// Live keeps its own account of the callers it holds next to this dictionary (the count a <c>Hangup</c> reads before
+    /// it looks through the queues), and a caller added or removed here directly bypasses it. A caller removed directly
+    /// costs every later <c>Hangup</c> of its <c>Uniqueid</c> one look through the queues; one added directly is not
+    /// removed by its <c>Hangup</c>.
+    /// </summary>
     public ConcurrentDictionary<string, AsteriskQueueEntry> Entries { get; } = new();
     public int MemberCount => Members.Count;
     public int EntryCount => Entries.Count;
