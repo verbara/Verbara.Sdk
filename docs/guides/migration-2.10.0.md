@@ -342,11 +342,14 @@ candidates, no reply bound. Now:
 A channel's `state` is read as Asterisk writes it. `"Dialing Offhook"` and `"Pre-ring"` read as `DialingOffhook` and
 `PreRing`; `"Mute"` reads as the new `AriChannelState.Mute`, appended after `Unknown` so no existing value changes its
 number; `"Rsrvd"` and `"Rsrved"` read as `Rsrvd`; and `"Unknown (N)"`, or any state the SDK has no member for, reads as
-`Unknown`. In 2.9.0 each of those strings dropped the whole event, or made a REST call that returns a channel throw.
-These states come from analog and DAHDI channels, not PJSIP. The reader is the new public
-`AriChannelStateConverter`, declared on `AriChannelState` itself, so it applies to every serializer, not only the SDK's:
-it writes Asterisk's spelling, and it reads a number from 0 to 11 as that member (as 2.9.0 did) and any other number as
-`Unknown`.
+`Unknown`. In 2.9.0 each of those strings except `"Rsrvd"`, which is the member's own name, dropped the whole event, or
+made a REST call that returns a channel throw. These states come from analog and DAHDI channels, not PJSIP. The reader
+is the new public `AriChannelStateConverter`, declared on `AriChannelState` itself. It writes Asterisk's spelling, so
+the SDK's own serializer now writes `"Pre-ring"` and `"Dialing Offhook"` where 2.9.0 wrote `"PreRing"` and
+`"DialingOffhook"`. It reads a number from 0 to 11 as that member (as 2.9.0 did) and any other number as `Unknown`,
+and it handles a state used as a dictionary key the same way. It also applies to a consumer's own source-generated
+context or `JsonSerializerOptions`, unless those options list an enum converter of their own, such as a global
+`JsonStringEnumConverter`: a converter in the options' `Converters` wins over one declared on the type.
 
 Five members that were always empty now carry what Asterisk sends: `AriChannel.Protocol` (from `protocol_id`),
 `AriChannel.ChannelVars` (from `channelvars`, when `ari.conf` names channel variables), `ChannelHoldEvent.MusicClass`
@@ -358,8 +361,11 @@ the transferring channel; Asterisk never writes `transferer`). No property is re
 expression compiles unchanged, and gets seconds: check what unit it assumed. Code with a `switch` over `AriChannelState` and no default arm,
 which now sees `Mute`. Code that built its own JSON with the old names (`protocol`, `channel_vars`, `music_class`,
 `set_id`, `transferer`) and read it through the SDK: those names are no longer read. Code that serializes an
-`AriChannel` or an `AriChannelState` with its own `JsonSerializerOptions` or its own source-generated context: the state
-is now written as Asterisk's text (`"state": "Up"`), where 2.9.0 wrote its number (`"state": 6`).
+`AriChannel` or an `AriChannelState` with its own `JsonSerializerOptions` or its own source-generated context and no
+enum converter of its own: the state is now written as Asterisk's text (`"state": "Pre-ring"`), where 2.9.0 wrote its
+number (`"state": 9`). Code whose options list a `JsonStringEnumConverter` keeps 2.9.0's behaviour: it writes the
+member name (`"PreRing"`), as 2.9.0 did, and still cannot read `"Pre-ring"`, `"Dialing Offhook"`, `"Rsrved"` or
+`"Unknown (N)"`.
 
 **What to do.**
 
@@ -371,6 +377,8 @@ is now written as Asterisk's text (`"state": "Up"`), where 2.9.0 wrote its numbe
 - Feed the SDK the names Asterisk sends, if you build test frames by hand.
 - If you store channels with your own serializer, expect the state as text in what you write from now on. Nothing to
   convert: a state stored as a number by 2.9.0 still reads back as its member.
+- If your options carry a global `JsonStringEnumConverter` and you read ARI channels through them, remove it, or insert
+  `new AriChannelStateConverter()` into the options' `Converters` ahead of it.
 
 ## Live
 
