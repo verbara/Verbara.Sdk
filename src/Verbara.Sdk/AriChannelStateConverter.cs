@@ -1,29 +1,48 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Verbara.Sdk;
 
-namespace Verbara.Sdk.Ari.Internal;
+namespace Verbara.Sdk;
 
 /// <summary>
-/// Reads a channel's <c>state</c> as Asterisk's <c>ast_state2str</c> writes it, and never fails the frame over it.
+/// Reads and writes an <see cref="AriChannelState"/> as Asterisk's <c>ast_state2str</c> writes it, and never fails
+/// the frame over it.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Asterisk writes <c>"Dialing Offhook"</c>, <c>"Pre-ring"</c> and <c>"Mute"</c>, which the generic string-enum
-/// converter cannot bind, and <c>"Unknown (N)"</c> for any state it has no name for; its schema spells the
-/// reserved state <c>"Rsrved"</c> where <c>ast_state2str</c> writes <c>"Rsrvd"</c>. A state the generic converter
-/// rejected lost the whole event or reply. This reader matches Asterisk's exact spellings first, without
-/// allocating, then any of them or a member name ignoring case (every string the earlier reader accepted), and
-/// reads everything else, including a token that is not a string, as <see cref="AriChannelState.Unknown"/>.
-/// Writing emits Asterisk's spelling. Registered on <c>AriJsonContext</c>; the source generator instantiates it
-/// directly, so no reflection is involved.
+/// converter cannot bind, and <c>"Unknown (N)"</c> for any state it has no name for; its schema spells the reserved
+/// state <c>"Rsrved"</c> where <c>ast_state2str</c> writes <c>"Rsrvd"</c>. This reader matches Asterisk's exact
+/// spellings first, without allocating, then any of them or a member name ignoring case, and reads every other
+/// string as <see cref="AriChannelState.Unknown"/>.
+/// </para>
+/// <para>
+/// A number that is one of the enum's values (0 to 11) reads as that member, so a model stored by a serializer that
+/// wrote the state as a number still reads back; any other number, and any other token that is not a string, reads as
+/// <see cref="AriChannelState.Unknown"/>. Writing emits Asterisk's spelling.
+/// </para>
+/// <para>
+/// It is declared on <see cref="AriChannelState"/> itself with <see cref="JsonConverterAttribute"/>, so every
+/// serializer uses it, including a consumer's own source-generated context; a source generator instantiates it
+/// directly, with no reflection. Code rarely needs to name it.
+/// </para>
 /// </remarks>
-internal sealed class AriChannelStateConverter : JsonConverter<AriChannelState>
+public sealed class AriChannelStateConverter : JsonConverter<AriChannelState>
 {
+    /// <summary>Reads a channel state; see the type's remarks for what each token reads as.</summary>
+    /// <param name="reader">The reader, positioned on the state's value.</param>
+    /// <param name="typeToConvert">The type being converted.</param>
+    /// <param name="options">The serializer options in use.</param>
+    /// <returns>The state, or <see cref="AriChannelState.Unknown"/> when the value names no member.</returns>
     public override AriChannelState Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType != JsonTokenType.String)
         {
-            // Asterisk always writes a string. Anything else is consumed whole and read as Unknown.
+            // Asterisk always writes a string. A member's number (a model stored by a serializer that wrote enums as
+            // numbers) reads as that member; anything else is consumed whole and read as Unknown.
+            if (reader.TokenType == JsonTokenType.Number)
+                return reader.TryGetInt32(out var number) && number is >= 0 and <= (int)AriChannelState.Mute
+                    ? (AriChannelState)number
+                    : AriChannelState.Unknown;
             if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
                 reader.Skip();
             return AriChannelState.Unknown;
@@ -45,6 +64,10 @@ internal sealed class AriChannelStateConverter : JsonConverter<AriChannelState>
         return FromText(reader.GetString());
     }
 
+    /// <summary>Writes Asterisk's spelling of <paramref name="value"/>.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="value">The state to write.</param>
+    /// <param name="options">The serializer options in use.</param>
     public override void Write(Utf8JsonWriter writer, AriChannelState value, JsonSerializerOptions options) =>
         writer.WriteStringValue(ToText(value));
 

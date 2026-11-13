@@ -95,3 +95,7 @@ override Verbara.Sdk.AriExternalMediaRequest.GetHashCode() -> int
 override Verbara.Sdk.AriExternalMediaRequest.ToString() -> string!
 static Verbara.Sdk.AriExternalMediaRequest.operator !=(Verbara.Sdk.AriExternalMediaRequest? left, Verbara.Sdk.AriExternalMediaRequest? right) -> bool
 static Verbara.Sdk.AriExternalMediaRequest.operator ==(Verbara.Sdk.AriExternalMediaRequest? left, Verbara.Sdk.AriExternalMediaRequest? right) -> bool
+override Verbara.Sdk.AriChannelStateConverter.Read(ref System.Text.Json.Utf8JsonReader reader, System.Type! typeToConvert, System.Text.Json.JsonSerializerOptions! options) -> Verbara.Sdk.AriChannelState
+override Verbara.Sdk.AriChannelStateConverter.Write(System.Text.Json.Utf8JsonWriter! writer, Verbara.Sdk.AriChannelState value, System.Text.Json.JsonSerializerOptions! options) -> void
+Verbara.Sdk.AriChannelStateConverter
+Verbara.Sdk.AriChannelStateConverter.AriChannelStateConverter() -> void

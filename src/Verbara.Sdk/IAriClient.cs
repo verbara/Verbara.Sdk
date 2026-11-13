@@ -471,8 +471,10 @@ public interface IAriMailboxesResource
 /// <see cref="DialingOffhook"/>, <c>"Pre-ring"</c> to <see cref="PreRing"/>, and both <c>"Rsrvd"</c> and the
 /// schema's <c>"Rsrved"</c> to <see cref="Rsrvd"/>. A state string it has no member for, including Asterisk's
 /// <c>"Unknown (N)"</c>, reads as <see cref="Unknown"/>, and the event or reply that carries it is still
-/// delivered. Members keep their values; <see cref="Mute"/> was added after <see cref="Unknown"/>.
+/// delivered. Members keep their values; <see cref="Mute"/> was added after <see cref="Unknown"/>. The reader is
+/// <see cref="AriChannelStateConverter"/>, declared on this type, so any serializer reads and writes these spellings.
 /// </remarks>
+[JsonConverter(typeof(AriChannelStateConverter))]
 public enum AriChannelState
 {
     Down,
