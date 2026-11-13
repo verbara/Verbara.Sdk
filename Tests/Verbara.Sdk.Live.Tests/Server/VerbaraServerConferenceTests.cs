@@ -142,4 +142,33 @@ public sealed class VerbaraServerConferenceTests : IAsyncLifetime
         joined.Should().HaveCount(2, "each join raises UserJoined once");
         left.Should().HaveCount(2, "each leave raises UserLeft once");
     }
+
+    [Fact]
+    public async Task Hangup_ShouldLeaveTheParticipantHeld_WhenNoLeaveFollows()
+    {
+        var left = new List<MeetMeUser>();
+        _sut.MeetMe.UserLeft += (_, user) => left.Add(user);
+        await StartAndGetObserverAsync();
+        JoinBoth();
+
+        _observer!.OnNext(new HangupEvent { UniqueId = FirstUniqueId, Channel = FirstChannel, Cause = 16 });
+
+        (_sut.MeetMe.GetRoom(Conference)?.Users.Keys).Should().BeEquivalentTo([FirstChannel, SecondChannel],
+            "a Hangup is not a leave in a conference: Asterisk can report the participant's leave after it");
+        left.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ConfbridgeLeave_ShouldLeaveOnceAsObserved_WhenItArrivesAfterTheParticipantsHangup()
+    {
+        var left = new List<(string? UniqueId, bool LeaveNotObserved)>();
+        _sut.MeetMe.UserLeft += (_, user) => left.Add((user.UniqueId, user.LeaveNotObserved));
+        await StartAndGetObserverAsync();
+        JoinBoth();
+
+        _observer!.OnNext(new HangupEvent { UniqueId = FirstUniqueId, Channel = FirstChannel, Cause = 16 });
+        Leave(FirstChannel, FirstUniqueId);
+
+        left.Should().Equal([(FirstUniqueId, false)], "the leave that follows the Hangup is the one Live applies");
+    }
 }
