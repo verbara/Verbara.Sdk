@@ -740,7 +740,8 @@ public sealed class QueueManager
     {
         // Read without the queue's lock, which is taken only for a caller on this Uniqueid: the removal takes out exactly
         // the entry read, and is posted under the lock, so a later join of the same caller is announced after this leave.
-        foreach (var queue in _queues.Values)
+        // The table is enumerated directly: its Values property takes every lock of the dictionary and copies it.
+        foreach (var (_, queue) in _queues)
         {
             foreach (var (key, entry) in queue.Entries)
             {
