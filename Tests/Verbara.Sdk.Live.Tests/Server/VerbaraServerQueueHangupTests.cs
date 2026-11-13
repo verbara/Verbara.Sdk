@@ -45,7 +45,10 @@ public sealed class VerbaraServerQueueHangupTests : IAsyncLifetime
             .Returns(call => Answer(call.Arg<ManagerAction>() is QueueStatusAction ? _queueStatus : []));
         _sut = new VerbaraServer(_connection, NullLogger<VerbaraServer>.Instance);
         _sut.Queues.CallerLeft += (queue, entry) =>
-            _left.Add(new LeftInHandler(queue, entry.UniqueId, entry.Channel, entry.LeaveNotObserved));
+        {
+            lock (_left)
+                _left.Add(new LeftInHandler(queue, entry.UniqueId, entry.Channel, entry.LeaveNotObserved));
+        };
         _sut.Queues.CallerLeaveReported += report => _reported.Add(report.UniqueId);
     }
 
@@ -184,10 +187,41 @@ public sealed class VerbaraServerQueueHangupTests : IAsyncLifetime
         _left.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Hangup_ShouldNotBeUndoneByASnapshotRowAppliedConcurrently()
+    {
+        await _sut.StartAsync();
+        Join(Caller, "u1");
+        _queueStatus = [Params(), SnapshotEntry(Caller, "u1")];
+        Task? hangup = null;
+        _sut.QueueRowBuffered = () =>
+        {
+            // The event pump reports the Hangup on its own thread while the load goes on to apply the row it read.
+            if (_sut.QueueRowBuffered is not null && BufferedEntry())
+            {
+                _sut.QueueRowBuffered = null;
+                hangup = Task.Run(() => Hangup("u1", Caller));
+            }
+        };
+
+        await _sut.RequestInitialStateAsync().AsTask().WaitAsync(CleanupBound);
+        await hangup!.WaitAsync(CleanupBound);
+
+        using var scope = new AssertionScope();
+        Held().Should().BeEmpty("the row was read before the caller hung up, so applying it would put back a caller who has gone");
+        LeftSoFar().Should().Equal(new LeftInHandler(Queue, "u1", Caller, LeaveNotObserved: true));
+    }
+
     // The buffered rows are Params then the entry: the entry is buffered on the second call.
     private int _buffered;
 
     private bool BufferedEntry() => ++_buffered == 2;
+
+    private LeftInHandler[] LeftSoFar()
+    {
+        lock (_left)
+            return [.. _left];
+    }
 
     private string?[] Held() =>
         _sut.Queues.GetByName(Queue) is { } queue ? [.. queue.Entries.Values.Select(e => e.UniqueId)] : [];
