@@ -18,6 +18,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Live` | [A channel subscriber's failure stays with that subscriber](#a-channel-subscribers-failure-stays-with-that-subscriber) | behaviour, BREAKING |
 | `Verbara.Sdk.Live` | [A live channel follows its dialplan location and caller ID](#a-live-channel-follows-its-dialplan-location-and-caller-id) | fix, behaviour |
 | `Verbara.Sdk.Live` | [A refused `Status` is counted and reported by the pool health check](#a-refused-status-is-counted-and-reported-by-the-pool-health-check) | new members, health check |
+| `Verbara.Sdk.Live` | [A waiting caller that only hangs up leaves the queue table](#a-waiting-caller-that-only-hangs-up-leaves-the-queue-table) | fix, behaviour |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
 | `Verbara.Sdk.Ami` | [`NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends](#newextenevent-and-newcalleridevent-carry-what-the-wire-sends) | fix, new members |
 | `Verbara.Sdk.Ami` | [An action the SDK does not type is sent with `RawAction`](#an-action-the-sdk-does-not-type-is-sent-with-rawaction) | new type, behaviour, BREAKING |
@@ -379,6 +380,26 @@ the pool has refused as a server id since 2.9.0.
 **What to do.** Give the server's AMI user `Status`, or alert on `live.status.refused` and on the `Degraded` check. On
 such a server the session engine cannot decide the calls it did not see whole, see
 [above](#a-call-ends-only-when-its-server-holds-none-of-its-channels).
+
+### A waiting caller that only hangs up leaves the queue table
+
+**What changed.** A caller that another channel relieves while it waits in a queue (an attended transfer, an `INVITE`
+with `Replaces`), or that `Action: Bridge` takes out of the queue, gets no `QueueCallerLeave` from Asterisk: it only
+hangs up. Live used to keep it in `AsteriskQueue.Entries`, counted as waiting with its `JoinedAt`, until the next reload,
+which without a reconnect could be the life of the connection. Now, when Asterisk reports the `Hangup` of a `Uniqueid` a
+queue holds, Live removes that caller: `live.queue.calls.left` advances, no `live.queue.wait_time` sample is recorded,
+and `CallerLeft` is raised with `LeaveNotObserved` reading `true`, as for a caller a reload removes. A caller held
+without a `Uniqueid` (added through the public `OnCallerJoined`) is not matched. A conference participant's `Hangup`
+still removes nothing: Asterisk can send its `ConfbridgeLeave` after the `Hangup`.
+
+**Who is affected.** A `CallerLeft` handler, which now hears these callers at their hangup instead of at a reload, and a
+reader of `Entries` or `EntryCount`, which stop counting them. After a relief the channel that took the caller's place
+never sent a `QueueCallerJoin`, so from the caller's `Hangup` until that channel leaves the table holds one caller fewer
+than the queue. A queue leave that Asterisk sent after the caller's `Hangup` would now read `LeaveNotObserved == true`:
+none of 640 did on Asterisk 20.20.1, 22.11.0, 23.5.0 and 24.0.0-rc2, measured on an idle server, not under load.
+
+**What to do.** Nothing, if your `CallerLeft` handler already handles `LeaveNotObserved == true`. A bridged-out caller
+stays counted until its bridged call ends.
 
 ## AMI
 
