@@ -7,8 +7,8 @@ using Verbara.Sdk.Ari.Resources;
 namespace Verbara.Sdk.Ari.Tests.Client;
 
 /// <summary>
-/// Where the channel-state reader is registered. It belongs to <see cref="AriChannelState"/> itself, so any
-/// serializer reads Asterisk's spellings, and it is not in <see cref="AriJsonContext"/>'s options, where a single
+/// Where the channel-state reader is registered. It belongs to <see cref="AriChannelState"/> itself, so a serializer
+/// whose options list no enum converter of their own reads Asterisk's spellings, and it is not in <see cref="AriJsonContext"/>'s options, where a single
 /// converter turns off the source-generated write path of every type in the context.
 /// </summary>
 public sealed class AriChannelStateRegistrationTests
@@ -82,6 +82,9 @@ public sealed class AriChannelStateRegistrationTests
     [InlineData("PreRing", AriChannelState.PreRing)]
     [InlineData("up", AriChannelState.Up)]
     [InlineData("Unknown (7)", AriChannelState.Unknown)]
+    [InlineData("6", AriChannelState.Up)]
+    [InlineData("42", AriChannelState.Unknown)]
+    [InlineData("-1", AriChannelState.Unknown)]
     public void AConsumersOwnContext_ShouldReadAsterisksSpelling_WhenTheStateIsADictionaryKey(
         string key, AriChannelState expected)
     {
@@ -89,6 +92,22 @@ public sealed class AriChannelStateRegistrationTests
             $$"""{"{{key}}":5}""", ConsumerAriJsonContext.Default.DictionaryAriChannelStateInt32);
 
         states.Should().ContainSingle().Which.Should().Be(new KeyValuePair<AriChannelState, int>(expected, 5));
+    }
+
+    [Fact]
+    public void OptionsWithTheirOwnEnumConverter_ShouldWriteTheMemberNameAndRefuseAsterisksSpelling()
+    {
+        var options = new JsonSerializerOptions
+        {
+            TypeInfoResolver = ConsumerAriJsonContext.Default,
+            Converters = { new JsonStringEnumConverter<AriChannelState>() },
+        };
+        var channelInfo = (JsonTypeInfo<AriChannel>)options.GetTypeInfo(typeof(AriChannel));
+
+        JsonSerializer.Serialize(new AriChannel { Id = "c", State = AriChannelState.PreRing }, channelInfo)
+            .Should().Contain("\"State\":\"PreRing\"");
+        var read = () => JsonSerializer.Deserialize("""{"Id":"c","State":"Pre-ring"}""", channelInfo);
+        read.Should().Throw<JsonException>();
     }
 
     [Fact]

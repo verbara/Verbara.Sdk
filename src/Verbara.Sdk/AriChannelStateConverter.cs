@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -21,9 +23,12 @@ namespace Verbara.Sdk;
 /// <see cref="AriChannelState.Unknown"/>. Writing emits Asterisk's spelling.
 /// </para>
 /// <para>
-/// It is declared on <see cref="AriChannelState"/> itself with <see cref="JsonConverterAttribute"/>, so every
-/// serializer uses it, including a consumer's own source-generated context; a source generator instantiates it
-/// directly, with no reflection. Code rarely needs to name it.
+/// It is declared on <see cref="AriChannelState"/> itself with <see cref="JsonConverterAttribute"/>, so a consumer's own
+/// source-generated context or options use it too, for a property and for a dictionary key; a source generator
+/// instantiates it directly, with no reflection. Options whose <see cref="JsonSerializerOptions.Converters"/> list an
+/// enum converter of their own, such as a global <see cref="JsonStringEnumConverter"/>, use that one instead: a
+/// converter in the options wins over one declared on the type. To read Asterisk's spellings through such options,
+/// remove that converter or insert this one ahead of it.
 /// </para>
 /// </remarks>
 public sealed class AriChannelStateConverter : JsonConverter<AriChannelState>
@@ -48,6 +53,42 @@ public sealed class AriChannelStateConverter : JsonConverter<AriChannelState>
             return AriChannelState.Unknown;
         }
 
+        return ReadText(ref reader);
+    }
+
+    /// <summary>
+    /// Reads a channel state used as a dictionary key, with the same spellings as <see cref="Read"/>; a key that is a
+    /// member's number (0 to 11) reads as that member.
+    /// </summary>
+    /// <param name="reader">The reader, positioned on the property name.</param>
+    /// <param name="typeToConvert">The type being converted.</param>
+    /// <param name="options">The serializer options in use.</param>
+    /// <returns>The state, or <see cref="AriChannelState.Unknown"/> when the key names no member.</returns>
+    public override AriChannelState ReadAsPropertyName(
+        ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        var state = ReadText(ref reader);
+        if (state != AriChannelState.Unknown)
+            return state;
+
+        var text = reader.GetString();
+        return int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var number)
+            && number <= (int)AriChannelState.Mute
+                ? (AriChannelState)number
+                : AriChannelState.Unknown;
+    }
+
+    /// <summary>Writes Asterisk's spelling of <paramref name="value"/> as a dictionary key.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="value">The state to write.</param>
+    /// <param name="options">The serializer options in use.</param>
+    public override void WriteAsPropertyName(Utf8JsonWriter writer, AriChannelState value, JsonSerializerOptions options) =>
+        writer.WritePropertyName(ToText(value));
+
+    // Inlined so Read's string path compiles as it did before the key methods shared it.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static AriChannelState ReadText(ref Utf8JsonReader reader)
+    {
         // The states PJSIP produces, most frequent first, then the rest of ast_state2str.
         if (reader.ValueTextEquals("Up"u8)) return AriChannelState.Up;
         if (reader.ValueTextEquals("Down"u8)) return AriChannelState.Down;
