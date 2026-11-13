@@ -359,26 +359,46 @@ public sealed class VerbaraServerQueueDiscoveryTests
     public async Task QueueCallerJoin_ShouldAskAgainOnTheNewSession_WhenTheListingOfTheOldOneNamedNoQueue()
     {
         var first = new BootingAsterisk { BootedAtLogin = true };
-        var second = new BootingAsterisk { BootedAtLogin = true };
-        await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
-        await run.StartServerAsync();
-
-        await first.SendEventAsync("QueueCallerJoin", AsteriskFrames.QueueCallerJoin(CallerUid, CallerChannel, "ghost", 1, 1));
-        var discovered = await DiscoveredAsync(run, first, "ghost");
-
-        var reloaded = run.ServerLog.Logged("[LIVE] State loaded", 2);
-        first.CloseSession();
-        await run.SecondSocketCreated.WaitAsync(Run.Bound);
-        run.ReleaseSecondPeer();
-        await reloaded.WaitAsync(Run.Bound);
-        await second.SendEventAsync("QueueCallerJoin", AsteriskFrames.QueueCallerJoin("1790633900.24", "PJSIP/far-00000024", "ghost", 1, 1));
-        var askedOnNewSession = await DiscoveredAsync(run, second, "ghost");
-
-        using (new AssertionScope())
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // The new session's reload is held on its QueueStatus, so no completed listing of every queue clears the marker:
+        // only the new session does.
+        var second = new BootingAsterisk
         {
-            discovered.Should().BeTrue();
-            askedOnNewSession.Should().BeTrue("a new AMI session holds no marker of the old one");
-            second.QueueStatusFilters.Should().Equal([null, "ghost"]);
+            BootedAtLogin = true, AnsweredAfter = new Dictionary<string, Task> { ["QueueStatus"] = answer.Task },
+        };
+        await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
+        try
+        {
+            await run.StartServerAsync();
+            await first.SendEventAsync("QueueCallerJoin", AsteriskFrames.QueueCallerJoin(CallerUid, CallerChannel, "ghost", 1, 1));
+            var discovered = await DiscoveredAsync(run, first, "ghost");
+
+            var reloaded = run.ServerLog.Logged("[LIVE] State loaded", 2);
+            first.CloseSession();
+            await run.SecondSocketCreated.WaitAsync(Run.Bound);
+            run.ReleaseSecondPeer();
+            await second.AskedAtLeast("QueueStatus", 1).WaitAsync(Run.Bound);
+            await second.SendEventAsync("QueueCallerJoin", AsteriskFrames.QueueCallerJoin("1790633900.24", "PJSIP/far-00000024", "ghost", 1, 1));
+            await DispatchedAsync(run, second, "ghost-on-new-session");
+            // Registered on the dispatch, before it is sent: the peer reads it once it has answered the reload's.
+            var askedOnNewSession = run.Server.PendingQueueDiscoveryCount == 1;
+            var pending = run.Server.PendingQueueDiscovery("ghost");
+            answer.SetResult();
+            var finished = await CompletesWithinBoundAsync(pending);
+            var loaded = await CompletesWithinBoundAsync(reloaded);
+
+            using (new AssertionScope())
+            {
+                discovered.Should().BeTrue();
+                askedOnNewSession.Should().BeTrue("a new AMI session holds no marker of the old one");
+                finished.Should().BeTrue();
+                loaded.Should().BeTrue("the new session's reload completes");
+                second.QueueStatusFilters.Should().Equal([null, "ghost"]);
+            }
+        }
+        finally
+        {
+            answer.TrySetResult();
         }
     }
 
