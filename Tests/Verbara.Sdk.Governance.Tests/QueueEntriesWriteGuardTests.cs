@@ -76,6 +76,38 @@ public sealed class QueueEntriesWriteGuardTests
     }
 
     [Fact]
+    public void Scan_ShouldReportTheWrite_WhenItIsNullConditionalRemoveOrThroughACast()
+    {
+        const string source =
+            "namespace Fixture;\n" +
+            "public sealed class QueueManager\n" +
+            "{\n" +
+            "    void A(AsteriskQueue? q, string k) { q?.Entries.TryRemove(k, out _); }\n" +
+            "    void B(AsteriskQueue q, string k) { q.Entries.Remove(k, out _); }\n" +
+            "    void C(AsteriskQueue q, string k) { ((System.Collections.Generic.IDictionary<string, AsteriskQueueEntry>)q.Entries).Remove(k); }\n" +
+            "    void D(AsteriskQueue q, string k) { q.Entries?.TryRemove(k, out _); }\n" +
+            "    void E(AsteriskQueue? q, string k, AsteriskQueueEntry e) { q?.Entries[k] = e; }\n" +
+            "    void F(AsteriskQueue q, string k) { _ = q.Entries?[k]; }\n" +
+            "}\n";
+
+        QueueEntriesWriteScanner.Scan(source, "x.cs").Select(violation => violation.Line).Should().Equal(4, 5, 6, 7, 8, 9);
+    }
+
+    [Fact]
+    public void Scan_ShouldMissTheWrite_WhenItGoesThroughAnAlias()
+    {
+        // The documented limit: following a value needs types and flow, which a syntax scan does not have.
+        const string source =
+            "namespace Fixture;\n" +
+            "public sealed class QueueManager\n" +
+            "{\n" +
+            "    void A(AsteriskQueue q, string k) { var e = q.Entries; e.TryRemove(k, out _); }\n" +
+            "}\n";
+
+        QueueEntriesWriteScanner.Scan(source, "x.cs").Should().BeEmpty("an alias is a known limit of the scan");
+    }
+
+    [Fact]
     public void Scan_ShouldPass_WhenTheWritesSitInTheHelpers()
     {
         const string source =

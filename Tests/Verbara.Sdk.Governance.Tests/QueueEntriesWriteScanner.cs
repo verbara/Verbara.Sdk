@@ -21,10 +21,19 @@ internal sealed record QueueEntriesWriteViolation(string Path, int Line, string 
 /// <para>
 /// A write is an element access on <c>Entries</c> (<c>x.Entries[key]</c>, read or written: the table is read through
 /// <c>TryGetValue</c> and <c>GetValueOrDefault</c>) or a call of <c>TryRemove</c>, <c>TryAdd</c>, <c>AddOrUpdate</c>,
-/// <c>GetOrAdd</c>, <c>TryUpdate</c> or <c>Clear</c> on it. The receiver is recognised by name: a member access whose
-/// name is <c>Entries</c>, or a bare <c>Entries</c> inside the class <c>AsteriskQueue</c>. Syntax only, no types: another
-/// type's member access named <c>Entries</c> is reported too (a false red, never a false green); a bare <c>Entries</c> in
-/// another class is a member of that class and is not.
+/// <c>GetOrAdd</c>, <c>TryUpdate</c>, <c>Clear</c> or <c>Remove</c> (the <c>CollectionExtensions</c> method and
+/// <c>IDictionary</c>'s) on it. The receiver is recognised by name: a member access whose name is <c>Entries</c>, a
+/// member binding named <c>Entries</c> under a null-conditional access (<c>x?.Entries.TryRemove(…)</c>,
+/// <c>x?.Entries[key]</c>), a null-conditional access whose receiver is one of these (<c>x.Entries?.TryRemove(…)</c>),
+/// any of these inside parentheses or a cast (<c>((IDictionary&lt;…&gt;)x.Entries).Remove(key)</c>), or a bare
+/// <c>Entries</c> inside the class <c>AsteriskQueue</c>. Syntax only, no types: another type's member access named
+/// <c>Entries</c> is reported too (a false red, never a false green); a bare <c>Entries</c> in another class is a member
+/// of that class and is not.
+/// </para>
+/// <para>
+/// A known limit: a write through an alias (<c>var e = x.Entries; e.TryRemove(…)</c>, or the dictionary passed to a method
+/// that writes it) is not seen, since following a value needs types and flow. Review catches those; this guard catches
+/// the forms that write <c>Entries</c> where they name it.
 /// </para>
 /// <para>
 /// Writes inside <see cref="Helpers"/> of the class <c>QueueManager</c> are the funnel and are counted, not reported:
@@ -45,6 +54,7 @@ internal static class QueueEntriesWriteScanner
         "GetOrAdd",
         "TryUpdate",
         "Clear",
+        "Remove",
     };
 
     private const string EntriesName = "Entries";
@@ -87,16 +97,35 @@ internal static class QueueEntriesWriteScanner
                 } invocation when WriteMethods.Contains(method.Identifier.Text) && IsEntries(receiver):
                     yield return invocation;
                     break;
+
+                // x.Entries?.TryRemove(…) and x.Entries?[key]: the call or index binds to the conditional's receiver.
+                case InvocationExpressionSyntax { Expression: MemberBindingExpressionSyntax { Name: var bound } } invocation
+                    when WriteMethods.Contains(bound.Identifier.Text) && IsEntries(ConditionalReceiver(invocation)):
+                    yield return invocation;
+                    break;
+                case ElementBindingExpressionSyntax binding when IsEntries(ConditionalReceiver(binding)):
+                    yield return binding;
+                    break;
             }
         }
     }
 
-    private static bool IsEntries(ExpressionSyntax expression) => expression switch
+    private static bool IsEntries(ExpressionSyntax? expression) => expression switch
     {
         MemberAccessExpressionSyntax member => member.Name.Identifier.Text == EntriesName,
+        // x?.Entries.TryRemove(…), x?.Entries[key]: the member bound under the null-conditional access.
+        MemberBindingExpressionSyntax binding => binding.Name.Identifier.Text == EntriesName,
+        ParenthesizedExpressionSyntax parenthesized => IsEntries(parenthesized.Expression),
+        CastExpressionSyntax cast => IsEntries(cast.Expression),
         IdentifierNameSyntax bare => bare.Identifier.Text == EntriesName && EnclosingClass(bare) == OwnerClass,
         _ => false,
     };
+
+    // The receiver a binding inside a null-conditional access reads: the Expression of the nearest enclosing
+    // ConditionalAccessExpression whose WhenNotNull holds the binding.
+    private static ExpressionSyntax? ConditionalReceiver(SyntaxNode binding) =>
+        binding.Ancestors().OfType<ConditionalAccessExpressionSyntax>()
+            .FirstOrDefault(access => access.WhenNotNull.Span.Contains(binding.Span))?.Expression;
 
     private static bool InHelper(SyntaxNode write)
     {
