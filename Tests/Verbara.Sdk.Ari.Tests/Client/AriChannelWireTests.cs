@@ -126,7 +126,6 @@ public sealed class AriChannelWireTests
     }
 
     [Theory]
-    [InlineData("""{"id":"c","state":7}""")]
     [InlineData("""{"id":"c","state":null}""")]
     [InlineData("""{"id":"c","state":true}""")]
     [InlineData("""{"id":"c","state":{"name":"Up","code":6}}""")]
@@ -137,6 +136,27 @@ public sealed class AriChannelWireTests
 
         channel!.State.Should().Be(AriChannelState.Unknown);
         channel.Id.Should().Be("c");
+    }
+
+    [Theory]
+    [InlineData("0", AriChannelState.Down)]
+    [InlineData("6", AriChannelState.Up)]
+    [InlineData("7", AriChannelState.Busy)]
+    [InlineData("9", AriChannelState.PreRing)]
+    [InlineData("11", AriChannelState.Mute)]
+    [InlineData("12", AriChannelState.Unknown)]
+    [InlineData("-1", AriChannelState.Unknown)]
+    [InlineData("1.5", AriChannelState.Unknown)]
+    [InlineData("4294967296", AriChannelState.Unknown)]
+    public void Deserialize_ShouldReadAStoredMemberNumber_AndAnyOtherNumberAsUnknown(string number, AriChannelState expected)
+    {
+        // Asterisk never writes a number; a model stored by a serializer that wrote enums as numbers did, and 2.9.0
+        // read those back as their member.
+        var channel = JsonSerializer.Deserialize($$"""{"id":"c","state":{{number}},"name":"PJSIP/x"}""", AriJsonContext.Default.AriChannel);
+
+        channel!.State.Should().Be(expected);
+        channel.Id.Should().Be("c");
+        channel.Name.Should().Be("PJSIP/x");
     }
 
     [Fact]
@@ -186,6 +206,25 @@ public sealed class AriChannelWireTests
     [InlineData("PreRing", AriChannelState.PreRing)]
     [InlineData("pre-ring", AriChannelState.PreRing)]
     public void Deserialize_ShouldKeepReadingTheSpellingsTheEarlierReaderAccepted(string wire, AriChannelState expected)
+    {
+        var channel = JsonSerializer.Deserialize(
+            WithState(CapturedChannelReply, "Up", wire), AriJsonContext.Default.AriChannel);
+
+        channel!.State.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("down", AriChannelState.Down)]
+    [InlineData("RING", AriChannelState.Ring)]
+    [InlineData("ringing", AriChannelState.Ringing)]
+    [InlineData("busy", AriChannelState.Busy)]
+    [InlineData("dialing", AriChannelState.Dialing)]
+    [InlineData("offhook", AriChannelState.OffHook)]
+    [InlineData("dialing offhook", AriChannelState.DialingOffhook)]
+    [InlineData("prering", AriChannelState.PreRing)]
+    [InlineData("mute", AriChannelState.Mute)]
+    [InlineData("rsrved", AriChannelState.Rsrvd)]
+    public void Deserialize_ShouldReadAsterisksSpellingsAndTheMemberNames_IgnoringCase(string wire, AriChannelState expected)
     {
         var channel = JsonSerializer.Deserialize(
             WithState(CapturedChannelReply, "Up", wire), AriJsonContext.Default.AriChannel);
