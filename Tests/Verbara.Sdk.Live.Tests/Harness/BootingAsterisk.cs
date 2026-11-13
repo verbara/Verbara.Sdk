@@ -101,8 +101,9 @@ internal sealed record QueueCaller(string Channel, string UniqueId, int Position
 /// <param name="Members">The <c>Location</c> of each static member.</param>
 /// <param name="Callers">The callers waiting in it.</param>
 /// <param name="Strategy">Its strategy.</param>
+/// <param name="PausedMembers">The <c>Location</c> of each member of <paramref name="Members"/> listed paused.</param>
 internal sealed record ListedQueue(string Name, IReadOnlyList<string> Members, IReadOnlyList<QueueCaller> Callers,
-    string Strategy = "rrmemory");
+    string Strategy = "rrmemory", IReadOnlyList<string>? PausedMembers = null);
 
 /// <summary>
 /// Plays, over one <see cref="PipedSocket"/> session, an Asterisk that accepted the AMI login before its modules
@@ -854,7 +855,8 @@ internal sealed class BootingAsterisk
                 await socket.WriteEventAsync("QueueMember",
                 [
                     new("ActionID", id), new("Queue", queue.Name), new("Name", location), new("Location", location),
-                    new("StateInterface", location), new("Penalty", "0"), new("Status", "1"), new("Paused", "0"),
+                    new("StateInterface", location), new("Penalty", "0"), new("Status", "1"),
+                    new("Paused", queue.PausedMembers?.Contains(location) == true ? "1" : "0"),
                 ]);
                 items++;
             }
