@@ -932,6 +932,21 @@ public sealed class VerbaraServer : IVerbaraServer
     /// discovers a queue Asterisk never lists, and no caller's earlier wait is invented.
     /// </para>
     /// <para>
+    /// Over an <see cref="AmiConnection"/> Live also asks on its own, for one queue: when a queue event (a caller's join,
+    /// leave or abandonment, a member's addition, removal, pause or device state) names a queue the table holds no listing
+    /// of, it sends <c>QueueStatus</c> for that queue alone, outside the event's handler, and admits what the answer lists
+    /// of that queue, as this call admits it, removing nothing. It asks once per queue name, in any letter case, while one
+    /// such request is in flight on an AMI session; a request that did not complete is asked again at the next event, and
+    /// one Asterisk answered with no row of the queue is not asked again on that session. A queue that sends no event is
+    /// found only by this call, or by the reload after the next reconnect: nothing polls.
+    /// </para>
+    /// <para>
+    /// The agents of the <c>Agent/</c> memberships it adds, removes or changes are settled as a live member event settles
+    /// them: <see cref="AgentManager.AgentStateChanged"/> is raised once for an agent whose state changed, and not for an
+    /// agent logged off or on a call; no agents listing is asked. They are settled also when a handler of the queue table
+    /// throws while the snapshot is applied, for what was applied before it; that failure then leaves this call.
+    /// </para>
+    /// <para>
     /// The reconciliation holds to the rules of a load's queues. A held caller the snapshot still lists keeps its entry
     /// and its <see cref="Queues.AsteriskQueueEntry.JoinedAt"/>, and no join is counted for it again. A held caller the
     /// completed snapshot omits, and whose join was handled before the snapshot was asked for, leaves the table counted

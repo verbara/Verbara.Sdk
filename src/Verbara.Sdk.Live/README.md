@@ -115,8 +115,21 @@ var sales = server.Queues.GetByName("sales"); // its parameters, members and wai
 - A snapshot that did not complete reconciles nothing: a cancelled read throws `OperationCanceledException`, and a read
   whose AMI session ended, or a connection that is not established, throws `AmiNotConnectedException`. A `QueueStatus`
   that Asterisk refuses reconciles nothing and does not throw.
+- An `Agent/<id>` membership it adds, removes or changes settles that agent's state as a live member event does: one
+  `AgentStateChanged` for an agent whose state changed, none for one logged off or on a call, and no agents listing.
 - It is logged at Debug and never reported as a state load. Nothing calls it for you: a queue Asterisk creates without
   an event is found by this call, or by the reload after the next reconnect.
+
+Live also asks on its own when it can. Once a queue event (`QueueCallerJoin`, `QueueCallerLeave`,
+`QueueCallerAbandon`, `QueueMemberAdded`, `QueueMemberRemoved`, `QueueMemberPause`, `QueueMemberStatus`) names a queue
+Live holds no listing of, it sends `QueueStatus` for that queue alone, outside the event's handler, and admits the
+queue's parameters, members and waiting callers from the answer. The event itself is applied as always, once: a
+caller whose join asked for the listing and who is in it is held and counted once. That targeted listing only admits:
+it removes nothing, ends no session's queue visit, and ignores rows of any other queue; a caller or member seen leaving
+while it is read stays gone. Events naming the same queue (in any letter case) on one AMI session share one request; a
+request that did not complete is asked again at the next event, and a queue Asterisk answered with no row for is not
+asked again on that session (a new session, or a completed `ReconcileQueuesAsync`, clears that). It runs only over the
+SDK's own `AmiConnection`. A queue that sends no event still needs the explicit refresh: nothing polls.
 
 ## Documentation
 
