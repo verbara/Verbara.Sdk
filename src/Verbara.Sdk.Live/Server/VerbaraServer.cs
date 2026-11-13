@@ -280,8 +280,9 @@ public sealed class VerbaraServer : IVerbaraServer
     // listed no row of the queue, not asked again on that session. Keyed as queues are, ignoring case. A new session
     // starts both empty; a completed listing of every queue clears the second.
     // No queue is asked for alone on a session until a listing of every queue (its load's, a reconnect's reload or a
-    // ReconcileQueuesAsync) has ended with Asterisk's answer on it, nor while one is read: a name an event gives before
-    // then waits in _namedDuringListing, and is asked for once the listing ends only if it did not list the queue.
+    // ReconcileQueuesAsync) has ended on it, however it ended, or a load on it has ended before its listing; nor while one
+    // is read: a name an event gives before then waits in _namedDuringListing, and is asked for once the listing ends
+    // only if the table still holds no listing of the queue. Only a session that has ended stays shut.
     private readonly Lock _discoveryGate = new();
     private Task? _discoverySession;
     private readonly Dictionary<string, QueueDiscovery> _discoveries = new(StringComparer.OrdinalIgnoreCase);
@@ -948,15 +949,19 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </para>
     /// <para>
     /// It asks for a queue alone only once a listing of every queue on that AMI session (the start's load, a reconnect's
-    /// reload, or this call) has ended with Asterisk's answer, applied or refused, and never while one is read. An event
-    /// that names a queue before or during that listing waits for it to end, and its queue is then asked for alone only if
-    /// the listing did not list it: a start or a reconnect sends one <c>QueueStatus</c> for every queue, not one per queue
-    /// its events name. A session whose load ended before its queue listing (a start cancelled before it) asks for no
-    /// queue alone until this call or the next reconnect's reload lists them. A refused targeted listing marks nothing:
-    /// Asterisk registers <c>QueueStatus</c> with no permission class, so it refuses it only while <c>app_queue</c> is not
-    /// loaded or Asterisk is shutting down, and the next event naming the queue asks again. A queue taken out of the table
-    /// by <see cref="QueueManager.RemoveQueue"/> or <see cref="QueueManager.Clear"/> is asked for again, with its members
-    /// and waiting callers, at the next event that names it.
+    /// reload, or this call) has ended, and never while one is read. A listing ends however it ends: applied, refused by
+    /// Asterisk, or cut short by its token or by a handler of the queue table that threw. A load on that session that
+    /// ended before its listing (an earlier step threw, or its token was cancelled) counts as one that ended. Only a
+    /// listing or a load whose AMI session ended first leaves that session asking for no queue alone; the next
+    /// session's reload lists the queues. An event that names a queue before or during that listing waits for it to end,
+    /// and its queue is then asked for alone only if the table still holds no listing of it. So a start or a reconnect
+    /// whose listing was applied in full sends one <c>QueueStatus</c> for every queue, not one per queue its events name;
+    /// one whose listing was not sends one more <c>QueueStatus</c> for each named queue the table does not hold listed.
+    /// A refused targeted listing marks nothing: Asterisk registers <c>QueueStatus</c> with no permission class, so it
+    /// refuses it only while <c>app_queue</c> is not loaded or Asterisk is shutting down, and the next event naming the
+    /// queue asks again. A queue taken out of the table by <see cref="QueueManager.RemoveQueue"/> or
+    /// <see cref="QueueManager.Clear"/> is asked for again, with its members and waiting callers, at the next event that
+    /// names it.
     /// </para>
     /// <para>
     /// The agents of the <c>Agent/</c> memberships it adds, removes or changes are settled as a live member event settles
@@ -1173,11 +1178,10 @@ public sealed class VerbaraServer : IVerbaraServer
     }
 
     /// <summary>
-    /// A listing of every queue counted by <see cref="BeginFullQueueListing"/> ended. <paramref name="answered"/>: Asterisk
-    /// answered it, with a listing that was applied or with a refusal, which opens the session to targeted discovery.
-    /// Once none is read, each name an event gave meanwhile is asked for, if the table still holds no listing of it.
+    /// A listing of every queue counted by <see cref="BeginFullQueueListing"/> ended, however it ended: applied, refused,
+    /// or cut short by its token or by a queue handler that threw. See <see cref="OpenDiscoveryLocked"/>.
     /// </summary>
-    private void EndFullQueueListing(LoadSession session, bool answered)
+    private void EndFullQueueListing(LoadSession session)
     {
         lock (_discoveryGate)
         {
@@ -1185,18 +1189,46 @@ public sealed class VerbaraServer : IVerbaraServer
                 return;
 
             _fullQueueListingsOpen--;
-            if (answered)
-                _sessionQueuesListed = true;
-            if (!_sessionQueuesListed || _fullQueueListingsOpen > 0 || _namedDuringListing.Count == 0)
+            OpenDiscoveryLocked(session);
+        }
+    }
+
+    /// <summary>
+    /// A load on <paramref name="session"/> ended, whichever step it reached. One that ended before its listing of every
+    /// queue (a step before it threw, or its token was cancelled) has no listing to open the session, and none follows on
+    /// that session but a <see cref="ReconcileQueuesAsync"/>: it opens the session as an ended listing does, unless the
+    /// session ended. For a load whose listing ended, the session is already open and this changes nothing.
+    /// </summary>
+    private void EndLoadOnSession(LoadSession session)
+    {
+        lock (_discoveryGate)
+        {
+            if (!session.IsCurrent)
                 return;
 
-            string[] named = [.. _namedDuringListing];
-            _namedDuringListing.Clear();
-            foreach (var queueName in named.Where(name => !Queues.HoldsListingOf(name) && !_unlistedQueues.Contains(name)
-                && !_discoveries.ContainsKey(name)))
-            {
-                StartDiscoveryLocked(session.Connection, queueName);
-            }
+            EnterDiscoverySessionLocked(session.FullyBooted);
+            OpenDiscoveryLocked(session);
+        }
+    }
+
+    /// <summary>
+    /// Opens <paramref name="session"/> to targeted discovery, unless it has ended: a session that ended stays shut, and
+    /// the next one's reload lists the queues. Once no listing of every queue is read, each name an event gave meanwhile is
+    /// asked for, if the table still holds no listing of it. Under the discovery gate.
+    /// </summary>
+    private void OpenDiscoveryLocked(LoadSession session)
+    {
+        if (session.IsCurrent)
+            _sessionQueuesListed = true;
+        if (!_sessionQueuesListed || _fullQueueListingsOpen > 0 || _namedDuringListing.Count == 0)
+            return;
+
+        string[] named = [.. _namedDuringListing];
+        _namedDuringListing.Clear();
+        foreach (var queueName in named.Where(name => !Queues.HoldsListingOf(name) && !_unlistedQueues.Contains(name)
+            && !_discoveries.ContainsKey(name)))
+        {
+            StartDiscoveryLocked(session.Connection, queueName);
         }
     }
 
@@ -1725,6 +1757,13 @@ public sealed class VerbaraServer : IVerbaraServer
             // exception untouched, since it was started before the connection was established.
             throw states.Stop($"the live state load could not send {request}, because its AMI session had ended");
         }
+        finally
+        {
+            // However the load ended: one that ended before its queue step has no listing of every queue to open its
+            // session to targeted discovery, and nothing else lists the queues on it.
+            if (session is not null)
+                EndLoadOnSession(session);
+        }
 
         VerbaraServerLog.InitialStateLoaded(_logger, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
         LiveActivitySource.SetStateLoadResult(activity, Channels.ChannelCount, Queues.QueueCount, Agents.AgentCount);
@@ -1757,7 +1796,7 @@ public sealed class VerbaraServer : IVerbaraServer
     /// interface a listed row applied, added before the row is applied, and every one the completion removed, added under
     /// the window gate before its notifications are raised: a handler that throws leaves it complete for what was
     /// committed. A listing of every queue on an <see cref="AmiConnection"/> holds the session's targeted discovery back
-    /// while it is read (<see cref="BeginFullQueueListing"/>), and lets it go once it ends.
+    /// while it is read (<see cref="BeginFullQueueListing"/>), and lets it go once it ends, however it ends.
     /// </remarks>
     private async ValueTask<bool> LoadQueuesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
         Barriers barriers, string readerName, CancellationToken cancellationToken, HashSet<string>? touched = null,
@@ -1769,17 +1808,14 @@ public sealed class VerbaraServer : IVerbaraServer
                 cancellationToken);
         }
 
-        var answered = false;
         try
         {
-            var applied = await ReadQueuesAsync(session, states, activity, barriers, readerName, touched, target: null,
+            return await ReadQueuesAsync(session, states, activity, barriers, readerName, touched, target: null,
                 cancellationToken);
-            answered = true;
-            return applied;
         }
         finally
         {
-            EndFullQueueListing(session, answered);
+            EndFullQueueListing(session);
         }
     }
 
