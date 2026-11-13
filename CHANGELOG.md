@@ -84,7 +84,7 @@ only Asterisk 11 and earlier send; `QueueMemberPause` is unchanged. Recompile ag
 removed types. The `VSDK0005` warning's link still opens the replacement for each symbol; the migration guide has
 the rest ([The types deprecated with `VSDK0005` are removed](docs/guides/migration-2.10.0.md#the-types-deprecated-with-vsdk0005-are-removed)).
 
-### Changed — BREAKING: seven AMI types whose wire name no Asterisk knows are deprecated with `VSDK0007` (#NNN)
+### Changed — BREAKING: seven AMI types whose wire name no Asterisk knows are deprecated with `VSDK0007` (#563)
 
 `DbPrefixGetAction` and `ExecAction` name actions no Asterisk registers (`DBPrefixGet`, `exec`): use
 `DbGetTreeAction`, and `CommandAction` or `RawAction`. `JitterBufStatsEvent`, `MasqueradeEvent`, `PriEventEvent`,
