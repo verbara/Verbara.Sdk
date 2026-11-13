@@ -2284,12 +2284,22 @@ public sealed class VerbaraServer : IVerbaraServer
                         Enum.TryParse<ChannelState>(nse.ChannelState, out var ns) ? ns : ChannelState.Unknown);
                     break;
 
+                // The queue hears of the Hangup by its Uniqueid, whatever the channel table holds: a caller that left its
+                // queue with no QueueCallerLeave (relieved by a transfer, or taken out by a bridge) leaves the table here.
+                // A conference participant does not: Asterisk can send a participant's ConfbridgeLeave after its Hangup.
                 case HangupEvent he:
-                    server.Channels.OnHangup(
-                        he.UniqueId ?? "",
-                        he.Cause is not null && Enum.IsDefined(typeof(HangupCause), he.Cause.Value)
-                            ? (HangupCause)he.Cause.Value
-                            : HangupCause.NormalClearing);
+                    try
+                    {
+                        server.Channels.OnHangup(
+                            he.UniqueId ?? "",
+                            he.Cause is not null && Enum.IsDefined(typeof(HangupCause), he.Cause.Value)
+                                ? (HangupCause)he.Cause.Value
+                                : HangupCause.NormalClearing);
+                    }
+                    finally
+                    {
+                        server.Queues.OnChannelHungUp(he.UniqueId ?? "");
+                    }
                     break;
 
                 // dialplan class: the channel moves to the step Asterisk reports. Absent on a connection that does not read

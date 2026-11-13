@@ -42,6 +42,24 @@ A consumer that deduplicates notifications by record equality, or keys them by `
 `notification with { Epoch = null }` instead. The notifications of a custom `ICallSessionManager` carry `null`
 unless it sets `Epoch`, so a consumer reads `Unknown` for them.
 
+### Fixed: a waiting caller that leaves a queue with no leave event leaves Live's queue table at its hangup (#567)
+
+A waiting caller that leaves a queue without a `QueueCallerLeave` (relieved by an attended transfer or an `INVITE`
+with `Replaces`, or taken out by `Action: Bridge`) now leaves Live's queue table when Asterisk reports its `Hangup`,
+instead of staying counted as waiting until the next reload. `CallerLeft` is raised for it with
+`LeaveNotObserved == true`; no wait sample is recorded and `CallerLeaveReported` is not raised. A queue leave Asterisk
+sent after the caller's `Hangup` would now read as not observed: none of 640 did on Asterisk 20.20.1, 22.11.0, 23.5.0
+and 24.0.0-rc2, not measured under load. A conference participant's `Hangup` still removes nothing.
+`AsteriskQueue.Entries` is read-only by contract: Live keeps an index of the callers it holds next to it, so a caller
+removed there directly costs each later hangup of its `Uniqueid` one look through every queue and keeps its key until
+`QueueManager.Clear`, and a caller added there directly is not removed by its hangup.
+
+### Changed: a queue join no longer copies its queue, and a hangup no queue holds looks through none (#567)
+
+A caller joining a queue no longer copies that queue's entries to look for itself: with 1,000 callers waiting a join
+allocates 208 B instead of 2,248 B and takes about 0.19 µs instead of about 4.6 µs. A hangup of a call no queue holds
+no longer looks through the queues: 0 B and about 6 ns at 200 queues.
+
 ### Fixed: a queue report nobody is subscribed to allocates nothing (#555)
 
 `QueueManager`: a queue params report, a member added or a caller's join on a queue the table already holds no longer
@@ -105,6 +123,43 @@ ids, the replacements the messages name, and the published instruments are as in
 recorded a measurement; the SDK has recorded nothing on `sessions.timed_out` or `sessions.orphaned` since 2.7.0
 (through 2.6.x the reconciliation sweep added to both, so a stored series keeps that history)
 ([guide](docs/guides/migration-2.10.0.md#vsdk0002-vsdk0003-vsdk0004-and-vsdk0006-name-their-removal-release)).
+
+### Changed — BREAKING: `AriRtpStats` reads a real `rtp_statistics` reply (#566)
+
+`Channels.GetRtpStatisticsAsync` threw `JsonException` on every reply a real Asterisk sends. `AriRtpStats.Rtt`,
+`LocalMaxrxploss` and `LocalMinrxploss` are now `double?` (Asterisk writes them as reals; `Rtt` is in seconds), and
+`LocalSsrc` and `RemoteSsrc` are `uint?` (a far end may pick an SSRC from 2^31 up). Code that reads these members into
+an `int` no longer compiles; code that reads `Rtt` into `var` or a `double` compiles and gets seconds. See the
+[migration guide](docs/guides/migration-2.10.0.md#arirtpstats-reads-a-real-reply-and-a-channel-state-never-drops-an-event).
+
+### Added: the 26 RTP statistics Asterisk sends and `AriRtpStats` lacked (#566)
+
+`Txoctetcount` and `Rxoctetcount` (`uint?`), the `Remote*jitter` and `Remote*rxploss` figures,
+`LocalNormdevrxploss`, `LocalStdevrxploss`, `Maxrtt`, `Minrtt`, `Normdevrtt`, `Stdevrtt`, and the media experience
+scores `Txmes`, `Rxmes`, `Remote*mes` and `Local*mes` (`double?`).
+
+### Added: `AriChannelStateConverter` (#566)
+
+The reader and writer of `AriChannelState`, public in `Verbara.Sdk` and declared on the enum with `[JsonConverter]`, so
+the SDK's serializer and a consumer's own source-generated context or `JsonSerializerOptions` read Asterisk's state
+spellings and write them, as a property and as a dictionary key. Options whose `Converters` list an enum converter of
+their own, such as a global `JsonStringEnumConverter`, keep using it: a converter in the options wins over one declared
+on the type, so they write the member name (`"PreRing"`) as in 2.9.0 and cannot read `"Pre-ring"`; remove that
+converter, or insert `new AriChannelStateConverter()` ahead of it. The SDK's own serializer now writes `"Pre-ring"` and
+`"Dialing Offhook"` where 2.9.0 wrote `"PreRing"` and `"DialingOffhook"`. Code that serializes an `AriChannel` with its
+own options and no enum converter now writes the state as Asterisk's text (`"state": "Up"`) where 2.9.0 wrote its
+number (`"state": 6`); a stored number from 0 to 11 still reads as its member. See the
+[migration guide](docs/guides/migration-2.10.0.md#arirtpstats-reads-a-real-reply-and-a-channel-state-never-drops-an-event).
+
+### Fixed: a channel state never drops an ARI event, and five members carry what Asterisk sends (#566)
+
+A channel whose `state` is `"Dialing Offhook"`, `"Pre-ring"`, `"Mute"`, `"Rsrved"` or `"Unknown (N)"` no longer drops
+the whole event, nor makes a REST call that returns it throw: the first two read as `DialingOffhook` and `PreRing`,
+`"Mute"` as the new `AriChannelState.Mute` (appended, value 11; no existing value changes), `"Rsrved"` as `Rsrvd`, and
+any state the SDK has no member for as `Unknown`; a number from 0 to 11 reads as that member, any other number as
+`Unknown`. `AriChannel.Protocol` reads `protocol_id`, `AriChannel.ChannelVars`
+reads `channelvars`, `ChannelHoldEvent.MusicClass` reads `musicclass`, `AriConfigInfo.SetId` reads `setid`, and
+`BridgeBlindTransferEvent.Transferer` reads the transferring channel from `channel`; each was always empty before.
 
 ### Changed — BREAKING: a call is found on the server that reported it (#533)
 

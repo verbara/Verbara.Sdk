@@ -5,6 +5,9 @@
     <IsTestProject>false</IsTestProject>
     <!-- BenchmarkDotNet requires instance methods; suppress CA1822 -->
     <NoWarn>$(NoWarn);CA1822</NoWarn>
+    <!-- QueueHangupBenchmark calls the queue table's hangup entry; without it the rows measure the loop alone (the
+         reference side of an ABAB against a tree that has no such entry). -->
+    <DefineConstants>$(DefineConstants);QUEUE_HANGUP_RULE</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
