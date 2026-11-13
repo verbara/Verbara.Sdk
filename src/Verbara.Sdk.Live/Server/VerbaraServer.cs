@@ -279,10 +279,16 @@ public sealed class VerbaraServer : IVerbaraServer
     // task, which a reconnect renews), the one discovery in flight per queue name, and the names whose completed listing
     // listed no row of the queue, not asked again on that session. Keyed as queues are, ignoring case. A new session
     // starts both empty; a completed listing of every queue clears the second.
+    // No queue is asked for alone on a session until a listing of every queue (its load's, a reconnect's reload or a
+    // ReconcileQueuesAsync) has ended with Asterisk's answer on it, nor while one is read: a name an event gives before
+    // then waits in _namedDuringListing, and is asked for once the listing ends only if it did not list the queue.
     private readonly Lock _discoveryGate = new();
     private Task? _discoverySession;
     private readonly Dictionary<string, QueueDiscovery> _discoveries = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _unlistedQueues = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _namedDuringListing = new(StringComparer.OrdinalIgnoreCase);
+    private bool _sessionQueuesListed;
+    private int _fullQueueListingsOpen;
 
     /// <summary>Observes the actual list/deferred fence selected immediately before its wait; null in production.</summary>
     internal Action<string, long>? FenceWaitObserved { get; set; }
@@ -985,9 +991,10 @@ public sealed class VerbaraServer : IVerbaraServer
         Exception? settleFailure;
         try
         {
+            // A cancellation after the snapshot was applied is not reported: the table is reconciled, and the callers a
+            // wait that ran out admitted are still to be announced.
             applied = await LoadQueuesAsync(session, states, activity: null, barriers, QueueReconcileReader,
                 cancellationToken, touched);
-            cancellationToken.ThrowIfCancellationRequested();
             transferred = true;
         }
         catch (AmiNotConnectedException) when (states.AtStop is null && states.BeganOnASession)
@@ -1069,42 +1076,113 @@ public sealed class VerbaraServer : IVerbaraServer
 
         lock (_discoveryGate)
         {
-            var current = ami.FullyBooted;
-            if (!ReferenceEquals(current, _discoverySession))
-            {
-                // A new session: what the old one asked or learned does not apply. Its discoveries in flight end with it.
-                _discoverySession = current;
-                _discoveries.Clear();
-                _unlistedQueues.Clear();
-            }
-
+            EnterDiscoverySessionLocked(ami.FullyBooted);
             if (_unlistedQueues.Contains(queueName) || _discoveries.ContainsKey(queueName))
                 return;
 
-            lock (_deferredLoadsGate)
+            // Before the session's first listing of every queue has ended, and while one is read, that listing is what
+            // finds the queue: the name waits for it to end.
+            if (!_sessionQueuesListed || _fullQueueListingsOpen > 0)
             {
-                if (_disposing.IsCancellationRequested)
-                    return;
+                _namedDuringListing.Add(queueName);
+                return;
+            }
 
-                var discovery = new QueueDiscovery(queueName, new LoadSession(ami, TimeProvider));
-                _discoveries[queueName] = discovery;
-                // Outside the dispatch, with no execution context of this handler: the listing waits for the dispatch
-                // to pass its last row, so it must never run on, or as part of, the handler that asked for it.
-                var flow = ExecutionContext.SuppressFlow();
-                try
+            StartDiscoveryLocked(ami, queueName);
+        }
+    }
+
+    /// <summary>
+    /// Moves the discovery state to <paramref name="session"/> when it is not the one held: what the old session asked,
+    /// learned or was waiting for does not apply, and its discoveries in flight end with it.
+    /// </summary>
+    private void EnterDiscoverySessionLocked(Task session)
+    {
+        if (ReferenceEquals(session, _discoverySession))
+            return;
+
+        _discoverySession = session;
+        _discoveries.Clear();
+        _unlistedQueues.Clear();
+        _namedDuringListing.Clear();
+        _sessionQueuesListed = false;
+        _fullQueueListingsOpen = 0;
+    }
+
+    /// <summary>Registers and starts the targeted listing of <paramref name="queueName"/>; under the discovery gate.</summary>
+    private void StartDiscoveryLocked(AmiConnection ami, string queueName)
+    {
+        lock (_deferredLoadsGate)
+        {
+            if (_disposing.IsCancellationRequested)
+                return;
+
+            var discovery = new QueueDiscovery(queueName, new LoadSession(ami, TimeProvider));
+            _discoveries[queueName] = discovery;
+            // Outside the dispatch, with no execution context of this handler: the listing waits for the dispatch
+            // to pass its last row, so it must never run on, or as part of, the handler that asked for it.
+            var flow = ExecutionContext.SuppressFlow();
+            try
+            {
+                discovery.Run = Task.Run(() => DiscoverQueueAsync(discovery), CancellationToken.None);
+            }
+            finally
+            {
+                flow.Undo();
+            }
+            _deferredLoads.Add(discovery.Run);
+            _ = discovery.Run.ContinueWith(completed =>
+            {
+                lock (_deferredLoadsGate)
+                    _deferredLoads.Remove(completed);
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+    }
+
+    /// <summary>
+    /// A listing of every queue begins on <paramref name="session"/>: until it ends, no queue is asked for alone on it.
+    /// Returns whether it was counted, which it is only on the connection's current session.
+    /// </summary>
+    private bool BeginFullQueueListing(LoadSession session)
+    {
+        lock (_discoveryGate)
+        {
+            if (!ReferenceEquals(session.FullyBooted, session.Connection.FullyBooted))
+                return false;
+
+            EnterDiscoverySessionLocked(session.FullyBooted);
+            _fullQueueListingsOpen++;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// A listing of every queue counted by <see cref="BeginFullQueueListing"/> ended. <paramref name="answered"/>: Asterisk
+    /// answered it, with a listing that was applied or with a refusal, which opens the session to targeted discovery.
+    /// Once none is read, each name an event gave meanwhile is asked for, if the table still holds no listing of it.
+    /// </summary>
+    private void EndFullQueueListing(LoadSession session, bool answered)
+    {
+        lock (_discoveryGate)
+        {
+            if (!ReferenceEquals(session.FullyBooted, _discoverySession))
+                return;
+
+            _fullQueueListingsOpen--;
+            if (answered)
+                _sessionQueuesListed = true;
+            if (!_sessionQueuesListed || _fullQueueListingsOpen > 0 || _namedDuringListing.Count == 0)
+                return;
+
+            string[] named = [.. _namedDuringListing];
+            _namedDuringListing.Clear();
+            foreach (var queueName in named)
+            {
+                if (!Queues.HoldsListingOf(queueName) && !_unlistedQueues.Contains(queueName)
+                    && !_discoveries.ContainsKey(queueName))
                 {
-                    discovery.Run = Task.Run(() => DiscoverQueueAsync(discovery), CancellationToken.None);
+                    StartDiscoveryLocked(session.Connection, queueName);
                 }
-                finally
-                {
-                    flow.Undo();
-                }
-                _deferredLoads.Add(discovery.Run);
-                _ = discovery.Run.ContinueWith(completed =>
-                {
-                    lock (_deferredLoadsGate)
-                        _deferredLoads.Remove(completed);
-                }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
             }
         }
     }
@@ -1174,14 +1252,15 @@ public sealed class VerbaraServer : IVerbaraServer
         }
         finally
         {
+            // Only the discovery the table still holds for the name releases it or marks it: a new session cleared the
+            // old session's, and may hold a discovery of its own for the same name.
             lock (_discoveryGate)
             {
                 if (_discoveries.TryGetValue(discovery.Name, out var held) && ReferenceEquals(held, discovery))
-                    _discoveries.Remove(discovery.Name);
-                if (completed && !discovery.ListedTarget
-                    && ReferenceEquals(_discoverySession, discovery.Session.FullyBooted))
                 {
-                    _unlistedQueues.Add(discovery.Name);
+                    _discoveries.Remove(discovery.Name);
+                    if (completed && !discovery.ListedTarget)
+                        _unlistedQueues.Add(discovery.Name);
                 }
             }
         }
@@ -1664,11 +1743,37 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <c>touched</c> is null for a load, whose agents step settles every agent. Otherwise it collects every member
     /// interface a listed row applied, added before the row is applied, and every one the completion removed, added under
     /// the window gate before its notifications are raised: a handler that throws leaves it complete for what was
-    /// committed.
+    /// committed. A listing of every queue on an <see cref="AmiConnection"/> holds the session's targeted discovery back
+    /// while it is read (<see cref="BeginFullQueueListing"/>), and lets it go once it ends.
     /// </remarks>
     private async ValueTask<bool> LoadQueuesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
         Barriers barriers, string readerName, CancellationToken cancellationToken, HashSet<string>? touched = null,
         QueueDiscovery? target = null)
+    {
+        if (target is not null || session is null || !BeginFullQueueListing(session))
+        {
+            return await ReadQueuesAsync(session, states, activity, barriers, readerName, touched, target,
+                cancellationToken);
+        }
+
+        var answered = false;
+        try
+        {
+            var applied = await ReadQueuesAsync(session, states, activity, barriers, readerName, touched, target: null,
+                cancellationToken);
+            answered = true;
+            return applied;
+        }
+        finally
+        {
+            EndFullQueueListing(session, answered);
+        }
+    }
+
+    /// <summary>The read and the reconciliation of <see cref="LoadQueuesAsync"/>.</summary>
+    private async ValueTask<bool> ReadQueuesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
+        Barriers barriers, string readerName, HashSet<string>? touched, QueueDiscovery? target,
+        CancellationToken cancellationToken)
     {
         using (var owner = new QueueSnapshotOwner(Queues.OpenSnapshotWindow()))
         {
