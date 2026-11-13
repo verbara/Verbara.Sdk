@@ -58,7 +58,7 @@ public sealed class CircuitGaugeReadsRealStateTests
     }
 
     [Fact]
-    public async Task CircuitStateGauge_ShouldReadClosed_WhenAProbeFailedAndNothingElseRan()
+    public async Task CircuitStateGauge_ShouldReadOpen_WhenAProbeFailedUnderAThresholdAboveOne()
     {
         var clock = new FakeTimeProvider();
         var policy = NewPolicy(clock, threshold: 3);
@@ -68,7 +68,11 @@ public sealed class CircuitGaugeReadsRealStateTests
 
         await FailAsync(policy, key);
 
-        ReadGauge(key).Should().Be(Closed);
+        ReadGauge(key).Should().Be(Open);
+        clock.Advance(OpenWindow - TimeSpan.FromTicks(1));
+        ReadGauge(key).Should().Be(Open);
+        clock.Advance(TimeSpan.FromTicks(1));
+        ReadGauge(key).Should().Be(HalfOpen);
     }
 
     [Fact]

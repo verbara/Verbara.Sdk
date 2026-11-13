@@ -23,15 +23,21 @@ public static class ResilienceMetrics
         "retry.attempts",
         description: "Total retry attempts performed by ResiliencePolicy, tagged by key.");
 
-    /// <summary>Counter tagged by <c>key</c> incremented when a circuit transitions from closed to open.</summary>
+    /// <summary>
+    /// Counter tagged by <c>key</c> incremented when a circuit opens: from closed when its failures reach the
+    /// threshold, or from half-open when its probe fails. One opening counts once.
+    /// </summary>
     public static readonly Counter<long> CircuitOpened = Meter.CreateCounter<long>(
         "circuit.opened",
-        description: "Circuit breaker transitions from closed to open, tagged by key.");
+        description: "Circuit breaker transitions to open, from closed or from half-open (failed probe), tagged by key.");
 
-    /// <summary>Counter tagged by <c>key</c> incremented when a circuit transitions from open back to closed.</summary>
+    /// <summary>
+    /// Counter tagged by <c>key</c> incremented when a circuit closes: when its probe succeeds, or when a call
+    /// admitted before a trip succeeds while the circuit is open. One close counts once.
+    /// </summary>
     public static readonly Counter<long> CircuitClosed = Meter.CreateCounter<long>(
         "circuit.closed",
-        description: "Circuit breaker transitions from open to closed (successful probe), tagged by key.");
+        description: "Circuit breaker transitions to closed, from half-open (successful probe) or open, tagged by key.");
 
     /// <summary>Counter tagged by <c>key</c> incremented when a per-attempt timeout elapses.</summary>
     public static readonly Counter<long> TimeoutFired = Meter.CreateCounter<long>(
@@ -41,7 +47,7 @@ public static class ResilienceMetrics
     // Per-key source of the observable gauge: the live breaker of the policy that reported the key
     // last, or a value SetCircuitState wrote. The gauge asks it at each observation, so an idle key
     // reports the state it is in now. Numeric encoding: 0 = closed, 1 = half-open (the open window
-    // has elapsed and no call has been admitted since), 2 = open.
+    // has elapsed, until a probe's result is recorded), 2 = open.
     private static readonly ConcurrentDictionary<string, CircuitSource> _circuitStates = new();
 
     /// <summary>
@@ -60,10 +66,13 @@ public static class ResilienceMetrics
         /// <summary>Circuit is closed; traffic flows normally.</summary>
         Closed = 0,
 
-        /// <summary>The open window has elapsed and no call has been admitted since.</summary>
+        /// <summary>
+        /// The open window has elapsed and no probe result has been recorded since: either no call has come yet, or
+        /// the one probe is in flight and every other call is rejected.
+        /// </summary>
         HalfOpen = 1,
 
-        /// <summary>Circuit is open; traffic is rejected.</summary>
+        /// <summary>Circuit is open within its window; traffic is rejected.</summary>
         Open = 2,
     }
 

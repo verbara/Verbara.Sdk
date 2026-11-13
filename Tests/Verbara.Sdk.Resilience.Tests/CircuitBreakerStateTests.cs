@@ -50,7 +50,7 @@ public sealed class CircuitBreakerStateTests
     }
 
     [Fact]
-    public void ShouldAllow_ShouldReturnTrue_WhenOpenDurationElapsed()
+    public void ShouldAllow_ShouldAdmitAProbeAndKeepTheOpeningTime_WhenOpenDurationElapsed()
     {
         var state = new CircuitBreakerState("node1");
         var clock = new FakeTimeProvider();
@@ -59,13 +59,15 @@ public sealed class CircuitBreakerStateTests
         for (var i = 0; i < 3; i++)
             state.RecordFailure(3, clock);
         state.IsOpen.Should().BeTrue();
+        var openedAt = clock.GetUtcNow();
 
         clock.Advance(TimeSpan.FromSeconds(31));
 
-        state.ShouldAllow(openDuration, clock).Should().BeTrue("auto half-open probe after open duration elapsed");
-        state.IsOpen.Should().BeFalse("state must reset to closed on half-open transition");
-        state.ConsecutiveFailures.Should().Be(0);
-        state.OpenedAt.Should().BeNull();
+        state.ShouldAllow(openDuration, clock).Should().BeTrue("the first call past the window is the probe");
+        state.OpenedAt.Should().Be(openedAt, "a half-open circuit keeps its last opening time");
+        state.IsOpen.Should().BeFalse("a half-open circuit is not open");
+        state.ConsecutiveFailures.Should().Be(3, "only a success clears the failures");
+        state.ShouldAllow(openDuration, clock).Should().BeFalse("the probe holds the only slot");
     }
 
     [Fact]

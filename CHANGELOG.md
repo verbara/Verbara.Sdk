@@ -11,6 +11,33 @@ and the rule's help link in a SARIF log, open that id's heading in the
 [2.10.0 migration guide](docs/guides/migration-2.10.0.md#vsdk0002) instead of the compiler's generic `CS0618` page. No
 message, id, signature or removal release changes: the members still leave in 2.11.0.
 
+### Changed — BREAKING: a half-open circuit admits one probe (#568)
+
+Once a circuit's open window has elapsed, `CircuitBreakerState.ShouldAllow` admits one call as the probe and rejects every
+other until that probe's result is recorded, or until a further open window has passed since it was admitted. It used to
+reset the circuit and admit every call. The probe is admitted at the clock reading `ShouldAllow` takes once the call holds
+the probe's slot, so a call admitted as the probe reads the injected `TimeProvider` twice. A failed probe re-opens the circuit
+at once, whatever the threshold, for a full window from the latest such failure, and counts on `circuit.opened`; a successful
+probe closes it and now counts on `circuit.closed`. A failure recorded before the probe is admitted moves nothing. This
+applies to `ResiliencePolicy.ExecuteAsync`, to webhook delivery (a rejected delivery is skipped,
+`asterisk.push.webhooks.circuit.skipped`) and to direct callers of `ShouldAllow`. What breaks: during an outage a key sees
+one attempt per window and `CircuitBreakerOpenException` for the rest; a policy with retries ends a failed probe's retries
+with `CircuitBreakerOpenException` instead of the probe's exception (a retry whose backoff outlasts the window is admitted as
+the next probe); the `circuit.closed` rate rises to one per recovery; `circuit.state` reads `1` for the whole probe, so `1` no
+longer implies the next call is admitted, and a failed probe reads `2` for a full window whatever the threshold; a direct
+caller of `ShouldAllow` that does not record the admitted call's result holds the circuit shut for up to one more window.
+Why: the package documented the closed → open → half-open → closed cycle, and admitting the whole backlog to a dependency
+that is still down is what a breaker exists to prevent. `CircuitBreakerState.RecordFailureReportingTrip` is new: it records
+a failure and returns `true` to the one call that opened the circuit. See the
+[migration guide](docs/guides/migration-2.10.0.md#a-half-open-circuit-admits-one-probe).
+
+### Fixed: a webhook circuit opening is counted and logged once (#568)
+
+`asterisk.push.webhooks.circuit.opened` was decided by reading `IsOpen` before and after each failure, so deliveries to one
+URL failing together could count one opening several times, or not at all, and repeat or miss its Warning. Webhook delivery
+now counts and logs on `CircuitBreakerState.RecordFailureReportingTrip`, once per opening, and a failed probe counts as an
+opening.
+
 ### Fixed: an out-of-memory no longer leaves a client, a reload or a session ending unreported (#554)
 
 `AriClient`: an out-of-memory in the events loop, while receiving or in a reconnect attempt, ends the client
@@ -647,8 +674,9 @@ that is not the one in `AsteriskQueue.Entries`, so match it by `Channel` or `Uni
 
 The gauge documented as the current circuit state per key replayed the last value a call wrote, so an idle tripped circuit
 read `2` forever and a failed probe below the threshold left `2` over a circuit that admits the next call (#420). It now
-reports the state when observed: `2` only while a call would be rejected, `1` once the open window has elapsed and no call
-has been admitted since, `0` otherwise, with no later call needed.
+reports the state when observed: `2` while the open window runs, `1` from the end of the open window until the probe's
+result is recorded (the probe holds it at `1` for its whole flight, while every other call is rejected; see #568), `0`
+otherwise, with no later call needed.
 
 What breaks: an alert, a dashboard or a health check that needs an unbroken `2`. That run was unbroken only because it was
 stale: under traffic the circuit cycles, so a rule such as "`circuit.state` is 2 for five minutes" may not fire during the
