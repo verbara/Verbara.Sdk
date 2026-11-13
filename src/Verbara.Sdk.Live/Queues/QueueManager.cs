@@ -942,9 +942,10 @@ public sealed class QueueManager
 
     /// <summary>
     /// The entry <paramref name="queue"/> holds for this caller, under its lock: by channel when that entry is the same
-    /// caller (same Uniqueid, or either carries none), else by Uniqueid under another channel name.
+    /// caller (same Uniqueid, or either carries none), else by Uniqueid under another channel name. The look by Uniqueid
+    /// runs only when the count holds it: a new caller, which is almost every join, reads no other entry.
     /// </summary>
-    private static AsteriskQueueEntry? FindHeldLocked(AsteriskQueue queue, string? uniqueId, string channel)
+    private AsteriskQueueEntry? FindHeldLocked(AsteriskQueue queue, string? uniqueId, string channel)
     {
         if (queue.Entries.TryGetValue(channel, out var byChannel)
             && (byChannel.UniqueId is null || uniqueId is null
@@ -953,7 +954,7 @@ public sealed class QueueManager
             return byChannel;
         }
 
-        if (uniqueId is null)
+        if (uniqueId is null || !_heldByUniqueId.ContainsKey(uniqueId))
             return null;
 
         foreach (var entry in queue.Entries.Values)
