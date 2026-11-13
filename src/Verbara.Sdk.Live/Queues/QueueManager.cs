@@ -281,9 +281,17 @@ public sealed class QueueManager
         {
             window.ListQueue(queueName);
             OnQueueParams(queueName, max, strategy, calls, holdTime, talkTime, completed, abandoned);
+            if (_queues.TryGetValue(queueName, out var listed))
+                listed.Listed = true;
         }
         RaisePending();
     }
+
+    /// <summary>
+    /// Whether the table holds <paramref name="queueName"/> from a listing: a queue it does not hold, or holds only because
+    /// a live join or member created it, has none. One lookup, no lock: read on the event dispatch.
+    /// </summary>
+    internal bool HoldsListingOf(string queueName) => _queues.TryGetValue(queueName, out var queue) && queue.Listed;
 
     /// <summary>Merge a listed member with the live lifecycle and fields observed in its read window.</summary>
     internal void OnSnapshotMember(QueueSnapshotWindow window, string queueName, string iface, string? memberName,
@@ -1189,6 +1197,17 @@ public sealed class AsteriskQueue
     // Set, under SyncRoot, when the queue is taken out of the manager's table; a join or member that finds it set adds
     // to the table's queue instead.
     internal bool RemovedFromTable { get; set; }
+
+    // Set once a QueueStatus listing listed this queue: its QueueParams row was applied. A queue a live join or member
+    // created is not listed until then, and the server asks for its listing. Never cleared: a queue taken out of the
+    // table is a new instance when it comes back.
+    private volatile bool _listed;
+
+    internal bool Listed
+    {
+        get => _listed;
+        set => _listed = value;
+    }
 
     public string Name { get; init; } = string.Empty;
     public int Max { get; set; }

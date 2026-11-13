@@ -57,6 +57,20 @@ internal static partial class VerbaraServerLog
         Message = "[LIVE] An agent state handler failed while a queue listing that had already failed settled the agents it changed")]
     public static partial void AgentSettleFailedAfterListingFailure(ILogger logger, Exception exception);
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[LIVE] Queue discovery asked: queue={Queue}")]
+    public static partial void QueueDiscoveryAsked(ILogger logger, string queue);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "[LIVE] Queue discovery finished: queue={Queue} listed={Listed} queue_status_refused={Refused}")]
+    public static partial void QueueDiscoveryFinished(ILogger logger, string queue, bool listed, bool refused);
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "[LIVE] Queue discovery ended with its AMI session or the server, nothing more applied: queue={Queue}")]
+    public static partial void QueueDiscoveryEnded(ILogger logger, string queue);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "[LIVE] Queue discovery failed: queue={Queue}")]
+    public static partial void QueueDiscoveryFailed(ILogger logger, string queue, Exception exception);
+
     [LoggerMessage(Level = LogLevel.Debug,
         Message = "[LIVE] Status refused again in this AMI session: {Message}; the channel table was not reconciled")]
     public static partial void StatusRefusedAgain(ILogger logger, string message);
@@ -260,6 +274,15 @@ public sealed class VerbaraServer : IVerbaraServer
     internal Task ScheduledReload { get; private set; } = Task.CompletedTask;
     private readonly Lock _deferredLoadsGate = new();
     private readonly HashSet<Task> _deferredLoads = [];
+
+    // The targeted queue discoveries of one AMI session (DiscoverQueue): the session they belong to (its FullyBooted
+    // task, which a reconnect renews), the one discovery in flight per queue name, and the names whose completed listing
+    // listed no row of the queue, not asked again on that session. Keyed as queues are, ignoring case. A new session
+    // starts both empty; a completed listing of every queue clears the second.
+    private readonly Lock _discoveryGate = new();
+    private Task? _discoverySession;
+    private readonly Dictionary<string, QueueDiscovery> _discoveries = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _unlistedQueues = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Observes the actual list/deferred fence selected immediately before its wait; null in production.</summary>
     internal Action<string, long>? FenceWaitObserved { get; set; }
@@ -985,16 +1008,176 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>What a <see cref="ReconcileQueuesAsync"/> is called in the exceptions and logs of its read.</summary>
     private const string QueueReconcileReader = "live queue reconciliation";
 
+    /// <summary>What a targeted discovery is called in the exceptions and logs of its read.</summary>
+    private const string QueueDiscoveryReader = "live queue discovery";
+
     /// <summary>The discovery in flight for <paramref name="queueName"/>; a completed task when none is. For tests.</summary>
     internal Task PendingQueueDiscovery(string queueName)
     {
-        _ = _connection;
-        _ = queueName;
-        return Task.CompletedTask;
+        lock (_discoveryGate)
+            return _discoveries.TryGetValue(queueName, out var discovery) ? discovery.Run : Task.CompletedTask;
     }
 
     /// <summary>How many discoveries are in flight. For tests.</summary>
-    internal int PendingQueueDiscoveryCount => _connection is null ? -1 : 0;
+    internal int PendingQueueDiscoveryCount
+    {
+        get
+        {
+            lock (_discoveryGate)
+                return _discoveries.Count;
+        }
+    }
+
+    /// <summary>One targeted listing of one queue on one AMI session.</summary>
+    private sealed class QueueDiscovery(string name, LoadSession session)
+    {
+        public string Name { get; } = name;
+
+        public LoadSession Session { get; } = session;
+
+        // Whether the completed answer carried a row of the queue: read once the listing returned.
+        public bool ListedTarget { get; set; }
+
+        public Task Run { get; set; } = Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Called on the event dispatch, after an event naming <paramref name="queueName"/> was applied. When the table holds no
+    /// listing of that queue, asks for that queue's listing alone, once per name and AMI session, outside the dispatch;
+    /// see <see cref="DiscoverQueueAsync"/>. Only over the SDK's own <see cref="AmiConnection"/>, whose session it scopes
+    /// the request to. Almost every call is one lookup that finds the queue listed.
+    /// </summary>
+    private void NoteQueueNamed(string queueName)
+    {
+        if (queueName.Length == 0 || Queues.HoldsListingOf(queueName) || _connection is not AmiConnection ami)
+            return;
+
+        lock (_discoveryGate)
+        {
+            var current = ami.FullyBooted;
+            if (!ReferenceEquals(current, _discoverySession))
+            {
+                // A new session: what the old one asked or learned does not apply. Its discoveries in flight end with it.
+                _discoverySession = current;
+                _discoveries.Clear();
+                _unlistedQueues.Clear();
+            }
+
+            if (_unlistedQueues.Contains(queueName) || _discoveries.ContainsKey(queueName))
+                return;
+
+            lock (_deferredLoadsGate)
+            {
+                if (_disposing.IsCancellationRequested)
+                    return;
+
+                var discovery = new QueueDiscovery(queueName, new LoadSession(ami, TimeProvider));
+                _discoveries[queueName] = discovery;
+                // Outside the dispatch, with no execution context of this handler: the listing waits for the dispatch
+                // to pass its last row, so it must never run on, or as part of, the handler that asked for it.
+                var flow = ExecutionContext.SuppressFlow();
+                try
+                {
+                    discovery.Run = Task.Run(() => DiscoverQueueAsync(discovery), CancellationToken.None);
+                }
+                finally
+                {
+                    flow.Undo();
+                }
+                _deferredLoads.Add(discovery.Run);
+                _ = discovery.Run.ContinueWith(completed =>
+                {
+                    lock (_deferredLoadsGate)
+                        _deferredLoads.Remove(completed);
+                }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The targeted listing of one queue an event named: <c>QueueStatus</c> with its <c>Queue</c>, read in a queue read
+    /// window as a load's is, behind the same wait for the dispatch. It only admits: the queue's parameters, members and
+    /// waiting callers, never a row of another queue; it removes nothing and completes no snapshot. It then settles the
+    /// agents of the memberships it admitted. It never throws: a session that ends or a server disposed during it applies
+    /// nothing more, and any other failure is logged. A completed answer with no row of the queue marks the name as
+    /// unlisted on the session; any other end releases the name, so the next event naming it asks again.
+    /// </summary>
+    private async Task DiscoverQueueAsync(QueueDiscovery discovery)
+    {
+        var completed = false;
+        try
+        {
+            if (!discovery.Session.IsCurrent)
+                return;
+
+            VerbaraServerLog.QueueDiscoveryAsked(_logger, discovery.Name);
+            var states = new LoadConnectionStates(_connection);
+            var barriers = new Barriers { Session = discovery.Session };
+            var touched = new HashSet<string>(StringComparer.Ordinal);
+            var transferred = false;
+            var applied = false;
+            try
+            {
+                applied = await LoadQueuesAsync(discovery.Session, states, activity: null, barriers, QueueDiscoveryReader,
+                    _disposing.Token, touched, discovery);
+                transferred = true;
+            }
+            catch (OperationCanceledException) when (_disposing.IsCancellationRequested)
+            {
+                VerbaraServerLog.QueueDiscoveryEnded(_logger, discovery.Name);
+            }
+            catch (AmiNotConnectedException)
+            {
+                VerbaraServerLog.QueueDiscoveryEnded(_logger, discovery.Name);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                VerbaraServerLog.QueueDiscoveryFailed(_logger, discovery.Name, ex);
+            }
+            finally
+            {
+                if (!transferred)
+                    barriers.QueueReports?.Dispose();
+
+                // What was committed is settled, also when a queue handler threw: in this task, never on the dispatch.
+                if (SettleAgentMembers(touched) is { } settleFailure)
+                    VerbaraServerLog.QueueDiscoveryFailed(_logger, discovery.Name, settleFailure);
+            }
+
+            if (!transferred)
+                return;
+
+            // A wait that ran out leaves the callers it admitted to be announced once the pump has caught up.
+            if (barriers.QueueReports is not null)
+                ScheduleDeferredOwner(barriers, reload: false);
+            completed = applied;
+            VerbaraServerLog.QueueDiscoveryFinished(_logger, discovery.Name, discovery.ListedTarget, refused: !applied);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            VerbaraServerLog.QueueDiscoveryFailed(_logger, discovery.Name, ex);
+        }
+        finally
+        {
+            lock (_discoveryGate)
+            {
+                if (_discoveries.TryGetValue(discovery.Name, out var held) && ReferenceEquals(held, discovery))
+                    _discoveries.Remove(discovery.Name);
+                if (completed && !discovery.ListedTarget
+                    && ReferenceEquals(_discoverySession, discovery.Session.FullyBooted))
+                {
+                    _unlistedQueues.Add(discovery.Name);
+                }
+            }
+        }
+    }
+
+    /// <summary>A completed listing of every queue: every name it did not list is worth asking for again.</summary>
+    private void ForgetUnlistedQueues()
+    {
+        lock (_discoveryGate)
+            _unlistedQueues.Clear();
+    }
 
     /// <summary>Who reads a channel snapshot: a load, or <see cref="ReconcileChannelsAsync"/>.</summary>
     /// <param name="Name">What the reader is called in the exception a session ending under it throws.</param>
@@ -1444,6 +1627,14 @@ public sealed class VerbaraServer : IVerbaraServer
     private abstract record QueueRow;
     private sealed record QueueParamsRow(string Queue, int Max, string? Strategy, int Calls, int HoldTime,
         int TalkTime, int Completed, int Abandoned) : QueueRow;
+    private static string? QueueOf(ManagerEvent evt) => evt switch
+    {
+        QueueParamsEvent qp => qp.Queue,
+        QueueMemberEvent qm => qm.Queue,
+        QueueEntryEvent qe => qe.Queue,
+        _ => null,
+    };
+
     private sealed record QueueMemberRow(string Queue, string Interface, string? Name, int Penalty, bool Paused,
         int Status) : QueueRow;
     private sealed record QueueEntryRow(string Queue, string Channel, string? UniqueId, string? CallerId,
@@ -1461,7 +1652,8 @@ public sealed class VerbaraServer : IVerbaraServer
     /// committed.
     /// </remarks>
     private async ValueTask<bool> LoadQueuesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
-        Barriers barriers, string readerName, CancellationToken cancellationToken, HashSet<string>? touched = null)
+        Barriers barriers, string readerName, CancellationToken cancellationToken, HashSet<string>? touched = null,
+        QueueDiscovery? target = null)
     {
         using (var owner = new QueueSnapshotOwner(Queues.OpenSnapshotWindow()))
         {
@@ -1469,10 +1661,20 @@ public sealed class VerbaraServer : IVerbaraServer
             var rows = new List<QueueRow>();
             var asked = new AskOutcome();
             var mark = session is not null ? new ListSnapshotMark() : null;
+            Func<ManagerAction> newAction = target is null
+                ? static () => new QueueStatusAction()
+                : () => new QueueStatusAction { Queue = target.Name };
             await foreach (var evt in AskWhileAsteriskStartsAsync(
-                "QueueStatus", static () => new QueueStatusAction(), session, states, cancellationToken, asked, mark,
+                "QueueStatus", newAction, session, states, cancellationToken, asked, mark,
                 onAttempt: rows.Clear))
             {
+                // A targeted listing admits the rows of its queue only: a row of another queue says nothing it asked.
+                if (target is not null && evt is QueueParamsEvent or QueueMemberEvent or QueueEntryEvent
+                    && !string.Equals(QueueOf(evt), target.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 switch (evt)
                 {
                     case QueueParamsEvent qp:
@@ -1497,6 +1699,8 @@ public sealed class VerbaraServer : IVerbaraServer
             var full = await AwaitBarrierAsync(session, mark, "QueueStatus", states, readerName, activity,
                 barriers, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            if (target is not null)
+                target.ListedTarget = rows.Count > 0;
             var reports = new List<(string Queue, AsteriskQueueEntry Entry)>();
             foreach (var row in rows)
             {
@@ -1518,10 +1722,17 @@ public sealed class VerbaraServer : IVerbaraServer
                         break;
                 }
             }
-            if (full)
+            // A targeted listing only admits: no removal and no completion, whose session consumer would close the open
+            // visits of every queue it does not list.
+            if (full && target is null)
+            {
                 Queues.CompleteSnapshot(window, touched);
-            else
+                ForgetUnlistedQueues();
+            }
+            else if (!full)
+            {
                 owner.TransferTo(barriers, mark!, reports);
+            }
         }
 
         return true;
@@ -2485,13 +2696,16 @@ public sealed class VerbaraServer : IVerbaraServer
                 // An Agent/<id> member's add, removal or pause re-derives that agent's state from the queue table, in a
                 // finally: the queue call raises its own notification first, and a queue handler's failure, which the
                 // call rethrows, does not skip the agent.
+                // Every queue event, once applied, also names its queue to NoteQueueNamed, in a finally too: a queue the
+                // table holds no listing of (Asterisk announces no queue it creates) is asked for, outside the dispatch.
                 case QueueMemberAddedEvent qma:
                 {
                     var iface = qma.Location ?? qma.Interface ?? "";
+                    var queue = qma.Queue ?? "";
                     try
                     {
                         server.Queues.OnMemberAdded(
-                            qma.Queue ?? "",
+                            queue,
                             iface,
                             qma.MemberName,
                             qma.Penalty ?? 0,
@@ -2500,7 +2714,14 @@ public sealed class VerbaraServer : IVerbaraServer
                     }
                     finally
                     {
-                        server.SettleAgentMember(iface);
+                        try
+                        {
+                            server.SettleAgentMember(iface);
+                        }
+                        finally
+                        {
+                            server.NoteQueueNamed(queue);
+                        }
                     }
 
                     break;
@@ -2509,81 +2730,138 @@ public sealed class VerbaraServer : IVerbaraServer
                 case QueueMemberRemovedEvent qmr:
                 {
                     var iface = qmr.Location ?? qmr.Interface ?? "";
+                    var queue = qmr.Queue ?? "";
                     try
                     {
-                        server.Queues.OnMemberRemoved(qmr.Queue ?? "", iface);
+                        server.Queues.OnMemberRemoved(queue, iface);
                     }
                     finally
                     {
-                        server.SettleAgentMember(iface);
+                        try
+                        {
+                            server.SettleAgentMember(iface);
+                        }
+                        finally
+                        {
+                            server.NoteQueueNamed(queue);
+                        }
                     }
 
                     break;
                 }
 
                 case QueueMemberStatusEvent qms:
-                    server.Queues.OnMemberStatusChanged(
-                        qms.Queue ?? "",
-                        qms.Location ?? qms.Interface ?? "",
-                        qms.Status ?? 0);
+                {
+                    var queue = qms.Queue ?? "";
+                    try
+                    {
+                        server.Queues.OnMemberStatusChanged(
+                            queue,
+                            qms.Location ?? qms.Interface ?? "",
+                            qms.Status ?? 0);
+                    }
+                    finally
+                    {
+                        server.NoteQueueNamed(queue);
+                    }
+
                     break;
+                }
 
                 case QueueMemberPauseEvent qmpe:
                 {
                     var iface = qmpe.RawFields?.GetValueOrDefault("Location") ?? qmpe.RawFields?.GetValueOrDefault("Interface") ?? "";
+                    var queue = qmpe.RawFields?.GetValueOrDefault("Queue") ?? "";
                     try
                     {
                         server.Queues.OnMemberPaused(
-                            qmpe.RawFields?.GetValueOrDefault("Queue") ?? "",
+                            queue,
                             iface,
                             qmpe.Paused ?? false,
                             qmpe.Pausedreason);
                     }
                     finally
                     {
-                        server.SettleAgentMember(iface);
+                        try
+                        {
+                            server.SettleAgentMember(iface);
+                        }
+                        finally
+                        {
+                            server.NoteQueueNamed(queue);
+                        }
                     }
 
                     break;
                 }
 
                 case QueueCallerJoinEvent qcj:
-                    server.Queues.OnCallerJoined(
-                        qcj.RawFields?.GetValueOrDefault("Queue") ?? "",
-                        qcj.RawFields?.GetValueOrDefault("Channel") ?? "",
-                        qcj.RawFields?.GetValueOrDefault("CallerIDNum"),
-                        qcj.Position ?? 0,
-                        qcj.UniqueId,
-                        server.ReadEventLossEpoch());
+                {
+                    var queue = qcj.RawFields?.GetValueOrDefault("Queue") ?? "";
+                    try
+                    {
+                        server.Queues.OnCallerJoined(
+                            queue,
+                            qcj.RawFields?.GetValueOrDefault("Channel") ?? "",
+                            qcj.RawFields?.GetValueOrDefault("CallerIDNum"),
+                            qcj.Position ?? 0,
+                            qcj.UniqueId,
+                            server.ReadEventLossEpoch());
+                    }
+                    finally
+                    {
+                        server.NoteQueueNamed(queue);
+                    }
+
                     break;
+                }
 
                 // agent class. The table's leave (CallerLeft, raised only for a caller the table holds), then Asterisk's
                 // own report, raised whatever the table holds: also when a CallerLeft handler throws, since the open
                 // reload windows and the session layer count on every report.
                 case QueueCallerLeaveEvent qcl:
+                {
+                    var queue = qcl.RawFields?.GetValueOrDefault("Queue") ?? "";
                     try
                     {
                         server.Queues.OnCallerLeft(
-                            qcl.RawFields?.GetValueOrDefault("Queue") ?? "",
+                            queue,
                             qcl.RawFields?.GetValueOrDefault("Channel") ?? "");
                     }
                     finally
                     {
-                        server.Queues.OnCallerLeaveReported(
-                            qcl.UniqueId ?? "",
-                            qcl.RawFields?.GetValueOrDefault("Queue") ?? "",
-                            qcl.RawFields?.GetValueOrDefault("Channel") ?? "",
-                            server.ReadEventLossEpoch());
+                        try
+                        {
+                            server.Queues.OnCallerLeaveReported(
+                                qcl.UniqueId ?? "",
+                                queue,
+                                qcl.RawFields?.GetValueOrDefault("Channel") ?? "",
+                                server.ReadEventLossEpoch());
+                        }
+                        finally
+                        {
+                            server.NoteQueueNamed(queue);
+                        }
                     }
 
                     break;
+                }
 
                 // agent class. app_queue counted the caller's visit abandoned; sent just before its leave.
                 case QueueCallerAbandonEvent qca:
-                    server.Queues.OnCallerAbandonReported(
-                        qca.UniqueId ?? "",
-                        qca.RawFields?.GetValueOrDefault("Queue") ?? "");
+                {
+                    var queue = qca.RawFields?.GetValueOrDefault("Queue") ?? "";
+                    try
+                    {
+                        server.Queues.OnCallerAbandonReported(qca.UniqueId ?? "", queue);
+                    }
+                    finally
+                    {
+                        server.NoteQueueNamed(queue);
+                    }
+
                     break;
+                }
 
                 // dialplan class. app_queue's account of why Queue() returned, set on the caller's channel right after
                 // its leave. Only QUEUESTATUS is read, by its exact name; every other VarSet is dropped here, as before.

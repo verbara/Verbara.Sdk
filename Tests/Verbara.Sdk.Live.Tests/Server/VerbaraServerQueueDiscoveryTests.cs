@@ -51,6 +51,12 @@ public sealed class VerbaraServerQueueDiscoveryTests
         var completions = 0;
         run.Server.Queues.CallerJoined += (queue, entry) => joined.Enqueue($"{queue}/{entry.Channel}");
         run.Server.Queues.QueueSnapshotCompleted += _ => Interlocked.Increment(ref completions);
+        var fenceWaits = 0;
+        run.Server.FenceWaitObserved = (list, _) =>
+        {
+            if (list == "QueueStatus")
+                Interlocked.Increment(ref fenceWaits);
+        };
 
         // The caller is in its own listing: Asterisk answers with the caller whose join triggered the ask.
         await peer.SendEventAsync("QueueCallerJoin", AsteriskFrames.QueueCallerJoin(CallerUid, CallerChannel, Sales, 1, 1));
@@ -69,6 +75,8 @@ public sealed class VerbaraServerQueueDiscoveryTests
             joined.Should().StartWith($"{Sales}/{CallerChannel}", "the live join is announced first, as always");
             Volatile.Read(ref completions).Should().Be(0, "a targeted listing raises no snapshot completion");
             run.Server.PendingQueueDiscoveryCount.Should().Be(0, "the finished discovery releases its entry");
+            Volatile.Read(ref fenceWaits).Should().Be(1,
+                "the listing runs outside the dispatch, so it waits for the dispatch instead of skipping the wait");
             HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
             peer.Fault.Should().BeNull("the peer served the session without failing");
         }
