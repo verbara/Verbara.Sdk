@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using FluentAssertions;
 using Verbara.Sdk.Ari.Resources;
 
@@ -58,8 +59,57 @@ public sealed class AriChannelStateRegistrationTests
     {
         JsonSerializer.Deserialize(json, AriJsonContext.Default.AriChannelState).Should().Be(expected);
     }
+
+    [Fact]
+    public void AConsumersOwnContext_ShouldWriteAsterisksSpelling_WhenTheStateIsADictionaryKey()
+    {
+        var states = new Dictionary<AriChannelState, int>
+        {
+            [AriChannelState.PreRing] = 1,
+            [AriChannelState.DialingOffhook] = 2,
+            [AriChannelState.Up] = 3,
+        };
+
+        var json = JsonSerializer.Serialize(states, ConsumerAriJsonContext.Default.DictionaryAriChannelStateInt32);
+
+        json.Should().Be("""{"Pre-ring":1,"Dialing Offhook":2,"Up":3}""");
+    }
+
+    [Theory]
+    [InlineData("Pre-ring", AriChannelState.PreRing)]
+    [InlineData("Dialing Offhook", AriChannelState.DialingOffhook)]
+    [InlineData("Rsrved", AriChannelState.Rsrvd)]
+    [InlineData("PreRing", AriChannelState.PreRing)]
+    [InlineData("up", AriChannelState.Up)]
+    [InlineData("Unknown (7)", AriChannelState.Unknown)]
+    public void AConsumersOwnContext_ShouldReadAsterisksSpelling_WhenTheStateIsADictionaryKey(
+        string key, AriChannelState expected)
+    {
+        var states = JsonSerializer.Deserialize(
+            $$"""{"{{key}}":5}""", ConsumerAriJsonContext.Default.DictionaryAriChannelStateInt32);
+
+        states.Should().ContainSingle().Which.Should().Be(new KeyValuePair<AriChannelState, int>(expected, 5));
+    }
+
+    [Fact]
+    public void OptionsWithTheirOwnEnumConverter_ShouldReadAsterisksSpelling_WhenTheStateConverterIsInsertedFirst()
+    {
+        var options = new JsonSerializerOptions
+        {
+            TypeInfoResolver = ConsumerAriJsonContext.Default,
+            Converters = { new AriChannelStateConverter(), new JsonStringEnumConverter<AriChannelState>() },
+        };
+
+        var channelInfo = (JsonTypeInfo<AriChannel>)options.GetTypeInfo(typeof(AriChannel));
+
+        var channel = JsonSerializer.Deserialize("""{"Id":"c","State":"Pre-ring"}""", channelInfo);
+
+        channel!.State.Should().Be(AriChannelState.PreRing);
+        JsonSerializer.Serialize(channel, channelInfo).Should().Contain("\"State\":\"Pre-ring\"");
+    }
 }
 
 /// <summary>A consumer's own context over the SDK's model, with no options at all.</summary>
 [JsonSerializable(typeof(AriChannel))]
+[JsonSerializable(typeof(Dictionary<AriChannelState, int>))]
 internal sealed partial class ConsumerAriJsonContext : JsonSerializerContext;
