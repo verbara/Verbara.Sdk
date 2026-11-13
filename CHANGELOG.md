@@ -106,7 +106,7 @@ recorded a measurement; the SDK has recorded nothing on `sessions.timed_out` or 
 (through 2.6.x the reconciliation sweep added to both, so a stored series keeps that history)
 ([guide](docs/guides/migration-2.10.0.md#vsdk0002-vsdk0003-vsdk0004-and-vsdk0006-name-their-removal-release)).
 
-### Changed — BREAKING: `AriRtpStats` reads a real `rtp_statistics` reply (#NNN)
+### Changed — BREAKING: `AriRtpStats` reads a real `rtp_statistics` reply (#566)
 
 `Channels.GetRtpStatisticsAsync` threw `JsonException` on every reply a real Asterisk sends. `AriRtpStats.Rtt`,
 `LocalMaxrxploss` and `LocalMinrxploss` are now `double?` (Asterisk writes them as reals; `Rtt` is in seconds), and
@@ -114,13 +114,13 @@ recorded a measurement; the SDK has recorded nothing on `sessions.timed_out` or 
 an `int` no longer compiles; code that reads `Rtt` into `var` or a `double` compiles and gets seconds. See the
 [migration guide](docs/guides/migration-2.10.0.md#arirtpstats-reads-a-real-reply-and-a-channel-state-never-drops-an-event).
 
-### Added: the 26 RTP statistics Asterisk sends and `AriRtpStats` lacked (#NNN)
+### Added: the 26 RTP statistics Asterisk sends and `AriRtpStats` lacked (#566)
 
 `Txoctetcount` and `Rxoctetcount` (`uint?`), the `Remote*jitter` and `Remote*rxploss` figures,
 `LocalNormdevrxploss`, `LocalStdevrxploss`, `Maxrtt`, `Minrtt`, `Normdevrtt`, `Stdevrtt`, and the media experience
 scores `Txmes`, `Rxmes`, `Remote*mes` and `Local*mes` (`double?`).
 
-### Added: `AriChannelStateConverter` (#NNN)
+### Added: `AriChannelStateConverter` (#566)
 
 The reader and writer of `AriChannelState`, public in `Verbara.Sdk` and declared on the enum with `[JsonConverter]`, so
 the SDK's serializer and a consumer's own source-generated context or `JsonSerializerOptions` read Asterisk's state
@@ -133,7 +133,7 @@ own options and no enum converter now writes the state as Asterisk's text (`"sta
 number (`"state": 6`); a stored number from 0 to 11 still reads as its member. See the
 [migration guide](docs/guides/migration-2.10.0.md#arirtpstats-reads-a-real-reply-and-a-channel-state-never-drops-an-event).
 
-### Fixed: a channel state never drops an ARI event, and five members carry what Asterisk sends (#NNN)
+### Fixed: a channel state never drops an ARI event, and five members carry what Asterisk sends (#566)
 
 A channel whose `state` is `"Dialing Offhook"`, `"Pre-ring"`, `"Mute"`, `"Rsrved"` or `"Unknown (N)"` no longer drops
 the whole event, nor makes a REST call that returns it throw: the first two read as `DialingOffhook` and `PreRing`,
