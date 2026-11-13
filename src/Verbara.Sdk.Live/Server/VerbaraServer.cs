@@ -957,6 +957,8 @@ public sealed class VerbaraServer : IVerbaraServer
     /// and its queue is then asked for alone only if the table still holds no listing of it. So a start or a reconnect
     /// whose listing was applied in full sends one <c>QueueStatus</c> for every queue, not one per queue its events name;
     /// one whose listing was not sends one more <c>QueueStatus</c> for each named queue the table does not hold listed.
+    /// A queue whose own <c>QueueStatus</c> was already on its way when a listing of every queue began may still be asked
+    /// once after that listing listed it; that answer only admits what the table already holds.
     /// A refused targeted listing marks nothing: Asterisk registers <c>QueueStatus</c> with no permission class, so it
     /// refuses it only while <c>app_queue</c> is not loaded or Asterisk is shutting down, and the next event naming the
     /// queue asks again. A queue taken out of the table by <see cref="QueueManager.RemoveQueue"/> or
