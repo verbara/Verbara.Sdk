@@ -35,20 +35,20 @@ public sealed class DeprecationIdGuardTests(ITestOutputHelper output)
     // ---- The register -------------------------------------------------------------------------------------------
 
     [Fact]
-    public void Register_ShouldHoldTwoRetiredAndFourMarkedIds_WhenReadOn2_10_0()
+    public void Register_ShouldHoldTwoRetiredAndFiveMarkedIds_WhenReadOn2_10_0()
     {
         var rows = DeprecationIdRegister.Rows;
 
-        rows.Select(r => r.Id).Should().Equal("VSDK0001", "VSDK0002", "VSDK0003", "VSDK0004", "VSDK0005", "VSDK0006");
+        rows.Select(r => r.Id).Should().Equal("VSDK0001", "VSDK0002", "VSDK0003", "VSDK0004", "VSDK0005", "VSDK0006", "VSDK0007");
         rows.Where(r => r.State == DeprecationIdState.Retired).Select(r => r.Id).Should().Equal("VSDK0001", "VSDK0005");
         rows.Where(r => r.State == DeprecationIdState.Marked).Select(r => (r.Id, r.Members.Count))
-            .Should().Equal(("VSDK0002", 6), ("VSDK0003", 1), ("VSDK0004", 5), ("VSDK0006", 2));
+            .Should().Equal(("VSDK0002", 6), ("VSDK0003", 1), ("VSDK0004", 5), ("VSDK0006", 2), ("VSDK0007", 7));
         rows.Where(r => r.State == DeprecationIdState.Marked).Should().OnlyContain(r => r.Release == "2.11.0");
-        rows.SelectMany(r => r.Members).Should().HaveCount(14).And.OnlyHaveUniqueItems();
+        rows.SelectMany(r => r.Members).Should().HaveCount(21).And.OnlyHaveUniqueItems();
     }
 
     [Fact]
-    public void Register_ShouldHoldTheFourteenMembersByPackage_WhenRead()
+    public void Register_ShouldHoldTheTwentyOneMembersByPackage_WhenRead()
     {
         DeprecationIdRegister.Rows.SelectMany(r => r.Members.Select(m => $"{r.Id} {m.Package} {m.Key}")).Should().BeEquivalentTo(
         [
@@ -60,6 +60,10 @@ public sealed class DeprecationIdGuardTests(ITestOutputHelper output)
             "VSDK0004 Verbara.Sdk.Ari ChanWebSocketHangup", "VSDK0004 Verbara.Sdk.Ari ChanWebSocketMediaBuffering",
             "VSDK0004 Verbara.Sdk.Ari ChanWebSocketDtmf.DurationMs",
             "VSDK0006 Verbara.Sdk.Sessions SessionMetrics.SessionsTimedOut", "VSDK0006 Verbara.Sdk.Sessions SessionMetrics.SessionsOrphaned",
+            "VSDK0007 Verbara.Sdk.Ami DbPrefixGetAction", "VSDK0007 Verbara.Sdk.Ami ExecAction",
+            "VSDK0007 Verbara.Sdk.Ami JitterBufStatsEvent", "VSDK0007 Verbara.Sdk.Ami MasqueradeEvent",
+            "VSDK0007 Verbara.Sdk.Ami PriEventEvent", "VSDK0007 Verbara.Sdk.Ami RtpReceiverStatEvent",
+            "VSDK0007 Verbara.Sdk.Ami RtpSenderStatEvent",
         ]);
     }
 
@@ -69,6 +73,7 @@ public sealed class DeprecationIdGuardTests(ITestOutputHelper output)
     [InlineData("VSDK0004", "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
     [InlineData("VSDK0005", "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/obsolete-ami-events-removal-migration.md#vsdk0005")]
     [InlineData("VSDK0006", "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0006")]
+    [InlineData("VSDK0007", "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0007")]
     public void Register_ShouldGiveEachIdWithAGuideTheLowerCaseLiteralLink_WhenRead(string id, string link)
     {
         DeprecationIdRegister.Row(id).Link.Should().Be(link).And.NotContain("{0}", "the compiler writes {0} as the id in upper case");

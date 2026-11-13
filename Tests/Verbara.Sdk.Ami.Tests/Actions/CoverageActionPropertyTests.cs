@@ -186,12 +186,14 @@ public sealed class CoverageActionPropertyTests
         action.Queue.Should().Be("sales");
     }
 
+#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
     [Fact]
     public void ExecAction_ShouldHaveProperties()
     {
         var action = new ExecAction { Command = "Playback(hello-world)" };
         action.Command.Should().Be("Playback(hello-world)");
     }
+#pragma warning restore VSDK0007
 
     [Fact]
     public void AbsoluteTimeoutAction_ShouldHaveProperties()

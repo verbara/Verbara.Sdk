@@ -27,6 +27,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.VoiceAi.Tts` | [A Cartesia or ElevenLabs audio frame that is not valid base64 no longer ends the synthesis](#a-cartesia-or-elevenlabs-audio-frame-that-is-not-valid-base64-no-longer-ends-the-synthesis) | fix, behaviour, BREAKING |
 | `Verbara.Sdk.Ami`, `Verbara.Sdk.Agi`, `Verbara.Sdk.Activities`, `Verbara.Sdk.Live` | [The types deprecated with `VSDK0005` are removed](#the-types-deprecated-with-vsdk0005-are-removed) | removed types and member, behaviour, BREAKING |
 | `Verbara.Sdk.Ami`, `Verbara.Sdk.Ari`, `Verbara.Sdk.Sessions` | [`VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` name their removal release](#vsdk0002-vsdk0003-vsdk0004-and-vsdk0006-name-their-removal-release) | warning text |
+| `Verbara.Sdk.Ami` | [Seven AMI types whose wire name no Asterisk knows are deprecated](#seven-ami-types-whose-wire-name-no-asterisk-knows-are-deprecated) | new warning, BREAKING |
 
 ## Sessions
 
@@ -699,3 +700,30 @@ panel that reads it has shown no new point since 2.7.0.
 
 **What to do.** Move to what each message names before 2.11.0. A `NoWarn` you keep for one of these ids keeps working
 in 2.10.0.
+
+### Seven AMI types whose wire name no Asterisk knows are deprecated
+
+**What changed.** Seven types of `Verbara.Sdk.Ami` are marked `[Obsolete]` with `VSDK0007`, a warning, and leave in
+2.11.0. Each one names an AMI action that no Asterisk registers, or an event that no supported Asterisk (22, 23, 24)
+emits, read in the whole upstream source of 22.12.0, 23.6.0 and 24.0.0. Sending one of the two actions is answered
+with an error; a handler for one of the five events never runs.
+
+#### VSDK0007
+
+| Type | Wire name | What to use | Removed in |
+|---|---|---|---|
+| `DbPrefixGetAction` | `DBPrefixGet`, never registered | `DbGetTreeAction` (`DBGetTree`): the entries of a family, optionally under a key | 2.11.0 |
+| `ExecAction` | `exec`, never registered | `CommandAction` to run a CLI command; `RawAction` to send an action by its name | 2.11.0 |
+| `JitterBufStatsEvent` | `JitterBufStats`, last emitted by chan_iax2 in Asterisk 11 | nothing: no supported Asterisk sends it | 2.11.0 |
+| `MasqueradeEvent` | `Masquerade`, last emitted by the core in Asterisk 11 | nothing: no supported Asterisk sends it | 2.11.0 |
+| `PriEventEvent` | `PRIEvent`, emitted by chan_dahdi in Asterisk 1.6, gone by 11 | nothing: no supported Asterisk sends it | 2.11.0 |
+| `RtpReceiverStatEvent` | `RTPReceiverStat`, emitted by the core in Asterisk 1.6, gone by 11 | nothing: no supported Asterisk sends it | 2.11.0 |
+| `RtpSenderStatEvent` | `RTPSenderStat`, emitted by the core in Asterisk 1.6, gone by 11 | nothing: no supported Asterisk sends it | 2.11.0 |
+
+**Who is affected.** Code that names one of these types. A build with TreatWarningsAsErrors fails on `VSDK0007`
+until the code moves or suppresses the id; any other build shows the warning. Nothing changes at run time.
+
+**What to do.** Replace the two actions as the table says. Delete a handler or a type check for one of the five
+events: it never ran against a supported Asterisk. If you cannot move before upgrading, suppress `VSDK0007` where you
+name the type (`#pragma warning disable VSDK0007`, or `NoWarn` in the project); the suppression works until 2.11.0
+removes the types.

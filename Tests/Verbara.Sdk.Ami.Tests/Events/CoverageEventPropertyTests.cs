@@ -27,6 +27,7 @@ public sealed class CoverageEventPropertyTests
         evt.LongestHoldTime.Should().Be(45);
     }
 
+#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
     [Fact]
     public void JitterBufStatsEvent_ShouldHaveAllProperties()
     {
@@ -66,7 +67,9 @@ public sealed class CoverageEventPropertyTests
         evt.RemoteTotalLost.Should().Be(2);
         evt.Remoteooo.Should().Be(0);
     }
+#pragma warning restore VSDK0007
 
+#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
     [Fact]
     public void RtpSenderStatEvent_ShouldHaveAllProperties()
     {
@@ -75,6 +78,7 @@ public sealed class CoverageEventPropertyTests
         evt.SrCount.Should().Be(10);
         evt.Rtt.Should().Be(0.025);
     }
+#pragma warning restore VSDK0007
 
     [Fact]
     public void RtcpSentEvent_ShouldHaveAllProperties()
