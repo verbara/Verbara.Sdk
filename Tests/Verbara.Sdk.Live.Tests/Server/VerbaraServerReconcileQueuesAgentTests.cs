@@ -52,6 +52,24 @@ public sealed class VerbaraServerReconcileQueuesAgentTests
     }
 
     [Fact]
+    public async Task ReconcileQueuesAsync_ShouldMakeTheAgentAvailableOnce_WhenTheCompletedRefreshRemovesTheQueueOfItsLastPausedMembership()
+    {
+        await using var rig = await AgentRig.StartAsync(new ListedQueue(Sales, [AgentMember], [], PausedMembers: [AgentMember]));
+        rig.State(Agent).Should().Be(AgentState.Paused);
+
+        rig.Peer.OtherQueues = [];
+        await rig.Run.Server.ReconcileQueuesAsync().AsTask().WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            rig.Run.Server.Queues.GetByName(Sales).Should().BeNull("a completed listing of every queue that omits one removes it");
+            rig.State(Agent).Should().Be(AgentState.Available, "the membership went with its queue");
+            rig.Changes(Agent).Should().Be(1, "exactly one state-changed notification");
+            rig.AssertNoAgentsListingAndCountEqualsTable();
+        }
+    }
+
+    [Fact]
     public async Task ReconcileQueuesAsync_ShouldMakeThePausedAgentAvailableOnce_WhenTheRefreshListsAnUnpausedMembershipInANewQueue()
     {
         await using var rig = await AgentRig.StartAsync(new ListedQueue(Sales, [AgentMember], [], PausedMembers: [AgentMember]));
