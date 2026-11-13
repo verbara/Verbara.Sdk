@@ -128,6 +128,9 @@ public sealed class ChannelVarsetEvent : AriEvent
 public sealed class ChannelHoldEvent : AriEvent
 {
     public AriChannel? Channel { get; set; }
+
+    /// <summary>The music-on-hold class the hold asked for, read from <c>musicclass</c>.</summary>
+    [JsonPropertyName("musicclass")]
     public string? MusicClass { get; set; }
 }
 
@@ -203,6 +206,12 @@ public sealed class BridgeAttendedTransferEvent : AriEvent
 public sealed class BridgeBlindTransferEvent : AriEvent
 {
     public string? Result { get; set; }
+
+    /// <summary>
+    /// The channel that performed the transfer. Asterisk writes it as <c>channel</c>, and this member reads it from
+    /// there; it never writes <c>transferer</c>.
+    /// </summary>
+    [JsonPropertyName("channel")]
     public AriChannel? Transferer { get; set; }
     public AriBridge? Bridge { get; set; }
     public AriChannel? Transferee { get; set; }

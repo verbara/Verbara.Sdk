@@ -377,39 +377,6 @@ public class AriNewResourceTests
     }
 
     [Fact]
-    public void AriRtpStats_ShouldDeserializeFromJson()
-    {
-        const string json = """
-        {
-            "txcount": 1000,
-            "rxcount": 980,
-            "txjitter": 1.5,
-            "rxjitter": 2.0,
-            "txploss": 5,
-            "rxploss": 3,
-            "rtt": 42,
-            "channel_uniqueid": "1234567890.1",
-            "local_ssrc": 111111,
-            "remote_ssrc": 222222
-        }
-        """;
-
-        var stats = JsonSerializer.Deserialize(json, AriJsonContext.Default.AriRtpStats);
-
-        stats.Should().NotBeNull();
-        stats!.Txcount.Should().Be(1000);
-        stats.Rxcount.Should().Be(980);
-        stats.Txjitter.Should().Be(1.5);
-        stats.Rxjitter.Should().Be(2.0);
-        stats.Txploss.Should().Be(5);
-        stats.Rxploss.Should().Be(3);
-        stats.Rtt.Should().Be(42);
-        stats.ChannelUniqueid.Should().Be("1234567890.1");
-        stats.LocalSsrc.Should().Be(111111);
-        stats.RemoteSsrc.Should().Be(222222);
-    }
-
-    [Fact]
     public void AriConfigTuple_ShouldDeserializeFromJson()
     {
         const string json = """{"attribute":"endpoint","value":"1000"}""";

@@ -58,17 +58,15 @@ public class AriCompletedEndpointTests
     [Fact]
     public async Task Channels_GetRtpStatisticsAsync_ShouldReturnStats()
     {
-        var json = JsonSerializer.Serialize(
-            new AriRtpStats { Txcount = 100, Rxcount = 95 },
-            AriJsonContext.Default.AriRtpStats);
-        using var handler = new FakeHttpHandler(json);
+        using var handler = new FakeHttpHandler(Client.AriRtpStatsWireTests.CapturedLoopReply);
         using var http = CreateHttpClient(handler);
         var sut = new AriChannelsResource(http, DefaultOptions);
 
         var result = await sut.GetRtpStatisticsAsync("ch-1");
 
-        result.Txcount.Should().Be(100);
-        result.Rxcount.Should().Be(95);
+        result.Txcount.Should().Be(600);
+        result.Rxcount.Should().Be(599);
+        result.Rtt.Should().Be(6.0999999999999999e-5);
         handler.LastMethod.Should().Be(HttpMethod.Get);
         handler.LastRequestUri.Should().Contain("rtp_statistics");
     }

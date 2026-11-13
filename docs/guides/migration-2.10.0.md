@@ -15,6 +15,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [`OriginateAsync` with an extension runs the dialplan](#originateasync-with-an-extension-runs-the-dialplan) | fix, behaviour |
 | `Verbara.Sdk.Ari` | [`STATUS`, `MEDIA_BUFFERING_COMPLETED` and `QUEUE_DRAINED` read as typed records](#status-media_buffering_completed-and-queue_drained-read-as-typed-records) | behaviour, new records |
 | `Verbara.Sdk.Ari` | [A WebSocket audio stream whose connection failed ends with `Error`](#a-websocket-audio-stream-whose-connection-failed-ends-with-error) | behaviour |
+| `Verbara.Sdk`, `Verbara.Sdk.Ari` | [`AriRtpStats` reads a real reply, and a channel state never drops an event](#arirtpstats-reads-a-real-reply-and-a-channel-state-never-drops-an-event) | fix, changed types, new members, BREAKING |
 | `Verbara.Sdk.Live` | [A channel subscriber's failure stays with that subscriber](#a-channel-subscribers-failure-stays-with-that-subscriber) | behaviour, BREAKING |
 | `Verbara.Sdk.Live` | [A live channel follows its dialplan location and caller ID](#a-live-channel-follows-its-dialplan-location-and-caller-id) | fix, behaviour |
 | `Verbara.Sdk.Live` | [A refused `Status` is counted and reported by the pool health check](#a-refused-status-is-counted-and-reported-by-the-pool-health-check) | new members, health check |
@@ -320,6 +321,65 @@ AudioSocket error frame produces, or that waits for `Disconnected` as the first 
 
 **What to do.** Handle `Error` as "the connection failed" and keep waiting for `Disconnected` as the last state, as an
 AudioSocket stream already required. AudioSocket streams are unchanged.
+
+### `AriRtpStats` reads a real reply, and a channel state never drops an event
+
+**What changed.** `Channels.GetRtpStatisticsAsync` threw `JsonException` on every reply a real Asterisk sends: Asterisk
+writes `rtt`, `local_maxrxploss` and `local_minrxploss` as reals, and an SSRC as an unsigned 32-bit integer, while
+`AriRtpStats` typed all five as `int?`. Captured on 20.20.1, 22.11.0, 23.5.0 and the 22.12, 23.6 and 24.0 release
+candidates, no reply bound. Now:
+
+| Member | 2.9.0 | 2.10.0 |
+|---|---|---|
+| `Rtt` | `int?` | `double?`, in seconds |
+| `LocalMaxrxploss`, `LocalMinrxploss` | `int?` | `double?` |
+| `LocalSsrc`, `RemoteSsrc` | `int?` | `uint?` |
+
+`AriRtpStats` also gains the 26 statistics Asterisk sends and the model lacked: `Txoctetcount` and `Rxoctetcount`
+(`uint?`), the `Remote*jitter` and `Remote*rxploss` figures, `LocalNormdevrxploss`, `LocalStdevrxploss`, `Maxrtt`,
+`Minrtt`, `Normdevrtt`, `Stdevrtt`, and the media experience scores `Txmes`, `Rxmes`, `Remote*mes` and `Local*mes`
+(`double?`).
+
+A channel's `state` is read as Asterisk writes it. `"Dialing Offhook"` and `"Pre-ring"` read as `DialingOffhook` and
+`PreRing`; `"Mute"` reads as the new `AriChannelState.Mute`, appended after `Unknown` so no existing value changes its
+number; `"Rsrvd"` and `"Rsrved"` read as `Rsrvd`; and `"Unknown (N)"`, or any state the SDK has no member for, reads as
+`Unknown`. In 2.9.0 each of those strings except `"Rsrvd"`, which is the member's own name, dropped the whole event, or
+made a REST call that returns a channel throw. These states come from analog and DAHDI channels, not PJSIP. The reader
+is the new public `AriChannelStateConverter`, declared on `AriChannelState` itself. It writes Asterisk's spelling, so
+the SDK's own serializer now writes `"Pre-ring"` and `"Dialing Offhook"` where 2.9.0 wrote `"PreRing"` and
+`"DialingOffhook"`. It reads a number from 0 to 11 as that member (as 2.9.0 did) and any other number as `Unknown`,
+and it handles a state used as a dictionary key the same way. It also applies to a consumer's own source-generated
+context or `JsonSerializerOptions`, unless those options list an enum converter of their own, such as a global
+`JsonStringEnumConverter`: a converter in the options' `Converters` wins over one declared on the type.
+
+Five members that were always empty now carry what Asterisk sends: `AriChannel.Protocol` (from `protocol_id`),
+`AriChannel.ChannelVars` (from `channelvars`, when `ari.conf` names channel variables), `ChannelHoldEvent.MusicClass`
+(from `musicclass`), `AriConfigInfo.SetId` (from `setid`) and `BridgeBlindTransferEvent.Transferer` (from `channel`,
+the transferring channel; Asterisk never writes `transferer`). No property is renamed.
+
+**Who is affected.** Code that reads `Rtt`, `LocalMaxrxploss`, `LocalMinrxploss`, `LocalSsrc` or `RemoteSsrc` into an
+`int`, or assigns them from one: it no longer compiles. Code that reads `Rtt` into `var`, a `double` or an arithmetic
+expression compiles unchanged, and gets seconds: check what unit it assumed. Code with a `switch` over `AriChannelState` and no default arm,
+which now sees `Mute`. Code that built its own JSON with the old names (`protocol`, `channel_vars`, `music_class`,
+`set_id`, `transferer`) and read it through the SDK: those names are no longer read. Code that serializes an
+`AriChannel` or an `AriChannelState` with its own `JsonSerializerOptions` or its own source-generated context and no
+enum converter of its own: the state is now written as Asterisk's text (`"state": "Pre-ring"`), where 2.9.0 wrote its
+number (`"state": 9`). Code whose options list a `JsonStringEnumConverter` keeps 2.9.0's behaviour: it writes the
+member name (`"PreRing"`), as 2.9.0 did, and still cannot read `"Pre-ring"`, `"Dialing Offhook"`, `"Rsrved"` or
+`"Unknown (N)"`.
+
+**What to do.**
+
+- Read the round-trip time as seconds: `stats.Rtt * 1000` is milliseconds. Do not cast it to `int`, which truncates every
+  value Asterisk measured on a LAN to 0.
+- Hold an SSRC as `uint` (or `long`). A cast to `int` turns any SSRC from 2^31 up negative; Asterisk generates its own
+  below 2^31, but a far end that is not Asterisk may not.
+- Handle `AriChannelState.Mute`, and treat `Unknown` as "a state the SDK has no name for": the event is delivered.
+- Feed the SDK the names Asterisk sends, if you build test frames by hand.
+- If you store channels with your own serializer, expect the state as text in what you write from now on. Nothing to
+  convert: a state stored as a number by 2.9.0 still reads back as its member.
+- If your options carry a global `JsonStringEnumConverter` and you read ARI channels through them, remove it, or insert
+  `new AriChannelStateConverter()` into the options' `Converters` ahead of it.
 
 ## Live
 

@@ -65,7 +65,7 @@
     "Verbara.Sdk.Benchmarks.AriJsonBenchmark.SerializeChannel": {
       "mean_ns": 363.01,
       "tolerance_pct": 45,
-      "bytes": 424,
+      "bytes": 432,
       "bytes_tolerance": 0
     },
     "Verbara.Sdk.Benchmarks.AriJsonBenchmark.DeserializeBridge": {

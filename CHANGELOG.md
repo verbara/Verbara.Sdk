@@ -124,6 +124,43 @@ recorded a measurement; the SDK has recorded nothing on `sessions.timed_out` or 
 (through 2.6.x the reconciliation sweep added to both, so a stored series keeps that history)
 ([guide](docs/guides/migration-2.10.0.md#vsdk0002-vsdk0003-vsdk0004-and-vsdk0006-name-their-removal-release)).
 
+### Changed — BREAKING: `AriRtpStats` reads a real `rtp_statistics` reply (#566)
+
+`Channels.GetRtpStatisticsAsync` threw `JsonException` on every reply a real Asterisk sends. `AriRtpStats.Rtt`,
+`LocalMaxrxploss` and `LocalMinrxploss` are now `double?` (Asterisk writes them as reals; `Rtt` is in seconds), and
+`LocalSsrc` and `RemoteSsrc` are `uint?` (a far end may pick an SSRC from 2^31 up). Code that reads these members into
+an `int` no longer compiles; code that reads `Rtt` into `var` or a `double` compiles and gets seconds. See the
+[migration guide](docs/guides/migration-2.10.0.md#arirtpstats-reads-a-real-reply-and-a-channel-state-never-drops-an-event).
+
+### Added: the 26 RTP statistics Asterisk sends and `AriRtpStats` lacked (#566)
+
+`Txoctetcount` and `Rxoctetcount` (`uint?`), the `Remote*jitter` and `Remote*rxploss` figures,
+`LocalNormdevrxploss`, `LocalStdevrxploss`, `Maxrtt`, `Minrtt`, `Normdevrtt`, `Stdevrtt`, and the media experience
+scores `Txmes`, `Rxmes`, `Remote*mes` and `Local*mes` (`double?`).
+
+### Added: `AriChannelStateConverter` (#566)
+
+The reader and writer of `AriChannelState`, public in `Verbara.Sdk` and declared on the enum with `[JsonConverter]`, so
+the SDK's serializer and a consumer's own source-generated context or `JsonSerializerOptions` read Asterisk's state
+spellings and write them, as a property and as a dictionary key. Options whose `Converters` list an enum converter of
+their own, such as a global `JsonStringEnumConverter`, keep using it: a converter in the options wins over one declared
+on the type, so they write the member name (`"PreRing"`) as in 2.9.0 and cannot read `"Pre-ring"`; remove that
+converter, or insert `new AriChannelStateConverter()` ahead of it. The SDK's own serializer now writes `"Pre-ring"` and
+`"Dialing Offhook"` where 2.9.0 wrote `"PreRing"` and `"DialingOffhook"`. Code that serializes an `AriChannel` with its
+own options and no enum converter now writes the state as Asterisk's text (`"state": "Up"`) where 2.9.0 wrote its
+number (`"state": 6`); a stored number from 0 to 11 still reads as its member. See the
+[migration guide](docs/guides/migration-2.10.0.md#arirtpstats-reads-a-real-reply-and-a-channel-state-never-drops-an-event).
+
+### Fixed: a channel state never drops an ARI event, and five members carry what Asterisk sends (#566)
+
+A channel whose `state` is `"Dialing Offhook"`, `"Pre-ring"`, `"Mute"`, `"Rsrved"` or `"Unknown (N)"` no longer drops
+the whole event, nor makes a REST call that returns it throw: the first two read as `DialingOffhook` and `PreRing`,
+`"Mute"` as the new `AriChannelState.Mute` (appended, value 11; no existing value changes), `"Rsrved"` as `Rsrvd`, and
+any state the SDK has no member for as `Unknown`; a number from 0 to 11 reads as that member, any other number as
+`Unknown`. `AriChannel.Protocol` reads `protocol_id`, `AriChannel.ChannelVars`
+reads `channelvars`, `ChannelHoldEvent.MusicClass` reads `musicclass`, `AriConfigInfo.SetId` reads `setid`, and
+`BridgeBlindTransferEvent.Transferer` reads the transferring channel from `channel`; each was always empty before.
+
 ### Changed — BREAKING: a call is found on the server that reported it (#533)
 
 `CallSessionManager` keeps its channel-id, `linkedid` and bridge indexes per server id, where it kept one of each for
