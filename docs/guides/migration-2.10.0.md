@@ -343,7 +343,10 @@ A channel's `state` is read as Asterisk writes it. `"Dialing Offhook"` and `"Pre
 `PreRing`; `"Mute"` reads as the new `AriChannelState.Mute`, appended after `Unknown` so no existing value changes its
 number; `"Rsrvd"` and `"Rsrved"` read as `Rsrvd`; and `"Unknown (N)"`, or any state the SDK has no member for, reads as
 `Unknown`. In 2.9.0 each of those strings dropped the whole event, or made a REST call that returns a channel throw.
-These states come from analog and DAHDI channels, not PJSIP.
+These states come from analog and DAHDI channels, not PJSIP. The reader is the new public
+`AriChannelStateConverter`, declared on `AriChannelState` itself, so it applies to every serializer, not only the SDK's:
+it writes Asterisk's spelling, and it reads a number from 0 to 11 as that member (as 2.9.0 did) and any other number as
+`Unknown`.
 
 Five members that were always empty now carry what Asterisk sends: `AriChannel.Protocol` (from `protocol_id`),
 `AriChannel.ChannelVars` (from `channelvars`, when `ari.conf` names channel variables), `ChannelHoldEvent.MusicClass`
@@ -354,7 +357,9 @@ the transferring channel; Asterisk never writes `transferer`). No property is re
 `int`, or assigns them from one: it no longer compiles. Code that reads `Rtt` into `var`, a `double` or an arithmetic
 expression compiles unchanged, and gets seconds: check what unit it assumed. Code with a `switch` over `AriChannelState` and no default arm,
 which now sees `Mute`. Code that built its own JSON with the old names (`protocol`, `channel_vars`, `music_class`,
-`set_id`, `transferer`) and read it through the SDK: those names are no longer read.
+`set_id`, `transferer`) and read it through the SDK: those names are no longer read. Code that serializes an
+`AriChannel` or an `AriChannelState` with its own `JsonSerializerOptions` or its own source-generated context: the state
+is now written as Asterisk's text (`"state": "Up"`), where 2.9.0 wrote its number (`"state": 6`).
 
 **What to do.**
 
@@ -364,6 +369,8 @@ which now sees `Mute`. Code that built its own JSON with the old names (`protoco
   below 2^31, but a far end that is not Asterisk may not.
 - Handle `AriChannelState.Mute`, and treat `Unknown` as "a state the SDK has no name for": the event is delivered.
 - Feed the SDK the names Asterisk sends, if you build test frames by hand.
+- If you store channels with your own serializer, expect the state as text in what you write from now on. Nothing to
+  convert: a state stored as a number by 2.9.0 still reads back as its member.
 
 ## Live
 
