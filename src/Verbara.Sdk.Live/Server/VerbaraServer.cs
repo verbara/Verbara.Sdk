@@ -947,6 +947,18 @@ public sealed class VerbaraServer : IVerbaraServer
     /// found only by this call, or by the reload after the next reconnect: nothing polls.
     /// </para>
     /// <para>
+    /// It asks for a queue alone only once a listing of every queue on that AMI session (the start's load, a reconnect's
+    /// reload, or this call) has ended with Asterisk's answer, applied or refused, and never while one is read. An event
+    /// that names a queue before or during that listing waits for it to end, and its queue is then asked for alone only if
+    /// the listing did not list it: a start or a reconnect sends one <c>QueueStatus</c> for every queue, not one per queue
+    /// its events name. A session whose load ended before its queue listing (a start cancelled before it) asks for no
+    /// queue alone until this call or the next reconnect's reload lists them. A refused targeted listing marks nothing:
+    /// Asterisk registers <c>QueueStatus</c> with no permission class, so it refuses it only while <c>app_queue</c> is not
+    /// loaded or Asterisk is shutting down, and the next event naming the queue asks again. A queue taken out of the table
+    /// by <see cref="QueueManager.RemoveQueue"/> or <see cref="QueueManager.Clear"/> is asked for again, with its members
+    /// and waiting callers, at the next event that names it.
+    /// </para>
+    /// <para>
     /// The agents of the <c>Agent/</c> memberships it adds, removes or changes are settled as a live member event settles
     /// them: <see cref="AgentManager.AgentStateChanged"/> is raised once for an agent whose state changed, and not for an
     /// agent logged off or on a call; no agents listing is asked. They are settled also when a handler of the queue table
@@ -963,9 +975,11 @@ public sealed class VerbaraServer : IVerbaraServer
     /// was applied in full.
     /// </para>
     /// <para>
-    /// A snapshot that did not complete reconciles nothing: one the token cancelled throws
+    /// A snapshot that did not complete reconciles nothing: one the token cancelled before it was applied throws
     /// <see cref="OperationCanceledException"/>, and one whose AMI session ended throws
-    /// <see cref="AmiNotConnectedException"/>. A <c>QueueStatus</c> Asterisk refused reconciles nothing and does not throw.
+    /// <see cref="AmiNotConnectedException"/>. A token cancelled once the snapshot was applied changes nothing: the call
+    /// returns, and the callers it admitted are announced as below. A <c>QueueStatus</c> Asterisk refused reconciles
+    /// nothing and does not throw.
     /// Over an <see cref="AmiConnection"/>, before the completed snapshot removes anything, it waits, for at most 10 s,
     /// until the connection has delivered to its handlers every event it received before <c>QueueStatusComplete</c>; when
     /// that runs out it only admits what the snapshot lists, removes nothing, logs a <c>Warning</c>, and announces the
@@ -974,7 +988,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <c>Debug</c>; it is never reported as a state load.
     /// </para>
     /// </remarks>
-    /// <param name="cancellationToken">Cancels the read; a cancelled read reconciles nothing.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the read; a read cancelled before its snapshot was applied reconciles nothing.
+    /// </param>
     /// <exception cref="AmiNotConnectedException">
     /// The connection is not established, or its AMI session ended before the snapshot could be reconciled.
     /// </exception>

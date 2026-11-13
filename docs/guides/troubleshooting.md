@@ -176,6 +176,9 @@ static async Task<AsteriskQueue?> RefreshAndFindQueueAsync(VerbaraServer server,
 
 A refused, cancelled or cut-short refresh removes nothing. Neither the refresh nor the queue Live asks for on its own
 polls: a queue that is never named by an event and never refreshed stays unknown until the next reconnect's reload.
+Live asks for a queue alone only after the AMI session's listing of every queue (the load, a reconnect's reload or a
+refresh) has ended, so the events that arrive while Live starts send no extra `QueueStatus`. A queue removed with
+`Queues.RemoveQueue` or `Queues.Clear` is listed again, with its members and callers, by the next event that names it.
 
 ### Shutdown waits for an event handler
 

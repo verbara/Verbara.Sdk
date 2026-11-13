@@ -1127,7 +1127,9 @@ public sealed class QueueManager
     /// <remarks>
     /// Each caller the queue held is counted in <c>live.queue.calls.left</c>, with no <c>live.queue.wait_time</c>
     /// sample since no leave was observed, so that <c>live.queue.calls.joined</c> minus <c>live.queue.calls.left</c>
-    /// keeps counting the callers held. No event is raised.
+    /// keeps counting the callers held. No event is raised. A server on the SDK's own AMI connection holds no listing of
+    /// the queue any more, so the next queue event that names it makes the server ask Asterisk for that queue's listing
+    /// and admit it again, with the members and waiting callers Asterisk lists.
     /// </remarks>
     public bool RemoveQueue(string queueName)
     {
@@ -1169,6 +1171,8 @@ public sealed class QueueManager
     /// later join lands in it. No <see cref="CallerLeft"/> is raised and <c>live.queue.calls.left</c> does not advance;
     /// the instance the table held for each caller reads <see cref="AsteriskQueueEntry.LeaveNotObserved"/> as
     /// <see langword="true"/>. A reload does not call it: it reconciles the table against Asterisk's snapshot instead.
+    /// A server on the SDK's own AMI connection then holds no listing of any queue, so the next queue event that names a
+    /// queue makes it ask Asterisk for that queue's listing and admit it again, with its members and waiting callers.
     /// </remarks>
     public void Clear()
     {

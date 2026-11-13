@@ -112,9 +112,10 @@ var sales = server.Queues.GetByName("sales"); // its parameters, members and wai
   counted for it again. One the completed snapshot no longer lists leaves as after a reload: counted left with no wait
   sample and marked `LeaveNotObserved`. A queue the snapshot no longer lists is removed once it holds no caller.
 - A caller or member that changes while the snapshot is being read is left as the live events made it.
-- A snapshot that did not complete reconciles nothing: a cancelled read throws `OperationCanceledException`, and a read
-  whose AMI session ended, or a connection that is not established, throws `AmiNotConnectedException`. A `QueueStatus`
-  that Asterisk refuses reconciles nothing and does not throw.
+- A snapshot that did not complete reconciles nothing: a read cancelled before its snapshot was applied throws
+  `OperationCanceledException`, and a read whose AMI session ended, or a connection that is not established, throws
+  `AmiNotConnectedException`. A token cancelled once the snapshot was applied changes nothing: the call returns, and
+  the callers it admitted are announced. A `QueueStatus` that Asterisk refuses reconciles nothing and does not throw.
 - An `Agent/<id>` membership it adds, removes or changes settles that agent's state as a live member event does: one
   `AgentStateChanged` for an agent whose state changed, none for one logged off or on a call, and no agents listing.
 - It is logged at Debug and never reported as a state load. Nothing calls it for you: a queue Asterisk creates without
@@ -130,6 +131,21 @@ while it is read stays gone. Events naming the same queue (in any letter case) o
 request that did not complete is asked again at the next event, and a queue Asterisk answered with no row for is not
 asked again on that session (a new session, or a completed `ReconcileQueuesAsync`, clears that). It runs only over the
 SDK's own `AmiConnection`. A queue that sends no event still needs the explicit refresh: nothing polls.
+
+- **Not before the session's listing of every queue.** On an AMI session Live asks for a queue alone only once a
+  listing of every queue (the start's load, the reload after a reconnect, or `ReconcileQueuesAsync`) has ended with
+  Asterisk's answer, and never while one is being read. A queue event that arrives before or during it waits for that
+  listing; when it ends, Live asks for the named queue alone only if the listing did not list it. So a start or a
+  reconnect sends one `QueueStatus` for every queue, not one per queue its events name. A session whose load never
+  reached its queue listing (a start cancelled before it, for example) asks for no queue alone until a
+  `ReconcileQueuesAsync` or the next reconnect's reload has listed them.
+- **A refused `QueueStatus` is asked again.** Asterisk registers `QueueStatus` with no permission class, so it refuses
+  it only while `app_queue` is not loaded, is being unloaded, or Asterisk is shutting down: all passing states, and
+  `app_queue` is also what sends queue events. A refused targeted listing therefore marks nothing, and the next event
+  naming the queue asks again; a refused listing of every queue still lets the session ask for queues alone.
+- **A queue taken out of the table comes back when an event names it.** After `Queues.RemoveQueue(name)` or
+  `Queues.Clear()`, the next queue event naming a queue that is no longer held makes Live ask for it and admit it again,
+  with the members and waiting callers Asterisk lists.
 
 ## Documentation
 
