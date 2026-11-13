@@ -11,7 +11,7 @@ and the rule's help link in a SARIF log, open that id's heading in the
 [2.10.0 migration guide](docs/guides/migration-2.10.0.md#vsdk0002) instead of the compiler's generic `CS0618` page. No
 message, id, signature or removal release changes: the members still leave in 2.11.0.
 
-### Changed — BREAKING: a half-open circuit admits one probe (#NNN)
+### Changed — BREAKING: a half-open circuit admits one probe (#568)
 
 Once a circuit's open window has elapsed, `CircuitBreakerState.ShouldAllow` admits one call as the probe and rejects every
 other until that probe's result is recorded, or until a further open window has passed since it was admitted. It used to
@@ -31,7 +31,7 @@ that is still down is what a breaker exists to prevent. `CircuitBreakerState.Rec
 a failure and returns `true` to the one call that opened the circuit. See the
 [migration guide](docs/guides/migration-2.10.0.md#a-half-open-circuit-admits-one-probe).
 
-### Fixed: a webhook circuit opening is counted and logged once (#NNN)
+### Fixed: a webhook circuit opening is counted and logged once (#568)
 
 `asterisk.push.webhooks.circuit.opened` was decided by reading `IsOpen` before and after each failure, so deliveries to one
 URL failing together could count one opening several times, or not at all, and repeat or miss its Warning. Webhook delivery
@@ -675,7 +675,7 @@ that is not the one in `AsteriskQueue.Entries`, so match it by `Channel` or `Uni
 The gauge documented as the current circuit state per key replayed the last value a call wrote, so an idle tripped circuit
 read `2` forever and a failed probe below the threshold left `2` over a circuit that admits the next call (#420). It now
 reports the state when observed: `2` while the open window runs, `1` from the end of the open window until the probe's
-result is recorded (the probe holds it at `1` for its whole flight, while every other call is rejected; see #NNN), `0`
+result is recorded (the probe holds it at `1` for its whole flight, while every other call is rejected; see #568), `0`
 otherwise, with no later call needed.
 
 What breaks: an alert, a dashboard or a health check that needs an unbroken `2`. That run was unbroken only because it was
