@@ -612,14 +612,22 @@ public sealed class VerbaraServerQueueDiscoveryTests
             var askedAfter = await CompletesWithinBoundAsync(peer.AskedAtLeast("QueueStatus", 3))
                 && await CompletesWithinBoundAsync(run.Server.PendingQueueDiscovery("ghost"));
             await DispatchedAsync(run, peer, "after-refresh");
+            var afterFirstRefresh = peer.QueueStatusFilters;
+
+            // A second refresh lists every queue again: a name the first one's wait handed on is not asked for again.
+            await run.Server.ReconcileQueuesAsync().AsTask().WaitAsync(Run.Bound);
+            var pendingAfterSecondRefresh = run.Server.PendingQueueDiscoveryCount;
+            await run.Server.PendingQueueDiscovery("ghost").WaitAsync(Run.Bound);
 
             using (new AssertionScope())
             {
                 askedDuringRefresh.Should().Be(2, "no queue is asked for alone while a listing of every queue is read");
                 pendingDuringRefresh.Should().Be(0, "nor registered");
                 askedAfter.Should().BeTrue("a named queue the completed listing did not list is asked for once it ends");
-                peer.QueueStatusFilters.Should().Equal([null, null, "ghost"],
+                afterFirstRefresh.Should().Equal([null, null, "ghost"],
                     "the load's listing, the refresh's, and the one queue the refresh did not list");
+                pendingAfterSecondRefresh.Should().Be(0, "no event named ghost since its listing");
+                peer.QueueStatusFilters.Should().Equal([null, null, "ghost", null]);
                 Held(run, Sales).Strategy.Should().Be("rrmemory", "the refresh listed sales");
                 run.Server.PendingQueueDiscoveryCount.Should().Be(0);
             }
@@ -748,6 +756,426 @@ public sealed class VerbaraServerQueueDiscoveryTests
         {
             oldEnds.TrySetResult();
             answer.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task QueueMemberAdded_ShouldAskForTheQueueAlone_WhenAQueueHandlerThrewWhileTheStartsListingWasApplied()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true, OtherQueues = [new ListedQueue("q1", ["PJSIP/2001"], [])] };
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.AnsweredAfter = new Dictionary<string, Task> { ["QueueStatus"] = answer.Task };
+        await using var run = await Run.ConnectAsync(peer);
+        var thrown = 0;
+        run.Server.Queues.MemberAdded += (queue, _) =>
+        {
+            if (queue == "q1" && Interlocked.Exchange(ref thrown, 1) == 0)
+                throw new InvalidOperationException("a queue handler fault");
+        };
+        try
+        {
+            var start = run.StartServerAsync();
+            await peer.AskedAtLeast("QueueStatus", 1).WaitAsync(Run.Bound);
+            // Named while the start's listing is read; that listing does not list it.
+            await peer.SendEventAsync("QueueMemberStatus", AsteriskFrames.QueueMember("ghost", "PJSIP/2008", status: 2));
+            await DispatchedAsync(run, peer, "during-listing");
+            var pendingDuringListing = run.Server.PendingQueueDiscoveryCount;
+            peer.AnsweredAfter = new Dictionary<string, Task>();
+            answer.SetResult();
+            var startFault = await Record.ExceptionAsync(() => start);
+            var ghostAsked = await DiscoveredAsync(run, peer, "ghost");
+
+            peer.OtherQueues = [.. peer.OtherQueues, new ListedQueue("later", ["PJSIP/2009"], [])];
+            await peer.SendEventAsync("QueueMemberAdded", AsteriskFrames.QueueMember("later", "PJSIP/2009"));
+            var laterAsked = await CompletesWithinBoundAsync(peer.AskedAtLeast("QueueStatus", 3))
+                && await CompletesWithinBoundAsync(run.Server.PendingQueueDiscovery("later"));
+
+            using (new AssertionScope())
+            {
+                startFault.Should().NotBeNull("the handler's fault leaves the start");
+                startFault?.ToString().Should().Contain("a queue handler fault");
+                pendingDuringListing.Should().Be(0, "nothing is asked alone while the start's listing is read");
+                ghostAsked.Should().BeTrue("a listing cut short by a handler ends, and the name it left unlisted is asked");
+                laterAsked.Should().BeTrue("the session asks for a queue created after the load");
+                peer.QueueStatusFilters.Should().Equal([null, "ghost", "later"]);
+                Held(run, "later").Members.Keys.Should().Equal(["PJSIP/2009"]);
+                run.Server.PendingQueueDiscoveryCount.Should().Be(0);
+            }
+        }
+        finally
+        {
+            answer.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task QueueMemberAdded_ShouldAskForTheQueueAlone_WhenAQueueHandlerThrewWhileTheReconnectReloadsListingWasApplied()
+    {
+        var first = new BootingAsterisk { BootedAtLogin = true };
+        var second = new BootingAsterisk { BootedAtLogin = true, OtherQueues = [new ListedQueue("q1", ["PJSIP/2001"], [])] };
+        await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
+        await run.StartServerAsync();
+        var thrown = 0;
+        run.Server.Queues.MemberAdded += (queue, _) =>
+        {
+            if (queue == "q1" && Interlocked.Exchange(ref thrown, 1) == 0)
+                throw new InvalidOperationException("a queue handler fault");
+        };
+        var failed = run.ServerLog.Logged("[LIVE] Reconnect reload failed");
+
+        first.CloseSession();
+        await run.SecondSocketCreated.WaitAsync(Run.Bound);
+        run.ReleaseSecondPeer();
+        var reloadFailed = await CompletesWithinBoundAsync(failed);
+        second.OtherQueues = [.. second.OtherQueues, new ListedQueue("later", ["PJSIP/2009"], [])];
+        await second.SendEventAsync("QueueMemberAdded", AsteriskFrames.QueueMember("later", "PJSIP/2009"));
+        var discovered = await DiscoveredAsync(run, second, "later");
+
+        using (new AssertionScope())
+        {
+            reloadFailed.Should().BeTrue("the handler's fault ends the reconnect's reload");
+            discovered.Should().BeTrue("the reload's listing ended on the new session, which then asks for a new queue");
+            second.QueueStatusFilters.Should().Equal([null, "later"]);
+            Held(run, "later").Members.Keys.Should().Equal(["PJSIP/2009"]);
+            run.Server.PendingQueueDiscoveryCount.Should().Be(0);
+        }
+    }
+
+    [Fact]
+    public async Task QueueMemberStatus_ShouldAskForTheNamedQueuesAlone_WhenTheStartThrewBeforeItsQueueListing()
+    {
+        var peer = new BootingAsterisk
+        {
+            BootedAtLogin = true,
+            OtherQueues = [new ListedQueue("named", ["PJSIP/2001"], [])],
+        };
+        var status = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.AnsweredAfter = new Dictionary<string, Task> { ["Status"] = status.Task };
+        await using var run = await Run.ConnectAsync(peer);
+        // Raised by the channel step once its Status was applied in full: a subscriber that throws ends the load there.
+        run.Server.ChannelSnapshotCompleted += _ => throw new InvalidOperationException("a channel snapshot subscriber fault");
+        try
+        {
+            var start = run.StartServerAsync();
+            await peer.AskedAtLeast("Status", 1).WaitAsync(Run.Bound);
+            await peer.SendEventAsync("QueueMemberStatus", AsteriskFrames.QueueMember("named", "PJSIP/2001", status: 2));
+            await DispatchedAsync(run, peer, "before-queue-step");
+            var pendingBefore = run.Server.PendingQueueDiscoveryCount;
+            peer.AnsweredAfter = new Dictionary<string, Task>();
+            status.SetResult();
+            var startFault = await Record.ExceptionAsync(() => start);
+            var namedAsked = await CompletesWithinBoundAsync(peer.AskedAtLeast("QueueStatus", 1))
+                && await CompletesWithinBoundAsync(run.Server.PendingQueueDiscovery("named"));
+
+            peer.OtherQueues = [.. peer.OtherQueues, new ListedQueue("later", ["PJSIP/2009"], [])];
+            await peer.SendEventAsync("QueueMemberAdded", AsteriskFrames.QueueMember("later", "PJSIP/2009"));
+            var laterAsked = await CompletesWithinBoundAsync(peer.AskedAtLeast("QueueStatus", 2))
+                && await CompletesWithinBoundAsync(run.Server.PendingQueueDiscovery("later"));
+
+            using (new AssertionScope())
+            {
+                startFault?.ToString().Should().Contain("a channel snapshot subscriber fault", "the channel step threw");
+                pendingBefore.Should().Be(0, "nothing is asked alone before the load ended");
+                namedAsked.Should().BeTrue("a load that ended before its queue listing opens its session");
+                laterAsked.Should().BeTrue();
+                peer.QueueStatusFilters.Should().Equal(["named", "later"], "the load never asked for every queue");
+                Held(run, "named").Members.Keys.Should().Equal(["PJSIP/2001"]);
+                Held(run, "later").Members.Keys.Should().Equal(["PJSIP/2009"]);
+                run.Server.PendingQueueDiscoveryCount.Should().Be(0);
+            }
+        }
+        finally
+        {
+            status.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task QueueMemberAdded_ShouldAskForTheQueueAlone_WhenAQueueHandlerThrewWhileARefreshsListingWasApplied()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true, OtherQueues = [new ListedQueue("q1", ["PJSIP/2001"], [])] };
+        await using var run = await Run.ConnectAsync(peer);
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim(initialState: false);
+        var holding = 0;
+        // The start's load is held after its Status: no listing of every queue has ended on the session yet.
+        run.Server.FenceWaitObserved = (list, _) =>
+        {
+            if (list == "Status" && Interlocked.Exchange(ref holding, 1) == 0)
+            {
+                held.TrySetResult();
+                release.Wait(Run.Bound);
+            }
+        };
+        var thrown = 0;
+        run.Server.Queues.MemberAdded += (queue, _) =>
+        {
+            if (queue == "q1" && Interlocked.Exchange(ref thrown, 1) == 0)
+                throw new InvalidOperationException("a queue handler fault");
+        };
+        try
+        {
+            var start = run.Server.StartAsync();
+            await held.Task.WaitAsync(Run.Bound);
+            var refreshFault = await Record.ExceptionAsync(() => run.Server.ReconcileQueuesAsync().AsTask().WaitAsync(Run.Bound));
+
+            peer.OtherQueues = [.. peer.OtherQueues, new ListedQueue("later", ["PJSIP/2009"], [])];
+            await peer.SendEventAsync("QueueMemberAdded", AsteriskFrames.QueueMember("later", "PJSIP/2009"));
+            var discovered = await DiscoveredAsync(run, peer, "later");
+            release.Set();
+            await start.WaitAsync(Run.Bound);
+
+            using (new AssertionScope())
+            {
+                refreshFault?.ToString().Should().Contain("a queue handler fault", "the handler's fault leaves the refresh");
+                discovered.Should().BeTrue("a refresh's listing cut short by a handler still ends, which opens the session");
+                peer.QueueStatusFilters.Should().Equal([null, "later", null], "the refresh, the queue alone, the start's");
+                Held(run, "later").Members.Keys.Should().Equal(["PJSIP/2009"]);
+                run.Server.PendingQueueDiscoveryCount.Should().Be(0);
+            }
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    [Fact]
+    public async Task QueueMemberAdded_ShouldAskForTheQueueAlone_WhenTheStartWasCancelledBeforeItsQueueListing()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        var status = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.AnsweredAfter = new Dictionary<string, Task> { ["Status"] = status.Task };
+        await using var run = await Run.ConnectAsync(peer);
+        using var cancel = new CancellationTokenSource();
+        try
+        {
+            var start = run.Server.StartAsync(cancel.Token);
+            await peer.AskedAtLeast("Status", 1).WaitAsync(Run.Bound);
+            await cancel.CancelAsync();
+            var startFault = await Record.ExceptionAsync(() => start.WaitAsync(Run.Bound));
+            // The peer answers in order: the abandoned Status goes out before anything asked after it.
+            peer.AnsweredAfter = new Dictionary<string, Task>();
+            status.SetResult();
+
+            peer.OtherQueues = [new ListedQueue("later", ["PJSIP/2009"], [])];
+            await peer.SendEventAsync("QueueMemberAdded", AsteriskFrames.QueueMember("later", "PJSIP/2009"));
+            var discovered = await CompletesWithinBoundAsync(peer.AskedAtLeast("QueueStatus", 1))
+                && await CompletesWithinBoundAsync(run.Server.PendingQueueDiscovery("later"));
+
+            using (new AssertionScope())
+            {
+                startFault.Should().BeAssignableTo<OperationCanceledException>("the start was cancelled during its Status");
+                discovered.Should().BeTrue("a start cancelled before its queue listing leaves its session open");
+                peer.QueueStatusFilters.Should().Equal(["later"]);
+                Held(run, "later").Members.Keys.Should().Equal(["PJSIP/2009"]);
+                run.Server.PendingQueueDiscoveryCount.Should().Be(0);
+            }
+        }
+        finally
+        {
+            status.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task QueueMemberStatus_ShouldAskOnlyTheReloadsListing_WhenQueueEventsArriveBeforeTheReconnectReloadListedTheQueues()
+    {
+        var first = new BootingAsterisk { BootedAtLogin = true };
+        var status = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var second = new BootingAsterisk
+        {
+            BootedAtLogin = true, OtherQueues = [new ListedQueue("q1", ["PJSIP/2001"], [])],
+            AnsweredAfter = new Dictionary<string, Task> { ["Status"] = status.Task },
+        };
+        await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
+        try
+        {
+            await run.StartServerAsync();
+            var reloaded = run.ServerLog.Logged("[LIVE] State loaded", 2);
+            first.CloseSession();
+            await run.SecondSocketCreated.WaitAsync(Run.Bound);
+            run.ReleaseSecondPeer();
+
+            // The new session's reload is held on its Status: the old session's discovery state no longer applies.
+            await second.AskedAtLeast("Status", 1).WaitAsync(Run.Bound);
+            foreach (var queue in new[] { BootingAsterisk.QueueName, "q1" })
+                await second.SendEventAsync("QueueMemberStatus", AsteriskFrames.QueueMember(queue, "PJSIP/2001", status: 2));
+            await DispatchedAsync(run, second, "before-reload-queues");
+            var pendingBeforeReload = run.Server.PendingQueueDiscoveryCount;
+            second.AnsweredAfter = new Dictionary<string, Task>();
+            status.SetResult();
+            await reloaded.WaitAsync(Run.Bound);
+            await DispatchedAsync(run, second, "after-reload");
+
+            using (new AssertionScope())
+            {
+                pendingBeforeReload.Should().Be(0, "a new session asks for no queue alone before its reload's listing");
+                second.QueueStatusFilters.Should().Equal([null], "the reload's listing covers the queues the events named");
+                Held(run, "q1").Strategy.Should().Be("rrmemory");
+                run.Server.PendingQueueDiscoveryCount.Should().Be(0);
+            }
+        }
+        finally
+        {
+            status.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task QueueMemberStatus_ShouldNotAskOnTheNewSessionForAQueueTheOldSessionNamed_WhenTheNewReloadEnds()
+    {
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = new BootingAsterisk
+        {
+            BootedAtLogin = true, AnsweredAfter = new Dictionary<string, Task> { ["QueueStatus"] = answer.Task },
+        };
+        var second = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
+        try
+        {
+            var start = run.Server.StartAsync();
+            await first.AskedAtLeast("QueueStatus", 1).WaitAsync(Run.Bound);
+            // Named on the old session while its listing is read: it waits for that listing, which never ends answered.
+            await first.SendEventAsync("QueueMemberStatus", AsteriskFrames.QueueMember("ghost", "PJSIP/2001", status: 2));
+            await DispatchedAsync(run, first, "old-session");
+            var reloaded = run.ServerLog.Logged("[LIVE] State loaded", 1);
+            first.CloseSession();
+            await run.SecondSocketCreated.WaitAsync(Run.Bound);
+            run.ReleaseSecondPeer();
+            await Record.ExceptionAsync(() => start.WaitAsync(Run.Bound));
+            await reloaded.WaitAsync(Run.Bound);
+            var pendingAfterReload = run.Server.PendingQueueDiscoveryCount;
+            await run.Server.PendingQueueDiscovery("ghost").WaitAsync(Run.Bound);
+            await DispatchedAsync(run, second, "after-reload");
+
+            using (new AssertionScope())
+            {
+                pendingAfterReload.Should().Be(0, "what the old session was waiting for does not carry to the new one");
+                second.QueueStatusFilters.Should().Equal([null], "the new session's reload lists every queue, once");
+            }
+        }
+        finally
+        {
+            answer.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task QueueMemberAdded_ShouldFollowOnlyTheNewSessionsListings_WhenTheOldSessionsListingEndsAfterTheNewReload()
+    {
+        var first = new BootingAsterisk { BootedAtLogin = true };
+        var second = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim(initialState: false);
+        var holding = 0;
+        // The start's listing of every queue, counted on the old session, is held past that session's end.
+        run.Server.FenceWaitObserved = (list, _) =>
+        {
+            if (list == "QueueStatus" && Interlocked.Exchange(ref holding, 1) == 0)
+            {
+                held.TrySetResult();
+                release.Wait(Run.Bound);
+            }
+        };
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            var start = run.Server.StartAsync();
+            await held.Task.WaitAsync(Run.Bound);
+            var reloaded = run.ServerLog.Logged("[LIVE] State loaded", 1);
+            first.CloseSession();
+            await run.SecondSocketCreated.WaitAsync(Run.Bound);
+            run.ReleaseSecondPeer();
+            await reloaded.WaitAsync(Run.Bound);
+
+            // The new session's reload has ended while the old session's listing is still open.
+            second.OtherQueues = [new ListedQueue("later", ["PJSIP/2009"], [])];
+            await second.SendEventAsync("QueueMemberAdded", AsteriskFrames.QueueMember("later", "PJSIP/2009"));
+            var laterAsked = await DiscoveredAsync(run, second, "later");
+
+            release.Set();
+            await Record.ExceptionAsync(() => start.WaitAsync(Run.Bound));
+
+            // The old listing has ended; a refresh on the new session still holds discovery back while it is read.
+            second.AnsweredAfter = new Dictionary<string, Task> { ["QueueStatus"] = answer.Task };
+            var refresh = run.Server.ReconcileQueuesAsync().AsTask();
+            (await CompletesWithinBoundAsync(second.AskedAtLeast("QueueStatus", 3))).Should().BeTrue("the refresh asked");
+            await second.SendEventAsync("QueueMemberStatus", AsteriskFrames.QueueMember("ghost", "PJSIP/2008", status: 2));
+            await DispatchedAsync(run, second, "during-refresh");
+            var askedDuringRefresh = second.Asked("QueueStatus");
+            var pendingDuringRefresh = run.Server.PendingQueueDiscoveryCount;
+            second.AnsweredAfter = new Dictionary<string, Task>();
+            answer.SetResult();
+            await refresh.WaitAsync(Run.Bound);
+            var ghostAsked = await CompletesWithinBoundAsync(second.AskedAtLeast("QueueStatus", 4))
+                && await CompletesWithinBoundAsync(run.Server.PendingQueueDiscovery("ghost"));
+
+            using (new AssertionScope())
+            {
+                laterAsked.Should().BeTrue("the old session's open listing does not hold the new session back");
+                askedDuringRefresh.Should().Be(3, "the old listing's end does not uncount the new session's refresh");
+                pendingDuringRefresh.Should().Be(0);
+                ghostAsked.Should().BeTrue();
+                second.QueueStatusFilters.Should().Equal([null, "later", null, "ghost"]);
+                run.Server.PendingQueueDiscoveryCount.Should().Be(0);
+            }
+        }
+        finally
+        {
+            release.Set();
+            answer.TrySetResult();
+        }
+    }
+
+    [Fact]
+    public async Task QueueMemberAdded_ShouldStillAskOnTheNewSession_WhenTheOldSessionsLoadEndsBeforeItsQueueStepAfterTheNewReload()
+    {
+        var first = new BootingAsterisk { BootedAtLogin = true };
+        var second = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim(initialState: false);
+        var holding = 0;
+        // The start's load is held after its Status, before its queue step, past the old session's end.
+        run.Server.FenceWaitObserved = (list, _) =>
+        {
+            if (list == "Status" && Interlocked.Exchange(ref holding, 1) == 0)
+            {
+                held.TrySetResult();
+                release.Wait(Run.Bound);
+            }
+        };
+        try
+        {
+            var start = run.Server.StartAsync();
+            await held.Task.WaitAsync(Run.Bound);
+            var reloaded = run.ServerLog.Logged("[LIVE] State loaded", 1);
+            first.CloseSession();
+            await run.SecondSocketCreated.WaitAsync(Run.Bound);
+            run.ReleaseSecondPeer();
+            await reloaded.WaitAsync(Run.Bound);
+
+            // The old session's load ends, before its queue step, after the new session's reload opened that session.
+            release.Set();
+            await Record.ExceptionAsync(() => start.WaitAsync(Run.Bound));
+
+            second.OtherQueues = [new ListedQueue("later", ["PJSIP/2009"], [])];
+            await second.SendEventAsync("QueueMemberAdded", AsteriskFrames.QueueMember("later", "PJSIP/2009"));
+            var discovered = await DiscoveredAsync(run, second, "later");
+
+            using (new AssertionScope())
+            {
+                first.QueueStatusFilters.Should().BeEmpty("the old session's load never reached its queue step");
+                discovered.Should().BeTrue("a load whose session ended does not take the discovery back to that session");
+                second.QueueStatusFilters.Should().Equal([null, "later"]);
+                run.Server.PendingQueueDiscoveryCount.Should().Be(0);
+            }
+        }
+        finally
+        {
+            release.Set();
         }
     }
 
