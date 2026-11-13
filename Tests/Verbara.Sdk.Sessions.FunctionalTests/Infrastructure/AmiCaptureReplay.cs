@@ -661,6 +661,79 @@ internal static class AmiCaptureReplay
     }
 
     /// <summary>
+    /// The capture-script recordings of transfers and bridges while a caller waits in a queue or a participant is in a
+    /// conference, one per Asterisk version (20.20.1, 22.11.0, 23.5.0, 24.0.0-rc2): every step of the workload's closed
+    /// list, each behind its own <c>CaptureMarker</c> (the folder's README, <i>The transfer and bridge captures</i>).
+    /// </summary>
+    public static readonly IReadOnlyList<string> TransferCaptures =
+    [
+        "renamed-caller-and-participant-asterisk-20.20.1.raw",
+        "renamed-caller-and-participant-asterisk-22.11.0.raw",
+        "renamed-caller-and-participant-asterisk-23.5.0.raw",
+        "renamed-caller-and-participant-asterisk-24.0.0-rc2.raw",
+    ];
+
+    /// <summary>
+    /// The one conference transfer of the same workload on Asterisk 23.5.0 whose participant's <c>ConfbridgeLeave</c>
+    /// arrived after that participant's <c>Hangup</c> (the folder's README, <i>The transfer and bridge captures</i>).
+    /// </summary>
+    public const string LateConferenceLeaveCapture = "renamed-caller-and-participant-refer-conference-asterisk-23.5.0.raw";
+
+    /// <summary>
+    /// Replays the live events of the named <paramref name="steps"/> of <paramref name="fixture"/>, a capture made by
+    /// the capture script, into a fresh server and session manager: each frame after a <c>CaptureMarker</c> whose
+    /// <c>Step</c> is one of them and before the next marker, in capture order, through the server's own observer.
+    /// The tap's own action answers (frames with an <c>ActionID</c>) are skipped: a client other than the tap never
+    /// receives them.
+    /// </summary>
+    /// <param name="fixture">The capture's file name.</param>
+    /// <param name="steps">The steps whose frames are delivered.</param>
+    /// <param name="started">Called once with the started rig, before the first frame is delivered.</param>
+    /// <param name="finished">Optional. Called once with the rig after the last frame, before the rig is disposed.</param>
+    /// <returns>Every exception the server's observer threw, in delivery order.</returns>
+    public static async Task<IReadOnlyList<SwallowedObserverException>> ReplayStepsAsync(
+        string fixture, IReadOnlyCollection<string> steps, Action<ReplayProbe> started,
+        Action<ReplayProbe>? finished = null)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+        ArgumentNullException.ThrowIfNull(started);
+        await using var rig = await ReplayRig.StartAsync(new SessionOptions());
+        var probe = new ReplayProbe(rig.Server, rig.Manager);
+        started(probe);
+        var swallowed = new List<SwallowedObserverException>();
+        await foreach (var (step, evt) in ReadStepsAsync(fixture, steps))
+        {
+            if (rig.Deliver(evt) is { } thrown)
+                swallowed.Add(new SwallowedObserverException(step, evt.EventType ?? "", thrown));
+        }
+
+        finished?.Invoke(probe);
+        return swallowed;
+    }
+
+    /// <summary>
+    /// The live events of the named <paramref name="steps"/> of <paramref name="fixture"/>, each with its step, as
+    /// <see cref="ReplayStepsAsync"/> delivers them.
+    /// </summary>
+    public static async IAsyncEnumerable<(string Step, ManagerEvent Event)> ReadStepsAsync(
+        string fixture, IReadOnlyCollection<string> steps)
+    {
+        string? step = null;
+        await foreach (var evt in ReadEventsAsync(FixturePath(fixture)))
+        {
+            var fields = evt.RawFields;
+            if (string.Equals(fields?.GetValueOrDefault("UserEvent"), "CaptureMarker", StringComparison.Ordinal))
+            {
+                step = fields!.GetValueOrDefault("Step");
+                continue;
+            }
+
+            if (step is not null && steps.Contains(step) && fields?.ContainsKey("ActionID") != true)
+                yield return (step, evt);
+        }
+    }
+
+    /// <summary>
     /// The events of <paramref name="fixture"/> (a file name in <c>Recordings/asterisk-ami/</c>), in order,
     /// parsed as a live connection parses them: live events, markers and the answers to the tap's actions
     /// alike.

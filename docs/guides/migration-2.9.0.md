@@ -270,8 +270,9 @@ meaning:
 - `live.queue.calls.joined` no longer counts a caller who is still waiting again on each reconnect, nor a repeated
   join for a caller already held.
 - `live.queue.calls.left` also counts the callers the SDK removes without a reported leave (a caller a reload no
-  longer lists, the callers of a removed queue, a caller whose channel a reconciliation removed). Those removals
-  record no `live.queue.wait_time` sample.
+  longer lists, the callers of a removed queue, a caller whose channel a reconciliation removed, and, from 2.10.0, a
+  caller whose `Hangup` Asterisk reported while it was still held). Those removals record no `live.queue.wait_time`
+  sample.
 - `BridgeManager.BridgeCount` and `live.bridges.created` count every bridge inserted since the start, listings
   included; a reconnect no longer resets `BridgeCount`.
 
@@ -338,7 +339,10 @@ Four rules for a consumer:
 the table held reads `true`. `QueueManager.Clear` also empties the `Entries` of a queue you retained.
 
 The reload is not the only way a caller reads `true`. A channel reconciliation that removes the caller's channel raises
-the same inferred `CallerLeft`, and so does a join that takes the channel name the caller was held under.
+the same inferred `CallerLeft`, and so does a join that takes the channel name the caller was held under. From 2.10.0 so
+does the caller's `Hangup` when the table still holds it: a caller that another channel relieved (an attended transfer,
+an `INVITE` with `Replaces`) or that a bridge took out of the queue gets no `QueueCallerLeave`, and only hangs up. A
+conference participant's `Hangup` removes nothing: its `ConfbridgeLeave` can arrive after it.
 
 Guide: [Reconnect](conference-participants-migration.md#reconnect).
 

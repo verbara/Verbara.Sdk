@@ -1,0 +1,880 @@
+Asterisk Call Manager/12.0.0
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1794455574.021322
+UserEvent: CaptureProvenance
+AsteriskVersion: Asterisk 23.5.0
+Image: andrius/asterisk:23.5.0_debian-trixie-c6e8a0e@sha256:532e68e4194e968e866a27f321ccce03fdd66bd7e369ffa17c07e7210da0fde1
+Workload: renamed-caller-and-participant
+ActionID: cap-2
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1794455664.687304
+UserEvent: CaptureMarker
+Step: refer-conference
+ActionID: cap-153
+
+Response: Success
+ActionID: cap-154
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1794455664.687733
+Channel: PJSIP/loop-0000000c
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1794455664.87
+Linkedid: 1794455664.87
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1794455664.688685
+Channel: PJSIP/loop-0000000d
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7227
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: conf-in
+Priority: 1
+Uniqueid: 1794455664.88
+Linkedid: 1794455664.88
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1794455664.689009
+ActionID: cap-154
+Response: Success
+Channel: PJSIP/loop-0000000c
+Application: Wait
+Data: 30
+Reason: 4
+Uniqueid: 1794455664.87
+CallerIDNum: 7227
+CallerIDName: Capture
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1794455665.190173
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: base
+BridgeTechnology: softmix
+BridgeCreator: ConfBridge
+BridgeName: capture-room
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: ConfbridgeStart
+Privilege: call,all
+Timestamp: 1794455665.190416
+Conference: capture-room
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: base
+BridgeTechnology: softmix
+BridgeCreator: ConfBridge
+BridgeName: capture-room
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1794455665.190455
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: base
+BridgeTechnology: softmix
+BridgeCreator: ConfBridge
+BridgeName: capture-room
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-0000000d
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7227
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: conf-in
+Priority: 3
+Uniqueid: 1794455664.88
+Linkedid: 1794455664.88
+
+Event: ConfbridgeJoin
+Privilege: call,all
+Timestamp: 1794455665.190551
+Conference: capture-room
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: base
+BridgeTechnology: softmix
+BridgeCreator: ConfBridge
+BridgeName: capture-room
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-0000000d
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7227
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: conf-in
+Priority: 3
+Uniqueid: 1794455664.88
+Linkedid: 1794455664.88
+Admin: No
+Muted: No
+
+Response: Success
+ActionID: cap-155
+Variable: CHANNEL(pjsip,call-id)
+Value: 22222222-2222-2222-2222-222222222222
+
+Response: Success
+ActionID: cap-156
+Variable: CHANNEL(pjsip,local_tag)
+Value: 33333333-3333-3333-3333-333333333333
+
+Response: Success
+ActionID: cap-157
+Variable: CHANNEL(pjsip,remote_tag)
+Value: 44444444-4444-4444-4444-444444444444
+
+Response: Success
+ActionID: cap-158
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1794455665.692348
+Channel: PJSIP/loop-0000000e
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1794455665.91
+Linkedid: 1794455665.91
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1794455665.692963
+Channel: PJSIP/loop-0000000f
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 7228
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: hold-in
+Priority: 1
+Uniqueid: 1794455665.92
+Linkedid: 1794455665.92
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1794455665.693276
+ActionID: cap-158
+Response: Success
+Channel: PJSIP/loop-0000000e
+Application: Wait
+Data: 30
+Reason: 4
+Uniqueid: 1794455665.91
+CallerIDNum: 7228
+CallerIDName: Capture
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1794455666.194229
+Channel: Local/peer@capture-00000024;1
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: peer
+Priority: 1
+Uniqueid: 1794455666.93
+Linkedid: 1794455665.92
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1794455666.194238
+Channel: Local/peer@capture-00000024;2
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: peer
+Priority: 1
+Uniqueid: 1794455666.94
+Linkedid: 1794455665.92
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1794455666.194491
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1794455666.194618
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/peer@capture-00000024;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: hold-in
+CallerIDName: <unknown>
+ConnectedLineNum: 7228
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 
+Priority: 1
+Uniqueid: 1794455666.93
+Linkedid: 1794455665.92
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1794455666.194665
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-0000000f
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7228
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: hold-in
+Priority: 2
+Uniqueid: 1794455665.92
+Linkedid: 1794455665.92
+
+Response: Success
+ActionID: cap-159
+Message: Variable Set
+
+Response: Success
+ActionID: cap-160
+Message: Redirect successful
+
+Event: Unhold
+Privilege: call,all
+Timestamp: 1794455666.195384
+Channel: PJSIP/loop-0000000f
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7228
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: hold-in
+Priority: 2
+Uniqueid: 1794455665.92
+Linkedid: 1794455665.92
+
+Event: Unhold
+Privilege: call,all
+Timestamp: 1794455666.195387
+Channel: PJSIP/loop-0000000d
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7227
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: conf-in
+Priority: 3
+Uniqueid: 1794455664.88
+Linkedid: 1794455664.88
+
+Event: AttendedTransfer
+Privilege: call,all
+Timestamp: 1794455666.195433
+Result: Success
+OrigTransfererChannel: PJSIP/loop-0000000f
+OrigTransfererChannelState: 6
+OrigTransfererChannelStateDesc: Up
+OrigTransfererCallerIDNum: 7228
+OrigTransfererCallerIDName: Capture
+OrigTransfererConnectedLineNum: <unknown>
+OrigTransfererConnectedLineName: <unknown>
+OrigTransfererLanguage: en
+OrigTransfererAccountCode: 
+OrigTransfererContext: capture-sip
+OrigTransfererExten: hold-in
+OrigTransfererPriority: 2
+OrigTransfererUniqueid: 1794455665.92
+OrigTransfererLinkedid: 1794455665.92
+OrigBridgeUniqueid: 55555555-5555-5555-5555-555555555555
+OrigBridgeType: basic
+OrigBridgeTechnology: simple_bridge
+OrigBridgeCreator: <unknown>
+OrigBridgeName: <unknown>
+OrigBridgeNumChannels: 2
+OrigBridgeVideoSourceMode: none
+SecondTransfererChannel: PJSIP/loop-0000000d
+SecondTransfererChannelState: 6
+SecondTransfererChannelStateDesc: Up
+SecondTransfererCallerIDNum: 7227
+SecondTransfererCallerIDName: Capture
+SecondTransfererConnectedLineNum: <unknown>
+SecondTransfererConnectedLineName: <unknown>
+SecondTransfererLanguage: en
+SecondTransfererAccountCode: 
+SecondTransfererContext: capture-sip
+SecondTransfererExten: conf-in
+SecondTransfererPriority: 3
+SecondTransfererUniqueid: 1794455664.88
+SecondTransfererLinkedid: 1794455664.88
+TransfereeChannel: Local/peer@capture-00000024;1
+TransfereeChannelState: 6
+TransfereeChannelStateDesc: Up
+TransfereeCallerIDNum: hold-in
+TransfereeCallerIDName: <unknown>
+TransfereeConnectedLineNum: 7228
+TransfereeConnectedLineName: Capture
+TransfereeLanguage: en
+TransfereeAccountCode: 
+TransfereeContext: capture
+TransfereeExten: 
+TransfereePriority: 1
+TransfereeUniqueid: 1794455666.93
+TransfereeLinkedid: 1794455665.92
+IsExternal: No
+DestType: App
+DestApp: ConfBridge
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1794455666.195449
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-0000000f
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7228
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: hold-in
+Priority: 2
+Uniqueid: 1794455665.92
+Linkedid: 1794455665.92
+
+Event: ConfbridgeLeave
+Privilege: call,all
+Timestamp: 1794455666.195465
+Conference: capture-room
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: base
+BridgeTechnology: softmix
+BridgeCreator: ConfBridge
+BridgeName: capture-room
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-0000000d
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7227
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: conf-in
+Priority: 3
+Uniqueid: 1794455664.88
+Linkedid: 1794455664.88
+Admin: No
+
+Event: ConfbridgeJoin
+Privilege: call,all
+Timestamp: 1794455666.195473
+Conference: capture-room
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: base
+BridgeTechnology: softmix
+BridgeCreator: ConfBridge
+BridgeName: capture-room
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: Local/peer@capture-00000024;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: hold-in
+CallerIDName: <unknown>
+ConnectedLineNum: 7228
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 
+Priority: 1
+Uniqueid: 1794455666.93
+Linkedid: 1794455665.92
+Admin: No
+Muted: No
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1794455666.195496
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: Local/peer@capture-00000024;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: hold-in
+CallerIDName: <unknown>
+ConnectedLineNum: 7228
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: 
+Priority: 1
+Uniqueid: 1794455666.93
+Linkedid: 1794455665.92
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1794455666.195521
+BridgeUniqueid: 55555555-5555-5555-5555-555555555555
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1794455666.195675
+Channel: PJSIP/loop-0000000f
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7228
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: hold-in
+Priority: 2
+Uniqueid: 1794455665.92
+Linkedid: 1794455665.92
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1794455666.195799
+Channel: PJSIP/loop-0000000e
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7228
+CallerIDName: Capture
+ConnectedLineNum: 7228
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: refer-go
+Priority: 2
+Uniqueid: 1794455665.91
+Linkedid: 1794455665.91
+UserEvent: CaptureApp
+App: Transfer
+Result: SUCCESS
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1794455666.195881
+Channel: PJSIP/loop-0000000d
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7227
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: 
+Priority: 1
+Uniqueid: 1794455664.88
+Linkedid: 1794455664.88
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1794455666.196078
+Channel: PJSIP/loop-0000000c
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7227
+CallerIDName: Capture
+ConnectedLineNum: 7227
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1794455664.87
+Linkedid: 1794455664.87
+Cause: 16
+Cause-txt: Normal Clearing
+
+Response: Success
+ActionID: cap-161
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1794455670.206069
+UserEvent: CaptureMarker
+Step: refer-conference-waiting
+ActionID: cap-161
+
+Response: Success
+ActionID: cap-162
+EventList: start
+Message: Confbridge user list will follow
+
+Event: ConfbridgeList
+ActionID: cap-162
+Conference: capture-room
+Admin: No
+MarkedUser: No
+WaitMarked: No
+EndMarked: No
+EndMarkedAny: No
+Waiting: No
+Muted: No
+Talking: No
+AnsweredTime: 5
+Channel: Local/peer@capture-00000024;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: hold-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: conf-in
+Priority: 3
+Uniqueid: 1794455666.93
+Linkedid: 1794455665.92
+
+Event: ConfbridgeListComplete
+ActionID: cap-162
+EventList: Complete
+ListItems: 1
+
+Response: Success
+ActionID: cap-163
+Message: User muted
+
+Event: ConfbridgeMute
+Privilege: call,all
+Timestamp: 1794455670.206375
+Conference: capture-room
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: base
+BridgeTechnology: softmix
+BridgeCreator: ConfBridge
+BridgeName: capture-room
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: Local/peer@capture-00000024;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: hold-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: conf-in
+Priority: 3
+Uniqueid: 1794455666.93
+Linkedid: 1794455665.92
+Admin: No
+
+Response: Success
+ActionID: cap-164
+EventList: start
+Message: Channels hung up will follow
+
+Event: ChannelsHungupListComplete
+ActionID: cap-164
+EventList: Complete
+ListItems: 3
+
+Response: Success
+ActionID: cap-165
+EventList: start
+Message: Channels will follow
+
+Event: CoreShowChannelsComplete
+ActionID: cap-165
+EventList: Complete
+ListItems: 3
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1794455670.707452
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: base
+BridgeTechnology: softmix
+BridgeCreator: ConfBridge
+BridgeName: capture-room
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: Local/peer@capture-00000024;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: hold-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: conf-in
+Priority: 3
+Uniqueid: 1794455666.93
+Linkedid: 1794455665.92
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1794455670.707605
+Channel: Local/peer@capture-00000024;2
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: hold-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: peer
+Priority: 2
+Uniqueid: 1794455666.94
+Linkedid: 1794455665.92
+Cause: 0
+Cause-txt: Unknown
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1794455670.708818
+Channel: Local/peer@capture-00000024;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: hold-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: conf-in
+Priority: 3
+Uniqueid: 1794455666.93
+Linkedid: 1794455665.92
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1794455670.708821
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: base
+BridgeTechnology: softmix
+BridgeCreator: ConfBridge
+BridgeName: capture-room
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: ConfbridgeLeave
+Privilege: call,all
+Timestamp: 1794455670.709939
+Conference: capture-room
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: base
+BridgeTechnology: softmix
+BridgeCreator: ConfBridge
+BridgeName: capture-room
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: Local/peer@capture-00000024;1
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: hold-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: conf-in
+Priority: 3
+Uniqueid: 1794455666.93
+Linkedid: 1794455665.92
+Admin: No
+
+Event: ConfbridgeEnd
+Privilege: call,all
+Timestamp: 1794455670.709956
+Conference: capture-room
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: base
+BridgeTechnology: softmix
+BridgeCreator: ConfBridge
+BridgeName: capture-room
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1794455670.710468
+Channel: PJSIP/loop-0000000e
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 7228
+CallerIDName: Capture
+ConnectedLineNum: 7228
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture
+Exten: refer-go
+Priority: 3
+Uniqueid: 1794455665.91
+Linkedid: 1794455665.91
+Cause: 0
+Cause-txt: Unknown
+
+Response: Success
+ActionID: cap-166
+EventList: start
+Message: Channels will follow
+
+Event: CoreShowChannelsComplete
+ActionID: cap-166
+EventList: Complete
+ListItems: 0
+
+Response: Success
+ActionID: cap-167
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1794455671.709651
+UserEvent: CaptureOutcome
+Step: refer-conference
+Surface: conference
+Trigger: refer
+TargetName: PJSIP/loop-0000000d
+TargetId: 1794455664.88
+Refusals: 0
+Leaves: 2
+LeaveIds: 1794455664.88,1794455666.93
+RenamedIds: 
+RenameFrames: 0
+Masquerades: 0
+LocalOptimizations: 0
+Detail: Transfer: SUCCESS; AttendedTransfer frames: 1
+ActionID: cap-167
+
+Response: Success
+ActionID: cap-168
+Message: Event Sent
+
