@@ -146,8 +146,8 @@ jobs:
 
       # ── The gate itself (ADR-0042 D4) ────────────────────────────────────────
       # Bytes decide, time informs: rows with a `bytes` entry are gated on
-      # Memory.BytesAllocatedPerOperation (exact or a stated bound), which no
-      # runner, fleet or ISA moves.
+      # Memory.BytesAllocatedPerOperation (exact or a stated bound), which no CPU
+      # model or ISA moves — but the core count can, so bytes are read on this runner.
       # Time is relative-regression only: observed mean vs the committed HOSTED-RUNNER
       # mean, inside a per-benchmark band calibrated from 13 real runs of this
       # workflow. It does not compare against README.md's workstation figures
