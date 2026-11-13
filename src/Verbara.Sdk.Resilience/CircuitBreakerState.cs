@@ -129,7 +129,7 @@ public sealed class CircuitBreakerState
         }
 
         Interlocked.Exchange(ref _probeAtTicks, nowTicks);
-        return ConfirmProbe(nowTicks, time);
+        return ConfirmProbe(nowTicks, openDuration, time);
     }
 
     // A probe that has reported nothing for a whole window hands its slot on, to one winner.
@@ -146,7 +146,7 @@ public sealed class CircuitBreakerState
         if (Interlocked.CompareExchange(ref _probeAtTicks, nowTicks, probeAtTicks) != probeAtTicks)
             return false;
 
-        return ConfirmProbe(nowTicks, time);
+        return ConfirmProbe(nowTicks, openDuration, time);
     }
 
     // The probe's window runs from the last clock reading its admission took. The reading that passed the window test
@@ -154,12 +154,17 @@ public sealed class CircuitBreakerState
     // clock is read again once the slot is held, and the probe time moves to that reading. The slot already carries the
     // earlier reading: a clock that throws here leaves a slot that expires, never half-open with no probe time. A lost
     // swap is read as it stands: another call took the slot once it had expired, and this one is rejected; or a result
-    // cleared it and decided the circuit, and this call stays admitted, as it would had the result come just after it.
-    private bool ConfirmProbe(long heldSinceTicks, TimeProvider time)
+    // cleared it and decided the circuit, and this call stays admitted, as it would had the result come just after it,
+    // unless a whole window has passed since it took the slot: the circuit that result re-opened may already have admitted
+    // its next probe, whose window this reading falls in, so this call is rejected.
+    private bool ConfirmProbe(long heldSinceTicks, TimeSpan openDuration, TimeProvider time)
     {
         var admittedAtTicks = time.GetUtcNow().UtcTicks;
         var seen = Interlocked.CompareExchange(ref _probeAtTicks, admittedAtTicks, heldSinceTicks);
-        return seen == heldSinceTicks || seen == NullTicksSentinel;
+        if (seen == heldSinceTicks)
+            return true;
+
+        return seen == NullTicksSentinel && !WindowHasElapsed(heldSinceTicks, openDuration, admittedAtTicks);
     }
 
     /// <summary>
