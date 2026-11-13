@@ -1161,6 +1161,12 @@ public sealed class QueueManager
             }
 
             _queuesByMember.Clear();
+
+            // The table is empty, so the count is too. Reset as well, not just released entry by entry, so that a key a
+            // consumer's direct removal from Entries left behind does not outlive the table. Every store runs under
+            // _windowsLock, held here; every take runs under its queue's lock, so one that beat this loop to an entry has
+            // already released it, and one after it finds nothing left to take: nothing in flight moves the count.
+            _heldByUniqueId.Clear();
         }
     }
 }
@@ -1186,11 +1192,13 @@ public sealed class AsteriskQueue
     public ConcurrentDictionary<string, AsteriskQueueMember> Members { get; } = new();
 
     /// <summary>
-    /// The callers waiting in this queue, by channel name, as Live's queue table holds them. Read it; do not change it:
-    /// Live keeps its own account of the callers it holds next to this dictionary (the count a <c>Hangup</c> reads before
-    /// it looks through the queues), and a caller added or removed here directly bypasses it. A caller removed directly
-    /// costs every later <c>Hangup</c> of its <c>Uniqueid</c> one look through the queues; one added directly is not
-    /// removed by its <c>Hangup</c>.
+    /// The callers waiting in this queue, by channel name, as Live's queue table holds them. Read-only by contract: read
+    /// it, do not change it. Live keeps its own index of the callers it holds next to this dictionary (a count by
+    /// <c>Uniqueid</c>, which a <c>Hangup</c> reads before it looks through the queues), and a caller added or removed here
+    /// directly bypasses it. A caller removed directly leaves a stale count: each later <c>Hangup</c> of its <c>Uniqueid</c>
+    /// looks through every queue once, finding nothing, and its key stays in the index until
+    /// <see cref="QueueManager.Clear"/> (<see cref="QueueManager.RemoveQueue"/> does not free it: the entry is no longer
+    /// there to release it). A caller added directly is not in the index, so its <c>Hangup</c> does not remove it.
     /// </summary>
     public ConcurrentDictionary<string, AsteriskQueueEntry> Entries { get; } = new();
     public int MemberCount => Members.Count;

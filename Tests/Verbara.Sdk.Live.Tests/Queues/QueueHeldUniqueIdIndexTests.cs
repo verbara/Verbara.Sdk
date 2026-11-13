@@ -152,6 +152,21 @@ public sealed class QueueHeldUniqueIdIndexTests
         ShouldMatchTheTable().Should().BeEmpty();
     }
 
+    [Fact]
+    public void Clear_ShouldForgetAUniqueIdLeftBehind_WhenAConsumerRemovedItsCallerDirectly()
+    {
+        _queues.OnCallerJoined(Queue, "PJSIP/a-1", "100", 1, "u1", Epoch);
+        _queues.OnCallerJoined(Queue, "PJSIP/a-2", "200", 1, "u2", Epoch);
+        // A consumer that breaks the read-only contract of Entries: the count no longer sees this removal.
+        _queues.GetByName(Queue)!.Entries.TryRemove("PJSIP/a-1", out _).Should().BeTrue("premise: removed directly");
+        _queues.HeldUniqueIdCounts().Should().Equal(Held(("u1", 1), ("u2", 1)), "premise: the count kept u1, stale");
+
+        _queues.Clear();
+
+        _queues.HeldUniqueIdCounts().Should().BeEmpty(
+            "the table is empty after a Clear, so a key a direct removal left behind must not outlive it");
+    }
+
     // Eight threads at once on a small pool of queues, channels and Uniqueids, so joins re-key, displace and land in
     // queues a snapshot, RemoveQueue or Clear is taking out. At rest the count equals a recount of the table. Bounded:
     // a fixed number of operations from fixed seeds, a few hundred milliseconds.

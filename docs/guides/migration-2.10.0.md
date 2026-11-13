@@ -401,6 +401,12 @@ none of 640 did on Asterisk 20.20.1, 22.11.0, 23.5.0 and 24.0.0-rc2, measured on
 **What to do.** Nothing, if your `CallerLeft` handler already handles `LeaveNotObserved == true`. A bridged-out caller
 stays counted until its bridged call ends.
 
+**`AsteriskQueue.Entries` is read-only by contract.** From 2.10.0 Live keeps an index of the callers it holds next to
+`Entries`, a count by `Uniqueid` that a `Hangup` reads before it looks through the queues. Read `Entries`; do not add or
+remove callers in it. A caller removed directly leaves a stale count: each later `Hangup` of its `Uniqueid` looks
+through every queue once, finding nothing, and its key stays in the index until `QueueManager.Clear` (`RemoveQueue`
+does not free it). A caller added directly is not in the index, so its `Hangup` does not remove it.
+
 ## AMI
 
 ### A parking event names its channel and where it is parked
