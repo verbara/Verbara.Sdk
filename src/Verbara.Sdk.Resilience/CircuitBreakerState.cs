@@ -100,7 +100,8 @@ public sealed class CircuitBreakerState
     }
 
     // Open → half-open, by one winner. The clock is read before the swap: a clock that throws leaves the circuit
-    // open, never half-open with no probe time, which no expiry could reach.
+    // open, never half-open with no probe time, which no expiry could reach. Once the slot is held, the clock is read
+    // again and the probe time moves to that reading (ConfirmProbe).
     private bool TryClaimProbe(TimeSpan openDuration, TimeProvider time)
     {
         var openedAtTicks = Interlocked.Read(ref _openedAtTicks);
@@ -128,7 +129,7 @@ public sealed class CircuitBreakerState
         }
 
         Interlocked.Exchange(ref _probeAtTicks, nowTicks);
-        return true;
+        return ConfirmProbe(nowTicks, time);
     }
 
     // A probe that has reported nothing for a whole window hands its slot on, to one winner.
@@ -142,7 +143,23 @@ public sealed class CircuitBreakerState
         if (!WindowHasElapsed(probeAtTicks, openDuration, nowTicks))
             return false;
 
-        return Interlocked.CompareExchange(ref _probeAtTicks, nowTicks, probeAtTicks) == probeAtTicks;
+        if (Interlocked.CompareExchange(ref _probeAtTicks, nowTicks, probeAtTicks) != probeAtTicks)
+            return false;
+
+        return ConfirmProbe(nowTicks, time);
+    }
+
+    // The probe's window runs from the last clock reading its admission took. The reading that passed the window test
+    // was taken before the slot was won, and a caller stalled in between would hold a slot that is already old; so the
+    // clock is read again once the slot is held, and the probe time moves to that reading. The slot already carries the
+    // earlier reading: a clock that throws here leaves a slot that expires, never half-open with no probe time. A lost
+    // swap is read as it stands: another call took the slot once it had expired, and this one is rejected; or a result
+    // cleared it and decided the circuit, and this call stays admitted, as it would had the result come just after it.
+    private bool ConfirmProbe(long heldSinceTicks, TimeProvider time)
+    {
+        var admittedAtTicks = time.GetUtcNow().UtcTicks;
+        var seen = Interlocked.CompareExchange(ref _probeAtTicks, admittedAtTicks, heldSinceTicks);
+        return seen == heldSinceTicks || seen == NullTicksSentinel;
     }
 
     /// <summary>
