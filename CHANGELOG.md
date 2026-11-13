@@ -42,7 +42,7 @@ A consumer that deduplicates notifications by record equality, or keys them by `
 `notification with { Epoch = null }` instead. The notifications of a custom `ICallSessionManager` carry `null`
 unless it sets `Epoch`, so a consumer reads `Unknown` for them.
 
-### Fixed: a waiting caller that leaves a queue with no leave event leaves Live's queue table at its hangup (#NNN)
+### Fixed: a waiting caller that leaves a queue with no leave event leaves Live's queue table at its hangup (#567)
 
 A waiting caller that leaves a queue without a `QueueCallerLeave` (relieved by an attended transfer or an `INVITE`
 with `Replaces`, or taken out by `Action: Bridge`) now leaves Live's queue table when Asterisk reports its `Hangup`,
@@ -54,7 +54,7 @@ and 24.0.0-rc2, not measured under load. A conference participant's `Hangup` sti
 removed there directly costs each later hangup of its `Uniqueid` one look through every queue and keeps its key until
 `QueueManager.Clear`, and a caller added there directly is not removed by its hangup.
 
-### Changed: a queue join no longer copies its queue, and a hangup no queue holds looks through none (#NNN)
+### Changed: a queue join no longer copies its queue, and a hangup no queue holds looks through none (#567)
 
 A caller joining a queue no longer copies that queue's entries to look for itself: with 1,000 callers waiting a join
 allocates 208 B instead of 2,248 B and takes about 0.19 µs instead of about 4.6 µs. A hangup of a call no queue holds
