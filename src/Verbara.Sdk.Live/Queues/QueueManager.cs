@@ -414,15 +414,27 @@ public sealed class QueueManager
     internal Action? MemberPauseApplied { get; set; }
 
     /// <summary>Handle QueueMemberStatus event (device state change).</summary>
-    public void OnMemberStatusChanged(string queueName, string iface, int status)
+    public void OnMemberStatusChanged(string queueName, string iface, int status) =>
+        ApplyMemberStatus(queueName, iface, status);
+
+    /// <summary>
+    /// <see cref="OnMemberStatusChanged"/>, returning whether the table holds a listing of the queue (see
+    /// <see cref="HoldsListingOf"/>), read from the lookup the status applies through: the most frequent queue event pays
+    /// no second lookup for the server's check.
+    /// </summary>
+    internal bool ApplyMemberStatus(string queueName, string iface, int status)
     {
+        bool listed;
         lock (_windowsLock)
         {
             foreach (var window in _windows)
                 window.OnLiveMemberStatus(queueName, iface, (QueueMemberState)status);
-            SetMemberStatusLocked(queueName, iface, (QueueMemberState)status);
+            listed = _queues.TryGetValue(queueName, out var queue) && queue.Listed;
+            if (queue is not null)
+                SetMemberStatusLocked(queue, iface, (QueueMemberState)status);
         }
         RaisePending();
+        return listed;
     }
 
     private void SetMemberStatusLocked(string queueName, string iface, QueueMemberState status)

@@ -2765,19 +2765,23 @@ public sealed class VerbaraServer : IVerbaraServer
                     break;
                 }
 
+                // The most frequent queue event: whether its queue is listed comes from the lookup the status applies
+                // through, so a listed queue pays no second lookup (the hot-path measurement of this check).
                 case QueueMemberStatusEvent qms:
                 {
                     var queue = qms.Queue ?? "";
+                    var listed = false;
                     try
                     {
-                        server.Queues.OnMemberStatusChanged(
+                        listed = server.Queues.ApplyMemberStatus(
                             queue,
                             qms.Location ?? qms.Interface ?? "",
                             qms.Status ?? 0);
                     }
                     finally
                     {
-                        server.NoteQueueNamed(queue);
+                        if (!listed)
+                            server.NoteQueueNamed(queue);
                     }
 
                     break;
