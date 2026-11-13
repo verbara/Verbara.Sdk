@@ -23,7 +23,7 @@ ENFORCING guard behind the AMI-throughput claim and the rest of `README.md`'s Pe
 |---|---|
 | `mean_ns` | mean-of-means across 13 real runs of `perf-regression.yml`, on **github-hosted `ubuntu-latest`**, in **nanoseconds** |
 | `tolerance_pct` | a **two-sided** band, in percent, calibrated to cover the observed across-run spread with headroom |
-| `bytes` | BenchmarkDotNet's `Memory.BytesAllocatedPerOperation` — allocated bytes per operation, **independent of the runner** |
+| `bytes` | BenchmarkDotNet's `Memory.BytesAllocatedPerOperation` — allocated bytes per operation, **independent of the CPU model and ISA, not of the core count** — read on the hosted runner |
 | `bytes_tolerance` | a **two-sided** absolute bound in bytes; `0` (the default) means exact |
 | `jit_isa` (top level) | the instruction-set level every BenchmarkDotNet log must report (`x86-64-v3`) |
 | **not** | the workstation figures published in `README.md` / `docs/README-technical.md` |
@@ -56,13 +56,21 @@ percentage points.**
 
 ## Bytes decide, time informs
 
-Time on a shared runner depends on the host; allocated bytes do not. Two local runs of the whole
+Time on a shared runner depends on the host; allocated bytes depend on it far less. Two local runs of the whole
 suite on .NET 10.0.14, one with the JIT at x86-64-v3 and one at x86-64-v4, gave **identical bytes on
 every synchronous row**; on that host an interleaved run moved time by at most about 5%, and the spread across
 hosted runners is what a re-calibration under the ISA pin measures. So a
 row whose allocation is deterministic carries `bytes`, gated exactly (`bytes_tolerance: 0`) or
-within a stated bound, and the bytes are calibrated where they are measured — any machine, one run,
-then confirmed by the next. A row may carry `bytes` alone, without `mean_ns`/`tolerance_pct`, until
+within a stated bound.
+
+**Bytes do move with the logical core count.** A `ConcurrentDictionary` built without a concurrency
+level sizes its lock array by `Environment.ProcessorCount`, so `ChannelManagerBenchmark.Create1000Channels`
+allocates 64,512 B more per operation on a 24-core workstation than on the 4-core hosted runner, on
+the same code, to the byte. So `bytes` are read from a hosted run of this workflow (its uploaded
+report carries `HostEnvironmentInfo.LogicalCoreCount`), or locally under `DOTNET_PROCESSOR_COUNT=4`,
+which reproduces the hosted figure exactly — never from an unpinned workstation run. A pinned local
+report still records the machine's own `LogicalCoreCount`, so its breach message names that count, not
+the pin. One run, then confirmed by the next. A row may carry `bytes` alone, without `mean_ns`/`tolerance_pct`, until
 two weekly runs give its time band: it is then gated on bytes and reports its time.
 
 A row whose allocation is **not** deterministic gets no `bytes` entry: a bimodal row (for example
@@ -71,8 +79,9 @@ writer/consumer race) is reported, never gated on bytes. A row with a fixed but 
 non-deterministic part carries a bound and says why in `_bytes_note`.
 
 A bytes breach is reported as `MORE-BYTES` (the regression) or `FEWER-BYTES` (a stale baseline, or
-work that went away — a human looks, as for `FASTER`). It needs no re-calibration argument: no
-runner, fleet or ISA moves it, so a bytes breach is the code.
+work that went away — a human looks, as for `FASTER`). No CPU model or ISA moves it, so against a
+baseline read on the same core count a bytes breach is the code; the breach message names the core
+count the run had.
 
 ## The pinned ISA
 
@@ -141,7 +150,7 @@ Measured but not baselined today, on purpose:
 
 - `TurnDetectionBenchmark` — `sources._turn_detection_note`.
 - Time only, bytes gated: `ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber`
-  (`_channel_manager_one_subscriber_note`), the two deterministic `AsyncEventPumpBenchmark` rows and
+  (`_channel_manager_one_subscriber_note`), `ChannelManagerBenchmark.Create1000Channels_TwoLegCalls`, the two deterministic `AsyncEventPumpBenchmark` rows and
   every `QueueManagerBenchmark` and `MeetMeManagerBenchmark` row. Their time bands come from two
   weekly runs.
 - `AsyncEventPumpBenchmark.EnqueueAndConsume1000Events` — neither: bimodal bytes, `_bytes_note`.
