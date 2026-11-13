@@ -37,14 +37,18 @@ public sealed class WebhookDeliveryOptions
 
     /// <summary>
     /// Consecutive per-URL delivery failures required to open the circuit. A subsequent
-    /// delivery to the same URL is short-circuited (skipped) while the circuit is open.
+    /// delivery to the same URL is short-circuited (skipped) while the circuit is open, and
+    /// while the circuit is half-open with its one probe delivery in flight.
     /// Set to 0 to disable the circuit breaker. Default 5.
     /// </summary>
     public int CircuitBreakerFailureThreshold { get; set; } = 5;
 
     /// <summary>
-    /// Duration the circuit stays open before auto-transitioning to half-open (i.e. the
-    /// next attempt is allowed to probe recovery). Default 30 s.
+    /// Duration the circuit stays open before it turns half-open: the next delivery to the URL is
+    /// then its one probe, and every other delivery to it is skipped until the probe's result is
+    /// recorded, or until a further open duration has passed. A failed attempt of the probe re-opens
+    /// the circuit at once, whatever the threshold, for a full open duration. The probe delivery
+    /// still runs its own retries, and a later attempt's success closes the circuit. Default 30 s.
     /// </summary>
     public TimeSpan CircuitBreakerOpenDuration { get; set; } = TimeSpan.FromSeconds(30);
 }

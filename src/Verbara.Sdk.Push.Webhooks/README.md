@@ -48,7 +48,7 @@ null or empty — the same rule the SSE stream of `Verbara.Sdk.Push.AspNetCore` 
 breaker is per target URL. If a receiver answers a topic-less event with a failure, every attempt counts: with the
 defaults one such event fails `MaxRetries + 1` = 6 times, which reaches `CircuitBreakerFailureThreshold` (5) and
 opens the URL's circuit, so every delivery to that URL — topic-bearing ones included — is skipped without an attempt
-(`circuit.skipped`) for `CircuitBreakerOpenDuration` (30 s). To keep topic-less events away from a receiver, publish
+(`circuit.skipped`) for `CircuitBreakerOpenDuration` (30 s). After that one delivery is admitted as the probe and the others are still skipped until its result is known; a failed probe opens the circuit again for a full open duration. To keep topic-less events away from a receiver, publish
 them with a topic path its pattern does not match; otherwise have the receiver accept them.
 
 ### When delivery starts and ends

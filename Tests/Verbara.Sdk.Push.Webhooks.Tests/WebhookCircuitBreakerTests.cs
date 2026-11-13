@@ -101,6 +101,15 @@ public sealed class WebhookCircuitBreakerTests
         WebhookMetrics metrics,
         TimeProvider time,
         params WebhookSubscription[] subs)
+        => BuildService(options, handler, metrics, time, NullLogger<WebhookDeliveryService>.Instance, subs);
+
+    private static WebhookDeliveryService BuildService(
+        WebhookDeliveryOptions options,
+        HttpMessageHandler handler,
+        WebhookMetrics metrics,
+        TimeProvider time,
+        Microsoft.Extensions.Logging.ILogger<WebhookDeliveryService> logger,
+        params WebhookSubscription[] subs)
     {
         // Instance constructor is internal; call via reflection to inject fakes.
         var ctor = typeof(WebhookDeliveryService).GetConstructor(
@@ -127,7 +136,7 @@ public sealed class WebhookCircuitBreakerTests
             new SingleClientFactory(handler),
             Options.Create(options),
             metrics,
-            NullLogger<WebhookDeliveryService>.Instance,
+            logger,
             time,
         ]);
     }
@@ -291,5 +300,167 @@ public sealed class WebhookCircuitBreakerTests
         await DeliverOnceAsync(service, sub, MakeEvent());
 
         handler.Calls.Should().Be(4, "success must reset the consecutive-failure counter");
+    }
+
+
+    private sealed class HoldingHandler : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Calls;
+        public int HoldOnCall;
+        public TaskCompletionSource Reached { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public void Release() => _held.SetResult();
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var idx = Interlocked.Increment(ref Calls);
+            if (idx == HoldOnCall)
+            {
+                Reached.SetResult();
+                await _held.Task;
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+        }
+    }
+
+    [Fact]
+    public async Task Delivery_ShouldSkipTheNextDelivery_WhenAProbeFailed()
+    {
+        var time = new FakeTime();
+        var handler = new CountingHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var options = new WebhookDeliveryOptions
+        {
+            MaxRetries = 0,
+            CircuitBreakerFailureThreshold = 3,
+            CircuitBreakerOpenDuration = TimeSpan.FromSeconds(30),
+        };
+        var sub = MakeSubscription("s", "https://example.com/hook-probe-failed");
+        var service = BuildService(options, handler, new WebhookMetrics(), time, sub);
+        for (var i = 0; i < 3; i++)
+            await DeliverOnceAsync(service, sub, MakeEvent());
+        time.Advance(TimeSpan.FromSeconds(30));
+        await DeliverOnceAsync(service, sub, MakeEvent());
+        handler.Calls.Should().Be(4);
+
+        await DeliverOnceAsync(service, sub, MakeEvent());
+
+        handler.Calls.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task Delivery_ShouldCloseTheCircuit_WhenARetryOfAProbeDeliverySucceeds()
+    {
+        var time = new FakeTime();
+        var handler = new CountingHandler(idx => new HttpResponseMessage(
+            idx <= 3 ? HttpStatusCode.InternalServerError : HttpStatusCode.OK));
+        var options = new WebhookDeliveryOptions
+        {
+            MaxRetries = 1,
+            InitialDelay = TimeSpan.FromMilliseconds(1),
+            CircuitBreakerFailureThreshold = 2,
+            CircuitBreakerOpenDuration = TimeSpan.FromSeconds(30),
+        };
+        var sub = MakeSubscription("s", "https://example.com/hook-probe-retry");
+        var service = BuildService(options, handler, new WebhookMetrics(), time, sub);
+        await DeliverOnceAsync(service, sub, MakeEvent());
+        time.Advance(TimeSpan.FromSeconds(30));
+        await DeliverOnceAsync(service, sub, MakeEvent());
+        handler.Calls.Should().Be(4);
+
+        await DeliverOnceAsync(service, sub, MakeEvent());
+
+        handler.Calls.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task Delivery_ShouldSkipADelivery_WhenAProbeIsInFlight()
+    {
+        var time = new FakeTime();
+        var handler = new HoldingHandler { HoldOnCall = 4 };
+        var options = new WebhookDeliveryOptions
+        {
+            MaxRetries = 0,
+            CircuitBreakerFailureThreshold = 3,
+            CircuitBreakerOpenDuration = TimeSpan.FromSeconds(30),
+        };
+        var sub = MakeSubscription("s", "https://example.com/hook-probe-in-flight");
+        var service = BuildService(options, handler, new WebhookMetrics(), time, sub);
+        for (var i = 0; i < 3; i++)
+            await DeliverOnceAsync(service, sub, MakeEvent());
+        time.Advance(TimeSpan.FromSeconds(30));
+        var probe = DeliverOnceAsync(service, sub, MakeEvent());
+        await handler.Reached.Task;
+
+        await DeliverOnceAsync(service, sub, MakeEvent());
+        var calls = handler.Calls;
+
+        handler.Release();
+        await probe;
+        calls.Should().Be(4);
+    }
+
+    private sealed class BarrierHandler : HttpMessageHandler
+    {
+        private readonly int _parties;
+        private readonly TaskCompletionSource _allInside = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _inside;
+
+        public BarrierHandler(int parties) => _parties = parties;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref _inside) == _parties)
+                _allInside.SetResult();
+
+            // Every delivery waits here until all of them are inside, then they fail together.
+            await _allInside.Task.ConfigureAwait(false);
+            return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+        }
+    }
+
+    [Theory]
+    [InlineData(1, 8)]
+    [InlineData(3, 4)]
+    public async Task Delivery_ShouldCountOneOpen_WhenDeliveriesFailTogether(int threshold, int deliveries)
+    {
+        const int rounds = 300;
+        var time = new FakeTime();
+        var options = new WebhookDeliveryOptions
+        {
+            MaxRetries = 0,
+            CircuitBreakerFailureThreshold = threshold,
+            CircuitBreakerOpenDuration = TimeSpan.FromSeconds(30),
+        };
+        var wrong = 0;
+        for (var round = 0; round < rounds; round++)
+        {
+            using var metrics = new WebhookMetrics();
+            var logger = new CapturingLogger();
+            var handler = new BarrierHandler(deliveries);
+            var sub = MakeSubscription("s", $"https://example.com/hook-together-{round}");
+            var service = BuildService(options, handler, metrics, time, logger, sub);
+            long opened = 0;
+            using var listener = new System.Diagnostics.Metrics.MeterListener();
+            listener.InstrumentPublished = (instrument, l) =>
+            {
+                if (ReferenceEquals(instrument, metrics.CircuitOpened))
+                    l.EnableMeasurementEvents(instrument);
+            };
+            listener.SetMeasurementEventCallback<long>((_, value, _, _) => Interlocked.Add(ref opened, value));
+            listener.Start();
+
+            var inFlight = Enumerable.Range(0, deliveries)
+                .Select(_ => DeliverOnceAsync(service, sub, MakeEvent()))
+                .ToArray();
+            await Task.WhenAll(inFlight);
+
+            var logged = logger.Entries.Count(e => e.EventId == 7);
+            if (Interlocked.Read(ref opened) != 1 || logged != 1)
+                wrong++;
+        }
+
+        wrong.Should().Be(0);
     }
 }

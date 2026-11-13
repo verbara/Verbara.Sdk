@@ -27,7 +27,8 @@ public sealed class ResiliencePolicyBuilder
     /// <summary>
     /// Configures a per-key circuit breaker. Opens after <paramref name="threshold"/>
     /// consecutive failures and stays open for <paramref name="openDuration"/> before
-    /// admitting a half-open probe.
+    /// admitting one half-open probe; every other call is rejected until the probe's result is
+    /// recorded. A failed probe re-opens the circuit for a full <paramref name="openDuration"/>.
     /// </summary>
     public ResiliencePolicyBuilder WithCircuitBreaker(int threshold, TimeSpan openDuration)
     {

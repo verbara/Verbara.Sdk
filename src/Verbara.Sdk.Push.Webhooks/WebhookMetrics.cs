@@ -38,10 +38,10 @@ internal sealed class WebhookMetrics : IDisposable
             "Deliveries that exhausted MaxRetries without a 2xx response.");
         CircuitOpened = _meter.CreateCounter<long>(
             "asterisk.push.webhooks.circuit.opened", "transitions",
-            "Transitions from closed to open for a target URL's circuit breaker.");
+            "Transitions to open for a target URL's circuit breaker, from closed or from a failed probe.");
         CircuitSkipped = _meter.CreateCounter<long>(
             "asterisk.push.webhooks.circuit.skipped", DeliveriesUnit,
-            "Deliveries short-circuited because the target URL's circuit is open.");
+            "Deliveries short-circuited because the target URL's circuit is open, or half-open with its probe in flight.");
     }
 
     public void Dispose() => _meter.Dispose();
