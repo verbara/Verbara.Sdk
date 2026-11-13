@@ -295,15 +295,16 @@ public sealed class VerbaraServerReconcileQueuesTests
             barrierClock.Advance(timer.DueTime);
             var outcome = await Record.ExceptionAsync(() => refresh.WaitAsync(Run.Bound));
             gate.Release();
-            var entry = await CompletesWithinBoundAsync(announced.Task) ? await announced.Task : null;
+            var announcedInTime = await CompletesWithinBoundAsync(announced.Task);
+            var announcedChannel = announcedInTime ? (await announced.Task).Channel : "(not announced)";
 
             using (new AssertionScope())
             {
                 cts.IsCancellationRequested.Should().BeTrue("the token was cancelled while the snapshot was applied");
                 outcome.Should().BeNull("a snapshot already applied is not reported as a cancelled read");
                 Held(run, Sales, "the applied snapshot stays applied").Entries.Keys.Should().Equal([Waiting.Channel]);
-                entry.Should().NotBeNull("the caller it admitted is announced once the pump caught up");
-                entry?.Channel.Should().Be(Waiting.Channel);
+                announcedInTime.Should().BeTrue("the caller it admitted is announced once the pump caught up");
+                announcedChannel.Should().Be(Waiting.Channel);
                 counters.Joined.Should().Be(1, "and counted joined once");
                 HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
             }

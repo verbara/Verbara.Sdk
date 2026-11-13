@@ -1192,13 +1192,10 @@ public sealed class VerbaraServer : IVerbaraServer
 
             string[] named = [.. _namedDuringListing];
             _namedDuringListing.Clear();
-            foreach (var queueName in named)
+            foreach (var queueName in named.Where(name => !Queues.HoldsListingOf(name) && !_unlistedQueues.Contains(name)
+                && !_discoveries.ContainsKey(name)))
             {
-                if (!Queues.HoldsListingOf(queueName) && !_unlistedQueues.Contains(queueName)
-                    && !_discoveries.ContainsKey(queueName))
-                {
-                    StartDiscoveryLocked(session.Connection, queueName);
-                }
+                StartDiscoveryLocked(session.Connection, queueName);
             }
         }
     }
