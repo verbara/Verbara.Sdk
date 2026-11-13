@@ -403,8 +403,19 @@ internal sealed class KeyExitRig : IAsyncDisposable
             case "STATUS" when _loaded:
                 StatusAsked.TrySetResult(id);
                 break;
-            case "STATUS":
+            // Asterisk lists the queue the caller joins, as a load reads it: a queue Live holds no listing of would make
+            // it ask for that queue alone at the join, and that answer would take buffer slots this test counts.
             case "QUEUESTATUS":
+                await socket.RespondAsync("Success", id, [new("EventList", "start")]);
+                await socket.WriteEventAsync("QueueParams",
+                [
+                    new("ActionID", id), new("Queue", Queue), new("Max", "0"), new("Strategy", "ringall"), new("Calls", "0"),
+                    new("Holdtime", "0"), new("TalkTime", "0"), new("Completed", "0"), new("Abandoned", "0"),
+                ]);
+                await socket.WriteEventAsync("QueueStatusComplete",
+                    [new("ActionID", id), new("EventList", "Complete"), new("ListItems", "1")]);
+                break;
+            case "STATUS":
             case "AGENTS":
             case "BRIDGELIST":
                 await socket.RespondAsync("Success", id, [new("EventList", "start")]);
