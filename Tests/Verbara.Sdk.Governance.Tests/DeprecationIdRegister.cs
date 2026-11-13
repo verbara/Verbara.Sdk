@@ -79,6 +79,11 @@ internal static class DeprecationIdRegister
             ]),
         new("VSDK0005", DeprecationIdState.Retired, "2.10.0", RemovalGuide2_9, [], BuildVsdk0005RemovedSet()),
         Marked("VSDK0006", [new(Sessions, "SessionMetrics.SessionsTimedOut"), new(Sessions, "SessionMetrics.SessionsOrphaned")]),
+        Marked("VSDK0007",
+            [
+                new(Ami, "DbPrefixGetAction"), new(Ami, "ExecAction"), new(Ami, "JitterBufStatsEvent"), new(Ami, "MasqueradeEvent"),
+                new(Ami, "PriEventEvent"), new(Ami, "RtpReceiverStatEvent"), new(Ami, "RtpSenderStatEvent"),
+            ]),
     ];
 
     public static DeprecationIdRow Row(string id) => Rows.Single(r => r.Id == id);
