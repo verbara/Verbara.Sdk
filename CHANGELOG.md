@@ -84,6 +84,16 @@ only Asterisk 11 and earlier send; `QueueMemberPause` is unchanged. Recompile ag
 removed types. The `VSDK0005` warning's link still opens the replacement for each symbol; the migration guide has
 the rest ([The types deprecated with `VSDK0005` are removed](docs/guides/migration-2.10.0.md#the-types-deprecated-with-vsdk0005-are-removed)).
 
+### Changed — BREAKING: seven AMI types whose wire name no Asterisk knows are deprecated with `VSDK0007` (#NNN)
+
+`DbPrefixGetAction` and `ExecAction` name actions no Asterisk registers (`DBPrefixGet`, `exec`): use
+`DbGetTreeAction`, and `CommandAction` or `RawAction`. `JitterBufStatsEvent`, `MasqueradeEvent`, `PriEventEvent`,
+`RtpReceiverStatEvent` and `RtpSenderStatEvent` name events no supported Asterisk emits, read in the whole upstream
+source of 22.12.0, 23.6.0 and 24.0.0. Each warning names its replacement where one exists, links to its heading in
+the migration guide and says the type is removed in 2.11.0. A warning, not an error: a build with
+TreatWarningsAsErrors that names one of them fails until it moves or suppresses `VSDK0007`. Nothing changes at run
+time ([guide](docs/guides/migration-2.10.0.md#vsdk0007)).
+
 ### Changed: `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` name their removal release, 2.11.0 (#558)
 
 The warning message of the six `StatusEvent` members (`VSDK0002`), `AudioStreamMetrics.BufferUnderruns`
