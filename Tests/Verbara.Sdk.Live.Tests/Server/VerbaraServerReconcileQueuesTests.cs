@@ -66,6 +66,7 @@ public sealed class VerbaraServerReconcileQueuesTests
                 "the refresh asks QueueStatus once and nothing else: no Status, BridgeList, ConfbridgeListRooms or Agents");
             peer.QueueStatusFilters.Should().HaveCount(2).And.OnlyContain(f => f == null,
                 "the refresh asks every queue, as the load does");
+            HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
             run.Connection.State.Should().Be(AmiConnectionState.Connected, "nothing reconnected");
             peer.Fault.Should().BeNull("the peer served the session without failing");
         }
@@ -92,6 +93,7 @@ public sealed class VerbaraServerReconcileQueuesTests
             after.ReportedWaitSeconds.Should().Be(HeldCaller.Wait, "and so is the wait Asterisk reported then");
             counters.Joined.Should().Be(0, "no join is counted for a caller already held");
             counters.Left.Should().Be(0, "and no leave");
+            HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
             run.Server.Queues.GetByName(Sales).Should().NotBeNull("the refresh still admitted the new queue");
             peer.Fault.Should().BeNull("the peer served the session without failing");
         }
@@ -117,6 +119,7 @@ public sealed class VerbaraServerReconcileQueuesTests
             counters.Left.Should().Be(1, "and is counted left once");
             counters.WaitSamples.Should().Be(0, "with no wait sample, since no leave was observed");
             run.Server.Queues.GetByName(Sales).Should().NotBeNull();
+            HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
         }
     }
 
@@ -181,6 +184,9 @@ public sealed class VerbaraServerReconcileQueuesTests
             Held(run, BootingAsterisk.QueueName, "a cut-short read removes nothing").Members.Should().ContainKey(BootingAsterisk.MemberLocation);
             counters.Left.Should().Be(0, "no caller is counted left");
             run.Server.Queues.ActiveSnapshotWindowCount.Should().Be(0, "the read's window is closed");
+            run.Server.Queues.HeldUniqueIdCounts().Should().BeEquivalentTo(
+                new Dictionary<string, int> { [HeldCaller.UniqueId] = 1 }, "the held-caller record is unchanged");
+            HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
         }
     }
 
@@ -224,6 +230,7 @@ public sealed class VerbaraServerReconcileQueuesTests
                 main.Entries.Should().ContainKey(HeldCaller.Channel, "nor a caller");
                 main.Members.Should().ContainKey(BootingAsterisk.MemberLocation, "nor a member");
                 counters.Left.Should().Be(0, "no caller is counted left");
+                HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
                 announced.Task.IsCompleted.Should().BeFalse("the admitted caller is announced only once the pump caught up");
                 run.Server.ScheduledReload.Should().BeSameAs(reloadBefore, "a queue refresh schedules no full reload");
                 run.ServerLog.Entries.Should().NotContain(e => e.Line.Contains("[LIVE] A load's wait for the event pump ran out"),
@@ -291,8 +298,128 @@ public sealed class VerbaraServerReconcileQueuesTests
                 .Which.Should().Match<QueueVisitSignal>(v => v.SessionId == gone!.SessionId && v.LeaveMissed
                     && v.EventsMayHaveBeenLost && v.QueueName == BootingAsterisk.QueueName);
             Held(run, BootingAsterisk.QueueName, "the queue is still listed").Entries.Keys.Should().Equal([StillChannel]);
+            HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
             peer.Fault.Should().BeNull("the peer served the session without failing");
         }
+    }
+
+    [Fact]
+    public async Task ReconcileQueuesAsync_ShouldLetTheCallerItAdmittedLeaveAtItsHangup_WhenTheQueueWasCreatedAfterTheLoad()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.StartAsync(peer);
+        peer.OtherQueues = [new ListedQueue(Sales, ["PJSIP/2001"], [Waiting])];
+        await run.Server.ReconcileQueuesAsync().AsTask().WaitAsync(Run.Bound);
+        var admitted = Held(run, Sales, "the refresh admits the new queue").Entries[Waiting.Channel];
+        run.Server.Queues.HeldUniqueIdCounts().Should().ContainKey(Waiting.UniqueId, "the admitted caller is held by its Uniqueid");
+        using var counters = new LiveCounters();
+
+        await peer.SendEventAsync("Hangup", AsteriskFrames.Hangup(Waiting.UniqueId, Waiting.Channel, Waiting.UniqueId));
+        await DispatchedAsync(run, peer, "after-hangup");
+
+        using (new AssertionScope())
+        {
+            Held(run, Sales, "the queue stays").Entries.Should().BeEmpty("the caller leaves the table at its Hangup");
+            admitted.LeaveNotObserved.Should().BeTrue("with no leave observed");
+            counters.Left.Should().Be(1, "counted left once");
+            counters.WaitSamples.Should().Be(0, "with no wait sample");
+            run.Server.Queues.HeldUniqueIdCounts().Should().NotContainKey(Waiting.UniqueId, "no Uniqueid remains held for it");
+            HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
+        }
+    }
+
+    [Fact]
+    public async Task ReconcileQueuesAsync_ShouldHoldNoUniqueIdForTheCallersAndQueueItDrops_WhenALaterHangupNamesThem()
+    {
+        var peer = new BootingAsterisk
+        {
+            BootedAtLogin = true, QueueEntries = [HeldCaller],
+            OtherQueues = [new ListedQueue(Sales, ["PJSIP/2001"], [Waiting])],
+        };
+        await using var run = await Run.StartAsync(peer);
+        run.Server.Queues.HeldUniqueIdCounts().Should().HaveCount(2, "the load holds both callers");
+        var left = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        run.Server.Queues.CallerLeft += (_, entry) => left.Enqueue(entry.Channel);
+
+        // The load's queue is gone, and the caller of the kept queue left with no leave observed.
+        peer.MainQueueListed = false;
+        peer.OtherQueues = [new ListedQueue(Sales, ["PJSIP/2001"], [])];
+        await run.Server.ReconcileQueuesAsync().AsTask().WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            run.Server.Queues.GetByName(BootingAsterisk.QueueName).Should().BeNull("the refresh removed the omitted queue");
+            Held(run, Sales, "the listed queue stays").Entries.Should().BeEmpty("and dropped its omitted caller");
+            run.Server.Queues.HeldUniqueIdCounts().Should().BeEmpty("no Uniqueid remains held for a dropped caller");
+            left.Should().BeEquivalentTo([HeldCaller.Channel, Waiting.Channel], "each dropped caller left once");
+        }
+
+        using var counters = new LiveCounters();
+        await peer.SendEventAsync("Hangup", AsteriskFrames.Hangup(HeldCaller.UniqueId, HeldCaller.Channel, HeldCaller.UniqueId));
+        await peer.SendEventAsync("Hangup", AsteriskFrames.Hangup(Waiting.UniqueId, Waiting.Channel, Waiting.UniqueId));
+        await DispatchedAsync(run, peer, "after-hangups");
+
+        using (new AssertionScope())
+        {
+            counters.Left.Should().Be(0, "a later Hangup of a dropped caller changes nothing");
+            left.Should().HaveCount(2, "and announces no second leave");
+            HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
+        }
+    }
+
+    [Fact]
+    public async Task ReconcileQueuesAsync_ShouldNotBringBackTheCaller_WhenItsHangupArrivesAfterTheListingReadItsRow()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await Run.StartAsync(peer);
+        using var counters = new LiveCounters();
+
+        // Asterisk wrote the caller's row, then the caller hung up, then the listing completed.
+        peer.OtherQueues = [new ListedQueue(Sales, ["PJSIP/2001"], [Waiting])];
+        peer.BeforeQueueStatusComplete = () =>
+            peer.SendEventAsync("Hangup", AsteriskFrames.Hangup(Waiting.UniqueId, Waiting.Channel, Waiting.UniqueId));
+        await run.Server.ReconcileQueuesAsync().AsTask().WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            Held(run, Sales, "the listing still admits the queue").Entries.Should().BeEmpty(
+                "a row read before the caller's Hangup does not bring it back");
+            run.Server.Queues.HeldUniqueIdCounts().Should().NotContainKey(Waiting.UniqueId, "and the record does not count it");
+            counters.Joined.Should().Be(0, "no join is counted for it");
+            HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
+        }
+    }
+
+    [Fact]
+    public async Task ReconcileQueuesAsync_ShouldKeepOneHeldCountForTheCaller_WhenTheRefreshListsItUnderANewChannelName()
+    {
+        const string Renamed = "PJSIP/far-00000001<MASQ>";
+        var peer = new BootingAsterisk { BootedAtLogin = true, QueueEntries = [HeldCaller] };
+        await using var run = await Run.StartAsync(peer);
+        using var counters = new LiveCounters();
+
+        peer.QueueEntries = [HeldCaller with { Channel = Renamed }];
+        await run.Server.ReconcileQueuesAsync().AsTask().WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            Held(run, BootingAsterisk.QueueName, "the queue is listed").Entries.Keys.Should().Equal([Renamed],
+                "the caller is re-keyed under the name the listing reports");
+            run.Server.Queues.HeldUniqueIdCounts().Should().BeEquivalentTo(
+                new Dictionary<string, int> { [HeldCaller.UniqueId] = 1 }, "the re-keyed caller keeps one count");
+            counters.Joined.Should().Be(0, "it is the same caller");
+            counters.Left.Should().Be(0);
+            HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
+        }
+    }
+
+    /// <summary>Sends a user event after the frames sent so far and waits until the connection has dispatched it.</summary>
+    private static async Task DispatchedAsync(Run run, BootingAsterisk peer, string marker)
+    {
+        var tail = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = run.Connection.Subscribe(new TailObserver(marker, tail));
+        await peer.SendEventAsync("UserEvent", [new("Privilege", "user,all"), new("UserEvent", marker)]);
+        await tail.Task.WaitAsync(Run.Bound);
     }
 
     private static void AssertNothingRemoved(Run run, BootingAsterisk peer, LiveCounters counters, Exception? outcome,
@@ -309,6 +436,9 @@ public sealed class VerbaraServerReconcileQueuesTests
             queue.Members.Should().ContainKey(BootingAsterisk.MemberLocation, "nor that its member was removed");
             counters.Left.Should().Be(0, "no caller is counted left");
             run.Server.Queues.ActiveSnapshotWindowCount.Should().Be(0, "the read's window is closed");
+            run.Server.Queues.HeldUniqueIdCounts().Should().BeEquivalentTo(
+                new Dictionary<string, int> { [HeldCaller.UniqueId] = 1 }, "the held-caller record is unchanged");
+            HeldCallerRecord.AssertEqualsTable(run.Server.Queues);
             peer.Fault.Should().BeNull("the peer served the session without failing");
         }
     }
