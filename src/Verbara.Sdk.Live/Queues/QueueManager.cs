@@ -695,6 +695,68 @@ public sealed class QueueManager
     }
 
     /// <summary>
+    /// Asterisk reported the <c>Hangup</c> of <paramref name="uniqueId"/>: a caller waiting on that <c>Uniqueid</c> leaves the
+    /// table, counted left with no wait sample and announced with <see cref="CallerLeft"/>, its leave marked as not
+    /// observed; never <see cref="CallerLeaveReported"/>. A caller leaves its queue with no <c>QueueCallerLeave</c> when
+    /// another channel relieves it (an attended transfer, an <c>INVITE</c> with <c>Replaces</c>) or a bridge takes it out,
+    /// and its <c>Hangup</c> is then the last Asterisk says of it. A caller that left normally is no longer held, so
+    /// nothing changes for it.
+    /// <para>
+    /// Matched by <c>Uniqueid</c> only: an empty one changes nothing, and an entry that carries none (added through the
+    /// public <see cref="OnCallerJoined(string, string, string?, int)"/>) is never removed here, since a channel name can be
+    /// reused. While a <c>QueueStatus</c> snapshot is being read, the <c>Uniqueid</c> is recorded in every open window
+    /// first, so a row read before the <c>Hangup</c> does not bring the caller back.
+    /// </para>
+    /// </summary>
+    internal void OnChannelHungUp(string uniqueId)
+    {
+        if (string.IsNullOrEmpty(uniqueId))
+            return;
+
+        try
+        {
+            if (Volatile.Read(ref _windows).Length == 0)
+            {
+                RemoveHungUp(uniqueId);
+                return;
+            }
+
+            // The window gate before the queue's lock, the order of every join: a row admitted before this fence is in
+            // the table when the walk below runs, and a row applied after it is dropped.
+            lock (_windowsLock)
+            {
+                foreach (var window in _windows)
+                    window.OnLeave(uniqueId, channel: "");
+                RemoveHungUp(uniqueId);
+            }
+        }
+        finally
+        {
+            RaisePending();
+        }
+    }
+
+    private void RemoveHungUp(string uniqueId)
+    {
+        // Read without the queue's lock, which is taken only for a caller on this Uniqueid: the removal takes out exactly
+        // the entry read, and is posted under the lock, so a later join of the same caller is announced after this leave.
+        foreach (var queue in _queues.Values)
+        {
+            foreach (var (key, entry) in queue.Entries)
+            {
+                if (!string.Equals(entry.UniqueId, uniqueId, StringComparison.Ordinal))
+                    continue;
+
+                lock (queue.SyncRoot)
+                {
+                    if (queue.Entries.TryRemove(new KeyValuePair<string, AsteriskQueueEntry>(key, entry)))
+                        LeftUnobserved(queue.Name, entry, "hangup", announce: true);
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// The core of every join, live or from a snapshot. A caller the table does not hold is a new insertion: the entry
     /// is stored, <c>live.queue.calls.joined</c> advances, and <see cref="CallerJoined"/> carries the stored entry. A
     /// caller it holds already (by Uniqueid, else by channel) is a replacement: the held entry is kept with its
@@ -1133,6 +1195,8 @@ public sealed class AsteriskQueueEntry
     /// <list type="bullet">
     /// <item>A completed queue snapshot no longer listed the caller in its queue, or no longer listed the queue.</item>
     /// <item>A channel reconciliation removed the caller's channel.</item>
+    /// <item>Asterisk reported the <c>Hangup</c> of the caller's <c>Uniqueid</c> while the table still held it: the caller
+    /// left the queue with no <c>QueueCallerLeave</c> (relieved by a transfer, or taken out by a bridge).</item>
     /// <item>A join took the channel name the caller was held under: another <c>Uniqueid</c> on that name, or a held
     /// caller re-keyed onto it by a rename.</item>
     /// <item><see cref="QueueManager.RemoveQueue(string)"/> removed its queue.</item>
