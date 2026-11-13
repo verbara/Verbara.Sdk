@@ -42,6 +42,24 @@ A consumer that deduplicates notifications by record equality, or keys them by `
 `notification with { Epoch = null }` instead. The notifications of a custom `ICallSessionManager` carry `null`
 unless it sets `Epoch`, so a consumer reads `Unknown` for them.
 
+### Fixed: a waiting caller that leaves a queue with no leave event leaves Live's queue table at its hangup (#NNN)
+
+A waiting caller that leaves a queue without a `QueueCallerLeave` (relieved by an attended transfer or an `INVITE`
+with `Replaces`, or taken out by `Action: Bridge`) now leaves Live's queue table when Asterisk reports its `Hangup`,
+instead of staying counted as waiting until the next reload. `CallerLeft` is raised for it with
+`LeaveNotObserved == true`; no wait sample is recorded and `CallerLeaveReported` is not raised. A queue leave Asterisk
+sent after the caller's `Hangup` would now read as not observed: none of 640 did on Asterisk 20.20.1, 22.11.0, 23.5.0
+and 24.0.0-rc2, not measured under load. A conference participant's `Hangup` still removes nothing.
+`AsteriskQueue.Entries` is read-only by contract: Live keeps an index of the callers it holds next to it, so a caller
+removed there directly costs each later hangup of its `Uniqueid` one look through every queue and keeps its key until
+`QueueManager.Clear`, and a caller added there directly is not removed by its hangup.
+
+### Changed: a queue join no longer copies its queue, and a hangup no queue holds looks through none (#NNN)
+
+A caller joining a queue no longer copies that queue's entries to look for itself: with 1,000 callers waiting a join
+allocates 208 B instead of 2,248 B and takes about 0.19 µs instead of about 4.6 µs. A hangup of a call no queue holds
+no longer looks through the queues: 0 B and about 6 ns at 200 queues.
+
 ### Fixed: a queue report nobody is subscribed to allocates nothing (#555)
 
 `QueueManager`: a queue params report, a member added or a caller's join on a queue the table already holds no longer
