@@ -985,6 +985,17 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>What a <see cref="ReconcileQueuesAsync"/> is called in the exceptions and logs of its read.</summary>
     private const string QueueReconcileReader = "live queue reconciliation";
 
+    /// <summary>The discovery in flight for <paramref name="queueName"/>; a completed task when none is. For tests.</summary>
+    internal Task PendingQueueDiscovery(string queueName)
+    {
+        _ = _connection;
+        _ = queueName;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>How many discoveries are in flight. For tests.</summary>
+    internal int PendingQueueDiscoveryCount => _connection is null ? -1 : 0;
+
     /// <summary>Who reads a channel snapshot: a load, or <see cref="ReconcileChannelsAsync"/>.</summary>
     /// <param name="Name">What the reader is called in the exception a session ending under it throws.</param>
     /// <param name="MetricName">The load or reconciliation label carried by the refusal counter.</param>

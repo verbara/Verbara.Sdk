@@ -241,6 +241,12 @@ internal sealed class BootingAsterisk
     public bool MainQueueListed { get; set; } = true;
 
     /// <summary>
+    /// Whether the peer answers a <c>QueueStatus</c> that names a queue with every queue's rows, as no Asterisk does: a
+    /// crafted answer, to prove that rows of another queue are ignored.
+    /// </summary>
+    public bool IgnoresQueueFilter { get; set; }
+
+    /// <summary>
     /// The <c>Queue</c> header of every <c>QueueStatus</c> the peer read, in order: <see langword="null"/> for one that
     /// asked for every queue.
     /// </summary>
@@ -763,7 +769,8 @@ internal sealed class BootingAsterisk
     private async Task AnswerQueueStatusAsync(PipedSocket socket, string id, string? filter)
     {
         // Asterisk compares the Queue header with each queue's name ignoring case, and lists only the one it names.
-        bool Asked(string queue) => filter is null || string.Equals(filter, queue, StringComparison.OrdinalIgnoreCase);
+        bool Asked(string queue) => filter is null || IgnoresQueueFilter
+            || string.Equals(filter, queue, StringComparison.OrdinalIgnoreCase);
         var main = MainQueueListed && Asked(QueueName);
         var entries = main ? QueueEntries : [];
         var others = OtherQueues.Where(q => Asked(q.Name)).ToList();
