@@ -403,3 +403,14 @@ Verbara.Sdk.Live.MeetMe.MeetMeUser.UniqueId.init -> void
 Verbara.Sdk.Live.Server.VerbaraServer.ReconcileChannelsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.Live.Server.VerbaraServerPool.ServerAdded -> System.Action<string!, Verbara.Sdk.Live.Server.VerbaraServer!>?
 Verbara.Sdk.Live.Server.VerbaraServerPool.ServerRemoved -> System.Action<string!, Verbara.Sdk.Live.Server.VerbaraServer!>?
+Verbara.Sdk.Live.Channels.ChannelManager.OnNewCallerId(string! uniqueId, string? callerIdNum, string? callerIdName) -> void
+Verbara.Sdk.Live.Channels.ChannelManager.OnNewExten(string! uniqueId, string? context, string? exten, int? priority) -> void
+Verbara.Sdk.Live.MeetMe.MeetMeUser.LeaveNotObserved.get -> bool
+Verbara.Sdk.Live.Queues.AsteriskQueueEntry.LeaveNotObserved.get -> bool
+Verbara.Sdk.Live.Queues.QueueManager.MemberPaused -> System.Action<string!, Verbara.Sdk.Live.Queues.AsteriskQueueMember!>?
+Verbara.Sdk.Live.Server.StatusRefusal
+Verbara.Sdk.Live.Server.StatusRefusal.Message.get -> string!
+Verbara.Sdk.Live.Server.StatusRefusal.OccurredAt.get -> System.DateTimeOffset
+Verbara.Sdk.Live.Server.VerbaraServer.LastStatusRefusal.get -> Verbara.Sdk.Live.Server.StatusRefusal?
+Verbara.Sdk.Live.Server.VerbaraServer.ReconcileQueuesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+static readonly Verbara.Sdk.Live.Diagnostics.LiveMetrics.StatusRefused -> System.Diagnostics.Metrics.Counter<long>!

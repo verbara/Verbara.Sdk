@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-11-13
+
 ### Added: refresh the queues without reconnecting, and find a queue an event names (#569)
 
 Asterisk sends no event when it creates a queue after Live's load (a `queue reload` that adds one, or a realtime

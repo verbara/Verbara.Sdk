@@ -1,10 +1,1 @@
 #nullable enable
-*REMOVED*Verbara.Sdk.Agi.Commands.MeetmeCommand
-*REMOVED*Verbara.Sdk.Agi.Commands.MeetmeCommand.Conference.get -> string?
-*REMOVED*Verbara.Sdk.Agi.Commands.MeetmeCommand.Conference.set -> void
-*REMOVED*Verbara.Sdk.Agi.Commands.MeetmeCommand.MeetmeCommand() -> void
-*REMOVED*Verbara.Sdk.Agi.Commands.MeetmeCommand.Options.get -> string?
-*REMOVED*Verbara.Sdk.Agi.Commands.MeetmeCommand.Options.set -> void
-*REMOVED*Verbara.Sdk.Agi.Commands.MeetmeCommand.Pin.get -> string?
-*REMOVED*Verbara.Sdk.Agi.Commands.MeetmeCommand.Pin.set -> void
-*REMOVED*override Verbara.Sdk.Agi.Commands.MeetmeCommand.BuildCommand() -> string!

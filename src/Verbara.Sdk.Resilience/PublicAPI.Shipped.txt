@@ -41,3 +41,5 @@ static readonly Verbara.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStat
 static readonly Verbara.Sdk.Resilience.Diagnostics.ResilienceMetrics.Meter -> System.Diagnostics.Metrics.Meter!
 static readonly Verbara.Sdk.Resilience.Diagnostics.ResilienceMetrics.RetryAttempts -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.Resilience.Diagnostics.ResilienceMetrics.TimeoutFired -> System.Diagnostics.Metrics.Counter<long>!
+Verbara.Sdk.Resilience.CircuitBreakerState.RecordFailureReportingTrip(int threshold, System.TimeProvider! time) -> bool
+Verbara.Sdk.Resilience.ResiliencePolicy.GetCircuitState(string! key) -> Verbara.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateValue

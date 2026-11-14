@@ -482,3 +482,36 @@ override sealed Verbara.Sdk.Sessions.CallReleasedEvent.Equals(Verbara.Sdk.Sessio
 static Verbara.Sdk.Sessions.CallReleasedEvent.operator !=(Verbara.Sdk.Sessions.CallReleasedEvent? left, Verbara.Sdk.Sessions.CallReleasedEvent? right) -> bool
 static Verbara.Sdk.Sessions.CallReleasedEvent.operator ==(Verbara.Sdk.Sessions.CallReleasedEvent? left, Verbara.Sdk.Sessions.CallReleasedEvent? right) -> bool
 static Verbara.Sdk.Sessions.Extensions.VerbaraSessionsBuilderExtensions.UseInMemory(this Verbara.Sdk.Sessions.Extensions.ISessionsBuilder! builder) -> Verbara.Sdk.Sessions.Extensions.ISessionsBuilder!
+Verbara.Sdk.Sessions.Manager.CallSessionManager.AdmitExistingCalls(string! serverId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByBridgeId(string! serverId, string! bridgeId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByChannelId(string! serverId, string! uniqueId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.CallSessionManager.GetByLinkedId(string! serverId, string! linkedId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.AdmitExistingCalls(string! serverId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetByBridgeId(string! serverId, string! bridgeId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetByChannelId(string! serverId, string! uniqueId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.Manager.ICallSessionManager.GetByLinkedId(string! serverId, string! linkedId) -> Verbara.Sdk.Sessions.CallSession?
+Verbara.Sdk.Sessions.SessionDomainEvent.Epoch.get -> Verbara.Sdk.Sessions.SessionEventEpoch?
+Verbara.Sdk.Sessions.SessionDomainEvent.Epoch.init -> void
+Verbara.Sdk.Sessions.SessionEventEpoch
+Verbara.Sdk.Sessions.SessionEventEpoch.AmiSession.get -> long
+Verbara.Sdk.Sessions.SessionEventEpoch.AmiSession.init -> void
+Verbara.Sdk.Sessions.SessionEventEpoch.Attachment.get -> long
+Verbara.Sdk.Sessions.SessionEventEpoch.Attachment.init -> void
+Verbara.Sdk.Sessions.SessionEventEpoch.ConnectionId.get -> System.Guid
+Verbara.Sdk.Sessions.SessionEventEpoch.ConnectionId.init -> void
+Verbara.Sdk.Sessions.SessionEventEpoch.Deconstruct(out System.Guid ConnectionId, out long AmiSession, out long DroppedBefore, out long Attachment) -> void
+Verbara.Sdk.Sessions.SessionEventEpoch.DroppedBefore.get -> long
+Verbara.Sdk.Sessions.SessionEventEpoch.DroppedBefore.init -> void
+Verbara.Sdk.Sessions.SessionEventEpoch.Equals(Verbara.Sdk.Sessions.SessionEventEpoch other) -> bool
+Verbara.Sdk.Sessions.SessionEventEpoch.SessionEventEpoch() -> void
+Verbara.Sdk.Sessions.SessionEventEpoch.SessionEventEpoch(System.Guid ConnectionId, long AmiSession, long DroppedBefore, long Attachment) -> void
+Verbara.Sdk.Sessions.SessionEventLoss
+Verbara.Sdk.Sessions.SessionEventLoss.NoneKnown = 1 -> Verbara.Sdk.Sessions.SessionEventLoss
+Verbara.Sdk.Sessions.SessionEventLoss.Possible = 2 -> Verbara.Sdk.Sessions.SessionEventLoss
+Verbara.Sdk.Sessions.SessionEventLoss.Unknown = 0 -> Verbara.Sdk.Sessions.SessionEventLoss
+override Verbara.Sdk.Sessions.SessionEventEpoch.GetHashCode() -> int
+static Verbara.Sdk.Sessions.SessionEventEpoch.LossBetween(Verbara.Sdk.Sessions.SessionEventEpoch? earlier, Verbara.Sdk.Sessions.SessionEventEpoch? later) -> Verbara.Sdk.Sessions.SessionEventLoss
+static Verbara.Sdk.Sessions.SessionEventEpoch.operator !=(Verbara.Sdk.Sessions.SessionEventEpoch left, Verbara.Sdk.Sessions.SessionEventEpoch right) -> bool
+static Verbara.Sdk.Sessions.SessionEventEpoch.operator ==(Verbara.Sdk.Sessions.SessionEventEpoch left, Verbara.Sdk.Sessions.SessionEventEpoch right) -> bool
+~override Verbara.Sdk.Sessions.SessionEventEpoch.Equals(object obj) -> bool
+~override Verbara.Sdk.Sessions.SessionEventEpoch.ToString() -> string
