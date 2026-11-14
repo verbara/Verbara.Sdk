@@ -1,0 +1,442 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
+using FluentAssertions;
+using FluentAssertions.Execution;
+using Verbara.Sdk.Ari.Audio;
+using Verbara.Sdk.Ari.Tests.TestSupport;
+using Verbara.Sdk.TestInfrastructure.Wire;
+
+namespace Verbara.Sdk.Ari.Tests.Audio;
+
+/// <summary>
+/// A write to a WebSocket audio stream that has already ended. Every audio write and every command that finds the
+/// stream ended throws <see cref="ObjectDisposedException"/>, whichever step of the ending it meets: the peer's close
+/// received, the answer sent, the transport failed, or the server's disposal done. A transport failure that cuts short
+/// a write already under way keeps its own type. Real sessions over real loopback sockets, each take counted by the
+/// outcome it ended on, so a failure prints the census of the run.
+/// </summary>
+/// <remarks>
+/// Several tests reset connections, which moves the process-wide <c>audio.transport.failures</c>: the class runs in
+/// <see cref="AudioStreamMetricsGroup"/>, alone.
+/// </remarks>
+[Collection(AudioStreamMetricsGroup.Name)]
+public sealed class WebSocketWriteAfterEndTests
+{
+    /// <summary>Upper bound on any wait. Reaching it is a failure, never a pace.</summary>
+    private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>Takes per racing test: enough that a mixed outcome cannot pass by luck.</summary>
+    private const int Takes = 50;
+
+    /// <summary>Takes of the cut-short write, each of which fills the connection first.</summary>
+    private const int CutShortTakes = 20;
+
+    /// <summary>Takes of the write queued behind a blocked one, each of which fills the connection first.</summary>
+    private const int QueuedTakes = 5;
+
+    /// <summary>How long the queued-write test lets the read loop take the peer's close: a tenth of the close bound.</summary>
+    private static readonly TimeSpan LateAnswer = TimeSpan.FromMilliseconds(100);
+
+    private const string Disposed = nameof(ObjectDisposedException);
+
+    private static readonly byte[] Frame = new byte[640];
+
+    // ============================================================ a write after the ending
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowObjectDisposed_WhenCalledRightAfterThePeersCloseEndedTheStream()
+    {
+        // Arrange — the real server, which disposes each stream once it ended, racing the consumer's write
+        await using var harness = await WebSocketEndingHarness.StartAsync(recording => recording.Subscribe());
+        var outcomes = new List<string>();
+
+        for (var take = 0; take < Takes; take++)
+        {
+            using var bound = new CancellationTokenSource(SignalTimeout);
+            var (peer, recording) = await harness.ConnectRawAsync($"after-{take}-{Guid.NewGuid():N}", bound.Token);
+            using var _ = peer;
+
+            // Act — the peer hangs up; the consumer writes as soon as it sees Disconnected
+            await peer.SendCloseAsync();
+            await recording.Ended.WaitAsync(bound.Token);
+            outcomes.Add(await OutcomeAsync(() => recording.Stream.WriteFrameAsync(Frame)));
+        }
+
+        // Assert
+        ShouldAllBeDisposed(outcomes,
+            "a write that finds the stream ended throws ObjectDisposedException, whether or not the server has disposed it yet");
+    }
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldEndOnObjectDisposed_WhenABackToBackWriterRacesThePeersClose()
+    {
+        // Arrange — a writer that never pauses, and a peer that closes after a different number of frames each take
+        var outcomes = new List<string>();
+
+        for (var take = 0; take < Takes; take++)
+        {
+            using var bound = new CancellationTokenSource(SignalTimeout);
+            await using var pair = await LoopbackSession.StartAsync(bound.Token);
+            var closeAfter = 1 + (take % 10);
+            var received = pair.PeerReceived(closeAfter);
+            var writer = WriteUntilThrowAsync(pair.Session, bound.Token);
+
+            // Act
+            await received.WaitAsync(bound.Token);
+            await pair.CloseFromPeerAsync(bound.Token);
+            outcomes.Add(await writer.WaitAsync(bound.Token));
+            await pair.Ended.WaitAsync(bound.Token);
+        }
+
+        // Assert
+        ShouldAllBeDisposed(outcomes,
+            "the writer's first failed write is the one that found the stream ended, so it throws ObjectDisposedException, never the transport's type");
+    }
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowObjectDisposed_WhenAResetEndedTheStream()
+    {
+        // Arrange — a session nobody disposes, so its socket stays aborted after the failure
+        var outcomes = new List<string>();
+
+        for (var take = 0; take < 10; take++)
+        {
+            using var bound = new CancellationTokenSource(SignalTimeout);
+            await using var pair = await LoopbackSession.StartAsync(bound.Token);
+
+            // Act — the peer resets; the consumer writes once it sees the ending
+            pair.ResetFromPeer();
+            await pair.Ended.WaitAsync(bound.Token);
+            outcomes.Add(await OutcomeAsync(() => pair.Session.WriteFrameAsync(Frame)));
+        }
+
+        // Assert
+        ShouldAllBeDisposed(outcomes, "the stream had ended before the write, so the write throws ObjectDisposedException");
+    }
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowObjectDisposed_WhenItWaitedBehindABlockedWriteWhileThePeerClosed()
+    {
+        // Arrange — the peer stops reading, so one write blocks and holds the send; a second write waits behind it
+        await using var harness = await WebSocketEndingHarness.StartAsync(recording => recording.Subscribe());
+        var outcomes = new List<string>();
+
+        for (var take = 0; take < QueuedTakes; take++)
+        {
+            using var bound = new CancellationTokenSource(SignalTimeout);
+            var (peer, recording) = await harness.ConnectRawAsync($"queued-{take}-{Guid.NewGuid():N}", bound.Token, readPaused: true);
+            using var _ = peer;
+            var blocked = await WriteUntilOneBlocksAsync(recording.Stream, bound.Token);
+            var queued = OutcomeAsync(() => recording.Stream.WriteFrameAsync(Frame));
+
+            // Act — the peer closes while both writes wait; once it reads again the blocked write goes out, and the
+            // queued one takes the send after the peer's close was received
+            await peer.SendCloseAsync();
+            await Task.Delay(LateAnswer, bound.Token); // fence-allow: SETTLE — lets the read loop take the peer's close, so the queued write gets the send on a stream that has ended
+            peer.ResumeReading();
+            await blocked.WaitAsync(bound.Token);
+            outcomes.Add(await queued.WaitAsync(bound.Token));
+            await recording.Ended.WaitAsync(bound.Token);
+        }
+
+        // Assert
+        ShouldAllBeDisposed(outcomes,
+            "the ending is read when the write takes the send, not when it was asked for, so a write that gets the send after the peer's close throws ObjectDisposedException");
+    }
+
+    [Theory]
+    [InlineData(ChanWebSocketCaptureFormat.PlainText)]
+    [InlineData(ChanWebSocketCaptureFormat.Json)]
+    public async Task SendCommands_ShouldThrowObjectDisposed_WhenThePeersCloseEndedTheStream(ChanWebSocketCaptureFormat format)
+    {
+        // Arrange — a stream whose MEDIA_START was read, so every command has a format to be written in
+        var commands = CommandsFor(format);
+        var outcomes = new List<string>();
+
+        for (var take = 0; take < 10; take++)
+        {
+            using var bound = new CancellationTokenSource(SignalTimeout);
+            await using var pair = await LoopbackSession.StartAsync(bound.Token);
+            await pair.NegotiateAsync(format, bound.Token);
+
+            // Act
+            await pair.CloseFromPeerAsync(bound.Token);
+            await pair.Ended.WaitAsync(bound.Token);
+            foreach (var (name, send) in commands)
+                outcomes.Add($"{name}:{await OutcomeAsync(() => send(pair.Session))}");
+        }
+
+        // Assert
+        using (new AssertionScope())
+        {
+            foreach (var (name, _) in commands)
+            {
+                ShouldAllBeDisposed(
+                    [.. outcomes.Where(o => o.StartsWith(name + ":", StringComparison.Ordinal)).Select(o => o[(name.Length + 1)..])],
+                    $"{name} finds the stream ended and throws ObjectDisposedException");
+            }
+        }
+    }
+
+    // ============================================================ a failure under a live write keeps its type
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowTheTransportsOwnFailure_WhenAResetCutsShortAWriteUnderWay()
+    {
+        // Arrange — the peer stops reading, so a write blocks in the transport with the stream still live
+        await using var harness = await WebSocketEndingHarness.StartAsync(recording => recording.Subscribe());
+        var outcomes = new List<string>();
+
+        for (var take = 0; take < CutShortTakes; take++)
+        {
+            using var bound = new CancellationTokenSource(SignalTimeout);
+            var (peer, recording) = await harness.ConnectRawAsync($"cut-{take}-{Guid.NewGuid():N}", bound.Token, readPaused: true);
+            using var _ = peer;
+            var blocked = await WriteUntilOneBlocksAsync(recording.Stream, bound.Token);
+
+            // Act
+            peer.Reset();
+            outcomes.Add(await OutcomeAsync(() => new ValueTask(blocked)).WaitAsync(bound.Token));
+            await recording.Ended.WaitAsync(bound.Token);
+        }
+
+        // Assert — the transport reports the reset as WebSocketException when the send fails first, and as
+        // OperationCanceledException when the read's failure aborted the socket first; both are its own, and the
+        // write had passed the ending check, so neither becomes ObjectDisposedException
+        var census = Census(outcomes);
+        using (new AssertionScope())
+        {
+            outcomes.Should().OnlyContain(
+                o => o.StartsWith(nameof(WebSocketException) + ":", StringComparison.Ordinal) || o == nameof(OperationCanceledException),
+                "a write under way when the transport failed throws the transport's own failure; the takes ended on: {0}", census);
+            outcomes.Should().Contain(
+                o => o.StartsWith(nameof(WebSocketException) + ":", StringComparison.Ordinal),
+                "at least one take sees the send itself fail, so a failure rewritten as another type shows here; the takes ended on: {0}", census);
+        }
+    }
+
+    // ============================================================ helpers
+
+    /// <summary>Every command a <see cref="IChanWebSocketSession"/> writes, in the format the connection negotiated.</summary>
+    private static List<(string Name, Func<IChanWebSocketSession, ValueTask> Send)> CommandsFor(ChanWebSocketCaptureFormat format)
+    {
+        List<(string, Func<IChanWebSocketSession, ValueTask>)> commands =
+        [
+            ("WriteFrameAsync", s => s.WriteFrameAsync(Frame)),
+            ("SendMarkAsync", s => s.SendMarkAsync("m")),
+            ("SendFlushMediaAsync", s => s.SendFlushMediaAsync()),
+            ("SendPauseMediaAsync", s => s.SendPauseMediaAsync()),
+            ("SendContinueMediaAsync", s => s.SendContinueMediaAsync()),
+            ("SendGetStatusAsync", s => s.SendGetStatusAsync()),
+            ("SendStartMediaBufferingAsync", s => s.SendStartMediaBufferingAsync()),
+            ("SendReportQueueDrainedAsync", s => s.SendReportQueueDrainedAsync()),
+            ("SendStopMediaBufferingAsync", s => s.SendStopMediaBufferingAsync("c1")),
+        ];
+        if (format == ChanWebSocketCaptureFormat.Json)
+            commands.Add(("SendSetMediaDirectionAsync", s => s.SendSetMediaDirectionAsync(ChanWebSocketMediaDirection.In)));
+        return commands;
+    }
+
+    /// <summary>What one call ended on: <c>succeeded</c>, the WebSocket error code, or the exception's type.</summary>
+    private static async Task<string> OutcomeAsync(Func<ValueTask> call)
+    {
+        try
+        {
+            await call();
+            return "succeeded";
+        }
+        catch (Exception ex)
+        {
+            return Name(ex);
+        }
+    }
+
+    private static string Name(Exception ex) =>
+        ex is WebSocketException ws ? $"{nameof(WebSocketException)}:{ws.WebSocketErrorCode}" : ex.GetType().Name;
+
+    /// <summary>Asserts every take ended on <see cref="ObjectDisposedException"/>, and prints the census when one did not.</summary>
+    private static void ShouldAllBeDisposed(List<string> outcomes, string because)
+    {
+        var census = Census(outcomes);
+        census.Should().Be($"{Disposed}={outcomes.Count}", "{0}; the takes ended on: {1}", because, census);
+    }
+
+    /// <summary>The outcomes counted, in ordinal order: <c>A=3, B=1</c>.</summary>
+    private static string Census(IEnumerable<string> outcomes) =>
+        string.Join(", ", outcomes.GroupBy(o => o, StringComparer.Ordinal)
+            .OrderBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => $"{g.Key}={g.Count()}"));
+
+    /// <summary>Writes with no pause until a write throws, and returns what it threw.</summary>
+    private static Task<string> WriteUntilThrowAsync(WebSocketAudioSession stream, CancellationToken token) =>
+        Task.Run(async () =>
+        {
+            try
+            {
+                while (!token.IsCancellationRequested)
+                {
+                    await stream.WriteFrameAsync(Frame, CancellationToken.None);
+                    await Task.Yield();
+                }
+
+                return "never-threw";
+            }
+            catch (Exception ex)
+            {
+                return Name(ex);
+            }
+        }, CancellationToken.None);
+
+    /// <summary>Writes large frames until one has not completed after 250 ms, and returns that write.</summary>
+    private static async Task<Task> WriteUntilOneBlocksAsync(IAudioStream stream, CancellationToken token)
+    {
+        var frame = new byte[64 * 1024];
+        for (var i = 0; i < 4000; i++)
+        {
+            var write = stream.WriteFrameAsync(frame, CancellationToken.None).AsTask();
+            if (await Task.WhenAny(write, Task.Delay(250, token)) != write) // fence-allow: SETTLE — the negative "this write has not completed" needs a bounded window; a write that has not completed in it counts as blocked
+                return write;
+            await write;
+        }
+
+        throw new InvalidOperationException("No write blocked: the peer's connection never filled.");
+    }
+
+    /// <summary>
+    /// A started <see cref="WebSocketAudioSession"/> over a real loopback socket, with no server: nothing disposes it
+    /// when it ends, so its socket stays in the state the ending left. The peer is a client <see cref="WebSocket"/>
+    /// that reads every frame the session sends until the session's close.
+    /// </summary>
+    private sealed class LoopbackSession : IAsyncDisposable
+    {
+        private readonly TcpClient _peerTcp;
+        private readonly TcpClient _accepted;
+        private readonly WebSocket _peer;
+        private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly IDisposable _subscription;
+        private readonly Lock _gate = new();
+        private readonly List<(int Count, TaskCompletionSource Signal)> _waits = [];
+        private Task? _peerRead;
+        private int _received;
+
+        private LoopbackSession(TcpClient peerTcp, TcpClient accepted)
+        {
+            _peerTcp = peerTcp;
+            _accepted = accepted;
+            _peer = WebSocket.CreateFromStream(peerTcp.GetStream(), new WebSocketCreationOptions { IsServer = false });
+            var serverSocket = WebSocket.CreateFromStream(accepted.GetStream(), new WebSocketCreationOptions { IsServer = true });
+            Session = new WebSocketAudioSession(serverSocket, $"loop-{Guid.NewGuid():N}", "slin16", new CapturingLogger<WebSocketAudioSession>());
+            _subscription = Session.StateChanges.Subscribe(state =>
+            {
+                if (state == AudioStreamState.Disconnected)
+                    _ended.TrySetResult();
+            });
+        }
+
+        public WebSocketAudioSession Session { get; }
+
+        /// <summary>Completes when the session publishes <see cref="AudioStreamState.Disconnected"/>.</summary>
+        public Task Ended => _ended.Task;
+
+        public static async Task<LoopbackSession> StartAsync(CancellationToken token)
+        {
+            using var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var peerTcp = new TcpClient();
+            var accepting = listener.AcceptTcpClientAsync(token).AsTask();
+            await peerTcp.ConnectAsync(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port, token);
+            var pair = new LoopbackSession(peerTcp, await accepting);
+            pair.Session.Start();
+            pair._peerRead = pair.ReadUntilCloseAsync();
+            return pair;
+        }
+
+        /// <summary>Completes once the peer has received <paramref name="count"/> binary frames.</summary>
+        public Task PeerReceived(int count)
+        {
+            var signal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (_gate)
+            {
+                if (_received >= count)
+                    signal.TrySetResult();
+                else
+                    _waits.Add((count, signal));
+            }
+
+            return signal.Task;
+        }
+
+        /// <summary>The peer sends the captured MEDIA_START of <paramref name="format"/>, and the session has read it.</summary>
+        public async Task NegotiateAsync(ChanWebSocketCaptureFormat format, CancellationToken token)
+        {
+            var mediaStart = ChanWebSocketWireCapture.MediaStart.First(f =>
+                f.AsteriskVersion == "24.0.0-rc2" && f.Producer == ChanWebSocketCaptureProducer.ExternalMedia && f.Format == format && f.Option == "none");
+            await _peer.SendAsync(mediaStart.Payload(), WebSocketMessageType.Text, endOfMessage: true, token);
+            await _peer.SendAsync(Frame, WebSocketMessageType.Binary, endOfMessage: true, token);
+
+            // The pump handles frames in order, so the MEDIA_START ahead of this frame has been read.
+            var frame = await Session.ReadFrameAsync(token).AsTask().WaitAsync(token);
+            frame.Length.Should().Be(Frame.Length);
+            Session.MediaStart.Should().NotBeNull();
+        }
+
+        /// <summary>The peer's orderly hangup: one close frame; the peer keeps reading until the session's answer.</summary>
+        public Task CloseFromPeerAsync(CancellationToken token) =>
+            _peer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, statusDescription: null, token);
+
+        /// <summary>The peer's connection reset, with no close frame.</summary>
+        public void ResetFromPeer()
+        {
+            _peerTcp.LingerState = new LingerOption(enable: true, seconds: 0);
+            _peerTcp.Client.Close();
+        }
+
+        private async Task ReadUntilCloseAsync()
+        {
+            var buffer = new byte[8192];
+            try
+            {
+                while (true)
+                {
+                    var result = await _peer.ReceiveAsync(buffer.AsMemory(), CancellationToken.None);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                        return;
+                    if (result.MessageType == WebSocketMessageType.Binary && result.EndOfMessage)
+                        OnFrameReceived();
+                }
+            }
+            catch (Exception ex) when (ex is WebSocketException or IOException or ObjectDisposedException or OperationCanceledException)
+            {
+                // The connection went away under the peer: its reading is over.
+            }
+        }
+
+        private void OnFrameReceived()
+        {
+            lock (_gate)
+            {
+                _received++;
+                for (var i = _waits.Count - 1; i >= 0; i--)
+                {
+                    if (_received < _waits[i].Count)
+                        continue;
+                    _waits[i].Signal.TrySetResult();
+                    _waits.RemoveAt(i);
+                }
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _subscription.Dispose();
+            await Session.DisposeAsync();
+            _peer.Abort();
+            _peer.Dispose();
+            if (_peerRead is not null)
+                await _peerRead.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            _peerTcp.Dispose();
+            _accepted.Dispose();
+        }
+    }
+}
