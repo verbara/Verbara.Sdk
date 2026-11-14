@@ -154,6 +154,34 @@ There are two profiles, and the filter as written is the first:
 
 The second line excludes every `VarSet` whose variable is not `QUEUESTATUS`; the pattern spells "not `QUEUESTATUS`" out because the filter's regular expressions have no lookahead. Behind it, on Asterisk 20.20.1, 22.9.0 and 23.4.1, the user received 1.28 % more bytes than the same user without `dialplan` (4.36 % more on calls that time out), and `CallsTimedOut` counted every timeout. The consequence: the user receives no other `VarSet` and no `Newexten`, so your own `VarSetEvent` observers see only `QUEUESTATUS`. No feature of the SDK reads another `VarSet`.
 
+### A queue created after the load is missing
+
+Asterisk sends no event when it creates a queue after Live's load (a `queue reload` that adds one, or a realtime
+insert). Live asks for such a queue on its own, alone, the first time a queue event names it — a caller joining, a
+member added, paused or changing device state — and admits its parameters, members and waiting callers without
+reconnecting. A queue no event has named yet is found by an explicit refresh, which lists every queue and asks for
+nothing else:
+
+```csharp
+using Verbara.Sdk.Live.Queues;
+using Verbara.Sdk.Live.Server;
+
+static async Task<AsteriskQueue?> RefreshAndFindQueueAsync(VerbaraServer server, string queueName,
+    CancellationToken cancellationToken)
+{
+    await server.ReconcileQueuesAsync(cancellationToken); // QueueStatus only; no reconnect
+    return server.Queues.GetByName(queueName);
+}
+```
+
+A refused, cancelled or cut-short refresh removes nothing. Neither the refresh nor the queue Live asks for on its own
+polls: a queue that is never named by an event and never refreshed stays unknown until the next reconnect's reload.
+Live asks for a queue alone only after the AMI session's listing of every queue (the load, a reconnect's reload or a
+refresh) has ended, however it ended, so when that listing was applied in full the events that arrive while Live starts
+send no extra `QueueStatus`; when a handler, a cancellation or a refusal cut it short, each queue those events named
+and the table does not hold listed is asked for alone once it ends. A queue removed with
+`Queues.RemoveQueue` or `Queues.Clear` is listed again, with its members and callers, by the next event that names it.
+
 ### Shutdown waits for an event handler
 
 **Symptoms:** `DisposeAsync` or `DisconnectAsync` of an `AmiConnection` takes as long as the event handler that was running when it was called.

@@ -168,6 +168,20 @@ internal static class AsteriskFrames
     public static KeyValuePair<string, string>[] QueueCallerLeave(string uniqueId, string channel, string queue,
         int position, int count) => QueueCaller(uniqueId, channel, queue, position, count);
 
+    /// <summary>
+    /// <c>QueueMemberAdded</c>, <c>QueueMemberRemoved</c> and <c>QueueMemberStatus</c> for a member of
+    /// <paramref name="queue"/>, with the headers Asterisk 22 sends for each (app_queue's member blob).
+    /// </summary>
+    public static KeyValuePair<string, string>[] QueueMember(string queue, string iface, int status = 1,
+        bool paused = false) =>
+    [
+        new("Privilege", "agent,all"), new("Queue", queue), new("MemberName", iface), new("Interface", iface),
+        new("StateInterface", iface), new("Membership", "dynamic"), new("Penalty", "0"), new("CallsTaken", "0"),
+        new("LastCall", "0"), new("LastPause", "0"), new("LoginTime", "1790633900"), new("InCall", "0"),
+        new("Status", status.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+        new("Paused", paused ? "1" : "0"), new("PausedReason", ""), new("Ringinuse", "1"), new("Wrapuptime", "0"),
+    ];
+
     private static KeyValuePair<string, string>[] QueueCaller(string uniqueId, string channel, string queue,
         int position, int count) =>
     [

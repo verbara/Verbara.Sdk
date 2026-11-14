@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: refresh the queues without reconnecting, and find a queue an event names (#569)
+
+Asterisk sends no event when it creates a queue after Live's load (a `queue reload` that adds one, or a realtime
+insert), so such a queue, its members and its waiting callers were held only after the next reconnect. Two ways now
+find it.
+
+**`VerbaraServer.ReconcileQueuesAsync()`** asks Asterisk for its queue snapshot (`QueueStatus`) and reconciles the queue
+table against it: the queue part of a state load and nothing else, with no `Status`, `BridgeList`,
+`ConfbridgeListRooms` or `Agents` and no reconnect. A caller already held and still listed keeps its entry, its
+`JoinedAt` and its one counted join. One the completed snapshot no longer lists leaves as after a reload (counted left,
+no wait sample, `LeaveNotObserved`). A refused, cancelled or cut-short read removes nothing. A read cancelled before its
+snapshot was applied throws `OperationCanceledException`, a lost session throws `AmiNotConnectedException`, and a token
+cancelled once the snapshot was applied changes nothing.
+
+**Live asks on its own**, over the SDK's own `AmiConnection`. A queue event (a caller's join, leave or abandonment, or a
+member's addition, removal, pause or device state) that names a queue Live holds no listing of sends `QueueStatus` for
+that queue alone, outside the event's handler. That listing only admits the queue's parameters, members and waiting
+callers: it removes nothing, and a caller whose join asked for it is held and counted once.
+
+- It is asked only after the AMI session's listing of every queue (the start's load, a reconnect's reload or the
+  refresh) has ended, however it ended, and never while one is being read. A start or reconnect whose listing was
+  applied in full therefore sends no extra `QueueStatus` for the queues it listed.
+- One request per queue is in flight on an AMI session. It is asked again after a request that did not complete or was
+  refused (Asterisk refuses `QueueStatus` only while `app_queue` is not loaded), and again once the queue has left the
+  table, for example after `Queues.RemoveQueue` or `Queues.Clear`. It is not asked again after a request that listed no
+  row of the queue, until a new session or a refresh.
+- A queue no event names is found only by the explicit refresh: nothing polls.
+
+Both settle the state of an agent whose `Agent/<id>` membership they add, remove or change, as a live member event
+does: one `AgentStateChanged` when the state changes, an agent on a call left alone, and no `Agents` listing. This
+holds also when a queue-table handler throws. `AgentStateChanged` can therefore be raised from inside
+`ReconcileQueuesAsync` or from the discovery's own task. See
+[the Live README](src/Verbara.Sdk.Live/README.md#refreshing-the-queues).
+
 ### Changed: the `VSDK0002`, `VSDK0003`, `VSDK0004` and `VSDK0006` warnings link to their migration-guide section (#560)
 
 The 14 members marked obsolete under these ids carry a documentation link: the warning a consumer's build reports,

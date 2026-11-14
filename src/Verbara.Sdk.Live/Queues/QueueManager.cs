@@ -281,9 +281,17 @@ public sealed class QueueManager
         {
             window.ListQueue(queueName);
             OnQueueParams(queueName, max, strategy, calls, holdTime, talkTime, completed, abandoned);
+            if (_queues.TryGetValue(queueName, out var listed))
+                listed.Listed = true;
         }
         RaisePending();
     }
+
+    /// <summary>
+    /// Whether the table holds <paramref name="queueName"/> from a listing: a queue it does not hold, or holds only because
+    /// a live join or member created it, has none. One lookup, no lock: read on the event dispatch.
+    /// </summary>
+    internal bool HoldsListingOf(string queueName) => _queues.TryGetValue(queueName, out var queue) && queue.Listed;
 
     /// <summary>Merge a listed member with the live lifecycle and fields observed in its read window.</summary>
     internal void OnSnapshotMember(QueueSnapshotWindow window, string queueName, string iface, string? memberName,
@@ -406,15 +414,27 @@ public sealed class QueueManager
     internal Action? MemberPauseApplied { get; set; }
 
     /// <summary>Handle QueueMemberStatus event (device state change).</summary>
-    public void OnMemberStatusChanged(string queueName, string iface, int status)
+    public void OnMemberStatusChanged(string queueName, string iface, int status) =>
+        ApplyMemberStatus(queueName, iface, status);
+
+    /// <summary>
+    /// <see cref="OnMemberStatusChanged"/>, returning whether the table holds a listing of the queue (see
+    /// <see cref="HoldsListingOf"/>), read from the lookup the status applies through: the most frequent queue event pays
+    /// no second lookup for the server's check.
+    /// </summary>
+    internal bool ApplyMemberStatus(string queueName, string iface, int status)
     {
+        bool listed;
         lock (_windowsLock)
         {
             foreach (var window in _windows)
                 window.OnLiveMemberStatus(queueName, iface, (QueueMemberState)status);
-            SetMemberStatusLocked(queueName, iface, (QueueMemberState)status);
+            listed = _queues.TryGetValue(queueName, out var queue) && queue.Listed;
+            if (queue is not null)
+                SetMemberStatusLocked(queue, iface, (QueueMemberState)status);
         }
         RaisePending();
+        return listed;
     }
 
     private void SetMemberStatusLocked(string queueName, string iface, QueueMemberState status)
@@ -556,14 +576,19 @@ public sealed class QueueManager
     /// snapshot while it was read. No event is raised for it, as none was when a reconnect cleared the table.</item>
     /// </list>
     /// A caller who joined after the request, and a member added after it, are kept: the snapshot could not list them.
+    /// <para>
+    /// <paramref name="removedMembers"/>, when given, receives the interface of every member removed, from a listed queue
+    /// or with a removed queue, under the window gate where it is removed and before any notification is raised: a
+    /// handler that throws leaves it complete.
+    /// </para>
     /// </summary>
-    internal void CompleteSnapshot(QueueSnapshotWindow window)
+    internal void CompleteSnapshot(QueueSnapshotWindow window, ISet<string>? removedMembers = null)
     {
         ArgumentNullException.ThrowIfNull(window);
         lock (window.Gate)
         {
             foreach (var queue in _queues.Values)
-                ApplySnapshot(queue, window.TableView());
+                ApplySnapshot(queue, window.TableView(), removedMembers);
             var completion = window.Complete();
             if (QueueSnapshotCompleted is not null)
             {
@@ -574,7 +599,7 @@ public sealed class QueueManager
         RaisePending();
     }
 
-    private void ApplySnapshot(AsteriskQueue queue, QueueSnapshotTableView view)
+    private void ApplySnapshot(AsteriskQueue queue, QueueSnapshotTableView view, ISet<string>? removedMembers)
     {
         var listed = view.ListsQueue(queue.Name);
         List<AsteriskQueueEntry>? gone = null;
@@ -603,6 +628,7 @@ public sealed class QueueManager
                 {
                     _queuesByMember.GetValueOrDefault(iface)?.TryRemove(queue.Name, out _);
                     (membersGone ??= []).Add(iface);
+                    removedMembers?.Add(iface);
                 }
             }
 
@@ -616,7 +642,10 @@ public sealed class QueueManager
                 removeQueue = _queues.TryRemove(new KeyValuePair<string, AsteriskQueue>(queue.Name, queue));
                 queue.RemovedFromTable = removeQueue;
                 if (removeQueue)
+                {
                     ForgetMembers(queue);
+                    removedMembers?.UnionWith(queue.Members.Keys);
+                }
             }
         }
 
@@ -1098,7 +1127,9 @@ public sealed class QueueManager
     /// <remarks>
     /// Each caller the queue held is counted in <c>live.queue.calls.left</c>, with no <c>live.queue.wait_time</c>
     /// sample since no leave was observed, so that <c>live.queue.calls.joined</c> minus <c>live.queue.calls.left</c>
-    /// keeps counting the callers held. No event is raised.
+    /// keeps counting the callers held. No event is raised. A server on the SDK's own AMI connection holds no listing of
+    /// the queue any more, so the next queue event that names it makes the server ask Asterisk for that queue's listing
+    /// and admit it again, with the members and waiting callers Asterisk lists.
     /// </remarks>
     public bool RemoveQueue(string queueName)
     {
@@ -1140,6 +1171,8 @@ public sealed class QueueManager
     /// later join lands in it. No <see cref="CallerLeft"/> is raised and <c>live.queue.calls.left</c> does not advance;
     /// the instance the table held for each caller reads <see cref="AsteriskQueueEntry.LeaveNotObserved"/> as
     /// <see langword="true"/>. A reload does not call it: it reconciles the table against Asterisk's snapshot instead.
+    /// A server on the SDK's own AMI connection then holds no listing of any queue, so the next queue event that names a
+    /// queue makes it ask Asterisk for that queue's listing and admit it again, with its members and waiting callers.
     /// </remarks>
     public void Clear()
     {
@@ -1180,6 +1213,17 @@ public sealed class AsteriskQueue
     // Set, under SyncRoot, when the queue is taken out of the manager's table; a join or member that finds it set adds
     // to the table's queue instead.
     internal bool RemovedFromTable { get; set; }
+
+    // Set once a QueueStatus listing listed this queue: its QueueParams row was applied. A queue a live join or member
+    // created is not listed until then, and the server asks for its listing. Never cleared: a queue taken out of the
+    // table is a new instance when it comes back.
+    private volatile bool _listed;
+
+    internal bool Listed
+    {
+        get => _listed;
+        set => _listed = value;
+    }
 
     public string Name { get; init; } = string.Empty;
     public int Max { get; set; }

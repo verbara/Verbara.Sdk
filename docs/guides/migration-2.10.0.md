@@ -21,6 +21,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Live` | [A live channel follows its dialplan location and caller ID](#a-live-channel-follows-its-dialplan-location-and-caller-id) | fix, behaviour |
 | `Verbara.Sdk.Live` | [A refused `Status` is counted and reported by the pool health check](#a-refused-status-is-counted-and-reported-by-the-pool-health-check) | new members, health check |
 | `Verbara.Sdk.Live` | [A waiting caller that only hangs up leaves the queue table](#a-waiting-caller-that-only-hangs-up-leaves-the-queue-table) | fix, behaviour |
+| `Verbara.Sdk.Live` | [A queue created after the load is found without a reconnect](#a-queue-created-after-the-load-is-found-without-a-reconnect) | new member, behaviour |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
 | `Verbara.Sdk.Ami` | [`NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends](#newextenevent-and-newcalleridevent-carry-what-the-wire-sends) | fix, new members |
 | `Verbara.Sdk.Ami` | [An action the SDK does not type is sent with `RawAction`](#an-action-the-sdk-does-not-type-is-sent-with-rawaction) | new type, behaviour, BREAKING |
@@ -467,6 +468,21 @@ stays counted until its bridged call ends.
 remove callers in it. A caller removed directly leaves a stale count: each later `Hangup` of its `Uniqueid` looks
 through every queue once, finding nothing, and its key stays in the index until `QueueManager.Clear` (`RemoveQueue`
 does not free it). A caller added directly is not in the index, so its `Hangup` does not remove it.
+
+### A queue created after the load is found without a reconnect
+
+**What changed.** Asterisk sends no event when it creates a queue after Live's load, so Live used to hold such a queue,
+its members and its waiting callers only after the next reconnect. Now Live asks for a queue when a queue event names
+one it holds no listing of, after the AMI session's own listing of every queue has ended: one `QueueStatus` for that
+queue alone, asked again only if that request failed or the queue left the table. `VerbaraServer.ReconcileQueuesAsync()`
+lists every queue on demand, for a queue no event names.
+
+**Who is affected.** A handler of `AgentManager.AgentStateChanged`, which can now be called from inside
+`ReconcileQueuesAsync` or from the discovery's own task, for an agent whose membership the listing changed. A host that
+calls `Queues.RemoveQueue` or `Queues.Clear`: the next event naming that queue lists it again.
+
+**What to do.** Nothing. Call `ReconcileQueuesAsync` after a change on the Asterisk side that creates queues no event
+will name soon.
 
 ## AMI
 
