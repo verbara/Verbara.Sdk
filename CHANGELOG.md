@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Added: refresh the queues without reconnecting, and find a queue an event names (#NNN)
+### Added: refresh the queues without reconnecting, and find a queue an event names (#569)
 
 Asterisk sends no event when it creates a queue after Live's load (a `queue reload` that adds one, or a realtime
 insert), so such a queue, its members and its waiting callers were held only after the next reconnect. Two ways now
