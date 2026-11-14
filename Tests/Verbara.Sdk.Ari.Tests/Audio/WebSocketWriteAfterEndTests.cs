@@ -413,7 +413,7 @@ public sealed class WebSocketWriteAfterEndTests
             await call();
             return "succeeded";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException) // every outcome is recorded, not judged here
         {
             return Name(ex);
         }
@@ -445,7 +445,7 @@ public sealed class WebSocketWriteAfterEndTests
 
                 return "never-threw";
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException) // every outcome is recorded, not judged here
             {
                 return Name(ex);
             }
