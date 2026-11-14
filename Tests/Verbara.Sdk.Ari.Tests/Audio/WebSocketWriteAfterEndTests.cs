@@ -312,6 +312,27 @@ public sealed class WebSocketWriteAfterEndTests
     }
 
     [Fact]
+    public async Task WriteFrameAsync_ShouldThrowOperationCanceledNotObjectDisposed_WhenItsCallerCancelsItWhileTheDisposalWaitsForIt()
+    {
+        // Arrange — the peer stops reading, so a write blocks holding the send; the disposal then waits for it
+        await using var harness = await WebSocketEndingHarness.StartAsync(recording => recording.Subscribe());
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        var (peer, recording) = await harness.ConnectRawAsync($"cancel-under-dispose-{Guid.NewGuid():N}", bound.Token, readPaused: true);
+        using var _ = peer;
+        using var caller = new CancellationTokenSource();
+        var blocked = await WriteUntilOneBlocksAsync(recording.Stream, bound.Token, caller.Token);
+        var disposing = recording.Stream.DisposeAsync().AsTask();
+
+        // Act — the caller gives up on its write while the disposal is still waiting for the send
+        await caller.CancelAsync();
+        var thrown = await Record.ExceptionAsync(() => blocked.WaitAsync(bound.Token));
+        await disposing.WaitAsync(bound.Token);
+
+        // Assert — the caller's own cancellation, not the disposal's ending
+        thrown.Should().BeAssignableTo<OperationCanceledException>();
+    }
+
+    [Fact]
     public async Task WriteFrameAsync_ShouldThrowObjectDisposedNotOperationCanceled_WhenItsTokenIsAlreadyCancelledOnADisposedStream()
     {
         // Arrange
@@ -437,13 +458,16 @@ public sealed class WebSocketWriteAfterEndTests
             }
         }, CancellationToken.None);
 
-    /// <summary>Writes large frames until one has not completed after 250 ms, and returns that write.</summary>
-    private static async Task<Task> WriteUntilOneBlocksAsync(IAudioStream stream, CancellationToken token)
+    /// <summary>
+    /// Writes large frames until one has not completed after 250 ms, and returns that write; each write is given
+    /// <paramref name="writeToken"/>.
+    /// </summary>
+    private static async Task<Task> WriteUntilOneBlocksAsync(IAudioStream stream, CancellationToken token, CancellationToken writeToken = default)
     {
         var frame = new byte[64 * 1024];
         for (var i = 0; i < 4000; i++)
         {
-            var write = stream.WriteFrameAsync(frame, CancellationToken.None).AsTask();
+            var write = stream.WriteFrameAsync(frame, writeToken).AsTask();
             if (await Task.WhenAny(write, Task.Delay(250, token)) != write) // fence-allow: SETTLE — the negative "this write has not completed" needs a bounded window; a write that has not completed in it counts as blocked
                 return write;
             await write;
