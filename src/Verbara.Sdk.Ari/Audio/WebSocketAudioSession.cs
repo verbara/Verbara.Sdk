@@ -433,15 +433,7 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
 
     public async ValueTask WriteFrameAsync(ReadOnlyMemory<byte> audioData, CancellationToken cancellationToken = default)
     {
-        await _sendLock.WaitAsync(cancellationToken);
-        try
-        {
-            await _webSocket.SendAsync(audioData, WebSocketMessageType.Binary, endOfMessage: true, cancellationToken);
-        }
-        finally
-        {
-            _sendLock.Release();
-        }
+        await SendUnderLockAsync(audioData, WebSocketMessageType.Binary, cancellationToken);
 
         // Counted once the message was sent, and no frame for a write that carried no audio.
         if (!audioData.IsEmpty)
@@ -453,7 +445,8 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
 
     // The refusals a session can predict from its own state are thrown before anything is written, and synchronously:
     // each Send…Async below is the non-async front half (argument, then state, then encoding in the connection's format,
-    // then length) and returns the ValueTask of the async back half, which only takes the send lock and writes.
+    // then length) and returns the ValueTask of the async back half, which takes the send lock, refuses a stream that has
+    // ended under it (an ending is a race with the write, so it is decided there and not here), and writes.
 
     private const string FormatNotYetKnownMessage =
         "No MEDIA_START has been read yet, so the connection's control format is not yet known: keep " +
@@ -554,12 +547,26 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     private ChanWebSocketControlMessageFormat NegotiatedFormat() =>
         MediaStart?.ControlMessageFormat ?? throw new InvalidOperationException(FormatNotYetKnownMessage);
 
-    private async ValueTask SendCommandAsync(ReadOnlyMemory<byte> command, CancellationToken cancellationToken)
+    private ValueTask SendCommandAsync(ReadOnlyMemory<byte> command, CancellationToken cancellationToken)
+        => SendUnderLockAsync(command, WebSocketMessageType.Text, cancellationToken);
+
+    private const string StreamEndedMessage =
+        "The stream has ended: its peer closed it, its transport failed, or it was disposed. Nothing was written.";
+
+    // The one send of an audio frame or a command. Whether the stream has ended is read under the send lock, which the
+    // answer to a peer's close takes too: a write either goes out before that answer, or finds the stream ended and
+    // throws ObjectDisposedException, whichever step of the ending it meets (the peer's close received, the answer sent,
+    // the transport failed, the disposal done). So the type a consumer catches never depends on a race inside the
+    // ending. A failure of the transport under a write that passed this check is the transport's own and keeps its type.
+    private async ValueTask SendUnderLockAsync(ReadOnlyMemory<byte> payload, WebSocketMessageType messageType, CancellationToken cancellationToken)
     {
         await _sendLock.WaitAsync(cancellationToken);
         try
         {
-            await _webSocket.SendAsync(command, WebSocketMessageType.Text, endOfMessage: true, cancellationToken);
+            if (!IsConnected)
+                throw new ObjectDisposedException(nameof(WebSocketAudioSession), StreamEndedMessage);
+
+            await _webSocket.SendAsync(payload, messageType, endOfMessage: true, cancellationToken);
         }
         finally
         {
