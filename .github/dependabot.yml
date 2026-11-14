@@ -33,6 +33,13 @@ updates:
       # pin to 17.x until the xunit v3 migration is scheduled.
       - dependency-name: "Microsoft.NET.Test.Sdk"
         update-types: ["version-update:semver-major"]
+      # .NET 10 is the LTS line this repo targets (net10.0). A new .NET major (11.0.x is
+      # STS) moves every runtime-band package together and is planned by hand across
+      # Sdk, Pro and Platform; patches and minors of the 10.x line still come through.
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.AspNetCore.*"
+        update-types: ["version-update:semver-major"]
     groups:
       # Group Microsoft.Extensions.*/runtime bumps into a single PR — minor +
       # patch only, so a major stays an individual review event (ADR-0039 D2,
