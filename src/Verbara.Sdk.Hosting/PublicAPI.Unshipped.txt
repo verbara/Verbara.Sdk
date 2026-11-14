@@ -1,5 +1,1 @@
 #nullable enable
-static Verbara.Sdk.Hosting.ServiceCollectionExtensions.AddVerbaraAri(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Verbara.Sdk.Ari.Client.AriClientOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
-Verbara.Sdk.Hosting.VerbaraHealthCheckOptions
-Verbara.Sdk.Hosting.VerbaraHealthCheckOptions.Tags.get -> System.Collections.Generic.ICollection<string!>!
-Verbara.Sdk.Hosting.VerbaraHealthCheckOptions.VerbaraHealthCheckOptions() -> void

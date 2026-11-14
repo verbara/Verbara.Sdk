@@ -77,8 +77,6 @@ Verbara.Sdk.Activities.Activities.MeetmeActivity.Options.get -> string?
 Verbara.Sdk.Activities.Activities.MeetmeActivity.Options.init -> void
 Verbara.Sdk.Activities.Activities.MeetmeActivity.RoomNumber.get -> string!
 Verbara.Sdk.Activities.Activities.MeetmeActivity.RoomNumber.init -> void
-Verbara.Sdk.Activities.Activities.MeetmeActivity.UseConfBridge.get -> bool
-Verbara.Sdk.Activities.Activities.MeetmeActivity.UseConfBridge.init -> void
 Verbara.Sdk.Activities.Activities.ParkActivity
 Verbara.Sdk.Activities.Activities.ParkActivity.ParkActivity(Verbara.Sdk.IAgiChannel! channel) -> void
 Verbara.Sdk.Activities.Activities.ParkActivity.ParkingLot.get -> string?
@@ -300,3 +298,7 @@ Verbara.Sdk.Activities.Activities.SnoopDirection.In = 1 -> Verbara.Sdk.Activitie
 Verbara.Sdk.Activities.Activities.SnoopDirection.None = 0 -> Verbara.Sdk.Activities.Activities.SnoopDirection
 Verbara.Sdk.Activities.Activities.SnoopDirection.Out = 2 -> Verbara.Sdk.Activities.Activities.SnoopDirection
 abstract Verbara.Sdk.Activities.Activities.AmiActivityBase.ExecuteAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.TransportData.get -> string?
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.TransportData.init -> void
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.Variables.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+Verbara.Sdk.Activities.Activities.ExternalMediaActivity.Variables.init -> void

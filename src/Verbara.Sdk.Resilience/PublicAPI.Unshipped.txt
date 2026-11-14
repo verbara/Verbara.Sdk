@@ -1,3 +1,1 @@
 #nullable enable
-Verbara.Sdk.Resilience.ResiliencePolicy.GetCircuitState(string! key) -> Verbara.Sdk.Resilience.Diagnostics.ResilienceMetrics.CircuitStateValue
-Verbara.Sdk.Resilience.CircuitBreakerState.RecordFailureReportingTrip(int threshold, System.TimeProvider! time) -> bool

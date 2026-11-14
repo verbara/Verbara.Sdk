@@ -126,14 +126,6 @@ Verbara.Sdk.Agi.Commands.HangupCommand
 Verbara.Sdk.Agi.Commands.HangupCommand.Channel.get -> string?
 Verbara.Sdk.Agi.Commands.HangupCommand.Channel.set -> void
 Verbara.Sdk.Agi.Commands.HangupCommand.HangupCommand() -> void
-Verbara.Sdk.Agi.Commands.MeetmeCommand
-Verbara.Sdk.Agi.Commands.MeetmeCommand.Conference.get -> string?
-Verbara.Sdk.Agi.Commands.MeetmeCommand.Conference.set -> void
-Verbara.Sdk.Agi.Commands.MeetmeCommand.MeetmeCommand() -> void
-Verbara.Sdk.Agi.Commands.MeetmeCommand.Options.get -> string?
-Verbara.Sdk.Agi.Commands.MeetmeCommand.Options.set -> void
-Verbara.Sdk.Agi.Commands.MeetmeCommand.Pin.get -> string?
-Verbara.Sdk.Agi.Commands.MeetmeCommand.Pin.set -> void
 Verbara.Sdk.Agi.Commands.NoopCommand
 Verbara.Sdk.Agi.Commands.NoopCommand.NoopCommand() -> void
 Verbara.Sdk.Agi.Commands.QueueCommand
@@ -410,7 +402,6 @@ override Verbara.Sdk.Agi.Commands.GetOptionCommand.BuildCommand() -> string!
 override Verbara.Sdk.Agi.Commands.GetVariableCommand.BuildCommand() -> string!
 override Verbara.Sdk.Agi.Commands.GosubCommand.BuildCommand() -> string!
 override Verbara.Sdk.Agi.Commands.HangupCommand.BuildCommand() -> string!
-override Verbara.Sdk.Agi.Commands.MeetmeCommand.BuildCommand() -> string!
 override Verbara.Sdk.Agi.Commands.NoopCommand.BuildCommand() -> string!
 override Verbara.Sdk.Agi.Commands.QueueCommand.BuildCommand() -> string!
 override Verbara.Sdk.Agi.Commands.ReceiveCharCommand.BuildCommand() -> string!
