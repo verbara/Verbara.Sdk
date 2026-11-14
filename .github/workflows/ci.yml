@@ -39,9 +39,9 @@ jobs:
   #    AOT Trim Check, Pack Warnings Gate, Audit Test Asserts — take the cheap JOB-level guard:
   #    a job skipped by `if:` reports conclusion `skipped`, which satisfies a required context,
   #    at zero runner cost.
-  #  * The SIXTH, "Functional Tests (Testcontainers) (23)", is MATRIX-SUFFIXED and takes the
-  #    STEP-level guard: a false job-level `if:` collapses the matrix into one unsuffixed
-  #    check-run, the (23) context never reports, and the PR is stranded forever (#104/#105,
+  #  * The SIXTH to EIGHTH, "Functional Tests (Testcontainers) (22)", "(23)" and "(24)", are
+  #    MATRIX-SUFFIXED and take the STEP-level guard: a false job-level `if:` collapses the matrix
+  #    into one unsuffixed check-run, the suffixed contexts never report, and the PR is stranded forever (#104/#105,
   #    ADR-0039 addendum — see that job's comment).
   # Always-run (NO `needs: gate`): "Coverage Script Tests", which hosts this classifier's unit
   # tests and MUST run on the very PR that edits it (§3.4). The one required context NOT in this file, "Analyze (C#)", lives in
@@ -359,7 +359,7 @@ jobs:
     # pressure that buys is refunded by the `concurrency:` block above.
     #
     # This job-level `if:` must NEVER evaluate false on a docs-only diff — a false job-level if:
-    # collapses the matrix and the required context "Functional Tests (Testcontainers) (23)" then
+    # collapses the matrix and the required contexts "Functional Tests (Testcontainers) (22|23|24)" then
     # never reports (#104/#105). `!cancelled()` keeps it true even when `gate` fails or is skipped;
     # the docs-only guard itself lives on the two heavy STEPS below.
     if: ${{ !cancelled() }}
@@ -374,10 +374,10 @@ jobs:
     # The guard is applied at STEP level, NOT job level (ADR-0039 addendum, 2026-07-15):
     # a job-level if: that evaluates false collapses the matrix so GitHub reports
     # a single check named "Functional Tests (Testcontainers)" (no matrix suffix,
-    # SKIPPED), and the required context "Functional Tests (Testcontainers) (23)"
-    # then NEVER reports — leaving the PR BLOCKED forever (observed on #104/#105).
-    # Keeping the job (and its matrix) always-run materializes the (23) check-run
-    # name and reports it success in seconds; only the Docker/Testcontainers steps
+    # SKIPPED), and the required suffixed contexts "Functional Tests (Testcontainers) (22|23|24)"
+    # then NEVER report — leaving the PR BLOCKED forever (observed on #104/#105).
+    # Keeping the job (and its matrix) always-run materializes the (22), (23) and (24) check-run
+    # names and reports them success in seconds; only the Docker/Testcontainers steps
     # are guarded. One piece of the guard shape stays load-bearing and the YAML
     # cannot show it: the merge_group term MUST LEAD, because on a queue run the
     # actor is the enqueuer and every `github.event.pull_request.*` field is empty —
@@ -385,16 +385,17 @@ jobs:
     # ADR-0039's bot test (`user.login`, deliberately NOT `github.actor`, which flips
     # to the human on a re-run) is now subsumed: a bot PR is a pull_request, so it
     # skips for the general reason. See ADR-0039 + addendum, then ADR-0051.
-    # The pull_request matrix stays [23] even though its heavy steps now no-op: the matrix must
-    # still EXPAND so the required context "Functional Tests (Testcontainers) (23)" materializes
-    # and reports — that is the whole #104/#105 lesson. Full matrix [22, 23, 24] in the merge queue, so
+    # The pull_request matrix is the queue's [22, 23, 24] even though its heavy steps no-op there: the
+    # matrix must still EXPAND so every required suffixed context "Functional Tests (Testcontainers) (N)"
+    # materializes and reports on the PR — that is the whole #104/#105 lesson, and a version leg that
+    # ran only in the queue could never be a required context. Full matrix [22, 23, 24] in the merge queue, so
     # nothing lands on main without full-matrix validation. ADR-0038 (D3) moved the 22 leg to queue
     # time; ADR-0051 moves the 23 leg with it; the 24 leg joins them there. See also verbara-meta/ADR-0003. Cost: ~19 min per
-    # variant in the queue, parallel across runners; seconds on a PR.
+    # variant in the queue, parallel across runners; seconds per variant on a PR (a `ci:functional` PR runs all three in full).
     strategy:
       fail-fast: false
       matrix:
-        asterisk: ${{ github.event_name == 'merge_group' && fromJSON('[22, 23, 24]') || fromJSON('[23]') }}
+        asterisk: [22, 23, 24]
     env:
       ASTERISK_VERSION: ${{ matrix.asterisk }}
     steps:
@@ -441,8 +442,8 @@ jobs:
       - name: Run functional + integration tests
         # Guarded (ADR-0051): pull_request events skip the Testcontainers execution unless the
         # PR carries `ci:functional`; merge_group runs it in full. With this step and the
-        # pre-pull skipped, the job completes SUCCESS in seconds on a PR while the (23)
-        # check-run name still reports — which is what keeps the queue reachable.
+        # pre-pull skipped, the job completes SUCCESS in seconds on a PR while the (22), (23)
+        # and (24) check-run names still report — which is what keeps the queue reachable.
         #
         # merge_group-only heavy work (ADR-0051), widening the ADR-0039 bot-only skip to every
         # pull_request. The merge_group term MUST still LEAD: on a queue run the actor is the
