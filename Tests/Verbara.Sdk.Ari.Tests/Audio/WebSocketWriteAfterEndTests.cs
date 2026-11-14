@@ -12,9 +12,12 @@ namespace Verbara.Sdk.Ari.Tests.Audio;
 /// <summary>
 /// A write to a WebSocket audio stream that has already ended. Every audio write and every command that finds the
 /// stream ended throws <see cref="ObjectDisposedException"/>, whichever step of the ending it meets: the peer's close
-/// received, the answer sent, the transport failed, or the server's disposal done. A transport failure that cuts short
-/// a write already under way keeps its own type. Real sessions over real loopback sockets, each take counted by the
-/// outcome it ended on, so a failure prints the census of the run.
+/// received, the answer sent, the transport failed, or the server's disposal done; a write waiting for the send when the
+/// stream is disposed finds it disposed too, and never hangs. A transport failure that cuts short a write already under
+/// way keeps its own type; a disposal that cuts one short ends it with <see cref="ObjectDisposedException"/>. A token
+/// already cancelled is read before the ending on a stream that has ended, and after the disposal on a disposed one.
+/// Real sessions over real loopback sockets, each take counted by the outcome it ended on, so a failure prints the
+/// census of the run.
 /// </summary>
 /// <remarks>
 /// Several tests reset connections, which moves the process-wide <c>audio.transport.failures</c>: the class runs in
@@ -28,6 +31,9 @@ public sealed class WebSocketWriteAfterEndTests
 
     /// <summary>Takes per racing test: enough that a mixed outcome cannot pass by luck.</summary>
     private const int Takes = 50;
+
+    /// <summary>Takes of the writer racing a reset: the window it probes is a few instructions wide, and a take costs milliseconds.</summary>
+    private const int ResetRaceTakes = 200;
 
     /// <summary>Takes of the cut-short write, each of which fills the connection first.</summary>
     private const int CutShortTakes = 20;
@@ -179,6 +185,149 @@ public sealed class WebSocketWriteAfterEndTests
         }
     }
 
+    [Fact]
+    public async Task WriteFrameAsync_ShouldEndOnObjectDisposed_WhenABackToBackWriterRacesTheDisposal()
+    {
+        // Arrange — a writer that never pauses, and a disposal after a different number of frames each take
+        var outcomes = new List<string>();
+
+        for (var take = 0; take < Takes; take++)
+        {
+            using var bound = new CancellationTokenSource(SignalTimeout);
+            await using var pair = await LoopbackSession.StartAsync(bound.Token);
+            var received = pair.PeerReceived(1 + (take % 10));
+            var writer = WriteUntilThrowAsync(pair.Session, bound.Token);
+
+            // Act
+            await received.WaitAsync(bound.Token);
+            await pair.Session.DisposeAsync().AsTask().WaitAsync(bound.Token);
+            outcomes.Add(await writer.WaitAsync(bound.Token));
+        }
+
+        // Assert
+        ShouldAllBeDisposed(outcomes,
+            "the disposal's close goes out under the send lock, so the writer's first failed write found the stream disposed and throws ObjectDisposedException, never the transport's type");
+    }
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldNeverThrowInvalidState_WhenABackToBackWriterRacesAReset()
+    {
+        // Arrange — a writer that never pauses, and a peer that resets after a different number of frames each take
+        var outcomes = new List<string>();
+
+        for (var take = 0; take < ResetRaceTakes; take++)
+        {
+            using var bound = new CancellationTokenSource(SignalTimeout);
+            await using var pair = await LoopbackSession.StartAsync(bound.Token);
+            var received = pair.PeerReceived(1 + (take % 7));
+            var writer = WriteUntilThrowAsync(pair.Session, bound.Token);
+
+            // Act — the reset aborts the socket from the read side, which takes no send lock: it can land between a
+            // write's ending check and its send
+            await received.WaitAsync(bound.Token);
+            pair.ResetFromPeer();
+            outcomes.Add(await writer.WaitAsync(bound.Token));
+        }
+
+        // Assert — a write that finds the stream ended throws ObjectDisposedException; one under way when the transport
+        // failed keeps the transport's own type; a write that wrote nothing never reports the transport's InvalidState
+        var census = Census(outcomes);
+        outcomes.Should().OnlyContain(
+            o => o == Disposed || o == nameof(OperationCanceledException) || o == $"{nameof(WebSocketException)}:{WebSocketError.ConnectionClosedPrematurely}",
+            "a write the reset left with nothing sent finds the stream ended and throws ObjectDisposedException, never WebSocketException:InvalidState; the takes ended on: {0}", census);
+    }
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowObjectDisposedRatherThanHang_WhenItWaitedBehindABlockedWriteWhileTheStreamWasDisposed()
+    {
+        // Arrange — the peer stops reading, so one write blocks and holds the send past the disposal's close bound; a
+        // second write waits behind it
+        await using var harness = await WebSocketEndingHarness.StartAsync(recording => recording.Subscribe());
+        var outcomes = new List<string>();
+
+        for (var take = 0; take < QueuedTakes; take++)
+        {
+            using var bound = new CancellationTokenSource(SignalTimeout);
+            var (peer, recording) = await harness.ConnectRawAsync($"queued-dispose-{take}-{Guid.NewGuid():N}", bound.Token, readPaused: true);
+            using var _ = peer;
+            var blockedWrite = await WriteUntilOneBlocksAsync(recording.Stream, bound.Token);
+            var blocked = OutcomeAsync(() => new ValueTask(blockedWrite));
+            var queued = OutcomeAsync(() => recording.Stream.WriteFrameAsync(Frame));
+
+            // Act
+            await recording.Stream.DisposeAsync().AsTask().WaitAsync(bound.Token);
+
+            // Assert input — each write's outcome, or `pending` when it had not finished one signal timeout later
+            var both = Task.WhenAll(blocked, queued);
+            var finished = await Task.WhenAny(both, Task.Delay(SignalTimeout, CancellationToken.None)) == both; // fence-allow: GUARD-TIMEOUT — a write that never completes is the defect; the bound turns the hang into a census entry
+            outcomes.Add($"blocked:{(blocked.IsCompleted ? blocked.Result : "pending")}");
+            outcomes.Add($"queued:{(queued.IsCompleted ? queued.Result : "pending")}");
+            if (!finished)
+                break;
+        }
+
+        // Assert
+        ShouldAllBeDisposed(outcomes.Select(o => o[(o.IndexOf(':', StringComparison.Ordinal) + 1)..]).ToList(),
+            $"the disposal ends both writes: the one under way and the one waiting for the send find the stream disposed and throw ObjectDisposedException, and neither hangs; per write: {string.Join(", ", outcomes)}");
+    }
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowTheSessionsOwnObjectDisposed_WhenTheStreamWasDisposed()
+    {
+        // Arrange
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        await using var pair = await LoopbackSession.StartAsync(bound.Token);
+        await pair.Session.DisposeAsync();
+
+        // Act
+        var thrown = await Record.ExceptionAsync(() => pair.Session.WriteFrameAsync(Frame).AsTask());
+
+        // Assert — the session's own exception, which says the stream ended, not one of a helper it released
+        var disposed = thrown.Should().BeOfType<ObjectDisposedException>().Subject;
+        using (new AssertionScope())
+        {
+            disposed.ObjectName.Should().Be(nameof(WebSocketAudioSession));
+            disposed.Message.Should().Contain("The stream has ended");
+        }
+    }
+
+    // ============================================================ a token cancelled before the write
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowOperationCanceledNotObjectDisposed_WhenItsTokenIsAlreadyCancelledOnAnEndedStream()
+    {
+        // Arrange — a stream the peer's close ended and nobody has disposed yet
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        await using var pair = await LoopbackSession.StartAsync(bound.Token);
+        await pair.CloseFromPeerAsync(bound.Token);
+        await pair.Ended.WaitAsync(bound.Token);
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        // Act
+        var thrown = await Record.ExceptionAsync(() => pair.Session.WriteFrameAsync(Frame, cancelled.Token).AsTask());
+
+        // Assert — the caller's cancellation is read before the ending, as every .NET wait reads its token first
+        thrown.Should().BeAssignableTo<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowObjectDisposedNotOperationCanceled_WhenItsTokenIsAlreadyCancelledOnADisposedStream()
+    {
+        // Arrange
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        await using var pair = await LoopbackSession.StartAsync(bound.Token);
+        await pair.Session.DisposeAsync();
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        // Act
+        var thrown = await Record.ExceptionAsync(() => pair.Session.WriteFrameAsync(Frame, cancelled.Token).AsTask());
+
+        // Assert — a disposed object refuses every call first, as it did before the session read the ending itself
+        thrown.Should().BeOfType<ObjectDisposedException>();
+    }
+
     // ============================================================ a failure under a live write keeps its type
 
     [Fact]
@@ -306,7 +455,7 @@ public sealed class WebSocketWriteAfterEndTests
     /// <summary>
     /// A started <see cref="WebSocketAudioSession"/> over a real loopback socket, with no server: nothing disposes it
     /// when it ends, so its socket stays in the state the ending left. The peer is a client <see cref="WebSocket"/>
-    /// that reads every frame the session sends until the session's close.
+    /// that reads every frame the session sends until the session's close, and answers that close when it was the first.
     /// </summary>
     private sealed class LoopbackSession : IAsyncDisposable
     {
@@ -401,7 +550,12 @@ public sealed class WebSocketWriteAfterEndTests
                 {
                     var result = await _peer.ReceiveAsync(buffer.AsMemory(), CancellationToken.None);
                     if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        // The session's own close, from a disposal: answered, so the disposal does not wait out its bound.
+                        if (_peer.State == WebSocketState.CloseReceived)
+                            await _peer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, statusDescription: null, CancellationToken.None);
                         return;
+                    }
                     if (result.MessageType == WebSocketMessageType.Binary && result.EndOfMessage)
                         OnFrameReceived();
                 }
