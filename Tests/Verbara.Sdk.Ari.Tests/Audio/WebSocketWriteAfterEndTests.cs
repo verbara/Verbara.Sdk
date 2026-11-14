@@ -70,8 +70,7 @@ public sealed class WebSocketWriteAfterEndTests
         }
 
         // Assert
-        ShouldAllBeDisposed(outcomes,
-            "a write that finds the stream ended throws ObjectDisposedException, whether or not the server has disposed it yet");
+        Census(outcomes).Should().Be(AllDisposed(outcomes), "{0}; the takes ended on: {1}", "a write that finds the stream ended throws ObjectDisposedException, whether or not the server has disposed it yet", Census(outcomes));
     }
 
     [Fact]
@@ -96,8 +95,7 @@ public sealed class WebSocketWriteAfterEndTests
         }
 
         // Assert
-        ShouldAllBeDisposed(outcomes,
-            "the writer's first failed write is the one that found the stream ended, so it throws ObjectDisposedException, never the transport's type");
+        Census(outcomes).Should().Be(AllDisposed(outcomes), "{0}; the takes ended on: {1}", "the writer's first failed write is the one that found the stream ended, so it throws ObjectDisposedException, never the transport's type", Census(outcomes));
     }
 
     [Fact]
@@ -118,7 +116,7 @@ public sealed class WebSocketWriteAfterEndTests
         }
 
         // Assert
-        ShouldAllBeDisposed(outcomes, "the stream had ended before the write, so the write throws ObjectDisposedException");
+        Census(outcomes).Should().Be(AllDisposed(outcomes), "{0}; the takes ended on: {1}", "the stream had ended before the write, so the write throws ObjectDisposedException", Census(outcomes));
     }
 
     [Fact]
@@ -147,8 +145,7 @@ public sealed class WebSocketWriteAfterEndTests
         }
 
         // Assert
-        ShouldAllBeDisposed(outcomes,
-            "the ending is read when the write takes the send, not when it was asked for, so a write that gets the send after the peer's close throws ObjectDisposedException");
+        Census(outcomes).Should().Be(AllDisposed(outcomes), "{0}; the takes ended on: {1}", "the ending is read when the write takes the send, not when it was asked for, so a write that gets the send after the peer's close throws ObjectDisposedException", Census(outcomes));
     }
 
     [Theory]
@@ -178,9 +175,8 @@ public sealed class WebSocketWriteAfterEndTests
         {
             foreach (var (name, _) in commands)
             {
-                ShouldAllBeDisposed(
-                    [.. outcomes.Where(o => o.StartsWith(name + ":", StringComparison.Ordinal)).Select(o => o[(name.Length + 1)..])],
-                    $"{name} finds the stream ended and throws ObjectDisposedException");
+                List<string> calls = [.. outcomes.Where(o => o.StartsWith(name + ":", StringComparison.Ordinal)).Select(o => o[(name.Length + 1)..])];
+                Census(calls).Should().Be(AllDisposed(calls), "{0} finds the stream ended and throws ObjectDisposedException; the takes ended on: {1}", name, Census(calls));
             }
         }
     }
@@ -205,8 +201,7 @@ public sealed class WebSocketWriteAfterEndTests
         }
 
         // Assert
-        ShouldAllBeDisposed(outcomes,
-            "the disposal's close goes out under the send lock, so the writer's first failed write found the stream disposed and throws ObjectDisposedException, never the transport's type");
+        Census(outcomes).Should().Be(AllDisposed(outcomes), "{0}; the takes ended on: {1}", "the disposal's close goes out under the send lock, so the writer's first failed write found the stream disposed and throws ObjectDisposedException, never the transport's type", Census(outcomes));
     }
 
     [Fact]
@@ -267,8 +262,10 @@ public sealed class WebSocketWriteAfterEndTests
         }
 
         // Assert
-        ShouldAllBeDisposed(outcomes.Select(o => o[(o.IndexOf(':', StringComparison.Ordinal) + 1)..]).ToList(),
-            $"the disposal ends both writes: the one under way and the one waiting for the send find the stream disposed and throw ObjectDisposedException, and neither hangs; per write: {string.Join(", ", outcomes)}");
+        List<string> writes = [.. outcomes.Select(o => o[(o.IndexOf(':', StringComparison.Ordinal) + 1)..])];
+        Census(writes).Should().Be(AllDisposed(writes),
+            "the disposal ends both writes: the one under way and the one waiting for the send find the stream disposed and throw ObjectDisposedException, and neither hangs; per write: {0}; the takes ended on: {1}",
+            string.Join(", ", outcomes), Census(writes));
     }
 
     [Fact]
@@ -425,12 +422,8 @@ public sealed class WebSocketWriteAfterEndTests
     private static string Name(Exception ex) =>
         ex is WebSocketException ws ? $"{nameof(WebSocketException)}:{ws.WebSocketErrorCode}" : ex.GetType().Name;
 
-    /// <summary>Asserts every take ended on <see cref="ObjectDisposedException"/>, and prints the census when one did not.</summary>
-    private static void ShouldAllBeDisposed(List<string> outcomes, string because)
-    {
-        var census = Census(outcomes);
-        census.Should().Be($"{Disposed}={outcomes.Count}", "{0}; the takes ended on: {1}", because, census);
-    }
+    /// <summary>The census of <paramref name="outcomes"/> when every take ended on <see cref="ObjectDisposedException"/>.</summary>
+    private static string AllDisposed(List<string> outcomes) => $"{Disposed}={outcomes.Count}";
 
     /// <summary>The outcomes counted, in ordinal order: <c>A=3, B=1</c>.</summary>
     private static string Census(IEnumerable<string> outcomes) =>
