@@ -58,11 +58,11 @@ The SDK is ported from [asterisk-java](https://github.com/asterisk-java/asterisk
 
 ## Status
 
-**v2.9.0** — 29 NuGet packages, 0 build warnings, 0 trim warnings, more than 7,400 unit tests, plus functional and integration suites against a real Asterisk (Testcontainers).
+**v2.10.0** — 29 NuGet packages, 0 build warnings, 0 trim warnings, more than 7,400 unit tests, plus functional and integration suites against a real Asterisk (Testcontainers).
 
 Release history — every version, with what changed and why — is in [`CHANGELOG.md`](CHANGELOG.md). It is not restated here: a second copy in the README is one nobody updates, and this block had drifted three releases behind before anyone noticed.
 
-API coverage, counted against what Asterisk 22.12 and the 24.0 release candidate document (the two document the same set): 113 of 154 AMI actions, 92 of 109 ARI REST operations, 42 of 45 ARI event types, plus 228 AMI event types. The SDK maps 120 AMI action types: two of them map the same action, `MixMonitorMute`, and the other six map names that 22 and 24 do not register (`Exec`, `DBPrefixGet` and the Dongle and fax-license actions). Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` control messages (plain text or JSON) both supported. Supported: **Asterisk 22 LTS** (primary) and **23 Standard** (secondary, until its end of life on 2027-10-15); 24 LTS becomes primary once it is generally available and in CI, and 20 and earlier are not supported — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for the policy, CI coverage and lifecycle.
+API coverage, counted against what Asterisk 22.12 and 24.0 document (the two document the same set): 113 of 154 AMI actions, 92 of 109 ARI REST operations, 42 of 45 ARI event types, plus 228 AMI event types. The SDK maps 120 AMI action types: two of them map the same action, `MixMonitorMute`, and the other six map names that 22 and 24 do not register (`Exec`, `DBPrefixGet` and the Dongle and fax-license actions). Asterisk 22.5+ outbound WebSocket and Asterisk 22.8/23.2+ `chan_websocket` control messages (plain text or JSON) both supported. Supported: **Asterisk 22 LTS** and **24 LTS** (primary; 2.10.0 is the first release that supports 24) and **23 Standard** (secondary, until its end of life on 2027-10-15); 20 and earlier are not supported — see [`docs/guides/asterisk-version-matrix.md`](docs/guides/asterisk-version-matrix.md) for the policy, CI coverage and lifecycle.
 
 ---
 
