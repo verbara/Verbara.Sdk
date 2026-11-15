@@ -4,7 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [2.10.0] - 2026-11-13
+## [2.10.0] - 2026-11-15
+
+### Fixed: a write to a WebSocket audio stream that has ended throws `ObjectDisposedException` (#576)
+
+A write or chan_websocket command on a WebSocket audio stream that had already ended could throw
+`WebSocketException` (`InvalidState`) or `ObjectDisposedException`, depending on how far the ending had got, and a write
+that Asterisk's hangup cut short in a burst of audio threw `WebSocketException` (`ConnectionClosedPrematurely`) on an
+ending the stream itself reported as orderly. Now:
+
+- A write or command that finds the stream ended or disposed throws `ObjectDisposedException`, decided under the send
+  lock. In 2.9.0 a write right after the peer's close, while the close was still unanswered, was sent and lost; it now
+  throws `ObjectDisposedException` too.
+- A write whose send fails takes the type of the ending the stream declares: after the peer's close,
+  `ObjectDisposedException` with the transport's failure as `InnerException`; after a failed connection, the
+  transport's own type. Such a write waits at most 50 ms per stream, counted from its first failed send, for the stream
+  to read how it ended.
+- A caller that cancels that wait gets `OperationCanceledException` with the transport's failure inside.
+- A write waiting behind a blocked write when the stream is disposed throws `ObjectDisposedException`; it used to never
+  complete. The exception names the stream, not an internal semaphore.
+
+Measured against Asterisk 22, 23 and 24 with a writer that floods audio while the call hangs up: `ObjectDisposedException`
+60 of 60. Before this fix the same writer got `WebSocketException` in 16 of 20 takes on Asterisk 24, and 2.9.0 in 0 of
+20. AudioSocket streams are
+unchanged. See the [migration guide](docs/guides/migration-2.10.0.md).
 
 ### Added: refresh the queues without reconnecting, and find a queue an event names (#569)
 

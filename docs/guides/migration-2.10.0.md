@@ -16,6 +16,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [`OriginateAsync` with an extension runs the dialplan](#originateasync-with-an-extension-runs-the-dialplan) | fix, behaviour |
 | `Verbara.Sdk.Ari` | [`STATUS`, `MEDIA_BUFFERING_COMPLETED` and `QUEUE_DRAINED` read as typed records](#status-media_buffering_completed-and-queue_drained-read-as-typed-records) | behaviour, new records |
 | `Verbara.Sdk.Ari` | [A WebSocket audio stream whose connection failed ends with `Error`](#a-websocket-audio-stream-whose-connection-failed-ends-with-error) | behaviour |
+| `Verbara.Sdk.Ari` | [A write to a WebSocket audio stream that has ended throws `ObjectDisposedException`](#a-write-to-a-websocket-audio-stream-that-has-ended-throws-objectdisposedexception) | behaviour |
 | `Verbara.Sdk`, `Verbara.Sdk.Ari` | [`AriRtpStats` reads a real reply, and a channel state never drops an event](#arirtpstats-reads-a-real-reply-and-a-channel-state-never-drops-an-event) | fix, changed types, new members, BREAKING |
 | `Verbara.Sdk.Live` | [A channel subscriber's failure stays with that subscriber](#a-channel-subscribers-failure-stays-with-that-subscriber) | behaviour, BREAKING |
 | `Verbara.Sdk.Live` | [A live channel follows its dialplan location and caller ID](#a-live-channel-follows-its-dialplan-location-and-caller-id) | fix, behaviour |
@@ -323,6 +324,22 @@ AudioSocket error frame produces, or that waits for `Disconnected` as the first 
 
 **What to do.** Handle `Error` as "the connection failed" and keep waiting for `Disconnected` as the last state, as an
 AudioSocket stream already required. AudioSocket streams are unchanged.
+
+### A write to a WebSocket audio stream that has ended throws `ObjectDisposedException`
+
+**What changed.** A write or command on a WebSocket audio stream that has ended throws `ObjectDisposedException`, never
+`WebSocketException`. In 2.9.0 a write made right after the peer's close, before the stream answered it, was usually
+sent and lost; it now throws. A write that the peer's close cuts short throws `ObjectDisposedException` with the
+transport's failure as `InnerException`; a write that a failed connection cuts short keeps the transport's own type,
+`WebSocketException` or `OperationCanceledException`. A write whose send fails can wait up to 50 ms, once per stream, for
+the stream to read how it ended.
+
+**Who is affected.** Code that keeps writing until a write succeeds or fails and expects every write after a hangup to
+succeed, or that tells a hangup from a network failure by catching `WebSocketException`.
+
+**What to do.** Stop writing on `ObjectDisposedException`: the call ended normally. Treat `WebSocketException` from a
+write as a failed connection, which `StateChanges` also reports as `Error`. Reading `IsConnected` before each write is
+not needed. AudioSocket streams are unchanged.
 
 ### `AriRtpStats` reads a real reply, and a channel state never drops an event
 
