@@ -58,6 +58,9 @@ public sealed class WebSocketWriteAfterEndTests
 
     private const string Disposed = nameof(ObjectDisposedException);
 
+    private const string FramesSent = "audio.frames.sent";
+    private const string BytesSent = "audio.bytes.sent";
+
     private static readonly byte[] Frame = new byte[640];
 
     // ============================================================ a write after the ending
@@ -496,6 +499,7 @@ public sealed class WebSocketWriteAfterEndTests
         // Arrange — a socket whose every send fails, whose read loop never learns how the stream ends, and writes
         // queued behind the first one for the send lock
         using var bound = new CancellationTokenSource(SignalTimeout);
+        using var recorder = new AudioMeasurementRecorder(FramesSent, BytesSent);
         await using var scripted = ScriptedSession.Start();
         var ends = new long[QueuedFailedWrites];
         var outcomes = new string[QueuedFailedWrites];
@@ -519,6 +523,7 @@ public sealed class WebSocketWriteAfterEndTests
             scripted.Socket.FailedSends.Should().Be(QueuedFailedWrites, "every queued write reached its own send");
             latest.Should().BeLessThan(WebSocketAudioSession.VerdictBound + VerdictSlack,
                 "no write waits for the ending again after the first failed send's wait ran out");
+            recorder.All.Should().BeEmpty("a write whose send failed sent no frame; the meter recorded {0}", recorder.Describe());
             scripted.States.Should().Equal([AudioStreamState.Connected], "nothing has ended the stream yet");
         }
     }
@@ -546,6 +551,32 @@ public sealed class WebSocketWriteAfterEndTests
             cancelled.InnerException.Should().BeOfType<WebSocketException>("the transport's failure the write met stays inside")
                 .Which.WebSocketErrorCode.Should().Be(WebSocketError.ConnectionClosedPrematurely);
             scripted.States.Should().Equal([AudioStreamState.Connected], "nothing has ended the stream yet");
+        }
+    }
+
+    // ============================================================ the one send path counts only audio
+
+    [Fact]
+    public async Task SendCommands_ShouldCountNeitherFrameNorBytesSent_WhenTheyGoOutBetweenTwoAudioFrames()
+    {
+        // Arrange — a stream whose MEDIA_START was read, so every command has a format to be written in
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        await using var pair = await LoopbackSession.StartAsync(bound.Token);
+        await pair.NegotiateAsync(ChanWebSocketCaptureFormat.Json, bound.Token);
+        using var recorder = new AudioMeasurementRecorder(FramesSent, BytesSent);
+
+        // Act — an audio frame, every command, then a second audio frame, all through the one send path
+        await pair.Session.WriteFrameAsync(Frame, bound.Token);
+        foreach (var (name, send) in CommandsFor(ChanWebSocketCaptureFormat.Json).Where(c => c.Name != nameof(WebSocketAudioSession.WriteFrameAsync)))
+            (await OutcomeAsync(() => send(pair.Session))).Should().Be("succeeded", "{0} goes out on a live stream", name);
+        await pair.Session.WriteFrameAsync(Frame, bound.Token);
+        await pair.PeerReceived(2).WaitAsync(bound.Token);
+
+        // Assert — a command is a text frame, not audio: only the two audio frames count
+        using (new AssertionScope())
+        {
+            recorder.Total(FramesSent).Should().Be(2, "two audio frames were sent; the meter recorded {0}", recorder.Describe());
+            recorder.Total(BytesSent).Should().Be(2 * Frame.Length, "only the audio payloads are bytes sent; the meter recorded {0}", recorder.Describe());
         }
     }
 
