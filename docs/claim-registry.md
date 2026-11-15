@@ -57,7 +57,7 @@ decision records, specs, plans and research notes are kept locally and are not t
 | 65 | supported: 22 LTS and 24 LTS primary (24 from 2.10.0), 23 Standard secondary until 2027-10-15, 20 and earlier not | ATTRIBUTED | — | GAP — corrected 2026-11-13 for 2.10.0 (was "24 once GA and in CI"; 24.0.0 is GA since 2026-11-05 and in the merge queue); corrected 2026-10-28 (was "Compatible with Asterisk 18, 20, 22 LTS, and 23 Standard"); same sources as `asterisk-version-matrix.md:7-27` |
 | ~~67~~ | ~~**60 ADRs**~~ | — | — | **DELETED** — the figure left `README.md` with the public decision catalog it counted (decision records are kept locally, no longer tracked); the two `StatusBlockCoherenceTests` cases that pinned it were removed with it. |
 | 89 | measurement provenance (Ryzen 9 9900X, .NET 10.0.5, BDN v0.14.0, 2026-04-18) | COHERENCE | `PerformanceTableCoherenceTests` — the header provenance test | PARTIAL — matched against the whole file rather than this line, and blind to the AMI row's .NET 10.0.6 MediumRunJob exception (`performance-record.json:12`); the two session-store rows measured apart from it state their own at :110 |
-| 93 | AMI parse+dispatch 1.62M events/sec (617.6 ns) | ENFORCING + COHERENCE | `PerformanceTableCoherenceTests` against `performance-record.json`; `perf-regression.yml` `*AmiProtocolReader*` against `baseline.json` | PARTIAL — COHERENCE bound; the regression gate has a baseline since #232 but observes only (`PERF_GATE_ENFORCE: 'false'`) |
+| 93 | AMI parse+dispatch 1.62M events/sec (617.6 ns) | ENFORCING + COHERENCE | `PerformanceTableCoherenceTests` against `performance-record.json`; `perf-regression.yml` `*AmiProtocolReader*` against `baseline.json` | PARTIAL — COHERENCE bound; the regression gate has a baseline since #232 and enforces since 2.10.0 (`PERF_GATE_ENFORCE: 'true'`; the weekly run fails on SLOWER, MORE-BYTES or a structural failure, and reports FASTER and FEWER-BYTES without failing) |
 | 94 | ARI deserialize Channel 3.54M ops/sec (283 ns) | ENFORCING + COHERENCE | `PerformanceTableCoherenceTests`; `*AriJson*` | PARTIAL — as row 93 |
 | 95 | ARI event parse 595K events/sec (1.68 µs), "2.7× faster than v1.0" | ENFORCING + COHERENCE | `PerformanceTableCoherenceTests` (binds the ratio too, `versus_v1_0`); `*AriParseEvent*` | PARTIAL — as row 93 |
 | 96 | 163.9M lookups/sec (6.1 ns) | ENFORCING + COHERENCE | `PerformanceTableCoherenceTests`; `*ChannelManager*` | PARTIAL — as row 93 |
@@ -343,9 +343,9 @@ range today would put back an ENFORCING claim with no gate behind it — the ben
 this one has none.
 
 *Unblocking condition.* The benchmark ships in this change and starts producing weekly observations
-immediately. Once it has enough runs to calibrate a band the same way — in the PR that flips
-`PERF_GATE_ENFORCE` — the figure can be published as ENFORCING, stated per utterance length and with
-its machine. Not before.
+immediately. Once it has enough runs to calibrate a band the same way, the figure can be published as
+ENFORCING, stated per utterance length and with its machine. Not before. The PR that turned
+`PERF_GATE_ENFORCE` on (2.10.0) left turn detection without a band, so it still observes only.
 
 **First-party turn-detection accuracy.** `README.md` states accuracy as **upstream's** measurement
 and will keep doing so until a first-party gate exists. The blocker is **labelling, not licensing**

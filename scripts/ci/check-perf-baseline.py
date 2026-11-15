@@ -81,6 +81,7 @@ Unit-tested by scripts/tests/test_check_perf_baseline.py in the always-on, requi
 own guard.
 """
 import json
+import math
 import os
 import re
 import sys
@@ -95,7 +96,9 @@ def die(message):
 
 
 def _is_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    # Finite only: json.load accepts NaN and Infinity, and NaN compares False both ways, so a NaN
+    # mean would otherwise read as inside its band.
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def parse_args(argv):

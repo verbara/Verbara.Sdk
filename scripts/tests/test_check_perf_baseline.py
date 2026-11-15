@@ -60,6 +60,8 @@ def _entry(full_name, mean=1000.0, stats="ok", allocated=None, memory=True):
         entry["Statistics"] = {"Mean": True}
     elif stats == "zero-mean":
         entry["Statistics"] = {"Mean": 0}
+    elif stats == "nan-mean":
+        entry["Statistics"] = {"Mean": float("nan")}
     elif stats == "null":
         entry["Statistics"] = None
     elif stats == "absent":
@@ -289,6 +291,14 @@ class CheckPerfBaselineTests(unittest.TestCase):
         self._write_report([_entry(_ALPHA, stats="absent"), _entry(_BETA, 50.0)])
         result = self._run("--enforce")
         self.assertEqual(1, result.returncode)
+
+    def test_Main_ShouldBreach_WhenStatisticsMeanIsNaN(self):
+        # json.load accepts NaN, and NaN compares False both ways, so without a finite check the
+        # row reads "ok" and a run with no measurement passes.
+        self._write_report([_entry(_ALPHA, stats="nan-mean"), _entry(_BETA, 50.0)])
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("not a positive", result.stdout)
 
     def test_Main_ShouldBreach_WhenStatisticsMeanIsNotNumeric(self):
         self._write_report([_entry(_ALPHA, stats="text-mean"), _entry(_BETA, 50.0)])
