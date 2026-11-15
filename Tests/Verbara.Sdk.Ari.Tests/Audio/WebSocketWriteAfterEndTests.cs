@@ -44,6 +44,9 @@ public sealed class WebSocketWriteAfterEndTests
     /// <summary>How long the queued-write test lets the read loop take the peer's close: a tenth of the close bound.</summary>
     private static readonly TimeSpan LateAnswer = TimeSpan.FromMilliseconds(100);
 
+    /// <summary>How long after its send failed the scripted socket delivers the peer's close: a fifth of the write's wait for the ending.</summary>
+    private static readonly TimeSpan LateClose = TimeSpan.FromMilliseconds(10);
+
     private const string Disposed = nameof(ObjectDisposedException);
 
     private static readonly byte[] Frame = new byte[640];
@@ -383,6 +386,95 @@ public sealed class WebSocketWriteAfterEndTests
         }
     }
 
+    // ============================================================ a write the peer's close cuts short ends as the ending the session declares
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowObjectDisposedWithTheTransportsFailureInside_WhenThePeerClosesThenResetsUnderAWriteUnderWay()
+    {
+        // Arrange — the peer stops reading, so a write blocks in the transport with audio the peer never reads
+        await using var harness = await WebSocketEndingHarness.StartAsync(recording => recording.Subscribe());
+        var outcomes = new List<string>();
+        var endings = new List<string>();
+
+        for (var take = 0; take < QueuedTakes; take++)
+        {
+            using var bound = new CancellationTokenSource(SignalTimeout);
+            var (peer, recording) = await harness.ConnectRawAsync($"close-then-reset-{take}-{Guid.NewGuid():N}", bound.Token, readPaused: true);
+            using var _ = peer;
+            var blocked = await WriteUntilOneBlocksAsync(recording.Stream, bound.Token);
+            var cut = ExceptionAsync(blocked);
+
+            // Act — Asterisk's hangup under a burst: its close, read by the session, then the connection cut with our
+            // audio still unread
+            await peer.SendCloseAsync();
+            while (recording.Stream.IsConnected && !bound.IsCancellationRequested)
+                await Task.Delay(1, CancellationToken.None); // fence-allow: LOOP-DRIVER — the stream exposes no signal for having read the peer's close, only IsConnected turning false; bounded by SignalTimeout
+            peer.Reset();
+            var thrown = await cut.WaitAsync(bound.Token);
+            await recording.Ended.WaitAsync(bound.Token);
+            outcomes.Add(thrown is ObjectDisposedException { InnerException: WebSocketException or IOException }
+                ? $"{Disposed}+inner"
+                : thrown is null ? "succeeded" : Name(thrown));
+            endings.Add(string.Join(",", recording.States));
+        }
+
+        // Assert — the session read the peer's close first and declares an orderly ending, so the write says the same
+        using (new AssertionScope())
+        {
+            Census(outcomes).Should().Be($"{Disposed}+inner={outcomes.Count}",
+                "a write cut short after the peer's close throws ObjectDisposedException with the transport's failure inside, never WebSocketException; the takes ended on: {0}", Census(outcomes));
+            Census(endings).Should().Be($"Connected,Disconnected={endings.Count}",
+                "the session ended on the peer's close, not on a failed transport; the endings were: {0}", Census(endings));
+        }
+    }
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowObjectDisposed_WhenItsSendFailsBeforeTheReadLoopHasThePeersClose()
+    {
+        // Arrange — a socket whose send fails while the peer's close is still on its way to the read loop
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        await using var scripted = ScriptedSession.Start();
+        var write = ExceptionAsync(scripted.Session.WriteFrameAsync(Frame).AsTask());
+        await scripted.Socket.SendFailed.WaitAsync(bound.Token);
+
+        // Act — the close arrives after the send failed, within the time the write waits for the ending
+        await Task.Delay(LateClose, bound.Token); // fence-allow: SETTLE — lets the failed write start waiting for the read loop's verdict before the close reaches it, a fifth of that wait
+        scripted.Socket.DeliverClose();
+        var thrown = await write.WaitAsync(bound.Token);
+        await scripted.Ended.WaitAsync(bound.Token);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            thrown.Should().BeOfType<ObjectDisposedException>("the read loop then declares the peer's close, so the write ends as that ending");
+            thrown?.InnerException.Should().BeOfType<WebSocketException>("the transport's failure stays inside");
+            scripted.States.Should().Equal([AudioStreamState.Connected, AudioStreamState.Disconnected], "the session ended on the peer's close");
+        }
+    }
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowTheTransportsOwnFailureWithinTheCloseBound_WhenItsSendFailsAndNoEndingFollows()
+    {
+        // Arrange — a socket whose send fails, and whose read loop never learns how the stream ends
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        await using var scripted = ScriptedSession.Start();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        // Act
+        var thrown = await ExceptionAsync(scripted.Session.WriteFrameAsync(Frame).AsTask()).WaitAsync(bound.Token);
+        var waited = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+
+        // Assert — the write waits a bounded time for an ending, then keeps the transport's type; the bound is well
+        // inside the close's own, so the answer to a close the write delayed still goes out in time
+        using (new AssertionScope())
+        {
+            thrown.Should().BeOfType<WebSocketException>("no ending was declared, so the failure is the transport's own")
+                .Which.WebSocketErrorCode.Should().Be(WebSocketError.ConnectionClosedPrematurely);
+            waited.Should().BeLessThan(WebSocketAudioSession.CloseBound, "the wait for the ending is bounded, and shorter than the close's bound");
+            scripted.States.Should().Equal([AudioStreamState.Connected], "nothing has ended the stream yet");
+        }
+    }
+
     // ============================================================ helpers
 
     /// <summary>Every command a <see cref="IChanWebSocketSession"/> writes, in the format the connection negotiated.</summary>
@@ -416,6 +508,20 @@ public sealed class WebSocketWriteAfterEndTests
         catch (Exception ex) when (ex is not OutOfMemoryException) // every outcome is recorded, not judged here
         {
             return Name(ex);
+        }
+    }
+
+    /// <summary>What <paramref name="call"/> threw, or <see langword="null"/> when it completed.</summary>
+    private static async Task<Exception?> ExceptionAsync(Task call)
+    {
+        try
+        {
+            await call;
+            return null;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) // every outcome is recorded, not judged here
+        {
+            return ex;
         }
     }
 
@@ -609,5 +715,114 @@ public sealed class WebSocketWriteAfterEndTests
             _peerTcp.Dispose();
             _accepted.Dispose();
         }
+    }
+
+    /// <summary>A started <see cref="WebSocketAudioSession"/> over a <see cref="ScriptedWebSocket"/>, with every state it published.</summary>
+    private sealed class ScriptedSession : IAsyncDisposable
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<AudioStreamState> _states = new();
+        private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly IDisposable _subscription;
+
+        private ScriptedSession()
+        {
+            Session = new WebSocketAudioSession(Socket, $"scripted-{Guid.NewGuid():N}", "slin16", new CapturingLogger<WebSocketAudioSession>());
+            _subscription = Session.StateChanges.Subscribe(state =>
+            {
+                _states.Enqueue(state);
+                if (state == AudioStreamState.Disconnected)
+                    _ended.TrySetResult();
+            });
+        }
+
+        public ScriptedWebSocket Socket { get; } = new();
+
+        public WebSocketAudioSession Session { get; }
+
+        public IReadOnlyList<AudioStreamState> States => [.. _states];
+
+        /// <summary>Completes when the session publishes <see cref="AudioStreamState.Disconnected"/>.</summary>
+        public Task Ended => _ended.Task;
+
+        public static ScriptedSession Start()
+        {
+            var scripted = new ScriptedSession();
+            scripted.Session.Start();
+            return scripted;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _subscription.Dispose();
+            await Session.DisposeAsync();
+            Socket.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A WebSocket whose every send fails as a reset does, <see cref="WebSocketException"/>
+    /// <see cref="WebSocketError.ConnectionClosedPrematurely"/> with an <see cref="IOException"/> inside, and whose one
+    /// received frame is the peer's close, delivered when the test says so or as the answer to this side's own close.
+    /// </summary>
+    private sealed class ScriptedWebSocket : WebSocket
+    {
+        private readonly TaskCompletionSource _close = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _sendFailed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private volatile WebSocketState _state = WebSocketState.Open;
+
+        /// <summary>Completes when a send has failed.</summary>
+        public Task SendFailed => _sendFailed.Task;
+
+        /// <summary>The peer's close reaches the read loop.</summary>
+        public void DeliverClose() => _close.TrySetResult();
+
+        public override WebSocketState State => _state;
+        public override WebSocketCloseStatus? CloseStatus => _state is WebSocketState.CloseReceived or WebSocketState.Closed ? WebSocketCloseStatus.NormalClosure : null;
+        public override string? CloseStatusDescription => null;
+        public override string? SubProtocol => null;
+
+        public override async ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(Memory<byte> buffer, CancellationToken ct)
+        {
+            await _close.Task.WaitAsync(ct);
+            _state = _state == WebSocketState.CloseSent ? WebSocketState.Closed : WebSocketState.CloseReceived;
+            return new ValueWebSocketReceiveResult(0, WebSocketMessageType.Close, true);
+        }
+
+        public override ValueTask SendAsync(ReadOnlyMemory<byte> buffer, WebSocketMessageType type, bool endOfMessage, CancellationToken ct)
+        {
+            _sendFailed.TrySetResult();
+            return ValueTask.FromException(new WebSocketException(WebSocketError.ConnectionClosedPrematurely, new IOException("Connection reset by peer")));
+        }
+
+        public override Task CloseOutputAsync(WebSocketCloseStatus status, string? description, CancellationToken ct)
+        {
+            if (_state == WebSocketState.CloseReceived)
+            {
+                _state = WebSocketState.Closed;
+            }
+            else
+            {
+                // This side's close, from a disposal: the peer answers it.
+                _state = WebSocketState.CloseSent;
+                DeliverClose();
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public override Task CloseAsync(WebSocketCloseStatus status, string? description, CancellationToken ct) =>
+            CloseOutputAsync(status, description, ct);
+
+        public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken ct)
+            => throw new NotSupportedException("Use the Memory overload");
+
+        public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType type, bool endOfMessage, CancellationToken ct)
+            => SendAsync(buffer.AsMemory(), type, endOfMessage, ct).AsTask();
+
+        public override void Abort() => _state = WebSocketState.Aborted;
+
+#pragma warning disable IDISP010 // WebSocket.Dispose is abstract — no base to call
+        public override void Dispose() => _state = WebSocketState.Closed;
+#pragma warning restore IDISP010
     }
 }
