@@ -576,7 +576,7 @@ public sealed class WebSocketWriteAfterEndTests
         using (new AssertionScope())
         {
             recorder.Total(FramesSent).Should().Be(2, "two audio frames were sent; the meter recorded {0}", recorder.Describe());
-            recorder.Total(BytesSent).Should().Be(2 * Frame.Length, "only the audio payloads are bytes sent; the meter recorded {0}", recorder.Describe());
+            recorder.Total(BytesSent).Should().Be(2.0 * Frame.Length, "only the audio payloads are bytes sent; the meter recorded {0}", recorder.Describe());
         }
     }
 
