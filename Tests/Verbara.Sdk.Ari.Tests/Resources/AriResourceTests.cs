@@ -4,6 +4,7 @@ using Verbara.Sdk;
 using Verbara.Sdk.Ari.Client;
 using Verbara.Sdk.Ari.Resources;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 
 namespace Verbara.Sdk.Ari.Tests.Resources;
 
@@ -405,6 +406,76 @@ public class AriResourceTests
         handler.LastRequestQuery.Should().Be(
             "?endpoint=PJSIP%2F1005%40loop&app=cap&channelId=506a482e-a9f8-46c6-a198-af7d261f785f&otherChannelId=other-1&originator=orig-1");
         handler.LastRequestHadContent.Should().BeFalse("a create without variables has no body");
+    }
+
+    // Error bodies in Asterisk's {"message": …} shape; Asterisk does not echo the request body in them. The 400 maps to
+    // AriException, the 409 to AriConflictException, the 500 to AriException with its status.
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, """{"message":"Endpoint is not valid"}""")]
+    [InlineData(HttpStatusCode.Conflict, """{"message":"Channel with given unique ID already exists"}""")]
+    [InlineData(HttpStatusCode.InternalServerError, """{"message":"Allocation failed"}""")]
+    public async Task Channels_CreateWithoutDialAsync_ShouldNotEchoVariableValues_WhenAsteriskAnswersWithError(
+        HttpStatusCode status, string errorBody)
+    {
+        var sentinel = $"cwd-secret-{Guid.NewGuid():N}";
+        var logger = new TestSupport.CapturingLogger<AriResourceTests>();
+        var activities = new System.Collections.Concurrent.ConcurrentQueue<System.Diagnostics.Activity>();
+        using var listener = new System.Diagnostics.ActivityListener
+        {
+            // By name, not through AriActivitySource.Source: the listener is consulted while that type is initialized.
+            ShouldListenTo = source => source.Name == "Verbara.Sdk.Ari",
+            Sample = (ref System.Diagnostics.ActivityCreationOptions<System.Diagnostics.ActivityContext> _) =>
+                System.Diagnostics.ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activities.Enqueue,
+        };
+        System.Diagnostics.ActivitySource.AddActivityListener(listener);
+
+        // The client's own pipeline: the logging handler in front of the transport, as AriClient builds it.
+        using var transport = new FakeHttpHandler(errorBody, status);
+        using var http = new HttpClient(new Verbara.Sdk.Ari.Internal.AriLoggingHandler(logger) { InnerHandler = transport })
+        {
+            BaseAddress = new Uri("http://localhost:8088/ari/")
+        };
+        var sut = new AriChannelsResource(http, DefaultOptions);
+        var channelId = Guid.NewGuid().ToString();
+
+        var act = async () => await sut.CreateWithoutDialAsync(CapturedCreateEndpoint, CapturedCreateApp, channelId,
+            variables: new Dictionary<string, string> { ["LABEMVAR"] = sentinel, ["LABEMVAR2"] = "plain-" + sentinel });
+
+        var thrown = (await act.Should().ThrowAsync<AriException>()).Which;
+
+        // Controls: the value did travel to the server, and the logger and the trace did see the failed call, so the
+        // absences below are measured on a call that carried the value and was logged.
+        System.Text.Encoding.UTF8.GetString(transport.LastRequestBody!).Should().Contain(sentinel,
+            "the create sent the value in its body");
+        thrown.StatusCode.Should().Be((int)status);
+        logger.Entries.Should().Contain(e => e.Level == LogLevel.Warning && e.Message.Contains(((int)status).ToString(
+            System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal),
+            "the error response is logged");
+        var callActivities = activities.Where(a => (a.GetTagItem("url.path") as string)?.Contains(channelId,
+            StringComparison.Ordinal) == true).ToList();
+        callActivities.Should().ContainSingle("the call is traced");
+
+        var exceptionTexts = new List<string>();
+        for (Exception? e = thrown; e is not null; e = e.InnerException)
+        {
+            exceptionTexts.Add(e.Message);
+            exceptionTexts.Add(e.ToString());
+            exceptionTexts.AddRange(e.Data.Values.Cast<object?>().Select(v => v?.ToString() ?? ""));
+        }
+        exceptionTexts.Should().NotContain(text => text.Contains(sentinel, StringComparison.Ordinal),
+            "the exception of a failed create carries no variable value");
+
+        var logTexts = logger.Entries.SelectMany(e => new[] { e.Message, e.Exception?.ToString() ?? "" }
+            .Concat(e.State.Select(pair => pair.Value?.ToString() ?? ""))).ToList();
+        logTexts.Should().NotContain(text => text.Contains(sentinel, StringComparison.Ordinal),
+            "no log line at any level carries a variable value");
+
+        var traceTexts = callActivities.SelectMany(a => new[] { a.DisplayName, a.StatusDescription ?? "" }
+            .Concat(a.TagObjects.Select(tag => tag.Value?.ToString() ?? ""))
+            .Concat(a.Events.Select(ev => ev.Name))).ToList();
+        traceTexts.Should().NotContain(text => text.Contains(sentinel, StringComparison.Ordinal),
+            "no trace attribute carries a variable value");
     }
 
     private static readonly string ExternalMediaChannelJson = JsonSerializer.Serialize(
@@ -1001,8 +1072,11 @@ internal sealed class FakeHttpHandler(string responseJson, HttpStatusCode status
         LastContentLength = request.Content?.Headers.ContentLength;
         LastRequestBody = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken);
 
+        // RequestMessage is set as the socket handler sets it, so code that reads the request back from its response
+        // sees what it would see in production.
         return new HttpResponseMessage(statusCode)
         {
+            RequestMessage = request,
             Content = new StringContent(responseJson, System.Text.Encoding.UTF8, "application/json")
         };
     }
