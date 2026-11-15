@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ## [2.10.0] - 2026-11-15
 
-### Fixed: a write to a WebSocket audio stream that has ended throws `ObjectDisposedException` (#NNN)
+### Fixed: a write to a WebSocket audio stream that has ended throws `ObjectDisposedException` (#576)
 
 A write or chan_websocket command on a WebSocket audio stream that had already ended could throw
 `WebSocketException` (`InvalidState`) or `ObjectDisposedException`, depending on how far the ending had got, and a write
