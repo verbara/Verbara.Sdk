@@ -89,7 +89,8 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     internal static readonly TimeSpan CloseBound = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// How long a write whose send failed, with the send lock held, waits for the read pump to say how the stream ends.
+    /// How long the writes whose sends failed, with the send lock held, wait for the read pump to say how the stream ends:
+    /// once per stream, counted from its first failed send, so a write that fails after it waits only for what is left.
     /// Measured against Asterisk, the peer's close is read at most 8.6 ms before such a send fails; this is a twentieth of
     /// <see cref="CloseBound"/>, so the answer to that close, which waits for the lock, keeps its bound.
     /// </summary>
@@ -117,6 +118,10 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     // close, or an ending on this side), false for a failed transport, as the ending it publishes. Always completed
     // before the pump asks for the send lock, so a write that waits for it with the lock held never waits on itself.
     private readonly TaskCompletionSource<bool> _pumpVerdict = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    // The Stopwatch timestamp at which the wait for that verdict runs out, or 0 before any send has failed: set once, by
+    // the first failed send, so every write that fails after it shares the one VerdictBound.
+    private long _verdictDeadline;
     private string _channelId;
 
     // The channel_id of the connection's first MEDIA_START, written and read by the read pump only.
@@ -462,17 +467,9 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         return ReadOnlyMemory<byte>.Empty;
     }
 
-    public async ValueTask WriteFrameAsync(ReadOnlyMemory<byte> audioData, CancellationToken cancellationToken = default)
-    {
-        await SendUnderLockAsync(audioData, WebSocketMessageType.Binary, cancellationToken);
-
-        // Counted once the message was sent, and no frame for a write that carried no audio.
-        if (!audioData.IsEmpty)
-        {
-            AudioStreamMetrics.FramesSent.Add(1, AudioStreamMetrics.WebSocketTransport);
-            AudioStreamMetrics.BytesSent.Add(audioData.Length, AudioStreamMetrics.WebSocketTransport);
-        }
-    }
+    // Not async: the one state machine on the path is SendUnderLockAsync's, which also counts the frame once it is sent.
+    public ValueTask WriteFrameAsync(ReadOnlyMemory<byte> audioData, CancellationToken cancellationToken = default)
+        => SendUnderLockAsync(audioData, WebSocketMessageType.Binary, cancellationToken);
 
     // The refusals a session can predict from its own state are thrown before anything is written, and synchronously:
     // each Send…Async below is the non-async front half (argument, then state, then encoding in the connection's format,
@@ -604,8 +601,11 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
     // the disposal's ObjectDisposedException. A peer can close and then cut the connection with this write's data unread
     // (Asterisk hangs up under a burst this way): the session ends on that close, as an orderly ending, so the write ends
     // as ObjectDisposedException too, with the transport's failure inside. Otherwise the failure is the transport's own
-    // and keeps its type. The read pump says which ending it is; a write that fails before it has said waits for it,
-    // VerdictBound at most and with the lock still held, then keeps the transport's type if it heard nothing.
+    // and keeps its type. The read pump says which ending it is; a write that fails before it has said waits for it, with
+    // the lock still held, until VerdictBound after the stream's first failed send, then keeps the transport's type if it
+    // heard nothing. A caller that cancels that wait gets its OperationCanceledException, with the send's failure inside.
+    //
+    // An audio frame is counted once its message was sent, and a write that carried no audio counts no frame.
     private async ValueTask SendUnderLockAsync(ReadOnlyMemory<byte> payload, WebSocketMessageType messageType, CancellationToken cancellationToken)
     {
         if (Volatile.Read(ref _disposed) != 0)
@@ -641,22 +641,43 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         {
             _sendLock.Release();
         }
+
+        if (messageType == WebSocketMessageType.Binary && !payload.IsEmpty)
+        {
+            AudioStreamMetrics.FramesSent.Add(1, AudioStreamMetrics.WebSocketTransport);
+            AudioStreamMetrics.BytesSent.Add(payload.Length, AudioStreamMetrics.WebSocketTransport);
+        }
     }
 
+    private const string CancelledUnderFailedWriteMessage =
+        "The write was cancelled while it waited for the stream's ending, after its send failed; the send's failure is inside.";
+
     // The exception a send that failed under a live stream ends on, or null to keep the transport's: the ending the read
-    // pump declares, read at once when it has one, else awaited up to VerdictBound (the caller's cancellation still wins).
-    // A disposal begun during the wait cuts the write short as the disposal. Kept out of SendUnderLockAsync, so its
+    // pump declares, read at once when it has one, else awaited until the stream's one verdict deadline, which the first
+    // failed send sets VerdictBound ahead. The caller's cancellation still wins, and carries the send's failure. A
+    // disposal begun during the wait cuts the write short as the disposal. Kept out of SendUnderLockAsync, so its
     // successful path carries no more state than one awaiter.
     private async Task<ObjectDisposedException?> EndingOfFailedSendAsync(Exception failure, CancellationToken cancellationToken)
     {
+        var now = Stopwatch.GetTimestamp();
+        var deadline = now + (long)(VerdictBound.TotalSeconds * Stopwatch.Frequency);
+        var set = Interlocked.CompareExchange(ref _verdictDeadline, deadline, 0);
+        if (set != 0)
+            deadline = set;
+        var left = Stopwatch.GetElapsedTime(now, deadline);
+
         bool orderly;
         try
         {
-            orderly = await _pumpVerdict.Task.WaitAsync(VerdictBound, cancellationToken).ConfigureAwait(false);
+            orderly = await _pumpVerdict.Task.WaitAsync(left > TimeSpan.Zero ? left : TimeSpan.Zero, cancellationToken).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
             orderly = false;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(CancelledUnderFailedWriteMessage, failure, cancellationToken);
         }
 
         if (DisposalCutShort(failure, cancellationToken))
