@@ -489,6 +489,9 @@ public sealed class WebSocketWriteAfterEndTests
                 "the wait for the ending is VerdictBound, and nothing waits after it");
             (WebSocketAudioSession.VerdictBound + VerdictSlack).Should().BeLessThanOrEqualTo(WebSocketAudioSession.CloseBound / 10,
                 "a write that holds the send lock for its wait leaves the answer to the peer's close most of its bound");
+            WebSocketAudioSession.VerdictBound.Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(40),
+                "the read loop was measured reaching its verdict up to about 9 ms after a send the peer's close cut "
+                + "short, and the bound keeps a wide margin over that");
             scripted.States.Should().Equal([AudioStreamState.Connected], "nothing has ended the stream yet");
         }
     }
