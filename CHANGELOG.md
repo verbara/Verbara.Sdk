@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [2.10.0] - 2026-11-15
+## [2.10.0] - 2026-11-16
 
 ### Fixed: a write to a WebSocket audio stream that has ended throws `ObjectDisposedException` (#576)
 

@@ -52,16 +52,25 @@ When the baseline declares `"jit_isa"`, every declared source's BenchmarkDotNet 
 ISA and no other ("RyuJIT x86-64-v3"); a log that names another, or no log at all, is a structural
 failure, so the pin cannot fall off without the gate saying so.
 
-OBSERVING-ONLY BY DEFAULT (openspec `enforce-unguarded-public-claims` §2.5). A gate whose first act
-is a false red gets routed around and then removed. So the comparison lands reporting-but-not-
-failing, and flips to failing in a LATER PR once two consecutive scheduled runs have passed under
-observation. THE FLIP IS ONE LINE: `PERF_GATE_ENFORCE: 'false'` -> `'true'` in
-.github/workflows/perf-regression.yml (or pass --enforce). Nothing else changes; the comparison,
-the annotations and the breach issue all already run.
+REPORTED BOTH WAYS, FAILING ONE WAY. Every breach is reported in both directions, but only the
+regression side fails the job: SLOWER, MORE-BYTES and every structural failure. FASTER and
+FEWER-BYTES are a stale baseline or work that went away; they still annotate the run, still set
+`status=breach` and still file the breach issue, so a human looks, but they do not fail it. The
+hosted fleet reads the same code up to 2-3x apart from run to run, mostly faster than the
+calibration, and a gate that went red on a faster week would be routed around. GITHUB_OUTPUT carries
+`breaches` (every band and bytes breach) and `failing` (the breaches and structural failures that
+fail an enforcing run).
+
+OBSERVING OR ENFORCING. `PERF_GATE_ENFORCE` in .github/workflows/perf-regression.yml (or --enforce)
+selects the mode. The comparison landed observing-only, because a gate whose first act is a false
+red gets routed around and then removed. No observed run was ever free of breaches in both
+directions, so the flip to enforcing came with the one-sided failure rule above rather than after two
+clean runs, and with a re-baselined time for the one row whose slowdown was an accepted cost.
 
 Exit codes:
-  0  pass, or observing-mode with findings (findings are reported, the job is not failed)
-  1  enforcing-mode with at least one breach (band or structural)
+  0  pass; or only FASTER / FEWER-BYTES breaches (reported, in either mode); or observing-mode
+     with findings of any kind (reported, the job is not failed)
+  1  enforcing-mode with at least one SLOWER or MORE-BYTES breach or structural failure
   2  the gate itself is misconfigured — bad usage, unreadable/invalid baseline. ALWAYS fatal,
      in both modes: this is the guard being broken rather than the guard reporting, and a
      silently-misinvoked guard is the `|| true` hole wearing a different hat.
@@ -72,6 +81,7 @@ Unit-tested by scripts/tests/test_check_perf_baseline.py in the always-on, requi
 own guard.
 """
 import json
+import math
 import os
 import re
 import sys
@@ -86,7 +96,9 @@ def die(message):
 
 
 def _is_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    # Finite only: json.load accepts NaN and Infinity, and NaN compares False both ways, so a NaN
+    # mean would otherwise read as inside its band.
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def parse_args(argv):
@@ -315,12 +327,14 @@ def _observed_mean(entry):
 
 
 def evaluate(baseline, observed):
-    """Return (rows, breaches, structural) for the baselined set. Two-sided by design: the SLOWER
-    side is the regression this exists to catch; the FASTER side is a stale baseline (ADR-0042 D6)
-    or a benchmark whose work got optimised away, and both want a human. Bytes are two-sided for
-    the same reasons: MORE is the regression, FEWER is a stale baseline or work that went away."""
+    """Return (rows, failing, reported, structural) for the baselined set. Reported two-sided: the
+    SLOWER side is the regression this exists to catch; the FASTER side is a stale baseline
+    (ADR-0042 D6) or a benchmark whose work got optimised away, and both want a human. Bytes the
+    same: MORE is the regression, FEWER is a stale baseline or work that went away. Only SLOWER and
+    MORE-BYTES go to `failing`; FASTER and FEWER-BYTES go to `reported`."""
     rows = []
-    breaches = []
+    failing = []
+    reported = []
     structural = []
     for full_name in sorted(baseline):
         expected = baseline[full_name]
@@ -361,7 +375,7 @@ def evaluate(baseline, observed):
             if over > 0:
                 direction = "SLOWER" if delta_pct > 0 else "FASTER"
                 verdicts.append(f"BREACH ({direction})")
-                breaches.append(
+                (failing if delta_pct > 0 else reported).append(
                     f"[{full_name}] {direction} than baseline by {abs(delta_pct):.2f}%, outside "
                     f"the +/-{band_pct:g}% band by {over:.2f} pp. baseline {mean_ns:g} ns, "
                     f"observed {actual:.2f} ns.")
@@ -380,7 +394,7 @@ def evaluate(baseline, observed):
                 verdicts.append(f"BREACH ({direction})")
                 measured_on = (f"{cores} logical cores" if cores is not None
                                else "a logical core count the report does not record")
-                breaches.append(
+                (failing if bytes_delta > 0 else reported).append(
                     f"[{full_name}] allocates {_bytes_text(actual_bytes)} B per operation against "
                     f"a baseline of {_bytes_text(want_bytes)} B "
                     f"({_bytes_text(bytes_delta, sign=True)} B), outside the "
@@ -402,7 +416,7 @@ def evaluate(baseline, observed):
             "bytes_tolerance": bytes_bound if want_bytes is not None else None,
             "verdict": " ".join(verdicts) or "ok",
         })
-    return rows, breaches, structural
+    return rows, failing, reported, structural
 
 
 def unbaselined(baseline, observed):
@@ -421,7 +435,7 @@ def _fmt(value, spec, empty="—"):
     return empty if value is None else format(value, spec)
 
 
-def render_markdown(rows, breaches, structural, extras, enforce):
+def render_markdown(rows, failing, reported, structural, extras, enforce):
     mode = "ENFORCING" if enforce else "OBSERVING (reports, does not fail the job — §2.5)"
     out = ["## Perf regression vs `Tests/Verbara.Sdk.Benchmarks/baseline.json`", "",
            f"Mode: **{mode}**", "",
@@ -432,9 +446,15 @@ def render_markdown(rows, breaches, structural, extras, enforce):
         out += [f"### Structural failures ({len(structural)})", "",
                 "A benchmark that never ran is not a pass (ADR-0042 D4).", ""]
         out += [f"- {item}" for item in structural] + [""]
-    if breaches:
-        out += [f"### Breaches ({len(breaches)})", ""]
-        out += [f"- {item}" for item in breaches] + [""]
+    if failing:
+        out += [f"### Failing breaches ({len(failing)})", "",
+                "SLOWER or MORE-BYTES: the regression side. These fail an enforcing run.", ""]
+        out += [f"- {item}" for item in failing] + [""]
+    if reported:
+        out += [f"### Reported, not failing ({len(reported)})", "",
+                "FASTER or FEWER-BYTES: a stale baseline or work that went away. A human looks; "
+                "the run is not failed for them.", ""]
+        out += [f"- {item}" for item in reported] + [""]
     if rows:
         out += ["### Measured", "",
                 "| benchmark | baseline (ns) | observed (ns) | delta | band | baseline (B) | "
@@ -459,7 +479,7 @@ def render_markdown(rows, breaches, structural, extras, enforce):
                 "| benchmark | observed (ns) | observed (B) |", "|---|--:|--:|"]
         out += [f"| `{name}` | {_fmt(mean, '.2f')} | {_bytes_text(allocated) or '—'} |"
                 for name, mean, allocated in extras] + [""]
-    if not breaches and not structural:
+    if not failing and not reported and not structural:
         out += ["All baselined benchmarks are inside their bands.", ""]
     return "\n".join(out)
 
@@ -470,7 +490,7 @@ def main(argv):
 
     observed_raw, structural = collect_observed(artifacts_root, sources)
     structural += check_isa(artifacts_root, sources, jit_isa)
-    rows, breaches, more_structural = evaluate(baseline, observed_raw)
+    rows, failing, reported, more_structural = evaluate(baseline, observed_raw)
     structural += more_structural
     extras = [(name, _observed_mean(observed_raw[name][0]), _observed_bytes(observed_raw[name][0]))
               for name in unbaselined(baseline, observed_raw)]
@@ -492,18 +512,21 @@ def main(argv):
     level = "error" if enforce else "warning"
     for item in structural:
         print(f"::{level}::perf-baseline STRUCTURAL: {item}")
-    for item in breaches:
+    for item in failing:
         print(f"::{level}::perf-baseline BREACH: {item}")
+    for item in reported:
+        print(f"::warning::perf-baseline BREACH: {item} Reported, not failing.")
     for name, _mean, _allocated in extras:
         print(f"::notice::perf-baseline: '{name}' is measured but has no baseline entry.")
 
-    failed = len(breaches) + len(structural)
-    status = "pass" if failed == 0 else "breach"
+    breaches = len(failing) + len(reported)
+    failed = len(failing) + len(structural)
+    status = "pass" if breaches + len(structural) == 0 else "breach"
 
     if markdown_out:
         try:
             with open(markdown_out, "w", encoding="utf-8") as handle:
-                handle.write(render_markdown(rows, breaches, structural, extras, enforce))
+                handle.write(render_markdown(rows, failing, reported, structural, extras, enforce))
         except OSError as exc:
             die(f"cannot write markdown report '{markdown_out}': {exc}")
 
@@ -512,24 +535,29 @@ def main(argv):
         try:
             with open(github_output, "a", encoding="utf-8") as handle:
                 handle.write(f"status={status}\n")
-                handle.write(f"breaches={len(breaches)}\n")
+                handle.write(f"breaches={breaches}\n")
+                handle.write(f"failing={failed}\n")
                 handle.write(f"structural={len(structural)}\n")
                 handle.write(f"enforcing={'true' if enforce else 'false'}\n")
         except OSError as exc:
             die(f"cannot write GITHUB_OUTPUT '{github_output}': {exc}")
 
-    if failed == 0:
+    if status == "pass":
         print(f"perf-baseline: OK — {len(rows)} benchmark(s) inside their bands and bounds.")
         return 0
 
-    print(f"perf-baseline: {len(breaches)} band breach(es), {len(structural)} structural "
-          f"failure(s).")
+    print(f"perf-baseline: {len(failing)} failing breach(es) (SLOWER / MORE-BYTES), "
+          f"{len(reported)} reported breach(es) (FASTER / FEWER-BYTES), {len(structural)} "
+          f"structural failure(s).")
+    if failed == 0:
+        print("perf-baseline: only FASTER / FEWER-BYTES breaches — reported, issue filed by the "
+              "caller, the job is not failed for them.")
+        return 0
     if enforce:
         return 1
-    # §2.5: observing-only. Reported loudly, issue filed by the caller, job stays green until the
-    # one-line flip to PERF_GATE_ENFORCE=true.
-    print("perf-baseline: OBSERVING mode — not failing the job. Flip PERF_GATE_ENFORCE to 'true' "
-          "in .github/workflows/perf-regression.yml once two consecutive scheduled runs pass.")
+    # Observing: reported loudly, issue filed by the caller, job stays green.
+    print("perf-baseline: OBSERVING mode — not failing the job. PERF_GATE_ENFORCE='true' in "
+          ".github/workflows/perf-regression.yml makes these fail it.")
     return 0
 
 

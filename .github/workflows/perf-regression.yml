@@ -57,13 +57,19 @@ jobs:
       # │            summary and still files the breach issue, but does NOT   │
       # │            fail the job. A gate whose first act is a false red gets │
       # │            routed around, then ignored, then deleted.               │
-      # │  'true'  — breaches and structural failures fail the job.           │
+      # │  'true'  — SLOWER, MORE-BYTES and structural failures fail the job. │
+      # │            FASTER and FEWER-BYTES are reported (annotation, summary,│
+      # │            breach issue) and do not fail it.                        │
       # │                                                                     │
-      # │  Flip to 'true' in its own PR, once TWO consecutive scheduled runs  │
-      # │  have passed under observation. Nothing else changes: the same flag │
-      # │  arms check-perf-baseline.py and report-perf-breach.sh together.    │
+      # │  Flipped to 'true' without two clean scheduled runs: no observed run│
+      # │  was ever free of breaches, because the hosted fleet reads the same │
+      # │  code up to 2-3x apart, mostly faster than the calibration. So the  │
+      # │  flip came with the one-sided failure rule above and with the time  │
+      # │  re-baseline of Create1000Channels for its accepted #533 cost (see  │
+      # │  baseline.json). The same flag arms check-perf-baseline.py and      │
+      # │  report-perf-breach.sh together.                                    │
       # └─────────────────────────────────────────────────────────────────────┘
-      PERF_GATE_ENFORCE: 'false'
+      PERF_GATE_ENFORCE: 'true'
       # ISA pin. ubuntu-latest mixes CPUs with and without AVX-512, and .NET 10 targets AVX-512
       # wherever it exists, so the same code read faster or slower by host: time "breaches" in both
       # directions on weeks when nothing here changed. This holds the JIT at x86-64-v3 on every
@@ -117,10 +123,10 @@ jobs:
           dotnet run -c Release --no-build -- --filter '*ObserverDispatch*' --exporters json --artifacts ../../artifacts/observer || true
       # Turn-detection inference latency (ADR-0042 D8 + change §3.5). Added WITHOUT a
       # baseline.json entry on purpose: every other band here was calibrated from 13 real runs of
-      # this workflow, and this benchmark has none yet. Its band gets calibrated the same way, from
-      # its own observations, in the PR that flips PERF_GATE_ENFORCE. Until then it publishes a
-      # measurement and the comparator ignores it — a band guessed today would be the "calibrated
-      # from observation, never guessed" rule broken by the change that wrote it.
+      # this workflow, and this benchmark has none yet. The flip to PERF_GATE_ENFORCE='true' left it
+      # unbaselined: its band gets calibrated the same way, from its own observations, in its own
+      # PR. Until then it publishes a measurement and the comparator ignores it — a band guessed
+      # today would be the "calibrated from observation, never guessed" rule broken.
       - name: Turn-detection end-of-utterance decision
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
@@ -152,6 +158,8 @@ jobs:
       # mean, inside a per-benchmark band calibrated from 13 real runs of this
       # workflow. It does not compare against README.md's workstation figures
       # (1.97x-2.35x faster — an absolute comparison would be permanently red).
+      # Reported both ways, failing one way: SLOWER and MORE-BYTES fail the job,
+      # FASTER and FEWER-BYTES are reported and file the issue without failing it.
       # Fails closed: absent results/ dir, absent report, empty `Benchmarks`,
       # a baselined FullName that never appeared, or a non-numeric
       # `Statistics.Mean` are all breaches. Exit 2 (gate misconfigured) fails
@@ -180,8 +188,9 @@ jobs:
       # ADR-0042 D5 — a weekly red nobody is told about is observational under
       # another name. Reuses ONE open issue by exact title so the week-by-week
       # trend accumulates in one place instead of filing a duplicate every
-      # Sunday. Runs in observing mode too: while the job stays green, this
-      # issue is the ONLY signal a breach happened.
+      # Sunday. Runs in both modes and on every breach: for a FASTER or
+      # FEWER-BYTES breach the job stays green, so this issue is the ONLY
+      # signal it happened.
       - name: File or update the breach issue
         if: ${{ !cancelled() && steps.perf.outputs.status == 'breach' }}
         env:

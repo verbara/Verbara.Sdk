@@ -60,6 +60,8 @@ def _entry(full_name, mean=1000.0, stats="ok", allocated=None, memory=True):
         entry["Statistics"] = {"Mean": True}
     elif stats == "zero-mean":
         entry["Statistics"] = {"Mean": 0}
+    elif stats == "nan-mean":
+        entry["Statistics"] = {"Mean": float("nan")}
     elif stats == "null":
         entry["Statistics"] = None
     elif stats == "absent":
@@ -200,12 +202,43 @@ class CheckPerfBaselineTests(unittest.TestCase):
         result = self._run(env={"PERF_GATE_ENFORCE": "true"})
         self.assertEqual(1, result.returncode)
 
-    def test_Main_ShouldReportFasterBreach_WhenBenchmarkIsFarBelowBaseline(self):
-        # Two-sided: an unexplained speed-up is a stale baseline or a benchmark measuring nothing.
+    def test_Main_ShouldReportFasterWithoutFailing_WhenEnforcingAndOnlyFaster(self):
+        # Reported in both directions, failing in one: an unexplained speed-up is a stale baseline
+        # or a benchmark measuring nothing and wants a human, so it is still a breach and still
+        # files the issue, but the hosted fleet reads the same code up to 2-3x apart and a
+        # FASTER-only week must not red the gate.
         self._write_report([_entry(_ALPHA, 400.0), _entry(_BETA, 50.0)])
         result = self._run("--enforce")
-        self.assertEqual(1, result.returncode)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertIn("FASTER", result.stdout)
+        self.assertIn("::warning::perf-baseline BREACH", result.stdout)
+        self.assertNotIn("::error::", result.stdout)
+        self.assertEqual("breach", self._outputs().get("status"))
+        self.assertEqual("1", self._outputs().get("breaches"))
+        self.assertEqual("0", self._outputs().get("failing"))
+
+    def test_Main_ShouldFailOnlyOnTheSlowerRow_WhenSlowerAndFasterTogether(self):
+        # Alpha is SLOWER (fails), Beta is FASTER (reported): one error, one warning, exit 1.
+        self._write_report([_entry(_ALPHA, 1400.0), _entry(_BETA, 10.0)])
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        errors = [line for line in result.stdout.splitlines() if line.startswith("::error::")]
+        warnings = [line for line in result.stdout.splitlines()
+                    if line.startswith("::warning::perf-baseline BREACH")]
+        self.assertEqual(1, len(errors), result.stdout)
+        self.assertIn("SLOWER", errors[0])
+        self.assertEqual(1, len(warnings), result.stdout)
+        self.assertIn("FASTER", warnings[0])
+        self.assertEqual("2", self._outputs().get("breaches"))
+        self.assertEqual("1", self._outputs().get("failing"))
+
+    def test_Main_ShouldSayWhichBreachesFail_WhenRenderingMarkdown(self):
+        self._write_report([_entry(_ALPHA, 1400.0), _entry(_BETA, 10.0)])
+        self._run("--enforce")
+        with open(self.markdown, encoding="utf-8") as handle:
+            body = handle.read()
+        self.assertIn("Failing breaches (1)", body)
+        self.assertIn("Reported, not failing (1)", body)
 
     # ---- fail-closed: the five structural conditions ---------------------
     def test_Main_ShouldBreach_WhenResultsDirectoryIsAbsent(self):
@@ -258,6 +291,14 @@ class CheckPerfBaselineTests(unittest.TestCase):
         self._write_report([_entry(_ALPHA, stats="absent"), _entry(_BETA, 50.0)])
         result = self._run("--enforce")
         self.assertEqual(1, result.returncode)
+
+    def test_Main_ShouldBreach_WhenStatisticsMeanIsNaN(self):
+        # json.load accepts NaN, and NaN compares False both ways, so without a finite check the
+        # row reads "ok" and a run with no measurement passes.
+        self._write_report([_entry(_ALPHA, stats="nan-mean"), _entry(_BETA, 50.0)])
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("not a positive", result.stdout)
 
     def test_Main_ShouldBreach_WhenStatisticsMeanIsNotNumeric(self):
         self._write_report([_entry(_ALPHA, stats="text-mean"), _entry(_BETA, 50.0)])
@@ -335,12 +376,37 @@ class CheckPerfBaselineTests(unittest.TestCase):
         self.assertIn("MORE-BYTES", result.stdout)
         self.assertIn(_GAMMA, result.stdout)
 
-    def test_Main_ShouldReportFewerBytes_WhenARowAllocatesLessThanItsBaseline(self):
-        # Two-sided, like time: fewer bytes is a stale baseline or work that went away.
+    def test_Main_ShouldReportFewerBytesWithoutFailing_WhenEnforcing(self):
+        # Reported like FASTER: fewer bytes is a stale baseline or work that went away, and wants a
+        # human, but it is not the regression this gate fails on.
         self._bytes_fixture(alpha_bytes=96)
         result = self._run("--enforce")
-        self.assertEqual(1, result.returncode)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertIn("FEWER-BYTES", result.stdout)
+        self.assertNotIn("::error::", result.stdout)
+        self.assertEqual("breach", self._outputs().get("status"))
+        self.assertEqual("0", self._outputs().get("failing"))
+
+    def test_Main_ShouldFail_WhenEnforcingAndAFasterRowAlsoAllocatesMore(self):
+        # One row, two verdicts: the FASTER time is reported, the MORE-BYTES still fails.
+        self._write_baseline(_BYTES_BASELINE)
+        self._write_report([_entry(_ALPHA, 400.0, allocated=169),
+                            _entry(_GAMMA, 287000.0, allocated=525994)])
+        with open(os.path.join(self.root, "fake", "x.log"), "w", encoding="utf-8") as handle:
+            handle.write(_bdn_log("x86-64-v3"))
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("MORE-BYTES", result.stdout)
+        self.assertEqual("2", self._outputs().get("breaches"))
+        self.assertEqual("1", self._outputs().get("failing"))
+
+    def test_Main_ShouldCountStructuralFailuresAsFailing_WhenEnforcing(self):
+        # No results directory, and both baselined rows absent: three structural failures, all failing.
+        result = self._run("--enforce", root=os.path.join(self._tmp, "nope"))
+        self.assertEqual(1, result.returncode)
+        self.assertEqual("0", self._outputs().get("breaches"))
+        self.assertEqual("3", self._outputs().get("structural"))
+        self.assertEqual("3", self._outputs().get("failing"))
 
     def test_Main_ShouldReportBytesBreachWithoutFailing_WhenObserving(self):
         self._bytes_fixture(alpha_bytes=656)
@@ -563,6 +629,13 @@ class CommittedBaselineContractTests(unittest.TestCase):
         used = set(re.findall(r"--artifacts \.\./\.\./artifacts/(\S+)", self.workflow))
         self.assertEqual(declared, used,
                          "every `--filter` step needs a baseline `sources` row and vice versa")
+
+    def test_Workflow_ShouldEnforceTheGate(self):
+        # The flip landed: a commented-out or reverted line would put the gate back to observing.
+        code = "\n".join(line for line in self.workflow.splitlines()
+                         if not line.lstrip().startswith("#"))
+        self.assertRegex(code, r"(?m)^\s+PERF_GATE_ENFORCE: 'true'$")
+        self.assertNotRegex(code, r"PERF_GATE_ENFORCE: 'false'")
 
     def test_Workflow_ShouldCallTheGuardAndTheNotifier(self):
         self.assertIn("scripts/ci/check-perf-baseline.py", self.workflow)

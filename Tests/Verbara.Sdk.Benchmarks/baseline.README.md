@@ -95,15 +95,21 @@ BenchmarkDotNet log; a log that names another ISA, or no log at all, is a struct
 The time bands were calibrated **before** the pin, pooled across both CPUs; a re-calibration under
 the pin is its own PR, from observed runs, with the protocol below.
 
-## Two-sided, on purpose
+## Reported both ways, failing one way
 
 A breach is reported when `|observed − baseline| / baseline` exceeds the band **in either
 direction**:
 
-- **SLOWER** — the regression this gate exists to catch.
+- **SLOWER** — the regression this gate exists to catch. It **fails** an enforcing run.
 - **FASTER** — *not* good news on its own. It is either a stale baseline (re-baseline per the
   protocol below) or a benchmark whose work got optimised away and is no longer measuring the thing
-  it is named after. Both want a human; neither should pass silently.
+  it is named after. Both want a human; neither should pass silently. It is **reported**: an
+  annotation, its own section of the run summary, and the breach issue. It does not fail the run.
+
+Bytes follow the same split: **MORE-BYTES** fails, **FEWER-BYTES** is reported. Every structural
+failure fails. The hosted fleet reads the same code up to 2–3× apart from run to run, mostly faster
+than the calibration, so a gate that failed on a faster week would be red for reasons that have
+nothing to do with this repository's code.
 
 ## The re-baseline protocol
 
@@ -195,16 +201,20 @@ Separately, exit code **2** means the *guard* is broken (bad arguments, unreadab
 `baseline.json`) and fails the job in **both** modes — a misconfigured guard reading green is the
 `|| true` hole wearing a different hat.
 
-## Current status: OBSERVING, not enforcing
+## Current status: ENFORCING
 
-The comparison landed **observing-only** (openspec `enforce-unguarded-public-claims` §2.5): it
-prints every delta, writes the run summary and files the breach issue (ADR-0042 D5), but does not
-fail the job. A gate whose first act is a false red gets routed around, then ignored, then deleted.
+The comparison landed **observing-only**: it printed every delta, wrote the run summary and filed
+the breach issue (ADR-0042 D5), but did not fail the job, because a gate whose first act is a false
+red gets routed around, then ignored, then deleted.
 
-The flip is **one line** — `PERF_GATE_ENFORCE: 'false'` → `'true'` in the job-level `env:` block of
-`.github/workflows/perf-regression.yml` — and belongs in its own PR, after **two consecutive
-scheduled runs** have passed under observation. That single flag arms both
-`check-perf-baseline.py` and `report-perf-breach.sh` together.
+`PERF_GATE_ENFORCE` is now `'true'` in the job-level `env:` block of
+`.github/workflows/perf-regression.yml`. The plan was to flip it after two consecutive clean
+scheduled runs, but no observed run was ever free of breaches: most were FASTER-only weeks, and the
+one SLOWER week (2026-11-11) included `Create1000Channels`, whose slowdown is an accepted cost
+against a time baseline read before it. So the flip came with two changes instead: the
+one-sided failure rule above, and the re-baseline of `ChannelManagerBenchmark.Create1000Channels`
+recorded in `_create_1000_channels_note`. That single flag arms both `check-perf-baseline.py` and
+`report-perf-breach.sh` together.
 
 ## Related
 
