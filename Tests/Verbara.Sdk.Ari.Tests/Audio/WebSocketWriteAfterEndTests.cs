@@ -47,6 +47,15 @@ public sealed class WebSocketWriteAfterEndTests
     /// <summary>How long after its send failed the scripted socket delivers the peer's close: a fifth of the write's wait for the ending.</summary>
     private static readonly TimeSpan LateClose = TimeSpan.FromMilliseconds(10);
 
+    /// <summary>
+    /// What a write whose send failed may take beyond <see cref="WebSocketAudioSession.VerdictBound"/>, counted from the
+    /// first failed send: the scheduling of the wait's end, never a second wait.
+    /// </summary>
+    private static readonly TimeSpan VerdictSlack = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>Writes queued behind the first failed send, each of which fails in turn.</summary>
+    private const int QueuedFailedWrites = 10;
+
     private const string Disposed = nameof(ObjectDisposedException);
 
     private static readonly byte[] Frame = new byte[640];
@@ -453,7 +462,7 @@ public sealed class WebSocketWriteAfterEndTests
     }
 
     [Fact]
-    public async Task WriteFrameAsync_ShouldThrowTheTransportsOwnFailureWithinTheCloseBound_WhenItsSendFailsAndNoEndingFollows()
+    public async Task WriteFrameAsync_ShouldThrowTheTransportsOwnFailureWithinTheVerdictBound_WhenItsSendFailsAndNoEndingFollows()
     {
         // Arrange — a socket whose send fails, and whose read loop never learns how the stream ends
         using var bound = new CancellationTokenSource(SignalTimeout);
@@ -464,13 +473,78 @@ public sealed class WebSocketWriteAfterEndTests
         var thrown = await ExceptionAsync(scripted.Session.WriteFrameAsync(Frame).AsTask()).WaitAsync(bound.Token);
         var waited = System.Diagnostics.Stopwatch.GetElapsedTime(started);
 
-        // Assert — the write waits a bounded time for an ending, then keeps the transport's type; the bound is well
-        // inside the close's own, so the answer to a close the write delayed still goes out in time
+        // Assert — the write waits VerdictBound for an ending, no less and not much more, then keeps the transport's
+        // type; that bound is a small part of the close's own, so the answer to a close the write delayed still goes
+        // out in time
         using (new AssertionScope())
         {
             thrown.Should().BeOfType<WebSocketException>("no ending was declared, so the failure is the transport's own")
                 .Which.WebSocketErrorCode.Should().Be(WebSocketError.ConnectionClosedPrematurely);
-            waited.Should().BeLessThan(WebSocketAudioSession.CloseBound, "the wait for the ending is bounded, and shorter than the close's bound");
+            waited.Should().BeGreaterThanOrEqualTo(WebSocketAudioSession.VerdictBound - TimeSpan.FromMilliseconds(5),
+                "the write waits for the read loop's verdict before it keeps the transport's type");
+            waited.Should().BeLessThan(WebSocketAudioSession.VerdictBound + VerdictSlack,
+                "the wait for the ending is VerdictBound, and nothing waits after it");
+            (WebSocketAudioSession.VerdictBound + VerdictSlack).Should().BeLessThanOrEqualTo(WebSocketAudioSession.CloseBound / 10,
+                "a write that holds the send lock for its wait leaves the answer to the peer's close most of its bound");
+            scripted.States.Should().Equal([AudioStreamState.Connected], "nothing has ended the stream yet");
+        }
+    }
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowWithinTheVerdictBoundOfTheFirstFailure_WhenWritesQueuedBehindAFailedSendFailToo()
+    {
+        // Arrange — a socket whose every send fails, whose read loop never learns how the stream ends, and writes
+        // queued behind the first one for the send lock
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        await using var scripted = ScriptedSession.Start();
+        var ends = new long[QueuedFailedWrites];
+        var outcomes = new string[QueuedFailedWrites];
+
+        // Act
+        var writes = Enumerable.Range(0, QueuedFailedWrites).Select(i => Task.Run(async () =>
+        {
+            var thrown = await ExceptionAsync(scripted.Session.WriteFrameAsync(Frame).AsTask());
+            ends[i] = System.Diagnostics.Stopwatch.GetTimestamp();
+            outcomes[i] = thrown is null ? "succeeded" : Name(thrown);
+        }, CancellationToken.None)).ToArray();
+        await Task.WhenAll(writes).WaitAsync(bound.Token);
+        var latest = ends.Select(end => System.Diagnostics.Stopwatch.GetElapsedTime(scripted.Socket.FirstSendFailedAt, end)).Max();
+
+        // Assert — the wait for the ending is one per stream, counted from its first failed send: a write that fails
+        // after it waits only for what is left of it, so the last of them throws within VerdictBound of the first failure
+        using (new AssertionScope())
+        {
+            Census(outcomes).Should().Be($"{nameof(WebSocketException)}:{WebSocketError.ConnectionClosedPrematurely}={QueuedFailedWrites}",
+                "no ending was declared, so every failure is the transport's own");
+            scripted.Socket.FailedSends.Should().Be(QueuedFailedWrites, "every queued write reached its own send");
+            latest.Should().BeLessThan(WebSocketAudioSession.VerdictBound + VerdictSlack,
+                "no write waits for the ending again after the first failed send's wait ran out");
+            scripted.States.Should().Equal([AudioStreamState.Connected], "nothing has ended the stream yet");
+        }
+    }
+
+    [Fact]
+    public async Task WriteFrameAsync_ShouldThrowOperationCanceledWithTheTransportsFailureInside_WhenItsCallerCancelsTheWaitForTheEnding()
+    {
+        // Arrange — a socket whose send fails, and whose read loop never learns how the stream ends, so the write
+        // waits for the ending
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        await using var scripted = ScriptedSession.Start();
+        using var caller = new CancellationTokenSource();
+        var write = ExceptionAsync(scripted.Session.WriteFrameAsync(Frame, caller.Token).AsTask());
+        await scripted.Socket.SendFailed.WaitAsync(bound.Token);
+
+        // Act — the caller gives up on the write while it waits for the ending
+        await caller.CancelAsync();
+        var thrown = await write.WaitAsync(bound.Token);
+
+        // Assert — the caller's cancellation wins, as on every wait of a write, and carries the send's failure
+        using (new AssertionScope())
+        {
+            var cancelled = thrown.Should().BeAssignableTo<OperationCanceledException>("the caller cancelled the write").Subject;
+            cancelled.CancellationToken.Should().Be(caller.Token, "the cancellation is the caller's own");
+            cancelled.InnerException.Should().BeOfType<WebSocketException>("the transport's failure the write met stays inside")
+                .Which.WebSocketErrorCode.Should().Be(WebSocketError.ConnectionClosedPrematurely);
             scripted.States.Should().Equal([AudioStreamState.Connected], "nothing has ended the stream yet");
         }
     }
@@ -769,9 +843,17 @@ public sealed class WebSocketWriteAfterEndTests
         private readonly TaskCompletionSource _close = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _sendFailed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private volatile WebSocketState _state = WebSocketState.Open;
+        private long _firstSendFailedAt;
+        private int _failedSends;
 
         /// <summary>Completes when a send has failed.</summary>
         public Task SendFailed => _sendFailed.Task;
+
+        /// <summary>The <see cref="System.Diagnostics.Stopwatch"/> timestamp of the first failed send, or 0 before it.</summary>
+        public long FirstSendFailedAt => Interlocked.Read(ref _firstSendFailedAt);
+
+        /// <summary>How many sends have failed.</summary>
+        public int FailedSends => Volatile.Read(ref _failedSends);
 
         /// <summary>The peer's close reaches the read loop.</summary>
         public void DeliverClose() => _close.TrySetResult();
@@ -790,6 +872,8 @@ public sealed class WebSocketWriteAfterEndTests
 
         public override ValueTask SendAsync(ReadOnlyMemory<byte> buffer, WebSocketMessageType type, bool endOfMessage, CancellationToken ct)
         {
+            Interlocked.CompareExchange(ref _firstSendFailedAt, System.Diagnostics.Stopwatch.GetTimestamp(), 0);
+            Interlocked.Increment(ref _failedSends);
             _sendFailed.TrySetResult();
             return ValueTask.FromException(new WebSocketException(WebSocketError.ConnectionClosedPrematurely, new IOException("Connection reset by peer")));
         }
