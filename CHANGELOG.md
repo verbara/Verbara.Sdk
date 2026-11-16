@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#NNN)
+### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#584)
 
 `AddVerbara` always registers `CompositeAudioServer`, and its `OnStreamConnected` merged the servers' announcements
 through one lock and one safe-observer wrapper per subscription. That broke two promises `IAudioServer` makes:
