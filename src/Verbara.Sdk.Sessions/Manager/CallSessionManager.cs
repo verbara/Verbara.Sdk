@@ -1945,6 +1945,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         {
             attachment.Server.Channels.VisitHeld(session.LinkedId, channel =>
             {
+                // A snoop held under the call's linkedid is a tap on one of its legs, not a leg: the
+                // reconstructed call takes it in no more than a live call does. Returns before the call lock.
+                if (SessionCorrelator.IsSnoopChannel(channel.Name)) return;
+
                 // VisitHeld holds the channel lock; the call lock is always inside it.
                 lock (session.SyncRoot)
                 {
