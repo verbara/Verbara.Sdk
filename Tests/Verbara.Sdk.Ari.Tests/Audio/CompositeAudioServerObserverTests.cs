@@ -52,22 +52,9 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
 
     private const int AudioPayloadLength = 320;
 
-    /// <summary>
-    /// Measured 2026-11-16 on e0506d98, 5 of 5 runs each: through the composite a second connection on either
-    /// server is accepted, registered, counted and carries audio while an earlier observer blocks, but is not
-    /// announced to a later observer until the blocked one returns (the merge forwards under one gate per
-    /// subscription); and an observer that throws is unsubscribed from the composite for good (Rx's safe observer
-    /// disposes the subscription), while a direct subscriber that threw keeps receiving later streams. Measured the
-    /// same day, 5 of 5 runs, all four server pairings: a second connection whose far end hangs up while the earlier
-    /// observer blocks stays registered, counted and in its place under MaxConcurrentStreams until that observer
-    /// returns (its handler waits inside the announcement), so a third connection is refused at a limit of two; a
-    /// direct subscription releases it within the 10 ms poll and admits the third.
-    /// </summary>
-    private const string H250Skip = "H250: measured red, awaiting the owner's wording decision";
-
     // ---- P1 / P2: an observer that blocks ------------------------------------------------------------------------
 
-    [Theory(Skip = H250Skip)]
+    [Theory]
     [InlineData(Transport.AudioSocket, Transport.AudioSocket)]
     [InlineData(Transport.AudioSocket, Transport.WebSocket)]
     [InlineData(Transport.WebSocket, Transport.WebSocket)]
@@ -144,14 +131,25 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
             call.Dispose();
             await disconnected.Task.WaitAsync(WaitLimit);
 
+            // Held on every poll over the whole bounded window, not read once: a release that is merely a few
+            // milliseconds late would pass a single read taken right after Disconnected.
+            var releasedMs = await WaitUntilAsync(
+                () => !ReferenceEquals(rig.Composite.GetStream(call.Key), stream)
+                    || rig.Composite.ActiveStreamCount != 1
+                    || rig.Options.Admission.Held != 1,
+                QuietWindow);
             var heldStream = rig.Composite.GetStream(call.Key);
             var heldCount = rig.Composite.ActiveStreamCount;
-            output.WriteLine($"P2 route={route} first={first}: after hang-up GetStream={(heldStream is null ? "null" : "held")} ActiveStreamCount={heldCount}");
+            var heldPlaces = rig.Options.Admission.Held;
+            output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"P2 route={route} first={first}: after hang-up releasedMs={releasedMs?.ToString("F1", CultureInfo.InvariantCulture) ?? "never"} GetStream={(heldStream is null ? "null" : "held")} ActiveStreamCount={heldCount} admissionHeld={heldPlaces}"));
 
             using (new AssertionScope())
             {
+                releasedMs.Should().BeNull("a blocking observer holds that connection's registration, count and place for as long as it blocks");
                 heldStream.Should().BeSameAs(stream, "a blocking observer holds that connection's registration until it returns");
-                heldCount.Should().Be(1, "and its place");
+                heldCount.Should().Be(1, "and its count");
+                heldPlaces.Should().Be(1, "and its place under the limit");
             }
         }
         finally
@@ -162,9 +160,72 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
         Volatile.Read(ref gateTimedOut).Should().Be(0, "the test opened the gate within its bound");
     }
 
+    // ---- One observer, two connections at once ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(Route.Composite, Transport.AudioSocket, Transport.AudioSocket)]
+    [InlineData(Route.Composite, Transport.AudioSocket, Transport.WebSocket)]
+    [InlineData(Route.Composite, Transport.WebSocket, Transport.WebSocket)]
+    [InlineData(Route.Composite, Transport.WebSocket, Transport.AudioSocket)]
+    [InlineData(Route.Direct, Transport.AudioSocket, Transport.AudioSocket)]
+    [InlineData(Route.Direct, Transport.AudioSocket, Transport.WebSocket)]
+    [InlineData(Route.Direct, Transport.WebSocket, Transport.WebSocket)]
+    [InlineData(Route.Direct, Transport.WebSocket, Transport.AudioSocket)]
+    public async Task OnStreamConnected_ShouldInvokeTheSameObserverForAnotherConnection_WhileItsInvocationForAnEarlierOneHasNotReturned(
+        Route route, Transport first, Transport second)
+    {
+        // The guard against a single gate: one observer blocks inside its call for A; the same observer must be entered
+        // for B before that call returns. Any composite that forwards under one lock — per subscription or shared by
+        // all of them — parks B's handler behind A's call and fails here.
+        await using var rig = await Rig.StartAsync();
+        using var gate = new ManualResetEventSlim(false);
+        var firstEntered = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entered = new Announcements();
+        var inside = 0;
+        var insideWhenEntered = new ConcurrentDictionary<string, int>(StringComparer.Ordinal);
+        var gateTimedOut = 0;
+        using var observer = rig.Subscribe(route, stream =>
+        {
+            insideWhenEntered[stream.ChannelId] = Interlocked.Increment(ref inside);
+            try
+            {
+                entered.Add(stream);
+                if (firstEntered.TrySetResult(stream.ChannelId) && !gate.Wait(GateLimit))
+                    Interlocked.Exchange(ref gateTimedOut, 1);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref inside);
+            }
+        });
+
+        bool enteredForSecond;
+        int insideForSecond;
+        try
+        {
+            using var callA = await Call.OpenAsync(rig, first);
+            (await firstEntered.Task.WaitAsync(WaitLimit)).Should().Be(callA.Key, "the observer is entered for A and blocks there");
+
+            using var callB = await Call.OpenAsync(rig, second);
+            enteredForSecond = await entered.WaitAsync(callB.Key, QuietWindow);
+            insideForSecond = insideWhenEntered.TryGetValue(callB.Key, out var n) ? n : 0;
+            output.WriteLine(
+                $"CONCURRENT route={route} A={first} B={second}: enteredForB={enteredForSecond} invocationsInsideWhenEnteredForB={insideForSecond} gateSet={gate.IsSet}");
+        }
+        finally
+        {
+            gate.Set();
+        }
+
+        using var scope = new AssertionScope();
+        enteredForSecond.Should().BeTrue("the same observer is invoked for B while its invocation for A has not returned");
+        insideForSecond.Should().Be(2, "both invocations are inside the observer at once");
+        Volatile.Read(ref gateTimedOut).Should().Be(0, "the test opened the gate within its bound");
+    }
+
     // ---- An observer that blocks on one connection and another connection that hangs up --------------------------
 
-    [Theory(Skip = H250Skip)]
+    [Theory]
     [InlineData(Transport.AudioSocket, Transport.AudioSocket)]
     [InlineData(Transport.AudioSocket, Transport.WebSocket)]
     [InlineData(Transport.WebSocket, Transport.WebSocket)]
@@ -344,7 +405,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
         outcome.FreshGotLater.Should().Be(2, "and a subscription made after the throw");
     }
 
-    [Theory(Skip = H250Skip)]
+    [Theory]
     [InlineData(Transport.AudioSocket)]
     [InlineData(Transport.WebSocket)]
     public async Task OnStreamConnected_ShouldKeepAnnouncingLaterStreamsToTheObserverThatThrew_WhenSubscribedThroughTheComposite(
@@ -473,7 +534,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
         {
             thrower.Add(stream);
             if (Interlocked.Exchange(ref threw, 1) == 0)
-                throw new InvalidOperationException("H250 observer failure");
+                throw new InvalidOperationException("an observer's own failure");
         });
         using var laterSubscription = rig.Subscribe(route, later.Add);
 
@@ -482,7 +543,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
         var closed = await callA.ClosedByServerAsync(WaitLimit);
         var registeredAfterClose = rig.Composite.GetStream(callA.Key) is not null;
         var countAfterClose = rig.Composite.ActiveStreamCount;
-        var logged = await rig.WhenConnectionErrorLogged(first, "H250 observer failure", WaitLimit);
+        var logged = await rig.WhenConnectionErrorLogged(first, "an observer's own failure", WaitLimit);
         var laterGotFirst = later.Contains(callA.Key);
 
         var fresh = new Announcements();
