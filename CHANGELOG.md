@@ -4,18 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: a snoop channel no longer opens, joins or ends a call
+### Fixed: a snoop channel is no longer treated as a call leg
 
 `CallSessionManager` treated a snoop channel (`Snoop/<target uniqueid>-<n>`, the channel Asterisk creates for an ARI
 snoop or `app_snoop` tap) as a call leg. A snoop carries a linkedid of its own, so each one opened a call session of its
 own, both from a live `Newchannel` and from the reload snapshot after a reconnect, and its hangup was decided against
 any live call whose linkedid it carried. A call reconstructed after a reload could also take in a held snoop as a
-participant. Now a `Snoop/` channel opens, joins and ends no call on any of these routes; every other channel is handled
-as before.
+participant, and `AdmitExistingCalls` opened a call for each snoop the server held, or joined it to the call whose
+linkedid it carried. Now a `Snoop/` channel opens no call and joins none on any of these routes, and its hangup decides
+no call by linkedid; every other channel is handled as before.
 
 **Note:** the `sessions.created`, `sessions.active`, `sessions.completed` and `sessions.failed` meters, and
 `ICallSessionManager.Events`, no longer count snoop channels, so a host that snoops calls reads lower figures after
-upgrading. Sessions a store already holds for snoop channels from earlier versions are not removed.
+upgrading. Sessions a store already holds for snoop channels from earlier versions are not removed; one a host restores
+with `RegisterReconstructedSession` still ends when its snoop hangs up.
 
 ## [2.10.0] - 2026-11-16
 

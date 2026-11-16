@@ -77,6 +77,9 @@ public sealed partial class CallSessionManager
             attachment.Server.Channels.VisitHeld(channel =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                // A snoop is a tap on a call, not a call: the walk neither opens a call for it nor joins it to the
+                // call its linkedid names, the same as a live arrival (OnChannelAdded).
+                if (SessionCorrelator.IsSnoopChannel(channel.Name)) return;
                 Step(HandlerStep.AdmissionVisit, serverId, channel.UniqueId);
                 // The opening's mark: the applied side, sampled before the channel is read, so it never counts a drop
                 // the content it announces did not see.

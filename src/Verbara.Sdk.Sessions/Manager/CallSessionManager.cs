@@ -835,16 +835,17 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// </summary>
     private void OnChannelRemoved(AsteriskChannel channel, string serverId, ServerIndex index, ServerSubscriptions source)
     {
-        // A snoop never joined a call (OnChannelAdded), and its departure decides none: without this, the
-        // by-linkedid half below would record it on a live call whose linkedid it carries.
-        if (SessionCorrelator.IsSnoopChannel(channel.Name)) return;
-
         index.ByChannelId.TryGetValue(channel.UniqueId, out var byChannel);
         if (byChannel is not null)
         {
             Step(HandlerStep.RemovalFound, serverId, channel.UniqueId);
             DecideCall(byChannel, channel, source: source, sourceId: serverId);
         }
+        // A snoop never joins a call, so its departure decides none by linkedid: without this, the half below would
+        // record it on a live call whose linkedid it carries. The by-channel half above still runs, so a session that
+        // does hold a snoop by its channel id (one an earlier version wrote to a store and a host restored) still
+        // ends when the snoop hangs up.
+        if (SessionCorrelator.IsSnoopChannel(channel.Name)) return;
         var key = string.IsNullOrEmpty(channel.LinkedId) ? channel.UniqueId : channel.LinkedId;
         if (index.ByLinkedId.TryGetValue(key, out var byLinked)
             && !ReferenceEquals(byLinked, byChannel)) DecideCall(byLinked, channel, source: source, sourceId: serverId);
