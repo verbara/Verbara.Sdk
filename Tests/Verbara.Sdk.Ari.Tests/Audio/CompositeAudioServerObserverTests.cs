@@ -415,8 +415,8 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
     public async Task OnStreamConnected_ShouldKeepAnnouncingLaterStreamsToTheObserverThatThrew_WhenSubscribedThroughTheComposite(
         Transport first)
     {
-        // Not in the published text, which says only that the throwing observer loses that connection: this is the
-        // parity with a direct subscription, measured in the Direct theory below.
+        // The published text says the throwing observer loses that connection and stays subscribed for the later
+        // streams of every server; this pins that second half, in parity with the Direct theory below.
         var outcome = await ThrowingScenarioAsync(Route.Composite, first);
 
         outcome.ThrowerGotLater.Should().Be(2, "a direct subscriber that threw is still announced later streams of both servers");

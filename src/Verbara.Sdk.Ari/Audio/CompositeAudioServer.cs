@@ -36,8 +36,10 @@ public sealed class CompositeAudioServer : IAudioServer
     /// </summary>
     /// <remarks>
     /// A subscriber is completed once, after every aggregated server has completed, and at once when there is no
-    /// server. The first server that fails ends the subscription: the subscriber receives that error, is unsubscribed
-    /// from the other servers and receives nothing more. Disposing the subscription unsubscribes it from every server.
+    /// server. The first server that fails, or that cannot be subscribed to, ends the subscription: the subscriber
+    /// receives that error once, is unsubscribed from the other servers and receives no later error or completion. No
+    /// lock orders announcements against that error, so an announcement already being delivered when it arrives may
+    /// still be running, or complete, after it. Disposing the subscription unsubscribes it from every server.
     /// </remarks>
     public IObservable<IAudioStream> OnStreamConnected => _announcements;
 
