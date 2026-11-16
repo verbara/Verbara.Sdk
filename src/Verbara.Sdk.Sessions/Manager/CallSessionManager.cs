@@ -488,6 +488,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// </summary>
     private void OnChannelAdded(AsteriskChannel channel, string serverId, ServerIndex index, ServerSubscriptions delivery)
     {
+        // A snoop is a tap Asterisk creates on a call, not a call: it opens and joins nothing. This returns
+        // before the release ride and the would-be session, so a snoop builds nothing on either route (a
+        // live Newchannel or a reload's snapshot entry, both of which arrive here).
+        if (SessionCorrelator.IsSnoopChannel(channel.Name)) return;
+
         // Release rides arrivals as well as endings, so a process that keeps accepting calls but has
         // stopped completing them still lets go of what it holds past retention. It runs before the
         // leg is correlated, so the leg is not put into a call this same evaluation lets go of. No
@@ -830,6 +835,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// </summary>
     private void OnChannelRemoved(AsteriskChannel channel, string serverId, ServerIndex index, ServerSubscriptions source)
     {
+        // A snoop never joined a call (OnChannelAdded), and its departure decides none: without this, the
+        // by-linkedid half below would record it on a live call whose linkedid it carries.
+        if (SessionCorrelator.IsSnoopChannel(channel.Name)) return;
+
         index.ByChannelId.TryGetValue(channel.UniqueId, out var byChannel);
         if (byChannel is not null)
         {
