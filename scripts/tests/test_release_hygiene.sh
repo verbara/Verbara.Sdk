@@ -18,6 +18,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIVENESS="$SCRIPT_DIR/../ci/check-publish-liveness.sh"
 BASELINE="$SCRIPT_DIR/../ci/check-apicompat-baseline.sh"
 fails=0; pass=0
+
+# Every throwaway repo and feed lives under one root that is removed on exit, pass or fail, so a run
+# leaves nothing behind in the temp directory.
+TMP_ROOT="$(mktemp -d)"
+trap 'rm -rf "$TMP_ROOT"' EXIT
 ok()  { pass=$((pass + 1)); }
 bad() { echo "FAIL: $1"; fails=$((fails + 1)); }
 
@@ -52,7 +57,7 @@ changelog() { # changelog <unreleased-filler-bytes>
 }
 
 new_repo() { # new_repo — a released repo at v1.0.0 with nothing pending
-  WORK="$(mktemp -d)"
+  WORK="$(mktemp -d -p "$TMP_ROOT")"
   g init -q
   mkdir -p "$WORK/src/Foo"
   cat > "$WORK/src/Foo/Foo.csproj" <<'EOF'
@@ -231,7 +236,7 @@ run "$BASELINE" 2 "an unreadable baseline is 'cannot tell', not 'fine'" "$UNREAC
 # The feed check only fires when the feed answers. A response that lists the baseline is green; one
 # that does not is a failure, because ApiCompat cannot download a baseline that is not published.
 new_repo
-FEED="$(mktemp -d)"; printf '{"versions":["0.9.0","1.0.0"]}' > "$FEED/index.json"
+FEED="$(mktemp -d -p "$TMP_ROOT")"; printf '{"versions":["0.9.0","1.0.0"]}' > "$FEED/index.json"
 run "$BASELINE" 0 "a feed listing the baseline is green" "FEED_INDEX_URL=file://$FEED/index.json"
 says "live on nuget.org" "the feed-confirmed path says so"
 printf '{"versions":["0.9.0"]}' > "$FEED/index.json"
