@@ -207,6 +207,30 @@ public sealed class CompositeAudioServerTests
     }
 
     [Fact]
+    public void OnStreamConnected_ShouldDropEverySignalAfterTheFirstError_WhenAServerKeepsSignallingAfterItsUnsubscription()
+    {
+        var failing = new SourceThatIgnoresDisposal();
+        var other = new SourceThatIgnoresDisposal();
+        var composite = new CompositeAudioServer([ServerOn(failing), ServerOn(other)]);
+        var received = new List<IAudioStream>();
+        var errors = new List<Exception>();
+        var completions = 0;
+        using var subscription = composite.OnStreamConnected.Subscribe(received.Add, errors.Add, () => completions++);
+        var failure = new InvalidOperationException("first");
+
+        failing.Observer!.OnError(failure);
+        other.Observer!.OnError(new InvalidOperationException("second"));
+        other.Observer.OnNext(Substitute.For<IAudioStream>());
+        other.Observer.OnCompleted();
+        failing.Observer.OnCompleted();
+
+        errors.Should().ContainSingle().Which.Should().BeSameAs(failure, "the first error wins and a later one is dropped");
+        received.Should().BeEmpty("an announcement after the error is dropped");
+        completions.Should().Be(0, "a completion after the error is dropped");
+        other.Disposed.Should().BeTrue("the first error disposed the other server's subscription");
+    }
+
+    [Fact]
     public void OnStreamConnected_ShouldNotSubscribeToLaterServers_WhenAnEarlierServerHasAlreadyFailed()
     {
         using var failed = new Subject<IAudioStream>();
@@ -272,6 +296,20 @@ public sealed class CompositeAudioServerTests
         var subscribe = () => composite.OnStreamConnected.Subscribe(null!);
 
         subscribe.Should().Throw<ArgumentNullException>();
+    }
+
+    /// <summary>A source that keeps its observer after its subscription is disposed, as a misbehaving server could.</summary>
+    private sealed class SourceThatIgnoresDisposal : IObservable<IAudioStream>
+    {
+        public IObserver<IAudioStream>? Observer { get; private set; }
+
+        public bool Disposed { get; private set; }
+
+        public IDisposable Subscribe(IObserver<IAudioStream> observer)
+        {
+            Observer = observer;
+            return System.Reactive.Disposables.Disposable.Create(() => Disposed = true);
+        }
     }
 
     private static IAudioServer ServerOn(IObservable<IAudioStream> announcements)
