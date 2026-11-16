@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#584)
+
+`AddVerbara` always registers `CompositeAudioServer`, and its `OnStreamConnected` merged the servers' announcements
+through one lock and one safe-observer wrapper per subscription. That broke two promises `IAudioServer` makes:
+
+- **An observer that blocked held back every other connection.** While it worked on one stream, a stream accepted on
+  any other connection, on the same server or the other one, was registered, counted and carried audio, but was not
+  announced to subscribers after it until the blocked call returned. A stream whose far end hung up meanwhile stayed
+  registered, counted in `ActiveStreamCount` and holding its place under `MaxConcurrentStreams`, so at that limit new
+  connections were refused until the blocked observer returned.
+- **An observer that threw was unsubscribed for good.** It received no later stream from any server, where an
+  observer subscribed to one server directly stays subscribed.
+
+Now each subscription is made on every server's own announcement, and each stream reaches the observer from the handler
+of the connection that carries it. An observer that blocks holds only its own connection, and one that throws loses
+that connection and stays subscribed.
+
+**Behaviour change:** a handler subscribed through `AddVerbara` may now be invoked concurrently for different
+connections, as it already could be when subscribed to one server directly. An observer that keeps shared state must
+make it thread-safe. Completion, the first error and an empty composite keep their meaning; a server that cannot be
+subscribed to (one already disposed) fails the subscription with its error, as before.
+
 ## [2.10.0] - 2026-11-16
 
 ### Fixed: a write to a WebSocket audio stream that has ended throws `ObjectDisposedException` (#576)

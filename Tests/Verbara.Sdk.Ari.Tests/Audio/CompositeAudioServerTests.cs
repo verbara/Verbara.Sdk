@@ -154,4 +154,225 @@ public sealed class CompositeAudioServerTests
 
         received.Should().ContainSingle().Which.Should().BeSameAs(mockStream);
     }
+
+    [Fact]
+    public void OnStreamConnected_ShouldCompleteOnceAfterTheLastServerCompletes_WhenEveryServerCompletes()
+    {
+        using var subject1 = new Subject<IAudioStream>();
+        using var subject2 = new Subject<IAudioStream>();
+        var composite = new CompositeAudioServer([ServerOn(subject1), ServerOn(subject2)]);
+        var completions = 0;
+        using var subscription = composite.OnStreamConnected.Subscribe(_ => { }, () => completions++);
+
+        subject1.OnCompleted();
+        var afterFirst = completions;
+        subject2.OnCompleted();
+
+        afterFirst.Should().Be(0, "one server completing does not end the aggregate");
+        completions.Should().Be(1, "the subscriber is completed once, after the last server completes");
+    }
+
+    [Fact]
+    public void OnStreamConnected_ShouldCompleteAtOnce_WhenTheAggregateHoldsNoServer()
+    {
+        var composite = new CompositeAudioServer([]);
+        var completions = 0;
+
+        using var subscription = composite.OnStreamConnected.Subscribe(_ => { }, () => completions++);
+
+        completions.Should().Be(1);
+    }
+
+    [Fact]
+    public void OnStreamConnected_ShouldForwardTheFirstErrorAndUnsubscribeFromTheOtherServers_WhenOneServerFails()
+    {
+        using var subject1 = new Subject<IAudioStream>();
+        using var subject2 = new Subject<IAudioStream>();
+        var composite = new CompositeAudioServer([ServerOn(subject1), ServerOn(subject2)]);
+        var observer = new RecordingObserver();
+        using var subscription = composite.OnStreamConnected.Subscribe(observer);
+        var failure = new InvalidOperationException("first");
+
+        subject1.OnError(failure);
+        var subscribedAfterError = subject2.HasObservers;
+        subject2.OnNext(Substitute.For<IAudioStream>());
+        subject2.OnError(new InvalidOperationException("second"));
+
+        observer.Errors.Should().ContainSingle().Which.Should().BeSameAs(failure, "the first error wins");
+        subscribedAfterError.Should().BeFalse("the first error unsubscribes the subscriber from the other servers");
+        observer.Streams.Should().BeEmpty("nothing is delivered after the error");
+        observer.Completions.Should().Be(0);
+    }
+
+    [Fact]
+    public void OnStreamConnected_ShouldDropEverySignalAfterTheFirstError_WhenAServerKeepsSignallingAfterItsUnsubscription()
+    {
+        // A hand-written observer, not lambdas: Rx's anonymous observer drops what follows a terminal signal by itself,
+        // which would hide a composite that forwards it.
+        var failing = new SourceThatIgnoresDisposal();
+        var other = new SourceThatIgnoresDisposal();
+        var composite = new CompositeAudioServer([ServerOn(failing), ServerOn(other)]);
+        var observer = new RecordingObserver();
+        using var subscription = composite.OnStreamConnected.Subscribe(observer);
+        var failure = new InvalidOperationException("first");
+
+        failing.Observer!.OnError(failure);
+        other.Observer!.OnError(new InvalidOperationException("second"));
+        other.Observer.OnNext(Substitute.For<IAudioStream>());
+        other.Observer.OnCompleted();
+        failing.Observer.OnCompleted();
+
+        observer.Errors.Should().ContainSingle().Which.Should().BeSameAs(failure, "the first error wins and a later one is dropped");
+        observer.Streams.Should().BeEmpty("an announcement after the error is dropped");
+        observer.Completions.Should().Be(0, "a completion after the error is dropped");
+        other.Disposed.Should().BeTrue("the first error disposed the other server's subscription");
+    }
+
+    [Fact]
+    public void OnStreamConnected_ShouldDeliverNothing_WhenAServerKeepsSignallingAfterTheSubscriptionIsDisposed()
+    {
+        var first = new SourceThatIgnoresDisposal();
+        var second = new SourceThatIgnoresDisposal();
+        var composite = new CompositeAudioServer([ServerOn(first), ServerOn(second)]);
+        var observer = new RecordingObserver();
+        var subscription = composite.OnStreamConnected.Subscribe(observer);
+
+        subscription.Dispose();
+        first.Observer!.OnNext(Substitute.For<IAudioStream>());
+        second.Observer!.OnNext(Substitute.For<IAudioStream>());
+        first.Observer.OnError(new InvalidOperationException("after disposal"));
+        second.Observer.OnCompleted();
+        first.Observer.OnCompleted();
+
+        first.Disposed.Should().BeTrue("disposing the subscription disposes every server's subscription");
+        second.Disposed.Should().BeTrue("disposing the subscription disposes every server's subscription");
+        observer.Streams.Should().BeEmpty("an announcement after disposal is dropped");
+        observer.Errors.Should().BeEmpty("an error after disposal is dropped");
+        observer.Completions.Should().Be(0, "a completion after disposal is dropped");
+    }
+
+    [Fact]
+    public void OnStreamConnected_ShouldDeliverTheErrorAndReleaseTheServersAlreadySubscribed_WhenSubscribingToAServerThrows()
+    {
+        using var live = new Subject<IAudioStream>();
+        var disposed = new Subject<IAudioStream>();
+        disposed.Dispose();
+        var composite = new CompositeAudioServer([ServerOn(live), ServerOn(disposed)]);
+        var observer = new RecordingObserver();
+
+        var subscribe = () => composite.OnStreamConnected.Subscribe(observer);
+
+        using var subscription = subscribe.Should().NotThrow("the failure is delivered to the observer, not thrown").Subject;
+        var liveSubscribedAfter = live.HasObservers;
+        live.OnNext(Substitute.For<IAudioStream>());
+        observer.Errors.Should().ContainSingle().Which.Should().BeOfType<ObjectDisposedException>();
+        liveSubscribedAfter.Should().BeFalse("the subscription already made on the live server is disposed");
+        observer.Streams.Should().BeEmpty("an announcement on the live server after the failed subscribe is not received");
+        observer.Completions.Should().Be(0);
+    }
+
+    [Fact]
+    public void OnStreamConnected_ShouldNotSubscribeToLaterServers_WhenAnEarlierServerHasAlreadyFailed()
+    {
+        using var failed = new Subject<IAudioStream>();
+        using var subject2 = new Subject<IAudioStream>();
+        var failure = new InvalidOperationException("failed before the subscription");
+        failed.OnError(failure);
+        var composite = new CompositeAudioServer([ServerOn(failed), ServerOn(subject2)]);
+        var errors = new List<Exception>();
+
+        using var subscription = composite.OnStreamConnected.Subscribe(_ => { }, errors.Add);
+
+        errors.Should().ContainSingle().Which.Should().BeSameAs(failure);
+        subject2.HasObservers.Should().BeFalse("a subscription that has already ended subscribes to no further server");
+    }
+
+    [Fact]
+    public void OnStreamConnected_ShouldUnsubscribeFromEveryServer_WhenTheSubscriptionIsDisposed()
+    {
+        using var subject1 = new Subject<IAudioStream>();
+        using var subject2 = new Subject<IAudioStream>();
+        var composite = new CompositeAudioServer([ServerOn(subject1), ServerOn(subject2)]);
+        var received = new List<IAudioStream>();
+        using var subscription = composite.OnStreamConnected.Subscribe(received.Add);
+        var subscribedBefore = subject1.HasObservers && subject2.HasObservers;
+
+        subscription.Dispose();
+        subscription.Dispose();
+        subject1.OnNext(Substitute.For<IAudioStream>());
+        subject2.OnNext(Substitute.For<IAudioStream>());
+
+        subscribedBefore.Should().BeTrue();
+        subject1.HasObservers.Should().BeFalse();
+        subject2.HasObservers.Should().BeFalse();
+        received.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void OnStreamConnected_ShouldKeepTheObserverSubscribed_WhenItsOnNextThrows()
+    {
+        using var subject1 = new Subject<IAudioStream>();
+        using var subject2 = new Subject<IAudioStream>();
+        var composite = new CompositeAudioServer([ServerOn(subject1), ServerOn(subject2)]);
+        var calls = 0;
+        using var subscription = composite.OnStreamConnected.Subscribe(_ =>
+        {
+            if (++calls == 1)
+                throw new InvalidOperationException("observer failure");
+        });
+
+        var announce = () => subject1.OnNext(Substitute.For<IAudioStream>());
+        announce.Should().Throw<InvalidOperationException>("the exception reaches the announcing server, as from a direct subscriber");
+        subject1.OnNext(Substitute.For<IAudioStream>());
+        subject2.OnNext(Substitute.For<IAudioStream>());
+
+        calls.Should().Be(3, "the observer that threw stays subscribed to every server");
+    }
+
+    [Fact]
+    public void OnStreamConnected_ShouldThrowArgumentNullException_WhenTheObserverIsNull()
+    {
+        var composite = new CompositeAudioServer([]);
+
+        var subscribe = () => composite.OnStreamConnected.Subscribe(null!);
+
+        subscribe.Should().Throw<ArgumentNullException>();
+    }
+
+    /// <summary>Records every call it receives, with none of the guards Rx's own observers add.</summary>
+    private sealed class RecordingObserver : IObserver<IAudioStream>
+    {
+        public List<IAudioStream> Streams { get; } = [];
+
+        public List<Exception> Errors { get; } = [];
+
+        public int Completions { get; private set; }
+
+        public void OnNext(IAudioStream value) => Streams.Add(value);
+
+        public void OnError(Exception error) => Errors.Add(error);
+
+        public void OnCompleted() => Completions++;
+    }
+
+    /// <summary>A source that keeps its observer after its subscription is disposed, as a misbehaving server could.</summary>
+    private sealed class SourceThatIgnoresDisposal : IObservable<IAudioStream>
+    {
+        public IObserver<IAudioStream>? Observer { get; private set; }
+
+        public bool Disposed { get; private set; }
+
+        public IDisposable Subscribe(IObserver<IAudioStream> observer)
+        {
+            Observer = observer;
+            return System.Reactive.Disposables.Disposable.Create(() => Disposed = true);
+        }
+    }
+
+    private static IAudioServer ServerOn(IObservable<IAudioStream> announcements)
+    {
+        var server = Substitute.For<IAudioServer>();
+        server.OnStreamConnected.Returns(announcements);
+        return server;
+    }
 }
