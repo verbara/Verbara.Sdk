@@ -488,6 +488,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// </summary>
     private void OnChannelAdded(AsteriskChannel channel, string serverId, ServerIndex index, ServerSubscriptions delivery)
     {
+        // A snoop is a tap Asterisk creates on a call, not a call: it opens and joins nothing. This returns
+        // before the release ride and the would-be session, so a snoop builds nothing on either route (a
+        // live Newchannel or a reload's snapshot entry, both of which arrive here).
+        if (SessionCorrelator.IsSnoopChannel(channel.Name)) return;
+
         // Release rides arrivals as well as endings, so a process that keeps accepting calls but has
         // stopped completing them still lets go of what it holds past retention. It runs before the
         // leg is correlated, so the leg is not put into a call this same evaluation lets go of. No
@@ -836,6 +841,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             Step(HandlerStep.RemovalFound, serverId, channel.UniqueId);
             DecideCall(byChannel, channel, source: source, sourceId: serverId);
         }
+        // A snoop never joins a call, so its departure decides none by linkedid: without this, the half below would
+        // record it on a live call whose linkedid it carries. The by-channel half above still runs, so a session that
+        // does hold a snoop by its channel id (one an earlier version wrote to a store and a host restored) still
+        // ends when the snoop hangs up.
+        if (SessionCorrelator.IsSnoopChannel(channel.Name)) return;
         var key = string.IsNullOrEmpty(channel.LinkedId) ? channel.UniqueId : channel.LinkedId;
         if (index.ByLinkedId.TryGetValue(key, out var byLinked)
             && !ReferenceEquals(byLinked, byChannel)) DecideCall(byLinked, channel, source: source, sourceId: serverId);
@@ -1066,6 +1076,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             for (var i = 0; i < channels.Length; i++)
             {
                 var channel = channels[i];
+                // A snoop carrying this linkedid is a tap on the call, not one of its channels, and its own hangup no
+                // longer decides by linkedid: counting it here would keep the call open after its real legs leave.
+                // One the call holds as a participant (restored from an earlier version) is still counted above.
+                if (SessionCorrelator.IsSnoopChannel(channel.Name)) continue;
                 if (ChannelManager.IsDeparting(channel))
                 {
                     if (call.HasRecordedDeparture(channel.UniqueId, channel.AdmissionMark)) continue;
@@ -1936,6 +1950,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         {
             attachment.Server.Channels.VisitHeld(session.LinkedId, channel =>
             {
+                // A snoop held under the call's linkedid is a tap on one of its legs, not a leg: the
+                // reconstructed call takes it in no more than a live call does. Returns before the call lock.
+                if (SessionCorrelator.IsSnoopChannel(channel.Name)) return;
+
                 // VisitHeld holds the channel lock; the call lock is always inside it.
                 lock (session.SyncRoot)
                 {

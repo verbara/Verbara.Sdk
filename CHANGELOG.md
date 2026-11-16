@@ -26,6 +26,24 @@ connections, as it already could be when subscribed to one server directly. An o
 make it thread-safe. Completion, the first error and an empty composite keep their meaning; a server that cannot be
 subscribed to (one already disposed) fails the subscription with its error, as before.
 
+### Fixed: a snoop channel is no longer treated as a call leg
+
+`CallSessionManager` treated a snoop channel (`Snoop/<target uniqueid>-<n>`, the channel Asterisk creates for an ARI
+snoop or `app_snoop` tap) as a call leg. A snoop carries a linkedid of its own, so each one opened a call session of its
+own, both from a live `Newchannel` and from the reload snapshot after a reconnect, and its hangup was decided against
+any live call whose linkedid it carried. A call reconstructed after a reload could also take in a held snoop as a
+participant, and `AdmitExistingCalls` opened a call for each snoop the server held, or joined it to the call whose
+linkedid it carried; such a call then ended only at the snoop's hangup, after its real legs had gone. Now a `Snoop/`
+channel opens no call and joins none on any of these routes, its hangup decides no call by linkedid, and a snoop still
+held does not keep the call it taps open: the call ends when its last real leg hangs up. Every other channel is handled
+as before.
+
+**Note:** the `sessions.created`, `sessions.active`, `sessions.completed` and `sessions.failed` meters, and
+`ICallSessionManager.Events`, no longer count snoop channels, so a host that snoops calls reads lower figures after
+upgrading. Sessions a store already holds for snoop channels from earlier versions are not removed; one a host restores
+with `RegisterReconstructedSession` still ends when its snoop hangs up, and a restored call stored with a joined snoop
+among its legs still ends at its last participant, snoop or leg.
+
 ## [2.10.0] - 2026-11-16
 
 ### Fixed: a write to a WebSocket audio stream that has ended throws `ObjectDisposedException` (#576)

@@ -26,6 +26,11 @@ internal sealed class SessionCorrelator
     public static bool IsLocalChannel(string channelName) =>
         channelName.StartsWith("Local/", StringComparison.OrdinalIgnoreCase);
 
+    // A snoop is a tap Asterisk creates on a call (app_snoop / ARI snoop), named Snoop/<target uniqueid>-<n>;
+    // it is never a call or a party to one. The '/' keeps a technology merely starting with "Snoop" out.
+    internal static bool IsSnoopChannel(string channelName) =>
+        channelName.StartsWith("Snoop/", StringComparison.OrdinalIgnoreCase);
+
     public static string ExtractTechnology(string channelName)
     {
         var slashIndex = channelName.IndexOf('/');
