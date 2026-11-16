@@ -223,8 +223,9 @@ public sealed class SnoopChannelSessionTests : FunctionalTestBase, IClassFixture
 
             await ari.Channels.HangupAsync(target.UniqueId);
             await channels.WaitForHangupAsync(target.UniqueId, StepBound);
-            if (snoopEndedBy == "none" && tapId is not null)
-                snoopEndedBy = await channels.TryWaitForHangupAsync(tapId, TimeSpan.FromSeconds(10)) ? "with-call" : "never";
+            // "none" is set only on the snoop path, after tapId is.
+            if (snoopEndedBy == "none")
+                snoopEndedBy = await channels.TryWaitForHangupAsync(tapId!, TimeSpan.FromSeconds(10)) ? "with-call" : "never";
 
             var activeAtEnd = await WaitForNoActiveSessionAsync(manager, StepBound);
 
@@ -254,10 +255,8 @@ public sealed class SnoopChannelSessionTests : FunctionalTestBase, IClassFixture
         finally
         {
             // A step that failed leaves its channels up; hang them up so the next test starts from an idle Asterisk.
-            foreach (var id in new[] { tapId, target?.UniqueId })
+            foreach (var id in new[] { tapId, target?.UniqueId }.OfType<string>())
             {
-                if (id is null)
-                    continue;
                 try
                 {
                     await ari.Channels.HangupAsync(id);
