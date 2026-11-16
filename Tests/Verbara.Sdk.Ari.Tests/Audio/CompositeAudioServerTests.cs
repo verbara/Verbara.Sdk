@@ -189,10 +189,8 @@ public sealed class CompositeAudioServerTests
         using var subject1 = new Subject<IAudioStream>();
         using var subject2 = new Subject<IAudioStream>();
         var composite = new CompositeAudioServer([ServerOn(subject1), ServerOn(subject2)]);
-        var received = new List<IAudioStream>();
-        var errors = new List<Exception>();
-        var completions = 0;
-        using var subscription = composite.OnStreamConnected.Subscribe(received.Add, errors.Add, () => completions++);
+        var observer = new RecordingObserver();
+        using var subscription = composite.OnStreamConnected.Subscribe(observer);
         var failure = new InvalidOperationException("first");
 
         subject1.OnError(failure);
@@ -200,22 +198,22 @@ public sealed class CompositeAudioServerTests
         subject2.OnNext(Substitute.For<IAudioStream>());
         subject2.OnError(new InvalidOperationException("second"));
 
-        errors.Should().ContainSingle().Which.Should().BeSameAs(failure, "the first error wins");
+        observer.Errors.Should().ContainSingle().Which.Should().BeSameAs(failure, "the first error wins");
         subscribedAfterError.Should().BeFalse("the first error unsubscribes the subscriber from the other servers");
-        received.Should().BeEmpty("nothing is delivered after the error");
-        completions.Should().Be(0);
+        observer.Streams.Should().BeEmpty("nothing is delivered after the error");
+        observer.Completions.Should().Be(0);
     }
 
     [Fact]
     public void OnStreamConnected_ShouldDropEverySignalAfterTheFirstError_WhenAServerKeepsSignallingAfterItsUnsubscription()
     {
+        // A hand-written observer, not lambdas: Rx's anonymous observer drops what follows a terminal signal by itself,
+        // which would hide a composite that forwards it.
         var failing = new SourceThatIgnoresDisposal();
         var other = new SourceThatIgnoresDisposal();
         var composite = new CompositeAudioServer([ServerOn(failing), ServerOn(other)]);
-        var received = new List<IAudioStream>();
-        var errors = new List<Exception>();
-        var completions = 0;
-        using var subscription = composite.OnStreamConnected.Subscribe(received.Add, errors.Add, () => completions++);
+        var observer = new RecordingObserver();
+        using var subscription = composite.OnStreamConnected.Subscribe(observer);
         var failure = new InvalidOperationException("first");
 
         failing.Observer!.OnError(failure);
@@ -224,10 +222,33 @@ public sealed class CompositeAudioServerTests
         other.Observer.OnCompleted();
         failing.Observer.OnCompleted();
 
-        errors.Should().ContainSingle().Which.Should().BeSameAs(failure, "the first error wins and a later one is dropped");
-        received.Should().BeEmpty("an announcement after the error is dropped");
-        completions.Should().Be(0, "a completion after the error is dropped");
+        observer.Errors.Should().ContainSingle().Which.Should().BeSameAs(failure, "the first error wins and a later one is dropped");
+        observer.Streams.Should().BeEmpty("an announcement after the error is dropped");
+        observer.Completions.Should().Be(0, "a completion after the error is dropped");
         other.Disposed.Should().BeTrue("the first error disposed the other server's subscription");
+    }
+
+    [Fact]
+    public void OnStreamConnected_ShouldDeliverNothing_WhenAServerKeepsSignallingAfterTheSubscriptionIsDisposed()
+    {
+        var first = new SourceThatIgnoresDisposal();
+        var second = new SourceThatIgnoresDisposal();
+        var composite = new CompositeAudioServer([ServerOn(first), ServerOn(second)]);
+        var observer = new RecordingObserver();
+        var subscription = composite.OnStreamConnected.Subscribe(observer);
+
+        subscription.Dispose();
+        first.Observer!.OnNext(Substitute.For<IAudioStream>());
+        second.Observer!.OnNext(Substitute.For<IAudioStream>());
+        first.Observer.OnError(new InvalidOperationException("after disposal"));
+        second.Observer.OnCompleted();
+        first.Observer.OnCompleted();
+
+        first.Disposed.Should().BeTrue("disposing the subscription disposes every server's subscription");
+        second.Disposed.Should().BeTrue("disposing the subscription disposes every server's subscription");
+        observer.Streams.Should().BeEmpty("an announcement after disposal is dropped");
+        observer.Errors.Should().BeEmpty("an error after disposal is dropped");
+        observer.Completions.Should().Be(0, "a completion after disposal is dropped");
     }
 
     [Fact]
@@ -296,6 +317,22 @@ public sealed class CompositeAudioServerTests
         var subscribe = () => composite.OnStreamConnected.Subscribe(null!);
 
         subscribe.Should().Throw<ArgumentNullException>();
+    }
+
+    /// <summary>Records every call it receives, with none of the guards Rx's own observers add.</summary>
+    private sealed class RecordingObserver : IObserver<IAudioStream>
+    {
+        public List<IAudioStream> Streams { get; } = [];
+
+        public List<Exception> Errors { get; } = [];
+
+        public int Completions { get; private set; }
+
+        public void OnNext(IAudioStream value) => Streams.Add(value);
+
+        public void OnError(Exception error) => Errors.Add(error);
+
+        public void OnCompleted() => Completions++;
     }
 
     /// <summary>A source that keeps its observer after its subscription is disposed, as a misbehaving server could.</summary>
