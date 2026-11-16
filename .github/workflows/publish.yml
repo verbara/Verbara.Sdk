@@ -30,6 +30,9 @@ jobs:
       # aside by path. Job-level permissions are exhaustive: without this scope the gate FAILS,
       # it does not degrade (ADR-0055 D1 and its 2026-09-12 addendum).
       actions: read
+      # Trusted Publishing: the job's OIDC token is exchanged with nuget.org for a push key that lives one hour.
+      # No long-lived key is stored in the repo. The nuget.org policy names this repository and this file.
+      id-token: write
     env:
       CI: true
     steps:
@@ -280,6 +283,18 @@ jobs:
           echo "Release notes: $(wc -l < release-notes.md) lines, $BODY_BYTES bytes."
 
       # ---------------------------------------------------------------------
+      # Trusted Publishing login. nuget.org trusts this repository's `publish.yml` through a policy owned by the
+      # account in the `NUGET_USER` repository variable, and hands back a push key valid for one hour. It runs on a
+      # DRY RUN too, on purpose: a dispatch then proves the exchange works before a tag depends on it, and the key it
+      # gets is never used.
+      # ---------------------------------------------------------------------
+      - name: Log in to nuget.org (Trusted Publishing)
+        id: nuget-login
+        uses: NuGet/login@v1.2.0
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      # ---------------------------------------------------------------------
       # The push. The key moved out of the `run:` line and into `env:`.
       #
       # `--api-key ${{ secrets.NUGET_API_KEY }}` interpolated into argv is two
@@ -291,12 +306,12 @@ jobs:
       - name: Push to nuget.org
         if: steps.identity.outputs.is_publish == 'true'
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: |
           set -euo pipefail
 
           if [ -z "${NUGET_API_KEY:-}" ]; then
-            echo "::error::NUGET_API_KEY is not set for this run."
+            echo "::error::The Trusted Publishing login returned no key for this run."
             exit 1
           fi
 
