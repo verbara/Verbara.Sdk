@@ -235,7 +235,14 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
         Transport first, Transport second)
     {
         var outcome = await CrossRetentionScenarioAsync(Route.Composite, first, second);
-        AssertReleased(outcome);
+
+        using var scope = new AssertionScope();
+        outcome.SecondDisconnected.Should().BeTrue("the second connection's far end hung up");
+        outcome.SecondHeldThroughWindow.Should().BeFalse("a connection that hung up is released whatever another connection's observer does");
+        outcome.CountAfterWindow.Should().Be(1, "only the blocked connection is still counted");
+        outcome.HeldAfterWindow.Should().Be(1, "and only it holds a place under the limit");
+        outcome.ThirdAdmitted.Should().BeTrue("so a new connection is admitted under a limit of two");
+        outcome.GateTimedOut.Should().BeFalse("the test opened the gate within its bound");
     }
 
     [Theory]
@@ -247,11 +254,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
         Transport first, Transport second)
     {
         var outcome = await CrossRetentionScenarioAsync(Route.Direct, first, second);
-        AssertReleased(outcome);
-    }
 
-    private static void AssertReleased(CrossRetentionOutcome outcome)
-    {
         using var scope = new AssertionScope();
         outcome.SecondDisconnected.Should().BeTrue("the second connection's far end hung up");
         outcome.SecondHeldThroughWindow.Should().BeFalse("a connection that hung up is released whatever another connection's observer does");
