@@ -253,7 +253,7 @@ public sealed class CompositeAudioServerTests
         using var subject2 = new Subject<IAudioStream>();
         var composite = new CompositeAudioServer([ServerOn(subject1), ServerOn(subject2)]);
         var received = new List<IAudioStream>();
-        var subscription = composite.OnStreamConnected.Subscribe(received.Add);
+        using var subscription = composite.OnStreamConnected.Subscribe(received.Add);
         var subscribedBefore = subject1.HasObservers && subject2.HasObservers;
 
         subscription.Dispose();

@@ -143,7 +143,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
             var heldCount = rig.Composite.ActiveStreamCount;
             var heldPlaces = rig.Options.Admission.Held;
             output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"P2 route={route} first={first}: after hang-up releasedMs={releasedMs?.ToString("F1", CultureInfo.InvariantCulture) ?? "never"} GetStream={(heldStream is null ? "null" : "held")} ActiveStreamCount={heldCount} admissionHeld={heldPlaces}"));
+                $"P2 route={route} first={first}: after hang-up releasedMs={releasedMs?.ToString("F1", CultureInfo.InvariantCulture) ?? "never"} GetStream={(ReferenceEquals(heldStream, stream) ? "held" : "released")} ActiveStreamCount={heldCount} admissionHeld={heldPlaces}"));
 
             using (new AssertionScope())
             {
