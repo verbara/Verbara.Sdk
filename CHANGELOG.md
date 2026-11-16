@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a snoop channel no longer opens, joins or ends a call
+
+`CallSessionManager` treated a snoop channel (`Snoop/<target uniqueid>-<n>`, the channel Asterisk creates for an ARI
+snoop or `app_snoop` tap) as a call leg. A snoop carries a linkedid of its own, so each one opened a call session of its
+own, both from a live `Newchannel` and from the reload snapshot after a reconnect, and its hangup was decided against
+any live call whose linkedid it carried. A call reconstructed after a reload could also take in a held snoop as a
+participant. Now a `Snoop/` channel opens, joins and ends no call on any of these routes; every other channel is handled
+as before.
+
+**Note:** the `sessions.created`, `sessions.active`, `sessions.completed` and `sessions.failed` meters, and
+`ICallSessionManager.Events`, no longer count snoop channels, so a host that snoops calls reads lower figures after
+upgrading. Sessions a store already holds for snoop channels from earlier versions are not removed.
+
 ## [2.10.0] - 2026-11-16
 
 ### Fixed: a write to a WebSocket audio stream that has ended throws `ObjectDisposedException` (#576)
