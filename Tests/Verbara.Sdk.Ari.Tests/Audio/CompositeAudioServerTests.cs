@@ -252,6 +252,26 @@ public sealed class CompositeAudioServerTests
     }
 
     [Fact]
+    public void OnStreamConnected_ShouldDeliverTheErrorAndReleaseTheServersAlreadySubscribed_WhenSubscribingToAServerThrows()
+    {
+        using var live = new Subject<IAudioStream>();
+        var disposed = new Subject<IAudioStream>();
+        disposed.Dispose();
+        var composite = new CompositeAudioServer([ServerOn(live), ServerOn(disposed)]);
+        var observer = new RecordingObserver();
+
+        var subscribe = () => composite.OnStreamConnected.Subscribe(observer);
+
+        using var subscription = subscribe.Should().NotThrow("the failure is delivered to the observer, not thrown").Subject;
+        var liveSubscribedAfter = live.HasObservers;
+        live.OnNext(Substitute.For<IAudioStream>());
+        observer.Errors.Should().ContainSingle().Which.Should().BeOfType<ObjectDisposedException>();
+        liveSubscribedAfter.Should().BeFalse("the subscription already made on the live server is disposed");
+        observer.Streams.Should().BeEmpty("an announcement on the live server after the failed subscribe is not received");
+        observer.Completions.Should().Be(0);
+    }
+
+    [Fact]
     public void OnStreamConnected_ShouldNotSubscribeToLaterServers_WhenAnEarlierServerHasAlreadyFailed()
     {
         using var failed = new Subject<IAudioStream>();

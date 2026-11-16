@@ -79,8 +79,8 @@ public sealed class CompositeAudioServer : IAudioServer
 
     /// <summary>
     /// Subscribes each subscriber to every server's own announcement, forwarding every notification as it arrives: no
-    /// gate, no catch, no safe-observer wrapper. That is what keeps the servers' contract, where a merge operator would
-    /// serialize all connections behind one gate and end a subscription whose observer threw.
+    /// gate, no catch around forwarding, no safe-observer wrapper. That is what keeps the servers' contract, where a
+    /// merge operator would serialize all connections behind one gate and end a subscription whose observer threw.
     /// </summary>
     private sealed class Announcements(IAudioServer[] servers) : IObservable<IAudioStream>
     {
@@ -94,8 +94,17 @@ public sealed class CompositeAudioServer : IAudioServer
             }
 
             var subscription = new Subscription(observer, servers.Length);
-            for (var i = 0; i < servers.Length && !subscription.IsStopped; i++)
-                subscription.Attach(i, servers[i].OnStreamConnected.Subscribe(new Forwarder(subscription)));
+            try
+            {
+                for (var i = 0; i < servers.Length && !subscription.IsStopped; i++)
+                    subscription.Attach(i, servers[i].OnStreamConnected.Subscribe(new Forwarder(subscription)));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // A server that cannot be subscribed to (one already disposed, say) fails the subscription as Merge
+                // does: what was already attached is disposed and the observer receives the error.
+                subscription.OnError(ex);
+            }
             return subscription;
         }
     }
