@@ -1,4 +1,4 @@
-using System.Reactive.Linq;
+using System.Reactive.Disposables;
 
 namespace Verbara.Sdk.Ari.Audio;
 
@@ -6,21 +6,40 @@ namespace Verbara.Sdk.Ari.Audio;
 /// Aggregates multiple audio servers (AudioSocket + WebSocket) into a single IAudioServer view.
 /// </summary>
 /// <remarks>
+/// <para>
+/// <see cref="OnStreamConnected"/> keeps the contract of <see cref="IAudioServer.OnStreamConnected"/> as each
+/// aggregated server keeps it: each subscription is made on every server's own announcement, and each stream
+/// reaches the observer from the handler of the connection that carries it, with no lock and no catch in between. An observer may
+/// therefore be invoked concurrently for different connections, on the same server or on different ones; one that
+/// blocks holds only the connection it was handed; and one that throws loses that connection, as the server that
+/// accepted it states, and stays subscribed for the later streams of every server.
+/// </para>
+/// <para>
 /// <see cref="ActiveStreams"/> and <see cref="ActiveStreamCount"/> only merge: the list holds every
 /// server's streams and the count is their sum. <see cref="GetStream(string)"/> hands one string to
 /// every server in turn and returns the first stream any of them holds under it.
+/// </para>
 /// </remarks>
 public sealed class CompositeAudioServer : IAudioServer
 {
     private readonly IAudioServer[] _servers;
+    private readonly Announcements _announcements;
 
     public CompositeAudioServer(IEnumerable<IAudioServer> servers)
     {
         _servers = servers.ToArray();
+        _announcements = new Announcements(_servers);
     }
 
-    public IObservable<IAudioStream> OnStreamConnected =>
-        _servers.Select(s => s.OnStreamConnected).Merge();
+    /// <summary>
+    /// Emits each new audio stream of every aggregated server, delivered as that server delivers it.
+    /// </summary>
+    /// <remarks>
+    /// A subscriber is completed once, after every aggregated server has completed, and at once when there is no
+    /// server. The first server that fails ends the subscription: the subscriber receives that error, is unsubscribed
+    /// from the other servers and receives nothing more. Disposing the subscription unsubscribes it from every server.
+    /// </remarks>
+    public IObservable<IAudioStream> OnStreamConnected => _announcements;
 
     /// <summary>
     /// Try each aggregated server in construction order and return the first stream registered
@@ -57,4 +76,90 @@ public sealed class CompositeAudioServer : IAudioServer
 
     public int ActiveStreamCount =>
         _servers.Sum(s => s.ActiveStreamCount);
+
+    /// <summary>
+    /// Subscribes each subscriber to every server's own announcement, forwarding every notification as it arrives: no
+    /// gate, no catch, no safe-observer wrapper. That is what keeps the servers' contract, where a merge operator would
+    /// serialize all connections behind one gate and end a subscription whose observer threw.
+    /// </summary>
+    private sealed class Announcements(IAudioServer[] servers) : IObservable<IAudioStream>
+    {
+        public IDisposable Subscribe(IObserver<IAudioStream> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+            if (servers.Length == 0)
+            {
+                observer.OnCompleted();
+                return Disposable.Empty;
+            }
+
+            var subscription = new Subscription(observer, servers.Length);
+            for (var i = 0; i < servers.Length && !subscription.IsStopped; i++)
+                subscription.Attach(i, servers[i].OnStreamConnected.Subscribe(new Forwarder(subscription)));
+            return subscription;
+        }
+    }
+
+    /// <summary>One subscriber's subscriptions to every server, and the end of its sequence.</summary>
+    private sealed class Subscription(IObserver<IAudioStream> observer, int serverCount) : IDisposable
+    {
+        private readonly IDisposable?[] _inner = new IDisposable?[serverCount];
+        private int _running = serverCount;
+        private int _stopped;
+
+        public bool IsStopped => Volatile.Read(ref _stopped) != 0;
+
+        public void Attach(int index, IDisposable inner)
+        {
+            Volatile.Write(ref _inner[index], inner);
+
+            // A stop that walked the slots before this write could not see it: take it back and dispose it here.
+            if (IsStopped)
+                Interlocked.Exchange(ref _inner[index], null)?.Dispose();
+        }
+
+        public void OnNext(IAudioStream stream)
+        {
+            if (!IsStopped)
+                observer.OnNext(stream);
+        }
+
+        public void OnError(Exception error)
+        {
+            if (Interlocked.Exchange(ref _stopped, 1) != 0)
+                return;
+            DisposeInner();
+            observer.OnError(error);
+        }
+
+        public void OnCompleted()
+        {
+            if (Interlocked.Decrement(ref _running) != 0 || Interlocked.Exchange(ref _stopped, 1) != 0)
+                return;
+            DisposeInner();
+            observer.OnCompleted();
+        }
+
+        public void Dispose()
+        {
+            Interlocked.Exchange(ref _stopped, 1);
+            DisposeInner();
+        }
+
+        private void DisposeInner()
+        {
+            for (var i = 0; i < _inner.Length; i++)
+                Interlocked.Exchange(ref _inner[i], null)?.Dispose();
+        }
+    }
+
+    /// <summary>One server's side of a subscription.</summary>
+    private sealed class Forwarder(Subscription subscription) : IObserver<IAudioStream>
+    {
+        public void OnNext(IAudioStream value) => subscription.OnNext(value);
+
+        public void OnError(Exception error) => subscription.OnError(error);
+
+        public void OnCompleted() => subscription.OnCompleted();
+    }
 }

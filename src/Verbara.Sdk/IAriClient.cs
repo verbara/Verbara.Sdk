@@ -990,6 +990,12 @@ public interface IAudioServer
     /// <para>
     /// An observer that <b>throws</b> loses that connection: the server logs the failure, releases the
     /// connection and closes it, and observers subscribed after the throwing one do not receive that stream.
+    /// The observer that threw stays subscribed and receives later streams.
+    /// </para>
+    /// <para>
+    /// An observer may be invoked <b>concurrently</b> for different connections: each connection's handler
+    /// delivers its own stream, and no lock orders one connection's delivery after another's. An observer that
+    /// keeps shared state makes it thread-safe.
     /// </para>
     /// <para>
     /// Long or blocking work belongs off the observer: hand the stream to <see cref="Task.Run(Func{Task})"/>,
