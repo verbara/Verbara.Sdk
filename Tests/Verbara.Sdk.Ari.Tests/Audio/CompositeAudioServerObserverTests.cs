@@ -20,9 +20,10 @@ namespace Verbara.Sdk.Ari.Tests.Audio;
 /// the same scenario subscribed on each server directly as the control.
 /// </summary>
 /// <remarks>
-/// The composite's <c>OnStreamConnected</c> is an Rx <c>Merge</c> of the two servers' subjects. Each subscription
-/// to it is one merge sink whose inner observers forward under one gate per sink, and the consumer's observer is
-/// wrapped in a safe observer that disposes the subscription when its <c>OnNext</c> throws.
+/// A composite that forwarded through a merge operator would deliver every connection's announcement under one gate
+/// per subscription and end a subscription whose observer threw: a blocked observer would then delay another
+/// connection's announcement and hold its release, and a thrower would receive nothing more. Each composite theory
+/// here fails on such a composite and has a direct-route control that measures what each server gives.
 /// </remarks>
 public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
 {
