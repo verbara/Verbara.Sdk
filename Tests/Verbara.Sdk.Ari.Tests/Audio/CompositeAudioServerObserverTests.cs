@@ -57,7 +57,11 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
     /// server is accepted, registered, counted and carries audio while an earlier observer blocks, but is not
     /// announced to a later observer until the blocked one returns (the merge forwards under one gate per
     /// subscription); and an observer that throws is unsubscribed from the composite for good (Rx's safe observer
-    /// disposes the subscription), while a direct subscriber that threw keeps receiving later streams.
+    /// disposes the subscription), while a direct subscriber that threw keeps receiving later streams. Measured the
+    /// same day, 5 of 5 runs, all four server pairings: a second connection whose far end hangs up while the earlier
+    /// observer blocks stays registered, counted and in its place under MaxConcurrentStreams until that observer
+    /// returns (its handler waits inside the announcement), so a third connection is refused at a limit of two; a
+    /// direct subscription releases it within the 10 ms poll and admits the third.
     /// </summary>
     private const string H250Skip = "H250: measured red, awaiting the owner's wording decision";
 
@@ -156,6 +160,164 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
         }
 
         Volatile.Read(ref gateTimedOut).Should().Be(0, "the test opened the gate within its bound");
+    }
+
+    // ---- An observer that blocks on one connection and another connection that hangs up --------------------------
+
+    [Theory(Skip = H250Skip)]
+    [InlineData(Transport.AudioSocket, Transport.AudioSocket)]
+    [InlineData(Transport.AudioSocket, Transport.WebSocket)]
+    [InlineData(Transport.WebSocket, Transport.WebSocket)]
+    [InlineData(Transport.WebSocket, Transport.AudioSocket)]
+    public async Task OnStreamConnected_ShouldReleaseAnotherConnectionThatHungUp_WhenAnEarlierCompositeObserverBlocks(
+        Transport first, Transport second)
+    {
+        var outcome = await CrossRetentionScenarioAsync(Route.Composite, first, second);
+        AssertReleased(outcome);
+    }
+
+    [Theory]
+    [InlineData(Transport.AudioSocket, Transport.AudioSocket)]
+    [InlineData(Transport.AudioSocket, Transport.WebSocket)]
+    [InlineData(Transport.WebSocket, Transport.WebSocket)]
+    [InlineData(Transport.WebSocket, Transport.AudioSocket)]
+    public async Task OnStreamConnected_ShouldReleaseAnotherConnectionThatHungUp_WhenAnEarlierObserverOnTheServerBlocks(
+        Transport first, Transport second)
+    {
+        var outcome = await CrossRetentionScenarioAsync(Route.Direct, first, second);
+        AssertReleased(outcome);
+    }
+
+    private static void AssertReleased(CrossRetentionOutcome outcome)
+    {
+        using var scope = new AssertionScope();
+        outcome.SecondDisconnected.Should().BeTrue("the second connection's far end hung up");
+        outcome.SecondHeldThroughWindow.Should().BeFalse("a connection that hung up is released whatever another connection's observer does");
+        outcome.CountAfterWindow.Should().Be(1, "only the blocked connection is still counted");
+        outcome.HeldAfterWindow.Should().Be(1, "and only it holds a place under the limit");
+        outcome.ThirdAdmitted.Should().BeTrue("so a new connection is admitted under a limit of two");
+        outcome.GateTimedOut.Should().BeFalse("the test opened the gate within its bound");
+    }
+
+    private sealed record CrossRetentionOutcome(
+        Route Route,
+        Transport First,
+        Transport Second,
+        bool SecondDisconnected,
+        double DisconnectedMs,
+        bool SecondHeldThroughWindow,
+        double ReleasedMs,
+        int CountAfterWindow,
+        int HeldAfterWindow,
+        bool ThirdAdmitted,
+        double ThirdMs,
+        bool ReleasedAfterGate,
+        double ReleasedAfterGateMs,
+        bool GateTimedOut);
+
+    /// <summary>
+    /// A blocks an earlier observer; B, on the same server or the other, is accepted and then hangs up while A's observer
+    /// still blocks; B's registration, count and place under a limit of two are read over a bounded window, and a third
+    /// connection C on B's transport is offered while that holds.
+    /// </summary>
+    private async Task<CrossRetentionOutcome> CrossRetentionScenarioAsync(Route route, Transport first, Transport second)
+    {
+        await using var rig = await Rig.StartAsync(maxConcurrentStreams: 2);
+        using var gate = new ManualResetEventSlim(false);
+        var blockedOn = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gateTimedOut = 0;
+        using var blocker = rig.Subscribe(route, stream =>
+        {
+            if (!blockedOn.TrySetResult(stream.ChannelId))
+                return;
+            if (!gate.Wait(GateLimit))
+                Interlocked.Exchange(ref gateTimedOut, 1);
+        });
+
+        try
+        {
+            using var callA = await Call.OpenAsync(rig, first);
+            (await blockedOn.Task.WaitAsync(WaitLimit)).Should().Be(callA.Key, "the first stream reaches the blocking observer");
+            (await rig.Registrations.WaitAsync(WaitLimit)).Should().BeTrue("A is registered");
+
+            using var callB = await Call.OpenAsync(rig, second);
+            (await rig.Registrations.WaitAsync(WaitLimit)).Should().BeTrue("B is accepted and registered");
+            var streamB = rig.Composite.GetStream(callB.Key);
+            streamB.Should().NotBeNull("B is found once registered");
+
+            var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var states = streamB!.StateChanges.Subscribe(state =>
+            {
+                if (state is AudioStreamState.Disconnected or AudioStreamState.Error)
+                    disconnected.TrySetResult();
+            });
+
+            var clock = Stopwatch.StartNew();
+            callB.Dispose();
+            bool secondDisconnected;
+            try
+            {
+                await disconnected.Task.WaitAsync(WaitLimit);
+                secondDisconnected = true;
+            }
+            catch (TimeoutException)
+            {
+                secondDisconnected = false;
+            }
+
+            var disconnectedMs = clock.Elapsed.TotalMilliseconds;
+
+            // Held over the whole bounded window, not read once: a release that is merely late is not a hold.
+            var releasedMs = await WaitUntilAsync(
+                () => rig.Composite.GetStream(callB.Key) is null && rig.Options.Admission.Held == 1, QuietWindow);
+            var heldThroughWindow = releasedMs is null;
+            var count = rig.Composite.ActiveStreamCount;
+            var held = rig.Options.Admission.Held;
+
+            var thirdClock = Stopwatch.StartNew();
+            Call? callC = null;
+            bool thirdAdmitted;
+            try
+            {
+                callC = await Call.OpenAsync(rig, second).WaitAsync(WaitLimit);
+                thirdAdmitted = await rig.Registrations.WaitAsync(QuietWindow) && rig.Composite.GetStream(callC.Key) is not null;
+            }
+            catch (Exception ex) when (ex is TimeoutException or OperationCanceledException or SocketException or InvalidOperationException or IOException)
+            {
+                thirdAdmitted = false;
+            }
+
+            var thirdMs = thirdClock.Elapsed.TotalMilliseconds;
+            using var thirdCall = callC;
+
+            gate.Set();
+            var afterGateMs = await WaitUntilAsync(() => rig.Composite.GetStream(callB.Key) is null, WaitLimit);
+
+            var outcome = new CrossRetentionOutcome(
+                route, first, second, secondDisconnected, disconnectedMs, heldThroughWindow, releasedMs ?? -1, count, held,
+                thirdAdmitted, thirdMs, afterGateMs is not null, afterGateMs ?? -1, Volatile.Read(ref gateTimedOut) == 1);
+            output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"CROSS route={route} A={first} B={second}: disconnected={secondDisconnected} disconnectedMs={disconnectedMs:F1} heldThroughWindow={heldThroughWindow} releasedMs={outcome.ReleasedMs:F1} count={count} admissionHeld={held} thirdAdmitted={thirdAdmitted} thirdMs={thirdMs:F1} releasedAfterGate={outcome.ReleasedAfterGate} afterGateMs={outcome.ReleasedAfterGateMs:F1} gateTimedOut={outcome.GateTimedOut}"));
+            return outcome;
+        }
+        finally
+        {
+            gate.Set();
+        }
+    }
+
+    /// <summary>Milliseconds until <paramref name="condition"/> held, or null when it did not within <paramref name="limit"/>.</summary>
+    private static async Task<double?> WaitUntilAsync(Func<bool> condition, TimeSpan limit)
+    {
+        var clock = Stopwatch.StartNew();
+        while (true)
+        {
+            if (condition())
+                return clock.Elapsed.TotalMilliseconds;
+            if (clock.Elapsed >= limit)
+                return null;
+            await Task.Delay(10);
+        }
     }
 
     // ---- P3: an observer that throws -----------------------------------------------------------------------------
@@ -383,12 +545,16 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
     {
         private Rig(AudioServerOptions options)
         {
+            Options = options;
             AudioSocket = new AudioSocketServer(options, AudioSocketLog, TimeProvider.System);
             WebSocket = new WebSocketAudioServer(options, WebSocketLog, TimeProvider.System);
             AudioSocket.AfterRegistryAdd = () => Registrations.Release();
             WebSocket.AfterRegistryAdd = () => Registrations.Release();
             Composite = new CompositeAudioServer([AudioSocket, WebSocket]);
         }
+
+        /// <summary>The one options instance both servers share, and with it their admission count.</summary>
+        public AudioServerOptions Options { get; }
 
         public CapturingLogger<AudioSocketServer> AudioSocketLog { get; } = new();
 
@@ -407,7 +573,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
 
         public int WebSocketPort { get; private set; }
 
-        public static async Task<Rig> StartAsync()
+        public static async Task<Rig> StartAsync(int maxConcurrentStreams = 1000)
         {
             // MediaStartTimeout zero: a WebSocket connection is announced under its path segment at once, without a
             // MEDIA_START, so the only wait between the upgrade and the announcement is the one under test.
@@ -420,6 +586,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
                     DefaultFormat = "slin16",
                     IdleTimeout = TimeSpan.FromSeconds(5),
                     MediaStartTimeout = TimeSpan.Zero,
+                    MaxConcurrentStreams = maxConcurrentStreams,
                 }),
                 async r =>
                 {
