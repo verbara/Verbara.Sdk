@@ -14,8 +14,13 @@ fails=0; pass=0
 ok()   { pass=$((pass + 1)); }
 bad()  { echo "FAIL: $1"; fails=$((fails + 1)); }
 
+# Every throwaway repo lives under one root that is removed on exit, pass or fail, so a run
+# leaves nothing behind in the temp directory.
+TMP_ROOT="$(mktemp -d)"
+trap 'rm -rf "$TMP_ROOT"' EXIT
+
 new_repo() { # new_repo [seed-file ...]
-  WORK="$(mktemp -d)"
+  WORK="$(mktemp -d -p "$TMP_ROOT")"
   git -C "$WORK" init -q
   git -C "$WORK" config user.email t@t.t
   git -C "$WORK" config user.name t

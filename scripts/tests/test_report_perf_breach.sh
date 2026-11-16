@@ -15,8 +15,13 @@ fails=0; pass=0
 ok()  { pass=$((pass + 1)); }
 bad() { echo "FAIL: $1"; fails=$((fails + 1)); }
 
+# Every throwaway workspace lives under one root that is removed on exit, pass or fail, so a run
+# leaves nothing behind in the temp directory.
+TMP_ROOT="$(mktemp -d)"
+trap 'rm -rf "$TMP_ROOT"' EXIT
+
 setup() {
-  WORK="$(mktemp -d)"
+  WORK="$(mktemp -d -p "$TMP_ROOT")"
   BIN="$WORK/bin"; mkdir -p "$BIN"
   GH_LOG="$WORK/gh.log"; : > "$GH_LOG"
   BODY="$WORK/report.md"
