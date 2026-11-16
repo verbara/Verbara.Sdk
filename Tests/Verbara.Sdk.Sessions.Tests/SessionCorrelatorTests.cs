@@ -40,6 +40,26 @@ public sealed class SessionCorrelatorTests
         SessionCorrelator.IsLocalChannel("PJSIP/100-00000001").Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("Snoop/1794794992.7-00000001")]
+    [InlineData("snoop/1794794992.7-00000001")]
+    public void IsSnoopChannel_ShouldReturnTrue_WhenNameHasSnoopPrefix(string channelName)
+    {
+        SessionCorrelator.IsSnoopChannel(channelName).Should().BeTrue(
+            "Asterisk names an ARI/app_snoop tap Snoop/<target uniqueid>-<n>, and the technology prefix is matched ignoring case");
+    }
+
+    [Theory]
+    [InlineData("PJSIP/100-00000001")]
+    [InlineData("Local/100@default-00000001;1")]
+    [InlineData("SnoopX/1794794992.7-00000001")]
+    [InlineData("")]
+    public void IsSnoopChannel_ShouldReturnFalse_WhenNameIsNotASnoop(string channelName)
+    {
+        SessionCorrelator.IsSnoopChannel(channelName).Should().BeFalse(
+            "only the exact Snoop/ technology prefix marks a snoop; other technologies, a longer name and an empty name do not");
+    }
+
     [Fact]
     public void ExtractTechnology_ShouldParsePjsip()
     {
