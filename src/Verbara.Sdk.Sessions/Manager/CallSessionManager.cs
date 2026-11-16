@@ -1076,6 +1076,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             for (var i = 0; i < channels.Length; i++)
             {
                 var channel = channels[i];
+                // A snoop carrying this linkedid is a tap on the call, not one of its channels, and its own hangup no
+                // longer decides by linkedid: counting it here would keep the call open after its real legs leave.
+                // One the call holds as a participant (restored from an earlier version) is still counted above.
+                if (SessionCorrelator.IsSnoopChannel(channel.Name)) continue;
                 if (ChannelManager.IsDeparting(channel))
                 {
                     if (call.HasRecordedDeparture(channel.UniqueId, channel.AdmissionMark)) continue;

@@ -103,6 +103,107 @@ public sealed class SnoopChannelAdmissionTests
         rig.AssertIndexes();
     }
 
+    [Fact]
+    public async Task AdmitExistingCalls_ShouldEndTheCallFromItsLegs_WhenTheyHangUpWhileASnoopCarryingItsLinkedIdIsStillHeld()
+    {
+        // The order Asterisk gives a real snoop: it ends after the channel it taps.
+        await using var rig = await AdmissionRig.CreateAsync();
+        rig.Add("X"); rig.Add("Y");
+        AddSnoop(rig, "S1", linkedId: "L");
+        rig.Attach();
+        await rig.Manager.AdmitExistingCalls("server");
+        var call = rig.Manager.GetByLinkedId("server", "L")!;
+
+        rig.Hangup("X"); rig.Hangup("Y");
+        rig.Ends(call).Should().Be(1, "the call's real legs are gone; the held snoop is not one of its channels");
+        rig.Manager.ActiveSessions.Should().BeEmpty();
+        rig.Hangup("S1");
+        rig.Ends(call).Should().Be(1);
+        rig.Events.Count(e => e is CallEndedEvent or CallFailedEvent).Should().Be(1);
+        rig.AssertIndexes();
+    }
+
+    [Fact]
+    public async Task OnChannelRemoved_ShouldEndAReconstructedSnoopSession_WhenItIsRegisteredAfterAttachAndItsSnoopHangsUp()
+    {
+        // The other order of the restore: the host attaches first and registers the stored session afterwards.
+        await using var rig = await AdmissionRig.CreateAsync();
+        rig.Add("X");
+        AddSnoop(rig, "S1", linkedId: "S1");
+        rig.Attach();
+        var restored = RestoredSnoopSession("restored-snoop", "S1");
+        rig.Manager.RegisterReconstructedSession(restored).Should().BeTrue();
+        rig.Manager.GetByChannelId("server", "S1").Should().BeSameAs(restored);
+
+        rig.Hangup("S1");
+        rig.Ends(restored).Should().Be(1);
+        rig.Manager.GetByChannelId("server", "S1").Should().BeNull();
+        rig.Manager.ActiveSessions.Should().NotContain(restored);
+        rig.AssertIndexes();
+    }
+
+    /// <summary>
+    /// A mixed restored call: 2.10.0 joined a snoop carrying a call's linkedid to that call and stored it so. Restored,
+    /// the snoop is one of the call's own participants, so its hangup is recorded on that call like any participant's
+    /// (the third requirement, not the second: the second is about calls a snoop is not a participant of), and the call
+    /// ends once its last participant, snoop or leg, has left.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task OnChannelRemoved_ShouldEndAMixedRestoredCallAtItsLastParticipant_WhenItHoldsLegsAndASnoop(bool snoopFirst)
+    {
+        await using var rig = await AdmissionRig.CreateAsync();
+        rig.Add("X"); rig.Add("Y");
+        AddSnoop(rig, "S1", linkedId: "L");
+        rig.Attach();
+        var restored = new CallSession("restored-mixed", "L", "server", CallDirection.Inbound);
+        foreach (var (id, name, role) in new[]
+                 {
+                     ("X", "PJSIP/X", ParticipantRole.Caller), ("Y", "PJSIP/Y", ParticipantRole.Agent),
+                     ("S1", SnoopName, ParticipantRole.Agent),
+                 })
+            restored.AddParticipant(new SessionParticipant
+            {
+                UniqueId = id, Channel = name, Technology = TechnologyOf(name), Role = role,
+                JoinedAt = DateTimeOffset.UtcNow
+            });
+        rig.Manager.RegisterReconstructedSession(restored).Should().BeTrue();
+        rig.Manager.GetByChannelId("server", "S1").Should().BeSameAs(restored);
+
+        if (snoopFirst)
+        {
+            rig.Hangup("S1");
+            rig.Ends(restored).Should().Be(0, "its legs X and Y are still up");
+            restored.Participants.Single(p => p.UniqueId == "S1").LeftAt.Should().NotBeNull(
+                "the snoop is this call's own participant, so its departure is recorded on it");
+            rig.Hangup("X"); rig.Hangup("Y");
+        }
+        else
+        {
+            rig.Hangup("X"); rig.Hangup("Y");
+            rig.Ends(restored).Should().Be(0, "the snoop is still one of this call's present participants");
+            rig.Hangup("S1");
+        }
+
+        rig.Ends(restored).Should().Be(1);
+        rig.Manager.ActiveSessions.Should().BeEmpty();
+        rig.AssertIndexes();
+    }
+
+    private static string TechnologyOf(string channel) => channel[..channel.IndexOf('/', StringComparison.Ordinal)];
+
+    private static CallSession RestoredSnoopSession(string sessionId, string snoopId)
+    {
+        var restored = new CallSession(sessionId, snoopId, "server", CallDirection.Inbound);
+        restored.AddParticipant(new SessionParticipant
+        {
+            UniqueId = snoopId, Channel = SnoopName, Technology = "Snoop", Role = ParticipantRole.Caller,
+            JoinedAt = DateTimeOffset.UtcNow
+        });
+        return restored;
+    }
+
     private static void AddSnoop(AdmissionRig rig, string uniqueId, string linkedId) =>
         rig.Run.Server.Channels.OnNewChannel(uniqueId, SnoopName, ChannelState.Up, linkedId: linkedId);
 }

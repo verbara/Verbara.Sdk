@@ -170,6 +170,50 @@ public sealed class CallSessionManagerSnoopChannelTests : IAsyncLifetime
             + "departure, so the call keeps its two legs and later ends exactly as the same call with no snoop ends");
     }
 
+    /// <summary>
+    /// The order Asterisk gives a real snoop: it ends after the channel it taps. The call's legs hang up while the snoop
+    /// carrying its linkedid is still held, and the call ends right then, from its legs, as the same call ends with no
+    /// snoop; the snoop's later hangup changes nothing.
+    /// </summary>
+    [Fact]
+    public void OnChannelRemoved_ShouldEndTheCallFromItsLegs_WhenTheyHangUpWhileASnoopCarryingItsLinkedIdIsStillHeld()
+    {
+        _sut.AttachToServer(_server, ServerId);
+        var twin = AnsweredCall("1794794990.1", "1794794990.2");
+        var call = AnsweredCall("1794794992.7", "1794794992.8");
+
+        const string snoopId = "1794794993.15";
+        const string snoop = "Snoop/1794794992.7-00000001";
+        _server.Channels.OnNewChannel(snoopId, snoop, ChannelState.Up, linkedId: call.LinkedId);
+
+        HangUpBoth(twin, "1794794990.1", "1794794990.2");
+        _server.Channels.OnHangup("1794794992.8", HangupCause.NormalClearing);
+        _server.Channels.OnHangup("1794794992.7", HangupCause.NormalClearing);
+        var endedWhileSnoopHeld = !_sut.ActiveSessions.Any(s => ReferenceEquals(s, call));
+        var endingWhileSnoopHeld = Ending(call);
+        var eventsBeforeSnoopHangup = _events.Count;
+        _server.Channels.OnHangup(snoopId, HangupCause.NormalClearing);
+
+        new
+        {
+            EndedWhileSnoopHeld = endedWhileSnoopHeld,
+            Ending = endingWhileSnoopHeld,
+            NotificationsAtSnoopHangup = _events.Skip(eventsBeforeSnoopHangup).Select(e => e.GetType().Name).ToArray(),
+            AuditNamingTheSnoop = call.Events.Where(e => e.SourceChannel == snoop).Select(e => e.Type.ToString()).ToArray(),
+            Active = _sut.ActiveSessions.Count(),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                EndedWhileSnoopHeld = true,
+                Ending = Ending(twin),
+                NotificationsAtSnoopHangup = Array.Empty<string>(),
+                AuditNamingTheSnoop = Array.Empty<string>(),
+                Active = 0,
+            },
+            "a held snoop is not one of the call's channels: when the last real leg leaves the call ends then, exactly as "
+            + "the same call with no snoop ends, and the snoop's later hangup decides nothing");
+    }
+
     // --- reconstruction: a held snoop under the reconstructed call's linkedid ---------------------------------------
 
     [Fact]
