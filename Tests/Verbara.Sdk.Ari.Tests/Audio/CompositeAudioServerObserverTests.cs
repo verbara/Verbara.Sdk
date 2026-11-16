@@ -381,7 +381,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
                 return clock.Elapsed.TotalMilliseconds;
             if (clock.Elapsed >= limit)
                 return null;
-            await Task.Delay(10);
+            await Task.Delay(10); // fence-allow: LOOP-DRIVER — paces the poll of a bounded wait; the limit bounds the loop
         }
     }
 
