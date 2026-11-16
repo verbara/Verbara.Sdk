@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.10.1] - 2026-11-16
+
 ### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#584)
 
 `AddVerbara` always registers `CompositeAudioServer`, and its `OnStreamConnected` merged the servers' announcements
@@ -26,7 +28,7 @@ connections, as it already could be when subscribed to one server directly. An o
 make it thread-safe. Completion, the first error and an empty composite keep their meaning; a server that cannot be
 subscribed to (one already disposed) fails the subscription with its error, as before.
 
-### Fixed: a snoop channel is no longer treated as a call leg
+### Fixed: a snoop channel is no longer treated as a call leg (#582)
 
 `CallSessionManager` treated a snoop channel (`Snoop/<target uniqueid>-<n>`, the channel Asterisk creates for an ARI
 snoop or `app_snoop` tap) as a call leg. A snoop carries a linkedid of its own, so each one opened a call session of its
