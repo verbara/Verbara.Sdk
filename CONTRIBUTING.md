@@ -113,27 +113,24 @@ dotnet test Verbara.Sdk.slnx --filter "Category=Functional|Category=Integration|
 
 Releases are driven by tag pushes matching `v*` (e.g. `v1.12.0`, `v1.12.1`). The `.github/workflows/publish.yml` workflow checks that the tagged commit was built green on `main`, builds in Release, packs every shipping project, builds the release notes from `CHANGELOG.md`, pushes all `.nupkg` files to nuget.org via `dotnet nuget push --skip-duplicate`, and creates the GitHub Release. No manual `dotnet nuget push` or `gh release create` is needed.
 
-### One-time setup — `NUGET_API_KEY` secret
+### One-time setup — nuget.org Trusted Publishing
 
-The workflow reads `${{ secrets.NUGET_API_KEY }}` from GitHub repository secrets. If the secret is missing or expired, the push step fails with HTTP 403 on the first package. Set or rotate the key **without pasting it into chat, commits, or issue comments** — any secret that travels through a transcript should be rotated immediately after.
+`publish.yml` holds no API key. It pushes through nuget.org [Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing): the job requests a GitHub OIDC token (`id-token: write`) and the `NuGet/login` step exchanges it with nuget.org for a push key that is valid for one hour. nuget.org issues that key only to this repository's `publish.yml`, as a Trusted Publishing policy on the package owner's account allows.
 
-The safe flow is local-only — the value never appears in the command line or shell history:
+Two things must be in place, both set once:
 
-```bash
-# 1. Generate / rotate at https://www.nuget.org/account/apikeys
-#    Scopes: "Push new packages and package versions"
-#    Glob Pattern: Verbara.Sdk.*
-#    Expiration: 365 days (max)
+1. **A Trusted Publishing policy on nuget.org** (account menu → *Trusted Publishing*), on the account that owns the `Verbara.Sdk*` packages:
+   - Repository owner `verbara`, repository `Verbara.Sdk`, workflow file `publish.yml`, no environment.
+   - Scope *Push new packages and package versions*, glob pattern `Verbara.Sdk*`.
 
-# 2. Pipe from clipboard or password manager directly to gh secret set:
-pbpaste | gh secret set NUGET_API_KEY --repo verbara/Verbara.Sdk              # macOS
-xclip -selection clipboard -o | gh secret set NUGET_API_KEY --repo verbara/Verbara.Sdk   # Linux X11
-wl-paste | gh secret set NUGET_API_KEY --repo verbara/Verbara.Sdk              # Linux Wayland
-pass show nuget/api-key | gh secret set NUGET_API_KEY --repo verbara/Verbara.Sdk         # pass(1)
+   When editing an existing policy, check the glob field before saving: the edit form can show it empty, and saving it empty leaves the policy covering no package.
+2. **The `NUGET_USER` repository variable**: the nuget.org profile name of that account (the policy's *Package owner*), never an e-mail address. A variable is not masked in logs, which are public here, so it must hold only what the nuget.org profile already shows:
 
-# 3. Verify the secret is registered (value stays encrypted):
-gh secret list --repo verbara/Verbara.Sdk
-```
+   ```bash
+   gh variable set NUGET_USER --repo verbara/Verbara.Sdk --body <nuget.org profile name>
+   ```
+
+A dispatched dry run (step 3 below) runs the login too, so it proves the exchange works before a tag depends on it; its log reads `Successfully exchanged OIDC token for NuGet API key.` and the key it gets is never used.
 
 ### Cutting a release
 
@@ -191,6 +188,8 @@ If `publish.yml` refuses or fails, **do not delete and re-push the tag** — the
   gh run rerun <failed-run-id> --failed
   gh run rerun <publish-run-id>
   ```
+
+- **The Trusted Publishing login failed.** Nothing was pushed. Check that the nuget.org policy is active and still names this repository, `publish.yml` and the `Verbara.Sdk*` glob, and that `NUGET_USER` holds the policy owner's profile name; then re-run the publish run.
 
 - **The push stopped partway through.** Fix the cause and re-run the publish run. `--skip-duplicate` skips the packages already on the feed, and the run then checks the feed and creates the GitHub Release if it does not exist yet.
 
