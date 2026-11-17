@@ -21,7 +21,7 @@ fi
 mapfile -t files <<< "$raw"
 for f in "${files[@]}"; do
   case "$f" in
-    # BEGIN docsnippets-carveout (must stay a superset of DocSnippetCompilationTests.cs `sources`)
+    # BEGIN docsnippets-carveout (must stay a superset of the snippet source list in DocSnippetCompilationTests.cs)
     README.md|docs/README-technical.md|docs/guides/ami-connection-state-and-health-migration.md|docs/guides/asterisk-version-compatibility.md|docs/guides/conference-participants-migration.md|docs/guides/high-load-tuning.md|docs/guides/migration-2.9.0.md|docs/guides/migration-2.10.0.md|docs/guides/obsolete-ami-events-removal-migration.md|docs/guides/session-store-backends.md|docs/guides/troubleshooting.md)
     # END docsnippets-carveout
       echo "docs_only=false"; exit 0 ;;

@@ -98,18 +98,71 @@ if (cd "$WORK" && bash "$CLASSIFY" "" >/dev/null 2>&1); then bad "empty BASE mus
 if (cd "$WORK" && bash "$CLASSIFY" deadbeefdeadbeef HEAD >/dev/null 2>&1); then bad "unreachable base must exit non-zero"; else ok; fi
 
 # --- drift guard: the carve-out MUST remain a superset of DocSnippetCompilationTests.cs sources ---
-if [ -f "$CS" ]; then
-  carve="$(grep -A1 'BEGIN docsnippets-carveout' "$CLASSIFY" | tail -1 | tr -d ' \t' | sed 's/).*$//')"
+# The guard reads the list the snippet test really iterates: the collection named by a
+# `foreach (var x in <name>)`, from its declaration `<name> =` up to the first `;`. That holds for
+# a field (`string[] _snippetSources = [...]`), a local (`var sources = new[] {...}`) or any other
+# collection type, and survives a rename. Finding no declaration that lists a .md file is a loud
+# failure, never a silent pass: a guard that reads nothing passes whatever the carve-out holds.
+snippet_sources() { # snippet_sources <cs-file> — one path per line; exit 1 when no list is found
+  local cs="$1" names n out=""
+  names="$(sed -nE 's/.*foreach[[:space:]]*\([^)]*[[:space:]]in[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*\).*/\1/p' "$cs" | sort -u)"
+  for n in $names; do
+    out+="$(awk -v n="$n" '
+      !inside && $0 !~ /foreach/ && $0 ~ ("(^|[^A-Za-z0-9_.])" n "[[:space:]]*=") \
+        && $0 !~ (n "[[:space:]]*=[=>]") { inside = 1 }
+      inside { print; if ($0 ~ /;/) exit }' "$cs" | grep -oE '"[^"]+\.md"' | tr -d '"' || true)"$'\n'
+  done
+  out="$(printf '%s' "$out" | sed '/^$/d' | sort -u)"
+  [ -n "$out" ] || return 1
+  printf '%s\n' "$out"
+}
+carveout() { # carveout <classifier> — the pipe-separated carve-out line; exit 1 when absent
+  local c
+  c="$(grep -A1 'BEGIN docsnippets-carveout' "$1" | tail -1 | tr -d ' \t' | sed 's/).*$//')"
+  case "$c" in *.md*) printf '%s\n' "$c" ;; *) return 1 ;; esac
+}
+drift_missing() { # drift_missing <cs-file> <classifier> — prints each source the carve-out lacks
+  local srcs carve s
+  srcs="$(snippet_sources "$1")" || { echo "NO-SNIPPET-SOURCE-DECLARATION"; return 2; }
+  carve="$(carveout "$2")" || { echo "NO-CARVEOUT"; return 2; }
   while IFS= read -r s; do
-    [ -n "$s" ] || continue
-    case "|$carve|" in
-      *"|$s|"*) ok ;;
-      *) bad "DocSnippets source '$s' is NOT in the classifier carve-out (a docs PR editing it would skip Unit Tests)" ;;
-    esac
-  done <<< "$(sed -n '/var sources = new\[\]/,/};/p' "$CS" | grep -oE '"[^"]+\.md"' | tr -d '"')"
+    case "|$carve|" in *"|$s|"*) ;; *) echo "$s" ;; esac
+  done <<< "$srcs"
+}
+
+if [ -f "$CS" ]; then
+  if missing="$(drift_missing "$CS" "$CLASSIFY")"; then
+    if [ -z "$missing" ]; then ok; else
+      while IFS= read -r s; do
+        bad "DocSnippets source '$s' is NOT in the classifier carve-out (a docs PR editing it would skip Unit Tests)"
+      done <<< "$missing"
+    fi
+  else
+    bad "drift guard read nothing ($missing) from $CS / $CLASSIFY — it cannot vouch for the carve-out"
+  fi
+  # The guard must read a list, not one stray string: the real list holds README.md and more.
+  n_read="$(snippet_sources "$CS" | wc -l)" || n_read=0
+  [ "$n_read" -ge 2 ] && ok || bad "drift guard read only $n_read snippet source(s) from $CS"
 else
   bad "DocSnippetCompilationTests.cs not found — the carve-out drift guard cannot run"
 fi
+
+# --- drift guard negative controls: the guard must be able to turn red ---
+CTRL="$(mktemp -d -p "$TMP_ROOT")"
+printf '%s\n' 'class T {' '    private static readonly string[] _snippetSources =' '    [' \
+  '        "README.md",' '        "docs/guides/not-in-the-carveout.md",' '    ];' \
+  '    void M() { foreach (var relativePath in _snippetSources) { } }' '}' > "$CTRL/outside.cs"
+out="$(drift_missing "$CTRL/outside.cs" "$CLASSIFY" || true)"
+[ "$out" = "docs/guides/not-in-the-carveout.md" ] && ok \
+  || bad "negative control: a source outside the carve-out must be reported, got '$out'"
+printf '%s\n' 'class T {' '    void M() {' '        var sources = new[] { "README.md", "docs/README-technical.md" };' \
+  '        foreach (var s in sources) { }' '    }' '}' > "$CTRL/local.cs"
+[ "$(snippet_sources "$CTRL/local.cs")" = "$(printf '%s\n' README.md docs/README-technical.md | sort -u)" ] && ok \
+  || bad "shape control: a local 'var sources = new[] {...}' list must be read"
+printf '%s\n' 'class T {' '    private static readonly string[] _paths = [ "README.md" ];' '}' > "$CTRL/none.cs"
+if drift_missing "$CTRL/none.cs" "$CLASSIFY" >/dev/null; then
+  bad "negative control: a file with no iterated source list must fail the guard, not pass it"
+else ok; fi
 
 echo "---"; echo "passed=$pass failed=$fails"
 [ "$fails" -eq 0 ] || exit 1
