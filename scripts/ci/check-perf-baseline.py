@@ -61,6 +61,16 @@ When the baseline declares `"jit_isa"`, every declared source's BenchmarkDotNet 
 ISA and no other ("RyuJIT x86-64-v3"); a log that names another, or no log at all, is a structural
 failure, so the pin cannot fall off without the gate saying so.
 
+PINNED ENVIRONMENT. The ISA is not the only thing that moves the JIT's output: a new runtime patch
+can change code generation too (that is how the AVX-512 shift arrived, with 10.0.12). So the
+baseline may also declare `"environment"`: the exact .NET SDK (`dotnet_sdk`), the exact runtime
+(`dotnet_runtime`) and the logical core count (`logical_cores`) the bands and bytes were read
+under. The workflow installs that SDK, and only it, from the same declaration. Every declared
+source's report must then show the same three values in its `HostEnvironmentInfo`
+(`DotNetCliVersion`, the version in `RuntimeVersion`, `LogicalCoreCount`); a value that differs,
+or one the report does not record, is a structural failure. A run on another runtime or another
+core count is not compared quietly as if it were the same experiment.
+
 REPORTED BOTH WAYS, FAILING ONE WAY. Every breach is reported in both directions, but only the
 regression side fails the job: SLOWER, MORE-BYTES and every structural failure. FASTER and
 FEWER-BYTES are a stale baseline or work that went away; they still annotate the run, still set
@@ -230,6 +240,11 @@ def load_baseline(path):
     if jit_isa is not None and (not isinstance(jit_isa, str) or not jit_isa):
         die(f"baseline '{path}' \"jit_isa\" must be a non-empty string such as \"x86-64-v3\".")
 
+    if "environment" in doc and doc["environment"] is None:
+        die(f"baseline '{path}' \"environment\" is null: remove the key to leave the environment "
+            f"unpinned, or declare it.")
+    environment = _load_environment(path, doc.get("environment"))
+
     # Every baselined benchmark must belong to a declared source, or its report would never be
     # looked for and its absence would go unnoticed — a hole the same shape as `|| true`.
     types = set(sources.values())
@@ -262,7 +277,101 @@ def load_baseline(path):
             die(f"baseline entry '{full_name}' is both in \"benchmarks\" and in \"unbanded\". "
                 f"It either has a band or it does not.")
         declared[full_name] = reason.strip()
-    return sources, parsed, declared, jit_isa
+    return sources, parsed, declared, jit_isa, environment
+
+
+_VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?")
+
+
+def _load_environment(path, environment):
+    """The optional `environment` declaration: None when absent, else all three keys, validated.
+    A partial declaration is refused rather than half-checked: a key nobody compares is a pin
+    that fell off without saying so."""
+    if environment is None:
+        return None
+    if not isinstance(environment, dict):
+        die(f"baseline '{path}' \"environment\" must be an object with \"dotnet_sdk\", "
+            f"\"dotnet_runtime\" and \"logical_cores\".")
+    for key in ("dotnet_sdk", "dotnet_runtime"):
+        value = environment.get(key)
+        if not isinstance(value, str) or not _VERSION.fullmatch(value):
+            die(f"baseline '{path}' \"environment.{key}\" must be an exact version such as "
+                f"\"10.0.404\", not {value!r}: a range or a wildcard pins nothing.")
+    cores = environment.get("logical_cores")
+    if not isinstance(cores, int) or isinstance(cores, bool) or cores <= 0:
+        die(f"baseline '{path}' \"environment.logical_cores\" must be a positive integer, not "
+            f"{cores!r}.")
+    unknown = sorted(k for k in environment if not k.startswith("_")
+                     and k not in ("dotnet_sdk", "dotnet_runtime", "logical_cores"))
+    if unknown:
+        die(f"baseline '{path}' \"environment\" has unknown key(s) {unknown}: the comparator "
+            f"would not check them, so they would read as pinned when they are not.")
+    return {"dotnet_sdk": environment["dotnet_sdk"],
+            "dotnet_runtime": environment["dotnet_runtime"],
+            "logical_cores": cores}
+
+
+_RUNTIME_VERSION = re.compile(r"^\.NET ([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)(?:\s|$)")
+
+
+def _observed_environment(host):
+    """(sdk, runtime, cores) as one report's HostEnvironmentInfo records them; None for any value
+    it does not record in a readable form."""
+    if not isinstance(host, dict):
+        return None, None, None
+    sdk = host.get("DotNetCliVersion")
+    sdk = sdk if isinstance(sdk, str) and sdk else None
+    raw = host.get("RuntimeVersion")
+    match = _RUNTIME_VERSION.match(raw) if isinstance(raw, str) else None
+    runtime = match.group(1) if match else None
+    cores = host.get("LogicalCoreCount")
+    cores = cores if isinstance(cores, int) and not isinstance(cores, bool) and cores > 0 else None
+    return sdk, runtime, cores
+
+
+def _shown(value):
+    """An observed value as it goes into a one-line annotation: plain when it is a plain version or
+    count, quoted (control characters escaped) otherwise, so a newline cannot cut the message."""
+    text = str(value)
+    return text if re.fullmatch(r"[0-9A-Za-z.+-]+", text) else repr(value)
+
+
+def check_environment(artifacts_root, sources, environment):
+    """Structural failures for every declared source whose report does not show the declared SDK,
+    runtime and core count. A source with no readable report is skipped: collect_observed already
+    reports it, once."""
+    structural = []
+    if not environment:
+        return structural
+    labels = (("dotnet_sdk", "SDK", "HostEnvironmentInfo.DotNetCliVersion"),
+              ("dotnet_runtime", "runtime", "HostEnvironmentInfo.RuntimeVersion"),
+              ("logical_cores", "logical core count", "HostEnvironmentInfo.LogicalCoreCount"))
+    for subdir in sorted(sources):
+        type_name = sources[subdir]
+        report = os.path.join(artifacts_root, subdir, "results", f"{type_name}{REPORT_SUFFIX}")
+        try:
+            with open(report, encoding="utf-8") as handle:
+                doc = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(doc, dict):
+            continue
+        observed = dict(zip(("dotnet_sdk", "dotnet_runtime", "logical_cores"),
+                            _observed_environment(doc.get("HostEnvironmentInfo"))))
+        for key, what, field in labels:
+            declared = environment[key]
+            seen = observed[key]
+            if seen is None:
+                structural.append(
+                    f"[{type_name}] the report does not record a readable {field}, so the "
+                    f"declared {what} {declared} cannot be confirmed.")
+            elif seen != declared:
+                structural.append(
+                    f"[{type_name}] measured on {what} {_shown(seen)}, not the declared {declared}: the "
+                    f"run is not the experiment the baseline was read from, and its numbers are "
+                    f"not compared as if it were. Move the declaration in baseline.json "
+                    f"\"environment\" only with a re-read of the rows (baseline.README.md).")
+    return structural
 
 
 ISA_PATTERN = re.compile(r"RyuJIT (x86-64-v[0-9]+)")
@@ -576,10 +685,11 @@ def render_markdown(rows, failing, reported, structural, extras, enforce):
 
 def main(argv):
     baseline_path, artifacts_root, markdown_out, enforce = parse_args(argv)
-    sources, baseline, declared, jit_isa = load_baseline(baseline_path)
+    sources, baseline, declared, jit_isa, environment = load_baseline(baseline_path)
 
     observed_raw, structural = collect_observed(artifacts_root, sources)
     structural += check_isa(artifacts_root, sources, jit_isa)
+    structural += check_environment(artifacts_root, sources, environment)
     rows, failing, reported, more_structural = evaluate(baseline, observed_raw)
     structural += more_structural
     extras, unbanded_structural = evaluate_unbanded(baseline, declared, observed_raw)
@@ -588,6 +698,12 @@ def main(argv):
     mode = "ENFORCING" if enforce else "OBSERVING"
     print(f"perf-baseline: mode={mode} baseline={baseline_path} artifacts={artifacts_root}")
     print(f"perf-baseline: jit_isa={jit_isa or '(not pinned)'}")
+    if environment:
+        print(f"perf-baseline: environment sdk={environment['dotnet_sdk']} "
+              f"runtime={environment['dotnet_runtime']} "
+              f"logical_cores={environment['logical_cores']}")
+    else:
+        print("perf-baseline: environment=(not pinned)")
     print(f"{'benchmark':<62} {'baseline':>12} {'observed':>12} {'delta':>9} {'band':>7} "
           f"{'base B':>10} {'obs B':>10} {'dB':>8}  verdict")
     for row in rows:

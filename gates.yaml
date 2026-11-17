@@ -75,10 +75,12 @@ gates:
       per-PR budget gate (BenchmarkDotNet needs ~20-25 min for stable numbers; per-PR cost rejected).
       Tests/Verbara.Sdk.Benchmarks/baseline.json + scripts/ci/check-perf-baseline.py now diff every
       weekly run against committed hosted-runner bands and fail closed on a missing/empty result
-      (ADR-0042 D4), with a breach filing an issue (D5) — but the workflow stays schedule +
-      workflow_dispatch only and contributes NO required check, and the comparison is still
-      OBSERVING (PERF_GATE_ENFORCE='false') pending two clean scheduled runs. So: a gate exists,
-      it is not a per-PR budget gate, and G6 stays `na`.
+      (ADR-0042 D4), with a breach filing an issue (D5). The comparison ENFORCES
+      (PERF_GATE_ENFORCE='true': SLOWER, MORE-BYTES and structural failures fail the run; FASTER and
+      FEWER-BYTES are reported) and measures on the SDK, runtime and core count baseline.json
+      `environment` declares, failing closed when a report shows another. But the workflow stays
+      schedule + workflow_dispatch only and contributes NO required check. So: a gate exists, it is
+      not a per-PR budget gate, and G6 stays `na`.
 
   - id: G7
     class: publish-reality

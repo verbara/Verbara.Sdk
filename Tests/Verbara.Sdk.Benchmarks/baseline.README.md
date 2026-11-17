@@ -26,6 +26,7 @@ ENFORCING guard behind the AMI-throughput claim and the rest of `README.md`'s Pe
 | `bytes` | BenchmarkDotNet's `Memory.BytesAllocatedPerOperation` — allocated bytes per operation, **independent of the CPU model and ISA, not of the core count** — read on the hosted runner |
 | `bytes_tolerance` | a **two-sided** absolute bound in bytes; `0` (the default) means exact |
 | `jit_isa` (top level) | the instruction-set level every BenchmarkDotNet log must report (`x86-64-v3`) |
+| `environment` (top level) | the exact .NET SDK and runtime the job installs and measures with, and the logical core count it expects; every report must show all three |
 | **not** | the workstation figures published in `README.md` / `docs/README-technical.md` |
 
 The published figures were measured on an AMD Ryzen 9 9900X (12C/24T) and are **1.97×–2.35×
@@ -104,6 +105,35 @@ and `Create1000Channels`' are therefore **provisional** and wider than the rest 
 widening stops the gate from seeing. A comparison of a reference build against this one inside the
 same job, on the same host, is what replaces them.
 
+## The pinned SDK and runtime
+
+The ISA pin holds the JIT's instruction set; it does not hold the JIT itself. A .NET runtime patch
+can change code generation on its own (10.0.12 is when the JIT began targeting AVX-512 on the hosts
+that have it), and before this pin the job measured with whatever `10.0.x` the runner image
+carried, so a time breach could be the runtime and nobody could tell which.
+
+So `environment` declares the SDK (`dotnet_sdk`), the runtime (`dotnet_runtime`) and the core count
+(`logical_cores`) this baseline is read under, and three things follow from that one declaration:
+
+1. The workflow reads `dotnet_sdk` from `baseline.json` (the version is not repeated in the
+   workflow) and installs that SDK into an empty directory (`DOTNET_INSTALL_DIR`), away from the
+   SDKs and runtimes preinstalled on the image. Roll-forward has nothing newer to pick.
+2. Before building, the job checks that the declared SDK and the declared runtime are the **only**
+   ones reachable, and stops if not, before 15 minutes of benchmarks are spent.
+3. The comparator reads every source's `HostEnvironmentInfo` (`DotNetCliVersion`, the version in
+   `RuntimeVersion`, `LogicalCoreCount`) and fails closed when one differs from the declaration or
+   is not recorded.
+
+The pin applies to this job only. The rest of the repository keeps `10.0.x` and `global.json`'s
+`rollForward: latestFeature`; `publish.yml` prints `dotnet --version` and `dotnet --info` so each
+published package's toolchain is on record.
+
+**The cost: a new .NET patch is not measured until a PR moves the declaration.** That PR is a
+re-baseline under the protocol below: it names the new SDK and runtime, and it re-reads every row
+on the new runtime (or says, row by row, why the old figure stands), because a runtime that moved
+the numbers is exactly the event this pin exists to make visible. The declared SDK must ship the
+declared runtime (the .NET release notes pair them; step 2 fails the run otherwise).
+
 ## Reported both ways, failing one way
 
 A breach is reported when `|observed − baseline| / baseline` exceeds the band **in either
@@ -136,6 +166,7 @@ Accepted reasons, and what each one obliges:
 | **A deliberate optimisation landed.** | Name the PR/commit that made it faster. The baseline follows the code, not the other way round. |
 | **A deliberate, accepted slowdown landed.** | Name the PR **and** the trade it bought (correctness fix, feature). A slowdown with no named trade is the regression, not a new baseline. |
 | **The runner fleet moved.** | Say which CPU models the new figures were observed on, and over how many runs. This is the one reason that carries no code meaning — say so explicitly, so a future reader does not mistake it for a performance event. |
+| **The .NET SDK or runtime moved** (`environment`). | Name the old and new SDK and runtime, the runs read on the new runtime, and every row the move changed. A row that moved with nothing else changed is a runtime effect: say so, so nobody reads it as code. |
 | **The benchmark itself changed.** | A renamed or rewritten benchmark is a **new** entry, not an edited one. Remove the old key, add the new one, and update the `sources` row if the class moved. |
 
 Not accepted, in any form: *"the run was red"*, *"CI is noisy"*, *"widen the band until it passes"*.
@@ -220,10 +251,13 @@ green. `check-perf-baseline.py` treats each of these as a **breach**, not a skip
   `0` or less there is the harness's resolution floor and is listed, not failed;
 - a row baselined on `bytes` has no numeric `Memory.BytesAllocatedPerOperation` (the memory
   diagnoser was removed);
-- a source's BenchmarkDotNet log names a JIT ISA other than `jit_isa`, or no log names one.
+- a source's BenchmarkDotNet log names a JIT ISA other than `jit_isa`, or no log names one;
+- a source's report shows an SDK, runtime or logical core count other than `environment`'s, or
+  does not record one.
 
 Separately, exit code **2** means the *guard* is broken (bad arguments, unreadable or invalid
-`baseline.json`, including a malformed `unbanded` entry: not an object, no `reason`, a class no
+`baseline.json`, including an `environment` that is partial, names a range instead of an exact
+version, or carries a key the comparator does not check, and a malformed `unbanded` entry: not an object, no `reason`, a class no
 `sources` row declares, or a key that is also in `benchmarks`) and fails the job in **both** modes — a misconfigured guard reading green is the
 `|| true` hole wearing a different hat.
 
