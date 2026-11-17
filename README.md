@@ -1,6 +1,6 @@
 # Verbara Sdk (formerly Asterisk.Sdk)
 
-> The modern .NET SDK for Asterisk PBX. AMI, AGI, ARI, Live API, Sessions, Voice AI — all in one package. Native AOT. Zero reflection. MIT licensed.
+> The modern .NET SDK for Asterisk PBX. AMI, AGI, ARI, Live API and Sessions in one meta-package, Voice AI as add-on packages. Native AOT. Zero reflection. MIT licensed.
 >
 > **Rebrand history:** released as `Asterisk.Sdk.*` through v1.15.3, fully renamed to `Verbara.Sdk.*` in **v2.0.0** (2026-05-06) — see ADR-0036. The legacy `Asterisk.Sdk.*` packages on nuget.org are deprecated; each points to its `Verbara.Sdk.*` replacement.
 
