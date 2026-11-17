@@ -672,6 +672,48 @@ class CheckPerfBaselineTests(unittest.TestCase):
         self.assertEqual(1, result.returncode, result.stdout)
         self.assertIn("measured on logical core count 8, not the declared 4", result.stdout)
 
+    def test_Main_ShouldBreach_WhenOnlyTheSecondSourceRanElsewhere(self):
+        second = "Verbara.Sdk.Benchmarks.OtherBenchmark"
+        self._write_baseline({
+            "sources": {"fake": _TYPE, "other": second},
+            "environment": dict(_ENVIRONMENT),
+            "benchmarks": {_ALPHA: {"mean_ns": 1000.0, "tolerance_pct": 10},
+                           f"{second}.Delta": {"mean_ns": 1000.0, "tolerance_pct": 10}},
+        })
+        good = {"DotNetCliVersion": "10.0.404",
+                "RuntimeVersion": ".NET 10.0.15 (10.0.15, 10.0.1526.53008)"}
+        self._write_report([_entry(_ALPHA, 1000.0)], cores=4, host_extra=good)
+        self._write_report([_entry(f"{second}.Delta", 1000.0)], subdir="other", type_name=second,
+                           cores=2, host_extra=good)
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn(f"[{second}] measured on logical core count 2", result.stdout)
+        self.assertNotIn(f"[{_TYPE}] measured on", result.stdout)
+        self.assertEqual("1", self._outputs()["structural"])
+
+    def test_Main_ShouldBreach_WhenAnObservedValueIsAlmostTheDeclaredOne(self):
+        # Close is not equal: each of these is another build, another runtime, or a value the
+        # report does not record in the form BenchmarkDotNet writes.
+        cases = (
+            ({"sdk": "10.0.404-preview.1"}, "measured on SDK 10.0.404-preview.1"),
+            ({"sdk": " 10.0.404\n"}, "measured on SDK ' 10.0.404\\n', not the declared"),
+            ({"runtime": ".NET 10.0.15-rc.1.1 (x)"}, "measured on runtime 10.0.15-rc.1.1"),
+            ({"runtime": ".NET Core 10.0.15 (x)"}, "readable HostEnvironmentInfo.RuntimeVersion"),
+            ({"runtime": ".NET 10.0.15.1 (x)"}, "readable HostEnvironmentInfo.RuntimeVersion"),
+            ({"cores": 4.0}, "readable HostEnvironmentInfo.LogicalCoreCount"),
+            ({"cores": "4"}, "readable HostEnvironmentInfo.LogicalCoreCount"),
+        )
+        for overrides, expected in cases:
+            with self.subTest(**{k: repr(v) for k, v in overrides.items()}):
+                self._environment_fixture(**overrides)
+                result = self._run("--enforce")
+                self.assertEqual(1, result.returncode, result.stdout)
+                self.assertIn(expected, result.stdout)
+
+    def test_Main_ShouldExitTwo_WhenTheEnvironmentIsNull(self):
+        self._write_baseline(dict(_BASELINE, environment=None))
+        self.assertEqual(2, self._run().returncode)
+
     def test_Main_ShouldBreach_WhenTheReportRecordsNoEnvironment(self):
         self._environment_fixture(sdk=None, runtime="unparseable", cores=None)
         result = self._run("--enforce")
@@ -923,6 +965,8 @@ class CommittedBaselineContractTests(unittest.TestCase):
         setup = re.findall(r"(?m)^\s+- uses: actions/setup-dotnet@\S+\n((?:\s{8,}.*\n)+)", code)
         self.assertEqual(1, len(setup), "exactly one setup-dotnet step")
         self.assertIn("DOTNET_INSTALL_DIR:", setup[0])
+        # Without it setup-dotnet installs the newest LTS runtime into the same directory first.
+        self.assertRegex(setup[0], r"skip-lts-prepass: true")
         self.assertRegex(setup[0], r"dotnet-version: \$\{\{ steps\.declared\.outputs\.sdk \}\}")
         order = [code.index(marker) for marker in (
             "id: declared", "actions/setup-dotnet@",

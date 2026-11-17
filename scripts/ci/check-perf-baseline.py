@@ -240,6 +240,9 @@ def load_baseline(path):
     if jit_isa is not None and (not isinstance(jit_isa, str) or not jit_isa):
         die(f"baseline '{path}' \"jit_isa\" must be a non-empty string such as \"x86-64-v3\".")
 
+    if "environment" in doc and doc["environment"] is None:
+        die(f"baseline '{path}' \"environment\" is null: remove the key to leave the environment "
+            f"unpinned, or declare it.")
     environment = _load_environment(path, doc.get("environment"))
 
     # Every baselined benchmark must belong to a declared source, or its report would never be
@@ -326,6 +329,13 @@ def _observed_environment(host):
     return sdk, runtime, cores
 
 
+def _shown(value):
+    """An observed value as it goes into a one-line annotation: plain when it is a plain version or
+    count, quoted (control characters escaped) otherwise, so a newline cannot cut the message."""
+    text = str(value)
+    return text if re.fullmatch(r"[0-9A-Za-z.+-]+", text) else repr(value)
+
+
 def check_environment(artifacts_root, sources, environment):
     """Structural failures for every declared source whose report does not show the declared SDK,
     runtime and core count. A source with no readable report is skipped: collect_observed already
@@ -357,7 +367,7 @@ def check_environment(artifacts_root, sources, environment):
                     f"declared {what} {declared} cannot be confirmed.")
             elif seen != declared:
                 structural.append(
-                    f"[{type_name}] measured on {what} {seen}, not the declared {declared}: the "
+                    f"[{type_name}] measured on {what} {_shown(seen)}, not the declared {declared}: the "
                     f"run is not the experiment the baseline was read from, and its numbers are "
                     f"not compared as if it were. Move the declaration in baseline.json "
                     f"\"environment\" only with a re-read of the rows (baseline.README.md).")

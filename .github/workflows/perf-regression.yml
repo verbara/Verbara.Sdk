@@ -88,7 +88,9 @@ jobs:
       # must not be the runtime in disguise. The version is read from baseline.json, not repeated
       # here, so the install and the comparator's check cannot disagree. DOTNET_INSTALL_DIR puts it
       # in an empty directory: the runner image's preinstalled SDKs and runtimes live elsewhere,
-      # so roll-forward has nothing newer to pick. The check after it fails before 15 minutes of
+      # so roll-forward has nothing newer to pick. `skip-lts-prepass` matters as much: by default
+      # setup-dotnet first installs the newest LTS runtime into that same directory, which would
+      # put the next 10.0 patch next to the declared one the week it ships. The check after it fails before 15 minutes of
       # benchmarks if anything else is reachable; the comparator checks the reports again.
       - name: Read the declared .NET environment
         id: declared
@@ -104,6 +106,7 @@ jobs:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-pinned
         with:
           dotnet-version: ${{ steps.declared.outputs.sdk }}
+          skip-lts-prepass: true
       - name: Confirm the pinned SDK and runtime are the only ones reachable
         env:
           DECLARED_SDK: ${{ steps.declared.outputs.sdk }}
