@@ -1407,37 +1407,19 @@ public sealed class AriClientStateTests
 
         using var caller = new CancellationTokenSource();
         var sut = new AriClient(CloseOptions(port), NullLogger<AriClient>.Instance);
-        List<(CancellationTokenSource? Source, ClientWebSocket? Socket)> held = [];
-        var endedBeforeRead = 0;
+        // The attempt's fields are read from inside the dial's bound, which every attempt creates on the caller's
+        // thread before it dials. Read after ConnectAsync returned instead, they are gone whenever the refused dial
+        // had already failed by then and the attempt ended inline: legal on every runtime, and common on .NET 11
+        // under load, where a refused loopback connect completes synchronously far more often.
+        var capture = new AttemptCapture(sut);
+        sut.TimeProvider = capture;
 
         try
         {
             for (var attempt = 1; attempt <= attempts; attempt++)
-            {
-                // A refused dial ends within a millisecond, and the attempt's end (which clears both fields) runs
-                // wherever its await resumes. Started under a context that holds what is posted to it, the attempt
-                // cannot resume, and so cannot end, until the test has read the fields it set up.
-                var hold = new HoldingSynchronizationContext(SynchronizationContext.Current);
-                Task connect;
-                SynchronizationContext.SetSynchronizationContext(hold);
-                try
-                {
-                    connect = sut.ConnectAsync(caller.Token).AsTask();
-                }
-                finally
-                {
-                    SynchronizationContext.SetSynchronizationContext(hold.Next);
-                }
+                _ = await Record.ExceptionAsync(() => sut.ConnectAsync(caller.Token).AsTask().WaitAsync(WaitLimit));
 
-                held.Add((
-                    (CancellationTokenSource?)AttemptSourceField.GetValue(sut),
-                    (ClientWebSocket?)AttemptSocketField.GetValue(sut)));
-                if (connect.IsCompleted)
-                    endedBeforeRead++;
-                hold.Release();
-                _ = await Record.ExceptionAsync(() => connect.WaitAsync(WaitLimit));
-            }
-
+            var held = capture.Attempts;
             var undisposedSources = held.Count(h => h.Source is not null && !IsDisposed(h.Source));
             var undisposedSockets = 0;
             foreach (var (_, socket) in held)
@@ -1448,8 +1430,9 @@ public sealed class AriClientStateTests
 
             using (new AssertionScope())
             {
-                endedBeforeRead.Should().Be(0, "each attempt's fields are read while the attempt is still running");
+                held.Should().HaveCount(attempts, "each attempt reaches its dial's bound once");
                 held.Should().OnlyContain(h => h.Source != null && h.Socket != null, "each attempt opened a source and a socket");
+                held.Select(h => h.Socket).Should().OnlyHaveUniqueItems("each attempt opened a socket of its own");
                 undisposedSources.Should().Be(0,
                     "each refused attempt's source is released when its attempt ended");
                 undisposedSockets.Should().Be(0, "each refused attempt's events socket is released when its attempt ended");
@@ -2047,48 +2030,32 @@ public sealed class AriClientStateTests
     }
 
     /// <summary>
-    /// Holds every continuation posted to it until <see cref="Release"/>, then hands those, and any posted after, to the
-    /// thread pool. Current while a call runs up to its first yield, it keeps that call from resuming, and so from
-    /// ending, until the test has looked at what it set up.
+    /// The system clock, which also records the client's attempt fields each time a timer is asked for. The only timer a
+    /// refused connect asks for is its dial's bound, created on the caller's thread while the attempt's source and
+    /// socket are set and before the dial starts, so every attempt is read while it is still running.
     /// </summary>
-    private sealed class HoldingSynchronizationContext(SynchronizationContext? next) : SynchronizationContext
+    private sealed class AttemptCapture(AriClient client) : TimeProvider
     {
         private readonly Lock _gate = new();
-        private List<(SendOrPostCallback Callback, object? State)>? _held = [];
+        private readonly List<(CancellationTokenSource? Source, ClientWebSocket? Socket)> _attempts = [];
 
-        /// <summary>The context this one replaced, to be restored once the call has yielded.</summary>
-        public SynchronizationContext? Next { get; } = next;
-
-        public override void Post(SendOrPostCallback d, object? state)
+        public IReadOnlyList<(CancellationTokenSource? Source, ClientWebSocket? Socket)> Attempts
         {
-            lock (_gate)
+            get
             {
-                if (_held is not null)
-                {
-                    _held.Add((d, state));
-                    return;
-                }
+                lock (_gate)
+                    return [.. _attempts];
             }
-
-            Forward(d, state);
         }
 
-        /// <summary>Hands on what was held, in order, and everything posted from now on.</summary>
-        public void Release()
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
-            List<(SendOrPostCallback Callback, object? State)> held;
+            var attempt = ((CancellationTokenSource?)AttemptSourceField.GetValue(client),
+                (ClientWebSocket?)AttemptSocketField.GetValue(client));
             lock (_gate)
-            {
-                held = _held ?? [];
-                _held = null;
-            }
-
-            foreach (var (callback, state) in held)
-                Forward(callback, state);
+                _attempts.Add(attempt);
+            return System.CreateTimer(callback, state, dueTime, period);
         }
-
-        private static void Forward(SendOrPostCallback d, object? state) =>
-            ThreadPool.QueueUserWorkItem(static held => held.Callback(held.State), (Callback: d, State: state), preferLocal: false);
     }
 
     private sealed record LogEntry(
