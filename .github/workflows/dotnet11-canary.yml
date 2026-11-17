@@ -1,0 +1,170 @@
+name: .NET 11 Canary
+
+# Does this tree build, run and publish Native AOT on .NET 11 today? The answer feeds the decision on a
+# `net11.0` target, which is taken when 2.12.0 is scoped; until then the packages stay on `net10.0`.
+# Three lanes, each its own job so one red does not hide the other two:
+#
+#   build    SDK 11, the tree as it is (net10.0, TreatWarningsAsErrors, the repository's analyzers).
+#            Red here means a newer SDK's analyzers or compiler reject code that SDK 10 accepts.
+#   runtime  SDK 11 builds net10.0 with warnings left as warnings (the build lane owns them), then the
+#            unit tests run on runtime 11: it is the only runtime installed, and DOTNET_ROLL_FORWARD=Major
+#            lets a net10.0 test host start on it. Red here is a behaviour change of runtime 11.
+#   aot      Every project retargeted to net11.0, tools/AotCanary published with ILC 11 and run.
+#
+# NOT A REQUIRED CHECK, AND IT MUST STAY THAT WAY. It is outside the `main` ruleset and the merge queue:
+# no `merge_group` trigger, and `pull_request` only for a PR that edits the canary itself, so its own
+# change is measured before it lands and no other PR ever shows its check. A .NET preview or a new
+# analyzer turning it red is the information it exists to give, not a reason to block anyone.
+#
+# It overrides global.json in its own checkout: the repository's says 10.0.100 with `latestFeature`,
+# and `latestFeature` never crosses a major version.
+#
+# Manual run: gh workflow run ".NET 11 Canary"
+
+on:
+  schedule:
+    # Mondays 05:00 UTC, the day after the Sunday perf run, so the two never share a runner window.
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/dotnet11-canary.yml'
+      - 'scripts/ci/dotnet11-canary.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dotnet11-canary-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # `11.0.x`, not an exact version: the canary's job is to meet each new .NET 11 patch the week it ships.
+  # The installed SDK and runtime are printed in every lane's summary, so a result is never unattributed.
+  CANARY_DOTNET: '11.0.x'
+  DOTNET_NOLOGO: '1'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  UNIT_FILTER: 'Category!=Functional&Category!=Integration&Category!=Realtime&Category!=Spike'
+
+jobs:
+  build:
+    name: Build on SDK 11 (tree as is)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      # An empty install directory and no LTS pre-pass: the runner image's .NET 10 SDKs and runtimes live
+      # elsewhere, and setup-dotnet would otherwise also install the newest LTS runtime next to 11.
+      - uses: actions/setup-dotnet@v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-11
+        with:
+          dotnet-version: ${{ env.CANARY_DOTNET }}
+          skip-lts-prepass: true
+      - name: Pin global.json to the one SDK 11 reachable
+        id: pin
+        run: |
+          set -o pipefail
+          python3 scripts/ci/dotnet11-canary.py pin-sdk | tee -a "$GITHUB_OUTPUT"
+      - name: Build (Release, warnings as errors)
+        run: |
+          set -o pipefail
+          dotnet build Verbara.Sdk.slnx -c Release --nologo 2>&1 | tee build.log
+      - name: Summary
+        if: always()
+        env:
+          SDK: ${{ steps.pin.outputs.sdk }}
+          RUNTIME: ${{ steps.pin.outputs.runtime }}
+        run: |
+          {
+            echo "### build — SDK ${SDK:-?}, runtime ${RUNTIME:-?}, net10.0, warnings as errors"
+            if [ -f build.log ]; then
+              echo '| Diagnostic | Count |'
+              echo '|---|---|'
+              grep -oE ' (error|warning) [A-Z]+[0-9]+' build.log | sort | uniq -c | sort -rn \
+                | awk '{print "| " $2 " " $3 " | " $1 " |"}' || true
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  runtime:
+    name: Unit tests on runtime 11
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DOTNET_ROLL_FORWARD: Major
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          lfs: true
+      - uses: actions/setup-dotnet@v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-11
+        with:
+          dotnet-version: ${{ env.CANARY_DOTNET }}
+          skip-lts-prepass: true
+      - name: Pin global.json to the one SDK 11 reachable
+        id: pin
+        run: |
+          set -o pipefail
+          python3 scripts/ci/dotnet11-canary.py pin-sdk | tee -a "$GITHUB_OUTPUT"
+      - name: Build (Release, warnings left as warnings)
+        run: dotnet build Verbara.Sdk.slnx -c Release --nologo -p:TreatWarningsAsErrors=false
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          dotnet test Verbara.Sdk.slnx --no-build -c Release --filter "$UNIT_FILTER" 2>&1 | tee test.log
+      - name: Summary
+        if: always()
+        env:
+          SDK: ${{ steps.pin.outputs.sdk }}
+          RUNTIME: ${{ steps.pin.outputs.runtime }}
+        run: |
+          {
+            echo "### runtime — tests on Microsoft.NETCore.App ${RUNTIME:-?} (SDK ${SDK:-?}), net10.0 rolled forward"
+            if [ -f test.log ]; then
+              echo "- assemblies passed: $(grep -c '^Passed!' test.log || true), failed: $(grep -c '^Failed!' test.log || true)"
+              grep -E '^\s+Failed [A-Za-z]' test.log | sed 's/^\s*/- /' || true
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  aot:
+    name: Native AOT on net11.0
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # LFS: the canary's smoke run loads the turn-detection ONNX model; without LFS it is a 132-byte
+      # pointer and the binary dies parsing it, which says nothing about .NET 11.
+      - uses: actions/checkout@v7.0.1
+        with:
+          lfs: true
+      - uses: actions/setup-dotnet@v6.1.0
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-11
+        with:
+          dotnet-version: ${{ env.CANARY_DOTNET }}
+          skip-lts-prepass: true
+      - name: Pin global.json to the one SDK 11 reachable
+        id: pin
+        run: |
+          set -o pipefail
+          python3 scripts/ci/dotnet11-canary.py pin-sdk | tee -a "$GITHUB_OUTPUT"
+      - name: Retarget every project to net11.0
+        run: python3 scripts/ci/dotnet11-canary.py retarget net11.0
+      - name: Publish tools/AotCanary with ILC and run it
+        run: |
+          set -o pipefail
+          python3 scripts/ci/dotnet11-canary.py aot net11.0 2>&1 | tee aot.log
+      - name: Summary
+        if: always()
+        env:
+          SDK: ${{ steps.pin.outputs.sdk }}
+          RUNTIME: ${{ steps.pin.outputs.runtime }}
+        run: |
+          {
+            echo "### aot — net11.0, SDK ${SDK:-?}, runtime ${RUNTIME:-?}"
+            if [ -f aot.log ]; then
+              grep -E '^(aot net11\.0:|dotnet11-canary:)' aot.log | sed 's/^/- /' || true
+              grep -oE 'microsoft\.dotnet\.ilcompiler/[0-9][^"/]*' tools/AotCanary/obj/project.assets.json 2>/dev/null \
+                | sort -u | sed 's/^/- /' || true
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
