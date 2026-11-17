@@ -1421,10 +1421,16 @@ public sealed class CallerReconnectReloadTests
         await rig.LoseAndComeBackAsync(Route.Caller);
         var fenced = await CompletesWithinBoundAsync(agentsFence.Task);
         var firstLoaded = rig.Run.ServerLog.Logged(StateLoaded, 2);
+        // Wait for whichever comes first, the load's end or its next timer. A timer fired before the load has awaited
+        // it resumes the load on the load's own thread, not inside Advance, so the load can end after Advance returns
+        // and create no further timer: checking IsCompleted and then waiting for a timer would wait for one never made.
         while (fenced && !firstLoaded.IsCompleted)
         {
-            var timer = await barrierClock.TimersCreated.ReadAsync().AsTask().WaitAsync(Run.Bound);
-            barrierClock.Advance(timer.DueTime);
+            using var stop = new CancellationTokenSource();
+            var next = barrierClock.TimersCreated.ReadAsync(stop.Token).AsTask();
+            var first = await Task.WhenAny(firstLoaded, next).WaitAsync(Run.Bound);
+            await stop.CancelAsync();
+            if (first == next && next.IsCompletedSuccessfully) barrierClock.Advance((await next).DueTime);
         }
 
         await firstLoaded.WaitAsync(Run.Bound);
