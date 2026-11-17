@@ -100,7 +100,10 @@ Its data maps each server id to its connection's state name.
   `agi`, `ari`, `sessions`, `verbara-pool`):
   `services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"))`, before or after the
   SDK's registrations. A host configured with `AddVerbara(IConfiguration)` can set the array
-  `Asterisk:HealthCheckTags` instead; the key and every `Configure` add to one set. To tag one check,
+  `Asterisk:HealthCheckTags` instead; the key and every `Configure` add to one set. That holds while
+  each contribution adds: `Configure` delegates run in registration order, so a later one that calls
+  `o.Tags.Clear()` or `o.Tags.Remove(...)` erases what the earlier ones added, the configuration key
+  included (`AddVerbara` applies it as a `Configure`). To tag one check,
   edit its registration in a `PostConfigure`:
 
   ```csharp

@@ -4,14 +4,14 @@ The recommended entry point to the [Verbara.Sdk](https://github.com/verbara/Verb
 
 ## What it does
 
-- **`AddVerbara(IConfiguration | Action<VerbaraOptions>)`** — registers `IAmiConnection`, `IAriClient`, `IAgiServer`, the Live API (`VerbaraServer`), `IActivityRegistry`, `ISessionEngine`, and the supporting hosted services. Source-generator-validated.
+- **`AddVerbara(IConfiguration | Action<VerbaraOptions>)`** — registers `IAmiConnection` (and `IAmiConnectionFactory`), `IAgiServer`, the Live API (`VerbaraServer` / `IVerbaraServer`), `IAriClient` when an `Ari` section is set, the health checks, and the supporting hosted services. Source-generator-validated. Sessions are a separate call: **`AddVerbaraSessions`** registers `ICallSessionManager`, `IAgentSessionTracker`, `IQueueSessionTracker` and the in-memory `ISessionStore`.
 - **`AddVerbaraAri(Action<AriClientOptions>)`** — registers `IAriClient` and nothing else, for a host that needs only ARI ([below](#ari-only-hosts)).
 - **`VerbaraOptions`** — strongly-typed configuration model with `[OptionsValidator]` source-generated validation (no runtime reflection). Bind directly from `appsettings.json` or configure inline.
 - **Hosted lifecycle** — `IHostedService` implementations connect AMI on `StartAsync`, drain on `StopAsync`. AGI server, ARI WebSocket, and `VerbaraServer` (Live aggregate) follow the same pattern.
 - **Health checks** — `AmiHealthCheck` (`ami`, the same state table as `live`), `LiveHealthCheck` (`live`) and `AgiHealthCheck` (`agi`) auto-registered, `AriHealthCheck` (`ari`, the same state table as `ami`, ARI's `Faulted` as `Unhealthy`) with an `Ari` section; `AddVerbaraMultiServer` adds `VerbaraServerPoolHealthCheck` (`verbara-pool`); all with no tags unless you name them (`VerbaraHealthCheckOptions.Tags`). Expose them at a diagnostics endpoint such as `/health`; point Kubernetes probes at endpoints filtered by tag, and never put an SDK check on the tag your readiness probe reads ([Health endpoint](#health-endpoint)).
 - **Multi-server support** — register multiple `VerbaraServer` instances via `VerbaraServerPool` for federated deployments.
 
-This is a **meta-package**: it does not contain its own runtime types. It transitively pulls in `Verbara.Sdk`, `Verbara.Sdk.Ami`, `Verbara.Sdk.Agi`, `Verbara.Sdk.Ari`, `Verbara.Sdk.Live`, `Verbara.Sdk.Activities`, `Verbara.Sdk.Sessions`, and `Verbara.Sdk.Config`. Add Voice AI / Push / OpenTelemetry packages on top as needed.
+This is a **meta-package** with a thin layer of its own: besides the DI extensions it ships the hosted services that run the connections and the session engine, `VerbaraOptions`, `VerbaraHealthCheckOptions` and `VerbaraTelemetry`. It transitively pulls in `Verbara.Sdk`, `Verbara.Sdk.Ami`, `Verbara.Sdk.Agi`, `Verbara.Sdk.Ari`, `Verbara.Sdk.Live`, `Verbara.Sdk.Activities`, `Verbara.Sdk.Sessions`, and `Verbara.Sdk.Config`. Add Voice AI / Push / OpenTelemetry packages on top as needed.
 
 ## Install
 
@@ -159,6 +159,9 @@ The `live` check reads the AMI connection before the state it holds: `Connected`
 Every SDK check (`ami`, `live`, `agi`, `ari`, `sessions`, `verbara-pool`) is registered with no tags unless you name them
 in `VerbaraHealthCheckOptions.Tags` — `builder.Services.Configure<VerbaraHealthCheckOptions>(o => o.Tags.Add("voice"))`,
 before or after the SDK's registrations — or, with `AddVerbara(IConfiguration)`, in the array `Asterisk:HealthCheckTags`.
+The contributions add to one set only while each of them adds: `Configure` delegates run in the order they were
+registered, so a later `Configure` that calls `o.Tags.Clear()` or `o.Tags.Remove(...)` erases what the ones before it
+added, the `Asterisk:HealthCheckTags` array included (it is applied as a `Configure` at the `AddVerbara` call).
 Never name the tag your readiness probe reads: an Asterisk outage would take the pod out of service. To tag one check, or
 keep one off the host-wide tag, see the `PostConfigure` recipe under [Multi-server](#multi-server-federation).
 

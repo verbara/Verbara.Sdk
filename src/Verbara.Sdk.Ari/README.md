@@ -4,7 +4,7 @@ Asterisk REST Interface (ARI) client for .NET 10 with Native AOT support.
 
 ## Features
 
-- REST client for all 8 ARI resources (Channels, Bridges, Playbacks, Recordings, Endpoints, Applications, Sounds, DeviceStates)
+- REST client for 10 ARI resources (Channels, Bridges, Playbacks, Recordings, Endpoints, Applications, Sounds, DeviceStates, Asterisk, Mailboxes)
 - WebSocket event streaming with 46 event types
 - AOT-safe JSON serialization via `System.Text.Json` source generation
 - Automatic reconnection with exponential backoff
