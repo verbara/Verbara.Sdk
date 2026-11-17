@@ -23,6 +23,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Live` | [A refused `Status` is counted and reported by the pool health check](#a-refused-status-is-counted-and-reported-by-the-pool-health-check) | new members, health check |
 | `Verbara.Sdk.Live` | [A waiting caller that only hangs up leaves the queue table](#a-waiting-caller-that-only-hangs-up-leaves-the-queue-table) | fix, behaviour |
 | `Verbara.Sdk.Live` | [A queue created after the load is found without a reconnect](#a-queue-created-after-the-load-is-found-without-a-reconnect) | new member, behaviour |
+| `Verbara.Sdk.Live` | [A reconnect you make yourself reloads Live](#a-reconnect-you-make-yourself-reloads-live) | fix, behaviour |
 | `Verbara.Sdk.Ami` | [A parking event names its channel and where it is parked](#a-parking-event-names-its-channel-and-where-it-is-parked) | fix, new members |
 | `Verbara.Sdk.Ami` | [`NewExtenEvent` and `NewCallerIdEvent` carry what the wire sends](#newextenevent-and-newcalleridevent-carry-what-the-wire-sends) | fix, new members |
 | `Verbara.Sdk.Ami` | [An action the SDK does not type is sent with `RawAction`](#an-action-the-sdk-does-not-type-is-sent-with-rawaction) | new type, behaviour, BREAKING |
@@ -500,6 +501,30 @@ calls `Queues.RemoveQueue` or `Queues.Clear`: the next event naming that queue l
 
 **What to do.** Nothing. Call `ReconcileQueuesAsync` after a change on the Asterisk side that creates queues no event
 will name soon.
+
+### A reconnect you make yourself reloads Live
+
+**What changed.** With `AutoReconnect` off, a successful `ConnectAsync` on an `AmiConnection` after a lost AMI session
+now runs Live's full state reload on the new session. In 2.9.0 Live stayed empty until the host called
+`RequestInitialStateAsync` itself. A load whose AMI session is lost stops there: a list it has not applied is not
+applied, and it asks nothing of the session that replaced it. A reload no longer empties the agents table first; the
+table is replaced in one step once the `Agents` list completes.
+
+**Who is affected.**
+
+- A host with `AutoReconnect` off that calls `RequestInitialStateAsync` after its own `ConnectAsync`. The call still
+  works, and each held call and queue visit is represented once, but it is now a second full AMI load on every
+  reconnect.
+- A caller of `RequestInitialStateAsync` whose session can be lost during the load: the call now throws
+  `AmiNotConnectedException`, where it used to finish on the newer session.
+- A handler of `QueueManager.CallerJoined`: after a reconnect you make yourself it is raised once for each caller still
+  waiting, as on any reload, on an object that is not the one in `AsteriskQueue.Entries`.
+- A handler of `AgentManager.AgentLoggedIn`: it is raised after the `Agents` list completes, never for a row of a list
+  cut short, and not for an agent a live logoff has reached since.
+
+**What to do.** Drop the explicit `RequestInitialStateAsync` after your own `ConnectAsync`, or keep it and accept the
+extra load. Where you still call it, handle `AmiNotConnectedException` as a lost session. Match a `CallerJoined` caller
+by `Channel` or `UniqueId`, not by reference.
 
 ## AMI
 
