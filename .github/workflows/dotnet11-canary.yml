@@ -132,7 +132,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # LFS: the canary's smoke run loads the turn-detection ONNX model; without LFS it is a 132-byte
+      # pointer and the binary dies parsing it, which says nothing about .NET 11.
       - uses: actions/checkout@v7.0.1
+        with:
+          lfs: true
       - uses: actions/setup-dotnet@v6.1.0
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-11

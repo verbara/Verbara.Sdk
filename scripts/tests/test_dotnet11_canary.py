@@ -295,6 +295,13 @@ class CanaryWorkflowContractTests(unittest.TestCase):
         aot = body[body.index("  aot:"):]
         self.assertLess(aot.index("retarget net11.0"), aot.index("aot net11.0"))
 
+    def test_Workflow_ShouldFetchLfs_WhereTheModelIsLoaded(self):
+        # The unit tests and the AOT smoke run both load the ONNX turn-detection model (an LFS object).
+        body = self.code.split("\njobs:\n", 1)[1]
+        for name in ("runtime", "aot"):
+            job = re.search(rf"^  {name}:\n(?P<job>(?:    .*\n|\n)+)", body + "\n", re.M).group("job")
+            self.assertRegex(job, r"uses: actions/checkout@[^\n]*\n\s+with:\n\s+lfs: true", name)
+
     def test_Workflow_ShouldRollTheTestsForwardOntoRuntime11(self):
         runtime = self.code[self.code.index("  runtime:"):self.code.index("  aot:")]
         self.assertIn("DOTNET_ROLL_FORWARD: Major", runtime)
