@@ -19,6 +19,15 @@ directory, a missing report, an empty `Benchmarks` array, a baseline-listed benc
 the parsed set, or a `Statistics.Mean` that is missing or not a positive number is a BREACH, not a
 skip. "We did not measure it" never reads as "it is fine".
 
+THAT HOLDS WITHOUT A BAND TOO. Every observed entry must carry a measurement: `Statistics` is an
+object and `Statistics.Mean` is a finite number. An entry with no band that fails this is a
+structural failure like any other. A finite mean of zero or less on such an entry is a measurement at
+BenchmarkDotNet's resolution floor (it subtracts its overhead and clamps at zero), not a missing one,
+and stays a notice. The entries expected to run without a band are declared in the baseline's
+optional `unbanded` object, keyed by FullName with a `reason`; a declared entry absent from the
+parsed set is structural, exactly like an absent banded one. Being declared there is the only way a
+benchmark of a gated class runs without a band on purpose.
+
     NOTE ON UNITS: BenchmarkDotNet's `Statistics.Mean` is in NANOSECONDS, always, and the report
     carries no unit field. Do not infer units from anything; do not read `Statistics.Scaled*`.
 
@@ -99,6 +108,30 @@ def _is_number(value):
     # Finite only: json.load accepts NaN and Infinity, and NaN compares False both ways, so a NaN
     # mean would otherwise read as inside its band.
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _measurement(entry):
+    """(mean, None) when the entry carries a measurement — `Statistics` is an object and its
+    `Mean` a finite, non-boolean number — or (None, reason) when it does not. One definition for
+    every observed entry, banded or not."""
+    stats = entry.get("Statistics") if isinstance(entry, dict) else None
+    if not isinstance(stats, dict):
+        return None, "carries no \"Statistics\" object"
+    if "Mean" not in stats:
+        return None, "has no \"Statistics.Mean\""
+    raw = stats["Mean"]
+    if not _is_number(raw):
+        return None, f"\"Statistics.Mean\"={raw!r} is not a finite number"
+    return float(raw), None
+
+
+_PARAMETERS = re.compile(r"\([^()]*\)$")
+
+
+def _owning_type(full_name):
+    """The BenchmarkDotNet type of a FullName: drop a trailing `(Param: value, …)` suffix, whose
+    values may contain dots, then split at the last dot."""
+    return _PARAMETERS.sub("", full_name).rsplit(".", 1)[0]
 
 
 def parse_args(argv):
@@ -201,12 +234,35 @@ def load_baseline(path):
     # looked for and its absence would go unnoticed — a hole the same shape as `|| true`.
     types = set(sources.values())
     for full_name in parsed:
-        owner = full_name.rsplit(".", 1)[0]
+        owner = _owning_type(full_name)
         if owner not in types:
             die(f"baseline entry '{full_name}' belongs to type '{owner}', which no \"sources\" "
                 f"row declares. Add the workflow filter step and its sources row, or remove "
                 f"the entry.")
-    return sources, parsed, jit_isa
+
+    # The entries expected to run without a band. Optional; when present it is validated as
+    # strictly as `benchmarks`, because a declaration the gate misreads would silently shrink
+    # what it expects to see.
+    unbanded = doc.get("unbanded", {})
+    if not isinstance(unbanded, dict):
+        die(f"baseline '{path}' \"unbanded\" must be an object keyed by BenchmarkDotNet FullName.")
+    declared = {}
+    for full_name, entry in unbanded.items():
+        if full_name.startswith("_"):
+            continue
+        reason = entry.get("reason") if isinstance(entry, dict) else None
+        if not isinstance(reason, str) or not reason.strip():
+            die(f"baseline \"unbanded\" entry '{full_name}' needs an object with a non-empty "
+                f"\"reason\": why it runs without a band.")
+        owner = _owning_type(full_name)
+        if owner not in types:
+            die(f"baseline \"unbanded\" entry '{full_name}' belongs to type '{owner}', which no "
+                f"\"sources\" row declares, so its report would never be looked for.")
+        if full_name in parsed:
+            die(f"baseline entry '{full_name}' is both in \"benchmarks\" and in \"unbanded\". "
+                f"It either has a band or it does not.")
+        declared[full_name] = reason.strip()
+    return sources, parsed, declared, jit_isa
 
 
 ISA_PATTERN = re.compile(r"RyuJIT (x86-64-v[0-9]+)")
@@ -320,12 +376,6 @@ def _observed_bytes(entry):
     return float(value) if _is_number(value) and value >= 0 else None
 
 
-def _observed_mean(entry):
-    stats = entry.get("Statistics") if isinstance(entry, dict) else None
-    value = stats.get("Mean") if isinstance(stats, dict) else None
-    return float(value) if _is_number(value) and value > 0 else None
-
-
 def evaluate(baseline, observed):
     """Return (rows, failing, reported, structural) for the baselined set. Reported two-sided: the
     SLOWER side is the regression this exists to catch; the FASTER side is a stale baseline
@@ -359,12 +409,12 @@ def evaluate(baseline, observed):
                 f"exists but carries no measurement.")
             continue
         raw = stats["Mean"]
-        if not _is_number(raw) or raw <= 0:
+        actual, _reason = _measurement(entry)
+        if actual is None or actual <= 0:
             structural.append(
                 f"[{full_name}] \"Statistics.Mean\"={raw!r} in '{report}' is not a positive "
                 f"number (BenchmarkDotNet means are nanoseconds).")
             continue
-        actual = float(raw)
         actual_bytes = _observed_bytes(entry)
         verdicts = []
 
@@ -420,10 +470,35 @@ def evaluate(baseline, observed):
 
 
 def unbaselined(baseline, observed):
-    """Benchmarks measured but not baselined. Reported, never fatal: a new benchmark method inside
-    an already-gated class is a baseline TODO (see baseline.README.md), not a regression, and
-    failing on it would block the very PR that adds the benchmark."""
+    """Benchmarks observed with no band, declared in `unbanded` or not. Their VALUE is reported,
+    never gated: a band is calibrated from observed runs. Their MEASUREMENT is checked by
+    `evaluate_unbanded`, because an entry with no band that measured nothing is not a pass."""
     return sorted(set(observed) - set(baseline))
+
+
+def evaluate_unbanded(baseline, declared, observed):
+    """Return (rows, structural) for every observed entry with no band, plus every declared one.
+    A declared entry absent from the parsed set is structural, like an absent banded one; an
+    observed entry with no measurement is structural, declared or not. A finite mean of zero or
+    less is BenchmarkDotNet's resolution floor: listed, never failed."""
+    rows = []
+    structural = []
+    for full_name in sorted(set(declared) - set(observed)):
+        structural.append(
+            f"[{full_name}] is declared in baseline.json \"unbanded\" but absent from the parsed "
+            f"results. The benchmark was removed, renamed, or never ran. Declared because: "
+            f"{declared[full_name]}")
+    for full_name in unbaselined(baseline, observed):
+        entry, report, _cores = observed[full_name]
+        mean, reason = _measurement(entry)
+        if mean is None:
+            structural.append(
+                f"[{full_name}] {reason} in '{report}' — the benchmark entry exists but carries no "
+                f"measurement. An entry with no band must still have measured.")
+            continue
+        rows.append({"name": full_name, "mean": mean, "bytes": _observed_bytes(entry),
+                     "declared": full_name in declared, "floor": mean <= 0})
+    return rows, structural
 
 
 def _short(full_name):
@@ -433,6 +508,15 @@ def _short(full_name):
 
 def _fmt(value, spec, empty="—"):
     return empty if value is None else format(value, spec)
+
+
+def _unbanded_table(extras):
+    lines = ["| benchmark | observed (ns) | observed (B) |", "|---|--:|--:|"]
+    for row in extras:
+        floor = " (resolution floor)" if row["floor"] else ""
+        lines.append(f"| `{row['name']}` | {row['mean']:.2f}{floor} | "
+                     f"{_bytes_text(row['bytes']) or '—'} |")
+    return lines + [""]
 
 
 def render_markdown(rows, failing, reported, structural, extras, enforce):
@@ -472,13 +556,19 @@ def render_markdown(rows, failing, reported, structural, extras, enforce):
                 f"{'—' if row['bytes_tolerance'] is None else '±' + _bytes_text(row['bytes_tolerance'])} | "
                 f"{row['verdict']} |")
         out.append("")
-    if extras:
-        out += [f"### Measured but not baselined ({len(extras)})", "",
-                "Not a failure. Add a `benchmarks` entry once its hosted-runner spread is "
-                "observed — see `baseline.README.md`.", "",
-                "| benchmark | observed (ns) | observed (B) |", "|---|--:|--:|"]
-        out += [f"| `{name}` | {_fmt(mean, '.2f')} | {_bytes_text(allocated) or '—'} |"
-                for name, mean, allocated in extras] + [""]
+    declared = [row for row in extras if row["declared"]]
+    undeclared = [row for row in extras if not row["declared"]]
+    if declared:
+        out += [f"### Declared without a band ({len(declared)})", "",
+                "Listed in `unbanded`: their presence and their measurement are checked, their "
+                "value is not banded.", ""]
+        out += _unbanded_table(declared)
+    if undeclared:
+        out += [f"### Measured but not baselined ({len(undeclared)})", "",
+                "Not a failure while it carries a measurement. Give it a `benchmarks` entry once "
+                "its hosted-runner spread is observed, or an `unbanded` entry — see "
+                "`baseline.README.md`.", ""]
+        out += _unbanded_table(undeclared)
     if not failing and not reported and not structural:
         out += ["All baselined benchmarks are inside their bands.", ""]
     return "\n".join(out)
@@ -486,14 +576,14 @@ def render_markdown(rows, failing, reported, structural, extras, enforce):
 
 def main(argv):
     baseline_path, artifacts_root, markdown_out, enforce = parse_args(argv)
-    sources, baseline, jit_isa = load_baseline(baseline_path)
+    sources, baseline, declared, jit_isa = load_baseline(baseline_path)
 
     observed_raw, structural = collect_observed(artifacts_root, sources)
     structural += check_isa(artifacts_root, sources, jit_isa)
     rows, failing, reported, more_structural = evaluate(baseline, observed_raw)
     structural += more_structural
-    extras = [(name, _observed_mean(observed_raw[name][0]), _observed_bytes(observed_raw[name][0]))
-              for name in unbaselined(baseline, observed_raw)]
+    extras, unbanded_structural = evaluate_unbanded(baseline, declared, observed_raw)
+    structural += unbanded_structural
 
     mode = "ENFORCING" if enforce else "OBSERVING"
     print(f"perf-baseline: mode={mode} baseline={baseline_path} artifacts={artifacts_root}")
@@ -516,8 +606,11 @@ def main(argv):
         print(f"::{level}::perf-baseline BREACH: {item}")
     for item in reported:
         print(f"::warning::perf-baseline BREACH: {item} Reported, not failing.")
-    for name, _mean, _allocated in extras:
-        print(f"::notice::perf-baseline: '{name}' is measured but has no baseline entry.")
+    for row in extras:
+        floor = " at BenchmarkDotNet's resolution floor" if row["floor"] else ""
+        kind = "declared in \"unbanded\"" if row["declared"] else "has no baseline entry"
+        print(f"::notice::perf-baseline: '{row['name']}' is measured ({row['mean']:.2f} ns{floor}) "
+              f"and {kind}.")
 
     breaches = len(failing) + len(reported)
     failed = len(failing) + len(structural)

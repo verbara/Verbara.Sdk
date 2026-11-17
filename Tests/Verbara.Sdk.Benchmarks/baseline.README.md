@@ -140,41 +140,53 @@ Three edits, in one PR:
 1. a `--filter` step in `.github/workflows/perf-regression.yml`;
 2. a `sources` row in `baseline.json` mapping that step's `--artifacts` subdirectory to the
    BenchmarkDotNet type whose report will land there;
-3. one `benchmarks` entry per `[Benchmark]` method, keyed by **`FullName`**
-   (`Namespace.Type.Method`) — `bytes` from one run wherever the row's allocation is deterministic,
-   and `mean_ns` + `tolerance_pct` once its hosted-runner spread has been observed.
+3. for each `[Benchmark]` method, keyed by **`FullName`** (`Namespace.Type.Method`, plus its
+   `(Param: value)` suffix for a parameterised case): a `benchmarks` entry — `bytes` from one run
+   wherever the row's allocation is deterministic, and `mean_ns` + `tolerance_pct` once its
+   hosted-runner spread has been observed — or, until then, an `unbanded` entry with its `reason`.
 
-Until step 3 exists the comparison reports the benchmark as *measured but not baselined* — a notice,
-never a failure, so the PR that adds a benchmark is not blocked by the absence of a band it cannot
-yet know. **Calibrate the band from observation, not from a guess:** dispatch the workflow a few
-times (`gh workflow run "Perf Regression"`) and use the observed across-run spread. `sources` and
-`benchmarks` must agree — a baselined entry whose type no `sources` row declares is a hard
+The script tests check step 3 on every pull request: for each `sources` class, the `[Benchmark]`
+methods in its source must be exactly the methods its `benchmarks` and `unbanded` entries name, so a
+method added, renamed or removed without its entry is red on the PR that does it. An `unbanded` entry
+is listed in the run summary as *declared without a band*: a notice while it carries a measurement, so
+the PR that adds a benchmark is not blocked by the absence of a band it cannot yet know — but its
+presence and its measurement are checked like any other row's.
+
+**Calibrate the band from observation, not from a guess:** dispatch the workflow a few times
+(`gh workflow run "Perf Regression"`) and use the observed across-run spread. `sources`,
+`benchmarks` and `unbanded` must agree — an entry whose type no `sources` row declares is a hard
 configuration error (exit 2), because its report would never be looked for and its absence would go
 unnoticed.
 
-Measured but not baselined today, on purpose:
+Declared in `unbanded` today, on purpose:
 
-- `TurnDetectionBenchmark` — `sources._turn_detection_note`.
-- Time only, bytes gated: `ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber`
-  (`_channel_manager_one_subscriber_note`), `ChannelManagerBenchmark.Create1000Channels_TwoLegCalls`, the two deterministic `AsyncEventPumpBenchmark` rows and
-  every `QueueManagerBenchmark` and `MeetMeManagerBenchmark` row. Their time bands come from two
-  weekly runs.
-- `AsyncEventPumpBenchmark.EnqueueAndConsume1000Events` — neither: bimodal bytes, `_bytes_note`.
+- `ObserverDispatchBenchmark.Dispatch_1Observer` — resolution floor, `_dispatch_1_observer_note`.
+- `TurnDetectionBenchmark.EndOfUtteranceDecision`, all four `UtteranceSeconds` cases —
+  `sources._turn_detection_note`.
+- `AsyncEventPumpBenchmark.EnqueueAndConsume1000Events` — bimodal bytes, `_bytes_note`.
+- `AsyncEventPumpBenchmark.Refuse9000Of10000Events` — not yet read on the hosted runner.
+
+Banded on bytes only, time not yet banded: `ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber`
+(`_channel_manager_one_subscriber_note`), `ChannelManagerBenchmark.Create1000Channels_TwoLegCalls`,
+the two deterministic `AsyncEventPumpBenchmark` rows and every `QueueManagerBenchmark` and
+`MeetMeManagerBenchmark` row. Their time bands come from two weekly runs.
 
 ## Removing a band without removing the benchmark
 
 A benchmark whose mean has fallen to BenchmarkDotNet's resolution floor can no longer carry a
 percentage band: the band then tracks the harness rather than the code, and every fleet or codegen
-change reads as a breach. Drop its `benchmarks` entry and leave its `--filter` step and its
-`sources` row in place — the step still runs, the report is still required, and the comparison
-reports it as *measured but not baselined*.
+change reads as a breach. Move its `benchmarks` entry to `unbanded` and leave its `--filter` step
+and its `sources` row in place — the step still runs, the report is still required, and the
+comparison still checks that the benchmark ran and measured; only its value stops being banded. A
+mean of `0` there is BenchmarkDotNet's floor (`ZeroMeasurement`), a measurement, not a failure.
 
 Three obligations, in the same PR:
 
 1. state the evidence in the PR description — the observed mean, the observed StdDev, and the
    BenchmarkDotNet warning (`ZeroMeasurement`) if it fired;
-2. record the absence as deliberate with a `_`-prefixed note at the top level of `baseline.json`,
-   the way `sources._turn_detection_note` does for a band that cannot be calibrated *yet*;
+2. record the absence as deliberate with an `unbanded` entry whose `reason` says why, plus a
+   `_`-prefixed note at the top level of `baseline.json` when one line is not enough, the way
+   `_dispatch_1_observer_note` does;
 3. say where the published figure it backed is guarded instead, or delete that figure.
 
 This is not a re-baseline and does not use the table above: no number moves. Removing the
@@ -191,14 +203,19 @@ green. `check-perf-baseline.py` treats each of these as a **breach**, not a skip
 - the class's `results/` directory is absent;
 - the `…-report-full-compressed.json` report is absent or unparseable;
 - the report's `Benchmarks` array is empty or missing;
-- a `FullName` listed in `baseline.json` never appears in the parsed set;
-- `Statistics.Mean` is missing, non-numeric, or not positive;
+- a `FullName` listed in `baseline.json` — in `benchmarks` or in `unbanded` — never appears in the
+  parsed set;
+- a banded row's `Statistics.Mean` is missing, non-numeric, not finite, or not positive;
+- any other observed row — declared in `unbanded` or not declared at all — carries no measurement:
+  `Statistics` is null or absent, or its `Mean` is missing or not a finite number. A finite mean of
+  `0` or less there is the harness's resolution floor and is listed, not failed;
 - a row baselined on `bytes` has no numeric `Memory.BytesAllocatedPerOperation` (the memory
   diagnoser was removed);
 - a source's BenchmarkDotNet log names a JIT ISA other than `jit_isa`, or no log names one.
 
 Separately, exit code **2** means the *guard* is broken (bad arguments, unreadable or invalid
-`baseline.json`) and fails the job in **both** modes — a misconfigured guard reading green is the
+`baseline.json`, including a malformed `unbanded` entry: not an object, no `reason`, a class no
+`sources` row declares, or a key that is also in `benchmarks`) and fails the job in **both** modes — a misconfigured guard reading green is the
 `|| true` hole wearing a different hat.
 
 ## Current status: ENFORCING

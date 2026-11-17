@@ -45,7 +45,7 @@ def _entry(full_name, mean=1000.0, stats="ok", allocated=None, memory=True):
     entry = {
         "Namespace": "Verbara.Sdk.Benchmarks",
         "Type": "FakeBenchmark",
-        "Method": full_name.rsplit(".", 1)[1],
+        "Method": full_name.split("(", 1)[0].rsplit(".", 1)[1],
         "Parameters": "",
         "FullName": full_name,
     }
@@ -62,6 +62,8 @@ def _entry(full_name, mean=1000.0, stats="ok", allocated=None, memory=True):
         entry["Statistics"] = {"Mean": 0}
     elif stats == "nan-mean":
         entry["Statistics"] = {"Mean": float("nan")}
+    elif stats == "inf-mean":
+        entry["Statistics"] = {"Mean": float("inf")}
     elif stats == "null":
         entry["Statistics"] = None
     elif stats == "absent":
@@ -276,23 +278,27 @@ class CheckPerfBaselineTests(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertIn("absent from the parsed results", result.stdout)
 
-    def test_Main_ShouldBreach_WhenStatisticsMeanIsMissing(self):
+    def test_Main_ShouldBreach_WhenABaselinedEntryHasNoMean(self):
         self._write_report([_entry(_ALPHA, stats="no-mean"), _entry(_BETA, 50.0)])
         result = self._run("--enforce")
         self.assertEqual(1, result.returncode)
         self.assertIn("Statistics.Mean", result.stdout)
 
-    def test_Main_ShouldBreach_WhenStatisticsIsNull(self):
+    def test_Main_ShouldBreach_WhenABaselinedEntryHasNullStatistics(self):
         self._write_report([_entry(_ALPHA, stats="null"), _entry(_BETA, 50.0)])
         result = self._run("--enforce")
         self.assertEqual(1, result.returncode)
+        self.assertIn("STRUCTURAL", result.stdout)
+        self.assertIn(_ALPHA, result.stdout)
 
-    def test_Main_ShouldBreach_WhenStatisticsIsAbsent(self):
+    def test_Main_ShouldBreach_WhenABaselinedEntryHasNoStatistics(self):
         self._write_report([_entry(_ALPHA, stats="absent"), _entry(_BETA, 50.0)])
         result = self._run("--enforce")
         self.assertEqual(1, result.returncode)
+        self.assertIn("STRUCTURAL", result.stdout)
+        self.assertIn(_ALPHA, result.stdout)
 
-    def test_Main_ShouldBreach_WhenStatisticsMeanIsNaN(self):
+    def test_Main_ShouldBreach_WhenABaselinedMeanIsNaN(self):
         # json.load accepts NaN, and NaN compares False both ways, so without a finite check the
         # row reads "ok" and a run with no measurement passes.
         self._write_report([_entry(_ALPHA, stats="nan-mean"), _entry(_BETA, 50.0)])
@@ -300,23 +306,26 @@ class CheckPerfBaselineTests(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertIn("not a positive", result.stdout)
 
-    def test_Main_ShouldBreach_WhenStatisticsMeanIsNotNumeric(self):
+    def test_Main_ShouldBreach_WhenABaselinedMeanIsNotNumeric(self):
         self._write_report([_entry(_ALPHA, stats="text-mean"), _entry(_BETA, 50.0)])
         result = self._run("--enforce")
         self.assertEqual(1, result.returncode)
         self.assertIn("not a positive", result.stdout)
 
-    def test_Main_ShouldBreach_WhenStatisticsMeanIsABoolean(self):
+    def test_Main_ShouldBreach_WhenABaselinedMeanIsABoolean(self):
         # `True` is an int in Python; without the bool guard it would compare as 1 ns.
         self._write_report([_entry(_ALPHA, stats="bool-mean"), _entry(_BETA, 50.0)])
         result = self._run("--enforce")
         self.assertEqual(1, result.returncode)
         self.assertIn("not a positive", result.stdout)
 
-    def test_Main_ShouldBreach_WhenStatisticsMeanIsZero(self):
+    def test_Main_ShouldBreach_WhenABaselinedMeanIsZero(self):
+        # A banded row keeps the positivity rule; only a row with no band treats 0 as the floor.
         self._write_report([_entry(_ALPHA, stats="zero-mean"), _entry(_BETA, 50.0)])
         result = self._run("--enforce")
         self.assertEqual(1, result.returncode)
+        self.assertIn("STRUCTURAL", result.stdout)
+        self.assertIn(_ALPHA, result.stdout)
 
     def test_Main_ShouldBreach_WhenAReportEntryHasNoFullName(self):
         broken = _entry(_ALPHA, 1010.0)
@@ -335,7 +344,7 @@ class CheckPerfBaselineTests(unittest.TestCase):
         self.assertIn("OBSERVING mode", result.stdout)
 
     # ---- tolerant of what should be tolerated ----------------------------
-    def test_Main_ShouldNotFail_WhenAMeasuredBenchmarkHasNoBaselineEntry(self):
+    def test_Main_ShouldNotFail_WhenAnUnbaselinedEntryCarriesAMeasurement(self):
         # Otherwise the PR that ADDS a benchmark is blocked by the band it cannot yet have.
         extra = _entry(f"{_TYPE}.Gamma", 7.0)
         self._write_report([_entry(_ALPHA, 1010.0), _entry(_BETA, 52.0), extra])
@@ -343,6 +352,126 @@ class CheckPerfBaselineTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stdout)
         self.assertIn("::notice::", result.stdout)
         self.assertIn("Gamma", result.stdout)
+
+    # ---- an entry with no band must still have measured -----------------
+    def _with_unbaselined_gamma(self, stats, mean=7.0):
+        self._write_report([_entry(_ALPHA, 1010.0), _entry(_BETA, 52.0),
+                            _entry(_GAMMA, mean, stats=stats)])
+
+    def _assert_structural_on_gamma(self, result):
+        self.assertEqual(1, result.returncode, result.stdout)
+        structural = [line for line in result.stdout.splitlines()
+                      if line.startswith("::error::perf-baseline STRUCTURAL:")]
+        self.assertTrue(any(_GAMMA in line for line in structural), result.stdout)
+
+    def test_Main_ShouldBreach_WhenAnUnbaselinedEntryHasNullStatistics(self):
+        # BenchmarkDotNet writes "Statistics": null for a case that produced no measurement.
+        self._with_unbaselined_gamma("null")
+        self._assert_structural_on_gamma(self._run("--enforce"))
+
+    def test_Main_ShouldBreach_WhenAnUnbaselinedEntryHasNoStatistics(self):
+        self._with_unbaselined_gamma("absent")
+        self._assert_structural_on_gamma(self._run("--enforce"))
+
+    def test_Main_ShouldBreach_WhenAnUnbaselinedEntryHasNoMean(self):
+        self._with_unbaselined_gamma("no-mean")
+        self._assert_structural_on_gamma(self._run("--enforce"))
+
+    def test_Main_ShouldBreach_WhenAnUnbaselinedEntryHasANonNumericMean(self):
+        for stats in ("text-mean", "bool-mean", "inf-mean", "nan-mean"):
+            with self.subTest(stats=stats):
+                shutil.rmtree(self.root, ignore_errors=True)
+                self._with_unbaselined_gamma(stats)
+                self._assert_structural_on_gamma(self._run("--enforce"))
+
+    def test_Main_ShouldReportTheIssue_WhenObservingAndAnUnbaselinedEntryMeasuredNothing(self):
+        self._with_unbaselined_gamma("null")
+        result = self._run()
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertIn("::warning::perf-baseline STRUCTURAL:", result.stdout)
+        self.assertNotIn("::error::", result.stdout)
+        self.assertEqual("breach", self._outputs().get("status"))
+        self.assertEqual("1", self._outputs().get("structural"))
+
+    def test_Main_ShouldNotBreach_WhenAnUnbaselinedMeanIsAtTheResolutionFloor(self):
+        # BenchmarkDotNet clamps a measurement at zero once the overhead is subtracted: a mean of 0
+        # is a measurement at the harness's floor (ZeroMeasurement), not a missing one.
+        self._with_unbaselined_gamma("zero-mean")
+        result = self._run("--enforce")
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertNotIn("STRUCTURAL", result.stdout)
+        self.assertIn(f"'{_GAMMA}'", result.stdout)
+        self.assertEqual("pass", self._outputs().get("status"))
+
+    # ---- the declared `unbanded` set -------------------------------------
+    def _unbanded_baseline(self, unbanded, benchmarks=None):
+        doc = {"sources": {"fake": _TYPE},
+               "benchmarks": benchmarks or dict(_BASELINE["benchmarks"]),
+               "unbanded": unbanded}
+        self._write_baseline(doc)
+
+    def test_Main_ShouldBreach_WhenADeclaredUnbandedEntryIsAbsent(self):
+        cases = [f"{_TYPE}.Decide(Seconds: {n})" for n in (1, 2, 4, 8)]
+        self._unbanded_baseline({name: {"reason": "band not calibrated yet"} for name in cases})
+        self._write_report([_entry(_ALPHA, 1010.0), _entry(_BETA, 52.0)]
+                           + [_entry(name, 7.0) for name in cases[:3]])
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode, result.stdout)
+        structural = [line for line in result.stdout.splitlines() if "STRUCTURAL" in line]
+        self.assertEqual(1, len(structural), result.stdout)
+        self.assertIn(cases[3], structural[0])
+        self.assertIn("absent from the parsed results", structural[0])
+
+    def test_Main_ShouldBreach_WhenADeclaredUnbandedEntryHasNullStatistics(self):
+        self._unbanded_baseline({_GAMMA: {"reason": "resolution floor"}})
+        self._with_unbaselined_gamma("null")
+        self._assert_structural_on_gamma(self._run("--enforce"))
+
+    def test_Main_ShouldPass_WhenEveryDeclaredUnbandedEntryMeasured(self):
+        self._unbanded_baseline({_GAMMA: {"reason": "resolution floor"}})
+        self._with_unbaselined_gamma("ok")
+        result = self._run("--enforce", markdown=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        with open(self.markdown, encoding="utf-8") as handle:
+            body = handle.read()
+        self.assertIn("Declared without a band (1)", body)
+        self.assertIn(f"| `{_GAMMA}` | 7.00 |", body)
+        self.assertNotIn("Measured but not baselined", body)
+
+    def test_Main_ShouldExitTwo_WhenUnbandedIsNotAnObject(self):
+        self._unbanded_baseline([_GAMMA])
+        result = self._run()
+        self.assertEqual(2, result.returncode, result.stdout)
+        self.assertIn("unbanded", result.stdout)
+
+    def test_Main_ShouldExitTwo_WhenAnUnbandedEntryHasNoReason(self):
+        for entry in ({}, {"reason": ""}, {"reason": 3}, "floor"):
+            with self.subTest(entry=entry):
+                self._unbanded_baseline({_GAMMA: entry})
+                result = self._run()
+                self.assertEqual(2, result.returncode, result.stdout)
+                self.assertIn(_GAMMA, result.stdout)
+
+    def test_Main_ShouldExitTwo_WhenAnUnbandedEntryBelongsToNoSource(self):
+        self._unbanded_baseline({"Other.Type.Method": {"reason": "x"}})
+        result = self._run()
+        self.assertEqual(2, result.returncode, result.stdout)
+        self.assertIn("Other.Type.Method", result.stdout)
+
+    def test_Main_ShouldExitTwo_WhenAKeyIsBothBandedAndUnbanded(self):
+        self._unbanded_baseline({_ALPHA: {"reason": "x"}})
+        result = self._run()
+        self.assertEqual(2, result.returncode, result.stdout)
+        self.assertIn(_ALPHA, result.stdout)
+
+    def test_Main_ShouldLoad_WhenAParameterValueContainsADot(self):
+        ratio = f"{_TYPE}.Alpha(Ratio: 0.5)"
+        self._write_baseline({"sources": {"fake": _TYPE},
+                              "benchmarks": {ratio: {"mean_ns": 1000.0, "tolerance_pct": 10}},
+                              "unbanded": {f"{_TYPE}.Beta(Ratio: 2.5)": {"reason": "x"}}})
+        self._write_report([_entry(ratio, 1010.0), _entry(f"{_TYPE}.Beta(Ratio: 2.5)", 7.0)])
+        result = self._run("--enforce")
+        self.assertEqual(0, result.returncode, result.stdout)
 
     # ---- bytes decide, time informs -------------------------------------
     def _bytes_fixture(self, alpha_bytes=168, gamma_bytes=525994, isa="x86-64-v3", log=True,
@@ -569,6 +698,50 @@ class CheckPerfBaselineTests(unittest.TestCase):
         self.assertEqual(2, result.returncode)
 
 
+_BENCHMARKS_DIR = os.path.dirname(_REAL_BASELINE)
+_BENCHMARK_ATTRIBUTE = re.compile(r"^\s*\[Benchmark(?:\([^\]]*\))?\]\s*$")
+_METHOD = re.compile(r"^\s*public\s+(?:static\s+)?(?:async\s+)?[\w<>\[\]?,. ]+?\s+(\w+)\s*\(")
+
+
+def _split_full_name(full_name):
+    """(type, method) of a BenchmarkDotNet FullName, ignoring a `(Param: value)` suffix."""
+    bare = re.sub(r"\([^()]*\)$", "", full_name)
+    owner, method = bare.rsplit(".", 1)
+    return owner, method
+
+
+def _benchmark_methods(type_name):
+    """The [Benchmark] methods the one benchmark source file declaring `type_name` carries.
+    `[BenchmarkCategory]` and other attributes do not count; attributes between `[Benchmark]` and
+    the method signature are skipped."""
+    simple = type_name.rsplit(".", 1)[1]
+    declaring = re.compile(rf"\bclass\s+{re.escape(simple)}\b")
+    files = []
+    for name in sorted(os.listdir(_BENCHMARKS_DIR)):
+        if name.endswith(".cs"):
+            with open(os.path.join(_BENCHMARKS_DIR, name), encoding="utf-8") as handle:
+                text = handle.read()
+            if declaring.search(text):
+                files.append(text)
+    if len(files) != 1:
+        raise AssertionError(f"expected one file declaring class {simple}, found {len(files)}")
+    methods = set()
+    pending = False
+    for line in files[0].splitlines():
+        if _BENCHMARK_ATTRIBUTE.match(line):
+            pending = True
+            continue
+        if not pending or line.strip().startswith("["):
+            continue
+        match = _METHOD.match(line)
+        if match is None:
+            raise AssertionError(f"{simple}: a [Benchmark] attribute is not followed by a public "
+                                 f"method signature: {line.strip()!r}")
+        methods.add(match.group(1))
+        pending = False
+    return methods
+
+
 class CommittedBaselineContractTests(unittest.TestCase):
     """Pins the SHIPPED baseline.json and the workflow it is read by. These two files have to
     agree and live in different languages, which is exactly the drift nobody notices."""
@@ -585,7 +758,7 @@ class CommittedBaselineContractTests(unittest.TestCase):
         types = set(sources.values())
         self.assertTrue(self.doc["benchmarks"], "baseline must not be empty")
         for full_name, entry in self.doc["benchmarks"].items():
-            owner = full_name.rsplit(".", 1)[0]
+            owner, _method = _split_full_name(full_name)
             self.assertIn(owner, types, f"{full_name} has no sources row")
             self.assertTrue("mean_ns" in entry or "bytes" in entry, f"{full_name} gates nothing")
             if "mean_ns" in entry:
@@ -597,6 +770,42 @@ class CommittedBaselineContractTests(unittest.TestCase):
                 self.assertIsInstance(entry["bytes"], int)
                 self.assertGreaterEqual(entry["bytes"], 0)
                 self.assertGreaterEqual(entry.get("bytes_tolerance", 0), 0)
+
+    def test_Baseline_ShouldNameEveryBenchmarkMethodOfEachSource_BandedOrUnbanded(self):
+        # The weekly gate can only notice a missing entry it expects. A benchmark method with no
+        # `benchmarks` and no `unbanded` entry would be a notice forever, and an entry whose method
+        # is gone would only surface a week later: both are caught here, on the pull request.
+        sources = {k: v for k, v in self.doc["sources"].items() if not k.startswith("_")}
+        named = {}
+        for key in list(self.doc["benchmarks"]) + list(self.doc.get("unbanded", {})):
+            if key.startswith("_"):
+                continue
+            owner, method = _split_full_name(key)
+            named.setdefault(owner, set()).add(method)
+        for type_name in sorted(set(sources.values())):
+            with self.subTest(type=type_name):
+                in_code = _benchmark_methods(type_name)
+                in_baseline = named.get(type_name, set())
+                missing = sorted(in_code - in_baseline)
+                stale = sorted(in_baseline - in_code)
+                self.assertFalse(missing, f"{type_name}: [Benchmark] method(s) {missing} have "
+                                          f"neither a \"benchmarks\" nor an \"unbanded\" entry")
+                self.assertFalse(stale, f"{type_name}: baseline.json names {stale}, which the "
+                                        f"class does not declare as [Benchmark] methods")
+
+    def test_Baseline_ShouldLoadUnderTheComparator(self):
+        # Against an empty artifacts root every source is a structural failure (exit 1). Exit 2
+        # would mean the committed baseline itself fails the comparator's own validation.
+        empty = tempfile.mkdtemp()
+        try:
+            environ = dict(os.environ)
+            environ.pop("GITHUB_OUTPUT", None)
+            result = subprocess.run([sys.executable, _SCRIPT, "--baseline", _REAL_BASELINE,
+                                     "--artifacts-root", empty, "--enforce"],
+                                    capture_output=True, text=True, check=False, env=environ)
+        finally:
+            shutil.rmtree(empty, ignore_errors=True)
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
 
     def test_Baseline_ShouldPinTheIsaTheWorkflowSets(self):
         # The comparator checks the logs against jit_isa; the workflow must set the variable that

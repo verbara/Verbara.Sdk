@@ -338,8 +338,9 @@ quantity.
 
 *Why nothing is published in its place.* A latency figure is meaningless without the utterance length
 it was measured at, because the mel cost scales with the accumulated audio. Publishing the measured
-range today would put back an ENFORCING claim with no gate behind it — the benchmark has no
-`baseline.json` entry, because every other band in that file was calibrated from 13 observed runs and
+range today would put back an ENFORCING claim with no gate behind it — the benchmark has no band in
+`baseline.json` (its cases are declared `unbanded`, so the weekly run fails if they stop measuring),
+because every other band in that file was calibrated from 13 observed runs and
 this one has none.
 
 *Unblocking condition.* The benchmark ships in this change and starts producing weekly observations

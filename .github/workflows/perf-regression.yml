@@ -125,8 +125,9 @@ jobs:
       # baseline.json entry on purpose: every other band here was calibrated from 13 real runs of
       # this workflow, and this benchmark has none yet. The flip to PERF_GATE_ENFORCE='true' left it
       # unbaselined: its band gets calibrated the same way, from its own observations, in its own
-      # PR. Until then it publishes a measurement and the comparator ignores it — a band guessed
-      # today would be the "calibrated from observation, never guessed" rule broken.
+      # PR. Until then its cases are declared in baseline.json `unbanded`: the comparator checks
+      # that each one ran and measured, and does not band its value — a band guessed today would
+      # be the "calibrated from observation, never guessed" rule broken.
       - name: Turn-detection end-of-utterance decision
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
@@ -161,8 +162,8 @@ jobs:
       # Reported both ways, failing one way: SLOWER and MORE-BYTES fail the job,
       # FASTER and FEWER-BYTES are reported and file the issue without failing it.
       # Fails closed: absent results/ dir, absent report, empty `Benchmarks`,
-      # a baselined FullName that never appeared, or a non-numeric
-      # `Statistics.Mean` are all breaches. Exit 2 (gate misconfigured) fails
+      # a baselined or `unbanded` FullName that never appeared, or an observed
+      # entry with no finite `Statistics.Mean` (banded or not) are all breaches. Exit 2 (gate misconfigured) fails
       # the job in BOTH modes — a guard that is broken must not read green.
       - name: Compare against baseline
         id: perf
