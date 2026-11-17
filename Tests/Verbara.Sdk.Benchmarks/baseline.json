@@ -9,6 +9,12 @@
   "_isa_note": "`jit_isa` pins what the comparison expects the JIT to target. ubuntu-latest mixes AMD EPYC 7763 (no AVX-512, x86-64-v3) and EPYC 9V74 (AVX-512, x86-64-v4), and .NET 10 uses AVX-512 where it exists, so the same code read faster or slower by host. The workflow sets DOTNET_EnableAVX512=0 for the whole job (DOTNET_EnableAVX512F=0, the older name, is accepted and ignored by .NET 10.0.14: the JIT still reports x86-64-v4), and the comparator fails closed when a BenchmarkDotNet log names any other ISA. The time bands below were calibrated before the pin, pooled across both CPUs; a re-calibration under the pin is its own PR, from observed runs.",
   "schema_version": 1,
   "jit_isa": "x86-64-v3",
+  "_environment_note": "`environment` pins the exact .NET SDK and runtime this job measures with, and the logical core count it expects. The workflow reads dotnet_sdk from here and installs that SDK, alone, into an empty directory, so no newer SDK or runtime preinstalled on the runner image can be picked up by roll-forward; the comparator then fails closed when a report's HostEnvironmentInfo shows another SDK, another runtime or another core count. Why: a runtime patch can change code generation (10.0.12 is when the JIT began targeting AVX-512 on the hosts that have it), and before this pin the weekly job took whatever 10.0.x the image carried, so a time breach could be the runtime and nobody could tell. The values are the ones the last four hosted runs measured with (2026-11-11 to 11-15: SDK 10.0.404, runtime 10.0.15, 4 logical cores); the run of 2026-11-08 was on 10.0.403 / 10.0.14, so the time bands below were read across more than one runtime, which a re-calibration under this pin will settle. A newer .NET patch is not measured until a PR moves these values; that PR says so, and re-reads the rows (baseline.README.md).",
+  "environment": {
+    "dotnet_sdk": "10.0.404",
+    "dotnet_runtime": "10.0.15",
+    "logical_cores": 4
+  },
   "calibration": {
     "method": "Parsed the BenchmarkDotNet `-report-full-compressed.json` artifacts of 13 real runs of .github/workflows/perf-regression.yml — 12 scheduled (weekly cron) plus 1 workflow_dispatch. `mean_ns` is the mean of those per-run means; the band is set to cover the observed across-run spread with headroom.",
     "runs": 13,

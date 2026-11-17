@@ -45,6 +45,13 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # setup-dotnet floats on 10.0.x, so the log is the only record of which SDK and runtime built
+      # what this run packs and pushes. Printed before anything is built.
+      - name: Record the .NET SDK and runtime
+        run: |
+          dotnet --version
+          dotnet --info
+
       # ---------------------------------------------------------------------
       # Gate 1 — is this a real publish, and which version is it publishing?
       #

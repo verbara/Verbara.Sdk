@@ -26,6 +26,7 @@ _REPO = os.path.normpath(os.path.join(_HERE, os.pardir, os.pardir))
 _SCRIPT = os.path.join(_REPO, "scripts", "ci", "check-perf-baseline.py")
 _REAL_BASELINE = os.path.join(_REPO, "Tests", "Verbara.Sdk.Benchmarks", "baseline.json")
 _WORKFLOW = os.path.join(_REPO, ".github", "workflows", "perf-regression.yml")
+_PUBLISH = os.path.join(_REPO, ".github", "workflows", "publish.yml")
 
 _TYPE = "Verbara.Sdk.Benchmarks.FakeBenchmark"
 _ALPHA = f"{_TYPE}.Alpha"
@@ -89,6 +90,9 @@ _BYTES_BASELINE = {
 }
 
 
+_ENVIRONMENT = {"dotnet_sdk": "10.0.404", "dotnet_runtime": "10.0.15", "logical_cores": 4}
+
+
 def _bdn_log(isa):
     return ("// * Summary *\n\nBenchmarkDotNet v0.15.8, Linux\n"
             f"  [Host]   : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT {isa}\n"
@@ -113,7 +117,7 @@ class CheckPerfBaselineTests(unittest.TestCase):
             json.dump(doc, handle)
 
     def _write_report(self, entries, subdir="fake", type_name=_TYPE, results=True, raw=None,
-                      cores=None):
+                      cores=None, host_extra=None):
         directory = os.path.join(self.root, subdir)
         if results:
             directory = os.path.join(directory, "results")
@@ -126,6 +130,8 @@ class CheckPerfBaselineTests(unittest.TestCase):
                 host = {"BenchmarkDotNetVersion": "0.15.8", "ProcessorName": "AMD EPYC 7763"}
                 if cores is not None:
                     host["LogicalCoreCount"] = cores
+                if host_extra:
+                    host.update(host_extra)
                 handle.write(json.dumps({
                     "Title": "FakeBenchmark",
                     "HostEnvironmentInfo": host,
@@ -627,6 +633,93 @@ class CheckPerfBaselineTests(unittest.TestCase):
         result = self._run("--enforce")
         self.assertEqual(0, result.returncode, result.stdout)
 
+    # ---- the pinned environment ------------------------------------------
+    def _environment_fixture(self, sdk="10.0.404", runtime=".NET 10.0.15 (10.0.15, 10.0.1526.53008)",
+                             cores=4, declared=None):
+        doc = dict(_BASELINE, environment=declared or dict(_ENVIRONMENT))
+        self._write_baseline(doc)
+        host = {}
+        if sdk is not None:
+            host["DotNetCliVersion"] = sdk
+        if runtime is not None:
+            host["RuntimeVersion"] = runtime
+        self._write_report([_entry(_ALPHA, 1010.0), _entry(_BETA, 52.0)], cores=cores,
+                           host_extra=host)
+
+    def test_Main_ShouldPass_WhenTheReportShowsTheDeclaredEnvironment(self):
+        self._environment_fixture()
+        result = self._run("--enforce")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("environment sdk=10.0.404 runtime=10.0.15 logical_cores=4", result.stdout)
+
+    def test_Main_ShouldBreach_WhenTheDeclaredSdkDiffersFromTheObservedOne(self):
+        # The negative control: the same report, a different declaration, and the gate is red.
+        self._environment_fixture(declared=dict(_ENVIRONMENT, dotnet_sdk="10.0.403"))
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("measured on SDK 10.0.404, not the declared 10.0.403", result.stdout)
+
+    def test_Main_ShouldBreach_WhenTheRuntimeRolledForward(self):
+        self._environment_fixture(runtime=".NET 10.0.16 (10.0.16, 10.0.1626.1)")
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("measured on runtime 10.0.16, not the declared 10.0.15", result.stdout)
+
+    def test_Main_ShouldBreach_WhenTheCoreCountDiffers(self):
+        # Bytes move with the core count, so a run on another count is another experiment.
+        self._environment_fixture(cores=8)
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn("measured on logical core count 8, not the declared 4", result.stdout)
+
+    def test_Main_ShouldBreach_WhenTheReportRecordsNoEnvironment(self):
+        self._environment_fixture(sdk=None, runtime="unparseable", cores=None)
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode, result.stdout)
+        for field in ("DotNetCliVersion", "RuntimeVersion", "LogicalCoreCount"):
+            self.assertIn(f"does not record a readable HostEnvironmentInfo.{field}", result.stdout)
+
+    def test_Main_ShouldBreachWithoutFailing_WhenObservingAndTheEnvironmentDiffers(self):
+        self._environment_fixture(sdk="10.0.405")
+        result = self._run()
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual("breach", self._outputs()["status"])
+        self.assertEqual("1", self._outputs()["structural"])
+
+    def test_Main_ShouldNotReportTheEnvironmentTwice_WhenTheReportIsMissing(self):
+        doc = dict(_BASELINE, environment=dict(_ENVIRONMENT))
+        self._write_baseline(doc)
+        os.makedirs(os.path.join(self.root, "fake", "results"))
+        result = self._run("--enforce")
+        self.assertEqual(1, result.returncode)
+        self.assertIn("is missing", result.stdout)
+        self.assertNotIn("cannot be confirmed", result.stdout,
+                         "a missing report is reported once, by the report check")
+
+    def test_Main_ShouldExitTwo_WhenTheEnvironmentIsPartial(self):
+        for key in _ENVIRONMENT:
+            with self.subTest(missing=key):
+                partial = {k: v for k, v in _ENVIRONMENT.items() if k != key}
+                self._write_baseline(dict(_BASELINE, environment=partial))
+                self.assertEqual(2, self._run().returncode)
+
+    def test_Main_ShouldExitTwo_WhenTheEnvironmentNamesAVersionRange(self):
+        for key, value in (("dotnet_sdk", "10.0.x"), ("dotnet_runtime", "10.0"),
+                           ("dotnet_sdk", ""), ("logical_cores", 0), ("logical_cores", True),
+                           ("logical_cores", "4")):
+            with self.subTest(key=key, value=value):
+                self._write_baseline(dict(_BASELINE, environment=dict(_ENVIRONMENT, **{key: value})))
+                self.assertEqual(2, self._run().returncode)
+
+    def test_Main_ShouldExitTwo_WhenTheEnvironmentHasAnUnknownKey(self):
+        # A key nobody compares would read as pinned when it is not.
+        self._write_baseline(dict(_BASELINE, environment=dict(_ENVIRONMENT, cpu="EPYC 7763")))
+        self.assertEqual(2, self._run().returncode)
+
+    def test_Main_ShouldExitTwo_WhenTheEnvironmentIsNotAnObject(self):
+        self._write_baseline(dict(_BASELINE, environment="10.0.404"))
+        self.assertEqual(2, self._run().returncode)
+
     # ---- exit 2: the guard itself is broken ------------------------------
     def test_Main_ShouldExitTwo_WhenBaselineIsMissing(self):
         result = self._run("--enforce", baseline=os.path.join(self._tmp, "nope.json"))
@@ -815,6 +908,38 @@ class CommittedBaselineContractTests(unittest.TestCase):
                          if not line.lstrip().startswith("#"))
         self.assertRegex(code, r"(?m)^\s+DOTNET_EnableAVX512: '0'$")
         self.assertNotRegex(code, r"DOTNET_EnableAVX512F")
+
+    def test_Baseline_ShouldPinTheEnvironmentTheWorkflowInstalls(self):
+        # The workflow installs the SDK baseline.json declares, alone, in an empty directory; a
+        # floating `10.0.x` here would hand the job whatever the runner image carries.
+        env = self.doc.get("environment")
+        self.assertIsInstance(env, dict, "baseline.json must declare \"environment\"")
+        self.assertRegex(env["dotnet_sdk"], r"^[0-9]+\.[0-9]+\.[0-9]+$")
+        self.assertRegex(env["dotnet_runtime"], r"^[0-9]+\.[0-9]+\.[0-9]+$")
+        self.assertEqual(4, env["logical_cores"], "every `bytes` here is the 4-core hosted figure")
+        code = "\n".join(line for line in self.workflow.splitlines()
+                         if not line.lstrip().startswith("#"))
+        self.assertNotIn("'10.0.x'", code)
+        setup = re.findall(r"(?m)^\s+- uses: actions/setup-dotnet@\S+\n((?:\s{8,}.*\n)+)", code)
+        self.assertEqual(1, len(setup), "exactly one setup-dotnet step")
+        self.assertIn("DOTNET_INSTALL_DIR:", setup[0])
+        self.assertRegex(setup[0], r"dotnet-version: \$\{\{ steps\.declared\.outputs\.sdk \}\}")
+        order = [code.index(marker) for marker in (
+            "id: declared", "actions/setup-dotnet@",
+            "name: Confirm the pinned SDK and runtime are the only ones reachable",
+            "name: Build benchmarks (Release)")]
+        self.assertEqual(sorted(order), order, "declare, install, confirm, then build")
+
+    def test_Publish_ShouldRecordTheSdkAndRuntimeBeforeBuilding(self):
+        with open(_PUBLISH, encoding="utf-8") as handle:
+            code = "\n".join(line for line in handle.read().splitlines()
+                             if not line.lstrip().startswith("#"))
+        record = code.find("dotnet --version\n          dotnet --info")
+        self.assertGreaterEqual(record, 0, "publish.yml must print dotnet --version and --info")
+        first_build = re.search(r"\bdotnet (build|pack|restore)\b", code)
+        self.assertIsNotNone(first_build)
+        self.assertLess(record, first_build.start(), "printed before anything is built")
+        self.assertLess(code.index("actions/setup-dotnet@"), record)
 
     def test_Baseline_ShouldGateTheEventPumpOnBytesButNotItsBimodalRow(self):
         pump = "Verbara.Sdk.Benchmarks.AsyncEventPumpBenchmark"
