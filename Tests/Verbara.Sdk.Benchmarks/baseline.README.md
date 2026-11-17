@@ -95,6 +95,15 @@ BenchmarkDotNet log; a log that names another ISA, or no log at all, is a struct
 The time bands were calibrated **before** the pin, pooled across both CPUs; a re-calibration under
 the pin is its own PR, from observed runs, with the protocol below.
 
+The pin does not make the fleet one machine. Under it the hosted runs have landed on four CPU
+models (EPYC 9V45, 9V74, 7763, Xeon 6975P-C), and on 2026-11-11 an EPYC 7763 read
+`ChannelManagerBenchmark.Update1000ChannelStates` 26.4% over its baseline with the code unchanged
+(an interleaved local run against the code of the previous 7763 run read 1.007 and 1.025). Its band
+and `Create1000Channels`' are therefore **provisional** and wider than the rest (35% and 40%);
+`_channel_manager_widened_bands_note` in `baseline.json` carries the runs, the ratios and what the
+widening stops the gate from seeing. A comparison of a reference build against this one inside the
+same job, on the same host, is what replaces them.
+
 ## Reported both ways, failing one way
 
 A breach is reported when `|observed − baseline| / baseline` exceeds the band **in either
