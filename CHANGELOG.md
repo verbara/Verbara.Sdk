@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: a reconnect reload no longer drops the events dispatched while it replaces its subscription (#NNN)
+
+On every reconnect, on the reconnect loop and on the caller's own `ConnectAsync`, `VerbaraServer` released its event
+subscription and then took a new one. `AmiConnection` keeps its observers across sessions and was already dispatching
+the new session's events while the reload ran, so an event dispatched between the two steps reached no observer and
+was recorded nowhere. A `Hangup` lost there had two outcomes:
+
+- **A hung-up channel could come back.** When an older channel snapshot (from `RequestInitialStateAsync`,
+  `ReconcileChannelsAsync` or `RequestChannelSnapshotAsync`, read before the hangup) was applied after it, the table
+  had no record of the departure and admitted the channel again. It stayed in `Channels`, with its call held open,
+  until a later full reload removed it.
+- **Otherwise the channel lost its cause.** The reload's own `Status` removed it as `RemovedByReload`, with no
+  `HangupCause`, instead of ending it with the real one.
+
+Any other event in that window (`Newchannel`, a queue or conference leave, an agent or bridge event) was lost the same
+way. The window was a few microseconds, longer on a loaded host.
+
+Now the server keeps the subscription it took at start for as long as that subscription's stream has not ended, so
+nothing falls between two subscriptions. It subscribes again only after the connection completed or failed the
+previous stream, which `AmiConnection` never does. A custom `IAmiConnection` that ends its observers' streams with
+each session keeps being subscribed again on each reconnect, as before; it must end them before it raises
+`Reconnected`.
+
 ## [2.10.1] - 2026-11-16
 
 ### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#584)

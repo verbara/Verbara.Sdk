@@ -2136,9 +2136,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// The caller opens the channel table's read window <c>before</c> calling this, so the window's
     /// admission mark is read before the <c>Status</c> action is sent and says how much of the
     /// channel table this snapshot could possibly describe. <c>OnReconnected</c> has its event
-    /// observer subscribed before it awaits this read (the start's, or a new one when that stream ended), so a call that starts during the read is admitted
-    /// live and is legitimately absent from the older snapshot; on a large estate that is a full
-    /// <c>Status</c> round trip. The mark is what keeps the reconciliation from reading that absence
+    /// observer subscribed before it awaits this read (the start's, or a new one when that stream
+    /// ended), so a call that starts during the read is admitted live and is legitimately absent
+    /// from the older snapshot; on a large estate that is a full <c>Status</c> round trip. The mark is what keeps the reconciliation from reading that absence
     /// as a hangup and ending a call that is up.
     /// </para>
     /// <para>
