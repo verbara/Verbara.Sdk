@@ -24,8 +24,9 @@ namespace Verbara.Sdk.Sessions.FunctionalTests.Infrastructure;
 /// to turn a reload that never ran into a report instead of a hang; no test waits on the clock.
 /// </para>
 /// <para>
-/// The server subscribes a new observer on every reconnect. <see cref="Observer"/> is always the latest
-/// one, so a test keeps delivering to the observer the reload left in place.
+/// The server keeps the observer it subscribed at start across a reconnect, and subscribes a new one only
+/// after a stream ended. <see cref="Observer"/> is always the latest one, so a test keeps delivering to the
+/// observer the server holds.
 /// </para>
 /// </remarks>
 internal sealed class ReloadableConnection
@@ -148,7 +149,7 @@ internal sealed class ReloadableConnection
             script = _script;
         }
 
-        // A live frame the script delivers here reaches the observer the reload subscribed, on the reload's own
+        // A live frame the script delivers here reaches the observer the server holds, on the reload's own
         // thread and before the answer is read: the order a pump that processed it in that gap gives.
         switch (action)
         {

@@ -118,7 +118,7 @@ internal sealed class QueueCallRig : IAsyncDisposable
     /// <summary>
     /// Makes the connection reconnect and runs the server's reload, answered with <paramref name="status"/>
     /// for <c>Status</c> and <paramref name="queueStatus"/> for <c>QueueStatus</c>, and returns once the
-    /// reload has read both. Frames delivered afterwards go to the observer the reload subscribed.
+    /// reload has read both. Frames delivered afterwards go to the observer the server holds.
     /// </summary>
     /// <remarks>
     /// The reload reconciles the channel table against <paramref name="status"/>, as it does against
