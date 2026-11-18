@@ -1,8 +1,10 @@
 """Unit tests for scripts/ci/check-perf-abab.py (the in-job comparison against a reference tag).
 
 The weekly perf job builds the declared reference tag beside HEAD and measures both in the same
-job, in the declared order (R H H R), and this comparator judges time by the ratio HEAD/reference
-per round. It runs only in a scheduled job, so like the absolute gate it needs its own guard here.
+job, in the declared order (R H H R R H), and this comparator judges time by the geometric mean of
+the per-round ratios HEAD/reference, confirmed by a majority of the rounds. It runs only in a
+scheduled job, so like the absolute gate it needs its own guard here. Most tests run the two-round
+order R H H R, which keeps today's verdicts (a regression control); section 31 runs three.
 
 The tests run the comparator as a subprocess on synthetic `abab-root` trees: one directory per
 invocation (`<position>-<arm>/results/<Type>-report-full-compressed.json` plus a BenchmarkDotNet
@@ -71,13 +73,14 @@ _DEFAULTS = {_ALPHA: (1000.0, 168), _BETA: (50.0, 0), _GAMMA: (2000.0, 500000), 
 
 _ROW_KEYS = {"name", "class", "arm", "judged", "not_judged_reason", "means", "ratios", "geomean",
              "self", "bytes", "bytes_delta", "bytes_judged", "bytes_verdict", "thresholds",
-             "verdict", "blind"}
+             "verdict", "blind", "lone_rounds"}
 _META_KEYS = {"schema", "mode", "enforcing", "switch", "reference_tag", "reference_sha",
               "head_sha", "newest_tag", "stale_reference", "order", "aa_run",
               "changed_compiled_paths", "changed_benchmark_paths", "environment", "invocations",
               "thresholds"}
-_SUMMARY_KEYS = {"judged_rows", "ratios_count", "median_abs_log_ratio", "p95_abs_log_ratio",
-                 "median_abs_log_self", "order_effect_geomean", "share_outside_band", "slower",
+_SUMMARY_KEYS = {"judged_rows", "ratios_count", "median_abs_log_ratio", "geomeans_count",
+                 "median_abs_log_geomean", "p95_abs_log_geomean", "share_geomean_outside_band",
+                 "lone_rounds", "median_abs_log_self", "order_effect_geomean", "slower",
                  "faster", "unconfirmed", "more_bytes", "fewer_bytes", "bytes_anomalies",
                  "structural", "failing", "head_only", "reference_only", "case_set_differs",
                  "incomplete", "not_judged", "sub_floor_judged", "blind"}
@@ -900,10 +903,16 @@ class CheckPerfAbabTests(unittest.TestCase):
         self.assertEqual(6, summary["ratios_count"])
         logs = sorted(abs(math.log(r)) for r in (1.02, 0.99, 1.0, 50.0 / 56.0, 1.0, 1.0))
         self.assertAlmostEqual((logs[2] + logs[3]) / 2, summary["median_abs_log_ratio"], places=9)
-        self.assertAlmostEqual(logs[-1], summary["p95_abs_log_ratio"], places=9)
         self.assertAlmostEqual(1.12 ** (1 / 3), summary["order_effect_geomean"], places=9)
-        self.assertAlmostEqual(1 / 6, summary["share_outside_band"], places=9)
+        # The noise clause reads g, the statistic the verdict uses: one g per judged row.
+        self.assertEqual(3, summary["geomeans_count"])
+        g_logs = sorted(abs(math.log(g)) for g in (math.sqrt(1.02 * 0.99),
+                                                   math.sqrt(50.0 / 56.0), 1.0))
+        self.assertAlmostEqual(g_logs[1], summary["median_abs_log_geomean"], places=9)
+        self.assertAlmostEqual(g_logs[-1], summary["p95_abs_log_geomean"], places=9)
+        self.assertAlmostEqual(0.0, summary["share_geomean_outside_band"], places=9)
         self.assertEqual(1, summary["unconfirmed"])
+        self.assertEqual(0, summary["lone_rounds"])
         alpha = self._row(_ALPHA)
         self.assertEqual([1000.0, 1000.0], alpha["means"]["R"])
         self.assertEqual([1020.0, 990.0], alpha["means"]["H"])
@@ -947,10 +956,170 @@ class CheckPerfAbabTests(unittest.TestCase):
         self._run()
         body = self._md()
         self.assertIn("In-job comparison: HEAD against v2.10.1 (R H H R)", body)
+        self.assertNotIn("(R H H R R H)", body)
         self.assertIn("OBSERVING", body)
         self.assertIn("PERF_ABAB_ENFORCE", body)
         self.assertIn("AMD EPYC 7763", body)
         self.assertIn("x86-64-v3", body)
+
+    # ---- 31. three rounds: the geometric mean, confirmed by a majority -------------------
+    _THREE = ["R", "H", "H", "R", "R", "H"]
+    _H_OF_ROUND = {1: 2, 2: 3, 3: 6}   # round k pairs the k-th R (1, 4, 5) with the k-th H
+
+    def use_three_rounds(self):
+        self.order = list(self._THREE)
+        self.baseline["abab"]["order"] = list(self._THREE)
+        self.manifest["order"] = list(self._THREE)
+        self.values = {pos: {name: list(value) for name, value in _DEFAULTS.items()}
+                       for pos in range(1, len(self.order) + 1)}
+        self.host = {pos: {} for pos in self.values}
+        self.isa = {pos: "x86-64-v3" for pos in self.values}
+
+    def set_rounds(self, case, *ratios):
+        """HEAD's mean in round k is the reference's (the default) times ratios[k-1]."""
+        reference = _DEFAULTS[case][0]
+        for k, ratio in enumerate(ratios, start=1):
+            self.set(self._H_OF_ROUND[k], case, mean=round(reference * ratio, 6))
+
+    def test_Main_ShouldReportSlower_WhenTheGeomeanAndTwoOfThreeRoundsExceed(self):
+        self.use_three_rounds()
+        self.set_rounds(_ALPHA, 1.2, 1.2, 1.0)
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        row = self._row(_ALPHA)
+        self.assertEqual("SLOWER", row["verdict"])
+        self.assertEqual(3, len(row["ratios"]))
+        self.assertAlmostEqual((1.2 * 1.2) ** (1 / 3), row["geomean"], places=9)
+        self.assertIn("In-job comparison: HEAD against v2.10.1 (R H H R R H)", self._md())
+
+    def test_Main_ShouldReportUnconfirmed_WhenOneSpikeAloneLiftsTheGeomean(self):
+        self.use_three_rounds()
+        self.set_rounds(_ALPHA, 1.5, 1.0, 1.0)   # g = 1.1447 over 1.10, one round of three
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual("UNCONFIRMED", self._row(_ALPHA)["verdict"])
+        self.assertEqual("1", self._outputs()["abab_unconfirmed"])
+        self.assertEqual("0", self._outputs()["abab_slower"])
+
+    def test_Main_ShouldReportUnconfirmed_WhenAMajorityExceedsButTheGeomeanDoesNot(self):
+        self.use_three_rounds()
+        self.set_rounds(_ALPHA, 1.11, 1.11, 0.95)   # g = 1.0540: two rounds over, g inside
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual("UNCONFIRMED", self._row(_ALPHA)["verdict"])
+
+    def test_Main_ShouldCountALoneRound_WhenOneRoundExceedsAndTheGeomeanIsInside(self):
+        self.use_three_rounds()
+        self.set_rounds(_ALPHA, 1.15, 1.0, 1.0)   # g = 1.0477
+        self.set_rounds(_BETA, 1.0, 0.85, 1.0)    # g = 0.9473, one round under 0.909
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        for case in (_ALPHA, _BETA):
+            row = self._row(case)
+            self.assertEqual("ok", row["verdict"], case)
+            self.assertEqual(1, row["lone_rounds"], case)
+        self.assertEqual(0, self._row(_GAMMA)["lone_rounds"])
+        summary = self._json()["summary"]
+        self.assertEqual(2, summary["lone_rounds"])
+        self.assertEqual(0, summary["unconfirmed"])
+        self.assertEqual("pass", self._outputs()["abab_status"])
+
+    def test_Main_ShouldReportFasterSymmetrically_WhenThreeRoundsRun(self):
+        self.use_three_rounds()
+        self.set_rounds(_ALPHA, 0.8, 0.8, 1.0)    # g = 0.8618, two of three under
+        self.set_rounds(_BETA, 0.7, 1.0, 1.0)     # g = 0.8879 by one spike
+        self.set_rounds(_GAMMA, 0.9, 0.9, 1.0)    # two of three under, g = 0.9322 inside
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual("FASTER", self._row(_ALPHA)["verdict"])
+        self.assertEqual("UNCONFIRMED", self._row(_BETA)["verdict"])
+        self.assertEqual("UNCONFIRMED", self._row(_GAMMA)["verdict"])
+        self.assertEqual("0", self._outputs()["abab_failing"])
+
+    def test_Main_ShouldJudgeASubFloorRowByTheGeomeanAndTheMajority_WhenThreeRoundsRun(self):
+        self.use_three_rounds()
+        self.set_arm("R", _TINY, mean=0.72)
+        for pos, mean in ((2, 30.0), (3, 30.0), (6, 2.0)):   # to the floor: 15, 15, 1
+            self.set(pos, _TINY, mean=mean)
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertEqual("SLOWER", self._row(_TINY)["verdict"])
+        self.set(3, _TINY, mean=2.0)                          # 15, 1, 1: g = 2.466, one round
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual("UNCONFIRMED", self._row(_TINY)["verdict"])
+        self.set(2, _TINY, mean=3.0)                          # 1.5, 1, 1: inside
+        self._run(enforce=True)
+        self.assertEqual("ok", self._row(_TINY)["verdict"])
+
+    def test_Main_ShouldKeepTodaysVerdicts_WhenTheOrderHasTwoRounds(self):
+        # The regression control: with two rounds, "g beyond and a majority beyond" is "every
+        # round beyond", and one round beyond is UNCONFIRMED whatever g says.
+        cases = {(1.2, 1.2): "SLOWER", (1.2, 1.0): "UNCONFIRMED", (1.25, 1.0): "UNCONFIRMED",
+                 (1.05, 1.15): "UNCONFIRMED", (0.8, 0.8): "FASTER", (0.8, 1.0): "UNCONFIRMED",
+                 (0.7, 1.0): "UNCONFIRMED", (1.2, 0.8): "UNCONFIRMED", (1.1, 1.1): "ok",
+                 (1.0, 1.0): "ok", (1.09, 0.92): "ok"}
+        for (r1, r2), verdict in cases.items():
+            with self.subTest(ratios=(r1, r2)):
+                self.set(2, _ALPHA, mean=round(1000.0 * r1, 6))   # round 1 = (pos 1, pos 2)
+                self.set(3, _ALPHA, mean=round(1000.0 * r2, 6))   # round 2 = (pos 4, pos 3)
+                result = self._run(enforce=True)
+                self.assertEqual(1 if verdict == "SLOWER" else 0, result.returncode,
+                                 result.stdout)
+                self.assertEqual(verdict, self._row(_ALPHA)["verdict"])
+
+    def test_Main_ShouldComputeTheNoiseStatisticsOnTheGeomean_WhenThreeRoundsRun(self):
+        self.use_three_rounds()
+        self.set_rounds(_ALPHA, 1.02, 0.99, 1.0)
+        self.set_rounds(_BETA, 1.3, 1.3, 1.3)
+        self.set_rounds(_GAMMA, 1.12, 1.0, 1.0)   # a lone round, g = 1.0385
+        self._run()
+        summary = self._json()["summary"]
+        self.assertEqual(_SUMMARY_KEYS, set(summary))
+        self.assertEqual(9, summary["ratios_count"])
+        self.assertEqual(3, summary["geomeans_count"])
+        g_alpha = (1.02 * 0.99) ** (1 / 3)
+        g_gamma = 1.12 ** (1 / 3)
+        logs = sorted(abs(math.log(g)) for g in (g_alpha, 1.3, g_gamma))
+        self.assertAlmostEqual(logs[1], summary["median_abs_log_geomean"], places=9)
+        self.assertAlmostEqual(math.log(1.3), summary["p95_abs_log_geomean"], places=9)
+        self.assertAlmostEqual(1 / 3, summary["share_geomean_outside_band"], places=9)
+        ratio_logs = sorted(abs(math.log(r)) for r in (1.02, 0.99, 1.0, 1.3, 1.3, 1.3,
+                                                       1.12, 1.0, 1.0))
+        self.assertAlmostEqual(ratio_logs[4], summary["median_abs_log_ratio"], places=9)
+        self.assertEqual(1, summary["lone_rounds"])
+        self.assertEqual(1, summary["slower"])
+        body = self._md()
+        self.assertIn("median |ln g|", body)
+        self.assertIn("1 lone round", body)
+
+    def test_Main_ShouldStillJudgeBytes_WhenARowIsNotJudgedOnTime(self):
+        self.use_three_rounds()
+        self.baseline["abab"]["rows"] = {_ALPHA: {"judge_time": False, "reason": "bimodal"}}
+        self.set_arm("H", _ALPHA, mean=2000.0, allocated=176)
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        row = self._row(_ALPHA)
+        self.assertFalse(row["judged"])
+        self.assertEqual("not judged", row["verdict"])
+        self.assertIn("bimodal", row["not_judged_reason"])
+        self.assertEqual("MORE-BYTES", row["bytes_verdict"])
+        self.assertEqual([8, 8, 8], row["bytes_delta"])
+        self.assertEqual(0, self._json()["summary"]["slower"])
+
+    def test_Main_ShouldRequireEveryRoundForBytes_WhenThreeRoundsRun(self):
+        self.use_three_rounds()
+        self.set(2, _ALPHA, allocated=176)
+        self.set(3, _ALPHA, allocated=176)    # rounds 1 and 2 over, round 3 exact
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        row = self._row(_ALPHA)
+        self.assertEqual("ok", row["bytes_verdict"])
+        self.assertEqual([8, 8, 0], row["bytes_delta"])
+        self.set(3, _ALPHA, allocated=160)    # FEWER needs every round too
+        self.set(2, _ALPHA, allocated=160)
+        self._run(enforce=True)
+        self.assertEqual("ok", self._row(_ALPHA)["bytes_verdict"])
 
 
 def _code_lines(text):
@@ -969,7 +1138,7 @@ def _step(code, name):
 _ABAB_STEPS = ("Read the declared in-job reference",
                "Check out the reference tag beside HEAD",
                "Build the reference benchmarks (Release)",
-               "Run the reference and HEAD alternated (R H H R)",
+               "Run the reference and HEAD alternated (R H H R R H)",
                "Compare HEAD against the reference in this job",
                "Publish the in-job comparison to the run summary")
 
@@ -1013,8 +1182,18 @@ class CommittedAbabContractTests(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
         self.assertEqual(1, result.returncode, result.stdout + result.stderr)
 
-    def test_Baseline_ShouldShipNoOverridesOrAcceptedCosts_WhileTheRunIsAnAATest(self):
-        self.assertEqual({}, self.doc["abab"]["rows"])
+    def test_Baseline_ShouldDeclareThreeRounds(self):
+        self.assertEqual(["R", "H", "H", "R", "R", "H"], self.doc["abab"]["order"])
+
+    def test_Baseline_ShouldShipOnlyTheBimodalRowOverride_WhileTheRunIsAnAATest(self):
+        # The second series names one override before it runs, and only that one: any other is a
+        # change after seeing the runs and starts a new series (baseline.README.md).
+        rows = {k: v for k, v in self.doc["abab"]["rows"].items() if not k.startswith("_")}
+        name = "Verbara.Sdk.Benchmarks.AsyncEventPumpBenchmark.EnqueueAndConsume1000Events"
+        self.assertEqual([name], list(rows))
+        self.assertIs(False, rows[name]["judge_time"])
+        self.assertEqual({"judge_time", "reason"}, set(rows[name]))
+        self.assertTrue(rows[name]["reason"].strip())
         self.assertEqual({}, self.doc["abab"]["accepted"])
 
     def test_Baseline_ShouldStillLoadUnderTheAbsoluteComparator(self):
@@ -1050,7 +1229,7 @@ class CommittedAbabContractTests(unittest.TestCase):
         for name in _ABAB_STEPS:
             with self.subTest(step=name):
                 self.assertIn("if: ${{ !cancelled() }}", _step(self.code, name))
-        run = _step(self.code, "Run the reference and HEAD alternated (R H H R)")
+        run = _step(self.code, "Run the reference and HEAD alternated (R H H R R H)")
         self.assertIn("continue-on-error: true", run)
         self.assertRegex(run, r"timeout-minutes: \d+")
         self.assertIn("scripts/ci/run-perf-abab.sh", run)
@@ -1063,14 +1242,16 @@ class CommittedAbabContractTests(unittest.TestCase):
 
     def test_Workflow_ShouldLeaveRoomForTheDoubledRun(self):
         job = int(re.search(r"(?m)^    timeout-minutes: (\d+)$", self.code).group(1))
-        run = _step(self.code, "Run the reference and HEAD alternated (R H H R)")
+        run = _step(self.code, "Run the reference and HEAD alternated (R H H R R H)")
         step = int(re.search(r"timeout-minutes: (\d+)", run).group(1))
         abab = self.doc["abab"]
         # The existing 9-step HEAD pass took up to 20 minutes; the job timeout must never be what
         # fires, because a cancelled job skips every `!cancelled()` comparison step.
         self.assertGreaterEqual(job, step + 25)
         invocations = len(abab["order"])
-        self.assertGreaterEqual(step * 60, invocations * abab["invocation_timeout_s"] + 2 * 120)
+        # run-perf-abab.sh gives every `timeout` call a 30 s --kill-after grace and the lists 120 s.
+        grace, lists = 30, 120
+        self.assertGreaterEqual(step * 60, invocations * (abab["invocation_timeout_s"] + grace) + 2 * (lists + grace))
 
     def test_Workflow_ShouldUploadTheAbabArtifacts(self):
         upload = _step(self.code, "Upload BenchmarkDotNet JSON reports")

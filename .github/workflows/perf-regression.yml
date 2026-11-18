@@ -33,10 +33,12 @@ name: Perf Regression
 # IN-JOB COMPARISON (ADR-0042 addendum). The bands above cover a fleet of CPU models
 # that read the same code up to 2-3x apart, so no band sees a 10-20% time regression. After the
 # absolute gate, this job also builds the reference tag declared in baseline.json
-# `abab.reference_tag` beside HEAD and measures both, alternated R H H R, in this job on this
-# machine; scripts/ci/check-perf-abab.py judges time by the ratio HEAD/reference per round and bytes
-# by the difference. It OBSERVES (PERF_ABAB_ENFORCE below) until five consecutive runs meet the
-# prediction written before them. It costs about twice this job's minutes, on the hosted runner.
+# `abab.reference_tag` beside HEAD and measures both, alternated R H H R R H (three rounds), in this
+# job on this machine; scripts/ci/check-perf-abab.py judges time by the geometric mean of the
+# per-round ratios HEAD/reference, confirmed by a majority of the rounds, and bytes by the
+# difference in every round. It OBSERVES (PERF_ABAB_ENFORCE below) until five consecutive runs meet
+# the prediction written before them. It costs more than twice this job's minutes, on the hosted
+# runner.
 #
 # Manual run: gh workflow run "Perf Regression"
 
@@ -55,10 +57,15 @@ jobs:
   benchmark:
     name: Run BenchmarkDotNet hot-paths
     runs-on: ubuntu-latest
-    # The in-job comparison adds four joint invocations (about 24-30 minutes) to the 15-20 minute
-    # absolute pass. This must never be what fires: a cancelled job skips every `!cancelled()`
-    # comparison step, so each phase has its own, shorter timeout (the run step 70 minutes).
-    timeout-minutes: 100
+    # The in-job comparison adds six joint invocations (about 38-40 minutes, projected from the
+    # first series' four; budget 48) to the 15-20 minute absolute pass; the whole job's budget is
+    # 70 minutes. These timeouts are the backstop, not the budget, and the job's must never be what
+    # fires: a cancelled job skips every `!cancelled()` comparison step, so each phase has its own,
+    # shorter timeout. The run step's (100 minutes) outlasts six invocations at
+    # `abab.invocation_timeout_s` plus the two list calls, each with its 30 s kill grace, so an
+    # invocation that hangs ends in its own `timeout` and the manifest is still written; the job's
+    # (125) leaves 25 minutes after it.
+    timeout-minutes: 125
     env:
       # ┌─────────────────────────────────────────────────────────────────────┐
       # │  THE FLIP. This one line is the whole difference between observing  │
@@ -291,10 +298,10 @@ jobs:
         continue-on-error: true
         working-directory: ${{ runner.temp }}/perf-ref
         run: dotnet build Tests/Verbara.Sdk.Benchmarks/ -c Release --nologo
-      - name: Run the reference and HEAD alternated (R H H R)
+      - name: Run the reference and HEAD alternated (R H H R R H)
         if: ${{ !cancelled() }}
         continue-on-error: true
-        timeout-minutes: 70
+        timeout-minutes: 100
         env:
           REF: ${{ steps.abab_ref.outputs.tag }}
         run: >-
