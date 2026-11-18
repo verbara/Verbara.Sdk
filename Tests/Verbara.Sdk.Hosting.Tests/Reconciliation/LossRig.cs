@@ -511,6 +511,7 @@ internal sealed class LossRig : IAsyncDisposable
         Server.FenceWaitObserved = (_, _) =>
         {
             if (_holding || Server.IsReconnectPending) waiting.TrySetResult();
+            return default;
         };
         try
         {

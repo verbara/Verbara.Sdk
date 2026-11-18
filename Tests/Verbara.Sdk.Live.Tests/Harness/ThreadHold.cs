@@ -1,14 +1,20 @@
 namespace Verbara.Sdk.Live.Tests.Harness;
 
 /// <summary>
-/// Holds the thread that raises a synchronous hook until the test releases it: the hook calls <see cref="Hold"/>, which
-/// completes <see cref="Held"/> and blocks, and the test, once <see cref="Held"/> completes, does what must happen while
-/// the thread is held and calls <see cref="Release"/>.
+/// Holds the code that raises a hook until the test releases it: the hook calls <see cref="HoldAsync"/> (an awaitable
+/// seam) or <see cref="Hold"/> (a synchronous one), which completes <see cref="Held"/> and waits, and the test, once
+/// <see cref="Held"/> completes, does what must happen while the hook is held and calls <see cref="Release"/>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The hook's thread is usually a thread-pool worker, and blocking one starves the work it would have run next, the
-/// test's own continuation included. Two rules keep that continuation runnable while the hold is in force:
+/// Prefer <see cref="HoldAsync"/> wherever the product awaits the hook (the server's internal load seams): it holds the
+/// load without holding a thread, so a saturated pool cannot starve the test's continuation past the bound. <see cref="Hold"/>
+/// is for a hook the product raises synchronously (a public event, an observer's <c>OnNext</c>, a lock-held seam), where
+/// the only way to hold is to block the thread.
+/// </para>
+/// <para>
+/// That thread is usually a thread-pool worker, and blocking one starves the work it would have run next, the test's
+/// own continuation included. Two rules keep that continuation runnable while a blocking hold is in force:
 /// </para>
 /// <list type="bullet">
 /// <item><see cref="Held"/> is completed from the pool's global queue (<see cref="Signal"/>). Completed on the worker
@@ -44,6 +50,26 @@ internal sealed class ThreadHold
     public bool IsReleased => _released.Task.IsCompleted;
 
     /// <summary>
+    /// Completes <see cref="Held"/> and waits, without blocking a thread, until <see cref="Release"/> or <see cref="Free"/>,
+    /// or until <paramref name="bound"/> runs out. For a seam the product awaits.
+    /// </summary>
+    /// <returns>Whether the hook was let go; <see langword="false"/> when the hold ran out.</returns>
+    public async ValueTask<bool> HoldAsync(TimeSpan bound)
+    {
+        _held.TrySetResult();
+        try
+        {
+            await _released.Task.WaitAsync(bound);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            // A release that lands between the wait's end and this exchange still let the hook go first.
+            return Interlocked.CompareExchange(ref _state, RanOut, Open) != Open;
+        }
+    }
+
+    /// <summary>
     /// Completes <see cref="Held"/> and blocks the calling thread until <see cref="Release"/> or <see cref="Free"/>, or
     /// until <paramref name="bound"/> runs out.
     /// </summary>
@@ -76,6 +102,22 @@ internal sealed class ThreadHold
     {
         Interlocked.CompareExchange(ref _state, Released, Open);
         _released.TrySetResult();
+    }
+
+    /// <summary>
+    /// Waits, without blocking a thread, until <paramref name="released"/> completes or <paramref name="bound"/> runs out,
+    /// whichever is first: for an awaitable seam whose test only paces it and judges the outcome elsewhere.
+    /// </summary>
+    public static async ValueTask Until(Task released, TimeSpan bound)
+    {
+        try
+        {
+            await released.WaitAsync(bound);
+        }
+        catch (TimeoutException)
+        {
+            // A hang bound: the seam goes on, and the test's own assertions judge what followed.
+        }
     }
 
     /// <summary>

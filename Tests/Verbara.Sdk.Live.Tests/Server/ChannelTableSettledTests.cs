@@ -194,12 +194,12 @@ public sealed class ChannelTableSettledTests
         using var gate = new DispatchGate();
         using var subscription = run.Connection.Subscribe(gate);
         using var bWritten = new ManualResetEventSlim();
-        using var bGo = new ManualResetEventSlim();
+        var bGo = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         run.Server.ChannelApplicationWritten = full =>
         {
-            if (full || bWritten.IsSet) return;
+            if (full || bWritten.IsSet) return default;
             bWritten.Set();
-            bGo.Wait(Run.Bound * 3);
+            return ThreadHold.Until(bGo.Task, Run.Bound * 3);
         };
 
         var b = await StartDeferredAsync(run, peer, gate, bWritten);
@@ -207,7 +207,7 @@ public sealed class ChannelTableSettledTests
         await run.Server.ReconcileChannelsAsync().AsTask().WaitAsync(Run.Bound);
         var completeWhileBCounted = run.Server.ChannelTableComplete;
         var settledWhileBCounted = watched.Settled.Count;
-        bGo.Set();
+        bGo.TrySetResult();
         await b.WaitAsync(Run.Bound);
 
         using (new AssertionScope())
@@ -232,14 +232,14 @@ public sealed class ChannelTableSettledTests
         using var gate = new DispatchGate();
         using var subscription = run.Connection.Subscribe(gate);
         using var bWritten = new ManualResetEventSlim();
-        using var bGo = new ManualResetEventSlim();
+        var bGo = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var aApplying = new ManualResetEventSlim();
         using var aGo = new ManualResetEventSlim();
         run.Server.ChannelApplicationWritten = full =>
         {
-            if (full || bWritten.IsSet) return;
+            if (full || bWritten.IsSet) return default;
             bWritten.Set();
-            bGo.Wait(Run.Bound * 3);
+            return ThreadHold.Until(bGo.Task, Run.Bound * 3);
         };
         run.Server.Channels.ChannelAdded += channel =>
         {
@@ -253,7 +253,7 @@ public sealed class ChannelTableSettledTests
         peer.StatusChannels = [new StatusChannel("a", "PJSIP/a", LinkedId: "call")];
         var a = Task.Run(async () => await run.Server.ReconcileChannelsAsync());
         aApplying.Wait(Run.Bound).Should().BeTrue("premise: A began to apply while B was held");
-        bGo.Set();
+        bGo.TrySetResult();
         await b.WaitAsync(Run.Bound);
         var settledAfterB = watched.Settled.Count;
         aGo.Set();
@@ -280,6 +280,7 @@ public sealed class ChannelTableSettledTests
         run.Server.ChannelApplicationWritten = full =>
         {
             if (!full) written.Set();
+            return default;
         };
 
         var b = await StartDeferredAsync(run, peer, gate, written);
@@ -361,7 +362,11 @@ public sealed class ChannelTableSettledTests
         }
 
         var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        run.Server.FenceWaitObserved = (_, _) => waiting.TrySetResult();
+        run.Server.FenceWaitObserved = (_, _) =>
+        {
+            waiting.TrySetResult();
+            return default;
+        };
         var read = Task.Run(async () => await run.Server.ReconcileChannelsAsync());
         await waiting.Task.WaitAsync(Run.Bound);
         run.Server.FenceWaitObserved = null;

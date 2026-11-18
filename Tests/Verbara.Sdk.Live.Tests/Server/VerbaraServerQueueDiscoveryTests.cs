@@ -56,6 +56,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
         {
             if (list == "QueueStatus")
                 Interlocked.Increment(ref fenceWaits);
+            return default;
         };
 
         // The caller is in its own listing: Asterisk answers with the caller whose join triggered the ask.
@@ -649,6 +650,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
         {
             if (list == "QueueStatus")
                 fenceWait.TrySetResult();
+            return default;
         };
         // Subscribed after the server, so it runs in the dispatch the server's handler named the queue in.
         using var hold = new JoinHold();
@@ -894,10 +896,10 @@ public sealed class VerbaraServerQueueDiscoveryTests
         var hold = new ThreadHold();
         var holding = 0;
         // The start's load is held after its Status: no listing of every queue has ended on the session yet.
-        run.Server.FenceWaitObserved = (list, _) =>
+        run.Server.FenceWaitObserved = async (list, _) =>
         {
             if (list == "Status" && Interlocked.Exchange(ref holding, 1) == 0)
-                hold.Hold(Run.Bound);
+                await hold.HoldAsync(Run.Bound);
         };
         var thrown = 0;
         run.Server.Queues.MemberAdded += (queue, _) =>
@@ -1062,10 +1064,10 @@ public sealed class VerbaraServerQueueDiscoveryTests
         var hold = new ThreadHold();
         var holding = 0;
         // The start's listing of every queue, counted on the old session, is held past that session's end.
-        run.Server.FenceWaitObserved = (list, _) =>
+        run.Server.FenceWaitObserved = async (list, _) =>
         {
             if (list == "QueueStatus" && Interlocked.Exchange(ref holding, 1) == 0)
-                hold.Hold(Run.Bound);
+                await hold.HoldAsync(Run.Bound);
         };
         var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
@@ -1126,10 +1128,10 @@ public sealed class VerbaraServerQueueDiscoveryTests
         var hold = new ThreadHold();
         var holding = 0;
         // The start's load is held after its Status, before its queue step, past the old session's end.
-        run.Server.FenceWaitObserved = (list, _) =>
+        run.Server.FenceWaitObserved = async (list, _) =>
         {
             if (list == "Status" && Interlocked.Exchange(ref holding, 1) == 0)
-                hold.Hold(Run.Bound);
+                await hold.HoldAsync(Run.Bound);
         };
         try
         {

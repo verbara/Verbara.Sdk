@@ -216,6 +216,7 @@ public sealed class SessionEventEpochStampTests
             // QueueParams, QueueMember, then the caller's QueueEntry.
             if (Interlocked.Increment(ref buffered) == 3)
                 entryBuffered.TrySetResult();
+            return default;
         };
         peer.StatusChannels = [new StatusChannel(Caller, CallerChannel, Caller)];
         peer.QueueEntries = [new QueueCaller(CallerChannel, Caller, Position: 1, Wait: 5)];

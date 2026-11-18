@@ -155,6 +155,8 @@ public sealed class VerbaraServerQueueHangupTests : IAsyncLifetime
                 _sut.QueueRowBuffered = null;
                 Hangup("u1", Caller);
             }
+
+            return default;
         };
 
         await _sut.RequestInitialStateAsync();
@@ -178,6 +180,8 @@ public sealed class VerbaraServerQueueHangupTests : IAsyncLifetime
                 _sut.QueueRowBuffered = null;
                 Hangup("u1", Caller);
             }
+
+            return default;
         };
 
         await _sut.RequestInitialStateAsync();
@@ -202,6 +206,8 @@ public sealed class VerbaraServerQueueHangupTests : IAsyncLifetime
                 _sut.QueueRowBuffered = null;
                 hangup = Task.Run(() => Hangup("u1", Caller));
             }
+
+            return default;
         };
 
         await _sut.RequestInitialStateAsync().AsTask().WaitAsync(CleanupBound);
