@@ -12,26 +12,34 @@ This comparison removes the host from the question: the weekly job builds the re
 declared in baseline.json `abab.reference_tag` beside HEAD and runs both, alternated, in the same
 job on the same machine (scripts/ci/run-perf-abab.sh). Time is judged by the ratio HEAD/reference.
 
-THE ORDER AND THE ROUNDS. The declared order (`abab.order`, R H H R) is a palindrome: round k
-pairs the k-th R invocation with the k-th H invocation, so round 1 = (position 1, position 2) and
-round 2 = (position 4, position 3). Under a linear drift across the run the two rounds carry it
-with opposite signs, so drift alone cannot make every round agree.
+THE ORDER AND THE ROUNDS. The declared order (`abab.order`, R H H R R H) has as many R as H
+invocations: round k pairs the k-th R invocation with the k-th H invocation, so round 1 =
+(position 1, position 2), round 2 = (position 4, position 3) and round 3 = (position 5,
+position 6). Nothing here is specific to three rounds.
 
 THE STATISTIC. For each case and round k, r_k = mean(H_k) / mean(R_k) (BenchmarkDotNet
-`Statistics.Mean`, nanoseconds). SLOWER when every r_k > slower_ratio x accepted; FASTER when every
-r_k < faster_ratio x accepted; UNCONFIRMED when some but not all rounds are beyond a bar; ok
-otherwise. `accepted` is 1 unless `abab.accepted` records a cost measured against this same
-reference. The point estimate shown is the geometric mean of the r_k. A case whose mean is under
+`Statistics.Mean`, nanoseconds), and g is the geometric mean of the r_k. In-job noise is between
+processes, one launch-level spike at a time, so the verdict reads g and asks a majority of the
+rounds to confirm it: SLOWER when g > slower_ratio x accepted and more than half of the r_k are
+over that bar; FASTER when g < faster_ratio x accepted and more than half of the r_k are under it.
+A bar is SUSPECTED when g is beyond it or at least half of the r_k are; a suspicion that is not a
+verdict is UNCONFIRMED; ok otherwise. With three rounds that is "exactly one of g and the majority";
+with two it is the rule of the two-round design (SLOWER only when both rounds are over,
+UNCONFIRMED when one is). The r_k beyond a bar in an ok row are its lone rounds: counted, never a
+finding. `accepted` is 1 unless `abab.accepted` records a cost measured against this same
+reference. A case whose mean is under
 `min_mean_ns` in a HEAD invocation is shown and not judged: a ratio of a few cycles measures
 BenchmarkDotNet's overhead subtraction, not the code. A case under the floor in the reference only
-is judged one way: SLOWER when, in every round, mean(H_k) / max(mean(R_k), min_mean_ns) is over
-`sub_floor_slower_ratio`; it is never FASTER, and it is left out of the noise statistics.
+is judged one way, by the same rule on mean(H_k) / max(mean(R_k), min_mean_ns) against
+`sub_floor_slower_ratio`; it is never FASTER, and it is left out of the noise statistics, which
+read g (median and p95 of |ln g|, share of g outside the bars) beside the median |ln r_k|.
 
 BYTES IN THE JOB. Both arms run on the same machine, so on the same core count, and a bytes
 difference between them is the code. For a case with a `bytes` entry in baseline.json `benchmarks`,
 MORE-BYTES when every round's delta exceeds its `bytes_tolerance`, FEWER-BYTES when every round's
-delta is under minus it. A case with no `bytes` entry shows its delta and is not judged. An exactly
-gated case whose bytes differ between the rounds of one arm is a bytes anomaly (reported).
+delta is under minus it: bytes are deterministic, so no majority applies to them. A case with no
+`bytes` entry shows its delta and is not judged. An exactly gated case whose bytes differ between
+the rounds of one arm is a bytes anomaly (reported).
 
 NEVER DROPPED. The two `--list flat` outputs are the methods each tree declares. A method in one
 list only is listed as HEAD only or reference only; a parameter case present in one arm only is
@@ -511,7 +519,8 @@ def compare(abab, baseline, manifest, lists, invocations, positions):
                "not_judged_reason": None, "means": {"R": [], "H": []}, "ratios": [],
                "geomean": None, "self": {"R": None, "H": None}, "bytes": {"R": [], "H": []},
                "bytes_delta": [], "bytes_judged": False, "bytes_verdict": None,
-               "thresholds": None, "verdict": "not judged", "blind": False}
+               "thresholds": None, "verdict": "not judged", "blind": False,
+               "lone_rounds": 0}
         bad_mean = False
         for arm in ("R", "H"):
             for entry in complete[arm].get(name, []):
@@ -577,6 +586,34 @@ def _int_or(value):
     return int(value) if float(value).is_integer() else value
 
 
+def _bar(ratios, g, beyond):
+    """(verdict, suspected) for one bar. `beyond(x)` says whether x is past the bar. The verdict
+    needs g past it and a strict majority of the rounds past it; a suspicion needs either g past
+    it or at least half of the rounds. With three rounds both halves read "two of three"; with two,
+    a verdict needs both rounds and one round is a suspicion, which is the rule two rounds always
+    had."""
+    count = sum(1 for r in ratios if beyond(r))
+    verdict = beyond(g) and count * 2 > len(ratios)
+    return verdict, verdict or beyond(g) or count * 2 >= len(ratios)
+
+
+def _verdict(row, ratios, g, slower, faster):
+    slow, slow_suspected = _bar(ratios, g, lambda x: x > slower)
+    fast, fast_suspected = (False, False) if faster is None else \
+        _bar(ratios, g, lambda x: x < faster)
+    if slow:
+        row["verdict"] = "SLOWER"
+    elif fast:
+        row["verdict"] = "FASTER"
+    elif slow_suspected or fast_suspected:
+        row["verdict"] = "UNCONFIRMED"
+    else:
+        row["verdict"] = "ok"
+        # One process spike is what the majority exists to absorb: counted, never a finding.
+        row["lone_rounds"] = sum(1 for r in ratios
+                                 if r > slower or (faster is not None and r < faster))
+
+
 def _judge(row, abab, baseline, changed_sources, configs, structural):
     name = row["name"]
     rmeans, hmeans = row["means"]["R"], row["means"]["H"]
@@ -625,20 +662,11 @@ def _judge(row, abab, baseline, changed_sources, configs, structural):
         row["thresholds"] = {"slower": bar, "faster": None, "accepted": 1.0}
         against = [h / max(r, floor) for r, h in zip(rmeans, hmeans)]
         row["floor_ratios"] = against
-        above = [r > bar for r in against]
-        row["verdict"] = ("SLOWER" if all(above) else "UNCONFIRMED" if any(above) else "ok")
+        row["floor_geomean"] = _geomean(against)
+        _verdict(row, against, row["floor_geomean"], bar, None)
     else:
         row["judged"] = True
-        above = [r > slower for r in row["ratios"]]
-        below = [r < faster for r in row["ratios"]]
-        if all(above):
-            row["verdict"] = "SLOWER"
-        elif all(below):
-            row["verdict"] = "FASTER"
-        elif any(above) or any(below):
-            row["verdict"] = "UNCONFIRMED"
-        else:
-            row["verdict"] = "ok"
+        _verdict(row, row["ratios"], row["geomean"], slower, faster)
 
     # Bytes.
     rbytes, hbytes = row["bytes"]["R"], row["bytes"]["H"]
@@ -672,9 +700,11 @@ def _judge(row, abab, baseline, changed_sources, configs, structural):
 def summarize(rows, structural):
     judged = [row for row in rows if row["judged"] and not row.get("sub_floor")]
     logs = [abs(math.log(r)) for row in judged for r in row["ratios"]]
+    g_logs = [abs(math.log(row["geomean"])) for row in judged]
     selfs = [abs(math.log(row["self"][arm])) for row in judged for arm in ("R", "H")]
-    outside = sum(1 for row in judged for r in row["ratios"]
-                  if r > row["thresholds"]["slower"] or r < row["thresholds"]["faster"])
+    outside = sum(1 for row in judged
+                  if row["geomean"] > row["thresholds"]["slower"]
+                  or row["geomean"] < row["thresholds"]["faster"])
     count = lambda key, value: sum(1 for row in rows if row[key] == value)  # noqa: E731
     slower, more = count("verdict", "SLOWER"), count("bytes_verdict", "MORE-BYTES")
     return {
@@ -683,10 +713,13 @@ def summarize(rows, structural):
         "blind": sum(1 for row in rows if row.get("blind")),
         "ratios_count": len(logs),
         "median_abs_log_ratio": _median(logs),
-        "p95_abs_log_ratio": _p95(logs),
+        "geomeans_count": len(g_logs),
+        "median_abs_log_geomean": _median(g_logs),
+        "p95_abs_log_geomean": _p95(g_logs),
+        "share_geomean_outside_band": outside / len(g_logs) if g_logs else None,
+        "lone_rounds": sum(row["lone_rounds"] for row in rows),
         "median_abs_log_self": _median(selfs),
         "order_effect_geomean": _geomean([row["self"]["R"] for row in judged]) if judged else None,
-        "share_outside_band": outside / len(logs) if logs else None,
         "slower": slower,
         "faster": count("verdict", "FASTER"),
         "unconfirmed": count("verdict", "UNCONFIRMED"),
@@ -710,6 +743,11 @@ def _short(name):
 def _shown_ratios(row):
     """The ratios a verdict was taken on: to the floor for a sub-floor reference, else H/R."""
     return row.get("floor_ratios", row["ratios"])
+
+
+def _shown_g(row):
+    """The geometric mean a verdict was taken on: to the floor for a sub-floor reference."""
+    return row.get("floor_geomean", row["geomean"])
 
 
 def _num(value, spec):
@@ -741,10 +779,12 @@ def render_markdown(meta, summary, rows, structural, notices, enforce):
             f"{', '.join(env.get('logical core count', [])) or '?'} logical cores, JIT "
             f"{meta['thresholds']['jit_isa'] or '(not pinned)'}, BenchmarkDotNet "
             f"{', '.join(env.get('BenchmarkDotNet version', [])) or '?'}. Time bars: SLOWER "
-            f"when every round is over x{meta['thresholds']['slower_ratio']:g}, FASTER when every "
-            f"round is under x{meta['thresholds']['faster_ratio']:g}; a case under "
-            f"{meta['thresholds']['min_mean_ns']:g} ns in HEAD is not judged, and one under it in "
-            f"the reference only is judged SLOWER-only, when every round of HEAD is over "
+            f"when the geometric mean g of the rounds is over "
+            f"x{meta['thresholds']['slower_ratio']:g} and so is a majority of the rounds, FASTER "
+            f"when g and a majority are under x{meta['thresholds']['faster_ratio']:g}, UNCONFIRMED "
+            f"when only one of the two is; a round beyond a bar in an ok row is a lone round. A "
+            f"case under {meta['thresholds']['min_mean_ns']:g} ns in HEAD is not judged, and one "
+            f"under it in the reference only is judged SLOWER-only by the same rule, against "
             f"x{meta['thresholds']['sub_floor_slower_ratio']:g} the larger of the floor and the "
             f"reference.", ""]
     out += ["| position | arm | started | ended | exit | timed out |", "|--:|---|---|---|--:|---|"]
@@ -764,28 +804,30 @@ def render_markdown(meta, summary, rows, structural, notices, enforce):
         return [describe(row) for row in rows if predicate(row)]
 
     section("Structural failures", "The comparison did not happen as declared.", structural)
-    section("Failing", "SLOWER in every round, or MORE-BYTES in every round. These fail an "
-            "enforcing run.",
+    section("Failing", "SLOWER (g and a majority of the rounds over the bar), or MORE-BYTES in "
+            "every round. These fail an enforcing run.",
             row_items(lambda r: r["verdict"] == "SLOWER",
-                      lambda r: f"`{r['name']}` SLOWER: "
+                      lambda r: f"`{r['name']}` SLOWER: g {_shown_g(r):.4f}, "
                                 f"{'ratios to the floor' if r.get('sub_floor') else 'ratios'} "
                                 f"{', '.join(f'{x:.4f}' for x in _shown_ratios(r))}"
                                 f", bar {r['thresholds']['slower']:.4f}")
             + row_items(lambda r: r["bytes_verdict"] == "MORE-BYTES",
                         lambda r: f"`{r['name']}` MORE-BYTES: deltas "
                                   f"{', '.join(f'{d:+}' for d in r['bytes_delta'])} B"))
-    section("Reported, not failing", "FASTER or FEWER-BYTES in every round.",
+    section("Reported, not failing", "FASTER (g and a majority of the rounds under the bar), or "
+            "FEWER-BYTES in every round.",
             row_items(lambda r: r["verdict"] == "FASTER",
-                      lambda r: f"`{r['name']}` FASTER: ratios "
+                      lambda r: f"`{r['name']}` FASTER: g {r['geomean']:.4f}, ratios "
                                 f"{', '.join(f'{x:.4f}' for x in r['ratios'])}")
             + row_items(lambda r: r["bytes_verdict"] == "FEWER-BYTES",
                         lambda r: f"`{r['name']}` FEWER-BYTES: deltas "
                                   f"{', '.join(f'{d:+}' for d in r['bytes_delta'])} B"))
-    section("Unconfirmed (one round only)", "Beyond a bar in some rounds and not in others. "
-            "Reported, never failing.",
+    section("Unconfirmed", "g beyond a bar without a majority of the rounds, or a majority "
+            "beyond it without g. Reported, never failing.",
             row_items(lambda r: r["verdict"] == "UNCONFIRMED",
-                      lambda r: f"`{r['name']}` ratios "
-                                f"{', '.join(f'{x:.4f}' for x in r['ratios'])}"))
+                      lambda r: f"`{r['name']}` g {_shown_g(r):.4f}, "
+                                f"{'ratios to the floor' if r.get('sub_floor') else 'ratios'} "
+                                f"{', '.join(f'{x:.4f}' for x in _shown_ratios(r))}"))
     section("Bytes anomalies", "An exactly gated case whose bytes differ between the rounds of "
             "one arm: allocation that is not deterministic.",
             row_items(lambda r: r.get("bytes_anomaly"),
@@ -809,12 +851,14 @@ def render_markdown(meta, summary, rows, structural, notices, enforce):
 
     out += ["### Noise of this run", ""]
     if summary["judged_rows"]:
-        out += [f"{summary['judged_rows']} judged rows, {summary['ratios_count']} ratios: median "
-                f"|ln r| {summary['median_abs_log_ratio']:.4f}, p95 "
-                f"{summary['p95_abs_log_ratio']:.4f}; median |ln self-ratio| "
+        out += [f"{summary['judged_rows']} judged rows, {summary['geomeans_count']} geometric "
+                f"means: median |ln g| {summary['median_abs_log_geomean']:.4f}, p95 "
+                f"{summary['p95_abs_log_geomean']:.4f}, "
+                f"{summary['share_geomean_outside_band']:.1%} of g outside their bars. {summary['ratios_count']} ratios: median |ln r| "
+                f"{summary['median_abs_log_ratio']:.4f}; median |ln self-ratio| "
                 f"{summary['median_abs_log_self']:.4f}; order effect geomean(R last / R first) "
-                f"{summary['order_effect_geomean']:.4f}; {summary['share_outside_band']:.1%} of "
-                f"ratios outside their bars.", ""]
+                f"{summary['order_effect_geomean']:.4f}; {summary['lone_rounds']} lone round(s), "
+                f"absorbed by the majority.", ""]
     else:
         out += ["No row was judged.", ""]
 
@@ -936,16 +980,17 @@ def main(argv):
           f"order={' '.join(abab['order'])} root={root}")
     for row in rows:
         ratios = ",".join(f"{r:.4f}" for r in row["ratios"]) or "-"
-        print(f"{_short(row['name']):<70} {row['class']:<16} ratios={ratios:<16} "
+        g = "-" if row["geomean"] is None else f"{row['geomean']:.4f}"
+        print(f"{_short(row['name']):<70} {row['class']:<16} ratios={ratios:<23} g={g:<6} "
               f"verdict={row['verdict']} bytes={row['bytes_verdict']}")
     level = "error" if enforce else "warning"
     for item in structural:
         print(f"::{level}::perf-abab STRUCTURAL: {item}")
     for row in rows:
         if row["verdict"] == "SLOWER":
-            print(f"::{level}::perf-abab SLOWER: {row['name']} ratios "
-                  f"{', '.join(f'{r:.4f}' for r in _shown_ratios(row))} over "
-                  f"{row['thresholds']['slower']:.4f} in every round.")
+            print(f"::{level}::perf-abab SLOWER: {row['name']} g {_shown_g(row):.4f} and a "
+                  f"majority of the ratios {', '.join(f'{r:.4f}' for r in _shown_ratios(row))} "
+                  f"over {row['thresholds']['slower']:.4f}.")
         if row["bytes_verdict"] == "MORE-BYTES":
             print(f"::{level}::perf-abab MORE-BYTES: {row['name']} deltas {row['bytes_delta']} B.")
         if row["verdict"] == "FASTER" or row["bytes_verdict"] == "FEWER-BYTES":
@@ -956,7 +1001,7 @@ def main(argv):
 
     def strip(row):
         return {k: v for k, v in row.items() if k not in ("bytes_anomaly", "sub_floor",
-                                                          "floor_ratios")}
+                                                          "floor_ratios", "floor_geomean")}
 
     if markdown_out:
         try:
@@ -999,7 +1044,7 @@ def main(argv):
     print(f"perf-abab: {summary['judged_rows']} judged row(s); {summary['slower']} SLOWER, "
           f"{summary['more_bytes']} MORE-BYTES, {summary['faster']} FASTER, "
           f"{summary['fewer_bytes']} FEWER-BYTES, {summary['unconfirmed']} UNCONFIRMED, "
-          f"{len(structural)} structural.")
+          f"{summary['lone_rounds']} lone round(s), {len(structural)} structural.")
     if failing and enforce:
         return 1
     if failing:

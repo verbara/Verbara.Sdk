@@ -137,6 +137,26 @@ LOG="$(PATH="$BIN:$PATH" PERF_ABAB_DRY_RUN=1 bash "$RUNNER" --baseline "$ORDER6"
 plan="$(printf '%s\n' "$LOG" | command grep -E '^run ' | awk '{print $3}' | tr -d '\n')"
 [ "$plan" = "RHHRRH" ] && ok || bad "a declared six-position order should run RHHRRH, got: $plan"
 
+# --- S1 (real run, three rounds): six invocations reach dotnet and the manifest lists six ---
+setup
+LOG="$(PATH="$BIN:$PATH" bash "$RUNNER" --baseline "$ORDER6" --head "$REPO" \
+       --reference "$REF_DIR" --reference-tag v1.2.3 --out "$OUT" 2>&1)"; RC=$?
+[ "$RC" -eq 0 ] && ok || bad "a six-position run should exit 0 (got $RC): $LOG"
+arts="$(command grep -o -- '--artifacts [^ ]*' "$CALLS" | awk '{print $2}' | xargs -n1 basename | tr '\n' ';')"
+[ "$arts" = "1-R;2-H;3-H;4-R;5-R;6-H;" ] && ok \
+  || bad "six-position artifacts directories should be 1-R 2-H 3-H 4-R 5-R 6-H, got: $arts"
+runs="$(command grep -- '--exporters json' "$CALLS" | sed -E 's/^dotnet cwd=([^ ]*) .*/\1/' \
+        | sed -e "s#^$REF_DIR/.*#R#" -e "s#^$REPO/.*#H#" | tr -d '\n')"
+[ "$runs" = "RHHRRH" ] && ok || bad "each of the six invocations runs in its arm's tree, got: $runs"
+[ "$(command grep -c '^timeout .*duration=900 cmd=dotnet' "$CALLS")" -eq 6 ] && ok \
+  || bad "six invocations under timeout 900"
+[ "$(manifest 'd["order"]')" = "['R', 'H', 'H', 'R', 'R', 'H']" ] && ok || bad "six-position manifest order"
+[ "$(manifest '[(i["position"], i["arm"], i["dir"]) for i in d["invocations"]]')" \
+  = "[(1, 'R', '1-R'), (2, 'H', '2-H'), (3, 'H', '3-H'), (4, 'R', '4-R'), (5, 'R', '5-R'), (6, 'H', '6-H')]" ] \
+  && ok || bad "manifest should list six invocations in the declared order: $(manifest 'd["invocations"]')"
+[ "$(manifest 'all(i["exit_code"] == 0 and not i["timed_out"] for i in d["invocations"])')" = "True" ] \
+  && ok || bad "six clean invocations recorded"
+
 # --- S2: one exact glob per sources type, and the same filters for both arms ---
 setup; run_abab
 filters="$(command grep '^dotnet' "$CALLS" | sed -E 's/.*--filter (.*)$/\1/' | sed -E 's/ --exporters.*//' | sort -u)"
