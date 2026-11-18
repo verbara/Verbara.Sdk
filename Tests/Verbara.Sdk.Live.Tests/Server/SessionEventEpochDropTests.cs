@@ -562,21 +562,19 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
     /// <summary>An observer that blocks the delivery of one channel's <c>Newchannel</c> until the test releases it.</summary>
     private sealed class ArrivalGate(string uniqueId) : IObserver<ManagerEvent>, IDisposable
     {
-        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly ManualResetEventSlim _gate = new(initialState: false);
+        private readonly ThreadHold _hold = new();
 
         /// <summary>Completes once the delivery is blocked inside this observer.</summary>
-        public Task Entered => _entered.Task;
+        public Task Entered => _hold.Held;
 
-        public void Release() => _gate.Set();
+        public void Release() => _hold.Release();
 
         public void OnNext(ManagerEvent value)
         {
             if (value is not NewChannelEvent arrival || arrival.UniqueId != uniqueId)
                 return;
 
-            _entered.TrySetResult();
-            _gate.Wait(DispatchGate.HoldBound);
+            _hold.Hold(DispatchGate.HoldBound);
         }
 
         public void OnError(Exception error)
@@ -589,11 +587,7 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
             // Completed when the connection is disposed; nothing to do.
         }
 
-        public void Dispose()
-        {
-            _gate.Set();
-            _gate.Dispose();
-        }
+        public void Dispose() => _hold.Free();
     }
 
     private static class Frames

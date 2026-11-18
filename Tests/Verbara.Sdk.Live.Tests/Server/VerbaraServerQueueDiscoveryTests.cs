@@ -693,8 +693,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
         };
         var second = new BootingAsterisk { BootedAtLogin = true, Agents = [new ListedAgent("1001")] };
         await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
-        var oldEnds = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var oldSettling = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldSettling = new ThreadHold();
         var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var holding = 0;
         try
@@ -705,14 +704,11 @@ public sealed class VerbaraServerQueueDiscoveryTests
             run.Server.Agents.AgentStateChanged += agent =>
             {
                 if (agent.AgentId == "1001" && Interlocked.Exchange(ref holding, 1) == 0)
-                {
-                    oldSettling.TrySetResult();
-                    oldEnds.Task.Wait(Run.Bound);
-                }
+                    oldSettling.Hold(Run.Bound);
             };
             first.OtherQueues = [.. first.OtherQueues, new ListedQueue(Sales, ["Agent/1001"], [])];
             await first.SendEventAsync("QueueMemberStatus", AsteriskFrames.QueueMember(Sales, "Agent/1001"));
-            await oldSettling.Task.WaitAsync(Run.Bound);
+            await oldSettling.Held.WaitAsync(Run.Bound);
             var old = run.Server.PendingQueueDiscovery(Sales);
 
             // The session ends; the new one's reload lists neither sales nor support, so both leave the table.
@@ -729,7 +725,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
             (await CompletesWithinBoundAsync(second.AskedAtLeast("QueueStatus", 2))).Should().BeTrue("the new session asked");
             var newPending = run.Server.PendingQueueDiscovery(Sales);
 
-            oldEnds.SetResult();
+            oldSettling.Release();
             var oldEnded = await CompletesWithinBoundAsync(old);
             var afterOldEnded = run.Server.PendingQueueDiscoveryCount;
             var newStillHeld = ReferenceEquals(run.Server.PendingQueueDiscovery(Sales), newPending);
@@ -754,7 +750,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
         }
         finally
         {
-            oldEnds.TrySetResult();
+            oldSettling.Free();
             answer.TrySetResult();
         }
     }
@@ -895,17 +891,13 @@ public sealed class VerbaraServerQueueDiscoveryTests
     {
         var peer = new BootingAsterisk { BootedAtLogin = true, OtherQueues = [new ListedQueue("q1", ["PJSIP/2001"], [])] };
         await using var run = await Run.ConnectAsync(peer);
-        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var release = new ManualResetEventSlim(initialState: false);
+        var hold = new ThreadHold();
         var holding = 0;
         // The start's load is held after its Status: no listing of every queue has ended on the session yet.
         run.Server.FenceWaitObserved = (list, _) =>
         {
             if (list == "Status" && Interlocked.Exchange(ref holding, 1) == 0)
-            {
-                held.TrySetResult();
-                release.Wait(Run.Bound);
-            }
+                hold.Hold(Run.Bound);
         };
         var thrown = 0;
         run.Server.Queues.MemberAdded += (queue, _) =>
@@ -916,13 +908,13 @@ public sealed class VerbaraServerQueueDiscoveryTests
         try
         {
             var start = run.Server.StartAsync();
-            await held.Task.WaitAsync(Run.Bound);
+            await hold.Held.WaitAsync(Run.Bound);
             var refreshFault = await Record.ExceptionAsync(() => run.Server.ReconcileQueuesAsync().AsTask().WaitAsync(Run.Bound));
 
             peer.OtherQueues = [.. peer.OtherQueues, new ListedQueue("later", ["PJSIP/2009"], [])];
             await peer.SendEventAsync("QueueMemberAdded", AsteriskFrames.QueueMember("later", "PJSIP/2009"));
             var discovered = await DiscoveredAsync(run, peer, "later");
-            release.Set();
+            hold.Release();
             await start.WaitAsync(Run.Bound);
 
             using (new AssertionScope())
@@ -936,7 +928,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
         }
         finally
         {
-            release.Set();
+            hold.Free();
         }
     }
 
@@ -1067,23 +1059,19 @@ public sealed class VerbaraServerQueueDiscoveryTests
         var first = new BootingAsterisk { BootedAtLogin = true };
         var second = new BootingAsterisk { BootedAtLogin = true };
         await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
-        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var release = new ManualResetEventSlim(initialState: false);
+        var hold = new ThreadHold();
         var holding = 0;
         // The start's listing of every queue, counted on the old session, is held past that session's end.
         run.Server.FenceWaitObserved = (list, _) =>
         {
             if (list == "QueueStatus" && Interlocked.Exchange(ref holding, 1) == 0)
-            {
-                held.TrySetResult();
-                release.Wait(Run.Bound);
-            }
+                hold.Hold(Run.Bound);
         };
         var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
             var start = run.Server.StartAsync();
-            await held.Task.WaitAsync(Run.Bound);
+            await hold.Held.WaitAsync(Run.Bound);
             var reloaded = run.ServerLog.Logged("[LIVE] State loaded", 1);
             first.CloseSession();
             await run.SecondSocketCreated.WaitAsync(Run.Bound);
@@ -1095,7 +1083,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
             await second.SendEventAsync("QueueMemberAdded", AsteriskFrames.QueueMember("later", "PJSIP/2009"));
             var laterAsked = await DiscoveredAsync(run, second, "later");
 
-            release.Set();
+            hold.Release();
             await Record.ExceptionAsync(() => start.WaitAsync(Run.Bound));
 
             // The old listing has ended; a refresh on the new session still holds discovery back while it is read.
@@ -1124,7 +1112,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
         }
         finally
         {
-            release.Set();
+            hold.Free();
             answer.TrySetResult();
         }
     }
@@ -1135,22 +1123,18 @@ public sealed class VerbaraServerQueueDiscoveryTests
         var first = new BootingAsterisk { BootedAtLogin = true };
         var second = new BootingAsterisk { BootedAtLogin = true };
         await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
-        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var release = new ManualResetEventSlim(initialState: false);
+        var hold = new ThreadHold();
         var holding = 0;
         // The start's load is held after its Status, before its queue step, past the old session's end.
         run.Server.FenceWaitObserved = (list, _) =>
         {
             if (list == "Status" && Interlocked.Exchange(ref holding, 1) == 0)
-            {
-                held.TrySetResult();
-                release.Wait(Run.Bound);
-            }
+                hold.Hold(Run.Bound);
         };
         try
         {
             var start = run.Server.StartAsync();
-            await held.Task.WaitAsync(Run.Bound);
+            await hold.Held.WaitAsync(Run.Bound);
             var reloaded = run.ServerLog.Logged("[LIVE] State loaded", 1);
             first.CloseSession();
             await run.SecondSocketCreated.WaitAsync(Run.Bound);
@@ -1158,7 +1142,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
             await reloaded.WaitAsync(Run.Bound);
 
             // The old session's load ends, before its queue step, after the new session's reload opened that session.
-            release.Set();
+            hold.Release();
             await Record.ExceptionAsync(() => start.WaitAsync(Run.Bound));
 
             second.OtherQueues = [new ListedQueue("later", ["PJSIP/2009"], [])];
@@ -1175,7 +1159,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
         }
         finally
         {
-            release.Set();
+            hold.Free();
         }
     }
 
@@ -1260,24 +1244,24 @@ public sealed class VerbaraServerQueueDiscoveryTests
     /// <summary>Holds the dispatch of the first <c>QueueCallerJoin</c> after every earlier subscriber has handled it.</summary>
     private sealed class JoinHold : IObserver<ManagerEvent>, IDisposable
     {
-        private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly ManualResetEventSlim _released = new(initialState: false);
+        private readonly ThreadHold _hold = new();
+        private int _taken;
 
-        public Task Held => _held.Task;
+        public Task Held => _hold.Held;
 
-        public void Release() => _released.Set();
+        public void Release() => _hold.Release();
 
         public void OnNext(ManagerEvent value)
         {
-            if (value is not QueueCallerJoinEvent || !_held.TrySetResult())
+            if (value is not QueueCallerJoinEvent || Interlocked.Exchange(ref _taken, 1) != 0)
                 return;
 
-            _released.Wait(Run.Bound);
+            _hold.Hold(Run.Bound);
         }
 
         public void OnError(Exception error) { }
         public void OnCompleted() { }
-        public void Dispose() => _released.Dispose();
+        public void Dispose() => _hold.Free();
     }
 
     private sealed class NullStore : SessionStoreBase

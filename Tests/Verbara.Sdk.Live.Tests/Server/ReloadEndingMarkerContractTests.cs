@@ -162,25 +162,22 @@ public sealed partial class ReloadEndingMarkerContractTests
         first.Server.Channels.OnNewChannel(GoneUid, GoneChannel, ChannelState.Up, linkedId: GoneUid);
         var call = rig.Manager.GetByLinkedId(GoneUid)!;
         call.State = CallSessionState.Connected;
-        using var release = new ManualResetEventSlim();
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var expired = false;
+        var hold = new ThreadHold();
         using var subscription = rig.Manager.Events.OfType<CallHeldEvent>().Subscribe(_ =>
         {
-            entered.TrySetResult();
             // fence-allow: GUARD-TIMEOUT — bounded owned subscriber hold; the helper releases and drains in finally
-            if (!release.Wait(Run.Bound * 3)) expired = true;
+            hold.Hold(Run.Bound * 3);
         });
         var holder = Task.Run(() => first.Server.Channels.OnHold(GoneUid, null));
         try
         {
-            await entered.Task.WaitAsync(Run.Bound);
+            await hold.Held.WaitAsync(Run.Bound);
             rig.Manager.DetachFromServer(ServerId);
             await Task.Run(() => rig.Manager.AttachToServer(replacement.Server, ServerId)).WaitAsync(Run.Bound);
             call.EndingDelivered.Should().BeFalse("iii actually skipped the call whose lock this subscriber holds");
         }
-        finally { release.Set(); await holder.WaitAsync(Run.Bound); }
-        expired.Should().BeFalse();
+        finally { hold.Free(); await holder.WaitAsync(Run.Bound); }
+        hold.TimedOut.Should().BeFalse("the hold ran out before the test released it");
         rig.Manager.IsPendingDecision(call).Should().BeTrue();
     }
 

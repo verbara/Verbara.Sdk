@@ -70,14 +70,14 @@ internal sealed class EndingBaselineRig : IAsyncDisposable
 internal sealed class NotificationGate : IDisposable
 {
     public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly ManualResetEventSlim _release = new();
+    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public void Hold()
     {
-        Entered.TrySetResult();
-        if (!_release.Wait(EndingBaselineRig.Bound)) throw new TimeoutException("notification gate was not released");
+        ThreadHold.Signal(Entered);
+        if (!ThreadHold.Block(_release.Task, EndingBaselineRig.Bound)) throw new TimeoutException("notification gate was not released");
     }
-    public void Release() => _release.Set();
-    public void Dispose() => _release.Dispose();
+    public void Release() => _release.TrySetResult();
+    public void Dispose() => _release.TrySetResult();
     public static async Task RunAsync(NotificationGate[] gates, List<Task> workers, Func<Task> body)
     {
         try { await body(); }
