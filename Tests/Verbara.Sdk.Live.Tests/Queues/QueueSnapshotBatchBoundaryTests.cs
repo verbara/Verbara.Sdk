@@ -52,6 +52,7 @@ public sealed class QueueSnapshotBatchBoundaryTests
         {
             rows++;
             run.Server.Queues.QueueCount.Should().Be(0, "collection has no public table transitions");
+            return default;
         };
         await run.StartServerAsync();
         rows.Should().BeGreaterThanOrEqualTo(2);
@@ -98,12 +99,12 @@ public sealed class QueueSnapshotBatchBoundaryTests
         }));
         var reports = 0;
         run.Server.Queues.CallerJoined += (_, _) => reports++;
-        run.Server.FenceWaitObserved = (list, _) =>
+        run.Server.FenceWaitObserved = async (list, _) =>
         {
             if (list != "deferred")
                 return;
             ownerEntered.TrySetResult();
-            releaseOwner.Task.WaitAsync(Run.Bound).GetAwaiter().GetResult();
+            await releaseOwner.Task.WaitAsync(Run.Bound);
         };
         try
         {

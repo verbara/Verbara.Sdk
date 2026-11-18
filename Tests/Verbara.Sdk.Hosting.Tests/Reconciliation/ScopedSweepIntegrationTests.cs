@@ -1,5 +1,4 @@
 using System.Reactive.Linq;
-using System.Reflection;
 using FluentAssertions;
 using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Enums;
@@ -83,8 +82,11 @@ public sealed class ScopedSweepIntegrationTests
         await peer.SendEventAsync("UserEvent", DispatchGate.Frame());
         await gate.Held.WaitAsync(Run.Bound);
         var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        typeof(VerbaraServer).GetProperty("FenceWaitObserved", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(run.Server, (Action<string, long>)((_, _) => waiting.TrySetResult()));
+        run.Server.FenceWaitObserved = (_, _) =>
+        {
+            waiting.TrySetResult();
+            return default;
+        };
         var load = run.StartServerAsync();
         Task admission = Task.CompletedTask;
         try

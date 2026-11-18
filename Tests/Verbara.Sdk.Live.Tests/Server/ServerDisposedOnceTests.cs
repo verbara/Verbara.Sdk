@@ -139,8 +139,8 @@ public sealed class ServerDisposedOnceTests
         {
             if (Interlocked.Increment(ref disposals) != 1)
                 return;
-            entered.TrySetResult();
-            hold.Task.Wait(Run.Bound);
+            ThreadHold.Signal(entered);
+            ThreadHold.Block(hold.Task, Run.Bound);
         });
         await server.StartAsync();
         // The stream ends with the session, so the reconnect subscribes again: the path this race is on.
@@ -197,8 +197,8 @@ public sealed class ServerDisposedOnceTests
         var after = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         run.Connection.Reconnected += () =>
         {
-            held.TrySetResult();
-            hold.Task.Wait(Run.Bound);
+            ThreadHold.Signal(held);
+            ThreadHold.Block(hold.Task, Run.Bound);
         };
         await run.StartServerAsync();
         run.Connection.Reconnected += () => after.TrySetResult();
@@ -355,9 +355,9 @@ public sealed class ServerDisposedOnceTests
         var returned = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         run.Server.Channels.ChannelRemoved += _ =>
         {
-            entered.TrySetResult();
+            ThreadHold.Signal(entered);
+            ThreadHold.Block(outer.Task, Run.Bound);
 #pragma warning disable VSTHRD002 // a handler that blocks on the disposal is the case under test
-            outer.Task.Wait(Run.Bound);
             returned.TrySetResult(run.Server.DisposeAsync().AsTask().Wait(InsideBound));
 #pragma warning restore VSTHRD002
         };

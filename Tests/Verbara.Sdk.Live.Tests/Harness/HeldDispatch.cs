@@ -12,8 +12,8 @@ namespace Verbara.Sdk.Live.Tests.Harness;
 /// <para>
 /// One clock: the hold starts on an event the peer writes, and ends on the test's <see cref="Release"/>, never on a
 /// timer. <see cref="Held"/> completes once the dispatch is blocked, so whatever the peer writes after it is queued.
-/// The block itself is bounded by <see cref="HoldBound"/>, a hang bound a healthy run never reaches, so a test that
-/// forgets to release cannot stall the lane.
+/// The block itself is a <see cref="ThreadHold"/> bounded by <see cref="HoldBound"/>, a hang bound a healthy run never
+/// reaches, so a test that forgets to release cannot stall the lane, and one whose hold ran out fails on its release.
 /// </para>
 /// </remarks>
 internal sealed class DispatchGate(string eventName = DispatchGate.Name) : IObserver<ManagerEvent>, IDisposable
@@ -24,29 +24,30 @@ internal sealed class DispatchGate(string eventName = DispatchGate.Name) : IObse
     /// <summary>The longest the dispatch is held when the test never releases it: a hang bound.</summary>
     public static readonly TimeSpan HoldBound = TimeSpan.FromSeconds(30);
 
-    private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly ManualResetEventSlim _released = new(initialState: false);
+    private readonly ThreadHold _hold = new();
 
     /// <summary>Completes once the dispatch is blocked inside this handler.</summary>
-    public Task Held => _held.Task;
+    public Task Held => _hold.Held;
 
     /// <summary>Whether the hold ran out on <see cref="HoldBound"/> instead of being released.</summary>
-    public bool TimedOut { get; private set; }
+    public bool TimedOut => _hold.TimedOut;
 
     /// <summary>The frame the peer writes to block the dispatch.</summary>
     public static KeyValuePair<string, string>[] Frame(string eventName = Name) =>
         [new("Privilege", "user,all"), new("UserEvent", eventName)];
 
-    /// <summary>Lets the dispatch go on.</summary>
-    public void Release() => _released.Set();
+    /// <summary>Lets the dispatch go on; fails when the hold had already run out (see <see cref="ThreadHold.Release"/>).</summary>
+    public void Release() => _hold.Release();
+
+    /// <summary>Lets the dispatch go on without judging the hold: for cleanup that runs however far the test got.</summary>
+    public void Free() => _hold.Free();
 
     public void OnNext(ManagerEvent value)
     {
         if (value is not UserEventEvent trigger || trigger.UserEvent != eventName)
             return;
 
-        _held.TrySetResult();
-        TimedOut = !_released.Wait(HoldBound);
+        _hold.Hold(HoldBound);
     }
 
     public void OnError(Exception error)
@@ -59,11 +60,7 @@ internal sealed class DispatchGate(string eventName = DispatchGate.Name) : IObse
         // Completed when the connection is disposed; nothing to do.
     }
 
-    public void Dispose()
-    {
-        _released.Set();
-        _released.Dispose();
-    }
+    public void Dispose() => _hold.Free();
 }
 
 /// <summary>

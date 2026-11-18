@@ -207,17 +207,16 @@ public sealed class SessionEventEpochReconnectTests
     /// </summary>
     private sealed class StateHandlerHold : IDisposable
     {
-        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly ManualResetEventSlim _gate = new(initialState: false);
+        private readonly ThreadHold _hold = new();
         private int _taken;
 
         /// <summary>Completes once the handler is blocked.</summary>
-        public Task Entered => _entered.Task;
+        public Task Entered => _hold.Held;
 
         /// <summary>The state the blocked change moved to.</summary>
         public AmiConnectionState Seen { get; private set; }
 
-        public bool Released => _gate.IsSet;
+        public bool Released => _hold.IsReleased;
 
         public void OnStateChanged(AmiConnectionStateChange change)
         {
@@ -225,37 +224,30 @@ public sealed class SessionEventEpochReconnectTests
                 return;
 
             Seen = change.Current;
-            _entered.TrySetResult();
-            _gate.Wait(DispatchGate.HoldBound);
+            _hold.Hold(DispatchGate.HoldBound);
         }
 
-        public void Release() => _gate.Set();
+        public void Release() => _hold.Release();
 
-        public void Dispose()
-        {
-            _gate.Set();
-            _gate.Dispose();
-        }
+        public void Dispose() => _hold.Free();
     }
 
     /// <summary>An observer that blocks the delivery of one channel's <c>Newchannel</c> until the test releases it.</summary>
     private sealed class ArrivalGate(string uniqueId) : IObserver<ManagerEvent>, IDisposable
     {
-        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly ManualResetEventSlim _gate = new(initialState: false);
+        private readonly ThreadHold _hold = new();
 
         /// <summary>Completes once the delivery is blocked inside this observer.</summary>
-        public Task Entered => _entered.Task;
+        public Task Entered => _hold.Held;
 
-        public void Release() => _gate.Set();
+        public void Release() => _hold.Release();
 
         public void OnNext(ManagerEvent value)
         {
             if (value is not NewChannelEvent arrival || arrival.UniqueId != uniqueId)
                 return;
 
-            _entered.TrySetResult();
-            _gate.Wait(DispatchGate.HoldBound);
+            _hold.Hold(DispatchGate.HoldBound);
         }
 
         public void OnError(Exception error)
@@ -268,11 +260,7 @@ public sealed class SessionEventEpochReconnectTests
             // Completed when the connection is disposed; nothing to do.
         }
 
-        public void Dispose()
-        {
-            _gate.Set();
-            _gate.Dispose();
-        }
+        public void Dispose() => _hold.Free();
     }
 
     private static class Frames

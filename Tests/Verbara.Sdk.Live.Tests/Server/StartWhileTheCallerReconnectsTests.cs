@@ -100,7 +100,7 @@ public sealed class StartWhileTheCallerReconnectsTests
             var disconnected = StateSignal(run.Connection, c => c.Current == AmiConnectionState.Disconnected);
             var callerConnecting = StateSignal(run.Connection,
                 c => c.Current == AmiConnectionState.Connecting && c.ByCaller);
-            run.Server.QueueRowBuffered = hold.Block;
+            run.Server.QueueRowBuffered = hold.BlockAsync;
 
             var start = run.Server.StartAsync();
             await hold.Held.WaitAsync(Run.Bound);
@@ -153,7 +153,7 @@ public sealed class StartWhileTheCallerReconnectsTests
                 c => c.Current == AmiConnectionState.Connecting && !c.ByCaller);
             var loopConnectedSignal = StateSignal(run.Connection,
                 c => c.Current == AmiConnectionState.Connected && !c.ByCaller);
-            run.Server.QueueRowBuffered = hold.Block;
+            run.Server.QueueRowBuffered = hold.BlockAsync;
 
             var start = run.Server.StartAsync();
             await hold.Held.WaitAsync(Run.Bound);

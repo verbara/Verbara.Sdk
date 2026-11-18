@@ -228,8 +228,8 @@ internal sealed class QueueAdmissionRun : IAsyncDisposable
     {
         _queueAnswer.TrySetResult();
         _statusAnswer.TrySetResult();
-        _firstGate.Release();
-        _secondGate.Release();
+        _firstGate.Free();
+        _secondGate.Free();
         using (_secondGate)
         using (_firstGate)
         {

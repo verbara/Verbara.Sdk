@@ -293,23 +293,26 @@ public sealed class VerbaraServer : IVerbaraServer
     private bool _sessionQueuesListed;
     private int _fullQueueListingsOpen;
 
+    // The test seams below are null in production. Each is awaited where it is observed, so a test that holds the load
+    // there awaits its own release instead of blocking the thread that runs the load; a null seam costs one check.
+
     /// <summary>Observes the actual list/deferred fence selected immediately before its wait; null in production.</summary>
-    internal Action<string, long>? FenceWaitObserved { get; set; }
+    internal Func<string, long, ValueTask>? FenceWaitObserved { get; set; }
 
     /// <summary>
     /// Null in production; observes a channel application after it wrote the verified flag and before it leaves. Its
     /// argument says whether the application applied in full.
     /// </summary>
-    internal Action<bool>? ChannelApplicationWritten { get; set; }
+    internal Func<bool, ValueTask>? ChannelApplicationWritten { get; set; }
 
     /// <summary>Null in production; observes collection of a queue row without publishing a queue event.</summary>
-    internal Action? QueueRowBuffered { get; set; }
+    internal Func<ValueTask>? QueueRowBuffered { get; set; }
 
     /// <summary>Null in production; observes a listing a load is about to request, by its AMI action name.</summary>
-    internal Action<string>? ListingRequested { get; set; }
+    internal Func<string, ValueTask>? ListingRequested { get; set; }
 
     /// <summary>Null in production; observes a load whose <c>Agents</c> list has passed its fence, before it is applied.</summary>
-    internal Action? AgentsListFenced { get; set; }
+    internal Func<ValueTask>? AgentsListFenced { get; set; }
 
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
@@ -1422,7 +1425,8 @@ public sealed class VerbaraServer : IVerbaraServer
             Volatile.Write(ref _channelVerifiedConnection, channelConnection);
             Interlocked.Exchange(ref _channelVerifiedSession, channelSession);
             Volatile.Write(ref _channelTableVerified, full && channelSession == Interlocked.Read(ref _reconnects) ? 1 : 0);
-            ChannelApplicationWritten?.Invoke(full);
+            if (ChannelApplicationWritten is { } written)
+                await written(full);
 
             // The read covers its sample only when it completed on the session it began on, its wait was reached (not
             // run out, not skipped inside a dispatch), it kept no channel received before its Status, and no other read
@@ -1504,7 +1508,8 @@ public sealed class VerbaraServer : IVerbaraServer
         }
 
         var clock = BarrierClock ?? TimeProvider;
-        FenceWaitObserved?.Invoke(list, mark.CompleteOrdinal);
+        if (FenceWaitObserved is { } observed)
+            await observed(list, mark.CompleteOrdinal);
         var started = clock.GetTimestamp();
         DispatchBarrierOutcome outcome;
 
@@ -1661,7 +1666,8 @@ public sealed class VerbaraServer : IVerbaraServer
             using (reports)
             {
                 // Queue reports always wait their own completion, even when Status exhausted this load's bound first.
-                FenceWaitObserved?.Invoke("deferred", mark.CompleteOrdinal);
+                if (FenceWaitObserved is { } observed)
+                    await observed("deferred", mark.CompleteOrdinal);
                 var outcome = await mark.WaitDispatchedThroughAsync(
                     Timeout.InfiniteTimeSpan, BarrierClock ?? TimeProvider, ending);
                 if (outcome != DispatchBarrierOutcome.Reached || ending.IsCancellationRequested
@@ -1876,7 +1882,8 @@ public sealed class VerbaraServer : IVerbaraServer
                             ReadEventLossEpoch()));
                         break;
                 }
-                QueueRowBuffered?.Invoke();
+                if (QueueRowBuffered is { } buffered)
+                    await buffered();
             }
             cancellationToken.ThrowIfCancellationRequested();
             if (asked.Refused)
@@ -2083,7 +2090,8 @@ public sealed class VerbaraServer : IVerbaraServer
     private async ValueTask<Listing> ReadListingAsync(ManagerAction action, string actionName, LoadSession? session,
         LoadConnectionStates states, ListSnapshotMark? mark, CancellationToken cancellationToken)
     {
-        ListingRequested?.Invoke(actionName);
+        if (ListingRequested is { } requested)
+            await requested(actionName);
 
         // Not on the session that replaced the one this load began on: that one loads itself.
         if (session is { IsCurrent: false })
@@ -2335,7 +2343,8 @@ public sealed class VerbaraServer : IVerbaraServer
         var full = await AwaitBarrierAsync(session, mark, "Agents", states, ChannelReader.Load.Name, activity, barriers,
             cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        AgentsListFenced?.Invoke();
+        if (AgentsListFenced is { } fenced)
+            await fenced();
         if (full && barriers.ReplacesAgents)
         {
             StopIfSessionIsGone(session, states);

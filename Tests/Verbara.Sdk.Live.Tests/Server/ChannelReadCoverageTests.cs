@@ -597,7 +597,11 @@ public sealed class ChannelReadCoverageTests
     private static Task BarrierSignal(Run run)
     {
         var signal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        run.Server.FenceWaitObserved = (_, _) => signal.TrySetResult();
+        run.Server.FenceWaitObserved = (_, _) =>
+        {
+            signal.TrySetResult();
+            return default;
+        };
         return signal.Task;
     }
 

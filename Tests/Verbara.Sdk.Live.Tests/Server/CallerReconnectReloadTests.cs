@@ -607,7 +607,7 @@ public sealed class CallerReconnectReloadTests
         var third = PeerAfter();
         await using var rig = await Rig.StartAsync(PeerBefore(), retired, route, laterPeers: [third]);
         using var hold = new HandlerHold();
-        rig.Run.Server.QueueRowBuffered = hold.Block;
+        rig.Run.Server.QueueRowBuffered = hold.BlockAsync;
 
         await rig.LoseAndComeBackAsync(route);
         var held = await CompletesWithinBoundAsync(hold.Held);
@@ -674,11 +674,7 @@ public sealed class CallerReconnectReloadTests
         }
 
         // The list was read to its end on the session; what stands before applying it is the fence, and here the loss.
-        rig.Run.Server.FenceWaitObserved = (name, _) =>
-        {
-            if (name == list)
-                hold.Block();
-        };
+        rig.Run.Server.FenceWaitObserved = (name, _) => name == list ? hold.BlockAsync() : default;
         var load = explicitLoad ? rig.Run.Server.RequestInitialStateAsync().AsTask() : Task.CompletedTask;
         if (!explicitLoad)
             await rig.LoseAndComeBackAsync(route);
@@ -737,7 +733,7 @@ public sealed class CallerReconnectReloadTests
         var third = PeerAfter();
         await using var rig = await Rig.StartAsync(PeerBefore(), retired, Route.Caller, laterPeers: [third]);
         using var hold = new HandlerHold();
-        rig.Run.Server.QueueRowBuffered = hold.Block;
+        rig.Run.Server.QueueRowBuffered = hold.BlockAsync;
 
         // A refused list passes no fence: the request after it is the first thing that can see the session is gone.
         await rig.LoseAndComeBackAsync(Route.Caller);
@@ -771,7 +767,7 @@ public sealed class CallerReconnectReloadTests
         // A caller this load's list alone would admit. The handler holds the dispatch, so the load skips the fence.
         retired.QueueEntries = [.. retired.QueueEntries, new QueueCaller(Rig.Sentinel.Channel, Rig.Sentinel.Uid, 4)];
         using var hold = new HandlerHold();
-        rig.Run.Server.QueueRowBuffered = hold.Block;
+        rig.Run.Server.QueueRowBuffered = hold.BlockAsync;
         var stopped = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var inHandler = rig.Run.Connection.Subscribe(new OnNext<ManagerEvent>(e =>
         {
@@ -818,6 +814,7 @@ public sealed class CallerReconnectReloadTests
         {
             if (Interlocked.Exchange(ref thrown, 1) == 0)
                 throw new InvalidOperationException("the load failed for a reason of its own");
+            return default;
         };
 
         await rig.LoseAndComeBackAsync(Route.Caller);
@@ -913,7 +910,7 @@ public sealed class CallerReconnectReloadTests
         await using var rig = await Rig.StartAsync(PeerBefore(), second, route);
         var stayedEntry = rig.Entry(Stayed);
         using var hold = new HandlerHold();
-        rig.Run.Server.QueueRowBuffered = hold.Block;
+        rig.Run.Server.QueueRowBuffered = hold.BlockAsync;
 
         // Whichever load reaches its queue listing first is held there, and the other runs to its end past it.
         await rig.LoseAndComeBackAsync(route);
@@ -945,7 +942,7 @@ public sealed class CallerReconnectReloadTests
         await notice.Held.WaitAsync(Run.Bound);
         rig.Run.ReleaseSecondPeer();
         await rig.CallerConnectsAsync();
-        rig.Run.Server.QueueRowBuffered = rows.Block;
+        rig.Run.Server.QueueRowBuffered = rows.BlockAsync;
         var explicitLoad = rig.Run.Server.RequestInitialStateAsync().AsTask();
         var explicitHeld = await CompletesWithinBoundAsync(rows.Held);
 
@@ -1027,20 +1024,12 @@ public sealed class CallerReconnectReloadTests
             await notice.Held.WaitAsync(Run.Bound);
             rig.Run.ReleaseSecondPeer();
             await rig.CallerConnectsAsync();
-            rig.Run.Server.FenceWaitObserved = (name, _) =>
-            {
-                if (name == list)
-                    fence.Block();
-            };
+            rig.Run.Server.FenceWaitObserved = (name, _) => name == list ? fence.BlockAsync() : default;
             explicitLoad = rig.Run.Server.RequestInitialStateAsync().AsTask();
         }
         else
         {
-            rig.Run.Server.FenceWaitObserved = (name, _) =>
-            {
-                if (name == list)
-                    fence.Block();
-            };
+            rig.Run.Server.FenceWaitObserved = (name, _) => name == list ? fence.BlockAsync() : default;
             await rig.LoseAndComeBackAsync(Route.Caller);
             explicitLoad = Task.CompletedTask;
         }
@@ -1191,6 +1180,7 @@ public sealed class CallerReconnectReloadTests
         {
             if (Interlocked.Exchange(ref thrown, 1) == 0)
                 throw new InvalidOperationException("the load failed for a reason of its own");
+            return default;
         };
 
         await rig.LoseAndComeBackAsync(route);
@@ -1234,7 +1224,11 @@ public sealed class CallerReconnectReloadTests
         after.Agents = [new ListedAgent(Stays), new ListedAgent(LogsOff, LoggedIn: false), new ListedAgent(Arrives)];
         await using var rig = await Rig.StartAsync(before, after, route);
         int? heldWhileReading = null;
-        rig.Run.Server.QueueRowBuffered = () => heldWhileReading ??= rig.Run.Server.Agents.AgentCount;
+        rig.Run.Server.QueueRowBuffered = () =>
+        {
+            heldWhileReading ??= rig.Run.Server.Agents.AgentCount;
+            return default;
+        };
         string[]? heldAtTheFirstLogin = null;
         rig.Run.Server.Agents.AgentLoggedIn += _ => heldAtTheFirstLogin ??= rig.AgentIds();
 
@@ -1345,7 +1339,7 @@ public sealed class CallerReconnectReloadTests
 
         // The reload is held after its Agents fence returned and before the table is replaced; the successor's whole load
         // completes inside that gap.
-        rig.Run.Server.AgentsListFenced = hold.Block;
+        rig.Run.Server.AgentsListFenced = hold.BlockAsync;
         await rig.LoseAndComeBackAsync(route);
         var held = await CompletesWithinBoundAsync(hold.Held);
         if (held)
@@ -1448,15 +1442,14 @@ public sealed class CallerReconnectReloadTests
         using var gate = new DispatchGate();
         using var gated = rig.Run.Connection.Subscribe(gate);
         var agentsFence = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        rig.Run.Server.FenceWaitObserved = (name, _) =>
+        rig.Run.Server.FenceWaitObserved = async (name, _) =>
         {
             // Past the queues' fence, so that only the Agents list has events behind the held dispatch.
             if (name == "QueueStatus")
             {
-#pragma warning disable VSTHRD002 // the load waits here so the hold is in place before it asks for the agents
-                second.SendEventAsync("UserEvent", DispatchGate.Frame()).Wait(Run.Bound);
-                gate.Held.Wait(Run.Bound);
-#pragma warning restore VSTHRD002
+                // The load waits here so the hold is in place before it asks for the agents.
+                await second.SendEventAsync("UserEvent", DispatchGate.Frame()).WaitAsync(Run.Bound);
+                await gate.Held.WaitAsync(Run.Bound);
             }
             else if (name == "Agents")
             {
@@ -1538,11 +1531,7 @@ public sealed class CallerReconnectReloadTests
                 if (a.AgentId == UnlistedLoggedIn)
                     lastDelivered.TrySetResult();
             };
-            rig.Run.Server.FenceWaitObserved = (name, _) =>
-            {
-                if (name == "Agents")
-                    fence.Block();
-            };
+            rig.Run.Server.FenceWaitObserved = (name, _) => name == "Agents" ? fence.BlockAsync() : default;
         }
 
         await rig.LoseAndComeBackAsync(route);
@@ -1598,11 +1587,7 @@ public sealed class CallerReconnectReloadTests
         if (moment == LiveEventMoment.BeforeItIsApplied)
         {
             rig.Run.Server.Agents.AgentLoggedOff += _ => delivered.TrySetResult();
-            rig.Run.Server.FenceWaitObserved = (name, _) =>
-            {
-                if (name == "Agents")
-                    fence.Block();
-            };
+            rig.Run.Server.FenceWaitObserved = (name, _) => name == "Agents" ? fence.BlockAsync() : default;
         }
 
         var load = rig.Run.Server.RequestInitialStateAsync().AsTask();
@@ -1689,10 +1674,7 @@ public sealed class CallerReconnectReloadTests
         using var hold = new HandlerHold();
         var asks = 0;
         rig.Run.Server.ListingRequested = name =>
-        {
-            if (name == list && Interlocked.Increment(ref asks) == ask)
-                hold.Block();
-        };
+            name == list && Interlocked.Increment(ref asks) == ask ? hold.BlockAsync() : default;
 
         await rig.LoseAndComeBackAsync(route);
         var held = await CompletesWithinBoundAsync(hold.Held);

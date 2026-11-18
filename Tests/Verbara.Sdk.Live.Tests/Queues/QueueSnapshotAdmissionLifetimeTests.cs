@@ -24,6 +24,7 @@ public sealed class QueueSnapshotAdmissionLifetimeTests
             lists[list] = ordinal;
             if (list == "deferred")
                 deferredFence.TrySetResult(ordinal);
+            return default;
         };
 
         await rig.ExpireStatusThenHoldTheLaterQueueFenceAsync();

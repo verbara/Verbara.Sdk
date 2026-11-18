@@ -52,7 +52,11 @@ public sealed class ChannelTableCompletenessTests
         var completed = 0;
         run.Server.ChannelSnapshotCompleted += _ => Interlocked.Increment(ref completed);
         var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        run.Server.FenceWaitObserved = (_, _) => waiting.TrySetResult();
+        run.Server.FenceWaitObserved = (_, _) =>
+        {
+            waiting.TrySetResult();
+            return default;
+        };
         var snapshot = run.Server.ReconcileChannelsAsync().AsTask();
         try
         {

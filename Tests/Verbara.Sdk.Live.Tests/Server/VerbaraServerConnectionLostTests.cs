@@ -265,12 +265,10 @@ public sealed partial class VerbaraServerConnectionLostTests
         var release = NewSignal();
         run.Server.ConnectionLost += _ =>
         {
-            entered.TrySetResult();
             // Holds the delivery until the test releases it; the bound only keeps a failed run from blocking a
             // thread-pool thread for good.
-#pragma warning disable VSTHRD002 // a handler that blocks is the case under test
-            release.Task.Wait(Bound * 2);
-#pragma warning restore VSTHRD002
+            ThreadHold.Signal(entered);
+            ThreadHold.Block(release.Task, Bound * 2);
         };
 
         first.CloseSession();

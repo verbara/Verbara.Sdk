@@ -1,5 +1,6 @@
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Channels;
+using Verbara.Sdk.Live.Tests.Harness;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit.Abstractions;
@@ -54,8 +55,8 @@ public sealed class ChannelManagerLockOrderTests(ITestOutputHelper output)
                     order.Add("added " + Admitted);
                 }
 
-                insideAdded.TrySetResult();
-                if (!amiHangupStarting.Task.Wait(RoundBound))
+                ThreadHold.Signal(insideAdded);
+                if (!ThreadHold.Block(amiHangupStarting.Task, RoundBound))
                     throw new TimeoutException("the AMI thread never started its hangup");
 
                 alreadyRemoved = manager.GetByUniqueId(Admitted) is null;

@@ -131,7 +131,11 @@ public sealed class StatusRefusalStateTests
         await peer.SendEventAsync("UserEvent", DispatchGate.Frame());
         await gate.Held.WaitAsync(Run.Bound);
         var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        run.Server.FenceWaitObserved = (_, _) => waiting.TrySetResult();
+        run.Server.FenceWaitObserved = (_, _) =>
+        {
+            waiting.TrySetResult();
+            return default;
+        };
         var completions = 0;
         run.Server.ChannelSnapshotCompleted += _ => Interlocked.Increment(ref completions);
         var snapshot = run.Server.ReconcileChannelsAsync().AsTask();

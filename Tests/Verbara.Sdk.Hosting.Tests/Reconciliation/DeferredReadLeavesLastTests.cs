@@ -1,6 +1,7 @@
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Verbara.Sdk.Live.Server;
+using Verbara.Sdk.Live.Tests.Harness;
 using Verbara.Sdk.Sessions;
 
 namespace Verbara.Sdk.Hosting.Tests.Reconciliation;
@@ -127,13 +128,13 @@ public sealed class DeferredReadLeavesLastTests
         rig.Server.ChannelTableSettled += _ => Interlocked.Increment(ref settled);
 
         using var bWritten = new ManualResetEventSlim();
-        using var bGo = new ManualResetEventSlim();
+        var bGo = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var aApplying = new ManualResetEventSlim();
         rig.Server.ChannelApplicationWritten = full =>
         {
-            if (full || bWritten.IsSet) return;
+            if (full || bWritten.IsSet) return default;
             bWritten.Set();
-            bGo.Wait(LossRig.Bound * 3);
+            return ThreadHold.Until(bGo.Task, LossRig.Bound * 3);
         };
 
         Task a;
@@ -180,7 +181,7 @@ public sealed class DeferredReadLeavesLastTests
         var completionsWhileBCounted = Volatile.Read(ref completions);
         var settledWhileBCounted = Volatile.Read(ref settled);
         var statusAskedWhileBCounted = rig.StatusAsked;
-        bGo.Set();
+        bGo.TrySetResult();
         await b.WaitAsync(LossRig.Bound);
 
         // The peer answers actions in order: once a Ping sent now is answered, any Status sent while B left and the
@@ -203,7 +204,11 @@ public sealed class DeferredReadLeavesLastTests
         }
 
         var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        rig.Server.FenceWaitObserved = (_, _) => waiting.TrySetResult();
+        rig.Server.FenceWaitObserved = (_, _) =>
+        {
+            waiting.TrySetResult();
+            return default;
+        };
         var b = Task.Run(() => rig.Server.ReconcileChannelsAsync().AsTask());
         await waiting.Task.WaitAsync(LossRig.Bound);
         rig.Server.FenceWaitObserved = null;

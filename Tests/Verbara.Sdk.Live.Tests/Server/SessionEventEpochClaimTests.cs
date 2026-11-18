@@ -197,13 +197,12 @@ public sealed class SessionEventEpochClaimTests
     /// </summary>
     private sealed class PosterPark(Func<AsteriskChannel, bool> match) : IDisposable
     {
-        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly ManualResetEventSlim _gate = new(initialState: false);
+        private readonly ThreadHold _hold = new();
         private int _taken;
         private int _parked;
 
         /// <summary>Completes once the poster is parked.</summary>
-        public Task Entered => _entered.Task;
+        public Task Entered => _hold.Held;
 
         /// <summary>Whether the poster is parked now.</summary>
         public bool IsParked => Volatile.Read(ref _parked) != 0;
@@ -218,10 +217,9 @@ public sealed class SessionEventEpochClaimTests
 
             Thread = Environment.CurrentManagedThreadId;
             Volatile.Write(ref _parked, 1);
-            _entered.TrySetResult();
             try
             {
-                _gate.Wait(DispatchGate.HoldBound);
+                _hold.Hold(DispatchGate.HoldBound);
             }
             finally
             {
@@ -229,13 +227,9 @@ public sealed class SessionEventEpochClaimTests
             }
         }
 
-        public void Release() => _gate.Set();
+        public void Release() => _hold.Release();
 
-        public void Dispose()
-        {
-            _gate.Set();
-            _gate.Dispose();
-        }
+        public void Dispose() => _hold.Free();
     }
 
     /// <summary>Whether the connection has dispatched the <c>UserEvent</c> named <paramref name="name"/>.</summary>
