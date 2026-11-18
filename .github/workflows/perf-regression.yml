@@ -84,8 +84,10 @@ jobs:
       # THE ABAB FLIP. 'false' = the in-job comparison against baseline.json
       # `abab.reference_tag` runs, writes its summary and artifacts, and cannot fail the job.
       # 'true' = SLOWER, MORE-BYTES and its structural failures fail it. Flipped only after five
-      # consecutive runs met the prediction written before them. Independent of PERF_GATE_ENFORCE:
-      # check-perf-abab.py reads this one only.
+      # consecutive runs met the prediction written before them (baseline.README.md, "Before the
+      # flip"). Only 'true' or 'false': the comparator exits 2 on any other spelling, since the
+      # continue-on-error lines below compare with 'true' exactly. Independent of
+      # PERF_GATE_ENFORCE: check-perf-abab.py reads this one only.
       PERF_ABAB_ENFORCE: 'false'
       # ISA pin. ubuntu-latest mixes CPUs with and without AVX-512, and .NET 10 targets AVX-512
       # wherever it exists, so the same code read faster or slower by host: time "breaches" in both

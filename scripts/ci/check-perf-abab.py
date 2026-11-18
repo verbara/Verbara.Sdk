@@ -22,8 +22,10 @@ THE STATISTIC. For each case and round k, r_k = mean(H_k) / mean(R_k) (Benchmark
 r_k < faster_ratio x accepted; UNCONFIRMED when some but not all rounds are beyond a bar; ok
 otherwise. `accepted` is 1 unless `abab.accepted` records a cost measured against this same
 reference. The point estimate shown is the geometric mean of the r_k. A case whose mean is under
-`min_mean_ns` in any invocation is shown and not judged: a ratio of a few cycles measures
-BenchmarkDotNet's overhead subtraction, not the code.
+`min_mean_ns` in a HEAD invocation is shown and not judged: a ratio of a few cycles measures
+BenchmarkDotNet's overhead subtraction, not the code. A case under the floor in the reference only
+is judged one way: SLOWER when, in every round, mean(H_k) / max(mean(R_k), min_mean_ns) is over
+`sub_floor_slower_ratio`; it is never FASTER, and it is left out of the noise statistics.
 
 BYTES IN THE JOB. Both arms run on the same machine, so on the same core count, and a bytes
 difference between them is the code. For a case with a `bytes` entry in baseline.json `benchmarks`,
@@ -35,18 +37,28 @@ NEVER DROPPED. The two `--list flat` outputs are the methods each tree declares.
 list only is listed as HEAD only or reference only; a parameter case present in one arm only is
 listed as a case-set difference. A case its arm declares but some invocation did not measure, a
 declared class with no report, a mean that is not a finite number, an invocation that timed out, or
-invocations that disagree on SDK, runtime, core count, JIT ISA, BenchmarkDotNet version or
-processor are STRUCTURAL failures: the comparison did not happen as declared.
+invocations that disagree on SDK, runtime, core count, JIT ISA, hardware intrinsics,
+BenchmarkDotNet version or processor, and a reference whose commit is not recorded or is not the
+tag's, are STRUCTURAL failures: the comparison did not happen as declared.
+
+NOT COMPARED IS A FINDING. A case whose class source differs from the reference, or whose
+BenchmarkDotNet job (the text after ': ' in its DisplayInfo) differs between invocations or is not
+recorded, is shown and not judged, and counts as a finding (`abab_blind`, status breach). A class
+with cases on both sides of which none is judged on time or bytes, and a run that judged no row on
+time, are STRUCTURAL: an edit to a benchmark cannot turn the comparison into a silent pass.
 
 OBSERVING OR ENFORCING. `PERF_ABAB_ENFORCE` (or --enforce) selects the mode, and nothing else
-does: `PERF_GATE_ENFORCE`, the absolute gate's switch, is not read here. Observing, every finding is
+does. It must be exactly 'true' or 'false' (or unset, observing): any other spelling is exit 2,
+because the workflow ties the step's continue-on-error to the exact string 'true'.
+`PERF_GATE_ENFORCE`, the absolute gate's switch, is not read here. Observing, every finding is
 reported and the exit is 0. Enforcing, SLOWER, MORE-BYTES and structural failures exit 1.
 
 Exit codes:
   0  pass; or only FASTER / FEWER-BYTES / UNCONFIRMED / not-judged / one-side-only findings; or
      observing with findings of any kind
   1  enforcing and at least one SLOWER, MORE-BYTES or structural failure
-  2  the guard is misconfigured, in both modes: bad usage, a baseline.json the absolute
+  2  the guard is misconfigured, in both modes: bad usage, a PERF_ABAB_ENFORCE other than
+     'true' or 'false', a baseline.json the absolute
      comparator refuses, an invalid or missing `abab` block, or a missing or invalid manifest
 
 Stdlib only. One definition of a measurement: `load_baseline`, `_measurement`,
@@ -74,7 +86,7 @@ PROJECT_EXEMPT = {"baseline.json", "baseline.README.md", "performance-record.jso
 _TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
 _LIST_LINE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
 _ABAB_KEYS = {"reference_tag", "order", "slower_ratio", "faster_ratio", "min_mean_ns",
-              "invocation_timeout_s", "rows", "accepted"}
+              "sub_floor_slower_ratio", "invocation_timeout_s", "rows", "accepted"}
 _ROW_KEYS = {"slower_ratio", "faster_ratio", "judge_time", "reason"}
 _ACCEPTED_KEYS = {"ratio", "relative_to", "pr", "reason"}
 
@@ -97,7 +109,16 @@ def _method_of(full_name):
 
 def parse_args(argv):
     baseline = root = markdown_out = json_out = None
-    enforce = os.environ.get(SWITCH, "").strip().lower() in ("1", "true", "yes", "on")
+    raw = os.environ.get(SWITCH)
+    if raw is None or raw == "" or raw == "false":
+        enforce = False
+    elif raw == "true":
+        enforce = True
+    else:
+        # The workflow arms continue-on-error on the exact string 'true'; any other spelling
+        # would read ENFORCING here while the step's failure still left the job green.
+        die(f"{SWITCH} is {raw!r}: it must be exactly 'true' or 'false' (or unset), the only "
+            f"two values .github/workflows/perf-regression.yml compares it with.")
     usage = ("usage: check-perf-abab.py --baseline <baseline.json> --abab-root <dir> [--enforce] "
              "[--markdown-out <file>] [--json-out <file>]")
     i = 0
@@ -166,6 +187,8 @@ def load_abab(path, types):
     floor = block["min_mean_ns"]
     if not _is_number(floor) or floor < 0:
         die(f"baseline \"abab.min_mean_ns\" must be a non-negative number, not {floor!r}.")
+    sub_floor = _ratio_value(block["sub_floor_slower_ratio"], "sub_floor_slower_ratio",
+                             low=slower)
     timeout = block["invocation_timeout_s"]
     if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
         die(f"baseline \"abab.invocation_timeout_s\" must be a positive integer, not {timeout!r}.")
@@ -222,7 +245,8 @@ def load_abab(path, types):
                 f"when the reference tag moves.")
         accepted[name] = ratio
     return {"reference_tag": tag, "order": list(order), "slower_ratio": slower,
-            "faster_ratio": faster, "min_mean_ns": float(floor), "invocation_timeout_s": timeout,
+            "faster_ratio": faster, "min_mean_ns": float(floor),
+            "sub_floor_slower_ratio": sub_floor, "invocation_timeout_s": timeout,
             "rows": overrides, "accepted": accepted}
 
 
@@ -358,11 +382,16 @@ def check_hosts(invocation_reports, environment):
                       "processor": host.get("ProcessorName")}
             for what, value in values.items():
                 observed.setdefault(what, {}).setdefault(label, set()).add(value)
+            for entry in report["cases"].values():
+                intrinsics = entry.get("HardwareIntrinsics") if isinstance(entry, dict) else None
+                observed.setdefault("hardware intrinsics", {}).setdefault(label, set()).add(
+                    intrinsics if isinstance(intrinsics, str) and intrinsics else None)
     declared = {}
     if environment:
         declared = {"SDK": environment["dotnet_sdk"], "runtime": environment["dotnet_runtime"],
                     "logical core count": environment["logical_cores"]}
-    for what in ("SDK", "runtime", "logical core count", "BenchmarkDotNet version", "processor"):
+    for what in ("SDK", "runtime", "logical core count", "BenchmarkDotNet version", "processor",
+                 "hardware intrinsics"):
         per_label = observed.get(what, {})
         for label, values in sorted(per_label.items()):
             if None in values:
@@ -482,7 +511,7 @@ def compare(abab, baseline, manifest, lists, invocations, positions):
                "not_judged_reason": None, "means": {"R": [], "H": []}, "ratios": [],
                "geomean": None, "self": {"R": None, "H": None}, "bytes": {"R": [], "H": []},
                "bytes_delta": [], "bytes_judged": False, "bytes_verdict": None,
-               "thresholds": None, "verdict": "not judged"}
+               "thresholds": None, "verdict": "not judged", "blind": False}
         bad_mean = False
         for arm in ("R", "H"):
             for entry in complete[arm].get(name, []):
@@ -511,22 +540,51 @@ def compare(abab, baseline, manifest, lists, invocations, positions):
             row["class"] = "incomplete"
             row["not_judged_reason"] = "a mean is not a finite number (structural)"
         else:
-            _judge(row, abab, baseline, changed_sources, structural)
+            configs = {_job_config(e) for arm in ("R", "H") for e in complete[arm][name]}
+            _judge(row, abab, baseline, changed_sources, configs, structural)
         rows.append(row)
+
+    # Blindness. A class whose cases exist on both sides and none of which is judged on time or
+    # bytes is not compared at all; nor is a run that judged no row. Both are structural, so a
+    # changed benchmark source or job cannot read "pass" with nothing behind it.
+    by_type = {}
+    for row in rows:
+        if row["class"] == "both":
+            by_type.setdefault(_BASE._owning_type(row["name"]), []).append(row)
+    for type_name, members in sorted(by_type.items()):
+        if not any(r["judged"] or r["bytes_judged"] for r in members):
+            reasons = sorted({r["not_judged_reason"] for r in members if r["not_judged_reason"]})
+            structural.append(f"[{type_name}] has {len(members)} case(s) on both sides and none "
+                              f"is judged on time or bytes ({'; '.join(reasons)}): the class is "
+                              f"not compared. Move abab.reference_tag to a release that carries "
+                              f"this benchmark as HEAD has it.")
+    if not any(row["judged"] for row in rows):
+        structural.append("no row was judged on time: the comparison measured nothing it could "
+                          "call a pass.")
     return rows, structural
+
+
+def _job_config(entry):
+    """The BenchmarkDotNet job a case ran under: the text after ': ' in its DisplayInfo, e.g.
+    'ShortRun(IterationCount=3, LaunchCount=1, WarmupCount=3)'. None when not recorded."""
+    display = entry.get("DisplayInfo") if isinstance(entry, dict) else None
+    if not isinstance(display, str) or ": " not in display:
+        return None
+    return display.split(": ", 1)[1].strip()
 
 
 def _int_or(value):
     return int(value) if float(value).is_integer() else value
 
 
-def _judge(row, abab, baseline, changed_sources, structural):
+def _judge(row, abab, baseline, changed_sources, configs, structural):
     name = row["name"]
     rmeans, hmeans = row["means"]["R"], row["means"]["H"]
     override = abab["rows"].get(name, {})
     accepted = abab["accepted"].get(name, 1.0)
     slower = override.get("slower_ratio", abab["slower_ratio"]) * accepted
     faster = override.get("faster_ratio", abab["faster_ratio"]) * accepted
+    floor = abab["min_mean_ns"]
     row["thresholds"] = {"slower": slower, "faster": faster, "accepted": accepted}
     positive = all(m > 0 for m in rmeans + hmeans)
     if positive:
@@ -535,17 +593,40 @@ def _judge(row, abab, baseline, changed_sources, structural):
         row["self"] = {"R": rmeans[-1] / rmeans[0], "H": hmeans[-1] / hmeans[0]}
     short = _BASE._owning_type(name).rsplit(".", 1)[-1]
     source_changed = short in changed_sources
-    reason = None
+    blind = None
     if source_changed:
-        reason = ("the benchmark source differs from the reference: the ratio includes the "
-                  "benchmark's own change")
-    elif min(rmeans + hmeans) < abab["min_mean_ns"] or not positive:
-        reason = (f"a mean is under the {abab['min_mean_ns']:g} ns floor: the ratio would measure "
-                  f"BenchmarkDotNet's overhead subtraction")
-    elif override.get("judge_time") is False:
+        blind = ("the benchmark source differs from the reference: the ratio includes the "
+                 "benchmark's own change")
+    elif None in configs:
+        blind = "an invocation does not record the case's BenchmarkDotNet job (DisplayInfo)"
+    elif len(configs) > 1:
+        blind = (f"the arms ran the case under different BenchmarkDotNet jobs "
+                 f"({' / '.join(sorted(configs))}): the ratio includes the harness")
+    reason = blind
+    sub_floor = False
+    if reason is None and override.get("judge_time") is False:
         reason = f"time not judged by abab.rows: {override['reason']}"
+    elif reason is None and (min(rmeans + hmeans) < floor or not positive):
+        if min(hmeans) >= floor and all(r >= 0 for r in rmeans):
+            # Only the reference is under the floor: its ratio measures the overhead
+            # subtraction, but HEAD leaving the floor by a coarse factor is the code. Judged one
+            # way only, against the floor itself.
+            sub_floor = True
+        else:
+            reason = (f"a mean is under the {floor:g} ns floor: the ratio would measure "
+                      f"BenchmarkDotNet's overhead subtraction")
+    row["blind"] = blind is not None
     if reason:
         row["not_judged_reason"] = reason
+    elif sub_floor:
+        bar = abab["sub_floor_slower_ratio"]
+        row["judged"] = True
+        row["sub_floor"] = True
+        row["thresholds"] = {"slower": bar, "faster": None, "accepted": 1.0}
+        against = [h / max(r, floor) for r, h in zip(rmeans, hmeans)]
+        row["floor_ratios"] = against
+        above = [r > bar for r in against]
+        row["verdict"] = ("SLOWER" if all(above) else "UNCONFIRMED" if any(above) else "ok")
     else:
         row["judged"] = True
         above = [r > slower for r in row["ratios"]]
@@ -573,7 +654,7 @@ def _judge(row, abab, baseline, changed_sources, structural):
                           f"\"Memory.BytesAllocatedPerOperation\": the memory diagnoser is off.")
         row["bytes_verdict"] = "not judged"
         return
-    if source_changed:
+    if blind:
         row["bytes_verdict"] = "not judged"
         return
     bound = expected["bytes_tolerance"]
@@ -589,7 +670,7 @@ def _judge(row, abab, baseline, changed_sources, structural):
 
 
 def summarize(rows, structural):
-    judged = [row for row in rows if row["judged"]]
+    judged = [row for row in rows if row["judged"] and not row.get("sub_floor")]
     logs = [abs(math.log(r)) for row in judged for r in row["ratios"]]
     selfs = [abs(math.log(row["self"][arm])) for row in judged for arm in ("R", "H")]
     outside = sum(1 for row in judged for r in row["ratios"]
@@ -597,7 +678,9 @@ def summarize(rows, structural):
     count = lambda key, value: sum(1 for row in rows if row[key] == value)  # noqa: E731
     slower, more = count("verdict", "SLOWER"), count("bytes_verdict", "MORE-BYTES")
     return {
-        "judged_rows": len(judged),
+        "judged_rows": sum(1 for row in rows if row["judged"]),
+        "sub_floor_judged": sum(1 for row in rows if row.get("sub_floor")),
+        "blind": sum(1 for row in rows if row.get("blind")),
         "ratios_count": len(logs),
         "median_abs_log_ratio": _median(logs),
         "p95_abs_log_ratio": _p95(logs),
@@ -622,6 +705,11 @@ def summarize(rows, structural):
 
 def _short(name):
     return _BASE._short(name)
+
+
+def _shown_ratios(row):
+    """The ratios a verdict was taken on: to the floor for a sub-floor reference, else H/R."""
+    return row.get("floor_ratios", row["ratios"])
 
 
 def _num(value, spec):
@@ -654,8 +742,11 @@ def render_markdown(meta, summary, rows, structural, notices, enforce):
             f"{meta['thresholds']['jit_isa'] or '(not pinned)'}, BenchmarkDotNet "
             f"{', '.join(env.get('BenchmarkDotNet version', [])) or '?'}. Time bars: SLOWER "
             f"when every round is over x{meta['thresholds']['slower_ratio']:g}, FASTER when every "
-            f"round is under x{meta['thresholds']['faster_ratio']:g}; means under "
-            f"{meta['thresholds']['min_mean_ns']:g} ns are not judged.", ""]
+            f"round is under x{meta['thresholds']['faster_ratio']:g}; a case under "
+            f"{meta['thresholds']['min_mean_ns']:g} ns in HEAD is not judged, and one under it in "
+            f"the reference only is judged SLOWER-only, when every round of HEAD is over "
+            f"x{meta['thresholds']['sub_floor_slower_ratio']:g} the larger of the floor and the "
+            f"reference.", ""]
     out += ["| position | arm | started | ended | exit | timed out |", "|--:|---|---|---|--:|---|"]
     for inv in meta["invocations"]:
         out.append(f"| {inv.get('position')} | {inv.get('arm')} | {inv.get('started') or '—'} | "
@@ -676,9 +767,10 @@ def render_markdown(meta, summary, rows, structural, notices, enforce):
     section("Failing", "SLOWER in every round, or MORE-BYTES in every round. These fail an "
             "enforcing run.",
             row_items(lambda r: r["verdict"] == "SLOWER",
-                      lambda r: f"`{r['name']}` SLOWER: ratios "
-                                f"{', '.join(f'{x:.4f}' for x in r['ratios'])}, bar "
-                                f"{r['thresholds']['slower']:.4f}")
+                      lambda r: f"`{r['name']}` SLOWER: "
+                                f"{'ratios to the floor' if r.get('sub_floor') else 'ratios'} "
+                                f"{', '.join(f'{x:.4f}' for x in _shown_ratios(r))}"
+                                f", bar {r['thresholds']['slower']:.4f}")
             + row_items(lambda r: r["bytes_verdict"] == "MORE-BYTES",
                         lambda r: f"`{r['name']}` MORE-BYTES: deltas "
                                   f"{', '.join(f'{d:+}' for d in r['bytes_delta'])} B"))
@@ -698,6 +790,11 @@ def render_markdown(meta, summary, rows, structural, notices, enforce):
             "one arm: allocation that is not deterministic.",
             row_items(lambda r: r.get("bytes_anomaly"),
                       lambda r: f"`{r['name']}` R {r['bytes']['R']}, H {r['bytes']['H']}"))
+    section("Not compared: the benchmark itself differs", "The class's source or the job it "
+            "ran under differs between the arms, so a ratio would include the benchmark's own "
+            "change. Reported as a finding; a class with no judged row is structural.",
+            row_items(lambda r: r.get("blind"),
+                      lambda r: f"`{r['name']}`: {r['not_judged_reason']}"))
     section("HEAD only", "No reference: not compared.",
             row_items(lambda r: r["class"] == "head-only", lambda r: f"`{r['name']}`"))
     section("Reference only", "Removed or renamed since the reference tag.",
@@ -706,7 +803,8 @@ def render_markdown(meta, summary, rows, structural, notices, enforce):
             row_items(lambda r: r["class"] == "case-set-differs",
                       lambda r: f"`{r['name']}` in arm {r['arm']} only"))
     section("Not judged", "Shown in the table, not judged.",
-            row_items(lambda r: r["class"] in ("both", "incomplete") and not r["judged"],
+            row_items(lambda r: r["class"] in ("both", "incomplete") and not r["judged"]
+                      and not r.get("blind"),
                       lambda r: f"`{r['name']}`: {r['not_judged_reason']}"))
 
     out += ["### Noise of this run", ""]
@@ -772,7 +870,8 @@ def main(argv):
         for type_name in sorted(types - listed):
             structural.append(f"[{type_name}] is a baseline.json \"sources\" type that "
                               f"list-H.txt does not name: HEAD declares it and never ran it.")
-    if manifest.get("reference_dir_sha") != manifest.get("reference_sha"):
+    if manifest.get("reference_dir_sha") is None or manifest.get("reference_sha") is None \
+            or manifest.get("reference_dir_sha") != manifest.get("reference_sha"):
         structural.append(f"the reference directory is at commit "
                           f"{manifest.get('reference_dir_sha')}, not the tag's commit "
                           f"{manifest.get('reference_sha')}: the R arm is not the declared "
@@ -828,7 +927,9 @@ def main(argv):
         "environment": observed_env,
         "invocations": manifest["invocations"],
         "thresholds": {"slower_ratio": abab["slower_ratio"], "faster_ratio": abab["faster_ratio"],
-                       "min_mean_ns": abab["min_mean_ns"], "jit_isa": jit_isa},
+                       "min_mean_ns": abab["min_mean_ns"],
+                       "sub_floor_slower_ratio": abab["sub_floor_slower_ratio"],
+                       "jit_isa": jit_isa},
     }
 
     print(f"perf-abab: mode={meta['mode']} reference={abab['reference_tag']} "
@@ -843,7 +944,7 @@ def main(argv):
     for row in rows:
         if row["verdict"] == "SLOWER":
             print(f"::{level}::perf-abab SLOWER: {row['name']} ratios "
-                  f"{', '.join(f'{r:.4f}' for r in row['ratios'])} over "
+                  f"{', '.join(f'{r:.4f}' for r in _shown_ratios(row))} over "
                   f"{row['thresholds']['slower']:.4f} in every round.")
         if row["bytes_verdict"] == "MORE-BYTES":
             print(f"::{level}::perf-abab MORE-BYTES: {row['name']} deltas {row['bytes_delta']} B.")
@@ -854,7 +955,8 @@ def main(argv):
         print(f"::notice::perf-abab: {notice}")
 
     def strip(row):
-        return {k: v for k, v in row.items() if k != "bytes_anomaly"}
+        return {k: v for k, v in row.items() if k not in ("bytes_anomaly", "sub_floor",
+                                                          "floor_ratios")}
 
     if markdown_out:
         try:
@@ -872,7 +974,7 @@ def main(argv):
 
     failing = summary["failing"]
     findings = failing + summary["faster"] + summary["fewer_bytes"] + summary["unconfirmed"] \
-        + summary["bytes_anomalies"]
+        + summary["bytes_anomalies"] + summary["blind"]
     status = "pass" if findings == 0 else "breach"
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
@@ -884,6 +986,7 @@ def main(argv):
                                    ("fewer_bytes", summary["fewer_bytes"]),
                                    ("unconfirmed", summary["unconfirmed"]),
                                    ("bytes_anomalies", summary["bytes_anomalies"]),
+                                   ("blind", summary["blind"]),
                                    ("head_only", summary["head_only"]),
                                    ("reference_only", summary["reference_only"]),
                                    ("structural", summary["structural"]),

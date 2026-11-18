@@ -37,6 +37,9 @@ _BETA = f"{_TYPE}.Beta"       # time only, no bytes entry
 _GAMMA = f"{_TYPE}.Gamma"     # bytes gated within a 1024 B bound
 _TINY = f"{_TYPE}.Tiny"       # 1 ns: below the floor, declared unbanded
 
+_JOB = "ShortRun(IterationCount=3, LaunchCount=1, WarmupCount=3)"
+_INTRINSICS = "AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT VectorSize=256"
+
 _ENVIRONMENT = {"dotnet_sdk": "10.0.404", "dotnet_runtime": "10.0.15", "logical_cores": 4}
 
 _ABAB = {
@@ -45,6 +48,7 @@ _ABAB = {
     "slower_ratio": 1.10,
     "faster_ratio": 0.909,
     "min_mean_ns": 2.0,
+    "sub_floor_slower_ratio": 2.0,
     "invocation_timeout_s": 900,
     "rows": {},
     "accepted": {},
@@ -67,7 +71,7 @@ _DEFAULTS = {_ALPHA: (1000.0, 168), _BETA: (50.0, 0), _GAMMA: (2000.0, 500000), 
 
 _ROW_KEYS = {"name", "class", "arm", "judged", "not_judged_reason", "means", "ratios", "geomean",
              "self", "bytes", "bytes_delta", "bytes_judged", "bytes_verdict", "thresholds",
-             "verdict"}
+             "verdict", "blind"}
 _META_KEYS = {"schema", "mode", "enforcing", "switch", "reference_tag", "reference_sha",
               "head_sha", "newest_tag", "stale_reference", "order", "aa_run",
               "changed_compiled_paths", "changed_benchmark_paths", "environment", "invocations",
@@ -76,7 +80,7 @@ _SUMMARY_KEYS = {"judged_rows", "ratios_count", "median_abs_log_ratio", "p95_abs
                  "median_abs_log_self", "order_effect_geomean", "share_outside_band", "slower",
                  "faster", "unconfirmed", "more_bytes", "fewer_bytes", "bytes_anomalies",
                  "structural", "failing", "head_only", "reference_only", "case_set_differs",
-                 "incomplete", "not_judged"}
+                 "incomplete", "not_judged", "sub_floor_judged", "blind"}
 
 
 def _method(full_name):
@@ -106,6 +110,8 @@ class CheckPerfAbabTests(unittest.TestCase):
         self.isa = {pos: "x86-64-v3" for pos in self.values}
         self.no_report = set()
         self.raw_stats = {}  # (pos, case) -> raw Statistics object
+        self.job = {}        # (pos, case) -> DisplayInfo job text (None: no DisplayInfo)
+        self.intrinsics = {}  # (pos, case) -> HardwareIntrinsics (None: absent)
         self.manifest = {
             "schema": 1,
             "reference_tag": "v2.10.1",
@@ -167,6 +173,12 @@ class CheckPerfAbabTests(unittest.TestCase):
                 entry = {"Namespace": "Verbara.Sdk.Benchmarks", "Type": "FakeBenchmark",
                          "Method": method, "FullName": name,
                          "Statistics": {"N": 3, "Mean": mean, "Median": mean}}
+                job = self.job.get((pos, name), _JOB)
+                if job is not None:
+                    entry["DisplayInfo"] = f"FakeBenchmark.{method}: {job}"
+                intrinsics = self.intrinsics.get((pos, name), _INTRINSICS)
+                if intrinsics is not None:
+                    entry["HardwareIntrinsics"] = intrinsics
                 if (pos, name) in self.raw_stats:
                     entry["Statistics"] = self.raw_stats[(pos, name)]
                 if allocated is not None:
@@ -264,6 +276,24 @@ class CheckPerfAbabTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, "PERF_GATE_ENFORCE must not arm the ABAB comparison")
         self.assertEqual("false", self._outputs()["abab_enforcing"])
 
+    def test_Main_ShouldExitTwo_WhenTheSwitchIsSpelledOtherThanTrueOrFalse(self):
+        # The workflow's continue-on-error compares with the exact string 'true': '1' or 'True'
+        # would read ENFORCING here while the job stayed green.
+        self.set_arm("H", _ALPHA, mean=2000.0)
+        for value in ("1", "True", "yes", "on", " true", "TRUE", "0"):
+            with self.subTest(value=value):
+                result = self._run(env={"PERF_ABAB_ENFORCE": value})
+                self.assertEqual(2, result.returncode, result.stdout)
+                self.assertIn("exactly 'true' or 'false'", result.stdout)
+
+    def test_Main_ShouldObserve_WhenTheSwitchIsFalseOrEmpty(self):
+        self.set_arm("H", _ALPHA, mean=2000.0)
+        for value in ("false", ""):
+            with self.subTest(value=value):
+                result = self._run(env={"PERF_ABAB_ENFORCE": value})
+                self.assertEqual(0, result.returncode, result.stdout)
+                self.assertEqual("false", self._outputs()["abab_enforcing"])
+
     def test_Main_ShouldEnforce_WhenTheFlagIsPassed(self):
         self.set_arm("H", _ALPHA, mean=1200.0)
         result = self._run("--enforce")
@@ -352,8 +382,8 @@ class CheckPerfAbabTests(unittest.TestCase):
         self.assertIn("relative_to", result.stdout)
 
     # ---- 10. the floor -------------------------------------------------------------------
-    def test_Main_ShouldNotJudge_WhenAMeanIsBelowTheFloor(self):
-        self.set_arm("H", _TINY, mean=2.5)   # 2.5x at about 1 ns
+    def test_Main_ShouldNotJudge_WhenAHeadMeanIsBelowTheFloor(self):
+        self.set_arm("H", _TINY, mean=1.9)   # 1.9x at about 1 ns, HEAD still under 2 ns
         result = self._run(enforce=True)
         self.assertEqual(0, result.returncode, result.stdout)
         row = self._row(_TINY)
@@ -361,6 +391,47 @@ class CheckPerfAbabTests(unittest.TestCase):
         self.assertIn("floor", row["not_judged_reason"])
         self.assertEqual("not judged", row["verdict"])
         self.assertIn("Tiny", self._md())
+
+    def test_Main_ShouldNotCallSlower_WhenOnlyTheReferenceIsUnderTheFloorAndHeadIsNear(self):
+        # 2.5x by H/R, but only 1.25x the floor: a ratio of a few cycles is not the code.
+        self.set_arm("H", _TINY, mean=2.5)
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        row = self._row(_TINY)
+        self.assertTrue(row["judged"])
+        self.assertEqual("ok", row["verdict"])
+        self.assertEqual(2.0, row["thresholds"]["slower"])
+
+    def test_Main_ShouldFail_WhenASubFloorRowLeavesTheFloorByTheCoarseBar(self):
+        # The review's scenario: 0.72 ns on the reference, 30 ns on HEAD.
+        self.set_arm("R", _TINY, mean=0.72)
+        self.set_arm("H", _TINY, mean=30.0)
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertEqual("SLOWER", self._row(_TINY)["verdict"])
+        self.assertIn("ratios to the floor 15.0000, 15.0000", self._md())
+
+    def test_Main_ShouldReportUnconfirmed_WhenASubFloorRowLeavesTheFloorInOneRoundOnly(self):
+        self.set(2, _TINY, mean=30.0)
+        self.set(3, _TINY, mean=3.0)
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual("UNCONFIRMED", self._row(_TINY)["verdict"])
+
+    def test_Main_ShouldNeverCallASubFloorRowFaster_WhenHeadIsFarBelowTheReferenceShare(self):
+        self.set_arm("R", _TINY, mean=1.99)
+        self.set_arm("H", _TINY, mean=2.0)
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual("ok", self._row(_TINY)["verdict"])
+
+    def test_Main_ShouldLeaveSubFloorRowsOutOfTheNoiseStatistics_WhenJudged(self):
+        self.set_arm("H", _TINY, mean=2.5)
+        self._run()
+        summary = self._json()["summary"]
+        self.assertEqual(4, summary["judged_rows"])
+        self.assertEqual(1, summary["sub_floor_judged"])
+        self.assertEqual(6, summary["ratios_count"])   # 3 rows x 2 rounds, Tiny excluded
 
     def test_Main_ShouldNotJudgeTime_WhenARowOverrideSaysSo(self):
         self.baseline["abab"]["rows"] = {_BETA: {"judge_time": False, "reason": "bimodal"}}
@@ -552,6 +623,19 @@ class CheckPerfAbabTests(unittest.TestCase):
         self.assertEqual(1, result.returncode, result.stdout)
         self.assertTrue(any("commit" in s for s in self._structural()))
 
+    def test_Main_ShouldBeStructural_WhenNeitherReferenceCommitIsRecorded(self):
+        self.manifest["reference_sha"] = None
+        self.manifest["reference_dir_sha"] = None
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any("not the declared reference" in s for s in self._structural()))
+
+    def test_Main_ShouldBeStructural_WhenOnlyTheTagCommitIsUnknown(self):
+        self.manifest["reference_sha"] = None
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any("not the declared reference" in s for s in self._structural()))
+
     def test_Main_ShouldReportStructuralWithoutFailing_WhenObserving(self):
         self.no_report.add(4)
         result = self._run()
@@ -615,16 +699,84 @@ class CheckPerfAbabTests(unittest.TestCase):
         self.assertTrue(any("Memory" in s for s in self._structural()))
 
     # ---- 24. a benchmark that changed itself ---------------------------------------------
-    def test_Main_ShouldNotJudge_WhenTheBenchmarkSourceDiffers(self):
+    def test_Main_ShouldBeStructural_WhenTheBenchmarkSourceDiffersAndNoRowOfTheClassIsJudged(self):
+        # The review's probe: HEAD 5x slower and 10 MB heavier on every row, one source edit.
         self.manifest["changed_benchmark_paths"] = ["Tests/Verbara.Sdk.Benchmarks/FakeBenchmark.cs"]
-        self.set_arm("H", _ALPHA, mean=1500.0, allocated=999)
+        for case, (mean, allocated) in _DEFAULTS.items():
+            self.set_arm("H", case, mean=mean * 5, allocated=allocated + 10_000_000)
         result = self._run(enforce=True)
-        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual(1, result.returncode, result.stdout)
         row = self._row(_ALPHA)
         self.assertFalse(row["judged"])
         self.assertFalse(row["bytes_judged"])
+        self.assertTrue(row["blind"])
         self.assertIn("benchmark's own change", row["not_judged_reason"])
-        self.assertAlmostEqual(1.5, row["geomean"], places=6)
+        self.assertAlmostEqual(5.0, row["geomean"], places=6)
+        self.assertTrue(any(_TYPE in s and "not compared" in s for s in self._structural()),
+                        self._structural())
+        self.assertTrue(any("no row was judged" in s for s in self._structural()))
+        outputs = self._outputs()
+        self.assertEqual("breach", outputs["abab_status"])
+        self.assertEqual("4", outputs["abab_blind"])
+        self.assertEqual(4, self._json()["summary"]["blind"])
+
+    def test_Main_ShouldReportBreachNotPass_WhenTheBenchmarkSourceDiffersAndObserving(self):
+        self.manifest["changed_benchmark_paths"] = ["Tests/Verbara.Sdk.Benchmarks/FakeBenchmark.cs"]
+        result = self._run()
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual("breach", self._outputs()["abab_status"])
+        self.assertIn("Not compared: the benchmark itself differs", self._md())
+
+    def test_Main_ShouldNotJudgeTheRow_WhenItsJobDiffersBetweenTheArms(self):
+        for pos in (2, 3):
+            self.job[(pos, _BETA)] = "Job-ABCDEF(IterationCount=15)"
+        self.set_arm("H", _BETA, mean=80.0)
+        result = self._run(enforce=True)
+        # Alpha and Gamma are still judged, so the class is compared: a finding, not a failure.
+        self.assertEqual(0, result.returncode, result.stdout)
+        row = self._row(_BETA)
+        self.assertFalse(row["judged"])
+        self.assertTrue(row["blind"])
+        self.assertIn("different BenchmarkDotNet jobs", row["not_judged_reason"])
+        self.assertEqual("ok", self._row(_ALPHA)["verdict"])
+        self.assertEqual("breach", self._outputs()["abab_status"])
+        self.assertEqual("1", self._outputs()["abab_blind"])
+
+    def test_Main_ShouldBeStructural_WhenEveryRowRanUnderAnotherJobInHead(self):
+        # A HEAD-side global config (a ManualConfig in Program.cs) changes every case's job.
+        for case in _DEFAULTS:
+            for pos in (2, 3):
+                self.job[(pos, case)] = "Job-ABCDEF(IterationCount=15)"
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any("not compared" in s for s in self._structural()))
+
+    def test_Main_ShouldNotJudgeTheRow_WhenAnInvocationDoesNotRecordItsJob(self):
+        self.job[(4, _BETA)] = None
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertIn("DisplayInfo", self._row(_BETA)["not_judged_reason"])
+
+    def test_Main_ShouldBeStructural_WhenNoRowIsJudgedOnTime(self):
+        self.baseline["abab"]["rows"] = {
+            case: {"judge_time": False, "reason": "probe"} for case in (_ALPHA, _BETA, _GAMMA)}
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any("no row was judged" in s for s in self._structural()))
+
+    def test_Main_ShouldBeStructural_WhenTheArmsRanOnDifferentHardwareIntrinsics(self):
+        for case in _DEFAULTS:
+            self.intrinsics[(3, case)] = "AVX512F+AVX512BW,AVX2 VectorSize=512"
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any("hardware intrinsics" in s for s in self._structural()))
+
+    def test_Main_ShouldBeStructural_WhenACaseDoesNotRecordItsHardwareIntrinsics(self):
+        self.intrinsics[(1, _ALPHA)] = None
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any("does not record its hardware intrinsics" in s
+                            for s in self._structural()), self._structural())
 
     def test_Main_ShouldNoticeAProjectChange_WhenAnotherBenchmarkFileDiffers(self):
         self.manifest["changed_benchmark_paths"] = [
@@ -664,6 +816,9 @@ class CheckPerfAbabTests(unittest.TestCase):
             "faster_ratio 1.0": lambda b: b["abab"].update(faster_ratio=1.0),
             "faster_ratio 0": lambda b: b["abab"].update(faster_ratio=0),
             "negative floor": lambda b: b["abab"].update(min_mean_ns=-1),
+            "sub-floor bar at the slower bar": lambda b: b["abab"].update(
+                sub_floor_slower_ratio=1.10),
+            "sub-floor bar missing": lambda b: b["abab"].pop("sub_floor_slower_ratio"),
             "timeout zero": lambda b: b["abab"].update(invocation_timeout_s=0),
             "one round only": lambda b: b["abab"].update(order=["R", "H"]),
             "unequal R and H": lambda b: b["abab"].update(order=["R", "H", "H", "R", "R"]),
@@ -772,7 +927,7 @@ class CheckPerfAbabTests(unittest.TestCase):
         for key in ("abab_status", "abab_slower", "abab_more_bytes", "abab_faster",
                     "abab_fewer_bytes", "abab_unconfirmed", "abab_structural", "abab_failing",
                     "abab_enforcing", "abab_head_only", "abab_reference_only",
-                    "abab_bytes_anomalies"):
+                    "abab_bytes_anomalies", "abab_blind"):
             self.assertIn(key, outputs)
         self.assertEqual("breach", outputs["abab_status"])
         self.assertEqual("1", outputs["abab_slower"])
