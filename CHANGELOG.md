@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Fixed: a reconnect reload no longer drops the events dispatched while it replaces its subscription (#NNN)
+### Fixed: a reconnect reload no longer drops the events dispatched while it replaces its subscription (#600)
 
 On every reconnect, on the reconnect loop and on the caller's own `ConnectAsync`, `VerbaraServer` released its event
 subscription and then took a new one. `AmiConnection` keeps its observers across sessions and was already dispatching
