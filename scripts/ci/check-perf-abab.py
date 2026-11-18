@@ -17,10 +17,18 @@ invocations: round k pairs the k-th R invocation with the k-th H invocation, so 
 (position 1, position 2), round 2 = (position 4, position 3) and round 3 = (position 5,
 position 6). Nothing here is specific to three rounds.
 
+THE LAUNCHES. Each invocation runs every case in `abab.launch_count` processes (two):
+run-perf-abab.sh passes `--launchCount` to the in-job run only, and BenchmarkDotNet rewrites the
+source's `[ShortRunJob]` in place (`ShortRun(IterationCount=3, LaunchCount=2, WarmupCount=3)`, one
+job, N = 6). Every case of every invocation must show it: its job text (the DisplayInfo after ': ')
+states `LaunchCount=<launch_count>`, and its `Measurements` hold Result iterations from launches 1
+to launch_count only, IterationCount of them in each. Anything else is STRUCTURAL: the override did
+not apply, or applied differently, and the run measured another design than the one declared.
+
 THE STATISTIC. For each case and round k, r_k = mean(H_k) / mean(R_k) (BenchmarkDotNet
-`Statistics.Mean`, nanoseconds), and g is the geometric mean of the r_k. In-job noise is between
-processes, one launch-level spike at a time, so the verdict reads g and asks a majority of the
-rounds to confirm it: SLOWER when g > slower_ratio x accepted and more than half of the r_k are
+`Statistics.Mean`, nanoseconds, over the Result iterations of all the invocation's launches), and
+g is the geometric mean of the r_k. In-job noise is between processes, one launch-level spike at a
+time, so the verdict reads g and asks a majority of the rounds to confirm it: SLOWER when g > slower_ratio x accepted and more than half of the r_k are
 over that bar; FASTER when g < faster_ratio x accepted and more than half of the r_k are under it.
 A bar is SUSPECTED when g is beyond it or at least half of the r_k are; a suspicion that is not a
 verdict is UNCONFIRMED; ok otherwise. With three rounds that is "exactly one of g and the majority";
@@ -94,7 +102,10 @@ PROJECT_EXEMPT = {"baseline.json", "baseline.README.md", "performance-record.jso
 _TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
 _LIST_LINE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
 _ABAB_KEYS = {"reference_tag", "order", "slower_ratio", "faster_ratio", "min_mean_ns",
-              "sub_floor_slower_ratio", "invocation_timeout_s", "rows", "accepted"}
+              "sub_floor_slower_ratio", "invocation_timeout_s", "launch_count", "rows",
+              "accepted"}
+_LAUNCH_COUNT = re.compile(r"\bLaunchCount=(\d+)\b")
+_ITERATION_COUNT = re.compile(r"\bIterationCount=(\d+)\b")
 _ROW_KEYS = {"slower_ratio", "faster_ratio", "judge_time", "reason"}
 _ACCEPTED_KEYS = {"ratio", "relative_to", "pr", "reason"}
 
@@ -200,6 +211,9 @@ def load_abab(path, types):
     timeout = block["invocation_timeout_s"]
     if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout <= 0:
         die(f"baseline \"abab.invocation_timeout_s\" must be a positive integer, not {timeout!r}.")
+    launches = block["launch_count"]
+    if not isinstance(launches, int) or isinstance(launches, bool) or launches <= 0:
+        die(f"baseline \"abab.launch_count\" must be a positive integer, not {launches!r}.")
 
     rows = block["rows"]
     if not isinstance(rows, dict):
@@ -255,7 +269,7 @@ def load_abab(path, types):
     return {"reference_tag": tag, "order": list(order), "slower_ratio": slower,
             "faster_ratio": faster, "min_mean_ns": float(floor),
             "sub_floor_slower_ratio": sub_floor, "invocation_timeout_s": timeout,
-            "rows": overrides, "accepted": accepted}
+            "launch_count": launches, "rows": overrides, "accepted": accepted}
 
 
 def _owned(name, types, where):
@@ -284,6 +298,10 @@ def load_manifest(root, abab):
     if manifest.get("order") != abab["order"]:
         die(f"manifest order {manifest.get('order')!r} is not the declared abab.order "
             f"{abab['order']!r}: the run's own order is not trusted.")
+    if manifest.get("launch_count") != abab["launch_count"]:
+        die(f"manifest launch_count {manifest.get('launch_count')!r} is not the declared "
+            f"abab.launch_count {abab['launch_count']}: the run's own launch count is not "
+            f"trusted.")
     if manifest.get("reference_tag") != abab["reference_tag"]:
         die(f"manifest reference_tag {manifest.get('reference_tag')!r} is not the declared "
             f"{abab['reference_tag']}.")
@@ -320,13 +338,47 @@ def read_list(root, arm, types):
     return methods, None
 
 
-def read_invocation(root, inv, sources, environment, jit_isa):
+def _launch_problem(entry, launch_count):
+    """Why a case's report does not show `launch_count` launches, or None when it does."""
+    job = _job_config(entry)
+    if job is not None:
+        stated = _LAUNCH_COUNT.search(job)
+        if stated is None:
+            return f"its job '{job}' states no LaunchCount"
+        if int(stated.group(1)) != launch_count:
+            return f"its job '{job}' states LaunchCount={stated.group(1)}"
+    measurements = entry.get("Measurements")
+    if not isinstance(measurements, list):
+        return "it records no Measurements, so its launches cannot be counted"
+    per_launch = {}
+    for item in measurements:
+        if isinstance(item, dict) and item.get("IterationMode") == "Workload" \
+                and item.get("IterationStage") == "Result":
+            per_launch[item.get("LaunchIndex")] = per_launch.get(item.get("LaunchIndex"), 0) + 1
+    expected = set(range(1, launch_count + 1))
+    if set(per_launch) != expected:
+        shown = ", ".join(str(k) for k in sorted(per_launch, key=str)) or "none"
+        return (f"its Result iterations come from launch(es) {shown}, not 1 to "
+                f"{launch_count}")
+    iterations = _ITERATION_COUNT.search(job) if job is not None else None
+    if iterations is not None:
+        want = int(iterations.group(1))
+        short = {k: v for k, v in per_launch.items() if v != want}
+        if short:
+            return (f"launch(es) {', '.join(str(k) for k in sorted(short))} hold "
+                    f"{', '.join(str(short[k]) for k in sorted(short))} Result iteration(s), "
+                    f"not IterationCount={want}")
+    return None
+
+
+def read_invocation(root, inv, sources, environment, jit_isa, launch_count):
     """Every declared type's report in one invocation directory. Returns (reports, structural):
     reports maps type -> {"cases": {FullName: entry}, "host": HostEnvironmentInfo}."""
     label = inv["dir"]
     directory = os.path.join(root, label)
     structural = []
     reports = {}
+    off_launch = []
     if inv.get("timed_out") is True:
         structural.append(f"[{label}] the invocation timed out (exit {inv.get('exit_code')}): "
                           f"its reports, if any, are a partial run.")
@@ -355,7 +407,16 @@ def read_invocation(root, inv, sources, environment, jit_isa):
                                   f"\"FullName\".")
                 continue
             cases[name] = entry
+            problem = _launch_problem(entry, launch_count)
+            if problem:
+                off_launch.append((name, problem))
         reports[type_name] = {"cases": cases, "host": doc.get("HostEnvironmentInfo")}
+    if off_launch:
+        name, problem = off_launch[0]
+        structural.append(f"[{label}] {len(off_launch)} case(s) do not show the declared "
+                          f"abab.launch_count {launch_count}: the --launchCount override did not "
+                          f"apply as declared, so the invocation measured another design. First: "
+                          f"{name}: {problem}.")
     if jit_isa and reports:
         seen = set()
         for name in sorted(os.listdir(directory)):
@@ -761,7 +822,8 @@ def render_markdown(meta, summary, rows, structural, notices, enforce):
             "OBSERVING (reports, cannot fail the job)")
     out += [f"Mode: **{mode}**, switch `{SWITCH}` in `.github/workflows/perf-regression.yml`. "
             f"Reference `{meta['reference_tag']}` at `{meta['reference_sha'] or 'unknown'}`, "
-            f"HEAD at `{meta['head_sha'] or 'unknown'}`.", ""]
+            f"HEAD at `{meta['head_sha'] or 'unknown'}`. {meta['launch_count']} launch(es) per "
+            f"invocation.", ""]
     if meta["aa_run"]:
         out += ["No compiled file differs from the reference: this run measures the comparison's "
                 "own noise.", ""]
@@ -923,7 +985,8 @@ def main(argv):
     invocations = {}
     positions = {"R": [], "H": []}
     for inv in manifest["invocations"]:
-        reports, problems = read_invocation(root, inv, sources, environment, jit_isa)
+        reports, problems = read_invocation(root, inv, sources, environment, jit_isa,
+                                            abab["launch_count"])
         invocations[inv["dir"]] = reports
         positions[inv["arm"]].append(inv["dir"])
         structural += problems
@@ -965,6 +1028,7 @@ def main(argv):
         "newest_tag": newest,
         "stale_reference": stale,
         "order": abab["order"],
+        "launch_count": abab["launch_count"],
         "aa_run": (compiled == []) if compiled is not None else None,
         "changed_compiled_paths": compiled,
         "changed_benchmark_paths": manifest.get("changed_benchmark_paths"),
@@ -977,7 +1041,7 @@ def main(argv):
     }
 
     print(f"perf-abab: mode={meta['mode']} reference={abab['reference_tag']} "
-          f"order={' '.join(abab['order'])} root={root}")
+          f"order={' '.join(abab['order'])} launch_count={abab['launch_count']} root={root}")
     for row in rows:
         ratios = ",".join(f"{r:.4f}" for r in row["ratios"]) or "-"
         g = "-" if row["geomean"] is None else f"{row['geomean']:.4f}"

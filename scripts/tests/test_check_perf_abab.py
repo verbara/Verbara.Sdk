@@ -52,6 +52,7 @@ _ABAB = {
     "min_mean_ns": 2.0,
     "sub_floor_slower_ratio": 2.0,
     "invocation_timeout_s": 900,
+    "launch_count": 1,
     "rows": {},
     "accepted": {},
 }
@@ -77,7 +78,7 @@ _ROW_KEYS = {"name", "class", "arm", "judged", "not_judged_reason", "means", "ra
 _META_KEYS = {"schema", "mode", "enforcing", "switch", "reference_tag", "reference_sha",
               "head_sha", "newest_tag", "stale_reference", "order", "aa_run",
               "changed_compiled_paths", "changed_benchmark_paths", "environment", "invocations",
-              "thresholds"}
+              "thresholds", "launch_count"}
 _SUMMARY_KEYS = {"judged_rows", "ratios_count", "median_abs_log_ratio", "geomeans_count",
                  "median_abs_log_geomean", "p95_abs_log_geomean", "share_geomean_outside_band",
                  "lone_rounds", "median_abs_log_self", "order_effect_geomean", "slower",
@@ -86,12 +87,38 @@ _SUMMARY_KEYS = {"judged_rows", "ratios_count", "median_abs_log_ratio", "geomean
                  "incomplete", "not_judged", "sub_floor_judged", "blind"}
 
 
+_FOLLOW = object()  # the manifest's launch_count follows the baseline's
+
+
 def _method(full_name):
     return re.sub(r"\([^()]*\)$", "", full_name)
 
 
 def _deep(doc):
     return json.loads(json.dumps(doc))
+
+
+def _results_of(job):
+    """What BenchmarkDotNet records for a job text: IterationCount Result iterations in each of
+    LaunchCount launches (1 when the text names none)."""
+    launches = re.search(r"LaunchCount=(\d+)", job)
+    iterations = re.search(r"IterationCount=(\d+)", job)
+    count = int(iterations.group(1)) if iterations else 3
+    return {launch: count for launch in range(1, (int(launches.group(1)) if launches else 1) + 1)}
+
+
+def _measurements(results, mean):
+    """BenchmarkDotNet 0.15.8's `Measurements` shape: per launch, warmup and actual iterations
+    and the Result iterations the statistics are computed from."""
+    out = []
+    ops = 1000
+    value = mean if isinstance(mean, (int, float)) else 1.0
+    for launch, count in sorted(results.items()):
+        for stage, n in (("Warmup", 3), ("Actual", count), ("Result", count)):
+            out.extend({"IterationMode": "Workload", "IterationStage": stage,
+                        "LaunchIndex": launch, "IterationIndex": i, "Operations": ops,
+                        "Nanoseconds": value * ops} for i in range(1, n + 1))
+    return out
 
 
 class CheckPerfAbabTests(unittest.TestCase):
@@ -115,6 +142,9 @@ class CheckPerfAbabTests(unittest.TestCase):
         self.raw_stats = {}  # (pos, case) -> raw Statistics object
         self.job = {}        # (pos, case) -> DisplayInfo job text (None: no DisplayInfo)
         self.intrinsics = {}  # (pos, case) -> HardwareIntrinsics (None: absent)
+        # (pos, case) -> Result iterations per LaunchIndex, e.g. {1: 3, 2: 3}; None: no
+        # Measurements. Default: the job text's LaunchCount and IterationCount.
+        self.results = {}
         self.manifest = {
             "schema": 1,
             "reference_tag": "v2.10.1",
@@ -129,6 +159,7 @@ class CheckPerfAbabTests(unittest.TestCase):
             "changed_compiled_paths": [],
         }
         self.write_manifest = True
+        self.manifest_launch_count = _FOLLOW
 
     def tearDown(self):
         shutil.rmtree(self._tmp, ignore_errors=True)
@@ -176,9 +207,14 @@ class CheckPerfAbabTests(unittest.TestCase):
                 entry = {"Namespace": "Verbara.Sdk.Benchmarks", "Type": "FakeBenchmark",
                          "Method": method, "FullName": name,
                          "Statistics": {"N": 3, "Mean": mean, "Median": mean}}
-                job = self.job.get((pos, name), _JOB)
+                launches = self.baseline.get("abab", {}).get("launch_count", 1)
+                default_job = _JOB.replace("LaunchCount=1", f"LaunchCount={launches}")
+                job = self.job.get((pos, name), default_job)
                 if job is not None:
                     entry["DisplayInfo"] = f"FakeBenchmark.{method}: {job}"
+                results = self.results.get((pos, name), _results_of(job or default_job))
+                if results is not None:
+                    entry["Measurements"] = _measurements(results, mean)
                 intrinsics = self.intrinsics.get((pos, name), _INTRINSICS)
                 if intrinsics is not None:
                     entry["HardwareIntrinsics"] = intrinsics
@@ -198,6 +234,10 @@ class CheckPerfAbabTests(unittest.TestCase):
                                          "Benchmarks": entries}))
         if not self.manifest.get("invocations"):
             self.manifest["invocations"] = invocations
+        # The run script writes the launch count it read; a test overrides it to break that.
+        self.manifest["launch_count"] = (
+            self.baseline.get("abab", {}).get("launch_count")
+            if self.manifest_launch_count is _FOLLOW else self.manifest_launch_count)
         if self.write_manifest:
             with open(os.path.join(self.root, "manifest.json"), "w", encoding="utf-8") as handle:
                 json.dump(self.manifest, handle)
@@ -741,7 +781,7 @@ class CheckPerfAbabTests(unittest.TestCase):
 
     def test_Main_ShouldNotJudgeTheRow_WhenItsJobDiffersBetweenTheArms(self):
         for pos in (2, 3):
-            self.job[(pos, _BETA)] = "Job-ABCDEF(IterationCount=15)"
+            self.job[(pos, _BETA)] = "Job-ABCDEF(IterationCount=15, LaunchCount=1)"
         self.set_arm("H", _BETA, mean=80.0)
         result = self._run(enforce=True)
         # Alpha and Gamma are still judged, so the class is compared: a finding, not a failure.
@@ -758,7 +798,7 @@ class CheckPerfAbabTests(unittest.TestCase):
         # A HEAD-side global config (a ManualConfig in Program.cs) changes every case's job.
         for case in _DEFAULTS:
             for pos in (2, 3):
-                self.job[(pos, case)] = "Job-ABCDEF(IterationCount=15)"
+                self.job[(pos, case)] = "Job-ABCDEF(IterationCount=15, LaunchCount=1)"
         result = self._run(enforce=True)
         self.assertEqual(1, result.returncode, result.stdout)
         self.assertTrue(any("not compared" in s for s in self._structural()))
@@ -832,6 +872,11 @@ class CheckPerfAbabTests(unittest.TestCase):
                 sub_floor_slower_ratio=1.10),
             "sub-floor bar missing": lambda b: b["abab"].pop("sub_floor_slower_ratio"),
             "timeout zero": lambda b: b["abab"].update(invocation_timeout_s=0),
+            "launch count missing": lambda b: b["abab"].pop("launch_count"),
+            "launch count zero": lambda b: b["abab"].update(launch_count=0),
+            "launch count string": lambda b: b["abab"].update(launch_count="2"),
+            "launch count float": lambda b: b["abab"].update(launch_count=2.0),
+            "launch count bool": lambda b: b["abab"].update(launch_count=True),
             "one round only": lambda b: b["abab"].update(order=["R", "H"]),
             "unequal R and H": lambda b: b["abab"].update(order=["R", "H", "H", "R", "R"]),
             "unknown arm": lambda b: b["abab"].update(order=["R", "H", "X", "R"]),
@@ -859,6 +904,9 @@ class CheckPerfAbabTests(unittest.TestCase):
                     self.manifest["reference_tag"] = self.baseline["abab"]["reference_tag"]
                 result = self._run()
                 self.assertEqual(2, result.returncode, f"{label}: {result.stdout}")
+                if label.startswith("launch count") and label != "launch count missing":
+                    # Refused by the block's own check, not by the manifest disagreeing with it.
+                    self.assertIn("abab.launch_count\" must be", result.stdout, label)
 
     def test_Main_ShouldExitTwo_InObservingModeToo_WhenMisconfigured(self):
         self.baseline["abab"]["slower_ratio"] = 0.9
@@ -1121,6 +1169,98 @@ class CheckPerfAbabTests(unittest.TestCase):
         self._run(enforce=True)
         self.assertEqual("ok", self._row(_ALPHA)["bytes_verdict"])
 
+    # ---- 32. the declared launch count (two launches per invocation) ----------------------
+    def use_two_launches(self):
+        self.baseline["abab"]["launch_count"] = 2
+
+    def test_Main_ShouldPass_WhenEveryInvocationShowsTheDeclaredTwoLaunches(self):
+        self.use_two_launches()
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual([], self._structural())
+        self.assertEqual(2, self._json()["meta"]["launch_count"])
+        self.assertIn("2 launch(es) per invocation", self._md())
+
+    def test_Main_ShouldBeStructural_WhenTheJobShowsOneLaunchAndTwoAreDeclared(self):
+        # The override did not apply: BenchmarkDotNet ran the source's ShortRun as written.
+        self.use_two_launches()
+        for case in _DEFAULTS:
+            self.job[(3, case)] = _JOB
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        problems = [s for s in self._structural() if s.startswith("[3-H]") and "launch" in s]
+        self.assertEqual(1, len(problems), self._structural())
+        self.assertIn("LaunchCount=1", problems[0])
+        self.assertIn("4 case(s)", problems[0])
+
+    def test_Main_ShouldBeStructural_WhenTheJobSaysTwoLaunchesButOneRan(self):
+        self.use_two_launches()
+        self.results[(4, _ALPHA)] = {1: 3}
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any(s.startswith("[4-R]") and "launch" in s and _ALPHA in s
+                            for s in self._structural()), self._structural())
+
+    def test_Main_ShouldBeStructural_WhenALaunchHasTooFewResultIterations(self):
+        self.use_two_launches()
+        self.results[(2, _BETA)] = {1: 3, 2: 2}
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any(s.startswith("[2-H]") and "Result" in s and _BETA in s
+                            for s in self._structural()), self._structural())
+
+    def test_Main_ShouldBeStructural_WhenThreeLaunchesRanAndTwoAreDeclared(self):
+        self.use_two_launches()
+        self.results[(1, _GAMMA)] = {1: 3, 2: 3, 3: 3}
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any(s.startswith("[1-R]") and _GAMMA in s for s in self._structural()),
+                        self._structural())
+
+    def test_Main_ShouldBeStructural_WhenACaseRecordsNoMeasurements(self):
+        self.use_two_launches()
+        self.results[(2, _ALPHA)] = None
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any(s.startswith("[2-H]") and "Measurements" in s
+                            for s in self._structural()), self._structural())
+
+    def test_Main_ShouldBeStructural_WhenTheJobTextNamesNoLaunchCount(self):
+        self.use_two_launches()
+        self.job[(4, _BETA)] = "Job-ABCDEF(IterationCount=3)"
+        self.results[(4, _BETA)] = {1: 3, 2: 3}
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any(s.startswith("[4-R]") and "LaunchCount" in s
+                            for s in self._structural()), self._structural())
+
+    def test_Main_ShouldStillPass_WhenOneLaunchIsDeclaredAndShown(self):
+        # The fixture default: launch_count 1 with ShortRun(..., LaunchCount=1, ...).
+        result = self._run(enforce=True)
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual(1, self._json()["meta"]["launch_count"])
+
+    def test_Main_ShouldBeStructural_WhenTwoLaunchesRanAndOneIsDeclared(self):
+        for case in _DEFAULTS:
+            for pos in range(1, len(self.order) + 1):
+                self.job[(pos, case)] = _JOB.replace("LaunchCount=1", "LaunchCount=2")
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertEqual(len(self.order),
+                         sum(1 for s in self._structural() if "launch" in s), self._structural())
+
+    def test_Main_ShouldExitTwo_WhenTheManifestRecordsAnotherLaunchCount(self):
+        self.use_two_launches()
+        self.manifest_launch_count = 1
+        result = self._run()
+        self.assertEqual(2, result.returncode, result.stdout)
+        self.assertIn("launch_count", result.stdout)
+
+    def test_Main_ShouldExitTwo_WhenTheManifestRecordsNoLaunchCount(self):
+        self.manifest_launch_count = None
+        result = self._run()
+        self.assertEqual(2, result.returncode, result.stdout)
+
 
 def _code_lines(text):
     return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
@@ -1170,6 +1310,7 @@ class CommittedAbabContractTests(unittest.TestCase):
                                          "timed_out": False}
                                         for i, arm in enumerate(order, start=1)],
                         "lists": {"R": {"exit_code": 1}, "H": {"exit_code": 1}},
+                        "launch_count": abab.get("launch_count"),
                         "changed_benchmark_paths": None, "changed_compiled_paths": None}
             with open(os.path.join(tmp, "manifest.json"), "w", encoding="utf-8") as handle:
                 json.dump(manifest, handle)
@@ -1184,6 +1325,17 @@ class CommittedAbabContractTests(unittest.TestCase):
 
     def test_Baseline_ShouldDeclareThreeRounds(self):
         self.assertEqual(["R", "H", "H", "R", "R", "H"], self.doc["abab"]["order"])
+
+    def test_Baseline_ShouldDeclareTwoLaunchesPerInvocation(self):
+        # The third series' design (baseline.README.md, "Before the flip"): one field, read by
+        # run-perf-abab.sh for the in-job run only.
+        self.assertEqual(2, self.doc["abab"]["launch_count"])
+        self.assertEqual(1080, self.doc["abab"]["invocation_timeout_s"])
+
+    def test_Workflow_ShouldNotPassALaunchCountToTheAbsoluteGate(self):
+        # The absolute bands were calibrated on the sources' own job; only the in-job run doubles.
+        absolute = self.code[:self.code.index("- name: Read the declared in-job reference")]
+        self.assertNotRegex(absolute, r"(?i)launch")
 
     def test_Baseline_ShouldShipOnlyTheBimodalRowOverride_WhileTheRunIsAnAATest(self):
         # The second series names one override before it runs, and only that one: any other is a
@@ -1241,17 +1393,32 @@ class CommittedAbabContractTests(unittest.TestCase):
         self.assertLess(positions[-1], self.code.index("- name: Upload BenchmarkDotNet JSON"))
 
     def test_Workflow_ShouldLeaveRoomForTheDoubledRun(self):
-        job = int(re.search(r"(?m)^    timeout-minutes: (\d+)$", self.code).group(1))
         run = _step(self.code, "Run the reference and HEAD alternated (R H H R R H)")
         step = int(re.search(r"timeout-minutes: (\d+)", run).group(1))
         abab = self.doc["abab"]
-        # The existing 9-step HEAD pass took up to 20 minutes; the job timeout must never be what
-        # fires, because a cancelled job skips every `!cancelled()` comparison step.
-        self.assertGreaterEqual(job, step + 25)
         invocations = len(abab["order"])
         # run-perf-abab.sh gives every `timeout` call a 30 s --kill-after grace and the lists 120 s.
         grace, lists = 30, 120
-        self.assertGreaterEqual(step * 60, invocations * (abab["invocation_timeout_s"] + grace) + 2 * (lists + grace))
+        self.assertGreaterEqual(step * 60, invocations * (abab["invocation_timeout_s"] + grace)
+                                + 2 * (lists + grace))
+
+    def test_Workflow_ShouldNeverLetTheJobTimeoutFire_WhenEveryStepRunsToItsOwnTimeout(self):
+        # A cancelled job skips every `!cancelled()` comparison step, so the job's timeout must
+        # outlast every step at its own timeout: each step declares one, and their sum is less
+        # than the job's.
+        job = int(re.search(r"(?m)^    timeout-minutes: (\d+)$", self.code).group(1))
+        steps = self.code.split("\n    steps:\n", 1)[1]
+        bodies = re.split(r"(?m)^      - ", steps)[1:]
+        total = 0
+        for body in bodies:
+            label = body.splitlines()[0]
+            with self.subTest(step=label):
+                found = re.search(r"(?m)^        timeout-minutes: (\d+)$", body)
+                self.assertIsNotNone(found, f"step {label!r} declares no timeout-minutes")
+                if found:
+                    total += int(found.group(1))
+        self.assertGreater(len(bodies), 20)
+        self.assertLess(total, job)
 
     def test_Workflow_ShouldUploadTheAbabArtifacts(self):
         upload = _step(self.code, "Upload BenchmarkDotNet JSON reports")

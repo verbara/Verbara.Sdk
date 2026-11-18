@@ -17,16 +17,21 @@
 #      methods each tree declares, so a benchmark present on one side only is reported, not dropped.
 #   3. Runs one BenchmarkDotNet invocation per position of the order (all the classes in one
 #      invocation: one generated-project build each), into <out>/<position>-<arm>, each under
-#      `timeout`. A failing or timed-out position never stops the later ones: missing output is the
+#      `timeout` and with `--launchCount <abab.launch_count>`: BenchmarkDotNet rewrites the source's
+#      `[ShortRunJob]` in place, so each case runs in that many processes per invocation. A failing or timed-out position never stops the later ones: missing output is the
 #      comparator's to find, as a structural failure.
-#   4. Writes <out>/manifest.json: the order, each invocation's times and exit code, the two
-#      commits, the files that differ between them, and the newest release tag.
+#   4. Writes <out>/manifest.json: the order, the launch count, each invocation's times and exit
+#      code, the two commits, the files that differ between them, and the newest release tag.
 #
-# Both arms run with the job's environment (the ISA pin, the pinned SDK) and the same command line;
-# the job configuration itself comes from the benchmark source ([ShortRunJob], [MemoryDiagnoser]).
+# Both arms run with the job's environment (the ISA pin, the pinned SDK) and the same command line.
+# The job is the benchmark source's ([ShortRunJob], [MemoryDiagnoser]) with one override, the launch
+# count, which only this in-job run passes: the absolute gate's steps run the sources' job as written.
+# The `--list flat` calls take no job option. check-perf-abab.py confirms from each report that the
+# override applied.
 #
 # Exit: 0 after the arguments parse, whatever the invocations did; 2 on bad usage or a baseline
-# that declares no `abab` block. Unit-tested by scripts/tests/test_run_perf_abab.sh.
+# that declares no `abab` block, or one whose `abab.launch_count` is missing or not a positive
+# integer (no default: a silent 1 would measure the old design). Unit-tested by scripts/tests/test_run_perf_abab.sh.
 set -uo pipefail
 
 die() { echo "::error::run-perf-abab: $1"; exit 2; }
@@ -53,7 +58,7 @@ done
 [ -f "$BASELINE" ] || die "cannot read baseline '$BASELINE'"
 [ -d "$HEAD_DIR" ] || die "HEAD directory '$HEAD_DIR' does not exist"
 
-# One line per fact: `type <T>`, `order <arm>`, `tag <tag>`, `timeout <s>`.
+# One line per fact: `type <T>`, `order <arm>`, `tag <tag>`, `timeout <s>`, `launch <n>`.
 plan="$(python3 - "$BASELINE" <<'PY'
 import json, sys
 doc = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -65,16 +70,21 @@ for arm in abab["order"]:
     print(f"order {arm}")
 print(f"tag {abab['reference_tag']}")
 print(f"timeout {abab['invocation_timeout_s']}")
+launch = abab.get("launch_count")
+# JSON true is a Python int and "2" would print as 2: only a real positive integer passes.
+ok = isinstance(launch, int) and not isinstance(launch, bool) and launch > 0
+print(f"launch {launch if ok else 'INVALID'}")
 PY
-)" || die "baseline '$BASELINE' declares no readable \"sources\" and \"abab\" (reference_tag, order, invocation_timeout_s)"
+)" || die "baseline '$BASELINE' declares no readable \"sources\" and \"abab\" (reference_tag, order, invocation_timeout_s, launch_count)"
 
-globs=() order=() declared_tag="" timeout_s=""
+globs=() order=() declared_tag="" timeout_s="" launch_count=""
 while IFS=' ' read -r kind value; do
   case "$kind" in
     type) globs+=("${value}.*") ;;
     order) order+=("$value") ;;
     tag) declared_tag="$value" ;;
     timeout) timeout_s="$value" ;;
+    launch) launch_count="$value" ;;
   esac
 done <<< "$plan"
 [ "${#globs[@]}" -gt 0 ] || die "baseline \"sources\" declares no type"
@@ -82,6 +92,9 @@ done <<< "$plan"
 [ "$REF_TAG" = "$declared_tag" ] || die "--reference-tag '$REF_TAG' is not the declared abab.reference_tag '$declared_tag'"
 timeout_s="${PERF_ABAB_INVOCATION_TIMEOUT_S:-$timeout_s}"
 case "$timeout_s" in ''|*[!0-9]*|0) die "invocation timeout '$timeout_s' is not a positive integer of seconds" ;; esac
+case "$launch_count" in
+  ''|*[!0-9]*|0) die "baseline \"abab.launch_count\" must be a positive integer, not '${launch_count:-missing}'" ;;
+esac
 LIST_TIMEOUT_S=120
 BENCH="Tests/Verbara.Sdk.Benchmarks"
 
@@ -92,7 +105,7 @@ if [ "${PERF_ABAB_DRY_RUN:-0}" = "1" ]; then
   pos=0
   for arm in "${order[@]}"; do
     pos=$((pos + 1))
-    echo "run $pos $arm $(arm_dir "$arm") timeout=$timeout_s ${globs[*]}"
+    echo "run $pos $arm $(arm_dir "$arm") timeout=$timeout_s launchCount=$launch_count ${globs[*]}"
   done
   exit 0
 fi
@@ -121,7 +134,7 @@ for arm in "${order[@]}"; do
   started="$(now)"
   (cd "$dir" && timeout --kill-after=30 "$timeout_s" \
      dotnet run -c Release --no-build -- --filter "${globs[@]}" --exporters json \
-       --artifacts "$OUT/$label")
+       --launchCount "$launch_count" --artifacts "$OUT/$label")
   rc=$?
   ended="$(now)"
   echo "::endgroup::"
@@ -145,10 +158,11 @@ tags="$OUT/.tags.txt"; tags_ok=0
 if git -C "$HEAD_DIR" ls-remote --tags --refs origin 'v*' > "$tags" 2>/dev/null; then tags_ok=1; fi
 
 python3 - "$OUT/manifest.json" "$records" "$changed" "$changed_ok" "$tags" "$tags_ok" \
-  "$REF_TAG" "$ref_sha" "$ref_dir_sha" "$head_sha" "${list_rc[R]}" "${list_rc[H]}" "${order[@]}" <<'PY'
+  "$REF_TAG" "$ref_sha" "$ref_dir_sha" "$head_sha" "${list_rc[R]}" "${list_rc[H]}" \
+  "$launch_count" "${order[@]}" <<'PY'
 import json, re, sys
 (out, records, changed, changed_ok, tags, tags_ok, tag, ref_sha, ref_dir_sha, head_sha,
- list_r, list_h, *order) = sys.argv[1:]
+ list_r, list_h, launch_count, *order) = sys.argv[1:]
 invocations = []
 for line in open(records, encoding="utf-8").read().splitlines():
     pos, arm, started, ended, rc, timed_out = line.split("\t")
@@ -172,7 +186,8 @@ if tags_ok == "1":
         newest = max(found, key=lambda m: tuple(int(g) for g in m.groups()[1:])).group(1)
 manifest = {"schema": 1, "reference_tag": tag, "reference_sha": ref_sha or None,
             "reference_dir_sha": ref_dir_sha or None, "head_sha": head_sha or None,
-            "newest_tag": newest, "order": order, "invocations": invocations,
+            "newest_tag": newest, "order": order, "launch_count": int(launch_count),
+            "invocations": invocations,
             "lists": {"R": {"exit_code": int(list_r)}, "H": {"exit_code": int(list_h)}},
             "changed_benchmark_paths": benchmark_paths, "changed_compiled_paths": compiled_paths}
 with open(out, "w", encoding="utf-8") as handle:
