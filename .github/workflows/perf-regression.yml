@@ -30,6 +30,14 @@ name: Perf Regression
 # filter still leave the other benchmarks measurable, and the comparison
 # step is now what notices.
 #
+# IN-JOB COMPARISON (ADR-0042 addendum). The bands above cover a fleet of CPU models
+# that read the same code up to 2-3x apart, so no band sees a 10-20% time regression. After the
+# absolute gate, this job also builds the reference tag declared in baseline.json
+# `abab.reference_tag` beside HEAD and measures both, alternated R H H R, in this job on this
+# machine; scripts/ci/check-perf-abab.py judges time by the ratio HEAD/reference per round and bytes
+# by the difference. It OBSERVES (PERF_ABAB_ENFORCE below) until five consecutive runs meet the
+# prediction written before them. It costs about twice this job's minutes, on the hosted runner.
+#
 # Manual run: gh workflow run "Perf Regression"
 
 on:
@@ -47,7 +55,10 @@ jobs:
   benchmark:
     name: Run BenchmarkDotNet hot-paths
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # The in-job comparison adds four joint invocations (about 24-30 minutes) to the 15-20 minute
+    # absolute pass. This must never be what fires: a cancelled job skips every `!cancelled()`
+    # comparison step, so each phase has its own, shorter timeout (the run step 70 minutes).
+    timeout-minutes: 100
     env:
       # ┌─────────────────────────────────────────────────────────────────────┐
       # │  THE FLIP. This one line is the whole difference between observing  │
@@ -70,6 +81,14 @@ jobs:
       # │  report-perf-breach.sh together.                                    │
       # └─────────────────────────────────────────────────────────────────────┘
       PERF_GATE_ENFORCE: 'true'
+      # THE ABAB FLIP. 'false' = the in-job comparison against baseline.json
+      # `abab.reference_tag` runs, writes its summary and artifacts, and cannot fail the job.
+      # 'true' = SLOWER, MORE-BYTES and its structural failures fail it. Flipped only after five
+      # consecutive runs met the prediction written before them (baseline.README.md, "Before the
+      # flip"). Only 'true' or 'false': the comparator exits 2 on any other spelling, since the
+      # continue-on-error lines below compare with 'true' exactly. Independent of
+      # PERF_GATE_ENFORCE: check-perf-abab.py reads this one only.
+      PERF_ABAB_ENFORCE: 'false'
       # ISA pin. ubuntu-latest mixes CPUs with and without AVX-512, and .NET 10 targets AVX-512
       # wherever it exists, so the same code read faster or slower by host: time "breaches" in both
       # directions on weeks when nothing here changed. This holds the JIT at x86-64-v3 on every
@@ -238,6 +257,70 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/ci/report-perf-breach.sh perf-baseline-report.md
 
+      # ── In-job comparison against the reference tag (ADR-0042 addendum) ─────
+      # Every step runs unless the run was cancelled, so a failed absolute gate still leaves the
+      # comparison measured. The reference is the tag's own tree (its src/ and its own benchmark
+      # project), in a worktree outside the workspace: HEAD stays where every step above put it.
+      # A reference that fails to check out or build is not skipped: its reports are missing and
+      # the comparator reports that as structural. The breach issue above is not filed from here.
+      - name: Read the declared in-job reference
+        id: abab_ref
+        if: ${{ !cancelled() }}
+        continue-on-error: ${{ env.PERF_ABAB_ENFORCE != 'true' }}
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import json, re
+          tag = json.load(open("Tests/Verbara.Sdk.Benchmarks/baseline.json", encoding="utf-8"))["abab"]["reference_tag"]
+          assert re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag), tag
+          print(f"tag={tag}")
+          PY
+      - name: Check out the reference tag beside HEAD
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          REF: ${{ steps.abab_ref.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # The checkout is shallow and carries no tags: fetch this one only. Worktrees skip Git
+          # LFS, so pull it, or the turn-detection model is a pointer file on the reference arm.
+          git fetch --no-tags --depth=1 origin "+refs/tags/${REF}:refs/tags/${REF}"
+          git worktree add --detach "$RUNNER_TEMP/perf-ref" "${REF}^{commit}"
+          git -C "$RUNNER_TEMP/perf-ref" lfs pull
+      - name: Build the reference benchmarks (Release)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        working-directory: ${{ runner.temp }}/perf-ref
+        run: dotnet build Tests/Verbara.Sdk.Benchmarks/ -c Release --nologo
+      - name: Run the reference and HEAD alternated (R H H R)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 70
+        env:
+          REF: ${{ steps.abab_ref.outputs.tag }}
+        run: >-
+          bash scripts/ci/run-perf-abab.sh --baseline Tests/Verbara.Sdk.Benchmarks/baseline.json
+          --head "$GITHUB_WORKSPACE" --reference "$RUNNER_TEMP/perf-ref" --reference-tag "$REF"
+          --out artifacts-abab
+      # Observing, even an exit 2 (the guard misconfigured) is an orange step and the job stays
+      # green; once PERF_ABAB_ENFORCE is 'true' the same exit fails it, as the absolute gate's does.
+      - name: Compare HEAD against the reference in this job
+        id: abab
+        if: ${{ !cancelled() }}
+        continue-on-error: ${{ env.PERF_ABAB_ENFORCE != 'true' }}
+        run: |
+          python3 scripts/ci/check-perf-abab.py \
+            --baseline Tests/Verbara.Sdk.Benchmarks/baseline.json \
+            --abab-root artifacts-abab \
+            --markdown-out perf-abab-report.md --json-out perf-abab.json
+      - name: Publish the in-job comparison to the run summary
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f perf-abab-report.md ]; then
+            cat perf-abab-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "In-job comparison produced no report — see the previous step." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload BenchmarkDotNet JSON reports
         if: always()
         uses: actions/upload-artifact@v7.0.2
@@ -246,5 +329,11 @@ jobs:
           path: |
             artifacts/**/results/*.json
             perf-baseline-report.md
+            artifacts-abab/manifest.json
+            artifacts-abab/list-*.txt
+            artifacts-abab/*/results/*-report-full-compressed.json
+            artifacts-abab/*/*.log
+            perf-abab-report.md
+            perf-abab.json
           if-no-files-found: warn
           retention-days: 90

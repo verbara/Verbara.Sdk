@@ -15,6 +15,18 @@
     "dotnet_runtime": "10.0.15",
     "logical_cores": 4
   },
+  "_abab_note": "In-job comparison (ADR-0042 addendum): after the absolute gate, the weekly job builds `abab.reference_tag` (the reference's own tree) beside HEAD and measures both in the same job, in `abab.order` (R H H R: round k pairs the k-th R with the k-th H, so a linear drift lands on the two rounds with opposite signs). Time is judged by r_k = mean(H_k) / mean(R_k): SLOWER only when every round exceeds slower_ratio, FASTER only when every round is under faster_ratio, UNCONFIRMED when the rounds disagree. A case whose mean is under min_mean_ns in a HEAD invocation is shown and not judged; one under it in the reference only is judged SLOWER-only, when every round's mean(H_k) / max(mean(R_k), min_mean_ns) exceeds sub_floor_slower_ratio, and never FASTER. A case whose class source or BenchmarkDotNet job differs between the arms is not compared and is reported as a finding; a class with no judged row, or a run with none, is structural. Bytes are judged by the per-round difference, against the row's `bytes_tolerance` in `benchmarks`, for rows that have a `bytes` entry. `rows` holds per-row overrides (slower_ratio, faster_ratio or judge_time false, each with a reason); `accepted` holds a cost accepted by a PR as a ratio with `relative_to` naming the reference it was measured against, and the comparator refuses an entry whose relative_to is not reference_tag, so moving the tag at a release forces its accepted entries out. OBSERVING until five consecutive runs met the prediction written before them; the switch is PERF_ABAB_ENFORCE in .github/workflows/perf-regression.yml, independent of PERF_GATE_ENFORCE. See baseline.README.md.",
+  "abab": {
+    "reference_tag": "v2.10.1",
+    "order": ["R", "H", "H", "R"],
+    "slower_ratio": 1.10,
+    "faster_ratio": 0.909,
+    "min_mean_ns": 2.0,
+    "sub_floor_slower_ratio": 2.0,
+    "invocation_timeout_s": 900,
+    "rows": {},
+    "accepted": {}
+  },
   "calibration": {
     "method": "Parsed the BenchmarkDotNet `-report-full-compressed.json` artifacts of 13 real runs of .github/workflows/perf-regression.yml — 12 scheduled (weekly cron) plus 1 workflow_dispatch. `mean_ns` is the mean of those per-run means; the band is set to cover the observed across-run spread with headroom.",
     "runs": 13,

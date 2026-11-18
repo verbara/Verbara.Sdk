@@ -103,7 +103,8 @@ models (EPYC 9V45, 9V74, 7763, Xeon 6975P-C), and on 2026-11-11 an EPYC 7763 rea
 and `Create1000Channels`' are therefore **provisional** and wider than the rest (35% and 40%);
 `_channel_manager_widened_bands_note` in `baseline.json` carries the runs, the ratios and what the
 widening stops the gate from seeing. A comparison of a reference build against this one inside the
-same job, on the same host, is what replaces them.
+same job, on the same host, is what replaces them: it runs now, observing, and is described under
+[In-job comparison against the reference tag](#in-job-comparison-against-the-reference-tag-observing).
 
 ## The pinned SDK and runtime
 
@@ -261,6 +262,130 @@ version, or carries a key the comparator does not check, and a malformed `unband
 `sources` row declares, or a key that is also in `benchmarks`) and fails the job in **both** modes — a misconfigured guard reading green is the
 `|| true` hole wearing a different hat.
 
+## In-job comparison against the reference tag (observing)
+
+No band that covers four CPU models sees a 10-20% time regression: the SLOWER bar sits +29% to +80%
+over a row's usual reading on most hosts. So, after the absolute gate, the weekly job measures the
+code against a **reference build in the same job, on the same machine**, and judges time by the
+ratio. `scripts/ci/run-perf-abab.sh` runs it and `scripts/ci/check-perf-abab.py` judges it; both
+read the `abab` block of `baseline.json`.
+
+- **The reference** is `abab.reference_tag`, built from the tag's own tree (its `src/` and its own
+  benchmark project) in a worktree beside HEAD, with the same pinned SDK, the same ISA pin and the
+  same command line. It is declared, not discovered: it moves by PR at a release, like
+  `environment`. When a newer release tag exists the report carries a notice, never a failure.
+- **The order** is `abab.order`, `R H H R`: one BenchmarkDotNet invocation per position with every
+  class of `sources` in it (one generated-project build each). Round *k* pairs the *k*-th R with the
+  *k*-th H, so round 1 is (position 1, position 2) and round 2 is (position 4, position 3). A linear
+  drift over the run lands on the two rounds with opposite signs, so drift alone cannot make every
+  round agree; a first-invocation penalty lands on R and pushes toward FASTER, which never fails.
+- **The statistic.** Per case and round, r = mean(H) / mean(R). **SLOWER** when every round is over
+  `slower_ratio` (1.10), **FASTER** when every round is under `faster_ratio` (0.909), **UNCONFIRMED**
+  when the rounds disagree, ok otherwise. The point estimate is the geometric mean of the rounds.
+  Each arm's last-over-first ratio is shown too: it is the run's own A/A noise.
+- **The floor.** A case whose mean is under `min_mean_ns` (2 ns) in a HEAD invocation is shown and
+  not judged: the ratio of a few cycles measures BenchmarkDotNet's overhead subtraction (the
+  `_dispatch_1_observer_note` lesson). A case under the floor in the reference only is judged one
+  way: **SLOWER** when every round's mean(H) / max(mean(R), `min_mean_ns`) is over
+  `sub_floor_slower_ratio` (2.0), so a 0.7 ns row that becomes 30 ns is seen; it is never FASTER
+  and stays out of the noise statistics.
+- **Bytes in the job.** Both arms run on the same core count, so a bytes difference between them is
+  the code. A case with a `bytes` entry in `benchmarks` is **MORE-BYTES** when every round's
+  difference is over its `bytes_tolerance` and **FEWER-BYTES** when every round's is under minus it;
+  a case with no `bytes` entry shows its difference and is not judged. An exactly gated case whose
+  bytes differ between the rounds of one arm is reported as a bytes anomaly.
+- **Never dropped.** Each arm's `--list flat` output is what that tree declares. A method in HEAD's
+  list only is reported as **HEAD only**, one in the reference's only as **reference only**, a
+  parameter case one arm lacks as **case set differs**; none is compared and none fails. A case its
+  arm declares that some invocation did not measure, a class with no report, a mean that is not a
+  finite number, a timed-out invocation, invocations that disagree on SDK, runtime, core count,
+  JIT ISA, hardware intrinsics, BenchmarkDotNet version or processor, and a reference worktree
+  whose commit is unknown or is not the tag's are **structural** failures.
+- **A changed benchmark is not a pass.** When a compared class's own `.cs` file differs between
+  the tag and HEAD, or a case's BenchmarkDotNet job (the text after `: ` in its `DisplayInfo`)
+  differs between invocations, its rows are shown, not judged, and counted as a finding
+  (`abab_blind`; the status reads breach, never pass): the ratio would include the benchmark's own
+  change. A class with cases on both sides and no row judged on time or bytes, and a run that
+  judged no row on time, are **structural**; the remedy is the next release's move of
+  `abab.reference_tag`. Any other change under the benchmark project (except this file,
+  `baseline.json`, `performance-record.json` and `README.md`) is a notice. When no compiled file
+  differs at all, the report says the run measures the comparison's own noise.
+- **Overrides and accepted costs.** `abab.rows["<FullName>"]` may set `slower_ratio`,
+  `faster_ratio` or `judge_time: false`, always with a `reason`. `abab.accepted["<FullName>"]`
+  records a cost a PR accepted, as `{ "ratio", "relative_to", "pr", "reason" }`; both bars are then
+  centred on that ratio. `relative_to` must name `reference_tag`, or the comparator refuses the
+  baseline (exit 2): an accepted ratio means nothing against another reference, so moving the tag
+  forces its accepted entries out.
+- **Moving the reference tag** at a release is a PR that changes `abab.reference_tag`, removes the
+  `accepted` entries measured against the old tag, and says so.
+- **The switch.** `PERF_ABAB_ENFORCE` in the job `env:` of `.github/workflows/perf-regression.yml`
+  is `'false'`: the comparison writes its section of the run summary, `perf-abab-report.md` and
+  `perf-abab.json`, and cannot fail the job, even on exit 2. Its only values are `'true'` and
+  `'false'`: the comparator refuses any other spelling (exit 2), because the steps'
+  `continue-on-error` compares with the exact string `'true'`. It is independent of
+  `PERF_GATE_ENFORCE`, and its result does not file the breach issue. It is flipped only after five
+  consecutive runs met the prediction below, written before them. Flipped, SLOWER, MORE-BYTES and
+  its structural failures fail the job.
+
+### Before the flip: the prediction and the flip rule
+
+Written on 2026-11-17, before the first validation run, and not edited after it: a change to any
+threshold below is a new prediction and starts a new series.
+
+**Protocol.** A branch `perf/abab-validation` at the merge commit of the comparison; five
+`workflow_dispatch` runs of `Perf Regression` on it, each after the previous one ends. At that
+commit no compiled file differs from `v2.10.1`, so every run is an A/A test; each manifest's
+`changed_compiled_paths` must hold no `.cs` or `.csproj`. A run lost to the infrastructure (runner
+lost, cancelled) is run again and does not count; no other run is discarded. The judged set is
+every row the comparator judges on time with the ratio H/R (about 40 rows); a sub-floor row's
+judgement is counted only by P1.
+
+**Prediction.** Every clause must hold in every run:
+
+- **P1.** Zero judged rows are SLOWER or FASTER, sub-floor rows included.
+- **P2.** Of all judged r_k over the five runs (about 400), at most 2% fall outside
+  [0.909, 1.10]. In each run the p95 of |ln r_k| is at most ln 1.06 and the median at most
+  ln 1.02.
+- **P3.** In each run the geometric mean over judged rows of R(position 4) / R(position 1) is in
+  [0.97, 1.03], and the median |ln r_k| is at most 1.5 times the median |ln self-ratio|.
+- **P4.** Zero MORE-BYTES, zero FEWER-BYTES and zero bytes anomalies: every exactly gated row has
+  a difference of 0 in both rounds and the same bytes in both rounds of each arm.
+- **P5.** Zero structural failures and zero rows not compared (`abab_blind` 0); `list-R.txt`
+  equals `list-H.txt`.
+- **P6.** Every run completes with the job at most 70 min, the in-job phase at most 40 min, and no
+  invocation timed out.
+- **P7 (per row).** No judged row has 2 or more of its 10 r_k (5 runs x 2 rounds) outside its
+  band, and no row is UNCONFIRMED in 2 or more of the 5 runs. Named in advance as the likeliest to
+  break it: `AsyncEventPumpBenchmark.EnqueueAndConsume1000Events` (its bytes are bimodal by a
+  writer/consumer race; a process that lands in one mode per launch would make its time bimodal
+  too), `ChannelManagerBenchmark.Create1000Channels`, `QueueManagerBenchmark.JoinLeave_OneSubscriber`,
+  `AriJsonBenchmark.DeserializeBridge` and
+  `TurnDetectionBenchmark.EndOfUtteranceDecision(UtteranceSeconds: 1)`.
+- **C1 (sensitivity, one more dispatch, not one of the five).** A throwaway branch carries a `src`
+  change whose cost on one row was first measured locally by an ABAB under the same ISA pin and
+  `DOTNET_PROCESSOR_COUNT=4` at a ratio in [1.12, 1.25]. That row is SLOWER in both rounds with a
+  geometric mean within 0.05 of the local ratio, and no other judged row is SLOWER or FASTER.
+
+**Flip rule.** `PERF_ABAB_ENFORCE` becomes `'true'` only when P1 to P7 and C1 all held, at the
+thresholds written above. Each clause that fails blocks the flip; none has a looser band in which
+it may flip anyway. What each failure leads to, none of which is a flip:
+
+- **P1 or C1.** The statistic or the threshold is wrong for this runner: three rounds
+  (`R H H R R H`), or per-row thresholds.
+- **P2.** In-job noise is too large for a 10% bar: per-row thresholds, or more rounds.
+- **P3.** The order is biased: change the order design.
+- **P4.** Bytes in the job are not reliable. Decided now, not after the runs: this blocks only the
+  bytes half. MORE-BYTES then leaves the failing set, bytes stay on the absolute gate and the
+  core-count check, and time may flip if every other clause held.
+- **P5 or P6.** Fix the design or the budget.
+- **P7.** That row needs an `abab.rows` override (`judge_time: false` or its own `slower_ratio`).
+
+Any change made after seeing these runs (an override, a threshold, the order, the number of
+rounds, a fix for P5 or P6) needs a fresh series of five runs on the changed configuration, judged
+by this same prediction, before the flip. The runs that motivated a change never count as its
+validation. If everything holds, the PR that flips the switch also records the evidence in the
+ADR-0042 addendum and states the fate of the two provisional bands.
+
 ## Current status: ENFORCING
 
 The comparison landed **observing-only**: it printed every delta, wrote the run summary and filed
@@ -281,5 +406,6 @@ recorded in `_create_1000_channels_note`. That single flag arms both `check-perf
 - ADR-0042 — D4 (relative gate, fail closed), D5 (durable
   breach artifact), D6 (no CI write-back), D7 (published figures are COHERENCE).
 - `docs/claim-registry.md` — which public claim each guard answers for.
-- `scripts/tests/test_check_perf_baseline.py`, `scripts/tests/test_report_perf_breach.sh` — the
-  guard's own guards, in the always-on required `Coverage Script Tests` job.
+- `scripts/tests/test_check_perf_baseline.py`, `scripts/tests/test_report_perf_breach.sh`,
+  `scripts/tests/test_check_perf_abab.py`, `scripts/tests/test_run_perf_abab.sh` — the
+  guards' own guards, in the always-on required `Coverage Script Tests` job.
