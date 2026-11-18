@@ -1137,12 +1137,13 @@ public sealed class CallerReconnectReloadTests
         await rig.ObservedCallAsync(second);
         (bool RemovedByReload, HangupCause? Cause)? removal =
             await CompletesWithinBoundAsync(stayedRemoved.Task) ? await stayedRemoved.Task : null;
+        (bool RemovedByReload, HangupCause? Cause)? observedLeave = (false, HangupCause.UserBusy);
 
         new { Reloaded = reloaded, Removal = removal, Ending = rig.Ending(Stayed) }.Should().BeEquivalentTo(
             new
             {
                 Reloaded = true,
-                Removal = ((bool RemovedByReload, HangupCause? Cause)?)(false, HangupCause.UserBusy),
+                Removal = observedLeave,
                 Ending = new Ending(null, HangupCause.UserBusy, 1),
             },
             "the Hangup the new session dispatched while the reload ran reached the server, so the channel left as an "
