@@ -1104,6 +1104,52 @@ public sealed class CallerReconnectReloadTests
         }
     }
 
+    [Fact]
+    public async Task Reload_ShouldEndAHeldChannelWithItsHangupCause_WhenItsHangupIsDispatchedWhileTheReloadRuns()
+    {
+        var first = PeerBefore();
+        var second = PeerAfter();
+        await using var rig = await Rig.StartAsync(first, second, Route.Caller);
+        var stayedRemoved = new TaskCompletionSource<(bool RemovedByReload, HangupCause? Cause)>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        rig.Run.Server.Channels.ChannelRemoved += c =>
+        {
+            if (c.UniqueId == Stayed.Uid)
+                stayedRemoved.TrySetResult((c.RemovedByReload, c.HangupCause));
+        };
+        using var notice = new HandlerHold();
+        rig.Run.Server.ConnectionLost += _ => notice.Block();
+
+        // The reload waits behind a slow loss handler while the new session is up, so it starts as the pump dispatches
+        // the Hangup that session reports: the connection keeps the start's observer, and the reload must not take it away.
+        first.CloseSession();
+        await notice.Held.WaitAsync(Run.Bound);
+        rig.Run.ReleaseSecondPeer();
+        await rig.CallerConnectsAsync();
+        second.StatusChannels = [.. second.StatusChannels.Where(s => s.UniqueId != Stayed.Uid)];
+        second.QueueEntries = [.. second.QueueEntries.Where(q => q.UniqueId != Stayed.Uid)];
+        await second.SendEventAsync("Hangup",
+            AsteriskFrames.Hangup(Stayed.Uid, Stayed.Channel, Stayed.Uid, (int)HangupCause.UserBusy, "User busy"));
+        notice.Release();
+
+        var reloaded = await CompletesWithinBoundAsync(rig.Run.ServerLog.Logged(StateLoaded, 2));
+        await rig.SettleAsync();
+        await rig.ObservedCallAsync(second);
+        (bool RemovedByReload, HangupCause? Cause)? removal =
+            await CompletesWithinBoundAsync(stayedRemoved.Task) ? await stayedRemoved.Task : null;
+        (bool RemovedByReload, HangupCause? Cause)? observedLeave = (false, HangupCause.UserBusy);
+
+        new { Reloaded = reloaded, Removal = removal, Ending = rig.Ending(Stayed) }.Should().BeEquivalentTo(
+            new
+            {
+                Reloaded = true,
+                Removal = observedLeave,
+                Ending = new Ending(null, HangupCause.UserBusy, 1),
+            },
+            "the Hangup the new session dispatched while the reload ran reached the server, so the channel left as an "
+            + "observed leave with the cause Asterisk gave, not as a removal the reload inferred from its absence");
+    }
+
     // ---- The agents ----
 
     [Theory]

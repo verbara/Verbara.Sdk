@@ -20,8 +20,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// Binds the window this change opened: a reload MUST NOT end a call that arrived after its
 /// snapshot was taken (ADR-0062, design D6).
 ///
-/// <para><c>VerbaraServer.OnReconnected</c> re-subscribes the event observer <b>before</b> it awaits
-/// the reload, so live events resume while the snapshot is still being read. A call that starts in
+/// <para><c>VerbaraServer.OnReconnected</c> has its event observer subscribed <b>before</b> it awaits
+/// the reload, so live events are heard while the snapshot is still being read. A call that starts in
 /// that window is admitted to the channel table, is legitimately absent from the older snapshot, and
 /// a reconciliation that read that absence as evidence would end a call that is up. On a large
 /// estate the window is a full <c>Status</c> round trip.</para>

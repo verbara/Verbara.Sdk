@@ -160,9 +160,8 @@ public sealed class ReloadPremiseTests : FunctionalTestBase
         var reconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         IDisposable? resubscription = null;
 
-        // Subscribing inside the handler keeps the gap between "the socket is back" and "we are
-        // listening again" as small as the SDK allows: a reconnect hands out a new subscription,
-        // which is why VerbaraServer.OnReconnected re-subscribes as well.
+        // A collector subscribed inside the handler hears only what the new session delivers: what
+        // the outage took is never replayed to it.
         connection.Reconnected += () =>
         {
             resubscription = connection.Subscribe(afterReconnect);
