@@ -121,7 +121,8 @@ public sealed class ServerDisposedOnceTests
 
     /// <summary>
     /// OnReconnected has passed the point where it disposes the old subscription when the disposal runs. A substitute's
-    /// disposal completes inline, so the disposal has run when the call returns.
+    /// disposal completes inline, so the disposal has run when the call returns. The substitute ends the first stream
+    /// before the reconnect: a reload replaces only a subscription whose stream ended.
     /// </summary>
     [Fact]
     public async Task DisposeAsync_ShouldLeaveNoSubscription_WhenOnReconnectedIsReplacingItsSubscription()
@@ -129,7 +130,8 @@ public sealed class ServerDisposedOnceTests
         var old = Substitute.For<IDisposable>();
         var fresh = Substitute.For<IDisposable>();
         var server = NewServer(old, out var connection);
-        connection.Subscribe(Arg.Any<IObserver<ManagerEvent>>()).Returns(old, fresh);
+        IObserver<ManagerEvent>? observer = null;
+        connection.Subscribe(Arg.Do<IObserver<ManagerEvent>>(o => observer ??= o)).Returns(old, fresh);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var disposals = 0;
@@ -141,6 +143,8 @@ public sealed class ServerDisposedOnceTests
             hold.Task.Wait(Run.Bound);
         });
         await server.StartAsync();
+        // The stream ends with the session, so the reconnect subscribes again: the path this race is on.
+        observer!.OnCompleted();
 
         var reconnect = Task.Run(() => connection.Reconnected += Raise.Event<Action>());
         await entered.Task.WaitAsync(Run.Bound);
@@ -161,10 +165,13 @@ public sealed class ServerDisposedOnceTests
         var old = Substitute.For<IDisposable>();
         var fresh = Substitute.For<IDisposable>();
         var server = NewServer(old, out var connection);
-        connection.Subscribe(Arg.Any<IObserver<ManagerEvent>>()).Returns(old, fresh);
+        IObserver<ManagerEvent>? observer = null;
+        connection.Subscribe(Arg.Do<IObserver<ManagerEvent>>(o => observer ??= o)).Returns(old, fresh);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         old.When(s => s.Dispose()).Do(_ => entered.TrySetResult());
         await server.StartAsync();
+        // The stream ends with the session, so the reconnect subscribes again: the path this race is on.
+        observer!.OnCompleted();
 
         var reconnect = Task.Run(() => connection.Reconnected += Raise.Event<Action>());
         await entered.Task.WaitAsync(Run.Bound);
