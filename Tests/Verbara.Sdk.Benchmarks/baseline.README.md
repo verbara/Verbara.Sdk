@@ -274,24 +274,33 @@ read the `abab` block of `baseline.json`.
   benchmark project) in a worktree beside HEAD, with the same pinned SDK, the same ISA pin and the
   same command line. It is declared, not discovered: it moves by PR at a release, like
   `environment`. When a newer release tag exists the report carries a notice, never a failure.
-- **The order** is `abab.order`, `R H H R`: one BenchmarkDotNet invocation per position with every
-  class of `sources` in it (one generated-project build each). Round *k* pairs the *k*-th R with the
-  *k*-th H, so round 1 is (position 1, position 2) and round 2 is (position 4, position 3). A linear
-  drift over the run lands on the two rounds with opposite signs, so drift alone cannot make every
-  round agree; a first-invocation penalty lands on R and pushes toward FASTER, which never fails.
-- **The statistic.** Per case and round, r = mean(H) / mean(R). **SLOWER** when every round is over
-  `slower_ratio` (1.10), **FASTER** when every round is under `faster_ratio` (0.909), **UNCONFIRMED**
-  when the rounds disagree, ok otherwise. The point estimate is the geometric mean of the rounds.
-  Each arm's last-over-first ratio is shown too: it is the run's own A/A noise.
+- **The order** is `abab.order`, `R H H R R H`: one BenchmarkDotNet invocation per position with
+  every class of `sources` in it (one generated-project build each). Round *k* pairs the *k*-th R
+  with the *k*-th H, so round 1 is (position 1, position 2), round 2 is (position 4, position 3) and
+  round 3 is (position 5, position 6). Three rounds, because in-job noise is between processes: a
+  launch-level spike lands on a different row each run, and more processes per arm is what dilutes
+  it. The order does not cancel a linear drift exactly: it leaves a third of one step's drift in
+  ln g, an estimated 0.25% at the order effect P3 allows, which no bar is near. A first-invocation
+  penalty lands on R and pushes toward FASTER, which never fails.
+- **The statistic.** Per case and round, r_k = mean(H) / mean(R), and g is the geometric mean of the
+  r_k. **SLOWER** when g is over `slower_ratio` (1.10) and so is a majority of the rounds (two of
+  three); **FASTER** when g and a majority are under `faster_ratio` (0.909); **UNCONFIRMED** when
+  only one of the two holds for a bar (g beyond it without the majority, or the majority without
+  g); ok otherwise. A single round beyond a bar with g inside it is ok and counted as a **lone
+  round**: one process spike is what the majority exists to absorb. Written as "g beyond the bar
+  and more than half of the rounds beyond it", the rule reads the same with two rounds as the
+  two-round design did (both rounds). The run's noise statistics read g, the statistic the verdict
+  uses; each arm's last-over-first ratio is shown too: it is the run's own A/A noise.
 - **The floor.** A case whose mean is under `min_mean_ns` (2 ns) in a HEAD invocation is shown and
   not judged: the ratio of a few cycles measures BenchmarkDotNet's overhead subtraction (the
   `_dispatch_1_observer_note` lesson). A case under the floor in the reference only is judged one
-  way: **SLOWER** when every round's mean(H) / max(mean(R), `min_mean_ns`) is over
-  `sub_floor_slower_ratio` (2.0), so a 0.7 ns row that becomes 30 ns is seen; it is never FASTER
-  and stays out of the noise statistics.
+  way, by the same rule on mean(H) / max(mean(R), `min_mean_ns`): **SLOWER** when their geometric
+  mean and a majority of them are over `sub_floor_slower_ratio` (2.0), so a 0.7 ns row that becomes
+  30 ns is seen; it is never FASTER and stays out of the noise statistics.
 - **Bytes in the job.** Both arms run on the same core count, so a bytes difference between them is
   the code. A case with a `bytes` entry in `benchmarks` is **MORE-BYTES** when every round's
-  difference is over its `bytes_tolerance` and **FEWER-BYTES** when every round's is under minus it;
+  difference is over its `bytes_tolerance` and **FEWER-BYTES** when every round's is under minus it
+  (every round, not a majority: bytes are deterministic);
   a case with no `bytes` entry shows its difference and is not judged. An exactly gated case whose
   bytes differ between the rounds of one arm is reported as a bytes anomaly.
 - **Never dropped.** Each arm's `--list flat` output is what that tree declares. A method in HEAD's
@@ -327,64 +336,96 @@ read the `abab` block of `baseline.json`.
   consecutive runs met the prediction below, written before them. Flipped, SLOWER, MORE-BYTES and
   its structural failures fail the job.
 
-### Before the flip: the prediction and the flip rule
+### Before the flip: the prediction and the flip rule (second series)
 
-Written on 2026-11-17, before the first validation run, and not edited after it: a change to any
-threshold below is a new prediction and starts a new series.
+Written on 2026-11-18, before the first run of the second series, and not edited after it: a change
+to any threshold below is a new prediction and starts a new series. The first prediction
+(2026-11-17) failed P2 and P7 on its five A/A runs; its text and its result are kept in the
+ADR-0042 addendum. Those five runs motivated this design and count for nothing below.
 
-**Protocol.** A branch `perf/abab-validation` at the merge commit of the comparison; five
-`workflow_dispatch` runs of `Perf Regression` on it, each after the previous one ends. At that
-commit no compiled file differs from `v2.10.1`, so every run is an A/A test; each manifest's
-`changed_compiled_paths` must hold no `.cs` or `.csproj`. A run lost to the infrastructure (runner
+**What changed, and why it is a design change and not a fit.** In-job noise is between processes
+(a launch-level spike on a different row each run), so the design measures more processes and stops
+one spike from deciding: three rounds (`R H H R R H`), a verdict on the geometric mean of the
+rounds confirmed by a majority of the rounds, and the noise clause read on that same geometric
+mean. No band is widened. `AsyncEventPumpBenchmark.EnqueueAndConsume1000Events`, the row the first
+prediction named first and the only one that broke P7, is not judged on time in the job
+(`abab.rows`, `judge_time: false`): its time is bimodal inside one process; its time stays
+reported by the absolute gate, which has no band for it either (`unbanded`).
+
+**The statistic.** Per judged row, r_k = mean(H) / mean(R) in round k (k = 1..3; rounds pair
+positions 1-2, 4-3 and 5-6) and g is the geometric mean of the three r_k. A row is **SLOWER** when
+g is over `slower_ratio` and at least two of the three r_k are over it; **FASTER** when g is under
+`faster_ratio` and at least two r_k are under it; **UNCONFIRMED** when exactly one of those two
+conditions holds for a bar (g beyond it without the majority, or the majority without g); ok
+otherwise. A single r_k beyond a bar with g inside it is ok and is counted as a lone round. A
+sub-floor row uses the same rule on mean(H) / max(mean(R), `min_mean_ns`) against
+`sub_floor_slower_ratio`. Bytes are unchanged: every round.
+
+**Protocol.** A branch `perf/abab-validation-2` cut from `e283c161` (the last commit of `main` at
+which no compiled file differs from `v2.10.1`) plus the commit that carries this design; five
+`workflow_dispatch` runs of `Perf Regression` on it, each after the previous one ends. Every run
+is an A/A test: each manifest's `changed_compiled_paths` must hold no `.cs` or `.csproj`, or the
+run is not part of the series and the branch is wrong. A run lost to the infrastructure (runner
 lost, cancelled) is run again and does not count; no other run is discarded. The judged set is
-every row the comparator judges on time with the ratio H/R (about 40 rows); a sub-floor row's
+every row the comparator judges on time with the ratio H/R (about 39 rows); a sub-floor row's
 judgement is counted only by P1.
 
 **Prediction.** Every clause must hold in every run:
 
 - **P1.** Zero judged rows are SLOWER or FASTER, sub-floor rows included.
-- **P2.** Of all judged r_k over the five runs (about 400), at most 2% fall outside
-  [0.909, 1.10]. In each run the p95 of |ln r_k| is at most ln 1.06 and the median at most
-  ln 1.02.
-- **P3.** In each run the geometric mean over judged rows of R(position 4) / R(position 1) is in
-  [0.97, 1.03], and the median |ln r_k| is at most 1.5 times the median |ln self-ratio|.
+- **P2.** Of all judged g over the five runs (about 195), at most 1% fall outside [0.909, 1.10].
+  In each run the p95 (nearest rank) of |ln g| is at most ln 1.06 and the median at most ln 1.02.
+- **P3.** In each run the geometric mean over judged rows of R(position 5) / R(position 1) is in
+  [0.97, 1.03], and the median |ln r_k| is at most 1.5 times the median |ln self-ratio| (each
+  arm's last invocation over its first).
 - **P4.** Zero MORE-BYTES, zero FEWER-BYTES and zero bytes anomalies: every exactly gated row has
-  a difference of 0 in both rounds and the same bytes in both rounds of each arm.
+  a difference of 0 in all three rounds and the same bytes in all three invocations of each arm.
 - **P5.** Zero structural failures and zero rows not compared (`abab_blind` 0); `list-R.txt`
-  equals `list-H.txt`.
-- **P6.** Every run completes with the job at most 70 min, the in-job phase at most 40 min, and no
-  invocation timed out.
-- **P7 (per row).** No judged row has 2 or more of its 10 r_k (5 runs x 2 rounds) outside its
-  band, and no row is UNCONFIRMED in 2 or more of the 5 runs. Named in advance as the likeliest to
-  break it: `AsyncEventPumpBenchmark.EnqueueAndConsume1000Events` (its bytes are bimodal by a
-  writer/consumer race; a process that lands in one mode per launch would make its time bimodal
-  too), `ChannelManagerBenchmark.Create1000Channels`, `QueueManagerBenchmark.JoinLeave_OneSubscriber`,
-  `AriJsonBenchmark.DeserializeBridge` and
-  `TurnDetectionBenchmark.EndOfUtteranceDecision(UtteranceSeconds: 1)`.
+  equals `list-H.txt`; the only row not judged on time by an override is
+  `AsyncEventPumpBenchmark.EnqueueAndConsume1000Events`.
+- **P6.** Every run completes with the job at most 70 min, the in-job phase at most 48 min (six
+  invocations), and no invocation timed out.
+- **P7 (per row).** No judged row has 2 or more of its 5 g outside its band, and no judged row is
+  UNCONFIRMED in 2 or more of the 5 runs. Lone rounds are reported and do not count: one process
+  spike is what the majority exists to absorb. Named in advance as the likeliest to break it:
+  `QueueManagerBenchmark.MemberStatus_OneSubscriber`,
+  `TurnDetectionBenchmark.EndOfUtteranceDecision(UtteranceSeconds: 4)`,
+  `ChannelManagerBenchmark.LookupByUniqueId`,
+  `ChannelManagerBenchmark.Create1000Channels_TwoLegCalls` and
+  `AmiProtocolReaderBenchmark.ParseSingleEvent`.
 - **C1 (sensitivity, one more dispatch, not one of the five).** A throwaway branch carries a `src`
-  change whose cost on one row was first measured locally by an ABAB under the same ISA pin and
-  `DOTNET_PROCESSOR_COUNT=4` at a ratio in [1.12, 1.25]. That row is SLOWER in both rounds with a
-  geometric mean within 0.05 of the local ratio, and no other judged row is SLOWER or FASTER.
+  change whose cost on one row, named here before the dispatch, was first measured locally by an
+  ABAB under the same ISA pin and `DOTNET_PROCESSOR_COUNT=4` at a ratio in [1.15, 1.25]. That row
+  is SLOWER under the rule above with g within 0.05 of the local ratio, and no other judged row is
+  SLOWER or FASTER. The row is not one of the five named in P7.
+
+**What the gate is expected to see** (stated, not a flip clause): a slowdown of 15% or more on a
+judged row in nearly every run; one of 12% in about four runs of five, so within two weekly runs
+when it persists. Under 10% it is not a gate.
 
 **Flip rule.** `PERF_ABAB_ENFORCE` becomes `'true'` only when P1 to P7 and C1 all held, at the
 thresholds written above. Each clause that fails blocks the flip; none has a looser band in which
 it may flip anyway. What each failure leads to, none of which is a flip:
 
-- **P1 or C1.** The statistic or the threshold is wrong for this runner: three rounds
-  (`R H H R R H`), or per-row thresholds.
-- **P2.** In-job noise is too large for a 10% bar: per-row thresholds, or more rounds.
+- **P1.** The majority is not enough on this runner: require every round beyond the bar as well as
+  g, and state the sensitivity that costs.
+- **P2.** Three processes per arm are too few: two launches per invocation on the in-job run only
+  (a command-line job override, the benchmark sources untouched), with the order and the budget
+  restated. Per-row thresholds are not a route: out of sample they did not catch the spikes.
 - **P3.** The order is biased: change the order design.
-- **P4.** Bytes in the job are not reliable. Decided now, not after the runs: this blocks only the
-  bytes half. MORE-BYTES then leaves the failing set, bytes stay on the absolute gate and the
-  core-count check, and time may flip if every other clause held.
+- **P4.** Bytes in the job are not reliable. This blocks only the bytes half: MORE-BYTES then
+  leaves the failing set, bytes stay on the absolute gate and the core-count check, and time may
+  flip if every other clause held.
 - **P5 or P6.** Fix the design or the budget.
 - **P7.** That row needs an `abab.rows` override (`judge_time: false` or its own `slower_ratio`).
+- **C1.** The bar or the statistic does not see the cost on this runner: measure the local-to-CI
+  ratio bias on that row before changing either.
 
 Any change made after seeing these runs (an override, a threshold, the order, the number of
-rounds, a fix for P5 or P6) needs a fresh series of five runs on the changed configuration, judged
-by this same prediction, before the flip. The runs that motivated a change never count as its
-validation. If everything holds, the PR that flips the switch also records the evidence in the
-ADR-0042 addendum and states the fate of the two provisional bands.
+rounds or launches, a fix for P5 or P6) needs a fresh series of five runs on the changed
+configuration, judged by a prediction written before them. The runs that motivated a change never
+count as its validation. If everything holds, the PR that flips the switch also records the
+evidence in the ADR-0042 addendum and states the fate of the two provisional bands.
 
 ## Current status: ENFORCING
 
