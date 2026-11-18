@@ -188,6 +188,8 @@ public sealed class VerbaraServer : IVerbaraServer
     private readonly IAmiConnection _connection;
     private readonly ILogger<VerbaraServer> _logger;
     private IDisposable? _subscription;
+    // The observer _subscription delivers to: a reconnect reload replaces the subscription only once this one's stream ended.
+    private EventObserver? _observer;
     private IAriClient? _ariClient;
     private readonly Meter _instanceMeter;
 
@@ -606,7 +608,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </exception>
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
-        _subscription = _connection.Subscribe(new EventObserver(this));
+        var observer = new EventObserver(this);
+        _subscription = _connection.Subscribe(observer);
+        Volatile.Write(ref _observer, observer);
         _connection.Reconnected += OnReconnected;
         // Subscribed before the load, so that a loss which cuts the load short is announced too.
         if (_connection is AmiConnection amiConnection)
@@ -755,9 +759,19 @@ public sealed class VerbaraServer : IVerbaraServer
             // listings reconcile them. Nor is the agents table: the load replaces it, in one step, with its
             // completed Agents list, so that a reload cut short leaves it as it was.
 
-            // Re-subscribe observer (the connection is new after reconnect)
-            _subscription?.Dispose();
-            _subscription = _connection.Subscribe(new EventObserver(this));
+            // The subscription is replaced only when its stream ended (its observer was completed or failed): that stream
+            // has nothing left to deliver, so nothing falls between it and the new one. A stream that did not end is still
+            // delivering the new session's events, as AmiConnection's does: it keeps its observers across sessions and
+            // never ends them. Releasing it there and subscribing again left a window in which an event the pump
+            // dispatched reached no observer, and a Hangup lost in it let an older snapshot bring the channel back.
+            var current = Volatile.Read(ref _observer);
+            if (current is null || current.StreamEnded)
+            {
+                _subscription?.Dispose();
+                var observer = new EventObserver(this);
+                _subscription = _connection.Subscribe(observer);
+                Volatile.Write(ref _observer, observer);
+            }
 
             // Reload fresh state from Asterisk
             states = new LoadConnectionStates(_connection);
@@ -2121,8 +2135,8 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <para>
     /// The caller opens the channel table's read window <c>before</c> calling this, so the window's
     /// admission mark is read before the <c>Status</c> action is sent and says how much of the
-    /// channel table this snapshot could possibly describe. <c>OnReconnected</c> re-subscribes the
-    /// event observer before it awaits this read, so a call that starts during the read is admitted
+    /// channel table this snapshot could possibly describe. <c>OnReconnected</c> has its event
+    /// observer subscribed before it awaits this read (the start's, or a new one when that stream ended), so a call that starts during the read is admitted
     /// live and is legitimately absent from the older snapshot; on a large estate that is a full
     /// <c>Status</c> round trip. The mark is what keeps the reconciliation from reading that absence
     /// as a hangup and ending a call that is up.
@@ -2805,6 +2819,11 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>Internal observer that dispatches typed AMI events to the appropriate manager.</summary>
     private sealed class EventObserver(VerbaraServer server) : IObserver<ManagerEvent>
     {
+        private int _streamEnded;
+
+        /// <summary>Whether the connection completed or failed this observer's stream: it delivers nothing more.</summary>
+        public bool StreamEnded => Volatile.Read(ref _streamEnded) != 0;
+
         public void OnNext(ManagerEvent value)
         {
             switch (value)
@@ -3203,12 +3222,15 @@ public sealed class VerbaraServer : IVerbaraServer
 
         public void OnError(Exception error)
         {
+            // Before the loss is raised: a handler that reconnects at once finds the stream already ended.
+            Volatile.Write(ref _streamEnded, 1);
             VerbaraServerLog.ConnectionError(server._logger, error);
             server.RaiseConnectionLost(error);
         }
 
         public void OnCompleted()
         {
+            Volatile.Write(ref _streamEnded, 1);
             VerbaraServerLog.ConnectionClosed(server._logger);
             server.RaiseConnectionLost(null);
         }
