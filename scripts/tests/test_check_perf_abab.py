@@ -535,6 +535,15 @@ class CheckPerfAbabTests(unittest.TestCase):
         self.assertEqual(1, result.returncode, result.stdout)
         self.assertTrue(any("4-R" in s for s in self._structural()), self._structural())
 
+    def test_Main_ShouldSayTheInvocationNeverRan_WhenItLeftNoDirectory(self):
+        # Mutation: dropping the "no directory" check still fails closed through the missing report,
+        # but the reason a reader needs (the invocation never ran) is lost.
+        self.no_report.add(4)
+        result = self._run(enforce=True)
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertTrue(any(s.startswith("[4-R]") and "never ran" in s for s in self._structural()),
+                        self._structural())
+
     def test_Main_ShouldBeStructural_WhenTheRootHoldsOnlyTheManifest(self):
         self.no_report.update({1, 2, 3, 4})
         self.lists = {"R": None, "H": None}
