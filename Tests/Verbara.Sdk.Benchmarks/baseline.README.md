@@ -387,17 +387,20 @@ judgement is counted only by P1.
   invocations), and no invocation timed out.
 - **P7 (per row).** No judged row has 2 or more of its 5 g outside its band, and no judged row is
   UNCONFIRMED in 2 or more of the 5 runs. Lone rounds are reported and do not count: one process
-  spike is what the majority exists to absorb. Named in advance as the likeliest to break it:
-  `QueueManagerBenchmark.MemberStatus_OneSubscriber`,
+  spike is what the majority exists to absorb. Named in advance as the likeliest to break it (the
+  five widest rows by spread, plus the two whose one observed spike ranks them high when each row
+  is resampled from its own ratios): `QueueManagerBenchmark.MemberStatus_OneSubscriber`,
   `TurnDetectionBenchmark.EndOfUtteranceDecision(UtteranceSeconds: 4)`,
   `ChannelManagerBenchmark.LookupByUniqueId`,
-  `ChannelManagerBenchmark.Create1000Channels_TwoLegCalls` and
-  `AmiProtocolReaderBenchmark.ParseSingleEvent`.
+  `ChannelManagerBenchmark.Create1000Channels_TwoLegCalls`,
+  `AmiProtocolReaderBenchmark.ParseSingleEvent`,
+  `ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber` and
+  `TurnDetectionBenchmark.EndOfUtteranceDecision(UtteranceSeconds: 2)`.
 - **C1 (sensitivity, one more dispatch, not one of the five).** A throwaway branch carries a `src`
   change whose cost on one row, named here before the dispatch, was first measured locally by an
   ABAB under the same ISA pin and `DOTNET_PROCESSOR_COUNT=4` at a ratio in [1.15, 1.25]. That row
   is SLOWER under the rule above with g within 0.05 of the local ratio, and no other judged row is
-  SLOWER or FASTER. The row is not one of the five named in P7.
+  SLOWER or FASTER. The row is not one of the seven named in P7.
 
 **What the gate is expected to see** (stated, not a flip clause): a slowdown of 15% or more on a
 judged row in nearly every run; one of 12% in about four runs of five, so within two weekly runs

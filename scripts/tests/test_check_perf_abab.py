@@ -1249,7 +1249,9 @@ class CommittedAbabContractTests(unittest.TestCase):
         # fires, because a cancelled job skips every `!cancelled()` comparison step.
         self.assertGreaterEqual(job, step + 25)
         invocations = len(abab["order"])
-        self.assertGreaterEqual(step * 60, invocations * abab["invocation_timeout_s"] + 2 * 120)
+        # run-perf-abab.sh gives every `timeout` call a 30 s --kill-after grace and the lists 120 s.
+        grace, lists = 30, 120
+        self.assertGreaterEqual(step * 60, invocations * (abab["invocation_timeout_s"] + grace) + 2 * (lists + grace))
 
     def test_Workflow_ShouldUploadTheAbabArtifacts(self):
         upload = _step(self.code, "Upload BenchmarkDotNet JSON reports")
