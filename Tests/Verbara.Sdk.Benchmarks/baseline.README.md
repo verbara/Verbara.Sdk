@@ -103,7 +103,8 @@ models (EPYC 9V45, 9V74, 7763, Xeon 6975P-C), and on 2026-11-11 an EPYC 7763 rea
 and `Create1000Channels`' are therefore **provisional** and wider than the rest (35% and 40%);
 `_channel_manager_widened_bands_note` in `baseline.json` carries the runs, the ratios and what the
 widening stops the gate from seeing. A comparison of a reference build against this one inside the
-same job, on the same host, is what replaces them.
+same job, on the same host, is what replaces them: it runs now, observing, and is described under
+[In-job comparison against the reference tag](#in-job-comparison-against-the-reference-tag-observing).
 
 ## The pinned SDK and runtime
 
@@ -261,6 +262,61 @@ version, or carries a key the comparator does not check, and a malformed `unband
 `sources` row declares, or a key that is also in `benchmarks`) and fails the job in **both** modes — a misconfigured guard reading green is the
 `|| true` hole wearing a different hat.
 
+## In-job comparison against the reference tag (observing)
+
+No band that covers four CPU models sees a 10-20% time regression: the SLOWER bar sits +29% to +80%
+over a row's usual reading on most hosts. So, after the absolute gate, the weekly job measures the
+code against a **reference build in the same job, on the same machine**, and judges time by the
+ratio. `scripts/ci/run-perf-abab.sh` runs it and `scripts/ci/check-perf-abab.py` judges it; both
+read the `abab` block of `baseline.json`.
+
+- **The reference** is `abab.reference_tag`, built from the tag's own tree (its `src/` and its own
+  benchmark project) in a worktree beside HEAD, with the same pinned SDK, the same ISA pin and the
+  same command line. It is declared, not discovered: it moves by PR at a release, like
+  `environment`. When a newer release tag exists the report carries a notice, never a failure.
+- **The order** is `abab.order`, `R H H R`: one BenchmarkDotNet invocation per position with every
+  class of `sources` in it (one generated-project build each). Round *k* pairs the *k*-th R with the
+  *k*-th H, so round 1 is (position 1, position 2) and round 2 is (position 4, position 3). A linear
+  drift over the run lands on the two rounds with opposite signs, so drift alone cannot make every
+  round agree; a first-invocation penalty lands on R and pushes toward FASTER, which never fails.
+- **The statistic.** Per case and round, r = mean(H) / mean(R). **SLOWER** when every round is over
+  `slower_ratio` (1.10), **FASTER** when every round is under `faster_ratio` (0.909), **UNCONFIRMED**
+  when the rounds disagree, ok otherwise. The point estimate is the geometric mean of the rounds.
+  Each arm's last-over-first ratio is shown too: it is the run's own A/A noise.
+- **The floor.** A case whose mean is under `min_mean_ns` (2 ns) in any invocation is shown and not
+  judged: the ratio of a few cycles measures BenchmarkDotNet's overhead subtraction (the
+  `_dispatch_1_observer_note` lesson).
+- **Bytes in the job.** Both arms run on the same core count, so a bytes difference between them is
+  the code. A case with a `bytes` entry in `benchmarks` is **MORE-BYTES** when every round's
+  difference is over its `bytes_tolerance` and **FEWER-BYTES** when every round's is under minus it;
+  a case with no `bytes` entry shows its difference and is not judged. An exactly gated case whose
+  bytes differ between the rounds of one arm is reported as a bytes anomaly.
+- **Never dropped.** Each arm's `--list flat` output is what that tree declares. A method in HEAD's
+  list only is reported as **HEAD only**, one in the reference's only as **reference only**, a
+  parameter case one arm lacks as **case set differs**; none is compared and none fails. A case its
+  arm declares that some invocation did not measure, a class with no report, a mean that is not a
+  finite number, a timed-out invocation, or invocations that disagree on SDK, runtime, core count,
+  JIT ISA, BenchmarkDotNet version or processor are **structural** failures.
+- **A changed benchmark.** When a compared class's own `.cs` file differs between the tag and HEAD
+  its rows are shown and not judged: the ratio would include the benchmark's change. Any other
+  change under the benchmark project (except this file, `baseline.json`, `performance-record.json`
+  and `README.md`) is a notice. When no compiled file differs at all, the report says the run
+  measures the comparison's own noise.
+- **Overrides and accepted costs.** `abab.rows["<FullName>"]` may set `slower_ratio`,
+  `faster_ratio` or `judge_time: false`, always with a `reason`. `abab.accepted["<FullName>"]`
+  records a cost a PR accepted, as `{ "ratio", "relative_to", "pr", "reason" }`; both bars are then
+  centred on that ratio. `relative_to` must name `reference_tag`, or the comparator refuses the
+  baseline (exit 2): an accepted ratio means nothing against another reference, so moving the tag
+  forces its accepted entries out.
+- **Moving the reference tag** at a release is a PR that changes `abab.reference_tag`, removes the
+  `accepted` entries measured against the old tag, and says so.
+- **The switch.** `PERF_ABAB_ENFORCE` in the job `env:` of `.github/workflows/perf-regression.yml`
+  is `'false'`: the comparison writes its section of the run summary, `perf-abab-report.md` and
+  `perf-abab.json`, and cannot fail the job, even on exit 2. It is independent of
+  `PERF_GATE_ENFORCE`, and its result does not file the breach issue. It is flipped only after five
+  consecutive runs met a prediction written before them. Flipped, SLOWER, MORE-BYTES and its
+  structural failures fail the job.
+
 ## Current status: ENFORCING
 
 The comparison landed **observing-only**: it printed every delta, wrote the run summary and filed
@@ -281,5 +337,6 @@ recorded in `_create_1000_channels_note`. That single flag arms both `check-perf
 - ADR-0042 — D4 (relative gate, fail closed), D5 (durable
   breach artifact), D6 (no CI write-back), D7 (published figures are COHERENCE).
 - `docs/claim-registry.md` — which public claim each guard answers for.
-- `scripts/tests/test_check_perf_baseline.py`, `scripts/tests/test_report_perf_breach.sh` — the
-  guard's own guards, in the always-on required `Coverage Script Tests` job.
+- `scripts/tests/test_check_perf_baseline.py`, `scripts/tests/test_report_perf_breach.sh`,
+  `scripts/tests/test_check_perf_abab.py`, `scripts/tests/test_run_perf_abab.sh` — the
+  guards' own guards, in the always-on required `Coverage Script Tests` job.

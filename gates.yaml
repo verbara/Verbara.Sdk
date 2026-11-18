@@ -78,7 +78,10 @@ gates:
       (ADR-0042 D4), with a breach filing an issue (D5). The comparison ENFORCES
       (PERF_GATE_ENFORCE='true': SLOWER, MORE-BYTES and structural failures fail the run; FASTER and
       FEWER-BYTES are reported) and measures on the SDK, runtime and core count baseline.json
-      `environment` declares, failing closed when a report shows another. But the workflow stays
+      `environment` declares, failing closed when a report shows another. The same weekly job also
+      builds the reference tag baseline.json `abab` declares and compares HEAD against it in the job
+      (scripts/ci/check-perf-abab.py, time by ratio per round, bytes by difference), observing only
+      (PERF_ABAB_ENFORCE='false'). But the workflow stays
       schedule + workflow_dispatch only and contributes NO required check. So: a gate exists, it is
       not a per-PR budget gate, and G6 stays `na`.
 

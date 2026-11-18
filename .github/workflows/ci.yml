@@ -223,6 +223,9 @@ jobs:
       # cheap, whatever its runtime.
       - name: Run perf-baseline notifier unit tests (ADR-0042)
         run: bash scripts/tests/test_report_perf_breach.sh
+      # The in-job ABAB runner of the same weekly job (its comparator rides `unittest discover`).
+      - name: Run perf in-job comparison runner unit tests (ADR-0042)
+        run: bash scripts/tests/test_run_perf_abab.sh
 
       # Package-validation coverage guard unit tests (ADR-0055 addendum "all 29 packed, but only 17 were
       # validated"). The guard itself
