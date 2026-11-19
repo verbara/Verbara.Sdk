@@ -34,11 +34,12 @@ name: Perf Regression
 # that read the same code up to 2-3x apart, so no band sees a 10-20% time regression. After the
 # absolute gate, this job also builds the reference tag declared in baseline.json
 # `abab.reference_tag` beside HEAD and measures both, alternated R H H R R H (three rounds), in this
-# job on this machine; scripts/ci/check-perf-abab.py judges time by the geometric mean of the
-# per-round ratios HEAD/reference, confirmed by a majority of the rounds, and bytes by the
-# difference in every round. It OBSERVES (PERF_ABAB_ENFORCE below) until five consecutive runs meet
-# the prediction written before them. It costs more than twice this job's minutes, on the hosted
-# runner.
+# job on this machine, each invocation in `abab.launch_count` (2) processes per case (a
+# `--launchCount` the absolute pass above never gets); scripts/ci/check-perf-abab.py judges time
+# by the geometric mean of the per-round ratios HEAD/reference, confirmed by a majority of the
+# rounds, and bytes by the difference in every round. It OBSERVES (PERF_ABAB_ENFORCE below) until five consecutive runs meet
+# the prediction written before them. It costs about three times the absolute pass's minutes, on
+# the hosted runner.
 #
 # Manual run: gh workflow run "Perf Regression"
 
@@ -57,15 +58,23 @@ jobs:
   benchmark:
     name: Run BenchmarkDotNet hot-paths
     runs-on: ubuntu-latest
-    # The in-job comparison adds six joint invocations (about 38-40 minutes, projected from the
-    # first series' four; budget 48) to the 15-20 minute absolute pass; the whole job's budget is
-    # 70 minutes. These timeouts are the backstop, not the budget, and the job's must never be what
-    # fires: a cancelled job skips every `!cancelled()` comparison step, so each phase has its own,
-    # shorter timeout. The run step's (100 minutes) outlasts six invocations at
-    # `abab.invocation_timeout_s` plus the two list calls, each with its 30 s kill grace, so an
-    # invocation that hangs ends in its own `timeout` and the manifest is still written; the job's
-    # (125) leaves 25 minutes after it.
-    timeout-minutes: 125
+    # The in-job comparison adds six joint invocations of two launches each (projected about 67
+    # minutes from the second series' logs and a local launch-factor probe of 1.93; budget 80) to
+    # the 15-20 minute absolute pass; the whole job's budget is 105 minutes (baseline.README.md,
+    # "Before the flip", P6). These timeouts are the backstop, not the budget, and the job's must
+    # never be what fires: a cancelled job skips every `!cancelled()` comparison step. So every step
+    # has its own timeout, and the job's outlasts all of them together:
+    #   absolute pass  5+1+5+1+10 (checkout, SDK, build) + 9 x 8 (one class each; the slowest
+    #                  observed 2.7 min) + 3+1+3 (compare, summary, issue)               = 101
+    #   in-job phase   1+5+10 (tag, checkout, build) + 125 (the run) + 3+1 (compare, summary) = 145
+    #   upload         5                                                                 =   5
+    #   every step at its own timeout: 251 minutes; the job's is 260.
+    # The run step's 125 minutes outlast six invocations at `abab.invocation_timeout_s` (1080 s)
+    # and the two list calls (120 s), each with its 30 s kill grace: 6 x 1110 + 2 x 150 = 6960 s,
+    # 116 minutes. So an invocation that hangs ends in its own `timeout` and the manifest is still
+    # written. A step that reaches its own timeout fails, and every comparison step after it still
+    # runs (`!cancelled()`), finding what is missing.
+    timeout-minutes: 260
     env:
       # ┌─────────────────────────────────────────────────────────────────────┐
       # │  THE FLIP. This one line is the whole difference between observing  │
@@ -106,6 +115,7 @@ jobs:
       DOTNET_EnableAVX512: '0'
     steps:
       - uses: actions/checkout@v7.0.1
+        timeout-minutes: 5
         with:
           lfs: true
       # ── Exact SDK and runtime (baseline.json `environment`) ──────────────────
@@ -119,6 +129,7 @@ jobs:
       # put the next 10.0 patch next to the declared one the week it ships. The check after it fails before 15 minutes of
       # benchmarks if anything else is reachable; the comparator checks the reports again.
       - name: Read the declared .NET environment
+        timeout-minutes: 1
         id: declared
         run: |
           python3 - >> "$GITHUB_OUTPUT" <<'PY'
@@ -128,12 +139,14 @@ jobs:
           print(f"runtime={env['dotnet_runtime']}")
           PY
       - uses: actions/setup-dotnet@v6.1.0
+        timeout-minutes: 5
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet-pinned
         with:
           dotnet-version: ${{ steps.declared.outputs.sdk }}
           skip-lts-prepass: true
       - name: Confirm the pinned SDK and runtime are the only ones reachable
+        timeout-minutes: 1
         env:
           DECLARED_SDK: ${{ steps.declared.outputs.sdk }}
           DECLARED_RUNTIME: ${{ steps.declared.outputs.runtime }}
@@ -152,6 +165,7 @@ jobs:
           fi
 
       - name: Build benchmarks (Release)
+        timeout-minutes: 10
         run: dotnet build Tests/Verbara.Sdk.Benchmarks/ -c Release --nologo
 
       # Each `--filter` argument runs ONE benchmark class. We run the
@@ -167,22 +181,27 @@ jobs:
       # `|| true` is intentional and is NOT a hole any more: the comparison step
       # fails closed on the empty artifacts directory a crashed step leaves.
       - name: AMI parse + dispatch
+        timeout-minutes: 8
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*AmiProtocolReader*' --exporters json --artifacts ../../artifacts/ami || true
       - name: ARI JSON deserialize Channel
+        timeout-minutes: 8
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*AriJson*' --exporters json --artifacts ../../artifacts/ari-json || true
       - name: ARI parse StasisStart event
+        timeout-minutes: 8
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*AriParseEvent*' --exporters json --artifacts ../../artifacts/ari-event || true
       - name: ChannelManager lookups
+        timeout-minutes: 8
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*ChannelManager*' --exporters json --artifacts ../../artifacts/channel-manager || true
       - name: Observer dispatch
+        timeout-minutes: 8
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*ObserverDispatch*' --exporters json --artifacts ../../artifacts/observer || true
@@ -194,6 +213,7 @@ jobs:
       # that each one ran and measured, and does not band its value — a band guessed today would
       # be the "calibrated from observation, never guessed" rule broken.
       - name: Turn-detection end-of-utterance decision
+        timeout-minutes: 8
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*TurnDetection*' --exporters json --artifacts ../../artifacts/turn-detection || true
@@ -201,6 +221,7 @@ jobs:
       # gated on bytes (bytes decide, time informs); EnqueueAndConsume1000Events is bimodal by a
       # writer/consumer race and is reported, never gated. Time bands follow two weekly runs.
       - name: AMI event pump
+        timeout-minutes: 8
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*AsyncEventPump*' --exporters json --artifacts ../../artifacts/async-event-pump || true
@@ -208,10 +229,12 @@ jobs:
       # and without one subscriber, because only the subscribed row shows what a change a handler
       # hears costs. Gated on bytes per event; time bands follow two weekly runs.
       - name: QueueManager event paths
+        timeout-minutes: 8
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*QueueManager*' --exporters json --artifacts ../../artifacts/queue-manager || true
       - name: MeetMeManager event paths
+        timeout-minutes: 8
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*MeetMeManager*' --exporters json --artifacts ../../artifacts/meetme-manager || true
@@ -232,6 +255,7 @@ jobs:
       # SDK, runtime or core count is not baseline.json `environment` are all breaches. Exit 2 (gate misconfigured) fails
       # the job in BOTH modes — a guard that is broken must not read green.
       - name: Compare against baseline
+        timeout-minutes: 3
         id: perf
         # `!cancelled()` rather than `always()`: a benchmark step that CRASHED must still be
         # compared (that is the whole point — no report is a breach), but a cancelled run has
@@ -244,6 +268,7 @@ jobs:
             --markdown-out perf-baseline-report.md
 
       - name: Publish comparison to the run summary
+        timeout-minutes: 1
         if: ${{ !cancelled() }}
         run: |
           if [ -f perf-baseline-report.md ]; then
@@ -259,6 +284,7 @@ jobs:
       # FEWER-BYTES breach the job stays green, so this issue is the ONLY
       # signal it happened.
       - name: File or update the breach issue
+        timeout-minutes: 3
         if: ${{ !cancelled() && steps.perf.outputs.status == 'breach' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -271,6 +297,7 @@ jobs:
       # A reference that fails to check out or build is not skipped: its reports are missing and
       # the comparator reports that as structural. The breach issue above is not filed from here.
       - name: Read the declared in-job reference
+        timeout-minutes: 1
         id: abab_ref
         if: ${{ !cancelled() }}
         continue-on-error: ${{ env.PERF_ABAB_ENFORCE != 'true' }}
@@ -282,6 +309,7 @@ jobs:
           print(f"tag={tag}")
           PY
       - name: Check out the reference tag beside HEAD
+        timeout-minutes: 5
         if: ${{ !cancelled() }}
         continue-on-error: true
         env:
@@ -294,6 +322,7 @@ jobs:
           git worktree add --detach "$RUNNER_TEMP/perf-ref" "${REF}^{commit}"
           git -C "$RUNNER_TEMP/perf-ref" lfs pull
       - name: Build the reference benchmarks (Release)
+        timeout-minutes: 10
         if: ${{ !cancelled() }}
         continue-on-error: true
         working-directory: ${{ runner.temp }}/perf-ref
@@ -301,7 +330,7 @@ jobs:
       - name: Run the reference and HEAD alternated (R H H R R H)
         if: ${{ !cancelled() }}
         continue-on-error: true
-        timeout-minutes: 100
+        timeout-minutes: 125
         env:
           REF: ${{ steps.abab_ref.outputs.tag }}
         run: >-
@@ -311,6 +340,7 @@ jobs:
       # Observing, even an exit 2 (the guard misconfigured) is an orange step and the job stays
       # green; once PERF_ABAB_ENFORCE is 'true' the same exit fails it, as the absolute gate's does.
       - name: Compare HEAD against the reference in this job
+        timeout-minutes: 3
         id: abab
         if: ${{ !cancelled() }}
         continue-on-error: ${{ env.PERF_ABAB_ENFORCE != 'true' }}
@@ -320,6 +350,7 @@ jobs:
             --abab-root artifacts-abab \
             --markdown-out perf-abab-report.md --json-out perf-abab.json
       - name: Publish the in-job comparison to the run summary
+        timeout-minutes: 1
         if: ${{ !cancelled() }}
         run: |
           if [ -f perf-abab-report.md ]; then
@@ -329,6 +360,7 @@ jobs:
           fi
 
       - name: Upload BenchmarkDotNet JSON reports
+        timeout-minutes: 5
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:

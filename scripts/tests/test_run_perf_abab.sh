@@ -54,7 +54,8 @@ git -C "$REPO" worktree add -q --detach "$REF_DIR" "$TAG_COMMIT"
 BASELINE="$TMP_ROOT/baseline.json"
 cat > "$BASELINE" <<JSON
 {"sources": {"_comment": "x", "fake": "$T1", "other": "$T2"},
- "abab": {"reference_tag": "v1.2.3", "order": ["R", "H", "H", "R"], "invocation_timeout_s": 900}}
+ "abab": {"reference_tag": "v1.2.3", "order": ["R", "H", "H", "R"], "invocation_timeout_s": 900,
+          "launch_count": 2}}
 JSON
 
 setup() {
@@ -213,6 +214,48 @@ LOG="$(PATH="$BIN:$PATH" bash "$RUNNER" --baseline "$BASELINE" --head "$REPO" \
 [ "$RC" -eq 0 ] && ok || bad "a missing reference directory still exits 0 (got $RC)"
 [ "$(manifest 'd["reference_dir_sha"]')" = "None" ] && ok || bad "reference_dir_sha null when the directory is missing"
 [ "$(manifest 'd["invocations"][0]["exit_code"] != 0')" = "True" ] && ok || bad "a missing directory records a failed invocation"
+
+# --- S7: the declared launch count reaches every in-job invocation, and nothing else ---
+setup; PERF_ABAB_DRY_RUN=1 run_abab
+[ "$(printf '%s\n' "$LOG" | command grep -c '^run .* launchCount=2 ')" -eq 4 ] && ok \
+  || bad "the dry run should print launchCount=2 on each of the four positions: $LOG"
+setup; run_abab
+[ "$RC" -eq 0 ] && ok || bad "a run with launch_count 2 should exit 0 (got $RC): $LOG"
+[ "$(command grep -- '--exporters json' "$CALLS" | command grep -c -- ' --launchCount 2 ')" -eq 4 ] && ok \
+  || bad "each of the four invocations should carry --launchCount 2: $(cat "$CALLS")"
+[ "$(command grep -- '--exporters json' "$CALLS" | command grep -o -- '--launchCount' | wc -l)" -eq 4 ] && ok \
+  || bad "--launchCount should appear once per invocation"
+command grep -- '--list flat' "$CALLS" | command grep -q -- '--launchCount' \
+  && bad "the --list calls must not carry --launchCount" || ok
+[ "$(manifest 'd["launch_count"]')" = "2" ] && ok || bad "the manifest should record launch_count 2"
+ONE="$TMP_ROOT/baseline-one.json"
+sed 's/"launch_count": 2/"launch_count": 1/' "$BASELINE" > "$ONE"
+setup
+LOG="$(PATH="$BIN:$PATH" bash "$RUNNER" --baseline "$ONE" --head "$REPO" \
+       --reference "$REF_DIR" --reference-tag v1.2.3 --out "$OUT" 2>&1)"; RC=$?
+[ "$RC" -eq 0 ] && ok || bad "a run with launch_count 1 should exit 0 (got $RC)"
+[ "$(command grep -- '--exporters json' "$CALLS" | command grep -c -- ' --launchCount 1 ')" -eq 4 ] && ok \
+  || bad "launch_count 1 should pass --launchCount 1, read from the field: $(cat "$CALLS")"
+[ "$(manifest 'd["launch_count"]')" = "1" ] && ok || bad "the manifest should record launch_count 1"
+
+# --- S7: a missing or invalid launch count fails closed, before anything runs ---
+for value in MISSING 0 -1 '"2"' 2.0 2.5 true null; do
+  BAD="$TMP_ROOT/baseline-launch.json"
+  python3 - "$BASELINE" "$BAD" "$value" <<'PY2'
+import json, sys
+doc = json.load(open(sys.argv[1], encoding="utf-8"))
+if sys.argv[3] == "MISSING":
+    del doc["abab"]["launch_count"]
+else:
+    doc["abab"]["launch_count"] = json.loads(sys.argv[3])
+json.dump(doc, open(sys.argv[2], "w", encoding="utf-8"))
+PY2
+  setup
+  PATH="$BIN:$PATH" bash "$RUNNER" --baseline "$BAD" --head "$REPO" --reference "$REF_DIR" \
+    --reference-tag v1.2.3 --out "$OUT" > /dev/null 2>&1; RC=$?
+  [ "$RC" -eq 2 ] && ok || bad "launch_count $value should exit 2 (got $RC)"
+  [ -s "$CALLS" ] && bad "launch_count $value must run nothing: $(cat "$CALLS")" || ok
+done
 
 # --- S6: bad usage exits 2 ---
 setup
