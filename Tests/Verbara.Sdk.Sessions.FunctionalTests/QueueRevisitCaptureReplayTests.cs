@@ -42,11 +42,8 @@ public sealed class QueueRevisitCaptureReplayTests
             }),
             probe =>
             {
-                foreach (var e in connected)
-                {
-                    if (probe.Manager.GetById(e.SessionId) is { } s)
-                        sessions[e.SessionId] = s;
-                }
+                foreach (var s in connected.Select(e => probe.Manager.GetById(e.SessionId)).OfType<CallSession>())
+                    sessions[s.SessionId] = s;
             });
         subscription?.Dispose();
 
@@ -54,21 +51,28 @@ public sealed class QueueRevisitCaptureReplayTests
         scope.AddReportable("connected", () => string.Join(Environment.NewLine,
             connected.Select(e => $"{e.SessionId} {e.QueueName} {e.AgentInterface} {e.AgentId}")));
         swallowed.Should().BeEmpty("no observer throws on {0}", fixture);
+        (string? Caller, string? Queue, string? Member)[] wire =
+        [
+            ("9101", "q-first", "PJSIP/agent1"),
+            ("9101", "q-second", "PJSIP/agent2"),
+            ("9201", "q-first", "PJSIP/agent1"),
+        ];
         connects.Select(f => (f.GetValueOrDefault("CallerIDNum"), f.GetValueOrDefault("Queue"), f.GetValueOrDefault("Interface")))
-            .Should().Equal(
-                [("9101", "q-first", "PJSIP/agent1"), ("9101", "q-second", "PJSIP/agent2"), ("9201", "q-first", "PJSIP/agent1")],
+            .Should().Equal(wire,
                 "premise: app_queue connected the revisit caller twice, to each queue's member, and the control once");
         connects.Should().OnlyContain(f => !f.ContainsKey("Agent"), "premise: no AgentConnect names an agent");
 
-        var byCaller = connected.GroupBy(e => sessions[e.SessionId].CallerIdNum).ToDictionary(g => g.Key ?? "", g => g.ToList());
+        var byCaller = connected.GroupBy(e => sessions[e.SessionId].CallerIdNum)
+            .ToDictionary(g => g.Key ?? "", g => g.ToList());
         byCaller.Keys.Should().BeEquivalentTo(["9101", "9201"], "the two calls are each announced");
-        byCaller["9101"].Select(e => (e.QueueName, e.AgentInterface, e.AgentId)).Should().Equal(
-            [("q-first", "PJSIP/agent1", (string?)null), ("q-second", "PJSIP/agent2", null)],
+        (string? Queue, string? Member, string? Agent)[] revisit =
+            [("q-first", "PJSIP/agent1", null), ("q-second", "PJSIP/agent2", null)];
+        (string? Queue, string? Member, string? Agent)[] once = [("q-first", "PJSIP/agent1", null)];
+        byCaller["9101"].Select(e => (e.QueueName, e.AgentInterface, e.AgentId)).Should().Equal(revisit,
             "each visit is announced once and names the member app_queue reported connecting it");
         sessions[byCaller["9101"][0].SessionId].AgentInterface.Should().Be("PJSIP/agent1",
             "the call keeps recording its first member, as before");
-        byCaller["9201"].Select(e => (e.QueueName, e.AgentInterface, e.AgentId)).Should().Equal(
-            [("q-first", "PJSIP/agent1", (string?)null)],
+        byCaller["9201"].Select(e => (e.QueueName, e.AgentInterface, e.AgentId)).Should().Equal(once,
             "a call answered once is announced once, naming its member");
     }
 }

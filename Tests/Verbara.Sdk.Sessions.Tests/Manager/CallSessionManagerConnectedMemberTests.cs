@@ -31,18 +31,11 @@ public sealed class CallSessionManagerConnectedMemberTests
         rig.Deliver(SecondVisitConnected("support", "c1", "m2", Second));
         var session = rig.Session("c1");
 
-        new
-        {
-            Connected = Connected(rig, session.SessionId),
-            Recorded = session.AgentInterface,
-        }.Should().BeEquivalentTo(
-            new
-            {
-                Connected = new[] { ("sales", (string?)First), ("support", (string?)Second) },
-                Recorded = First,
-            },
-            "each visit's announcement names the member app_queue reported connecting that visit, while the call keeps "
-            + "recording its first member, as before");
+        (string? Queue, string? Member)[] expected = [("sales", First), ("support", Second)];
+
+        Connected(rig, session.SessionId).Should().Equal(expected,
+            "each visit's announcement names the member app_queue reported connecting that visit");
+        session.AgentInterface.Should().Be(First, "the call keeps recording its first member, as before");
     }
 
     [Fact]
@@ -94,15 +87,12 @@ public sealed class CallSessionManagerConnectedMemberTests
             BridgeEnter("bridge-n1-2", "n1"));
         var session = rig.Session("n1");
 
-        new { Connected = Connected(rig, session.SessionId), Recorded = session.AgentInterface }
-            .Should().BeEquivalentTo(
-                new
-                {
-                    Connected = new[] { ((string?)null, (string?)"PJSIP/agent4"), (null, "PJSIP/agent4") },
-                    Recorded = (string?)"PJSIP/agent4",
-                },
-                "the agent's connect announces the call with the agent's interface; after the transfer the call's "
-                + "bridge announces it connected again and names the interface the call recorded, the agent's");
+        (string? Queue, string? Member)[] expected = [(null, "PJSIP/agent4"), (null, "PJSIP/agent4")];
+
+        Connected(rig, session.SessionId).Should().Equal(expected,
+            "the agent's connect announces the call with the agent's interface; after the transfer the call's "
+            + "bridge announces it connected again and names the interface the call recorded, the agent's");
+        session.AgentInterface.Should().Be("PJSIP/agent4", "the agent's connect recorded its interface");
     }
 
     [Fact]
@@ -116,10 +106,11 @@ public sealed class CallSessionManagerConnectedMemberTests
             BridgeEnter(Bridge("d1"), "d1"));
         var session = rig.Session("d1");
 
-        new { Connected = Connected(rig, session.SessionId), Recorded = session.AgentInterface }
-            .Should().BeEquivalentTo(
-                new { Connected = new[] { ((string?)null, (string?)null) }, Recorded = (string?)null },
-                "a call that never joined a queue and recorded no interface is announced by its bridge with no member");
+        (string? Queue, string? Member)[] expected = [(null, null)];
+
+        Connected(rig, session.SessionId).Should().Equal(expected,
+            "a call that never joined a queue and recorded no interface is announced by its bridge with no member");
+        session.AgentInterface.Should().BeNull("no connect recorded an interface");
     }
 
     [Fact]
@@ -129,22 +120,14 @@ public sealed class CallSessionManagerConnectedMemberTests
         var positional = new CallConnectedEvent("s1", "srv-1", at, null, "sales", TimeSpan.Zero);
         var named = positional with { AgentInterface = First };
 
-        new
-        {
-            Positional = positional.AgentInterface,
-            Named = named.AgentInterface,
-            Equal = positional.Equals(named),
-            Deconstructed = Deconstructed(named),
-        }.Should().BeEquivalentTo(
-            new
-            {
-                Positional = (string?)null,
-                Named = First,
-                Equal = false,
-                Deconstructed = ("s1", "srv-1", at, (string?)null, (string?)"sales", TimeSpan.Zero),
-            },
-            "the member is an init-only member outside the positional ones: the constructor and Deconstruct are as "
-            + "before, and two notifications that differ only by it are not equal");
+        (string, string, DateTimeOffset, string?, string?, TimeSpan) positionalMembers =
+            ("s1", "srv-1", at, null, "sales", TimeSpan.Zero);
+
+        positional.AgentInterface.Should().BeNull("the positional constructor alone names no member");
+        named.AgentInterface.Should().Be(First, "the member is set with its init accessor");
+        positional.Should().NotBe(named, "two notifications that differ only by the member are not equal");
+        Deconstructed(named).Should().Be(positionalMembers,
+            "the member is outside the positional ones: Deconstruct is as before");
     }
 
     private static (string, string, DateTimeOffset, string?, string?, TimeSpan) Deconstructed(CallConnectedEvent e)
