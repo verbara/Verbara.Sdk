@@ -1316,7 +1316,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 // (OnQueueCallerConnected): a member leg can enter a bridge that app_queue never
                 // connects, as a pooled agent that never acknowledges does.
                 if (session.QueueName is null)
-                    PublishConnected(session, session.AgentId, attachment);
+                    PublishConnected(session, session.AgentId, session.AgentInterface, attachment);
 
                 _ = PersistAsync(session);
             }
@@ -1663,9 +1663,13 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// no sample on any path: it has no queue wait.</item>
     /// </list>
     /// The event's own <see cref="CallConnectedEvent.WaitTime"/> is the call's wait since it was
-    /// created, whichever the case.
+    /// created, whichever the case. Its <see cref="CallConnectedEvent.AgentInterface"/> is
+    /// <paramref name="memberInterface"/>, the member of the connect being announced, which each caller
+    /// takes from that connect and never from a later one: <see cref="CallSession.AgentInterface"/> keeps
+    /// the call's first member, so a later visit's member is not read from it.
     /// </summary>
-    private void PublishConnected(CallSession session, string? agentId, ServerSubscriptions attachment)
+    private void PublishConnected(CallSession session, string? agentId, string? memberInterface,
+        ServerSubscriptions attachment)
     {
         var queued = session.QueueName is not null;
         if (queued)
@@ -1679,7 +1683,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         var connectedAt = _timeProvider.GetUtcNow();
         var waitSinceCreated = session.WaitTime ?? TimeSpan.Zero;
         Publish(new CallConnectedEvent(session.SessionId, session.ServerId,
-            connectedAt, agentId, session.QueueName, waitSinceCreated), attachment);
+            connectedAt, agentId, session.QueueName, waitSinceCreated) { AgentInterface = memberInterface }, attachment);
 
         if (!queued)
             return;
@@ -2068,7 +2072,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             // A queued call is announced once per visit, and a known agent's connect arrives before
             // app_queue's own report of it (OnQueueCallerConnected), so this is the announcement that
             // carries the agent. A call the manager never saw join a queue is published as it always was.
-            PublishConnected(session, agentId, attachment);
+            PublishConnected(session, agentId, interface_, attachment);
         }
 
         _ = PersistAsync(session);
@@ -2107,7 +2111,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             // agent, so the connect of an agent known by name (which runs first and records its own
             // interface) does not run for it. The member is recorded here, before the call is announced, so
             // a consumer of the announcement reads it. One already recorded is kept: a later queue visit of
-            // the same call, taken by another member, does not replace it.
+            // the same call, taken by another member, does not replace it; the announcement below names this
+            // report's member (CallConnectedEvent.AgentInterface) whichever the call keeps.
             session.AgentInterface ??= memberInterface;
 
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
@@ -2133,7 +2138,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 CountConnectedLeg(session, new WrapUpLeg(serverId, memberInterface, wrapUpKey, agentId, OpensAtCallEnd: false));
             }
 
-            PublishConnected(session, session.AgentId, attachment);
+            PublishConnected(session, session.AgentId, memberInterface, attachment);
         }
 
         _ = PersistAsync(session);

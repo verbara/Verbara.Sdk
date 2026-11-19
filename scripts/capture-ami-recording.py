@@ -1311,6 +1311,156 @@ def _renamed_caller_and_participant(tap: Tap):
     return steps
 
 
+# --- queue-revisit: one call answered on two queue visits by two members ----------------------
+
+_REVISIT_EXTENSIONS = """[general]
+static = yes
+writeprotect = no
+
+[capture]
+; where the first member's blind transfer sends the caller: the second queue
+exten => second,1,Queue(q-second)
+ same => n,Hangup()
+
+[capture-sip]
+; the answering leg of the caller's PJSIP loopback call: the caller the PBX sees, in the first queue
+exten => revisit-in,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=90)
+ same => n,Queue(q-first)
+ same => n,Hangup()
+; the member phones: each rings 1 s, answers and stays until it is hung up
+exten => agent1,1,Ringing()
+ same => n,Wait(1)
+ same => n,Answer()
+ same => n,Wait(60)
+ same => n,Hangup()
+exten => agent2,1,Ringing()
+ same => n,Wait(1)
+ same => n,Answer()
+ same => n,Wait(60)
+ same => n,Hangup()
+"""
+
+_REVISIT_QUEUES = """[general]
+persistentmembers = no
+
+[revisit](!)
+strategy = ringall
+timeout = 15
+retry = 1
+wrapuptime = 0
+joinempty = yes
+leavewhenempty = no
+ringinuse = yes
+announce-frequency = 0
+periodic-announce-frequency = 0
+announce-position = no
+announce-holdtime = no
+
+[q-first](revisit)
+member => PJSIP/agent1
+
+[q-second](revisit)
+member => PJSIP/agent2
+"""
+
+# The PJSIP loopback of `renamed-caller-and-participant`, plus one endpoint per member: a member's
+# INVITE goes to the PBX itself, comes back in as `loop` and is answered in `capture-sip` under the
+# member's own extension, so app_queue reports the member as `PJSIP/agent1` or `PJSIP/agent2`.
+_REVISIT_PJSIP = _RENAMED_PJSIP + """
+[agent1]
+type = aor
+contact = sip:agent1@127.0.0.1:5060
+
+[agent1]
+type = endpoint
+transport = transport-loopback
+context = capture-sip
+disallow = all
+allow = ulaw
+aors = agent1
+direct_media = no
+
+[agent2]
+type = aor
+contact = sip:agent2@127.0.0.1:5060
+
+[agent2]
+type = endpoint
+transport = transport-loopback
+context = capture-sip
+disallow = all
+allow = ulaw
+aors = agent2
+direct_media = no
+"""
+
+
+def _queue_revisit(tap: Tap):
+    """N calls (`--sequential-calls`, default 1), each answered in `q-first` by `PJSIP/agent1`, moved
+    by an AMI `BlindTransfer` of that member's leg into `q-second` and answered there by
+    `PJSIP/agent2`; then N negative controls, each answered once in `q-first` and hung up. One step
+    per call (`revisit-NN`, `once-NN`), one call at a time, each gone before the next starts.
+
+    A call that fails or times out is recorded, never fatal. Each call ends with
+    `UserEvent: CaptureOutcome` (the caller's id, the members app_queue reported connecting it, in
+    order, and the error if any); the tap's bytes stay the evidence, the outcome line only indexes them."""
+    steps = []
+    calls = max(1, int(tap.options.get("sequential_calls", 0) or 0))
+    timeout = float(tap.options.get("join_timeout", 20))
+
+    def step(name):
+        steps.append(name)
+        tap.marker(name)
+        return len(tap.frames)
+
+    def connect_of(cid, queue, mark):
+        return tap.wait_for(lambda f: f.get("Event") == "AgentConnect" and f.get("Queue") == queue
+                            and f.get("CallerIDNum") == cid, timeout, mark, f"the AgentConnect of {cid} in {queue}")
+
+    def outcome(name, mark, cid, detail=""):
+        connects = [f for f in tap.frames[mark:] if f.get("Event") == "AgentConnect" and f.get("CallerIDNum") == cid]
+        fields = [("Action", "UserEvent"), ("UserEvent", "CaptureOutcome"), ("Step", name),
+                  ("CallerId", cid), ("Connects", str(len(connects))),
+                  ("Members", ",".join(f.get("Interface", "") for f in connects)),
+                  ("CallerIds", ",".join(f.get("Uniqueid", "") for f in connects))]
+        if detail:
+            fields.append(("Detail", re.sub(r"[\r\n]+", " ", detail)[:200]))
+        tap.action(fields)
+
+    def call(name, cid, transfer):
+        mark = step(name)
+        detail = ""
+        try:
+            tap.send([("Action", "Originate"), ("Channel", "PJSIP/revisit-in@loop"), ("Application", "Wait"),
+                      ("Data", "60"), ("CallerID", f"Capture <{cid}>"), ("Async", "true")])
+            first = connect_of(cid, "q-first", mark)
+            tap.pump(2.0)
+            if transfer:
+                response = tap.action([("Action", "BlindTransfer"), ("Channel", first.get("DestChannel", "")),
+                                       ("Context", "capture"), ("Exten", "second")])
+                if response.get("Response") != "Success":
+                    detail = f"BlindTransfer: {response.get('Response')}: {response.get('Message', '')}"
+                else:
+                    connect_of(cid, "q-second", mark)
+                    tap.pump(2.0)
+        except ConnectionClosed:
+            raise
+        except CaptureError as error:
+            detail = f"error: {error}"
+        _hangup_all(tap)
+        tap.pump(1.0)
+        outcome(name, mark, cid, detail)
+
+    for i in range(1, calls + 1):
+        call(f"revisit-{i:02d}", str(9100 + i), transfer=True)
+    for i in range(1, calls + 1):
+        call(f"once-{i:02d}", str(9200 + i), transfer=False)
+
+    step("done")
+    return steps
+
+
 WORKLOADS = {
     "bridges-and-conference": {
         "description": "Local call; two-party bridge + BridgeList/BridgeInfo/Status; two-participant "
@@ -1325,6 +1475,14 @@ WORKLOADS = {
         "files": {"extensions.conf": _PARKING_EXTENSIONS, "res_parking.conf": _PARKING_RES_PARKING,
                   "pjsip.conf": _PARKING_PJSIP},
         "run": _dialplan_and_parking,
+    },
+    "queue-revisit": {
+        "description": "N calls (--sequential-calls, default 1) each answered in q-first by PJSIP/agent1, "
+                       "blind-transferred by that member into q-second and answered there by PJSIP/agent2; "
+                       "then N calls answered once in q-first (the negative control).",
+        "files": {"extensions.conf": _REVISIT_EXTENSIONS, "queues.conf": _REVISIT_QUEUES,
+                  "pjsip.conf": _REVISIT_PJSIP},
+        "run": _queue_revisit,
     },
     "renamed-caller-and-participant": {
         "description": "A queue caller and a ConfBridge participant nobody renames; a rename outside "
@@ -1496,7 +1654,8 @@ def main(argv=None):
     cap.add_argument("--drop-events", default="")
     cap.add_argument("--keep-steps", default="")
     cap.add_argument("--sequential-calls", type=int, default=0,
-                     help="renamed-caller-and-participant only: N sequential calls per surface (default 0)")
+                     help="renamed-caller-and-participant: N sequential calls per surface (default 0); "
+                          "queue-revisit: N calls of each kind (default 1)")
 
     red = sub.add_parser("reduce", help="reduce a kept tap again (deterministic)")
     red.add_argument("tap", type=Path, help="<name>.tap.raw; its <name>.tap.json must be beside it")

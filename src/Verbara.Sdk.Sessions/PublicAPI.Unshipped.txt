@@ -1,1 +1,3 @@
 #nullable enable
+Verbara.Sdk.Sessions.CallConnectedEvent.AgentInterface.get -> string?
+Verbara.Sdk.Sessions.CallConnectedEvent.AgentInterface.init -> void

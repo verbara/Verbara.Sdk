@@ -70,6 +70,20 @@ public sealed class QueueVisitAnnouncementTests
         rig.Counts("q-pjsip3").Should().Be(new QueueOutcome(Answered: 1, Abandoned: 0, Waiting: 0), "the second queue answered the call once");
     }
 
+    [Fact]
+    public async Task QueueCall_ShouldNameEachVisitsMember_WhenAnsweredInOneQueueAndThenInAnother()
+    {
+        await using var rig = await QueueCallRig.StartAsync();
+
+        rig.Deliver(AnsweredThenTransferredIntoASecondQueue());
+
+        rig.Connected.Select(e => (e.QueueName, e.AgentInterface)).Should().Equal(
+            [("q-pjsip", "PJSIP/agent1"), ("q-pjsip3", "PJSIP/agent3")],
+            "each visit's announcement names the member app_queue reported connecting that visit");
+        rig.Manager.GetById(rig.Connected[1].SessionId)!.AgentInterface.Should().Be("PJSIP/agent1",
+            "the call keeps recording its first member, as before");
+    }
+
     /// <summary>
     /// The call's own wait keeps its meaning, time since the call was created, whatever the queue
     /// measures per visit. The IVR is the one PI's capture shows: the caller is answered before it

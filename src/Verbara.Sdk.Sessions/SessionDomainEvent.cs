@@ -38,7 +38,22 @@ public sealed record CallStartedEvent(string SessionId, string ServerId, DateTim
     CallDirection Direction, string? CallerIdNum) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
 public sealed record CallConnectedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
-    string? AgentId, string? QueueName, TimeSpan WaitTime) : SessionDomainEvent(SessionId, ServerId, Timestamp);
+    string? AgentId, string? QueueName, TimeSpan WaitTime) : SessionDomainEvent(SessionId, ServerId, Timestamp)
+{
+    /// <summary>
+    /// The interface of the member whose connect this notification announces, exactly as Asterisk reported it in that
+    /// connect: <c>PJSIP/agent1</c> for an endpoint member, the <c>Local</c> interface for a member that is a
+    /// <c>Local</c> channel. <see langword="null"/> when the SDK has none, as for a call that never joined a queue and
+    /// that no agent known by name connected.
+    /// </summary>
+    /// <remarks>
+    /// It is taken from the connect being announced, so each queue visit of a call names the member that answered that
+    /// visit. It may differ from <see cref="CallSession.AgentInterface"/>, which keeps the call's first member when a
+    /// later visit is taken by another. Not a positional member: a notification built with the positional constructor
+    /// alone names no member, and two notifications that differ only by it are not equal.
+    /// </remarks>
+    public string? AgentInterface { get; init; }
+}
 
 public sealed record CallTransferredEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string TransferType, string? TargetChannel) : SessionDomainEvent(SessionId, ServerId, Timestamp);

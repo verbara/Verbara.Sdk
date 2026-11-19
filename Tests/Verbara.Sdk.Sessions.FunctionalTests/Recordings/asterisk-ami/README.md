@@ -1,12 +1,13 @@
 # Recordings — asterisk-ami
 
 Byte captures of the AMI stream a real Asterisk PBX sent to one manager client, one capture per
-Asterisk version for each of seven sets: twelve call shapes (`call-shapes-*`), seventeen queue
+Asterisk version for each of eight sets: twelve call shapes (`call-shapes-*`), seventeen queue
 shapes (`queue-shapes-*`), four queue calls with the PBX's own state snapshots taken while they
 waited (`queue-reload-*`), and, read with the `dialplan` class, one call for each way of leaving a
 queue (`queue-exits-*`) and one timeout loop (`queue-loop-*`), the dialplan and parking events of one
 workload (`dialplan-and-parking-*`), and transfers and bridges of a waiting caller and of a conference participant
-(`renamed-caller-and-participant-*`). This suite replays them through the SDK's own parsing path, so a
+(`renamed-caller-and-participant-*`), and one call answered on two queue visits by two members
+(`queue-revisit-*`). This suite replays them through the SDK's own parsing path, so a
 call-session assertion made here is checked against what Asterisk actually sent rather than against
 what a test author believed it sends.
 
@@ -36,6 +37,10 @@ what a test author believed it sends.
 | `renamed-caller-and-participant-asterisk-23.5.0.raw` | 23.5.0 | `Asterisk Call Manager/12.0.0` | 213 464 |
 | `renamed-caller-and-participant-asterisk-24.0.0-rc2.raw` | 24.0.0-rc2 | `Asterisk Call Manager/13.0.0` | 213 286 |
 | `renamed-caller-and-participant-refer-conference-asterisk-23.5.0.raw` | 23.5.0 | `Asterisk Call Manager/12.0.0` | 19 719 |
+| `queue-revisit-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 139 962 |
+| `queue-revisit-asterisk-22.12.0.raw` | 22.12.0 | `Asterisk Call Manager/11.0.0` | 139 966 |
+| `queue-revisit-asterisk-23.6.0.raw` | 23.6.0 | `Asterisk Call Manager/12.0.0` | 140 425 |
+| `queue-revisit-asterisk-24.0.0.raw` | 24.0.0 | `Asterisk Call Manager/13.0.0` | 140 419 |
 
 The call and queue shapes were captured 2026-09-27, the reload, exit and loop captures 2026-09-28. The
 `.gitattributes` rule `**/Recordings/**/*.raw binary` keeps the CRLF framing byte-exact; never open
@@ -939,6 +944,36 @@ Each step runs behind its own `CaptureMarker`; a test replays one step through t
 - **A normal queue leave arrives before the caller's `Hangup`** (`negative-queue` and the other steps).
 - **In the conference that order is not guaranteed.** In the `refer-conference` file the participant
   `Local/peer@capture-00000024;1` hangs up 1.1 ms before its `ConfbridgeLeave`.
+
+## The queue-revisit captures
+
+One run of the `queue-revisit` workload of `scripts/capture-ami-recording.py` with `--sequential-calls 10` on each
+image of `docker/asterisk-base-images.txt`, by digest, captured 2026-11-19. Each file is that run's tap reduced with
+`--keep-steps revisit-01,once-01`: the first call of each kind.
+
+| Asterisk | Image digest |
+|----------|--------------|
+| 20.20.1 | `sha256:c202cdf0f0348ab75e6dee49967418ce8c08853644b8a5c00de91f6b4aca4dd1` |
+| 22.12.0 | `sha256:470d10b0382e9c822c7b334780f0795e1d09f61e111d798a43b959ba7e959df7` |
+| 23.6.0 | `sha256:bed956493e84e22841013d7ba356ce68be529bf11fcf65ef95b59cfd0b4eb1b5` |
+| 24.0.0 | `sha256:09d05c27812adc0ab863be12f325acd71bbba040a3d71c639f07dbdc00a7cd7f` |
+
+The workload runs on one container with a PJSIP loopback: the caller is an `Originate` of `PJSIP/revisit-in@loop`,
+whose answering leg joins `q-first`; the members `PJSIP/agent1` (`q-first`) and `PJSIP/agent2` (`q-second`) are
+endpoints whose contact is the PBX itself, answered in the dialplan after 1 s of ringing. In `revisit-01` (caller
+`9101`), once `agent1` answers, an AMI `BlindTransfer` of that member's leg sends the caller to `capture,second`,
+`Queue(q-second)`, where `agent2` answers; in `once-01` (caller `9201`) `agent1` answers and the call is hung up.
+Each step ends with `UserEvent: CaptureOutcome` (the caller, the members connected, any error).
+
+What these files pin about the wire, on all four versions: the revisit caller gets two `AgentConnect` frames on the
+same caller channel, the first `Queue: q-first`, `Interface: PJSIP/agent1`, the second `Queue: q-second`,
+`Interface: PJSIP/agent2`, with an `AgentComplete` (`Reason: transfer`) for the first member and a second
+`QueueCallerJoin` in between; the control gets one. No `AgentConnect` carries an `Agent` header. In the measured run
+every one of the 10 calls of each kind matched this, on every version. They are replayed by
+`QueueRevisitCaptureReplayTests`.
+
+Each file keeps 341 or 342 of about 3 445 frames (the other eighteen calls are outside the kept steps) and replaced
+8 UUIDs and no address.
 
 ## Capturing on a new Asterisk build
 
