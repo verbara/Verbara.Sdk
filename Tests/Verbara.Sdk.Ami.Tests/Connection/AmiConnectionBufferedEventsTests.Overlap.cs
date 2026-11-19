@@ -250,8 +250,7 @@ public sealed partial class AmiConnectionBufferedEventsTests
     {
         const string blockedPeer = "BLOCK/new";
         await using var run = new OverlapRun();
-        using var block = new ManualResetEventSlim();
-        var blockedEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var block = new ThreadHold();
 
         // Holds the thread it is called on, not only the dispatch: a consumer that resumed inline on the thread that
         // completed the lost session's release would keep that thread, and whatever else continues on that release, here.
@@ -259,8 +258,7 @@ public sealed partial class AmiConnectionBufferedEventsTests
         {
             if (evt is PeerStatusEvent { Peer: blockedPeer })
             {
-                blockedEntered.TrySetResult();
-                block.Wait(Bound * 3);
+                block.Hold(Bound * 3);
             }
 
             return ValueTask.CompletedTask;
@@ -281,10 +279,10 @@ public sealed partial class AmiConnectionBufferedEventsTests
             (await second!.WriteEventAsync("PeerStatus", [new("Peer", blockedPeer)])).Should().BeTrue();
             await run.BufferAsync(second, "NEW", 3);
             run.Recorder.Open(HeldPeer);
-            var entered = await CompletesWithinBoundAsync(blockedEntered.Task);
+            var entered = await CompletesWithinBoundAsync(block.Held);
             var reconnectedWhileHeld = await CompletesWithinBoundAsync(run.Recorder.ReconnectedReached(1));
-            var stillHeld = !block.IsSet;
-            block.Set();
+            var stillHeld = !block.IsReleased;
+            block.Release();
             var delivered = await CompletesWithinBoundAsync(run.Recorder.CountReached(1 + 3 + 1 + 3));
 
             using (new AssertionScope())
@@ -301,7 +299,7 @@ public sealed partial class AmiConnectionBufferedEventsTests
         }
         finally
         {
-            block.Set();
+            block.Free();
         }
     }
 

@@ -109,8 +109,9 @@ public sealed class ScopedSweepIntegrationTests
             await FinishDeferred(tick, barrierClock);
             ScopedSweepDecisionTests.Count(rig, "Unverifiable").Should().Be(0);
             rig.EndingsOf(call).Should().Be(0);
+            gate.Release();
         }
-        finally { gate.Release(); await Task.WhenAll(load, admission).WaitAsync(Run.Bound); }
+        finally { gate.Free(); await Task.WhenAll(load, admission).WaitAsync(Run.Bound); }
         await run.Server.ScheduledReload.WaitAsync(Run.Bound);
         await run.Server.ReconcileChannelsAsync();
         rig.EndingsOf(call).Should().Be(1);

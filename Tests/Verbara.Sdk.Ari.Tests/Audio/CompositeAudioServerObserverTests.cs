@@ -107,14 +107,16 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
     {
         // P2: the blocked connection's far end hangs up; its registration and its place stay until the observer returns.
         await using var rig = await Rig.StartAsync();
-        using var gate = new ManualResetEventSlim(false);
+        var gate = new ThreadHold();
         var blocked = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
         var gateTimedOut = 0;
+        var claimed = 0;
         using var blocker = rig.Subscribe(route, stream =>
         {
-            if (!blocked.TrySetResult(stream))
+            if (Interlocked.Exchange(ref claimed, 1) != 0)
                 return;
-            if (!gate.Wait(GateLimit))
+            ThreadHold.Signal(blocked, stream);
+            if (!gate.Hold(GateLimit))
                 Interlocked.Exchange(ref gateTimedOut, 1);
         });
 
@@ -155,7 +157,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
         }
         finally
         {
-            gate.Set();
+            gate.Free();
         }
 
         Volatile.Read(ref gateTimedOut).Should().Be(0, "the test opened the gate within its bound");
@@ -179,20 +181,25 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
         // for B before that call returns. Any composite that forwards under one lock — per subscription or shared by
         // all of them — parks B's handler behind A's call and fails here.
         await using var rig = await Rig.StartAsync();
-        using var gate = new ManualResetEventSlim(false);
+        var gate = new ThreadHold();
         var firstEntered = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var entered = new Announcements();
         var inside = 0;
         var insideWhenEntered = new ConcurrentDictionary<string, int>(StringComparer.Ordinal);
         var gateTimedOut = 0;
+        var claimed = 0;
         using var observer = rig.Subscribe(route, stream =>
         {
             insideWhenEntered[stream.ChannelId] = Interlocked.Increment(ref inside);
             try
             {
                 entered.Add(stream);
-                if (firstEntered.TrySetResult(stream.ChannelId) && !gate.Wait(GateLimit))
-                    Interlocked.Exchange(ref gateTimedOut, 1);
+                if (Interlocked.Exchange(ref claimed, 1) == 0)
+                {
+                    ThreadHold.Signal(firstEntered, stream.ChannelId);
+                    if (!gate.Hold(GateLimit))
+                        Interlocked.Exchange(ref gateTimedOut, 1);
+                }
             }
             finally
             {
@@ -211,11 +218,11 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
             enteredForSecond = await entered.WaitAsync(callB.Key, QuietWindow);
             insideForSecond = insideWhenEntered.TryGetValue(callB.Key, out var n) ? n : 0;
             output.WriteLine(
-                $"CONCURRENT route={route} A={first} B={second}: enteredForB={enteredForSecond} invocationsInsideWhenEnteredForB={insideForSecond} gateSet={gate.IsSet}");
+                $"CONCURRENT route={route} A={first} B={second}: enteredForB={enteredForSecond} invocationsInsideWhenEnteredForB={insideForSecond} gateSet={gate.IsReleased}");
         }
         finally
         {
-            gate.Set();
+            gate.Free();
         }
 
         using var scope = new AssertionScope();
@@ -288,14 +295,16 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
     private async Task<CrossRetentionOutcome> CrossRetentionScenarioAsync(Route route, Transport first, Transport second)
     {
         await using var rig = await Rig.StartAsync(maxConcurrentStreams: 2);
-        using var gate = new ManualResetEventSlim(false);
+        var gate = new ThreadHold();
         var blockedOn = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var gateTimedOut = 0;
+        var claimed = 0;
         using var blocker = rig.Subscribe(route, stream =>
         {
-            if (!blockedOn.TrySetResult(stream.ChannelId))
+            if (Interlocked.Exchange(ref claimed, 1) != 0)
                 return;
-            if (!gate.Wait(GateLimit))
+            ThreadHold.Signal(blockedOn, stream.ChannelId);
+            if (!gate.Hold(GateLimit))
                 Interlocked.Exchange(ref gateTimedOut, 1);
         });
 
@@ -355,7 +364,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
             var thirdMs = thirdClock.Elapsed.TotalMilliseconds;
             using var thirdCall = callC;
 
-            gate.Set();
+            gate.Free();
             var afterGateMs = await WaitUntilAsync(() => rig.Composite.GetStream(callB.Key) is null, WaitLimit);
 
             var outcome = new CrossRetentionOutcome(
@@ -367,7 +376,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
         }
         finally
         {
-            gate.Set();
+            gate.Free();
         }
     }
 
@@ -453,17 +462,19 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
     private async Task<BlockingOutcome> BlockingScenarioAsync(Route route, Transport first, Transport second)
     {
         await using var rig = await Rig.StartAsync();
-        using var gate = new ManualResetEventSlim(false);
+        var gate = new ThreadHold();
         var blockedOn = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var gateTimedOut = 0;
+        var claimed = 0;
         var announced = new Announcements();
 
         // The blocking observer subscribes first, so the non-blocking one is the "later" observer of each stream.
         using var blocker = rig.Subscribe(route, stream =>
         {
-            if (!blockedOn.TrySetResult(stream.ChannelId))
+            if (Interlocked.Exchange(ref claimed, 1) != 0)
                 return;
-            if (!gate.Wait(GateLimit))
+            ThreadHold.Signal(blockedOn, stream.ChannelId);
+            if (!gate.Hold(GateLimit))
                 Interlocked.Exchange(ref gateTimedOut, 1);
         });
         using var watcher = rig.Subscribe(route, announced.Add);
@@ -495,7 +506,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
             var announcedWhileBlocked = callB is not null && await announced.WaitAsync(callB.Key, QuietWindow);
             var audioFlowed = callB is not null && await callB.AudioFlowsAsync(rig.Composite.GetStream(callB.Key));
 
-            gate.Set();
+            gate.Free();
             var released = Stopwatch.StartNew();
             var announcedAfter = callB is not null && await announced.WaitAsync(callB.Key, WaitLimit);
             var announcedAfterMs = released.Elapsed.TotalMilliseconds;
@@ -509,7 +520,7 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
         }
         finally
         {
-            gate.Set();
+            gate.Free();
         }
     }
 

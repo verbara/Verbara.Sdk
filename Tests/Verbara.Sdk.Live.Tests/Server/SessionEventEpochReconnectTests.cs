@@ -79,10 +79,11 @@ public sealed class SessionEventEpochReconnectTests
                 SessionEventEpoch.LossBetween(started.Epoch, ended.Epoch).Should().Be(SessionEventLoss.Possible,
                     "the SDK may have missed an event of the call while the connection was down");
             }
+            hold.Release();
         }
         finally
         {
-            hold.Release();
+            hold.Free();
         }
     }
 
@@ -126,10 +127,11 @@ public sealed class SessionEventEpochReconnectTests
                 SessionEventEpoch.LossBetween(started.Epoch, ended.Epoch).Should().Be(SessionEventLoss.Possible,
                     "the SDK may have missed an event of the call while the connection was down");
             }
+            hold.Release();
         }
         finally
         {
-            hold.Release();
+            hold.Free();
         }
     }
 
@@ -196,7 +198,7 @@ public sealed class SessionEventEpochReconnectTests
         }
         finally
         {
-            gate.Release();
+            gate.Free();
         }
     }
 
@@ -229,6 +231,8 @@ public sealed class SessionEventEpochReconnectTests
 
         public void Release() => _hold.Release();
 
+        public void Free() => _hold.Free();
+
         public void Dispose() => _hold.Free();
     }
 
@@ -241,6 +245,8 @@ public sealed class SessionEventEpochReconnectTests
         public Task Entered => _hold.Held;
 
         public void Release() => _hold.Release();
+
+        public void Free() => _hold.Free();
 
         public void OnNext(ManagerEvent value)
         {

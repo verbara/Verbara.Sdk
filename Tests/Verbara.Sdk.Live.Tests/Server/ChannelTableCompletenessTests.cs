@@ -63,8 +63,9 @@ public sealed class ChannelTableCompletenessTests
             await waiting.Task.WaitAsync(Run.Bound);
             completed.Should().Be(0);
             snapshot.IsCompleted.Should().BeFalse();
+            gate.Release();
         }
-        finally { gate.Release(); }
+        finally { gate.Free(); }
         await snapshot.WaitAsync(Run.Bound);
         completed.Should().Be(1);
         run.Server.ChannelTableComplete.Should().BeTrue();
@@ -97,8 +98,9 @@ public sealed class ChannelTableCompletenessTests
             await snapshot.WaitAsync(Run.Bound);
             run.Server.ChannelTableComplete.Should().BeFalse();
             completed.Should().Be(0);
+            gate.Release();
         }
-        finally { gate.Release(); }
+        finally { gate.Free(); }
     }
 
     [Fact]

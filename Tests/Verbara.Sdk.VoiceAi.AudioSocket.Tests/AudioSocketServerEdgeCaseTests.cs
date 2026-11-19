@@ -410,12 +410,10 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
         var holder = await HandOverAndAwaitAnnouncementAsync(server, listener);
         await NextTimerAsync(time); // the holder's UUID deadline
 
-        using var gate = new ManualResetEventSlim(false);
-        var consumerHandlerRunning = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         holder.OnHangup += () =>
         {
-            consumerHandlerRunning.TrySetResult();
-            gate.Wait(SignalTimeout);
+            gate.Hold(SignalTimeout);
         };
         var announced = new TaskCompletionSource<AudioSocketSession>(TaskCreationOptions.RunContinuationsAsynchronously);
         server.OnSessionStarted += session =>
@@ -425,7 +423,7 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
         };
 
         await SendFrameAsync(holderPeer, AudioSocketFrameType.Hangup, []);
-        await consumerHandlerRunning.Task.WaitAsync(SignalTimeout);
+        await gate.Held.WaitAsync(SignalTimeout);
 
         try
         {
@@ -447,7 +445,7 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
                 "the connection waits for the holder, bounded by the grace");
             announced.Task.IsCompleted.Should().BeFalse("the consumer's hangup handler for the holder has not returned");
 
-            gate.Set();
+            gate.Release();
             (await announced.Task.WaitAsync(SignalTimeout)).ChannelId.Should().Be(
                 x,
                 "once every hangup handler of the holder has returned, the call that came back is served");
@@ -456,7 +454,7 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
         finally
         {
             // Never leave the holder's read loop blocked in the consumer's handler past the test.
-            gate.Set();
+            gate.Free();
         }
     }
 

@@ -50,8 +50,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
             ReconnectInitialDelay = TimeSpan.FromMilliseconds(20),
             ReconnectMaxDelay = TimeSpan.FromMilliseconds(20),
         }), sockets, logger);
-        using var gate = new ManualResetEventSlim(false);
-        var lostEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         var lostNotification = NotAQueueTask;
         var lostCalls = 0;
         connection.Lost += _ =>
@@ -60,8 +59,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
                 return;
 
             Volatile.Write(ref lostNotification, Task.CurrentId ?? NotAQueueTask);
-            lostEntered.TrySetResult();
-            gate.Wait();
+            gate.Hold(Timeout.InfiniteTimeSpan);
         };
         var deliveries = new List<(long Session, AmiConnectionState State, bool PendingInside)>();
         connection.Reconnected += () =>
@@ -74,7 +72,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
         await logins.Reader.ReadAsync(peerCts.Token).AsTask().WaitAsync(Bound);
 
         sockets.Created[0].CloseFromPeer();
-        await lostEntered.Task.WaitAsync(Bound);
+        await gate.Held.WaitAsync(Bound);
         await logins.Reader.ReadAsync(peerCts.Token).AsTask().WaitAsync(Bound);
         await TailMovedPastAsync(connection, Volatile.Read(ref lostNotification)).WaitAsync(Bound);
 
@@ -84,7 +82,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
         await TailMovedPastAsync(connection, tail).WaitAsync(Bound);
         var pendingAtThirdLogin = connection.ReconnectPending;
 
-        gate.Set();
+        gate.Release();
         await connection.PendingNotifications.WaitAsync(Bound);
         var pendingAfter = connection.ReconnectPending;
         List<(long Session, AmiConnectionState State, bool PendingInside)> delivered;
@@ -144,8 +142,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
             ReconnectInitialDelay = TimeSpan.FromMilliseconds(20),
             ReconnectMaxDelay = TimeSpan.FromMilliseconds(20),
         }), sockets, logger);
-        using var gate = new ManualResetEventSlim(false);
-        var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         var thirdEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var sessions = new List<long>();
         connection.Reconnected += () =>
@@ -156,8 +153,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
 
             if (session == 2)
             {
-                secondEntered.TrySetResult();
-                gate.Wait(Bound * 3);
+                gate.Hold(Bound * 3);
             }
             else
             {
@@ -172,14 +168,14 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
 
             sockets.Created[0].CloseFromPeer();
             await logins.Reader.ReadAsync(peerCts.Token).AsTask().WaitAsync(Bound);
-            await secondEntered.Task.WaitAsync(Bound);
+            await gate.Held.WaitAsync(Bound);
 
             sockets.Created[1].CloseFromPeer();
             await logins.Reader.ReadAsync(peerCts.Token).AsTask().WaitAsync(Bound);
             await thirdConnected.Task.WaitAsync(Bound);
             var pendingAtThirdLogin = connection.ReconnectPending;
 
-            gate.Set();
+            gate.Release();
             var pendingInThirdHandler = await thirdEntered.Task.WaitAsync(Bound);
             await connection.PendingNotifications.WaitAsync(Bound);
             var pendingAfter = connection.ReconnectPending;
@@ -199,7 +195,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
         }
         finally
         {
-            gate.Set();
+            gate.Free();
             await connection.DisposeAsync().AsTask().WaitAsync(Bound);
             await peerCts.CancelAsync();
             await serving;

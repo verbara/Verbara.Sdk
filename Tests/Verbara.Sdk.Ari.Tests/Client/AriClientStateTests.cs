@@ -1013,7 +1013,7 @@ public sealed class AriClientStateTests
         }
         finally
         {
-            logger.Release();
+            logger.Free();
             await sut.DisposeAsync();
         }
     }
@@ -1041,7 +1041,7 @@ public sealed class AriClientStateTests
         }
         finally
         {
-            logger.Release();
+            logger.Free();
         }
 
         await peer.CloseSeen.WaitAsync(WaitLimit);
@@ -1086,7 +1086,7 @@ public sealed class AriClientStateTests
         }
         finally
         {
-            logger.Release();
+            logger.Free();
             await sut.DisposeAsync();
         }
     }
@@ -1121,7 +1121,7 @@ public sealed class AriClientStateTests
         }
         finally
         {
-            logger.Release();
+            logger.Free();
             await sut.DisposeAsync();
         }
     }
@@ -1894,15 +1894,17 @@ public sealed class AriClientStateTests
     /// </summary>
     private sealed class EventLoopHoldingLogger : ILogger<AriClient>, IDisposable
     {
-        private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly ManualResetEventSlim _released = new();
+        private readonly ThreadHold _hold = new();
         private int _holds;
 
         /// <summary>Completes once the events loop is held. Faults with <see cref="TimeoutException"/> when it never is.</summary>
-        public Task HeldAsync() => _held.Task.WaitAsync(WaitLimit);
+        public Task HeldAsync() => _hold.Held.WaitAsync(WaitLimit);
 
-        /// <summary>Lets the events loop go on. Idempotent.</summary>
-        public void Release() => _released.Set();
+        /// <summary>Lets the events loop go on; fails when the hold had already run out. Idempotent.</summary>
+        public void Release() => _hold.Release();
+
+        /// <summary>Lets the events loop go on without judging the hold: for cleanup.</summary>
+        public void Free() => _hold.Free();
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
@@ -1918,16 +1920,13 @@ public sealed class AriClientStateTests
             if (eventId.Name != "EventReceived" || Interlocked.Exchange(ref _holds, 1) != 0)
                 return;
 
-            _held.TrySetResult();
-
             // Bounded, so a test that fails before it releases the loop cannot hold it for good.
-            _released.Wait(WaitLimit);
+            _hold.Hold(WaitLimit);
         }
 
         public void Dispose()
         {
-            _released.Set();
-            _released.Dispose();
+            _hold.Free();
         }
     }
 

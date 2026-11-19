@@ -326,8 +326,7 @@ public sealed class QueueSnapshotAdmissionLifetimeTests
         {
             // Always release, drain and dispose before asserting the captured result. Each cleanup failure is kept
             // separately, so cleanup cannot hide either the pre-release regression or a peer/fixture failure.
-            rig.Release();
-            rig.ReleaseSecond();
+            rig.Free();
             drainFailure = await Record.ExceptionAsync(() => owner.WaitAsync(Run.Bound));
             cleanupFailure = await Record.ExceptionAsync(() => rig.DisposeAsync().AsTask());
         }

@@ -176,7 +176,7 @@ public sealed class SessionEventEpochAttachmentTests
         finally
         {
             manager.StepHook = null;
-            park.Release();
+            park.Free();
         }
     }
 }

@@ -685,7 +685,7 @@ public sealed class ChannelReadCoverageTests
 
         public void Dispose()
         {
-            Gate.Release();
+            Gate.Free();
             _subscription.Dispose();
             Gate.Dispose();
         }

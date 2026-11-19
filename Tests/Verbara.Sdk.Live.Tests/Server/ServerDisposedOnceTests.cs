@@ -132,25 +132,30 @@ public sealed class ServerDisposedOnceTests
         var server = NewServer(old, out var connection);
         IObserver<ManagerEvent>? observer = null;
         connection.Subscribe(Arg.Do<IObserver<ManagerEvent>>(o => observer ??= o)).Returns(old, fresh);
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var hold = new ThreadHold();
         var disposals = 0;
         old.When(s => s.Dispose()).Do(_ =>
         {
             if (Interlocked.Increment(ref disposals) != 1)
                 return;
-            ThreadHold.Signal(entered);
-            ThreadHold.Block(hold.Task, Run.Bound);
+            hold.Hold(Run.Bound);
         });
         await server.StartAsync();
         // The stream ends with the session, so the reconnect subscribes again: the path this race is on.
         observer!.OnCompleted();
 
         var reconnect = Task.Run(() => connection.Reconnected += Raise.Event<Action>());
-        await entered.Task.WaitAsync(Run.Bound);
-        var disposal = server.DisposeAsync().AsTask();
-        hold.SetResult();
-        await Task.WhenAll(reconnect, disposal).WaitAsync(Run.Bound);
+        try
+        {
+            await hold.Held.WaitAsync(Run.Bound);
+            var disposal = server.DisposeAsync().AsTask();
+            hold.Release();
+            await Task.WhenAll(reconnect, disposal).WaitAsync(Run.Bound);
+        }
+        finally
+        {
+            hold.Free();
+        }
 
         DisposeCalls(fresh).Should().Be(1, "the subscription the reconnect made has an owner once the disposal returned");
     }
@@ -192,23 +197,18 @@ public sealed class ServerDisposedOnceTests
         // The second session lists no agent: a reload of it would leave the agent the start loaded no longer held.
         var second = new BootingAsterisk { BootedAtLogin = true, Agents = [] };
         await using var run = await Run.ConnectAsync(first, second, autoReconnect: true);
-        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var hold = new ThreadHold();
         var after = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        run.Connection.Reconnected += () =>
-        {
-            ThreadHold.Signal(held);
-            ThreadHold.Block(hold.Task, Run.Bound);
-        };
+        run.Connection.Reconnected += () => hold.Hold(Run.Bound);
         await run.StartServerAsync();
         run.Connection.Reconnected += () => after.TrySetResult();
         var agentBefore = run.Server.Agents.GetById(BootingAsterisk.AgentId);
 
         first.CloseSession();
         run.ReleaseSecondPeer();
-        await held.Task.WaitAsync(Run.Bound);
+        await hold.Held.WaitAsync(Run.Bound);
         await run.Server.DisposeAsync();
-        hold.SetResult();
+        hold.Release();
         await after.Task.WaitAsync(Run.Bound);
 
         // A subscriber taken after the server's handler ran: an observer that handler subscribed is ahead of it, so by the
@@ -350,13 +350,11 @@ public sealed class ServerDisposedOnceTests
         };
         var second = new BootingAsterisk { BootedAtLogin = true };
         await using var run = await Run.StartAsync(first, second, autoReconnect: true);
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var outer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var outer = new ThreadHold();
         var returned = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         run.Server.Channels.ChannelRemoved += _ =>
         {
-            ThreadHold.Signal(entered);
-            ThreadHold.Block(outer.Task, Run.Bound);
+            outer.Hold(Run.Bound);
 #pragma warning disable VSTHRD002 // a handler that blocks on the disposal is the case under test
             returned.TrySetResult(run.Server.DisposeAsync().AsTask().Wait(InsideBound));
 #pragma warning restore VSTHRD002
@@ -366,16 +364,16 @@ public sealed class ServerDisposedOnceTests
         {
             first.CloseSession();
             run.ReleaseSecondPeer();
-            await entered.Task.WaitAsync(Run.Bound);
+            await outer.Held.WaitAsync(Run.Bound);
             var disposal = run.Server.DisposeAsync().AsTask();
-            outer.SetResult();
+            outer.Release();
 
             (await returned.Task.WaitAsync(Run.Bound)).Should().BeTrue("the second disposal returns inside the handler");
             await disposal.WaitAsync(Run.Bound);
         }
         finally
         {
-            outer.TrySetResult();
+            outer.Free();
         }
     }
 
@@ -485,15 +483,15 @@ public sealed class ServerDisposedOnceTests
         var second = new BootingAsterisk { BootedAtLogin = true };
         await using var run = await Run.StartAsync(first, second, autoReconnect: true);
         var innerReturned = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var hold = new ThreadHold();
         run.Server.Channels.ChannelRemoved += _ =>
         {
 #pragma warning disable VSTHRD002 // a handler that blocks on the disposal, then holds the reload, is the case under test
             // The first disposal, inside the reload: it returns here, without waiting for this reload.
-            innerReturned.TrySetResult(run.Server.DisposeAsync().AsTask().Wait(InsideBound));
-            // Then hold the reload: its reconciliation has not ended while this handler has not returned.
-            hold.Task.Wait(Run.Bound);
+            ThreadHold.Signal(innerReturned, run.Server.DisposeAsync().AsTask().Wait(InsideBound));
 #pragma warning restore VSTHRD002
+            // Then hold the reload: its reconciliation has not ended while this handler has not returned.
+            hold.Hold(Run.Bound);
         };
 
         try
@@ -507,7 +505,7 @@ public sealed class ServerDisposedOnceTests
             // The reload cannot end while the handler is held, so completing here is the defect, not a timing accident; the
             // delay only bounds how long the test looks.
             var returnedWhileTheReloadRan = await BoundedWait.WhenAnyAsync(outer, token => Task.Delay(TimeSpan.FromMilliseconds(500), token)) == outer; // fence-allow: SETTLE — the negative "has not returned while the reload is held" needs a bounded window; the hold below decides the positive
-            hold.SetResult();
+            hold.Release();
             await outer.WaitAsync(Run.Bound);
             var loadStillInFlight = run.Server.IsLoadInFlight;
 
@@ -520,7 +518,7 @@ public sealed class ServerDisposedOnceTests
         }
         finally
         {
-            hold.TrySetResult();
+            hold.Free();
         }
     }
 

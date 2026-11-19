@@ -681,7 +681,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
         }
         finally
         {
-            hold.Release();
+            hold.Free();
         }
     }
 
@@ -1252,6 +1252,8 @@ public sealed class VerbaraServerQueueDiscoveryTests
         public Task Held => _hold.Held;
 
         public void Release() => _hold.Release();
+
+        public void Free() => _hold.Free();
 
         public void OnNext(ManagerEvent value)
         {
