@@ -87,6 +87,9 @@ public sealed class QueueShapeMemberReplayTests
                 atDelivery.Should().OnlyContain(e => e.AgentInterface == member,
                     "{0}: the member is recorded when the call is announced connected, so a consumer reads it on that delivery",
                     shape.Shape.Name);
+                shape.ConnectedEvents.Where(e => e.QueueName is not null).Should().OnlyContain(
+                    e => e.AgentInterface == member,
+                    "{0}: the call-connected event names the member app_queue reported for that connection", shape.Shape.Name);
             }
             else
             {
@@ -96,6 +99,8 @@ public sealed class QueueShapeMemberReplayTests
                 shape.Sessions.Should().NotBeEmpty("premise: {0} opened a call", shape.Shape.Name);
                 shape.Sessions.Should().OnlyContain(s => s.AgentInterface == null,
                     "{0}: no member took the call, so it records none", shape.Shape.Name);
+                shape.ConnectedEvents.Should().NotContain(e => e.AgentInterface != null,
+                    "{0}: no member took the call, so no call-connected event names one", shape.Shape.Name);
             }
         }
     }

@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added: `CallConnectedEvent.AgentInterface` names the member whose connection the event announces
+
+`CallConnectedEvent` gains `string? AgentInterface { get; init; }`: the interface of the member whose connect the event
+announces, exactly as Asterisk reported it in that connect (`PJSIP/agent1`, or the `Local` interface of a member that
+is a `Local` channel), and `null` when the SDK has none. It is taken from the connect being announced: app_queue's
+connect report, the connect of an agent known by name, or, for a call that never joined a queue, the interface the
+call recorded. So a call answered in a queue, transferred into a second queue and answered there by another member is
+announced twice, and the second announcement names the second member. `CallSession.AgentInterface` is unchanged: it
+keeps the call's first member, so a consumer that needs the member of a given connection reads it from the event.
+
+An init-only member, not a positional one: the record's constructor and `Deconstruct` are as before, and a
+notification built with the positional constructor alone names no member. A consumer that compares whole
+`CallConnectedEvent` values sees that the published ones now carry the member, so they are no longer equal to one built
+positionally with the same other values.
+
+To roll back, keep the property and stop setting it (it then reads `null`), or revert together with every consumer
+that reads it: a consumer compiled against the property does not build, or fails to bind at run time, against a
+package that lacks it.
+
 ### Fixed: a reconnect reload no longer drops the events dispatched while it replaces its subscription (#600)
 
 On every reconnect, on the reconnect loop and on the caller's own `ConnectAsync`, `VerbaraServer` released its event
