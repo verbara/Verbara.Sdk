@@ -27,6 +27,13 @@ previous stream, which `AmiConnection` never does. A custom `IAmiConnection` tha
 each session keeps being subscribed again on each reconnect, as before; it must end them before it raises
 `Reconnected`.
 
+### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.35 (#619)
+
+`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.35` instead of `>= 3.4.31`. A patch release of
+the same library, with the same `Microsoft.Extensions.*` floors. The upstream change an application can see: on a
+server that announces a `MOVING` handoff, new commands wait in the backlog while the in-flight ones drain, so the
+connection is recycled within a round trip instead of at the end of the handoff window. No public API change.
+
 ## [2.10.1] - 2026-11-16
 
 ### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#584)
