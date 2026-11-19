@@ -35,5 +35,8 @@ public sealed class SweepCountsOnceTests : IAsyncLifetime
             new { State = CallSessionState.Failed, Counters = CounterDeltas.None with { Failed = 1 } },
             "Asterisk listed the call at the sweep, so the sweep counted nothing; the hangup with a failure cause "
             + $"ends it failed and counts it once. Measured: {_rig.Describe()}");
+        counters.Published.Should().Contain(["sessions.completed", "sessions.failed"])
+            .And.NotContain(SessionCounters.RemovedInstruments,
+                "2.11.0 removed sessions.timed_out and sessions.orphaned: the sweep has no timed-out or orphaned account");
     }
 }

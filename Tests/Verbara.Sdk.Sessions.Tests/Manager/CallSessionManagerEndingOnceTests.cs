@@ -206,11 +206,10 @@ public sealed class CallSessionManagerEndingOnceTests : IAsyncLifetime
 
         private bool OnCapturingThread => Environment.CurrentManagedThreadId == _thread;
 
-        /// <summary>Calls counted as ended, whatever their final state: completed, failed or timed out.</summary>
+        /// <summary>Calls counted as ended, whatever their final state: completed or failed.</summary>
         public int Endings =>
             _measurements.GetValueOrDefault("sessions.completed")
-            + _measurements.GetValueOrDefault("sessions.failed")
-            + _measurements.GetValueOrDefault("sessions.timed_out");
+            + _measurements.GetValueOrDefault("sessions.failed");
 
         public int DurationRecordings => _measurements.GetValueOrDefault("sessions.duration");
 

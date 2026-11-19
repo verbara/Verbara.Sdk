@@ -1,3 +1,5 @@
 #nullable enable
 Verbara.Sdk.Sessions.CallConnectedEvent.AgentInterface.get -> string?
 Verbara.Sdk.Sessions.CallConnectedEvent.AgentInterface.init -> void
+*REMOVED*static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsOrphaned -> System.Diagnostics.Metrics.Counter<long>!
+*REMOVED*static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsTimedOut -> System.Diagnostics.Metrics.Counter<long>!

@@ -116,60 +116,6 @@ public interface IChanWebSocketSession : IAudioStream
     ValueTask SendMarkAsync(string mark, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1,
-    /// 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: <c>command unknown</c>, no reply). Throws
-    /// <see cref="NotSupportedException"/> and writes nothing. Flow control is Asterisk's to send: read
-    /// <see cref="ChanWebSocketMediaXoff"/> and <see cref="ChanWebSocketMediaXon"/> on <see cref="ControlMessages"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, in both control formats: Asterisk answers
-    /// every XON/XOFF spelling with <c>command unknown</c> and acts on none. The method still compiles and stays on the
-    /// interface until 2.11.0, which removes it.
-    /// </para>
-    /// <para>
-    /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
-    /// deprecation with <c>&lt;NoWarn&gt;$(NoWarn);VSDK0004&lt;/NoWarn&gt;</c> instead of silencing every <c>CS0618</c>
-    /// in their tree.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="NotSupportedException">
-    /// Always: Asterisk accepts no such command. Thrown synchronously, before anything is written.
-    /// </exception>
-    [Obsolete(
-        "Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: 'command unknown', no reply), so this method throws NotSupportedException and writes nothing. Flow control is Asterisk's to send: read ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0004",
-        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
-    ValueTask SendXonAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1,
-    /// 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: <c>command unknown</c>, no reply). Throws
-    /// <see cref="NotSupportedException"/> and writes nothing. Flow control is Asterisk's to send: read
-    /// <see cref="ChanWebSocketMediaXoff"/> and <see cref="ChanWebSocketMediaXon"/> on <see cref="ControlMessages"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, in both control formats: Asterisk answers
-    /// every XON/XOFF spelling with <c>command unknown</c> and acts on none. The method still compiles and stays on the
-    /// interface until 2.11.0, which removes it.
-    /// </para>
-    /// <para>
-    /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
-    /// deprecation with <c>&lt;NoWarn&gt;$(NoWarn);VSDK0004&lt;/NoWarn&gt;</c> instead of silencing every <c>CS0618</c>
-    /// in their tree.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="NotSupportedException">
-    /// Always: Asterisk accepts no such command. Thrown synchronously, before anything is written.
-    /// </exception>
-    [Obsolete(
-        "Never acted on: chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2: 'command unknown', no reply), so this method throws NotSupportedException and writes nothing. Flow control is Asterisk's to send: read ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0004",
-        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
-    ValueTask SendXoffAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Writes a <c>SET_MEDIA_DIRECTION</c> command, which changes the direction of this channel's media. The command is
     /// JSON-only: Asterisk acts on it only in the JSON control format (measured on 22.10.1, 23.4.1, 22.12.0-rc2,
     /// 23.6.0-rc2 and 24.0.0-rc2), and the connection's format is unknown until <see cref="MediaStart"/> is read. Read

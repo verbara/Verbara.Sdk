@@ -43,7 +43,7 @@ public sealed class SweepNeighbourPinsTests : IAsyncLifetime
                 HangupCause = (HangupCause?)HangupCause.UserBusy,
                 Cause = default(string),
                 Endings = 1,
-                Counters = new CounterDeltas(Completed: 0, Failed: 1, TimedOut: 0, Orphaned: 0),
+                Counters = new CounterDeltas(Completed: 0, Failed: 1),
             },
             $"an observed hangup ends the call with the cause Asterisk gave, once. Measured: {_rig.Describe()}");
     }

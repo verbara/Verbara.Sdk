@@ -61,7 +61,7 @@ internal static class ChanWebSocketInboundReader
         return frame.Event switch
         {
             ChanWebSocketTextFrameHead.MediaStartEvent => null,
-            "DTMF_END" => new ChanWebSocketDtmf(frame.Get("digit") ?? string.Empty, DurationMs: 0)
+            "DTMF_END" => new ChanWebSocketDtmf(frame.Get("digit") ?? string.Empty)
             {
                 ChannelId = frame.Get("channel_id"),
             },

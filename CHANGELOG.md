@@ -23,6 +23,32 @@ who is affected, the compiler error and what to write instead.
 A binary built against 2.10.x that names one of these symbols fails with `MissingMethodException` or
 `TypeLoadException` when it reaches it, until it is recompiled against 2.11.0.
 
+### Changed — BREAKING: the chan_websocket and meter surface deprecated for 2.11.0 is removed (#622)
+
+The symbols of `Verbara.Sdk.Ari` and `Verbara.Sdk.Sessions` whose 2.10.0 warning said "Removed in Verbara.Sdk 2.11.0."
+are gone, and their ids `VSDK0003`, `VSDK0004` and `VSDK0006` are retired. The
+[2.11.0 migration guide](docs/guides/migration-2.11.0.md) has the details and the replacement for each.
+
+- **`IChanWebSocketSession.SendXonAsync` and `SendXoffAsync`** (`VSDK0004`). Both threw `NotSupportedException`:
+  chan_websocket has no XON/XOFF command. Flow control arrives from Asterisk as `ChanWebSocketMediaXoff` and
+  `ChanWebSocketMediaXon` on `ControlMessages`. A class that implements the interface explicitly reports `CS0539` on
+  the two members until they are deleted.
+- **`ChanWebSocketHangup` and `ChanWebSocketMediaBuffering`** (`VSDK0004`), with their `kind` rows and their
+  `ChanWebSocketJsonContext` getters. No session ever published either. JSON an application stored through the context
+  with `"kind":"hangup"` or `"kind":"media_buffering"` no longer deserializes.
+- **`ChanWebSocketDtmf.DurationMs`** (`VSDK0004`). It was always 0: `DTMF_END` carries no duration on any supported
+  version, re-measured on the GA images.
+- **The `ChanWebSocketDtmf` constructor and `Deconstruct` change, with no earlier warning:**
+  `ChanWebSocketDtmf(string Digit, int DurationMs)` becomes `ChanWebSocketDtmf(string Digit)`, and
+  `Deconstruct(out string Digit, out int DurationMs)` becomes `Deconstruct(out string Digit)`.
+- **`AudioStreamMetrics.BufferUnderruns`** (`VSDK0003`) and **`SessionMetrics.SessionsTimedOut` and
+  `SessionsOrphaned`** (`VSDK0006`). **The instruments `audio.buffer.underruns`, `sessions.timed_out` and
+  `sessions.orphaned` leave their meters.** None has recorded a measurement since 2.7.0, and `audio.buffer.underruns`
+  never did.
+
+A binary built against 2.10.x that names one of these symbols fails with `MissingMethodException`,
+`MissingFieldException` (the three meter fields) or `TypeLoadException` when it reaches it, until it is recompiled.
+
 ### Added: `CallConnectedEvent.AgentInterface` names the member whose connection the event announces
 
 `CallConnectedEvent` gains `string? AgentInterface { get; init; }`: the interface of the member whose connect the event

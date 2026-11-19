@@ -7,6 +7,10 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 |---|---|---|
 | `Verbara.Sdk.Ami` | [Six `StatusEvent` members no Asterisk fills are removed](#six-statusevent-members-no-asterisk-fills-are-removed) | removed members, BREAKING |
 | `Verbara.Sdk.Ami` | [Seven AMI types whose wire name no Asterisk knows are removed](#seven-ami-types-whose-wire-name-no-asterisk-knows-are-removed) | removed types, BREAKING |
+| `Verbara.Sdk.Ari` | [Two flow-control send methods Asterisk never acted on are removed](#two-flow-control-send-methods-asterisk-never-acted-on-are-removed) | removed members, BREAKING |
+| `Verbara.Sdk.Ari` | [Two WebSocket control records nothing published are removed](#two-websocket-control-records-nothing-published-are-removed) | removed types, BREAKING |
+| `Verbara.Sdk.Ari` | [`ChanWebSocketDtmf` carries the digit alone: its constructor and `Deconstruct` change](#chanwebsocketdtmf-carries-the-digit-alone-its-constructor-and-deconstruct-change) | removed member, changed constructor and `Deconstruct`, BREAKING |
+| `Verbara.Sdk.Ari`, `Verbara.Sdk.Sessions` | [Three meter instruments nothing records are removed](#three-meter-instruments-nothing-records-are-removed) | removed fields and meter instruments, BREAKING |
 
 ## Before you start: move every package at once
 
@@ -18,10 +22,12 @@ release; a 2.10.x package loaded next to a 2.11.0 one is not a combination anyth
 2.10.0 printed "Removed in Verbara.Sdk 2.11.0." in the warning of each symbol below, and linked the warning to its id's
 heading in the [2.10.0 guide](migration-2.10.0.md#deprecated-surface). Those symbols are gone. The ids are retired:
 nothing in the SDK carries them any more, so a `NoWarn` or `#pragma warning disable` you kept for one of them
-suppresses nothing and can be deleted.
+suppresses nothing and can be deleted. One change below had no warning: the `ChanWebSocketDtmf` constructor and
+`Deconstruct`, which lose their second value with `DurationMs`.
 
 A binary built against 2.10.x or earlier that names a removed symbol fails when it reaches it, with
-`MissingMethodException` for a removed member and `TypeLoadException` for a removed type, until it is recompiled
+`MissingMethodException` for a removed method or property, `MissingFieldException` for a removed field (the three
+meter fields below) and `TypeLoadException` for a removed type, until it is recompiled
 against 2.11.0 and the use is moved as below.
 
 ### Six `StatusEvent` members no Asterisk fills are removed
@@ -118,4 +124,173 @@ static (string? Clone, string? Original) ReadMasquerade(ManagerEvent evt) =>
     evt.EventType == "Masquerade" && evt.RawFields is { } fields
         ? (fields.GetValueOrDefault("Clone"), fields.GetValueOrDefault("Original"))
         : (null, null);
+```
+
+### Two flow-control send methods Asterisk never acted on are removed
+
+**What changed.** `IChanWebSocketSession.SendXonAsync` and `SendXoffAsync` are removed (marked with `VSDK0004` since
+2.9.0). chan_websocket has no XON/XOFF command in any spelling: every supported Asterisk answers one with
+`command unknown`, and both methods threw `NotSupportedException` and wrote nothing. Flow control is Asterisk's to
+send: it arrives on `ControlMessages` as `ChanWebSocketMediaXoff` when its queue of your audio is full, then
+`ChanWebSocketMediaXon` when it has drained.
+
+**Who is affected.** Code that calls either method, which reports `CS1061`
+(`'IChanWebSocketSession' does not contain a definition for 'SendXonAsync'`). A class of your own that implements
+`IChanWebSocketSession` explicitly (`ValueTask IChanWebSocketSession.SendXonAsync(…)`) reports `CS0539` on that member
+until you delete it; one that declares the two as ordinary public methods still compiles.
+
+**What to do.** Delete the calls, and pause or resume your audio on the messages Asterisk sends. Before (2.10.x:
+warned `VSDK0004` and threw; does not compile against 2.11.0):
+
+<!-- skip-doc-snippet -->
+```csharp
+await session.SendXoffAsync();
+```
+
+After:
+
+```csharp
+using Verbara.Sdk.Ari.Audio;
+
+static IDisposable PauseOnXoff(IChanWebSocketSession session, Action<bool> setPaused) =>
+    session.ControlMessages.Subscribe(message =>
+    {
+        if (message is ChanWebSocketMediaXoff)
+            setPaused(true);
+        else if (message is ChanWebSocketMediaXon)
+            setPaused(false);
+    });
+```
+
+### Two WebSocket control records nothing published are removed
+
+**What changed.** `ChanWebSocketHangup` and `ChanWebSocketMediaBuffering` are removed (marked with `VSDK0004` since
+2.9.0), with their `kind` rows on `ChanWebSocketControlMessage` and their `ChanWebSocketJsonContext` getters. No
+session ever published either: chan_websocket ends a call by closing the connection, never with a text message, and no
+message it sends reports a buffer fill in bytes.
+
+| Removed type | Read instead |
+|---|---|
+| `ChanWebSocketHangup` | `IAudioStream.StateChanges`: the session publishes `Disconnected` once, last, when Asterisk closes the connection |
+| `ChanWebSocketMediaBuffering` | `ChanWebSocketMediaXoff` / `ChanWebSocketMediaXon` on `ControlMessages` for flow control; `ChanWebSocketStatus.QueueLength`, the reply to `SendGetStatusAsync`, for the queue length |
+
+`ChanWebSocketMediaBufferingCompleted`, Asterisk's reply to `STOP_MEDIA_BUFFERING`, is not affected.
+
+**Who is affected.** Code that names either type: as a type it reports `CS0246`
+(`The type or namespace name 'ChanWebSocketMediaBuffering' could not be found`), and in a `case ChanWebSocketHangup:`
+label `CS0103` (`The name 'ChanWebSocketHangup' does not exist in the current context`). Code that reads
+`ChanWebSocketJsonContext.Default.ChanWebSocketHangup` or `.ChanWebSocketMediaBuffering` reports `CS1061`. JSON you
+stored through `ChanWebSocketJsonContext` with `"kind":"hangup"` or `"kind":"media_buffering"` no longer deserializes
+as `ChanWebSocketControlMessage`: the discriminator is unknown. Only an application that built these records itself
+can hold such JSON, because no session published them.
+
+**What to do.** Delete a `case` for either record; it never ran. Before (2.10.x: warned `VSDK0004`; does not compile
+against 2.11.0):
+
+<!-- skip-doc-snippet -->
+```csharp
+case ChanWebSocketHangup:
+    OnCallEnded();
+    break;
+```
+
+After, the ending read where the session publishes it:
+
+```csharp
+using Verbara.Sdk;
+using Verbara.Sdk.Ari.Audio;
+
+static IDisposable OnEnded(IAudioStream stream, Action onEnded) =>
+    stream.StateChanges.Subscribe(state =>
+    {
+        if (state == AudioStreamState.Disconnected)
+            onEnded();
+    });
+```
+
+### `ChanWebSocketDtmf` carries the digit alone: its constructor and `Deconstruct` change
+
+**What changed.** `ChanWebSocketDtmf.DurationMs` is removed (marked with `VSDK0004` since 2.9.0). It was always 0:
+chan_websocket's `DTMF_END` carries `digit` and `channel_id` only, on every supported version and in both control
+formats. The property was the record's second positional parameter, so its removal also changes two members no 2.10.x
+warning named:
+
+**The constructor `ChanWebSocketDtmf(string Digit, int DurationMs)` becomes `ChanWebSocketDtmf(string Digit)`, and
+`Deconstruct(out string Digit, out int DurationMs)` becomes `Deconstruct(out string Digit)`.**
+
+`ChannelId` stays an init member. The `asterisk.dtmf.received` activity event carries no duration tag, as before.
+
+**Who is affected.** Code that builds the record (a test double, a replay of stored messages), deconstructs it into two
+values, matches it with a two-value positional pattern, or reads `DurationMs`. Each reports a compiler error against
+2.11.0: `new ChanWebSocketDtmf("5", 0)` reports `CS1729`
+(`'ChanWebSocketDtmf' does not contain a constructor that takes 2 arguments`); `var (digit, ms) = dtmf;` and the
+pattern `ChanWebSocketDtmf(var pressed, _)` report `CS1501` (`No overload for method 'Deconstruct' takes 2 arguments`)
+with `CS8129`; and `dtmf.DurationMs` reports `CS1061`. An application that serializes the record through `ChanWebSocketJsonContext` no longer writes
+`duration_ms`.
+
+**What to do.** Drop the second value. C# has no one-value deconstruction syntax, so a `var (digit, ms) = dtmf;`
+becomes `dtmf.Deconstruct(out var digit)`, or a read of `dtmf.Digit`. Before (2.10.x; `DurationMs` warned `VSDK0004`, the constructor and
+`Deconstruct` did not; does not compile against 2.11.0):
+
+<!-- skip-doc-snippet -->
+```csharp
+var dtmf = new ChanWebSocketDtmf("5", 0);
+var (digit, ms) = dtmf;
+if (message is ChanWebSocketDtmf(var pressed, _))
+    OnDigit(pressed);
+```
+
+After:
+
+```csharp
+using Verbara.Sdk.Ari.Audio;
+
+static string? Digit(ChanWebSocketControlMessage message)
+{
+    var dtmf = new ChanWebSocketDtmf("5");
+    dtmf.Deconstruct(out var digit);
+    return message is ChanWebSocketDtmf(var pressed) ? pressed : null;
+}
+```
+
+The duration is read from the channel that received the digit, never from the WebSocket channel: the ARI
+`ChannelDtmfReceived` event of the bridged peer (`ChannelDtmfReceivedEvent.DurationMs`; seen when the peer is in
+Stasis or the application subscribes to all), or AMI `DTMFEnd` on that peer (`DtmfEndEvent.DurationMs`).
+
+### Three meter instruments nothing records are removed
+
+**What changed.** `AudioStreamMetrics.BufferUnderruns` (marked with `VSDK0003` since 2.9.0) and
+`SessionMetrics.SessionsTimedOut` and `SessionsOrphaned` (marked with `VSDK0006` since 2.9.0) are removed. Each field
+was its instrument's only creation, so **`audio.buffer.underruns` leaves the `Verbara.Sdk.Ari.Audio` meter, and
+`sessions.timed_out` and `sessions.orphaned` leave the `Verbara.Sdk.Sessions` meter.**
+
+- `audio.buffer.underruns` never recorded a measurement: the SDK has no write pump, so it never sees the far end
+  starve. No exporter has emitted a point under that name.
+- `sessions.timed_out` and `sessions.orphaned` have recorded nothing since 2.7.0, when the reconciliation sweep began
+  ending a call it finds gone as a reload ends it, counted once in `sessions.completed` or `sessions.failed`. Through
+  2.6.x the sweep added to both, so a series an exporter stored from 2.6.x or earlier keeps that history.
+
+**Who is affected.** Code that reads one of the three fields, which reports `CS0117`
+(`'SessionMetrics' does not contain a definition for 'SessionsTimedOut'`). An exporter that subscribes by meter name
+builds and runs unchanged, and no longer lists the three instruments; a dashboard panel or alert on one of them has
+nothing to read.
+
+**What to do.** Delete the reads, and the panels and alerts on the three names. Count call endings from
+`sessions.completed` and `sessions.failed`, which the sweep's endings also feed. Before (2.10.x: warned `VSDK0003` and
+`VSDK0006`; does not compile against 2.11.0):
+
+<!-- skip-doc-snippet -->
+```csharp
+var underruns = AudioStreamMetrics.BufferUnderruns;
+var timedOut = SessionMetrics.SessionsTimedOut;
+```
+
+After, the instruments that count endings:
+
+```csharp
+using System.Diagnostics.Metrics;
+using Verbara.Sdk.Sessions.Diagnostics;
+
+static (Counter<long> Completed, Counter<long> Failed) Endings() =>
+    (SessionMetrics.SessionsCompleted, SessionMetrics.SessionsFailed);
 ```

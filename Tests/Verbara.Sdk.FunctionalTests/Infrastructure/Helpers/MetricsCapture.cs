@@ -7,6 +7,7 @@ public sealed class MetricsCapture : IDisposable
     private readonly MeterListener _listener = new();
     private readonly Dictionary<string, long> _counters = [];
     private readonly Dictionary<string, double> _doubleCounters = [];
+    private readonly HashSet<string> _published = new(StringComparer.Ordinal);
     private readonly Lock _lock = new();
 
     public MetricsCapture(params string[] meterNames)
@@ -14,7 +15,10 @@ public sealed class MetricsCapture : IDisposable
         _listener.InstrumentPublished = (instrument, listener) =>
         {
             if (meterNames.Length == 0 || meterNames.Contains(instrument.Meter.Name))
+            {
+                lock (_lock) _published.Add(instrument.Name);
                 listener.EnableMeasurementEvents(instrument);
+            }
         };
         _listener.SetMeasurementEventCallback<long>(OnMeasurement);
         _listener.SetMeasurementEventCallback<int>(OnMeasurementInt);
@@ -57,6 +61,12 @@ public sealed class MetricsCapture : IDisposable
     public double GetDouble(string instrumentName)
     {
         lock (_lock) return _doubleCounters.GetValueOrDefault(instrumentName);
+    }
+
+    /// <summary>Whether a meter this capture listens to published an instrument of that name.</summary>
+    public bool WasPublished(string instrumentName)
+    {
+        lock (_lock) return _published.Contains(instrumentName);
     }
 
     public void Dispose() => _listener.Dispose();
