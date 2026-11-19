@@ -39,5 +39,8 @@ internal sealed class HandlerHold : IDisposable
     /// <summary>Lets the handler go on; fails when the hold had already run out.</summary>
     public void Release() => _hold.Release();
 
+    /// <summary>Lets the handler go on without judging the hold: for cleanup that runs however far the test got.</summary>
+    public void Free() => _hold.Free();
+
     public void Dispose() => _hold.Free();
 }

@@ -907,12 +907,10 @@ public sealed class CallSessionManagerQueueWrapUpDurationTests
     public async Task AgentComplete_ShouldLetAnotherEventOfTheCallBeHandledOnAnotherThread_WhileTheProviderIsStillAnswering()
     {
         var clock = new ThreadedTimeProvider();
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         var provider = new RecordingProvider((_, _, _) =>
         {
-            entered.TrySetResult();
-            gate.Task.Wait(Bound);
+            gate.Hold(Bound);
             return TimeSpan.FromSeconds(10);
         });
         await using var rig = await WrapUpRig.StartAsync(clock, Options(), provider, logger: null);
@@ -922,7 +920,7 @@ public sealed class CallSessionManagerQueueWrapUpDurationTests
         rig.Deliver(hangup[0], hangup[1]);
 
         var completion = Task.Run(() => rig.Deliver(hangup[2]));
-        var providerEntered = await BoundedWait.WhenAnyAsync(entered.Task, token => Task.Delay(Bound, TimeProvider.System, token)) == entered.Task; // fence-allow: GUARD-TIMEOUT — failure bound on the provider being asked, never the winning arm of a green run
+        var providerEntered = await BoundedWait.WhenAnyAsync(gate.Held, token => Task.Delay(Bound, TimeProvider.System, token)) == gate.Held; // fence-allow: GUARD-TIMEOUT — failure bound on the provider being asked, never the winning arm of a green run
         var otherHandledInTime = false;
         Task? other = null;
         if (providerEntered)
@@ -932,7 +930,7 @@ public sealed class CallSessionManagerQueueWrapUpDurationTests
             otherHandledInTime = await BoundedWait.WhenAnyAsync(other, token => Task.Delay(Bound, TimeProvider.System, token)) == other; // fence-allow: GUARD-TIMEOUT — failure bound on the other thread's frames, never the winning arm of a green run
         }
 
-        gate.TrySetResult();
+        gate.Release();
         await completion.WaitAsync(Bound);
         if (other is not null)
             await other.WaitAsync(Bound);

@@ -160,10 +160,11 @@ public sealed class StatusRefusalStateTests
             var result = await health.CheckHealthAsync(new HealthCheckContext());
             result.Status.Should().Be(HealthStatus.Healthy, "a deferred application does not retain a completed Status refusal");
             result.Data.Should().NotContainKey("status-refused");
+            gate.Release();
         }
         finally
         {
-            gate.Release();
+            gate.Free();
             await snapshot.WaitAsync(Run.Bound);
         }
         peer.Fault.Should().BeNull();

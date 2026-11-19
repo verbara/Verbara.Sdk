@@ -742,12 +742,10 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         }
         firstRig.Listener.ReadEndedBeforeUntracking = ParkPump;
         secondRig.Listener.ReadEndedBeforeUntracking = ParkPump;
-        using var releasePublication = new ManualResetEventSlim();
-        var publicationClaimed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releasePublication = new ThreadHold();
         second.CompletionStarting = () =>
         {
-            publicationClaimed.TrySetResult();
-            if (!releasePublication.Wait(Limit)) throw new TimeoutException("The target publisher was not released.");
+            if (!releasePublication.Hold(Limit)) throw new TimeoutException("The target publisher was not released.");
         };
         var secondCompletions = 0;
         var disposedInCallback = false;
@@ -766,11 +764,11 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
             await Task.WhenAll(firstClose, secondClose, bothParked.Task).WaitAsync(Limit);
             secondPublication = Task.Factory.StartNew(() => second.DisconnectAsync().AsTask().GetAwaiter().GetResult(),
                 CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
-            await publicationClaimed.Task.WaitAsync(Limit);
+            await releasePublication.Held.WaitAsync(Limit);
             await Task.Factory.StartNew(() => first.DisconnectAsync().AsTask().GetAwaiter().GetResult(),
                 CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).WaitAsync(Limit);
             var subjectFault = Record.Exception(() => second.Events.Subscribe(_ => { }).Dispose());
-            releasePublication.Set();
+            releasePublication.Release();
             await secondPublication.WaitAsync(Limit);
             using (new AssertionScope())
             {
@@ -781,7 +779,7 @@ public sealed class AriOutboundClosingTests(ITestOutputHelper output)
         }
         finally
         {
-            releasePublication.Set();
+            releasePublication.Free();
             releasePumps.TrySetResult();
             firstPeer.Abort();
             secondPeer.Abort();

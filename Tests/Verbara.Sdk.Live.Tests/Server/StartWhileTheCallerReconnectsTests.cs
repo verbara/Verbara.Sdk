@@ -126,7 +126,7 @@ public sealed class StartWhileTheCallerReconnectsTests
         }
         finally
         {
-            hold.Release();
+            hold.Free();
             await run.DisposeAsync();
 
             // The caller's connect that the test never let finish ends with the run; its outcome is not under test.
@@ -178,7 +178,7 @@ public sealed class StartWhileTheCallerReconnectsTests
         }
         finally
         {
-            hold.Release();
+            hold.Free();
             await run.DisposeAsync();
         }
     }

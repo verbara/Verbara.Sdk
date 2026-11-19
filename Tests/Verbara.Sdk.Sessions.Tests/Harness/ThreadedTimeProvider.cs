@@ -46,8 +46,7 @@ internal sealed class ThreadedTimeProvider : TimeProvider
         var readHold = Interlocked.Exchange(ref _readHold, null);
         if (readHold is not null)
         {
-            readHold.Reach();
-            if (!readHold.WaitForRelease(Bound))
+            if (!readHold.Hold(Bound))
                 throw new TimeoutException("A held clock read was never released.");
         }
 
@@ -128,8 +127,7 @@ internal sealed class ThreadedTimeProvider : TimeProvider
             {
                 if (hold is not null)
                 {
-                    hold.Reach();
-                    if (!hold.WaitForRelease(Bound))
+                    if (!hold.Hold(Bound))
                         throw new TimeoutException("A held timer callback was never released.");
                 }
 
@@ -203,15 +201,14 @@ internal sealed class ThreadedTimeProvider : TimeProvider
 /// </summary>
 internal sealed class FireHold
 {
-    private readonly TaskCompletionSource _reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly ThreadHold _hold = new();
 
     /// <summary>Completes when the held callback has been dispatched and is parked.</summary>
-    public Task Reached => _reached.Task;
+    public Task Reached => _hold.Held;
 
-    public void Release() => _released.TrySetResult();
+    /// <summary>Lets the held callback go on; fails when the hold had already run out (see <see cref="ThreadHold.Release"/>).</summary>
+    public void Release() => _hold.Release();
 
-    internal void Reach() => _reached.TrySetResult();
-
-    internal bool WaitForRelease(TimeSpan bound) => _released.Task.Wait(bound);
+    /// <summary>Completes <see cref="Reached"/> and blocks the callback until <see cref="Release"/> or <paramref name="bound"/>.</summary>
+    internal bool Hold(TimeSpan bound) => _hold.Hold(bound);
 }

@@ -255,7 +255,7 @@ public sealed class VerbaraServerReconcileQueuesTests
         finally
         {
             run.Server.Queues.CallerJoined -= onJoined;
-            gate.Release();
+            gate.Free();
         }
     }
 
@@ -313,7 +313,7 @@ public sealed class VerbaraServerReconcileQueuesTests
         {
             run.Server.Queues.CallerJoined -= onJoined;
             run.Server.Queues.MemberAdded -= onMember;
-            gate.Release();
+            gate.Free();
         }
     }
 

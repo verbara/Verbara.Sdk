@@ -1,4 +1,4 @@
-namespace Verbara.Sdk.Live.Tests.Harness;
+namespace Verbara.Sdk.Tests.Shared.Threading;
 
 /// <summary>
 /// Holds the code that raises a hook until the test releases it: the hook calls <see cref="HoldAsync"/> (an awaitable
@@ -126,6 +126,13 @@ internal sealed class ThreadHold
     /// </summary>
     public static void Signal(TaskCompletionSource signal) =>
         ThreadPool.UnsafeQueueUserWorkItem(static s => s.TrySetResult(), signal, preferLocal: false);
+
+    /// <summary>
+    /// Completes <paramref name="signal"/> with <paramref name="result"/> from the pool's global queue, for a hook that
+    /// blocks its thread right after (see <see cref="Signal(TaskCompletionSource)"/>).
+    /// </summary>
+    public static void Signal<T>(TaskCompletionSource<T> signal, T result) =>
+        ThreadPool.UnsafeQueueUserWorkItem(static s => s.Signal.TrySetResult(s.Result), (Signal: signal, Result: result), preferLocal: false);
 
     /// <summary>
     /// Blocks the calling thread until <paramref name="released"/> completes or <paramref name="bound"/> runs out, in a

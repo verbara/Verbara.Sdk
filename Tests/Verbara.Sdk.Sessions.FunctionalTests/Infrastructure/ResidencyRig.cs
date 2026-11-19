@@ -196,8 +196,7 @@ internal sealed class ReadHold
 {
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(10);
 
-    private readonly TaskCompletionSource _reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly ThreadHold _hold = new();
     private int _taken;
     private int _parked;
     private int _readsWhileHeld;
@@ -206,18 +205,20 @@ internal sealed class ReadHold
     public int ReadsWhileHeld => Volatile.Read(ref _readsWhileHeld);
 
     /// <summary>Waits until the first reader is parked; false if none arrived within the bound.</summary>
-    public bool WaitUntilReached() => _reached.Task.Wait(Bound);
+    public bool WaitUntilReached() => _hold.Held.Wait(Bound);
 
-    /// <summary>Lets the parked reader finish its read.</summary>
-    public void Release() => _released.TrySetResult();
+    /// <summary>Lets the parked reader finish its read; fails when the hold had already run out (see <see cref="ThreadHold.Release"/>).</summary>
+    public void Release() => _hold.Release();
+
+    /// <summary>Lets the parked reader finish its read without judging the hold: for cleanup.</summary>
+    public void Free() => _hold.Free();
 
     internal void OnRead()
     {
         if (Interlocked.CompareExchange(ref _taken, 1, 0) == 0)
         {
             Volatile.Write(ref _parked, 1);
-            _reached.TrySetResult();
-            _released.Task.Wait(Bound);
+            _hold.Hold(Bound);
             Volatile.Write(ref _parked, 0);
             return;
         }

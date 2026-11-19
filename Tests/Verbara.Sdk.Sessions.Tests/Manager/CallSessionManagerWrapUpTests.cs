@@ -606,19 +606,20 @@ public sealed class CallSessionManagerWrapUpTests
     /// <summary>Blocks inside <c>OnNext</c> on the first <see cref="CallWrapUpEvent"/> until released.</summary>
     private sealed class GatedSubscriber : IObserver<SessionDomainEvent>
     {
-        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly ThreadHold _hold = new();
+        private int _taken;
 
-        public Task Entered => _entered.Task;
+        public Task Entered => _hold.Held;
 
-        public void Release() => _released.TrySetResult();
+        /// <summary>Lets the subscriber go on; fails when the hold had already run out (see <see cref="ThreadHold.Release"/>).</summary>
+        public void Release() => _hold.Release();
 
         public void OnNext(SessionDomainEvent value)
         {
-            if (value is not CallWrapUpEvent || !_entered.TrySetResult())
+            if (value is not CallWrapUpEvent || Interlocked.Exchange(ref _taken, 1) != 0)
                 return;
 
-            if (!_released.Task.Wait(Bound))
+            if (!_hold.Hold(Bound))
                 throw new TimeoutException("The gated subscriber was never released.");
         }
 

@@ -162,6 +162,13 @@ internal sealed class QueueAdmissionRun : IAsyncDisposable
 
     public void Release() => _firstGate.Release();
     public void ReleaseSecond() => _secondGate.Release();
+
+    /// <summary>Lets both held dispatches go on without judging the holds: for cleanup.</summary>
+    public void Free()
+    {
+        _firstGate.Free();
+        _secondGate.Free();
+    }
     public void AnswerQueue() => _queueAnswer.TrySetResult();
 
     public async Task FinishAsync(bool liveJoin = true)

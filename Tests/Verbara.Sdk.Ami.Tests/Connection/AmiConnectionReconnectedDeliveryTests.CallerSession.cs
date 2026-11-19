@@ -19,13 +19,11 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
     public async Task CallerReconnected_ShouldNameTheNewSessionBehindItsLossAndRaiseNoReconnected_WhenTheCallerReconnects()
     {
         await using var rig = new LostSessionRig();
-        using var gate = new ManualResetEventSlim(false);
-        var lostHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         var delivered = new ConcurrentQueue<string>();
         rig.Connection.Lost += _ =>
         {
-            lostHeld.TrySetResult();
-            gate.Wait(Bound);
+            gate.Hold(Bound);
             delivered.Enqueue("lost");
         };
         rig.Connection.Reconnected += () => delivered.Enqueue("reconnected");
@@ -33,11 +31,11 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
 
         await rig.ConnectFirstAsync();
         await rig.LoseTheFirstSessionAsync();
-        await lostHeld.Task.WaitAsync(Bound);
+        await gate.Held.WaitAsync(Bound);
         await rig.Connection.ConnectAsync().AsTask().WaitAsync(Bound);
         var pendingBehindTheLoss = rig.Connection.ReconnectPending;
         var deliveredBehindTheLoss = string.Join(", ", delivered);
-        gate.Set();
+        gate.Release();
         await rig.Connection.PendingNotifications.WaitAsync(Bound);
 
         new
@@ -83,22 +81,20 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
     public async Task CallerReconnected_ShouldQueueNothingAndLeaveNothingPending_WhenNothingListensAtTheLogin()
     {
         await using var rig = new LostSessionRig();
-        using var gate = new ManualResetEventSlim(false);
-        var lostHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         rig.Connection.Lost += _ =>
         {
-            lostHeld.TrySetResult();
-            gate.Wait(Bound);
+            gate.Hold(Bound);
         };
 
         await rig.ConnectFirstAsync();
         await rig.LoseTheFirstSessionAsync();
-        await lostHeld.Task.WaitAsync(Bound);
+        await gate.Held.WaitAsync(Bound);
         await rig.Connection.ConnectAsync().AsTask().WaitAsync(Bound);
         var pending = rig.Connection.ReconnectPending;
         var delivered = new ConcurrentQueue<long>();
         rig.Connection.CallerReconnected += delivered.Enqueue;
-        gate.Set();
+        gate.Release();
         await rig.Connection.PendingNotifications.WaitAsync(Bound);
 
         new { Pending = pending, Delivered = delivered.ToArray() }.Should().BeEquivalentTo(
@@ -170,8 +166,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
     public async Task CallerReconnected_ShouldNotBeDelivered_WhenItsSessionIsNoLongerCurrent()
     {
         await using var rig = new LostSessionRig();
-        using var gate = new ManualResetEventSlim(false);
-        var lostHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         var delivered = new ConcurrentQueue<long>();
         var lostCalls = 0;
         rig.Connection.Lost += _ =>
@@ -179,21 +174,20 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
             if (Interlocked.Increment(ref lostCalls) != 1)
                 return;
 
-            lostHeld.TrySetResult();
-            gate.Wait(Bound);
+            gate.Hold(Bound);
         };
         rig.Connection.CallerReconnected += delivered.Enqueue;
 
         await rig.ConnectFirstAsync();
         await rig.LoseTheFirstSessionAsync();
-        await lostHeld.Task.WaitAsync(Bound);
+        await gate.Held.WaitAsync(Bound);
         await rig.Connection.ConnectAsync().AsTask().WaitAsync(Bound);
         rig.Sockets.Created[1].CloseFromPeer();
         // Read directly: the held queue delivers no StateChanged.
         SpinWait.SpinUntil(() => rig.Connection.State != AmiConnectionState.Connected, Bound) // fence-allow: GUARD-TIMEOUT — failure bound on an observed state, never the winning arm of a green run
             .Should().BeTrue("the peer closed the second session");
         await rig.Connection.ConnectAsync().AsTask().WaitAsync(Bound);
-        gate.Set();
+        gate.Release();
         await rig.Connection.PendingNotifications.WaitAsync(Bound);
 
         delivered.Should().Equal([3L], "the session lost before its notice was delivered has no reload owed to it");
@@ -203,22 +197,20 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
     public async Task CallerReconnected_ShouldNotBeDelivered_WhenTheCallerEndsTheConnectionFirst()
     {
         await using var rig = new LostSessionRig();
-        using var gate = new ManualResetEventSlim(false);
-        var lostHeld = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         var delivered = new ConcurrentQueue<long>();
         rig.Connection.Lost += _ =>
         {
-            lostHeld.TrySetResult();
-            gate.Wait(Bound);
+            gate.Hold(Bound);
         };
         rig.Connection.CallerReconnected += delivered.Enqueue;
 
         await rig.ConnectFirstAsync();
         await rig.LoseTheFirstSessionAsync();
-        await lostHeld.Task.WaitAsync(Bound);
+        await gate.Held.WaitAsync(Bound);
         await rig.Connection.ConnectAsync().AsTask().WaitAsync(Bound);
         await rig.Connection.DisposeAsync().AsTask().WaitAsync(Bound);
-        gate.Set();
+        gate.Release();
         await rig.Connection.PendingNotifications.WaitAsync(Bound);
 
         delivered.Should().BeEmpty("an ending recorded while the notice waited ends the connection for good");

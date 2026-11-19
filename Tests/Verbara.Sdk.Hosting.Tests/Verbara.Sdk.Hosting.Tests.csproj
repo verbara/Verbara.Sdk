@@ -17,7 +17,8 @@
     <Compile Include="..\Verbara.Sdk.Live.Tests\Harness\BootingAsterisk.cs" Link="Harness\BootingAsterisk.cs" />
     <Compile Include="..\Verbara.Sdk.Live.Tests\Harness\FakeTimeProvider.cs" Link="Harness\FakeTimeProvider.cs" />
     <Compile Include="..\Verbara.Sdk.Live.Tests\Harness\HeldDispatch.cs" Link="Harness\HeldDispatch.cs" />
-    <Compile Include="..\Verbara.Sdk.Live.Tests\Harness\ThreadHold.cs" Link="Harness\ThreadHold.cs" />
+    <Compile Include="..\Shared\Threading\ThreadHold.cs" Link="Shared\Threading\ThreadHold.cs" />
+    <Using Include="Verbara.Sdk.Tests.Shared.Threading" />
     <Compile Include="..\Verbara.Sdk.Live.Tests\Server\ReloadEndingMarkerContractTests.cs" Link="Reconciliation\ReloadEndingMarkerContractTests.cs" />
   </ItemGroup>
   <ItemGroup>

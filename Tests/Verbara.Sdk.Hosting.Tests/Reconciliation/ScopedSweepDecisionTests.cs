@@ -103,8 +103,9 @@ public sealed class ScopedSweepDecisionTests
             await Task.Run(() => rig.Manager.AttachToServer(replacement, "a")).WaitAsync(SweepRig.Bound);
             rig.Log.Entries.Count(e => e.Level == LogLevel.Error && e.Values.TryGetValue("SessionId", out var id)
                 && Equals(id, call.SessionId)).Should().Be(1);
+            parked.Release();
         }
-        finally { parked.Release(); await held.WaitAsync(SweepRig.Bound); }
+        finally { parked.Free(); await held.WaitAsync(SweepRig.Bound); }
         rig.Manager.IsPendingDecision(call).Should().BeTrue();
         if (disconnected) first.ConnectionState = AmiConnectionState.Disconnected;
         if (unreported)
@@ -223,13 +224,16 @@ public sealed class ScopedSweepDecisionTests
 internal sealed class SweepDecisionGate : IDisposable
 {
     public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly ManualResetEventSlim _release = new();
+    private readonly ThreadHold _release = new();
     public void Hold()
     {
-        Entered.TrySetResult();
+        ThreadHold.Signal(Entered);
         // fence-allow: GUARD-TIMEOUT — bounds a causal notification hold; the test explicitly releases it
-        if (!_release.Wait(SweepRig.Bound)) throw new TimeoutException("sweep decision notification was not released");
+        if (!_release.Hold(SweepRig.Bound)) throw new TimeoutException("sweep decision notification was not released");
     }
-    public void Release() => _release.Set();
-    public void Dispose() => _release.Dispose();
+    /// <summary>Lets the notification go on; fails when the hold had already run out (see <see cref="ThreadHold.Release"/>).</summary>
+    public void Release() => _release.Release();
+    /// <summary>Lets the notification go on without judging the hold: for cleanup.</summary>
+    public void Free() => _release.Free();
+    public void Dispose() => _release.Free();
 }

@@ -215,9 +215,8 @@ public class WebSocketAudioServerTests
         var (started, port) = await StartOnLoopbackAsync();
         await using var server = started;
         var disposedSignal = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var subscriberEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var subscriberLeft = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var release = new ManualResetEventSlim();
+        var release = new ThreadHold();
         // Observers run in subscription order: the first sees the session, the second parks the
         // connection's handler inside OnNext until the test releases it.
         using var tracking = server.OnStreamConnected.Subscribe(stream => disposedSignal.TrySetResult(WhenDisposed(stream)));
@@ -225,8 +224,7 @@ public class WebSocketAudioServerTests
         {
             try
             {
-                subscriberEntered.TrySetResult();
-                release.Wait();
+                release.Hold(Timeout.InfiniteTimeSpan);
             }
             finally
             {
@@ -238,7 +236,7 @@ public class WebSocketAudioServerTests
         {
             using var client = new ClientWebSocket();
             await client.ConnectAsync(ChannelUri(port, "ch-blocked"), CancellationToken.None);
-            await subscriberEntered.Task.WaitAsync(WaitLimit);
+            await release.Held.WaitAsync(WaitLimit);
             var disposed = await disposedSignal.Task.WaitAsync(WaitLimit);
 
             using var stopToken = new CancellationTokenSource();
@@ -251,11 +249,12 @@ public class WebSocketAudioServerTests
             disposed.IsCompleted.Should().BeTrue("StopAsync disposes the registered session once its wait is cancelled");
             server.ActiveStreamCount.Should().Be(0);
             server.IsRunning.Should().BeFalse();
+            release.Release();
         }
         finally
         {
-            release.Set();
-            if (subscriberEntered.Task.IsCompleted)
+            release.Free();
+            if (release.Held.IsCompleted)
                 await subscriberLeft.Task.WaitAsync(WaitLimit);
         }
     }
@@ -346,12 +345,10 @@ public class WebSocketAudioServerTests
         // time the emission happens, so the client's connect completes before the park.
         var (started, port) = await StartOnLoopbackAsync();
         await using var server = started;
-        var handlerParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var release = new ManualResetEventSlim();
+        var release = new ThreadHold();
         using var parking = server.OnStreamConnected.Subscribe(_ =>
         {
-            handlerParked.TrySetResult();
-            release.Wait();
+            release.Hold(Timeout.InfiniteTimeSpan);
         });
 
         bool stopWasStillRunningWhenRead;
@@ -360,7 +357,7 @@ public class WebSocketAudioServerTests
         {
             using var client = new ClientWebSocket();
             await client.ConnectAsync(ChannelUri(port, "ch-stopping"), CancellationToken.None);
-            await handlerParked.Task.WaitAsync(WaitLimit);
+            await release.Held.WaitAsync(WaitLimit);
 
             // Act — StopAsync runs synchronously as far as its first await, so by the time it
             // hands back its ValueTask the listener is already down: the stop has unambiguously
@@ -369,12 +366,12 @@ public class WebSocketAudioServerTests
             stopWasStillRunningWhenRead = !stop.IsCompleted;
             runningWhileStopping = server.IsRunning;
 
-            release.Set();
+            release.Release();
             await stop.WaitAsync(WaitLimit);
         }
         finally
         {
-            release.Set();
+            release.Free();
         }
 
         // Assert
@@ -400,8 +397,7 @@ public class WebSocketAudioServerTests
         using var accepts = new TestOwnedAccepts(handFirstOverOnceReadable: true);
         await using var server = CreateServer(PortTheOsPicks, mediaStartTimeout: TimeSpan.Zero);
         server.AcceptOverride = accepts.AcceptAsync;
-        using var release = new ManualResetEventSlim();
-        var firstParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new ThreadHold();
         var firstLeft = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var secondAnnounced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var seen = 0;
@@ -416,15 +412,13 @@ public class WebSocketAudioServerTests
 
             try
             {
-                firstParked.TrySetResult();
-                release.Wait(ParkLimit);
+                release.Hold(ParkLimit);
             }
             finally
             {
                 firstLeft.TrySetResult();
             }
         });
-        void ReleaseParked() => release.Set();
         await server.StartAsync();
         using var bound = new CancellationTokenSource(ParkLimit);
 
@@ -436,18 +430,19 @@ public class WebSocketAudioServerTests
             // those bytes are readable on the server's side.
             using var first = await RawWebSocketPeer.ConnectAsync(accepts.Port, bound.Token);
             _ = first.UpgradeAsync("ch-first", bound.Token);
-            await firstParked.Task.WaitAsync(WaitLimit);
+            await release.Held.WaitAsync(WaitLimit);
 
             // Act — an ordinary second connection while the first observer is parked.
             using var second = await RawWebSocketPeer.ConnectAsync(accepts.Port, bound.Token);
             _ = second.UpgradeAsync("ch-second", bound.Token);
             announcedInTime = await BoundedWait.WhenAnyAsync(secondAnnounced.Task, token => Task.Delay(WaitLimit, token)) == secondAnnounced.Task; // fence-allow: GUARD-TIMEOUT — failure bound on the second announcement; a green run leaves on the announcement
             firstStillParked = !firstLeft.Task.IsCompleted;
+            release.Release();
         }
         finally
         {
-            ReleaseParked();
-            if (firstParked.Task.IsCompleted)
+            release.Free();
+            if (release.Held.IsCompleted)
                 await firstLeft.Task.WaitAsync(WaitLimit);
         }
 
@@ -503,8 +498,7 @@ public class WebSocketAudioServerTests
         using var accepts = new TestOwnedAccepts();
         await using var server = CreateServer(PortTheOsPicks);
         server.AcceptOverride = accepts.AcceptAsync;
-        using var release = new ManualResetEventSlim();
-        var firstParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new ThreadHold();
         var firstLeft = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var secondAnnounced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var seen = 0;
@@ -518,8 +512,7 @@ public class WebSocketAudioServerTests
 
             try
             {
-                firstParked.TrySetResult();
-                release.Wait(ParkLimit);
+                release.Hold(ParkLimit);
             }
             finally
             {
@@ -538,7 +531,7 @@ public class WebSocketAudioServerTests
             await accepts.NextAskAsync();
             first.AnswerCloseWhenReceived();
             await first.UpgradeAsync("ch-held", bound.Token);
-            await firstParked.Task.WaitAsync(WaitLimit);
+            await release.Held.WaitAsync(WaitLimit);
 
             using var second = await RawWebSocketPeer.ConnectAsync(accepts.Port, bound.Token);
             await accepts.NextAskAsync();
@@ -553,13 +546,13 @@ public class WebSocketAudioServerTests
             stopFinishedWhileParked = await BoundedWait.WhenAnyAsync(stop, token => Task.Delay(StopObservationWindow, token)) == stop; // fence-allow: SETTLE — the negative "has not finished while the observer is parked" needs a bounded window; the release below decides the positive
             parkedWhenRead = !firstLeft.Task.IsCompleted;
 
-            release.Set();
+            release.Release();
             await stop.WaitAsync(WaitLimit);
         }
         finally
         {
-            release.Set();
-            if (firstParked.Task.IsCompleted)
+            release.Free();
+            if (release.Held.IsCompleted)
                 await firstLeft.Task.WaitAsync(WaitLimit);
         }
 
@@ -1061,8 +1054,8 @@ public class WebSocketAudioServerTests
         await using var server = started;
         using var announcements = new Announcements(server);
 
-        var closedButNotReleased = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var resume = new ManualResetEventSlim();
+        var resume = new ThreadHold();
+        var parks = 0;
         var announced = 0;
         using var parking = server.OnStreamConnected.Subscribe(stream =>
         {
@@ -1071,11 +1064,8 @@ public class WebSocketAudioServerTests
 
             stream.StateChanges.Subscribe(state =>
             {
-                if (state is AudioStreamState.Disconnected or AudioStreamState.Error
-                    && closedButNotReleased.TrySetResult())
-                {
-                    resume.Wait(WaitLimit);
-                }
+                if (state is AudioStreamState.Disconnected or AudioStreamState.Error && Interlocked.Exchange(ref parks, 1) == 0)
+                    resume.Hold(WaitLimit);
             });
         });
 
@@ -1088,13 +1078,14 @@ public class WebSocketAudioServerTests
         {
             // Act — the second client closes and is parked before its release; then the first closes
             await second.SendCloseAsync();
-            await closedButNotReleased.Task.WaitAsync(WaitLimit);
+            await resume.Held.WaitAsync(WaitLimit);
             await first.CloseAsync();
             holderAfterFirstClosed = server.GetStream("ch-skip");
+            resume.Release();
         }
         finally
         {
-            resume.Set();
+            resume.Free();
         }
 
         await second.Disposed.WaitAsync(WaitLimit);

@@ -70,20 +70,27 @@ internal sealed class EndingBaselineRig : IAsyncDisposable
 internal sealed class NotificationGate : IDisposable
 {
     public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly ThreadHold _release = new();
     public void Hold()
     {
         ThreadHold.Signal(Entered);
-        if (!ThreadHold.Block(_release.Task, EndingBaselineRig.Bound)) throw new TimeoutException("notification gate was not released");
+        if (!_release.Hold(EndingBaselineRig.Bound)) throw new TimeoutException("notification gate was not released");
     }
-    public void Release() => _release.TrySetResult();
-    public void Dispose() => _release.TrySetResult();
+    /// <summary>Lets the notification go on; fails when the hold had already run out (see <see cref="ThreadHold.Release"/>).</summary>
+    public void Release() => _release.Release();
+    /// <summary>Lets the notification go on without judging the hold: for cleanup.</summary>
+    public void Free() => _release.Free();
+    public void Dispose() => _release.Free();
     public static async Task RunAsync(NotificationGate[] gates, List<Task> workers, Func<Task> body)
     {
-        try { await body(); }
+        try
+        {
+            await body();
+            foreach (var gate in gates) gate.Release();
+        }
         finally
         {
-            foreach (var gate in gates) gate.Release();
+            foreach (var gate in gates) gate.Free();
             await Task.WhenAll(workers).WaitAsync(EndingBaselineRig.Bound);
         }
     }

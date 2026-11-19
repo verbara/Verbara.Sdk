@@ -100,12 +100,12 @@ public sealed partial class AmiConnectionBufferedEventsTests
         using var subscription = connection.Subscribe(observer);
         var socket = await ConnectAsync(connection, factory, peerCts);
         (await socket.WriteEventAsync("FullyBooted")).Should().BeTrue("the peer sends the first event");
-        (await CompletesWithinBoundAsync(observer.First.Entered)).Should().BeTrue("the observer receives it and holds its OnNext");
+        (await CompletesWithinBoundAsync(observer.First.Held)).Should().BeTrue("the observer receives it and holds its OnNext");
         await BufferAsync(connection, socket, Buffered, peerCts);
 
         var asked = observer.Count;
         var end = connection.DisposeAsync().AsTask();
-        observer.First.Open();
+        observer.First.Release();
         var ended = await CompletesWithinBoundAsync(end);
 
         using (new AssertionScope())
@@ -741,7 +741,7 @@ public sealed partial class AmiConnectionBufferedEventsTests
     {
         private int _count;
 
-        public HeldDispatch First { get; } = new();
+        public ThreadHold First { get; } = new();
 
         public int Count => Volatile.Read(ref _count);
 
@@ -750,8 +750,7 @@ public sealed partial class AmiConnectionBufferedEventsTests
             if (Interlocked.Increment(ref _count) != 1)
                 return;
 
-            First.Enter();
-            First.Gate.Wait(Bound);
+            First.Hold(Bound);
         }
 
         public void OnError(Exception error)

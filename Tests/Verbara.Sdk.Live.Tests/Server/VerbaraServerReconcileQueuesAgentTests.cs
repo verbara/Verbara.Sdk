@@ -183,10 +183,11 @@ public sealed class VerbaraServerReconcileQueuesAgentTests
                 rig.Changes(Agent).Should().Be(1, "exactly one state-changed notification");
                 rig.AssertNoAgentsListingAndCountEqualsTable();
             }
+            gate.Release();
         }
         finally
         {
-            gate.Release();
+            gate.Free();
         }
     }
 

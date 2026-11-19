@@ -80,7 +80,7 @@ public sealed class SessionEventEpochClaimTests
         finally
         {
             run.Server.Channels.Events.Posted = null;
-            park.Release();
+            park.Free();
             await reconciliation.WaitAsync(Run.Bound);
         }
     }
@@ -132,11 +132,12 @@ public sealed class SessionEventEpochClaimTests
                 (started.Epoch?.AmiSession, started.Epoch?.DroppedBefore).Should().Be((1L, 0L),
                     "an adopted live arrival carries its own event's mark, which predates the drop");
             }
+            park.Release();
         }
         finally
         {
             run.Server.Channels.Events.Posted = null;
-            park.Release();
+            park.Free();
         }
     }
 
@@ -186,7 +187,7 @@ public sealed class SessionEventEpochClaimTests
         finally
         {
             run.Server.Channels.Events.Posted = null;
-            park.Release();
+            park.Free();
             await reconciliation.WaitAsync(Run.Bound);
         }
     }
@@ -228,6 +229,8 @@ public sealed class SessionEventEpochClaimTests
         }
 
         public void Release() => _hold.Release();
+
+        public void Free() => _hold.Free();
 
         public void Dispose() => _hold.Free();
     }
