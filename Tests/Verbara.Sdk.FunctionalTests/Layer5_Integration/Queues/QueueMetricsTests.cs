@@ -62,14 +62,14 @@ public sealed class QueueMetricsTests : FunctionalTestBase
         });
 
         // Wait for join
-        var joinResult = await Task.WhenAny(callerJoinedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var joinResult = await BoundedWait.WhenAnyAsync(callerJoinedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         joinResult.Should().Be(callerJoinedTcs.Task, "caller should join the queue");
 
         // Hangup to trigger leave
         await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
 
         // Wait for leave
-        var leaveResult = await Task.WhenAny(callerLeftTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var leaveResult = await BoundedWait.WhenAnyAsync(callerLeftTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         leaveResult.Should().Be(callerLeftTcs.Task, "caller should leave the queue");
 
         // Verify counters
@@ -118,7 +118,7 @@ public sealed class QueueMetricsTests : FunctionalTestBase
         });
 
         // Wait for join
-        var joinResult = await Task.WhenAny(callerJoinedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var joinResult = await BoundedWait.WhenAnyAsync(callerJoinedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         joinResult.Should().Be(callerJoinedTcs.Task, "caller should join the queue");
 
         // Let the caller wait for a bit to accumulate wait time
@@ -128,7 +128,7 @@ public sealed class QueueMetricsTests : FunctionalTestBase
         await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
 
         // Wait for leave
-        var leaveResult = await Task.WhenAny(callerLeftTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var leaveResult = await BoundedWait.WhenAnyAsync(callerLeftTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         leaveResult.Should().Be(callerLeftTcs.Task, "caller should leave the queue");
 
         // The histogram live.queue.wait_time is recorded as a double in OnCallerLeft.

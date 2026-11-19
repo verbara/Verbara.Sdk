@@ -55,7 +55,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
         });
 
         // Wait for channel to be established
-        var channelResult = await Task.WhenAny(channelTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        var channelResult = await BoundedWait.WhenAnyAsync(channelTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(5), token));
         channelResult.Should().Be(channelTcs.Task, "originating Local/100@test-functional must report the originated channel within 5 s");
 
         var channelName = (await channelTcs.Task).Channel!;
@@ -109,7 +109,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
             ActionId = "mixmon-stop-01"
         });
 
-        var channelResult = await Task.WhenAny(channelTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        var channelResult = await BoundedWait.WhenAnyAsync(channelTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(5), token));
         channelResult.Should().Be(channelTcs.Task, "originating Local/100@test-functional must report the originated channel within 5 s");
 
         var channelName = (await channelTcs.Task).Channel!;
@@ -171,7 +171,7 @@ public sealed class MixMonitorTests : FunctionalTestBase
             ActionId = "mixmon-mute-01"
         });
 
-        var channelResult = await Task.WhenAny(channelTcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        var channelResult = await BoundedWait.WhenAnyAsync(channelTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(5), token));
         channelResult.Should().Be(channelTcs.Task, "originating Local/100@test-functional must report the originated channel within 5 s");
 
         var channelName = (await channelTcs.Task).Channel!;

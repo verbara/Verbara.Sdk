@@ -93,7 +93,7 @@ public sealed class SseDefaultKestrelTests
         // Nothing is published until the headers are read; the shipped 15 s heartbeat is longer than the bound.
         using var abort = new CancellationTokenSource();
         var responseTask = host.OpenStreamAsync(string.Empty, abort.Token);
-        var headersArrived = await Task.WhenAny(responseTask, Task.Delay(Bound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+        var headersArrived = await BoundedWait.WhenAnyAsync(responseTask, token => Task.Delay(Bound, token)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
         using var response = headersArrived ? await responseTask : null;
 
         var subscribed = response?.StatusCode == HttpStatusCode.OK
@@ -143,7 +143,7 @@ public sealed class SseFrameTests
 
         using var abort = new CancellationTokenSource();
         var responseTask = host.OpenStreamAsync(string.Empty, abort.Token);
-        var headersArrived = await Task.WhenAny(responseTask, Task.Delay(Bound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+        var headersArrived = await BoundedWait.WhenAnyAsync(responseTask, token => Task.Delay(Bound, token)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
         using var response = headersArrived ? await responseTask : null;
         var subscribed = response?.StatusCode == HttpStatusCode.OK
             && await host.Bus.Subscribers.WaitUntilAsync(static n => n >= 1, Bound);
@@ -188,7 +188,7 @@ public sealed class SseFrameTests
 
         using var abort = new CancellationTokenSource();
         var responseTask = host.OpenStreamAsync(string.Empty, abort.Token);
-        var headersArrived = await Task.WhenAny(responseTask, Task.Delay(Bound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+        var headersArrived = await BoundedWait.WhenAnyAsync(responseTask, token => Task.Delay(Bound, token)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
         using var response = headersArrived ? await responseTask : null;
         var subscribed = response?.StatusCode == HttpStatusCode.OK
             && await host.Bus.Subscribers.WaitUntilAsync(static c => c >= 1, Bound);
@@ -278,7 +278,7 @@ public sealed class SseStoppedReaderTests
 
         using var abort = new CancellationTokenSource();
         var responseTask = host.OpenStreamAsync(string.Empty, abort.Token);
-        var headersArrived = await Task.WhenAny(responseTask, Task.Delay(Bound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+        var headersArrived = await BoundedWait.WhenAnyAsync(responseTask, token => Task.Delay(Bound, token)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
         using var response = headersArrived ? await responseTask : null;
 
         // The SSE client reads nothing after the headers.
@@ -340,7 +340,7 @@ public sealed class SseAbortTests
 
             using var abort = new CancellationTokenSource();
             var responseTask = host.OpenStreamAsync(string.Empty, abort.Token);
-            var headersArrived = await Task.WhenAny(responseTask, Task.Delay(Bound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+            var headersArrived = await BoundedWait.WhenAnyAsync(responseTask, token => Task.Delay(Bound, token)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
             var response = headersArrived ? await responseTask : null;
             var status = response?.StatusCode;
             var subscribed = status == HttpStatusCode.OK
@@ -507,7 +507,7 @@ public sealed class SseStreamBoundTests
 
         using var abort = new CancellationTokenSource();
         var responseTask = host.OpenStreamAsync(string.Empty, abort.Token);
-        var headersArrived = await Task.WhenAny(responseTask, Task.Delay(Bound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+        var headersArrived = await BoundedWait.WhenAnyAsync(responseTask, token => Task.Delay(Bound, token)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
         using var response = headersArrived ? await responseTask : null;
         var subscribed = response?.StatusCode == HttpStatusCode.OK
             && await host.Bus.Subscribers.WaitUntilAsync(static c => c >= 1, Bound);
@@ -585,7 +585,7 @@ public sealed class SseStreamBoundTests
 
         using var abort = new CancellationTokenSource();
         var responseTask = host.OpenStreamAsync(string.Empty, abort.Token);
-        var headersArrived = await Task.WhenAny(responseTask, Task.Delay(Bound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+        var headersArrived = await BoundedWait.WhenAnyAsync(responseTask, token => Task.Delay(Bound, token)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
         using var response = headersArrived ? await responseTask : null;
         var subscribed = response?.StatusCode == HttpStatusCode.OK
             && await host.Bus.Subscribers.WaitUntilAsync(static c => c >= 1, Bound);
@@ -747,7 +747,7 @@ public sealed class SseStreamBoundTests
 
         using var abort = new CancellationTokenSource();
         var responseTask = host.OpenStreamAsync(string.Empty, abort.Token);
-        var headersArrived = await Task.WhenAny(responseTask, Task.Delay(Bound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+        var headersArrived = await BoundedWait.WhenAnyAsync(responseTask, token => Task.Delay(Bound, token)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
         using var response = headersArrived ? await responseTask : null;
         var status = response?.StatusCode;
         var subscribed = status == HttpStatusCode.OK

@@ -21,4 +21,8 @@
     <PackageReference Include="coverlet.collector" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\Timing\BoundedWait.cs" Link="Shared\Timing\BoundedWait.cs" />
+    <Using Include="Verbara.Sdk.Tests.Shared.Timing" />
+  </ItemGroup>
 </Project>

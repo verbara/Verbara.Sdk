@@ -211,7 +211,7 @@ public sealed class ExistingCallAdmissionConcurrencyTests
             rig.Manager.DetachFromServer("server", release ? DetachedCalls.Release : DetachedCalls.Keep);
             if (replace) rig.Manager.AttachToServer(sameInstance ? rig.Run.Server : replacement.Server, "server");
             // fence-allow: GUARD-TIMEOUT — the detached admission must stop before the deliberately unanswered Status.
-            stoppedBeforeAnswer = await Task.WhenAny(admission, Task.Delay(TimeSpan.FromSeconds(3))) == admission;
+            stoppedBeforeAnswer = await BoundedWait.WhenAnyAsync(admission, token => Task.Delay(TimeSpan.FromSeconds(3), token)) == admission;
             if (stoppedBeforeAnswer) await admission;
             rig.Events.OfType<CallStartedEvent>().Should().BeEmpty();
         }
@@ -273,7 +273,7 @@ public sealed class ExistingCallAdmissionConcurrencyTests
             await held.Entered.Task.WaitAsync(Run.Bound);
             workers.Add(Task.Run(() => rig.Hangup("X")));
             // fence-allow: GUARD-TIMEOUT — a subscriber must return before the walk can obtain this channel lock.
-            returnedWhileLocked = await Task.WhenAny(returned.Task, Task.Delay(TimeSpan.FromSeconds(3))) == returned.Task;
+            returnedWhileLocked = await BoundedWait.WhenAnyAsync(returned.Task, token => Task.Delay(TimeSpan.FromSeconds(3), token)) == returned.Task;
             held.Release();
             await Task.WhenAll(workers).WaitAsync(Run.Bound);
             admission.Should().NotBeNull();

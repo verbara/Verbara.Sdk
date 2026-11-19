@@ -336,7 +336,7 @@ public sealed class BridgeLifecycleTests : FunctionalTestBase
             // Wait (event-driven) for all 3 channels to join — up to 15 s.
             // Using ConfbridgeJoinEvent instead of BridgeNumChannels avoids flakiness caused
             // by native↔softmix bridge technology switches that change BridgeUniqueid.
-            var result = await Task.WhenAny(threeJoinedTcs.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+            var result = await BoundedWait.WhenAnyAsync(threeJoinedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(15), token));
             result.Should().Be(threeJoinedTcs.Task,
                 "3 ConfbridgeJoin events must fire for conference 'test-bridge-05' when 3 channels originate into it");
         }

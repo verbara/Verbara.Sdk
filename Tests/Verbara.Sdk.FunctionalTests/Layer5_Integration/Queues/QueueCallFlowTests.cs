@@ -73,14 +73,14 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
             });
 
             // Verify caller joins the queue
-            var joinResult = await Task.WhenAny(joinTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+            var joinResult = await BoundedWait.WhenAnyAsync(joinTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
             joinResult.Should().Be(joinTcs.Task, "caller should join the queue");
 
             // Hangup all channels to trigger leave
             await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
 
             // Verify caller leaves
-            var leaveResult = await Task.WhenAny(leaveTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+            var leaveResult = await BoundedWait.WhenAnyAsync(leaveTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
             leaveResult.Should().Be(leaveTcs.Task, "caller should leave the queue after hangup");
         }
         finally
@@ -149,7 +149,7 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
             }
 
             // Wait for all 3 callers to join
-            var allJoined = await Task.WhenAny(allJoinedTcs.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+            var allJoined = await BoundedWait.WhenAnyAsync(allJoinedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(15), token));
             allJoined.Should().Be(allJoinedTcs.Task, "all 3 callers should join the queue");
 
             // Verify positions are increasing (1, 2, 3 or similar)
@@ -199,7 +199,7 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
         await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
 
         // Wait for the abandon event
-        var result = await Task.WhenAny(abandonTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var result = await BoundedWait.WhenAnyAsync(abandonTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         result.Should().Be(abandonTcs.Task, "QueueCallerAbandonEvent should fire after caller hangs up from empty queue");
 
         var abandonEvent = await abandonTcs.Task;
@@ -256,7 +256,7 @@ public sealed class QueueCallFlowTests : FunctionalTestBase
             });
 
             // Wait for caller to join
-            var joinResult = await Task.WhenAny(callerJoinedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+            var joinResult = await BoundedWait.WhenAnyAsync(callerJoinedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
             joinResult.Should().Be(callerJoinedTcs.Task, "caller should join queue");
 
             // Verify queue manager has the queue with a member

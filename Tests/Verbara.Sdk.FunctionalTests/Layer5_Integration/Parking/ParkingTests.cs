@@ -59,7 +59,7 @@ public sealed class ParkingTests : FunctionalTestBase
         });
 
         // Wait for the channel to be established
-        var channelResult = await Task.WhenAny(originatedChannel.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var channelResult = await BoundedWait.WhenAnyAsync(originatedChannel.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         channelResult.Should().Be(originatedChannel.Task, "originating Local/100@test-functional must report the originated channel within 10 s");
 
         var channel = await originatedChannel.Task;
@@ -74,7 +74,7 @@ public sealed class ParkingTests : FunctionalTestBase
         });
 
         // Wait for ParkedCallEvent
-        var waitResult = await Task.WhenAny(parkedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var waitResult = await BoundedWait.WhenAnyAsync(parkedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         waitResult.Should().Be(parkedTcs.Task, "a redirect to 750 must park the call in the parkedcalls lot and produce a ParkedCall event within 10 s");
 
         var parked = await parkedTcs.Task;
@@ -127,7 +127,7 @@ public sealed class ParkingTests : FunctionalTestBase
             ActionId = "park-test-02"
         });
 
-        var channelResult = await Task.WhenAny(originatedChannel.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var channelResult = await BoundedWait.WhenAnyAsync(originatedChannel.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         channelResult.Should().Be(originatedChannel.Task, "originating Local/100@test-functional must report the originated channel within 10 s");
 
         var channel = await originatedChannel.Task;
@@ -140,7 +140,7 @@ public sealed class ParkingTests : FunctionalTestBase
             Priority = 1
         });
 
-        var parkedResult = await Task.WhenAny(parkedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var parkedResult = await BoundedWait.WhenAnyAsync(parkedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         parkedResult.Should().Be(parkedTcs.Task, "a redirect to 750 must park the call in the parkedcalls lot and produce a ParkedCall event within 10 s");
 
         var parked = await parkedTcs.Task;
@@ -161,7 +161,7 @@ public sealed class ParkingTests : FunctionalTestBase
             ActionId = "unpark-test-02"
         });
 
-        var unparkedResult = await Task.WhenAny(unparkedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var unparkedResult = await BoundedWait.WhenAnyAsync(unparkedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         unparkedResult.Should().Be(unparkedTcs.Task, "dialling the parked space must unpark the call and produce an UnParkedCall event within 10 s");
 
         var unparked = await unparkedTcs.Task;
@@ -208,7 +208,7 @@ public sealed class ParkingTests : FunctionalTestBase
             ActionId = "park-test-03"
         });
 
-        var channelResult = await Task.WhenAny(originatedChannel.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var channelResult = await BoundedWait.WhenAnyAsync(originatedChannel.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         channelResult.Should().Be(originatedChannel.Task, "originating Local/100@test-functional must report the originated channel within 10 s");
 
         var channel = await originatedChannel.Task;
@@ -222,11 +222,11 @@ public sealed class ParkingTests : FunctionalTestBase
             Priority = 1
         });
 
-        var parkedResult = await Task.WhenAny(parkedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var parkedResult = await BoundedWait.WhenAnyAsync(parkedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         parkedResult.Should().Be(parkedTcs.Task, "a redirect to 750 must park the call in the parkedcalls lot and produce a ParkedCall event within 10 s");
 
         // Wait for parkingtime (10s) + buffer — total 15s wait for timeout event
-        var timeoutResult = await Task.WhenAny(timeoutTcs.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+        var timeoutResult = await BoundedWait.WhenAnyAsync(timeoutTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(15), token));
         timeoutResult.Should().Be(timeoutTcs.Task, "the parkedcalls lot has parkingtime 10, so a ParkedCallTimeOut event must arrive within 15 s");
 
         var timedOut = await timeoutTcs.Task;
@@ -273,7 +273,7 @@ public sealed class ParkingTests : FunctionalTestBase
             ActionId = "park-test-04"
         });
 
-        var channelResult = await Task.WhenAny(originatedChannel.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var channelResult = await BoundedWait.WhenAnyAsync(originatedChannel.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         channelResult.Should().Be(originatedChannel.Task, "originating Local/100@test-functional must report the originated channel within 10 s");
 
         var channel = await originatedChannel.Task;
@@ -287,7 +287,7 @@ public sealed class ParkingTests : FunctionalTestBase
             Priority = 1
         });
 
-        var parkedResult = await Task.WhenAny(parkedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var parkedResult = await BoundedWait.WhenAnyAsync(parkedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         parkedResult.Should().Be(parkedTcs.Task, "a redirect to 750 must park the call in the parkedcalls lot and produce a ParkedCall event within 10 s");
 
         var parked = await parkedTcs.Task;
@@ -309,7 +309,7 @@ public sealed class ParkingTests : FunctionalTestBase
             // Channel may already be gone
         }
 
-        var giveUpResult = await Task.WhenAny(giveUpTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var giveUpResult = await BoundedWait.WhenAnyAsync(giveUpTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         giveUpResult.Should().Be(giveUpTcs.Task, "hanging up a parked channel must produce a ParkedCallGiveUp event within 10 s");
 
         var giveUp = await giveUpTcs.Task;

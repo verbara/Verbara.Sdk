@@ -397,7 +397,7 @@ public sealed class CallSessionManagerWrapUpTests
         }
 
         var fired = clock.Advance(WrapUp);
-        (await Task.WhenAny(gate.Entered, Task.Delay(Bound, TimeProvider.System))) // fence-allow: GUARD-TIMEOUT — failure bound on the close reaching the subscriber, never the winning arm of a green run
+        (await BoundedWait.WhenAnyAsync(gate.Entered, token => Task.Delay(Bound, TimeProvider.System, token))) // fence-allow: GUARD-TIMEOUT — failure bound on the close reaching the subscriber, never the winning arm of a green run
             .Should().BeSameAs(gate.Entered, "premise: the wrap-up's close reached the subscriber. " + Describe(rig));
 
         // Started on the test's thread: the disposal runs synchronously up to its first wait that has not completed,
@@ -464,7 +464,7 @@ public sealed class CallSessionManagerWrapUpTests
 
         var hold = clock.HoldNextFire();
         var firstFired = clock.Advance(WrapUp);
-        (await Task.WhenAny(hold.Reached, Task.Delay(Bound, TimeProvider.System))) // fence-allow: GUARD-TIMEOUT — failure bound on the parked callback, never the winning arm of a green run
+        (await BoundedWait.WhenAnyAsync(hold.Reached, token => Task.Delay(Bound, TimeProvider.System, token))) // fence-allow: GUARD-TIMEOUT — failure bound on the parked callback, never the winning arm of a green run
             .Should().BeSameAs(hold.Reached, "premise: the first wrap-up's timer fired and its callback is parked. "
                 + Describe(rig));
 
@@ -472,7 +472,7 @@ public sealed class CallSessionManagerWrapUpTests
         // callback reports instead of hanging the run.
         var replacedAt = clock.GetUtcNow();
         var replacement = Task.Run(() => rig.Deliver(MemberHangsUp(Queue, "c2", "m2", Member)));
-        var replacedInTime = await Task.WhenAny(replacement, Task.Delay(Bound, TimeProvider.System)) == replacement; // fence-allow: GUARD-TIMEOUT — failure bound on the replacement, never the winning arm of a green run
+        var replacedInTime = await BoundedWait.WhenAnyAsync(replacement, token => Task.Delay(Bound, TimeProvider.System, token)) == replacement; // fence-allow: GUARD-TIMEOUT — failure bound on the replacement, never the winning arm of a green run
         hold.Release();
         await Task.WhenAll(firstFired).WaitAsync(Bound);
         var afterStaleCallback = rig.WrapUps.ToArray();
@@ -514,7 +514,7 @@ public sealed class CallSessionManagerWrapUpTests
         // detaching the servers cannot stop. Disposal runs to its end while it is parked.
         var read = clock.HoldNextRead();
         var delivery = Task.Run(() => rig.Deliver(hangup[2]));
-        (await Task.WhenAny(read.Reached, Task.Delay(Bound, TimeProvider.System))) // fence-allow: GUARD-TIMEOUT — failure bound on the parked handler, never the winning arm of a green run
+        (await BoundedWait.WhenAnyAsync(read.Reached, token => Task.Delay(Bound, TimeProvider.System, token))) // fence-allow: GUARD-TIMEOUT — failure bound on the parked handler, never the winning arm of a green run
             .Should().BeSameAs(read.Reached, "premise: the AgentComplete's handler is parked at its clock read. "
                 + Describe(rig));
         await rig.DisposeManagerAsync().AsTask().WaitAsync(Bound);

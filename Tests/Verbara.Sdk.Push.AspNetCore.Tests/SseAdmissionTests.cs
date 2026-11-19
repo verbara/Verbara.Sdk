@@ -83,7 +83,7 @@ public sealed class SseAdmissionTests
 
         using var abort = new CancellationTokenSource();
         var responseTask = host.OpenStreamAsync(expected.Query, abort.Token);
-        var headersArrived = await Task.WhenAny(responseTask, Task.Delay(HeadersBound)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
+        var headersArrived = await BoundedWait.WhenAnyAsync(responseTask, token => Task.Delay(HeadersBound, token)) == responseTask; // fence-allow: GUARD-TIMEOUT — failure bound on the response headers, never the winning arm of a green run
         using var response = headersArrived ? await responseTask : null;
 
         var status = response?.StatusCode;

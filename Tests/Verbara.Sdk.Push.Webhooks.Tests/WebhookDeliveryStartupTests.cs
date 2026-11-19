@@ -39,14 +39,14 @@ public sealed class WebhookDeliveryStartupTests
             await StartCallGatedBus.CallStartAsync(() => run.StartServiceAsync(CancellationToken.None));
 
             await run.PublishAsync(FirstEvent, topicPath: "startup.evt");
-            e1WasDispatched = await Task.WhenAny(e1Dispatched.Task, Task.Delay(GuardRun.Bound)) == e1Dispatched.Task; // fence-allow: GUARD-TIMEOUT — failure bound on a dispatch signal, never the winning arm of a green run
+            e1WasDispatched = await BoundedWait.WhenAnyAsync(e1Dispatched.Task, token => Task.Delay(GuardRun.Bound, token)) == e1Dispatched.Task; // fence-allow: GUARD-TIMEOUT — failure bound on a dispatch signal, never the winning arm of a green run
         }
         finally
         {
             gated!.Release();
         }
 
-        subscribed = await Task.WhenAny(run.Bus.Subscribed, Task.Delay(GuardRun.Bound)) == run.Bus.Subscribed; // fence-allow: GUARD-TIMEOUT — failure bound on a subscription signal, never the winning arm of a green run
+        subscribed = await BoundedWait.WhenAnyAsync(run.Bus.Subscribed, token => Task.Delay(GuardRun.Bound, token)) == run.Bus.Subscribed; // fence-allow: GUARD-TIMEOUT — failure bound on a subscription signal, never the winning arm of a green run
         await run.PublishAsync(SecondEvent, topicPath: "startup.evt");
         e2Delivered = await run.Endpoint.To("s-startup", SecondEvent).WaitForAsync(1, GuardRun.Bound);
         e1Delivered = await run.Endpoint.To("s-startup", FirstEvent).WaitForAsync(1, GuardRun.Bound);

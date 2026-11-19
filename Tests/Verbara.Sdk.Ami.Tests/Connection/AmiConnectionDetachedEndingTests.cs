@@ -72,7 +72,7 @@ public sealed class AmiConnectionDetachedEndingTests
         (await socket.WriteEventAsync("UserEvent", [new("UserEvent", "one")])).Should().BeTrue("the peer sends event 1");
         (await socket.WriteEventAsync("UserEvent", [new("UserEvent", "two")])).Should().BeTrue("the peer sends event 2");
         var dispose = await disposeCalled.Task.WaitAsync(Bound);
-        await Task.WhenAny(dispose, Task.Delay(SettleWindow)); // fence-allow: SETTLE — the window in which today's dispose completes without waiting for the held dispatch
+        await BoundedWait.WhenAnyAsync(dispose, token => Task.Delay(SettleWindow, token)); // fence-allow: SETTLE — the window in which today's dispose completes without waiting for the held dispatch
         secondGate.TrySetResult();
         var waited = !await disposeCompletedWhenSecondReturned.Task.WaitAsync(Bound);
         await dispose.WaitAsync(Bound);

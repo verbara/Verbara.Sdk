@@ -48,7 +48,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
         });
 
         // Wait for CHAN_END which is the final CEL event in a call
-        var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        var result = await BoundedWait.WhenAnyAsync(chanEndReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(30), token));
         result.Should().Be(chanEndReceived.Task, "ext 101 answers, waits 5 s and hangs up, so the CEL stream must report CHAN_END within 30 s");
 
         // Allow a brief moment for any trailing events to arrive
@@ -90,7 +90,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
             ActionId = "cel-linkedid-01"
         });
 
-        var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        var result = await BoundedWait.WhenAnyAsync(chanEndReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(30), token));
         result.Should().Be(chanEndReceived.Task, "ext 101 answers, waits 5 s and hangs up, so the CEL stream must report CHAN_END within 30 s");
 
         await Task.Delay(TimeSpan.FromMilliseconds(500));
@@ -147,7 +147,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
             ActionId = "cel-monotonic-01"
         });
 
-        var result = await Task.WhenAny(chanEndReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        var result = await BoundedWait.WhenAnyAsync(chanEndReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(30), token));
         result.Should().Be(chanEndReceived.Task, "ext 101 answers, waits 5 s and hangs up, so the CEL stream must report this call's LINKEDID_END within 30 s");
 
         // The call's CEL events in the order they arrived — not sorted: the order is the claim.
@@ -214,7 +214,7 @@ public sealed class CelSequenceTests : FunctionalTestBase
             });
 
             // Wait for at least one CEL event to confirm CEL is firing
-            var result = await Task.WhenAny(chanStartReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+            var result = await BoundedWait.WhenAnyAsync(chanStartReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(15), token));
             result.Should().Be(chanStartReceived.Task, "an originate into the queue must make the CEL stream report CHAN_START within 15 s");
 
             // Allow events to accumulate for a moment

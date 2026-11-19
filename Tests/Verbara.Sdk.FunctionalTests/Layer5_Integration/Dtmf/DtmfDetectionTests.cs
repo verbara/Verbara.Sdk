@@ -80,7 +80,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
 
         // Wait for channel to be answered
-        var channelResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var channelResult = await BoundedWait.WhenAnyAsync(channelUp.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         channelResult.Should().Be(channelUp.Task, "ext 100 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
@@ -94,9 +94,9 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
             Receive = false
         });
 
-        var beginResult = await Task.WhenAny(beginReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var beginResult = await BoundedWait.WhenAnyAsync(beginReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         beginResult.Should().Be(beginReceived.Task, "the digit PlayDtmf sends on the ;1 half must arrive on the ;2 half as a DtmfBegin within 10 s; DTMF events seen: {0}", string.Join("; ", seen));
-        var endResult = await Task.WhenAny(endReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var endResult = await BoundedWait.WhenAnyAsync(endReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         endResult.Should().Be(endReceived.Task, "the digit PlayDtmf sends on the ;1 half must arrive on the ;2 half as a DtmfEnd within 10 s; DTMF events seen: {0}", string.Join("; ", seen));
 
         ((await beginReceived.Task).RawFields?.GetValueOrDefault("Digit")).Should().Be("5", "the DtmfBegin must carry the digit played");
@@ -141,7 +141,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
             ActionId = "dtmf-all-digits-01"
         });
 
-        var channelResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var channelResult = await BoundedWait.WhenAnyAsync(channelUp.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         channelResult.Should().Be(channelUp.Task, "ext 100 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
@@ -205,7 +205,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
             ActionId = "dtmf-dir-recv-01"
         });
 
-        var channelResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var channelResult = await BoundedWait.WhenAnyAsync(channelUp.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         channelResult.Should().Be(channelUp.Task, "ext 100 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
@@ -219,7 +219,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
             Receive = true
         });
 
-        var result = await Task.WhenAny(endReceived.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var result = await BoundedWait.WhenAnyAsync(endReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         result.Should().Be(endReceived.Task, "PlayDtmf with Receive=true on an Up channel must produce a DtmfEnd within 10 s");
 
         var endEvent = await endReceived.Task;
@@ -271,7 +271,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
             ActionId = "dtmf-dir-sent-01"
         });
 
-        var bridged = await Task.WhenAny(callerEnter.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var bridged = await BoundedWait.WhenAnyAsync(callerEnter.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         bridged.Should().Be(callerEnter.Task, "ext 170 dials ext 171, which answers, so the caller must enter a bridge within 10 s");
         var caller = await callerEnter.Task;
         var other = enters.FirstOrDefault(e => e.BridgeUniqueid == caller.BridgeUniqueid && e.UniqueId != callId);
@@ -355,7 +355,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
         });
 
         // The last digit arrives about 6.3 s after the originate; 15 s bounds the failure.
-        var result = await Task.WhenAny(allDigitsReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+        var result = await BoundedWait.WhenAnyAsync(allDigitsReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(15), token));
         result.Should().Be(allDigitsReceived.Task,
             "each half of the call must report the eleven digits the other half sends within 15 s; ;1 half: [{0}], ;2 half: [{1}]",
             string.Join(",", firstHalfDigits), string.Join(",", secondHalfDigits));
@@ -418,7 +418,7 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
             ActionId = "dtmf-read-01"
         });
 
-        var channelResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var channelResult = await BoundedWait.WhenAnyAsync(channelUp.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         channelResult.Should().Be(channelUp.Task, "ext 155 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
@@ -434,14 +434,14 @@ public sealed class DtmfDetectionTests : FunctionalTestBase
             Receive = true
         });
 
-        var result = await Task.WhenAny(dtmfEnd.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var result = await BoundedWait.WhenAnyAsync(dtmfEnd.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         result.Should().Be(dtmfEnd.Task, "PlayDtmf with Receive=true into the channel running Read must produce a DtmfEnd on that channel within 10 s");
 
         var endEvent = await dtmfEnd.Task;
         (endEvent.RawFields?.GetValueOrDefault("Digit")).Should().Be("7", "the DtmfEnd must carry the digit PlayDtmf sent");
         (endEvent.RawFields?.GetValueOrDefault("Channel")).Should().Be(channelName, "the DtmfEnd must come from the channel running Read");
 
-        var read = await Task.WhenAny(readResult.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var read = await BoundedWait.WhenAnyAsync(readResult.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         read.Should().Be(readResult.Task, "Read() must set its RESULT variable when it returns, within 10 s");
         (await readResult.Task).Should().Be("7", "Read() must consume the digit '7'");
     }

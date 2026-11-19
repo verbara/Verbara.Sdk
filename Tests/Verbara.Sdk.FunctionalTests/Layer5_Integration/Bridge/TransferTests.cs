@@ -73,7 +73,7 @@ public sealed class TransferTests : FunctionalTestBase
             ActionId = "blind-redirect-01"
         });
 
-        var hold = await Task.WhenAny(holding.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var hold = await BoundedWait.WhenAnyAsync(holding.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         hold.Should().Be(holding.Task, "the originated channel runs ext 100, which reports a NewExten for its Wait within 10 s");
         var targetChannel = await holding.Task;
 
@@ -89,7 +89,7 @@ public sealed class TransferTests : FunctionalTestBase
         await connection.SendActionAsync(redirect);
 
         // Only the redirect can put this call in ext 161: it was running ext 100's Wait(30).
-        var reached = await Task.WhenAny(reached161.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        var reached = await BoundedWait.WhenAnyAsync(reached161.Task, token => Task.Delay(TimeSpan.FromSeconds(5), token));
         reached.Should().Be(reached161.Task,
             "RedirectAction to ext 161 must make the redirected channel run ext 161, reported as a NewExten on that channel within 5 s");
         var newExten = await reached161.Task;
@@ -132,7 +132,7 @@ public sealed class TransferTests : FunctionalTestBase
 
         await OriginateTwoPartyBridgeAsync(connection, callId, "blind-transfer-evt-01");
 
-        var bridgeResult = await Task.WhenAny(bridged.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var bridgeResult = await BoundedWait.WhenAnyAsync(bridged.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         bridgeResult.Should().Be(bridged.Task, "ext 170 dials ext 171, which answers, so the caller must enter a two-party bridge within 10 s");
         var enter = await bridged.Task;
 
@@ -144,7 +144,7 @@ public sealed class TransferTests : FunctionalTestBase
         });
         response.Response.Should().Be("Success", "a BlindTransfer of a party of a two-party Dial bridge must be accepted: {0}", response.Message);
 
-        var transferResult = await Task.WhenAny(blindTransfer.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        var transferResult = await BoundedWait.WhenAnyAsync(blindTransfer.Task, token => Task.Delay(TimeSpan.FromSeconds(5), token));
         transferResult.Should().Be(blindTransfer.Task, "an accepted BlindTransfer must fire a BlindTransfer event naming its transferer within 5 s");
 
         var transferEvent = await blindTransfer.Task;
@@ -206,7 +206,7 @@ public sealed class TransferTests : FunctionalTestBase
             Priority = 1
         });
 
-        var reached = await Task.WhenAny(reached161.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        var reached = await BoundedWait.WhenAnyAsync(reached161.Task, token => Task.Delay(TimeSpan.FromSeconds(5), token));
         reached.Should().Be(reached161.Task, "the redirect must make the channel run ext 161, reported as a NewExten within 5 s");
 
         // Allow ChannelManager to process the state update

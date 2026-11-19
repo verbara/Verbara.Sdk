@@ -83,7 +83,7 @@ public class CartesiaSpeechSynthesizerTests : IAsyncLifetime
         await synth.SynthesizeAsync("dos", AudioFormat.Slin16Mono8kHz).ToListAsync();
 
         var ids = _server.ReceivedJsonMessages
-            .Select(m => JsonDocument.Parse(m).RootElement.GetProperty("context_id").GetString())
+            .Select(m => JsonElement.Parse(m).GetProperty("context_id").GetString())
             .ToList();
 
         ids.Should().HaveCount(2);

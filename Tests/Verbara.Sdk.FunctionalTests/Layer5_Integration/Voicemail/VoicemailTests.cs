@@ -68,7 +68,7 @@ public sealed class VoicemailTests : FunctionalTestBase
         });
 
         // The caller hangs up after 3 s; the message is saved and announced right after.
-        var result = await Task.WhenAny(messageWaiting.Task, Task.Delay(TimeSpan.FromSeconds(15))); // fence-allow: GUARD-TIMEOUT — failure bound on an observed condition; a green run leaves on the condition
+        var result = await BoundedWait.WhenAnyAsync(messageWaiting.Task, token => Task.Delay(TimeSpan.FromSeconds(15), token)); // fence-allow: GUARD-TIMEOUT — failure bound on an observed condition; a green run leaves on the condition
         result.Should().Be(messageWaiting.Task,
             "a 3 s message left in mailbox 9002 must fire a MessageWaiting event for 9002@default within 15 s");
 

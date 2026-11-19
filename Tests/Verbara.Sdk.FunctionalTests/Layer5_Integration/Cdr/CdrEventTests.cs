@@ -45,7 +45,7 @@ public sealed class CdrEventTests : FunctionalTestBase
         });
 
         // CDR fires after hangup; Wait(5) + processing time = up to 30s
-        var result = await Task.WhenAny(cdrReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        var result = await BoundedWait.WhenAnyAsync(cdrReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(30), token));
         result.Should().Be(cdrReceived.Task, "ext 101 answers, waits 5 s and hangs up, so cdr_manager must report a Cdr event within 30 s");
 
         var cdr = await cdrReceived.Task;
@@ -96,7 +96,7 @@ public sealed class CdrEventTests : FunctionalTestBase
             ActionId = "cdr-unanswered-01"
         });
 
-        var result = await Task.WhenAny(cdrReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+        var result = await BoundedWait.WhenAnyAsync(cdrReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(15), token));
         result.Should().Be(cdrReceived.Task, "ext 131 runs Congestion() on a channel it never answers, so cdr_manager must report its Cdr within 15 s");
 
         var cdr = await cdrReceived.Task;
@@ -129,7 +129,7 @@ public sealed class CdrEventTests : FunctionalTestBase
             ActionId = "cdr-timestamps-01"
         });
 
-        var result = await Task.WhenAny(cdrReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        var result = await BoundedWait.WhenAnyAsync(cdrReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(30), token));
         result.Should().Be(cdrReceived.Task, "ext 101 answers, waits 5 s and hangs up, so cdr_manager must report a Cdr event within 30 s");
 
         var cdr = await cdrReceived.Task;
@@ -208,10 +208,10 @@ public sealed class CdrEventTests : FunctionalTestBase
             ActionId = "cdr-disposition-busy"
         });
 
-        var busyResult = await Task.WhenAny(busyReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+        var busyResult = await BoundedWait.WhenAnyAsync(busyReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(15), token));
         busyResult.Should().Be(busyReceived.Task, "ext 130 runs Busy() on a channel it never answers, so cdr_manager must report its Cdr within 15 s");
 
-        var answeredResult = await Task.WhenAny(answeredReceived.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        var answeredResult = await BoundedWait.WhenAnyAsync(answeredReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(30), token));
         answeredResult.Should().Be(answeredReceived.Task, "ext 101 answers, waits 5 s and hangs up, so cdr_manager must report its Cdr within 30 s");
 
         (await answeredReceived.Task).Disposition.Should().Be("ANSWERED", "ext 101 answers the call");
