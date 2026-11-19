@@ -100,11 +100,12 @@ The pin does not make the fleet one machine. Under it the hosted runs have lande
 models (EPYC 9V45, 9V74, 7763, Xeon 6975P-C), and on 2026-11-11 an EPYC 7763 read
 `ChannelManagerBenchmark.Update1000ChannelStates` 26.4% over its baseline with the code unchanged
 (an interleaved local run against the code of the previous 7763 run read 1.007 and 1.025). Its band
-and `Create1000Channels`' are therefore **provisional** and wider than the rest (35% and 40%);
+and `Create1000Channels`' are therefore wider than the rest (35% and 40%);
 `_channel_manager_widened_bands_note` in `baseline.json` carries the runs, the ratios and what the
-widening stops the gate from seeing. A comparison of a reference build against this one inside the
-same job, on the same host, is what replaces them: it runs now, observing, and is described under
-[In-job comparison against the reference tag](#in-job-comparison-against-the-reference-tag-observing).
+widening stops the gate from seeing. They were provisional until a comparison of a reference build
+against this one inside the same job, on the same host, enforced; it does since 2026-11-19, judges
+both rows on time, and is described under
+[In-job comparison against the reference tag](#in-job-comparison-against-the-reference-tag).
 
 ## The pinned SDK and runtime
 
@@ -262,7 +263,7 @@ version, or carries a key the comparator does not check, and a malformed `unband
 `sources` row declares, or a key that is also in `benchmarks`) and fails the job in **both** modes — a misconfigured guard reading green is the
 `|| true` hole wearing a different hat.
 
-## In-job comparison against the reference tag (observing)
+## In-job comparison against the reference tag
 
 No band that covers four CPU models sees a 10-20% time regression: the SLOWER bar sits +29% to +80%
 over a row's usual reading on most hosts. So, after the absolute gate, the weekly job measures the
@@ -342,13 +343,13 @@ read the `abab` block of `baseline.json`.
 - **Moving the reference tag** at a release is a PR that changes `abab.reference_tag`, removes the
   `accepted` entries measured against the old tag, and says so.
 - **The switch.** `PERF_ABAB_ENFORCE` in the job `env:` of `.github/workflows/perf-regression.yml`
-  is `'false'`: the comparison writes its section of the run summary, `perf-abab-report.md` and
-  `perf-abab.json`, and cannot fail the job, even on exit 2. Its only values are `'true'` and
+  is `'true'` since 2026-11-19: SLOWER, MORE-BYTES and the comparison's structural failures fail
+  the job. The comparison writes its section of the run summary, `perf-abab-report.md` and
+  `perf-abab.json` in both modes; set back to `'false'`, it cannot fail the job, even on exit 2. Its only values are `'true'` and
   `'false'`: the comparator refuses any other spelling (exit 2), because the steps'
   `continue-on-error` compares with the exact string `'true'`. It is independent of
-  `PERF_GATE_ENFORCE`, and its result does not file the breach issue. It is flipped only after five
-  consecutive runs met the prediction below, written before them. Flipped, SLOWER, MORE-BYTES and
-  its structural failures fail the job.
+  `PERF_GATE_ENFORCE`, and its result does not file the breach issue. It was flipped after five
+  consecutive runs met the prediction below, written before them.
 
 ### Before the flip: the prediction and the flip rule (third series)
 
@@ -464,6 +465,37 @@ rounds or launches, a timeout, a fix for P5 or P6) needs a fresh series of five 
 changed configuration, judged by a prediction written before them. The runs that motivated a
 change never count as its validation. If everything holds, the PR that flips the switch also
 records the evidence in the ADR-0042 addendum and states the fate of the two provisional bands.
+
+### The result (third series)
+
+Five consecutive A/A runs on `perf/abab-validation-3` (runs 44445323031, 44455236182, 44465047964,
+44474374249 and 44485419806, 2026-11-19, on EPYC 7763, 9V74 and 9V45 hosts), after the C1
+dispatch (44435524176). Judged twice, by two scripts written apart, which agree on every clause:
+
+- **C1** held: `ParseStasisStart` SLOWER at g 1.2327 (rounds 1.210, 1.193, 1.298), nothing else
+  SLOWER or FASTER.
+- **P1** held: 39 judged rows per run, none SLOWER, FASTER or UNCONFIRMED.
+- **P2** held: 0 of 195 g outside [0.909, 1.10] (min 0.942, max 1.053); per run, the p95 of
+  |ln g| 0.024 to 0.052 against 0.058, the median 0.004 to 0.017 against 0.020.
+- **P3** held: R(5)/R(1) 0.980 to 1.003; median |ln r_k| 0.85 to 0.96 times the self-ratio's.
+- **P4** held: 36 rows with bytes, every exactly gated one at a difference of 0 in every round.
+- **P5** held: 0 structural, 0 blind, the lists equal, every invocation `LaunchCount=2`, and only
+  `EnqueueAndConsume1000Events` not judged by an override.
+- **P6** held: jobs 75 to 86 min against 105, the in-job phase 62 to 68 min against 80, the
+  longest invocation 688 s, none timed out.
+- **P7** held: no row with an out-of-band g or an UNCONFIRMED verdict; 6 lone rounds in all, at
+  most one per row and run.
+
+So `PERF_ABAB_ENFORCE` is `'true'`. **The two provisional bands** (`Update1000ChannelStates` 35%,
+`Create1000Channels` 40%) stay at their width and stop being provisional. Both rows are judged on
+time in the job in every run (g 0.995 to 1.007 and 0.998 to 1.024), while the absolute gate in
+the same runs read them at 44 to 74 us and 270 to 544 us with the code unchanged: the band measures the
+fleet, the comparison measures the code. Narrowed back to 15% and 30%, the EPYC 7763 hosts would
+put them at their edge again (in this series Create read +18% and +25% there, Update +8% and
++12%; on 2026-11-11, +29% and +26%). What the width costs:
+a drift under 10% per release is judged against the previous tag only, so it can accumulate up to
+the band before the absolute gate sees it. They become provisional again if `PERF_ABAB_ENFORCE`
+goes back to `'false'` or either row gets `judge_time: false`.
 
 ## Current status: ENFORCING
 

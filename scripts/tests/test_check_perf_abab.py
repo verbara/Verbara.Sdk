@@ -1363,9 +1363,9 @@ class CommittedAbabContractTests(unittest.TestCase):
     def test_Workflow_ShouldDeclareTheAbabSwitchOnce(self):
         self.assertEqual(1, len(re.findall(r"(?m)^\s+PERF_ABAB_ENFORCE:", self.code)))
 
-    def test_Workflow_ShouldObserveTheAbabComparison(self):
-        # PR 2 flips this line and this assertion together, after the five repetitions.
-        self.assertRegex(self.code, r"(?m)^\s+PERF_ABAB_ENFORCE: 'false'$")
+    def test_Workflow_ShouldEnforceTheAbabComparison(self):
+        # Flipped together with the workflow line, after the third series met its prediction.
+        self.assertRegex(self.code, r"(?m)^\s+PERF_ABAB_ENFORCE: 'true'$")
         # The absolute gate keeps enforcing; the two switches are independent.
         self.assertRegex(self.code, r"(?m)^\s+PERF_GATE_ENFORCE: 'true'$")
 
