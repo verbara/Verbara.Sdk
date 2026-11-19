@@ -261,18 +261,13 @@ public sealed partial class VerbaraServerConnectionLostTests
         var first = new BootingAsterisk { BootedAtLogin = true };
         var second = new BootingAsterisk { BootedAtLogin = true };
         await using var run = await Run.StartAsync(first, second, autoReconnect: true);
-        var entered = NewSignal();
-        var release = NewSignal();
-        run.Server.ConnectionLost += _ =>
-        {
-            // Holds the delivery until the test releases it; the bound only keeps a failed run from blocking a
-            // thread-pool thread for good.
-            ThreadHold.Signal(entered);
-            ThreadHold.Block(release.Task, Bound * 2);
-        };
+        var hold = new ThreadHold();
+        // Holds the delivery until the test releases it; the bound only keeps a failed run from blocking a thread-pool
+        // thread for good.
+        run.Server.ConnectionLost += _ => hold.Hold(Bound * 2);
 
         first.CloseSession();
-        var heldEntered = await CompletesWithinBoundAsync(entered.Task);
+        var heldEntered = await CompletesWithinBoundAsync(hold.Held);
         var loggedIn = false;
         int? statusAskedWhileHeld = null;
         bool? reloadStartedWhileHeld = null;
@@ -283,11 +278,11 @@ public sealed partial class VerbaraServerConnectionLostTests
             loggedIn = await CompletesWithinBoundAsync(run.ConnectionLog.Logged("[AMI] Connected", times: 2));
             statusAskedWhileHeld = second.Asked("Status");
             reloadStartedWhileHeld = run.ServerLog.Entries.Any(e => e.Line.Contains(ReloadStarted, StringComparison.Ordinal));
-            release.TrySetResult();
+            hold.Release();
             reloadedAfter = await CompletesWithinBoundAsync(run.ServerLog.Logged(StateLoaded, times: 2));
         }
 
-        release.TrySetResult();
+        hold.Free();
         using (new AssertionScope())
         {
             heldEntered.Should().BeTrue("the peer's close is a loss, and the slow handler is told of it");

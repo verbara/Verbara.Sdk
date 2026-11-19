@@ -122,7 +122,7 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
         }
         finally
         {
-            gate.Release();
+            gate.Free();
         }
     }
 
@@ -356,7 +356,7 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
         finally
         {
             manager.StepHook = null;
-            park.Release();
+            park.Free();
             await admission.WaitAsync(Run.Bound);
         }
     }
@@ -432,10 +432,11 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
                 SessionEventEpoch.LossBetween(started.Epoch, released.Epoch).Should().Be(SessionEventLoss.Possible,
                     "an event was dropped between the call's start and its release");
             }
+            gate.Release();
         }
         finally
         {
-            gate.Release();
+            gate.Free();
         }
     }
 
@@ -568,6 +569,8 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
         public Task Entered => _hold.Held;
 
         public void Release() => _hold.Release();
+
+        public void Free() => _hold.Free();
 
         public void OnNext(ManagerEvent value)
         {

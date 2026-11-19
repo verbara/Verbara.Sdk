@@ -148,7 +148,7 @@ public sealed class QueueSnapshotBatchBoundaryTests
         {
             queueAnswer.TrySetResult();
             releaseOwner.TrySetResult();
-            gate.Release();
+            gate.Free();
         }
     }
 

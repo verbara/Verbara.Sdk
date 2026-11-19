@@ -765,22 +765,24 @@ internal sealed class FrontHold(Func<ManagerEvent, bool> holds) : IObserver<Mana
 {
     public void Dispose()
     {
-        _released.Set();
-        _released.Dispose();
+        _hold.Free();
     }
 
-    private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly ManualResetEventSlim _released = new(false);
+    private readonly ThreadHold _hold = new();
+    private int _taken;
 
-    public Task Held => _held.Task;
+    public Task Held => _hold.Held;
 
-    public void Release() => _released.Set();
+    /// <summary>Lets the held dispatch go on; fails when the hold had already run out (see <see cref="ThreadHold.Release"/>).</summary>
+    public void Release() => _hold.Release();
+
+    /// <summary>Lets the held dispatch go on without judging the hold: for cleanup.</summary>
+    public void Free() => _hold.Free();
 
     public void OnNext(ManagerEvent value)
     {
-        if (_held.Task.IsCompleted || !holds(value)) return;
-        _held.TrySetResult();
-        _released.Wait(LossRig.Bound * 3);
+        if (Volatile.Read(ref _taken) != 0 || !holds(value) || Interlocked.Exchange(ref _taken, 1) != 0) return;
+        _hold.Hold(LossRig.Bound * 3);
     }
 
     public void OnError(Exception error)

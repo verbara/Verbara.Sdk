@@ -109,16 +109,14 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
             ReconnectInitialDelay = TimeSpan.FromMilliseconds(20),
             ReconnectMaxDelay = TimeSpan.FromMilliseconds(20),
         }), sockets, logger);
-        using var gate = new ManualResetEventSlim(false);
-        var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         var settled = new ConcurrentQueue<long>();
         var thirdSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         connection.Reconnected += () =>
         {
             if (connection.EventLossMark.Session != 2)
                 return;
-            secondEntered.TrySetResult();
-            gate.Wait(Bound * 3);
+            gate.Hold(Bound * 3);
         };
         connection.ReconnectSettled += session =>
         {
@@ -134,13 +132,13 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
 
             sockets.Created[0].CloseFromPeer();
             await logins.Reader.ReadAsync(peerCts.Token).AsTask().WaitAsync(Bound);
-            await secondEntered.Task.WaitAsync(Bound);
+            await gate.Held.WaitAsync(Bound);
 
             sockets.Created[1].CloseFromPeer();
             await logins.Reader.ReadAsync(peerCts.Token).AsTask().WaitAsync(Bound);
             await thirdConnected.Task.WaitAsync(Bound);
 
-            gate.Set();
+            gate.Release();
             var raised = await CompletesWithinBoundAsync(thirdSettled.Task);
             await connection.PendingNotifications.WaitAsync(Bound);
 
@@ -153,7 +151,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
         }
         finally
         {
-            gate.Set();
+            gate.Free();
             await connection.DisposeAsync().AsTask().WaitAsync(Bound);
             await peerCts.CancelAsync();
             await serving;
@@ -168,7 +166,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
         run.Connection.ReconnectSettled += settled.Enqueue;
 
         await run.Connection.DisposeAsync().AsTask().WaitAsync(Bound);
-        run.Gate.Set();
+        run.Gate.Release();
         await run.Connection.PendingNotifications.WaitAsync(Bound);
         await run.StopPeersAsync();
 

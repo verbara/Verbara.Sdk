@@ -363,17 +363,13 @@ public sealed class AmiConnectionLostTests
         var connection = Create(sockets, logger: logger);
         await connection.ConnectAsync().AsTask().WaitAsync(Bound);
         var trail = new ConcurrentQueue<string>();
-        var entered = NewSignal();
-        var release = NewSignal();
+        var release = new ThreadHold();
         var reconnected = NewSignal();
         connection.Lost += _ =>
         {
-            entered.TrySetResult();
             // Holds the delivery until the test releases it; the bound only keeps a failed run from blocking a
             // thread-pool thread for good.
-#pragma warning disable VSTHRD002 // a handler that blocks is the case under test
-            release.Task.Wait(Bound * 2);
-#pragma warning restore VSTHRD002
+            release.Hold(Bound * 2);
             trail.Enqueue("lost-returned");
         };
         connection.Reconnected += () =>
@@ -383,11 +379,11 @@ public sealed class AmiConnectionLostTests
         };
 
         sockets.Created[0].CloseFromPeer();
-        var heldEntered = await CompletesWithinBoundAsync(entered.Task);
+        var heldEntered = await CompletesWithinBoundAsync(release.Held);
         var loggedIn = heldEntered && await CompletesWithinBoundAsync(logger.Logged("[AMI] Connected", times: 2));
         var stateWhileHeld = connection.State;
         var reconnectedWhileHeld = reconnected.Task.IsCompleted;
-        release.TrySetResult();
+        release.Free();
         var back = await CompletesWithinBoundAsync(reconnected.Task);
         var drained = await EndAndDrainAsync(connection);
 
@@ -397,6 +393,7 @@ public sealed class AmiConnectionLostTests
             loggedIn.Should().BeTrue("a slow loss handler does not hold the reconnect");
             stateWhileHeld.Should().Be(AmiConnectionState.Connected, "the connection is back while the handler still runs");
             reconnectedWhileHeld.Should().BeFalse("Reconnected is delivered only once the loss handler of its outage has returned");
+            release.TimedOut.Should().BeFalse("the hold is a hang bound; a run-out let the handler go on unheld");
             back.Should().BeTrue("once released, Reconnected is delivered");
             drained.Should().BeTrue("the dispose returns and every queued notification is delivered");
             trail.Should().Equal(["lost-returned", "reconnected"]);
@@ -458,8 +455,7 @@ public sealed class AmiConnectionLostTests
         var logger = new SignalingLogger<AmiConnection>();
         var connection = Create(sockets, logger: logger);
         await connection.ConnectAsync().AsTask().WaitAsync(Bound);
-        var blockerEntered = NewSignal();
-        var release = NewSignal();
+        var release = new ThreadHold();
         var secondReconnect = NewSignal();
         var reconnects = 0;
         connection.Reconnected += () =>
@@ -467,10 +463,7 @@ public sealed class AmiConnectionLostTests
             if (Interlocked.Increment(ref reconnects) == 1)
             {
                 // The first reconnect's delivery holds the queue until the test releases it.
-                blockerEntered.TrySetResult();
-#pragma warning disable VSTHRD002 // a handler that blocks is the case under test
-                release.Task.Wait(Bound * 2);
-#pragma warning restore VSTHRD002
+                release.Hold(Bound * 2);
             }
             else
             {
@@ -489,7 +482,7 @@ public sealed class AmiConnectionLostTests
         // Outage 1: heard, then the reconnect, whose Reconnected blocks the queue.
         sockets.Created[0].CloseFromPeer();
         var firstLossHeard = await CompletesWithinBoundAsync(firstHeard.Task);
-        var blocked = firstLossHeard && await CompletesWithinBoundAsync(blockerEntered.Task);
+        var blocked = firstLossHeard && await CompletesWithinBoundAsync(release.Held);
         var secondQueued = false;
         if (blocked)
         {
@@ -499,7 +492,7 @@ public sealed class AmiConnectionLostTests
         }
 
         connection.Lost -= counting;
-        release.TrySetResult();
+        release.Free();
         var back = secondQueued && await CompletesWithinBoundAsync(secondReconnect.Task);
         var drained = await EndAndDrainAsync(connection);
 
@@ -507,6 +500,7 @@ public sealed class AmiConnectionLostTests
         {
             firstLossHeard.Should().BeTrue("the first outage is announced to the subscribed handler");
             blocked.Should().BeTrue("the first reconnect's Reconnected holds the queue");
+            release.TimedOut.Should().BeFalse("the hold is a hang bound; a run-out let the handler go on unheld");
             secondQueued.Should().BeTrue("the second outage's loss is queued, and the loop reconnects");
             back.Should().BeTrue("the second reconnect is delivered once the queue is released");
             drained.Should().BeTrue("the dispose returns and every queued notification is delivered");

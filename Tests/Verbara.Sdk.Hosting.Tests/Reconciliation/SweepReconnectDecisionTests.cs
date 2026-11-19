@@ -36,8 +36,9 @@ public sealed class SweepReconnectDecisionTests
             ScopedSweepDecisionTests.Complete(rig.Server).Should().BeTrue("the new fully-booted AMI session supplied this complete table");
             Flag(rig.Server, "IsReconnectPending").Should().BeTrue();
             await Task.Run(() => rig.Manager.AttachToServer(rig.Server, SweepRig.ServerId)).WaitAsync(SweepRig.Bound);
+            parked.Release();
         }
-        finally { parked.Release(); await hold.WaitAsync(SweepRig.Bound); }
+        finally { parked.Free(); await hold.WaitAsync(SweepRig.Bound); }
         try
         {
             rig.Manager.IsPendingDecision(call).Should().BeTrue("the bounded iii was genuinely busy");

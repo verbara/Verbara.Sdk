@@ -23,6 +23,29 @@ To roll back, keep the property and stop setting it (it then reads `null`), or r
 that reads it: a consumer compiled against the property does not build, or fails to bind at run time, against a
 package that lacks it.
 
+### Changed: `Verbara.Sdk.OpenTelemetry` moves to OpenTelemetry 1.21 (#618)
+
+`Verbara.Sdk.OpenTelemetry` now declares `OpenTelemetry`, `OpenTelemetry.Extensions.Hosting`,
+`OpenTelemetry.Exporter.OpenTelemetryProtocol` and `OpenTelemetry.Exporter.Console` at `>= 1.21.0` instead of
+`>= 1.20.1`, and `OpenTelemetry.Exporter.Prometheus.AspNetCore` at `>= 1.21.0-beta.1` instead of `>= 1.20.1-beta.1`, so
+the five packages move together. One consequence reaches every application that references the package:
+`OpenTelemetry.Api` 1.21.0 declares `System.Diagnostics.DiagnosticSource >= 11.0.0` for `net10.0` (1.20.1 declared
+10.0.0), so a `net10.0` application now restores that package and ships its own `System.Diagnostics.DiagnosticSource.dll`
+11.0.0 instead of using the shared framework's copy. Upstream changes an application can see:
+
+- **Prometheus scrape:** a metric whose unit is not an underscore-separated suffix of its name is served without its
+  `# UNIT` line (Prometheus rejected the whole response); array- and map-valued attributes are JSON-encoded, and
+  `byte[]` Base64-encoded, instead of written as the .NET type name; a series that appears twice in one response is
+  dropped instead of making Prometheus reject the response.
+- **Configuration:** `OpenTelemetryLoggerOptions` is bound from `Logging:OpenTelemetry` by the configuration binding
+  source generator, and an empty boolean value there is ignored; `SelfDiagnosticsOptions` is bound from
+  `OpenTelemetry:SelfDiagnostics` when that section is present.
+- **Experimental OTLP disk retry, on non-Windows:** creating the exporter throws `UnauthorizedAccessException` when
+  another user could change the retry directory. Set
+  `OTEL_DOTNET_EXPERIMENTAL_OTLP_DISK_RETRY_CHECK_PERMISSIONS=false` to turn the check off.
+
+The SDK's own meters and activity sources are unaffected: the scrape and OTLP export tests pass unchanged. No public API change.
+
 ### Fixed: a reconnect reload no longer drops the events dispatched while it replaces its subscription (#600)
 
 On every reconnect, on the reconnect loop and on the caller's own `ConnectAsync`, `VerbaraServer` released its event
@@ -45,6 +68,13 @@ nothing falls between two subscriptions. It subscribes again only after the conn
 previous stream, which `AmiConnection` never does. A custom `IAmiConnection` that ends its observers' streams with
 each session keeps being subscribed again on each reconnect, as before; it must end them before it raises
 `Reconnected`.
+
+### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.35 (#619)
+
+`Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.35` instead of `>= 3.4.31`. A patch release of
+the same library, with the same `Microsoft.Extensions.*` floors. The upstream change an application can see: on a
+server that announces a `MOVING` handoff, new commands wait in the backlog while the in-flight ones drain, so the
+connection is recycled within a round trip instead of at the end of the handoff window. No public API change.
 
 ## [2.10.1] - 2026-11-16
 

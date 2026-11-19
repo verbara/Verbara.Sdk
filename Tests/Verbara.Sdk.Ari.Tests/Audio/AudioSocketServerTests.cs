@@ -461,12 +461,10 @@ public class AudioSocketServerTests : IAsyncLifetime
         // parked on a socket read on another thread and so cannot complete inline.
         var (server, port) = await StartOnLoopbackAsync();
 
-        var handlerParked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var release = new ManualResetEventSlim();
+        var release = new ThreadHold();
         using var parking = server.OnStreamConnected.Subscribe(_ =>
         {
-            handlerParked.TrySetResult();
-            release.Wait();
+            release.Hold(Timeout.InfiniteTimeSpan);
         });
 
         bool stopWasStillRunningWhenRead;
@@ -477,7 +475,7 @@ public class AudioSocketServerTests : IAsyncLifetime
             var stream = client.GetStream();
             await stream.WriteAsync(BuildUuidFrame(Guid.NewGuid()));
             await stream.FlushAsync();
-            await handlerParked.Task.WaitAsync(SignalTimeout);
+            await release.Held.WaitAsync(SignalTimeout);
 
             // Act — StopAsync runs synchronously as far as its first await, so by the time it
             // hands back its ValueTask the listener is already down: the stop has unambiguously
@@ -486,12 +484,12 @@ public class AudioSocketServerTests : IAsyncLifetime
             stopWasStillRunningWhenRead = !stop.IsCompleted;
             runningWhileStopping = server.IsRunning;
 
-            release.Set();
+            release.Release();
             await stop.WaitAsync(SignalTimeout);
         }
         finally
         {
-            release.Set();
+            release.Free();
         }
 
         // Assert
@@ -1050,15 +1048,13 @@ public class AudioSocketServerTests : IAsyncLifetime
     {
         // Arrange — an observer that parks the connection's handler inside the announcement until the test releases it.
         var (server, port) = await StartOnLoopbackAsync();
-        var parked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var left = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var release = new ManualResetEventSlim();
+        var release = new ThreadHold();
         using var parking = server.OnStreamConnected.Subscribe(_ =>
         {
             try
             {
-                parked.TrySetResult();
-                release.Wait(ParkLimit);
+                release.Hold(ParkLimit);
             }
             finally
             {
@@ -1075,17 +1071,18 @@ public class AudioSocketServerTests : IAsyncLifetime
             var stream = client.GetStream();
             await stream.WriteAsync(BuildUuidFrame(uuid));
             await stream.FlushAsync();
-            await parked.Task.WaitAsync(SignalTimeout);
+            await release.Held.WaitAsync(SignalTimeout);
 
             // Act — a stop with no token, bounded so a stop that waits for the observer fails here instead of hanging.
             await server.StopAsync().AsTask().WaitAsync(SignalTimeout);
             stillParkedWhenStopped = !left.Task.IsCompleted;
             foundAfterStop = server.GetStream(uuid.ToString());
+            release.Release();
         }
         finally
         {
-            release.Set();
-            if (parked.Task.IsCompleted)
+            release.Free();
+            if (release.Held.IsCompleted)
                 await left.Task.WaitAsync(SignalTimeout);
         }
 
@@ -1268,8 +1265,8 @@ public class AudioSocketServerTests : IAsyncLifetime
         using var announcements = new Announcements(server);
         var x = Guid.NewGuid();
 
-        var disconnectedButNotReleased = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var resume = new ManualResetEventSlim();
+        var resume = new ThreadHold();
+        var parks = 0;
         var announced = 0;
         using var parking = server.OnStreamConnected.Subscribe(stream =>
         {
@@ -1278,11 +1275,8 @@ public class AudioSocketServerTests : IAsyncLifetime
 
             stream.StateChanges.Subscribe(state =>
             {
-                if (state is AudioStreamState.Disconnected or AudioStreamState.Error
-                    && disconnectedButNotReleased.TrySetResult())
-                {
-                    resume.Wait(SignalTimeout);
-                }
+                if (state is AudioStreamState.Disconnected or AudioStreamState.Error && Interlocked.Exchange(ref parks, 1) == 0)
+                    resume.Hold(SignalTimeout);
             });
         });
 
@@ -1295,13 +1289,14 @@ public class AudioSocketServerTests : IAsyncLifetime
         {
             // Act — B hangs up and is parked before its release; then A ends
             await second.SendAsync(BuildHangupFrame());
-            await disconnectedButNotReleased.Task.WaitAsync(SignalTimeout);
+            await resume.Held.WaitAsync(SignalTimeout);
             await first.HangUpAsync();
             holderAfterFirstEnded = server.GetStream(x.ToString());
+            resume.Release();
         }
         finally
         {
-            resume.Set();
+            resume.Free();
         }
 
         await second.Disposed.WaitAsync(SignalTimeout);

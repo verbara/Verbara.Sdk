@@ -165,10 +165,11 @@ public sealed class ReleaseOnArrivalTests
 
             arrivalThread.Start();
             arrival = WhatTheArrivalDid(arrivalThread, hold);
+            hold.Release();
         }
         finally
         {
-            hold.Release();
+            hold.Free();
         }
 
         var joined = new { Ending = endingThread.Join(Bound), Arrival = arrivalThread.Join(Bound) };

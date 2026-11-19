@@ -36,10 +36,11 @@ public sealed class ChannelDeparturePublicationTests
         {
             await hold.Held.WaitAsync(Run.Bound);
             heldOrDeparting = manager.IsHeldOrDeparting("X");
+            hold.Release();
         }
         finally
         {
-            hold.Release();
+            hold.Free();
             await removal.WaitAsync(Run.Bound);
         }
         heldOrDeparting.Should().BeTrue("a table reader must never see a departing channel in neither state");

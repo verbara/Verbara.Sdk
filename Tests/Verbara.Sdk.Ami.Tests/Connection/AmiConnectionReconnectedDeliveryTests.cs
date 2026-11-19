@@ -80,7 +80,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
         var run = await HoldLostUntilReconnectedIsQueuedAsync();
 
         await run.Connection.DisposeAsync().AsTask().WaitAsync(Bound);
-        run.Gate.Set();
+        run.Gate.Release();
         await run.Connection.PendingNotifications.WaitAsync(Bound);
         await run.StopPeersAsync();
 
@@ -100,7 +100,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
     {
         var run = await HoldLostUntilReconnectedIsQueuedAsync();
 
-        run.Gate.Set();
+        run.Gate.Release();
         await run.Connection.PendingNotifications.WaitAsync(Bound);
         var calls = Volatile.Read(ref run.ReconnectedCalls[0]);
         await run.Connection.DisposeAsync().AsTask().WaitAsync(Bound);
@@ -112,7 +112,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
     private sealed record HeldQueueRun(
         AmiConnection Connection,
         SignalingLogger<AmiConnection> Logger,
-        ManualResetEventSlim Gate,
+        ThreadHold Gate,
         int[] ReconnectedCalls,
         CancellationTokenSource PeerCts,
         Task Serving)
@@ -122,7 +122,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
             await PeerCts.CancelAsync();
             await Serving;
             PeerCts.Dispose();
-            Gate.Dispose();
+            Gate.Free();
         }
     }
 
@@ -153,8 +153,7 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
             ReconnectInitialDelay = TimeSpan.FromMilliseconds(20),
             ReconnectMaxDelay = TimeSpan.FromMilliseconds(20),
         }), sockets, logger);
-        var gate = new ManualResetEventSlim(false);
-        var lostEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         var reconnectedCalls = new int[1];
         var lostNotification = NotAQueueTask;
         connection.Lost += _ =>
@@ -162,14 +161,13 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
             // The queue runs each notification as its own task, so the id current here is the held Lost's place in it.
             // The queue logs and swallows a handler's throw, so a Lost on no task is recorded and failed on below.
             Volatile.Write(ref lostNotification, Task.CurrentId ?? NotAQueueTask);
-            lostEntered.TrySetResult();
-            gate.Wait();
+            gate.Hold(Timeout.InfiniteTimeSpan);
         };
         connection.Reconnected += () => Interlocked.Increment(ref reconnectedCalls[0]);
         await connection.ConnectAsync().AsTask().WaitAsync(Bound);
 
         sockets.Created[0].CloseFromPeer();
-        await lostEntered.Task.WaitAsync(Bound);
+        await gate.Held.WaitAsync(Bound);
         var lost = Volatile.Read(ref lostNotification);
         if (lost == NotAQueueTask)
             throw new InvalidOperationException("Lost ran outside a queue task, so the queue's tail cannot name it");

@@ -41,24 +41,22 @@ public sealed class AmiConnectionStuckNotificationTests
     public async Task Notify_ShouldLogOneWarning_WhenAHandlerHasNotReturnedOnceTheBoundHasPassed()
     {
         using var peerCts = new CancellationTokenSource(Bound * 3);
-        using var stuck = new ManualResetEventSlim(false);
+        var stuck = new ThreadHold();
         var sockets = new PipedSocketFactory();
         var logger = new SignalingLogger<AmiConnection>();
         var clock = new FakeTimeProvider();
         var connection = Create(sockets, logger, clock);
         try
         {
-            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             connection.Lost += _ =>
             {
-                entered.TrySetResult();
-                stuck.Wait(peerCts.Token);
+                stuck.Hold(Bound * 3);
             };
             var served = ServeFirstAsync(sockets, peerCts.Token);
             await connection.ConnectAsync().AsTask().WaitAsync(Bound);
             await served.WaitAsync(Bound);
             sockets.Created[0].CloseFromPeer();
-            await entered.Task.WaitAsync(Bound);
+            await stuck.Held.WaitAsync(Bound);
 
             clock.Advance(StuckBound - TimeSpan.FromMilliseconds(1));
             var belowTheBound = StuckWarnings(logger);
@@ -74,10 +72,11 @@ public sealed class AmiConnectionStuckNotificationTests
                     .Which.Level.Should().Be(LogLevel.Warning);
                 wellPastTheBound.Should().HaveCount(1, "the same stuck handler is reported once, however long it runs");
             }
+            stuck.Release();
         }
         finally
         {
-            stuck.Set();
+            stuck.Free();
             await connection.DisposeAsync().AsTask().WaitAsync(Bound);
         }
     }

@@ -47,9 +47,9 @@
   <!-- Runtime dependencies -->
   <ItemGroup>
     <!-- Test-only: in-process ASP.NET Core HTTP pipeline (no port binding) for webhook integration tests. -->
-    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.15" />
     <!-- Test-only: real JwtBearer authentication in the SSE push stream tests (tokens minted per test host). -->
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
     <!-- System.IO.Pipelines is included in net10.0, no NuGet needed -->
     <PackageVersion Include="System.Reactive" Version="7.0.0" />
   </ItemGroup>
@@ -61,7 +61,7 @@
 
   <!-- Redis (spike validation) -->
   <ItemGroup>
-    <PackageVersion Include="StackExchange.Redis" Version="3.4.31" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.4.35" />
   </ItemGroup>
 
   <!-- NATS (Verbara.Sdk.Push.Nats bridge) -->
@@ -76,11 +76,11 @@
 
   <!-- OpenTelemetry (Verbara.Sdk.OpenTelemetry batteries-included package) -->
   <ItemGroup>
-    <PackageVersion Include="OpenTelemetry" Version="1.20.1" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
-    <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.20.1" />
-    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.20.1-beta.1" />
+    <PackageVersion Include="OpenTelemetry" Version="1.21.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.21.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.21.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Console" Version="1.21.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.21.0-beta.1" />
   </ItemGroup>
 
   <!-- Source generators -->
@@ -91,7 +91,7 @@
 
   <!-- SourceLink — debuggable NuGet packages -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.403" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.404" />
   </ItemGroup>
 
   <!-- Analyzers — Layer 1: API Protection -->
@@ -116,7 +116,7 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="FluentAssertions" Version="7.2.2" />
-    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.1" />
     <PackageVersion Include="Testcontainers" Version="4.16.0" />
     <!-- Test-only HTTP substrate for the VoiceAi provider suites whose transport is HTTP
          request/response (ADR-0041 D1/D7). Referenced ONLY from
@@ -131,7 +131,7 @@
          deliberate over WireMock.Net.Minimal: "Minimal" pulls OpenApiParser/NSwag and resolves
          Newtonsoft.Json 9.0.1 and System.Text.Encodings.Web 4.7.1, both carrying advisories that
          would trip dependency-review's fail-on-severity: high. -->
-    <PackageVersion Include="WireMock.Net" Version="2.21.0" />
+    <PackageVersion Include="WireMock.Net" Version="2.30.0" />
     <!-- Transitive pin (CentralPackageTransitivePinningEnabled): WireMock.Net resolves
          Microsoft.AspNetCore.WebUtilities 2.3.0, flagged by GHSA-6527-9fp8-r4x6 (NU1902 is an
          error here). 2.3.14 is the patched release. Remove once WireMock.Net resolves >= 2.3.14. -->

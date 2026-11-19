@@ -243,7 +243,8 @@ public sealed class WebSocketSessionEndingTests
         const int parkedThreads = 2; // the held handler and the observer
         RawWebSocketPeer? farEnd = null;
         bool? answeredBeforeDisconnected = null;
-        using var observed = new ManualResetEventSlim();
+        var handlerHoldRanOut = false;
+        var observed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var announced = new TaskCompletionSource<StateRecording>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var harness = await WebSocketEndingHarness.StartAsync(recording =>
         {
@@ -253,10 +254,11 @@ public sealed class WebSocketSessionEndingTests
                 if (state != AudioStreamState.Disconnected)
                     return;
                 answeredBeforeDisconnected = Volatile.Read(ref farEnd)!.WaitForClose(CloseBound);
-                observed.Set();
+                observed.TrySetResult();
             });
-            announced.TrySetResult(recording);
-            observed.Wait(SignalTimeout);
+            ThreadHold.Signal(announced, recording);
+            if (!ThreadHold.Block(observed.Task, SignalTimeout))
+                Volatile.Write(ref handlerHoldRanOut, true);
         });
         using var bound = new CancellationTokenSource(SignalTimeout);
         var peer = await RawWebSocketPeer.ConnectAsync(harness.Port, bound.Token);
@@ -282,11 +284,13 @@ public sealed class WebSocketSessionEndingTests
         }
         finally
         {
-            observed.Set();
+            observed.TrySetResult();
             ThreadPool.SetMinThreads(minWorkers, minIo);
         }
 
         // Assert
+        Volatile.Read(ref handlerHoldRanOut).Should().BeFalse(
+            "the handler is held until the observer is done; a hold that ran out let it go on unheld, a starved test, not a product fault");
         using (new AssertionScope())
         {
             peer.Closes.Should().ContainSingle("a close from the peer is answered by exactly one close frame");

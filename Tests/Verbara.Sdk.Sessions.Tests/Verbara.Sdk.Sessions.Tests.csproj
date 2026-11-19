@@ -2,6 +2,8 @@
   <ItemGroup>
     <Compile Include="..\Shared\Sessions\SessionIndexInvariant.cs" Link="Shared\Sessions\SessionIndexInvariant.cs" />
     <Compile Include="..\Shared\Sessions\StepParker.cs" Link="Shared\Sessions\StepParker.cs" />
+    <Compile Include="..\Shared\Threading\ThreadHold.cs" Link="Shared\Threading\ThreadHold.cs" />
+    <Using Include="Verbara.Sdk.Tests.Shared.Threading" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Verbara.Sdk.Sessions\Verbara.Sdk.Sessions.csproj" />

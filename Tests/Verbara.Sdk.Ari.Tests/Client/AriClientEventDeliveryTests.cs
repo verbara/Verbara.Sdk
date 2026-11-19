@@ -162,7 +162,7 @@ public sealed class AriClientEventDeliveryTests
         }
         finally
         {
-            observer.Open();
+            observer.Free();
             await sut.DisposeAsync();
         }
     }
@@ -256,7 +256,7 @@ public sealed class AriClientEventDeliveryTests
         }
         finally
         {
-            observer.Open();
+            observer.Free();
             await sut.DisposeAsync();
         }
     }
@@ -297,10 +297,11 @@ public sealed class AriClientEventDeliveryTests
     public async Task EventLoop_ShouldCountEachDiscardTaggedBufferFull_WhenTheBufferIsFull()
     {
         // The buffer holds AriEventPump.DefaultCapacity events; three more than that arrive behind a held dispatch,
-        // and the buffer discards its three oldest.
+        // and the buffer discards its three oldest. The peer sends the rest only once the first event's dispatch is
+        // held: sent at once, a consumer that took its first event after the overflow left one more discarded.
         const int overflow = 3;
         using var dropped = new DroppedCapture(expectedBufferFull: overflow);
-        await using var peer = new EventPeer(1 + AriEventPump.DefaultCapacity + overflow);
+        await using var peer = new EventPeer(1 + AriEventPump.DefaultCapacity + overflow, restAfterGo: true);
         using var observer = new GatedObserver();
         var sut = new AriClient(Options(peer.Port), new RecordingLogger());
         using var subscription = sut.Subscribe(observer);
@@ -308,6 +309,7 @@ public sealed class AriClientEventDeliveryTests
         {
             await sut.ConnectAsync();
             await observer.Held.WaitAsync(WaitLimit);
+            peer.SendRest();
             var counted = await BoundedWait.WhenAnyAsync(dropped.BufferFullReached, token => Task.Delay(WaitLimit, token)) == dropped.BufferFullReached; // fence-allow: GUARD-TIMEOUT — bounds the wait for the counter
 
             using (new AssertionScope())
@@ -318,7 +320,7 @@ public sealed class AriClientEventDeliveryTests
         }
         finally
         {
-            observer.Open();
+            observer.Free();
             await sut.DisposeAsync();
         }
     }
@@ -413,15 +415,14 @@ public sealed class AriClientEventDeliveryTests
     /// </summary>
     private sealed class GatedObserver(bool holdFirst = true) : IObserver<AriEvent>, IDisposable
     {
-        private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly ManualResetEventSlim _gate = new();
+        private readonly ThreadHold _hold = new();
         private readonly List<int> _indexes = [];
         private readonly Lock _lock = new();
         private int _total;
         private int _afterEnding;
         private volatile bool _ending;
 
-        public Task Held => _held.Task;
+        public Task Held => _hold.Held;
 
         public int Total => Volatile.Read(ref _total);
 
@@ -434,7 +435,11 @@ public sealed class AriClientEventDeliveryTests
 
         public void MarkEnding() => _ending = true;
 
-        public void Open() => _gate.Set();
+        /// <summary>Lets the held dispatch go on; fails when the hold had already run out.</summary>
+        public void Open() => _hold.Release();
+
+        /// <summary>Lets the held dispatch go on without judging the hold: for cleanup.</summary>
+        public void Free() => _hold.Free();
 
         public void OnNext(AriEvent value)
         {
@@ -444,8 +449,7 @@ public sealed class AriClientEventDeliveryTests
 
             if (count == 1 && holdFirst)
             {
-                _held.TrySetResult();
-                _gate.Wait(WaitLimit * 3);
+                _hold.Hold(WaitLimit * 3);
                 return;
             }
 
@@ -463,8 +467,7 @@ public sealed class AriClientEventDeliveryTests
 
         public void Dispose()
         {
-            _gate.Set();
-            _gate.Dispose();
+            _hold.Free();
         }
     }
 
@@ -579,20 +582,24 @@ public sealed class AriClientEventDeliveryTests
     /// <summary>
     /// The Asterisk side: answers each dial and sends events <c>Probe-0</c>, <c>Probe-1</c>, … on it — the first dial
     /// <c>events</c> of them, the second <c>secondConnectionEvents</c> — then answers the client's close. With
-    /// <c>closeAfterSending</c> the first connection is instead dropped when the test calls <see cref="Close"/>.
+    /// <c>closeAfterSending</c> the first connection is instead dropped when the test calls <see cref="Close"/>. With
+    /// <c>restAfterGo</c> the first dial sends <c>Probe-0</c> alone and the rest once the test calls <see cref="SendRest"/>.
     /// </summary>
     private sealed class EventPeer : IAsyncDisposable
     {
         private readonly TcpListener _server = new(IPAddress.Loopback, 0);
         private readonly CancellationTokenSource _stop = new();
         private readonly TaskCompletionSource _close = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _rest = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly int _events;
         private readonly int _secondEvents;
         private readonly bool _closeAfterSending;
+        private readonly bool _restAfterGo;
         private readonly Task _run;
 
-        public EventPeer(int events, bool closeAfterSending = false, int secondConnectionEvents = 0)
+        public EventPeer(int events, bool closeAfterSending = false, int secondConnectionEvents = 0, bool restAfterGo = false)
         {
+            _restAfterGo = restAfterGo;
             _events = events;
             _secondEvents = secondConnectionEvents;
             _closeAfterSending = closeAfterSending;
@@ -604,6 +611,9 @@ public sealed class AriClientEventDeliveryTests
         public int Port { get; }
 
         public void Close() => _close.TrySetResult();
+
+        /// <summary>Lets a <c>restAfterGo</c> peer send what follows <c>Probe-0</c>.</summary>
+        public void SendRest() => _rest.TrySetResult();
 
         public async ValueTask DisposeAsync()
         {
@@ -623,7 +633,7 @@ public sealed class AriClientEventDeliveryTests
                 {
                     var connection = await _server.AcceptTcpClientAsync(ct);
                     var events = dial switch { 1 => _events, 2 => _secondEvents, _ => -1 };
-                    serving.Add(ServeAsync(connection, events, _closeAfterSending && dial == 1, ct));
+                    serving.Add(ServeAsync(connection, events, _closeAfterSending && dial == 1, _restAfterGo && dial == 1, ct));
                 }
             }
             catch (OperationCanceledException)
@@ -639,7 +649,7 @@ public sealed class AriClientEventDeliveryTests
                 await task.ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
         }
 
-        private async Task ServeAsync(TcpClient connection, int events, bool closeAfterSending, CancellationToken ct)
+        private async Task ServeAsync(TcpClient connection, int events, bool closeAfterSending, bool restAfterGo, CancellationToken ct)
         {
             using var held = connection;
             if (events < 0)
@@ -657,6 +667,8 @@ public sealed class AriClientEventDeliveryTests
             {
                 var json = Encoding.UTF8.GetBytes($$"""{"type":"Probe-{{i}}","application":"test-app"}""");
                 await ws.SendAsync(json, WebSocketMessageType.Text, endOfMessage: true, ct);
+                if (i == 0 && restAfterGo)
+                    await _rest.Task.WaitAsync(ct);
             }
 
             if (closeAfterSending)

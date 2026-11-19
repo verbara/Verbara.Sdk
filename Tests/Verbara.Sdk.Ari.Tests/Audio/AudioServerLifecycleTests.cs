@@ -207,6 +207,11 @@ public sealed class AudioServerLifecycleTests
         var active = harness.Server.ActiveStreamCount;
         var listed = listedInTheWindow;
         server.AfterRegistryAdd = null;
+
+        // Read before the probe: the handler closes the connection (Released, peer.Closed) and only then
+        // gives its place back, so the probe can still meet the limit and log a refusal it retries past.
+        // That refusal is the probe's, not the window's; the window's own lines all precede the close.
+        var warnedInTheWindow = harness.Logger.Entries.Where(e => e.Level >= LogLevel.Warning).ToList();
         var held = await HeldAfterRestartAsync(harness, bound.Token);
 
         // Assert
@@ -215,7 +220,7 @@ public sealed class AudioServerLifecycleTests
             announced.Should().Be(0, "a connection that registers once the stop has begun is never announced");
             active.Should().Be(0);
             held.Should().Be(0, "its place was given back");
-            harness.Logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+            warnedInTheWindow.Should().BeEmpty("a connection refused in the stop window is closed without a line");
             listed.Should().Be(-1, "a refused connection is never added to the tables, not even for a moment");
         }
     }

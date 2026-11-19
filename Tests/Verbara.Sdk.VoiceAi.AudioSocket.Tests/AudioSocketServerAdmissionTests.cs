@@ -166,8 +166,7 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         };
         await server.StartAsync(CancellationToken.None);
 
-        using var gate = new ManualResetEventSlim();
-        var holderEnding = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         using var holderPeer = await ConnectAndIdentifyAsync(server, x);
         var holder = await announcements.Next(x).WaitAsync(SignalTimeout);
 
@@ -175,14 +174,13 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         // and its place while the call comes back.
         holder.OnHangup += () =>
         {
-            holderEnding.TrySetResult();
-            gate.Wait(SignalTimeout);
+            gate.Hold(SignalTimeout);
         };
 
         try
         {
             await SendFrameAsync(holderPeer, AudioSocketFrameType.Hangup, []);
-            await holderEnding.Task.WaitAsync(SignalTimeout);
+            await gate.Held.WaitAsync(SignalTimeout);
 
             using var reEntryPeer = await ConnectAndIdentifyAsync(server, x);
             await reEntryWaits.Task.WaitAsync(SignalTimeout);
@@ -190,7 +188,7 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
             using var otherPeer = await ConnectAndIdentifyAsync(server, y);
             var other = await ReadUntilClosedAsync(otherPeer).WaitAsync(SignalTimeout);
 
-            gate.Set();
+            gate.Release();
             var reEntry = await announcements.Next(x).WaitAsync(SignalTimeout);
 
             using (new AssertionScope())
@@ -206,7 +204,7 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         }
         finally
         {
-            gate.Set();
+            gate.Free();
         }
     }
 
@@ -226,8 +224,7 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         var announcements = new AnnouncementLog(server);
         await server.StartAsync(CancellationToken.None);
 
-        using var gate = new ManualResetEventSlim();
-        var holderEnding = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new ThreadHold();
         var peers = new List<TcpClient>();
         try
         {
@@ -238,11 +235,10 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
             var other = await announcements.Next(z).WaitAsync(SignalTimeout);
             holder.OnHangup += () =>
             {
-                holderEnding.TrySetResult();
-                gate.Wait(SignalTimeout);
+                gate.Hold(SignalTimeout);
             };
             await SendFrameAsync(peers[0], AudioSocketFrameType.Hangup, []);
-            await holderEnding.Task.WaitAsync(SignalTimeout);
+            await gate.Held.WaitAsync(SignalTimeout);
 
             // The call comes back under X. Its check passes because X is held; between that check and
             // its registration, the hook lets the holder's hangup finish and waits for its release.
@@ -252,11 +248,13 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
                 if (call != 1 || Interlocked.Exchange(ref released, 1) != 0)
                     return;
 
-                gate.Set();
+                gate.Free();
                 holder.HungUp.Wait(SignalTimeout);
             };
             peers.Add(await ConnectAndIdentifyAsync(server, x));
             var reEntry = await announcements.Next(x).WaitAsync(SignalTimeout);
+            // The hook let the holder go; this judges whether its hold had run out before that.
+            gate.Release();
             clock.OnRead = null;
 
             // Both later end.
@@ -291,7 +289,7 @@ public sealed class AudioSocketServerAdmissionTests : IDisposable
         }
         finally
         {
-            gate.Set();
+            gate.Free();
             await server.DisposeAsync();
             DisposeEach(peers);
         }
