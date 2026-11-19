@@ -37,8 +37,8 @@ name: Perf Regression
 # job on this machine, each invocation in `abab.launch_count` (2) processes per case (a
 # `--launchCount` the absolute pass above never gets); scripts/ci/check-perf-abab.py judges time
 # by the geometric mean of the per-round ratios HEAD/reference, confirmed by a majority of the
-# rounds, and bytes by the difference in every round. It OBSERVES (PERF_ABAB_ENFORCE below) until five consecutive runs meet
-# the prediction written before them. It costs about three times the absolute pass's minutes, on
+# rounds, and bytes by the difference in every round. It ENFORCES (PERF_ABAB_ENFORCE below): five consecutive runs met
+# the prediction written before them (third series, 2026-11-19). It costs about three times the absolute pass's minutes, on
 # the hosted runner.
 #
 # Manual run: gh workflow run "Perf Regression"
@@ -99,12 +99,12 @@ jobs:
       PERF_GATE_ENFORCE: 'true'
       # THE ABAB FLIP. 'false' = the in-job comparison against baseline.json
       # `abab.reference_tag` runs, writes its summary and artifacts, and cannot fail the job.
-      # 'true' = SLOWER, MORE-BYTES and its structural failures fail it. Flipped only after five
-      # consecutive runs met the prediction written before them (baseline.README.md, "Before the
-      # flip"). Only 'true' or 'false': the comparator exits 2 on any other spelling, since the
+      # 'true' = SLOWER, MORE-BYTES and its structural failures fail it. Flipped on 2026-11-19, after
+      # five consecutive runs met the prediction written before them (baseline.README.md, "Before the
+      # flip", and its result). Only 'true' or 'false': the comparator exits 2 on any other spelling, since the
       # continue-on-error lines below compare with 'true' exactly. Independent of
       # PERF_GATE_ENFORCE: check-perf-abab.py reads this one only.
-      PERF_ABAB_ENFORCE: 'false'
+      PERF_ABAB_ENFORCE: 'true'
       # ISA pin. ubuntu-latest mixes CPUs with and without AVX-512, and .NET 10 targets AVX-512
       # wherever it exists, so the same code read faster or slower by host: time "breaches" in both
       # directions on weeks when nothing here changed. This holds the JIT at x86-64-v3 on every
@@ -337,8 +337,8 @@ jobs:
           bash scripts/ci/run-perf-abab.sh --baseline Tests/Verbara.Sdk.Benchmarks/baseline.json
           --head "$GITHUB_WORKSPACE" --reference "$RUNNER_TEMP/perf-ref" --reference-tag "$REF"
           --out artifacts-abab
-      # Observing, even an exit 2 (the guard misconfigured) is an orange step and the job stays
-      # green; once PERF_ABAB_ENFORCE is 'true' the same exit fails it, as the absolute gate's does.
+      # PERF_ABAB_ENFORCE is 'true': an exit 1 or 2 fails the job, as the absolute gate's does. Set
+      # back to 'false', even an exit 2 (the guard misconfigured) is an orange step and the job stays green.
       - name: Compare HEAD against the reference in this job
         timeout-minutes: 3
         id: abab
