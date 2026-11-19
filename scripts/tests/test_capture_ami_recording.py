@@ -1032,5 +1032,140 @@ class AriClientTests(unittest.TestCase):
         self.assertEqual("Basic Y2FwdHVyZTpwdw==", seen[0][2])
 
 
+
+class _RevisitPbx:
+    """The answers a PBX gives the queue-revisit workload, in a fake's script shape: each originated caller is
+    connected in q-first to PJSIP/agent1 and, after a BlindTransfer of that member's leg, in q-second to PJSIP/agent2.
+    With `refuse_transfer`, BlindTransfer answers an Error and the caller stays with the first member."""
+
+    def __init__(self, refuse_transfer=False):
+        self.refuse_transfer = refuse_transfer
+        self.calls = 0
+        self.cid = None
+
+    def ok(self, message="Success"):
+        return b"Response: Success\r\nActionID: {id}\r\nMessage: " + message.encode() + b"\r\n\r\n"
+
+    def connect(self, queue, member):
+        return _ev(("Event", "AgentConnect"), ("Channel", f"PJSIP/loop-{self.calls:08d}"),
+                   ("Uniqueid", f"1700000000.{self.calls}"), ("CallerIDNum", self.cid), ("Queue", queue),
+                   ("Interface", member), ("MemberName", member),
+                   ("DestChannel", f"{member}-{self.calls:08d}"))
+
+    def originate(self, h):
+        self.calls += 1
+        self.cid = h["CallerID"].split("<")[1].rstrip(">")
+        return [self.ok("Originate successfully queued"), self.connect("q-first", "PJSIP/agent1")]
+
+    def blind_transfer(self, h):
+        if self.refuse_transfer:
+            return [b"Response: Error\r\nActionID: {id}\r\nMessage: No such channel\r\n\r\n"]
+        return [self.ok("Transfer succeeded"), self.connect("q-second", "PJSIP/agent2")]
+
+    def script(self):
+        return {
+            "Login": [self.ok("Authentication accepted")],
+            "UserEvent": lambda h: [self.ok("Event Sent"),
+                                    _ev(("Event", "UserEvent"), ("UserEvent", h["UserEvent"]),
+                                        ("Step", h.get("Step", "")), ("ActionID", h["ActionID"]))],
+            "Originate": self.originate,
+            "BlindTransfer": self.blind_transfer,
+            "Hangup": [self.ok("Channel Hungup")],
+            "CoreShowChannels": [b"Response: Success\r\nActionID: {id}\r\nEventList: start\r\n\r\n",
+                                 b"Event: CoreShowChannelsComplete\r\nActionID: {id}\r\nEventList: Complete\r\n"
+                                 b"ListItems: 0\r\n\r\n"],
+            "Logoff": [b"Response: Goodbye\r\nActionID: {id}\r\n\r\n"],
+        }
+
+
+class QueueRevisitWorkloadTests(unittest.TestCase):
+    _NAME = "queue-revisit"
+
+    def _run(self, calls, refuse_transfer=False):
+        pbx_state = _RevisitPbx(refuse_transfer)
+        ours, theirs = socket.socketpair()
+        pbx = _FakePbx(theirs, pbx_state.script())
+        pbx.start()
+        try:
+            tap = cap.Tap(ours)
+            tap.pump = lambda seconds: cap.Tap.pump(tap, min(seconds, 0.02))
+            tap.options = {"sequential_calls": calls, "join_timeout": 2}
+            tap.login("capture", "secret")
+            steps = cap.WORKLOADS[self._NAME]["run"](tap)
+            tap.logoff()
+        finally:
+            ours.close()
+            theirs.close()
+            pbx.join(2)
+        return steps, pbx.received
+
+    @staticmethod
+    def _outcomes(received):
+        return [(h["Step"], h["CallerId"], h["Connects"], h["Members"], h.get("Detail", ""))
+                for h in received if h.get("Action") == "UserEvent" and h.get("UserEvent") == "CaptureOutcome"]
+
+    def test_workloads_ShouldOfferQueueRevisit(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(0, cap.main(["workloads"]))
+
+        self.assertIn(self._NAME + ":", out.getvalue())
+
+    def test_files_ShouldConfigureTwoQueuesWithOneEndpointMemberEachOnALoopback(self):
+        files = cap.WORKLOADS[self._NAME]["files"]
+
+        self.assertEqual({"extensions.conf", "queues.conf", "pjsip.conf"}, set(files))
+        queues = files["queues.conf"]
+        self.assertIn("[q-first](revisit)\nmember => PJSIP/agent1", queues)
+        self.assertIn("[q-second](revisit)\nmember => PJSIP/agent2", queues)
+        self.assertIn("exten => second,1,Queue(q-second)", files["extensions.conf"])
+        self.assertIn("exten => revisit-in,1,Answer()", files["extensions.conf"])
+        pjsip = files["pjsip.conf"]
+        self.assertIn("bind = 127.0.0.1:5060", pjsip, "SIP stays inside the container")
+        self.assertIn("contact = sip:agent1@127.0.0.1:5060", pjsip)
+        self.assertIn("contact = sip:agent2@127.0.0.1:5060", pjsip)
+        self.assertNotIn("0.0.0.0", pjsip)
+
+    def test_run_ShouldTransferEachRevisitCallsFirstMemberIntoTheSecondQueue_ThenRunTheControls(self):
+        steps, received = self._run(2)
+
+        self.assertEqual(["revisit-01", "revisit-02", "once-01", "once-02", "done"], steps)
+        transfers = [(h["Channel"], h["Context"], h["Exten"]) for h in received if h.get("Action") == "BlindTransfer"]
+        self.assertEqual([("PJSIP/agent1-00000001", "capture", "second"),
+                          ("PJSIP/agent1-00000002", "capture", "second")], transfers,
+                         "only the revisit calls are transferred, each from its first member's own leg")
+        originates = [(h["Channel"], h["CallerID"]) for h in received if h.get("Action") == "Originate"]
+        self.assertEqual([("PJSIP/revisit-in@loop", f"Capture <{cid}>") for cid in ("9101", "9102", "9201", "9202")],
+                         originates)
+        self.assertEqual([("revisit-01", "9101", "2", "PJSIP/agent1,PJSIP/agent2", ""),
+                          ("revisit-02", "9102", "2", "PJSIP/agent1,PJSIP/agent2", ""),
+                          ("once-01", "9201", "1", "PJSIP/agent1", ""),
+                          ("once-02", "9202", "1", "PJSIP/agent1", "")], self._outcomes(received))
+
+    def test_run_ShouldRecordARefusedTransferAndGoOn_WhenThePbxRefusesIt(self):
+        steps, received = self._run(1, refuse_transfer=True)
+
+        self.assertEqual(["revisit-01", "once-01", "done"], steps)
+        self.assertEqual([("revisit-01", "9101", "1", "PJSIP/agent1", "BlindTransfer: Error: No such channel"),
+                          ("once-01", "9201", "1", "PJSIP/agent1", "")], self._outcomes(received))
+
+    def test_run_ShouldPlaceOneCallOfEachKind_WhenNoCountIsGiven(self):
+        pbx_state = _RevisitPbx()
+        ours, theirs = socket.socketpair()
+        pbx = _FakePbx(theirs, pbx_state.script())
+        pbx.start()
+        try:
+            tap = cap.Tap(ours)
+            tap.pump = lambda seconds: cap.Tap.pump(tap, min(seconds, 0.02))
+            tap.login("capture", "secret")
+            steps = cap.WORKLOADS[self._NAME]["run"](tap)
+        finally:
+            ours.close()
+            theirs.close()
+            pbx.join(2)
+
+        self.assertEqual(["revisit-01", "once-01", "done"], steps)
+
+
 if __name__ == "__main__":
     unittest.main()

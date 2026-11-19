@@ -100,6 +100,19 @@ internal static class AmiCaptureReplay
         "queue-loop-asterisk-23.4.1.raw",
     ];
 
+    /// <summary>
+    /// The queue-revisit captures, one per image of <c>docker/asterisk-base-images.txt</c> (20.20.1, 22.12.0, 23.6.0,
+    /// 24.0.0), made by <c>scripts/capture-ami-recording.py</c>'s <c>queue-revisit</c> workload: one call answered on
+    /// two queue visits by two members (step <c>revisit-01</c>) and one answered once (step <c>once-01</c>).
+    /// </summary>
+    public static readonly IReadOnlyList<string> QueueRevisitCaptures =
+    [
+        "queue-revisit-asterisk-20.20.1.raw",
+        "queue-revisit-asterisk-22.12.0.raw",
+        "queue-revisit-asterisk-23.6.0.raw",
+        "queue-revisit-asterisk-24.0.0.raw",
+    ];
+
     private const string MarkerUserEvent = "N5Marker";
     private const string BeforeFirstMarker = "(before-the-first-marker)";
 
