@@ -119,7 +119,7 @@ public sealed class GenerationDecisionTests
             var attach = Task.Run(() => manager.AttachToServer(replacement.Run.Server, "server"));
             workers.Add(attach);
             // fence-allow: GUARD-TIMEOUT — detects the missing one-second acquisition bound while the subscriber holds the lock.
-            returnedWhileHeld = await Task.WhenAny(attach, Task.Delay(TimeSpan.FromSeconds(3))) == attach;
+            returnedWhileHeld = await BoundedWait.WhenAnyAsync(attach, token => Task.Delay(TimeSpan.FromSeconds(3), token)) == attach;
             errorsWhileHeld = log.Entries.Count(e => e.Level == LogLevel.Error
                 && e.Message.Contains("server", StringComparison.Ordinal)
                 && e.Message.Contains(call.SessionId, StringComparison.Ordinal));

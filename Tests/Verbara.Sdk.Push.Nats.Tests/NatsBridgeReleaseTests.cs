@@ -220,7 +220,7 @@ public sealed class NatsBridgeReleaseTests
         await rig.Publisher.DisposeEntered.WaitAsync(Fence); // the stop's release is parked in the publisher's dispose
 
         var dispose = Task.Run(bridge.Dispose);
-        var returnedWhileParked = await Task.WhenAny(dispose, Task.Delay(TimeSpan.FromMilliseconds(300))) == dispose; // fence-allow: SETTLE — the negative "has not returned while the dispose is parked" needs a bounded window; the gate below decides the positive
+        var returnedWhileParked = await BoundedWait.WhenAnyAsync(dispose, token => Task.Delay(TimeSpan.FromMilliseconds(300), token)) == dispose; // fence-allow: SETTLE — the negative "has not returned while the dispose is parked" needs a bounded window; the gate below decides the positive
 
         rig.Publisher.OpenDisposeGate();
         var disposeEnded = await EndsWithinAsync(dispose, Fence);

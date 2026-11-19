@@ -154,7 +154,7 @@ internal sealed class GuardRun : IAsyncDisposable
         {
             Metadata = new PushEventMetadata("t", null, DateTimeOffset.UtcNow, "drain", TopicPath: "drain.marker.never-subscribed"),
         });
-        return await Task.WhenAny(seen.Task, Task.Delay(Bound)) == seen.Task; // fence-allow: GUARD-TIMEOUT — failure bound on a dispatch signal, never the winning arm of a green run
+        return await BoundedWait.WhenAnyAsync(seen.Task, token => Task.Delay(Bound, token)) == seen.Task; // fence-allow: GUARD-TIMEOUT — failure bound on a dispatch signal, never the winning arm of a green run
     }
 
     public async ValueTask DisposeAsync()

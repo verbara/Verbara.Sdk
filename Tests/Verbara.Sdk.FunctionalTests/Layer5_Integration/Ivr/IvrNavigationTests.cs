@@ -58,11 +58,11 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         });
 
         // Wait for channel to come up
-        var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var upResult = await BoundedWait.WhenAnyAsync(channelUp.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
         // Wait(1) takes ~1s, then WaitExten starts
-        var wxResult = await Task.WhenAny(waitExtenReached.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var wxResult = await BoundedWait.WhenAnyAsync(waitExtenReached.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         wxResult.Should().Be(waitExtenReached.Task,
             "NewExtenEvent with Application=WaitExten must fire after Wait(1) completes");
 
@@ -108,7 +108,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
             ActionId = "ivr-opt1-01"
         });
 
-        var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var upResult = await BoundedWait.WhenAnyAsync(channelUp.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
@@ -124,7 +124,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
             Receive = true
         });
 
-        var result = await Task.WhenAny(reachedExt165.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var result = await BoundedWait.WhenAnyAsync(reachedExt165.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         result.Should().Be(reachedExt165.Task,
             "pressing '1' during WaitExten must navigate to extension 165");
 
@@ -169,7 +169,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
             ActionId = "ivr-opt2-01"
         });
 
-        var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var upResult = await BoundedWait.WhenAnyAsync(channelUp.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
@@ -183,7 +183,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
             Receive = true
         });
 
-        var result = await Task.WhenAny(reachedExt166.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var result = await BoundedWait.WhenAnyAsync(reachedExt166.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         result.Should().Be(reachedExt166.Task,
             "pressing '2' during WaitExten must navigate to extension 166");
 
@@ -231,12 +231,12 @@ public sealed class IvrNavigationTests : FunctionalTestBase
             ActionId = "ivr-timeout-01"
         });
 
-        var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var upResult = await BoundedWait.WhenAnyAsync(channelUp.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
         // Do NOT send any DTMF — let WaitExten(5) time out
         // Wait(1) ~1s + WaitExten(5) = ~6s total, plus margin
-        var hangupResult = await Task.WhenAny(hangupReceived.Task, Task.Delay(TimeSpan.FromSeconds(15)));
+        var hangupResult = await BoundedWait.WhenAnyAsync(hangupReceived.Task, token => Task.Delay(TimeSpan.FromSeconds(15), token));
         hangupResult.Should().Be(hangupReceived.Task,
             "WaitExten timeout must trigger the 't' handler which hangs up the channel");
     }
@@ -289,7 +289,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
             ActionId = "ivr-invalid-01"
         });
 
-        var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var upResult = await BoundedWait.WhenAnyAsync(channelUp.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
@@ -305,12 +305,12 @@ public sealed class IvrNavigationTests : FunctionalTestBase
         });
 
         // Verify the "i" handler fires
-        var invalidResult = await Task.WhenAny(invalidHandlerReached.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var invalidResult = await BoundedWait.WhenAnyAsync(invalidHandlerReached.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         invalidResult.Should().Be(invalidHandlerReached.Task,
             "pressing an invalid digit must trigger the 'i' handler");
 
         // Verify the menu restarts (second WaitExten)
-        var retryResult = await Task.WhenAny(menuRetryReached.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var retryResult = await BoundedWait.WhenAnyAsync(menuRetryReached.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         retryResult.Should().Be(menuRetryReached.Task,
             "the 'i' handler must Goto ext 160 causing a second WaitExten cycle");
     }
@@ -354,7 +354,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
             ActionId = "ivr-flow-01"
         });
 
-        var upResult = await Task.WhenAny(channelUp.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var upResult = await BoundedWait.WhenAnyAsync(channelUp.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         upResult.Should().Be(channelUp.Task, "ext 160 answers, so the originated channel must report Up within 10 s");
 
         var channelName = await channelUp.Task;
@@ -368,7 +368,7 @@ public sealed class IvrNavigationTests : FunctionalTestBase
             Receive = true
         });
 
-        var result = await Task.WhenAny(reachedExt165.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var result = await BoundedWait.WhenAnyAsync(reachedExt165.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         result.Should().Be(reachedExt165.Task, "pressing 1 in the ivr-menu must reach ext 165 within 10 s");
 
         // Allow final events to propagate

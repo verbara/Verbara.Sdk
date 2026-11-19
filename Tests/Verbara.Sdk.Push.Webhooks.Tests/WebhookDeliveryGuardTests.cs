@@ -217,7 +217,7 @@ internal sealed class CountSignal
             _waiters.Add((count, tcs));
             signal = tcs.Task;
         }
-        return await Task.WhenAny(signal, Task.Delay(bound)) == signal; // fence-allow: GUARD-TIMEOUT — failure bound on a counted outcome, never the winning arm of a green run
+        return await BoundedWait.WhenAnyAsync(signal, token => Task.Delay(bound, token)) == signal; // fence-allow: GUARD-TIMEOUT — failure bound on a counted outcome, never the winning arm of a green run
     }
 }
 

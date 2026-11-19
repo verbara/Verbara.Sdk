@@ -193,7 +193,7 @@ public sealed class AmiProtocolWriter
     /// <see cref="InlineFields"/> holds get here.
     /// </summary>
     private static Span<KeyValuePair<string, string>> Grow(
-        Span<KeyValuePair<string, string>> current, ref KeyValuePair<string, string>[]? rented)
+        ReadOnlySpan<KeyValuePair<string, string>> current, ref KeyValuePair<string, string>[]? rented)
     {
         var larger = ArrayPool<KeyValuePair<string, string>>.Shared.Rent(current.Length * 2);
         current.CopyTo(larger);

@@ -113,8 +113,8 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncLifetime
         // the caller the member that matters.
         _server.SendRecordedAudioOutputFrame = true;
         var expected = Convert.FromBase64String(
-            JsonDocument.Parse(ElevenLabsFakeServer.ReadFrame(ElevenLabsFakeServer.AudioOutputFrame))
-                .RootElement.GetProperty("audio").GetString()!);
+            JsonElement.Parse(ElevenLabsFakeServer.ReadFrame(ElevenLabsFakeServer.AudioOutputFrame))
+                .GetProperty("audio").GetString()!);
         var synth = BuildSynthesizer();
 
         var frames = await synth.SynthesizeAsync("hola", AudioFormat.Slin16Mono8kHz).ToListAsync();

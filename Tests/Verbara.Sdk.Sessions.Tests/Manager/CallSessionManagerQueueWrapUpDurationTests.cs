@@ -922,14 +922,14 @@ public sealed class CallSessionManagerQueueWrapUpDurationTests
         rig.Deliver(hangup[0], hangup[1]);
 
         var completion = Task.Run(() => rig.Deliver(hangup[2]));
-        var providerEntered = await Task.WhenAny(entered.Task, Task.Delay(Bound, TimeProvider.System)) == entered.Task; // fence-allow: GUARD-TIMEOUT — failure bound on the provider being asked, never the winning arm of a green run
+        var providerEntered = await BoundedWait.WhenAnyAsync(entered.Task, token => Task.Delay(Bound, TimeProvider.System, token)) == entered.Task; // fence-allow: GUARD-TIMEOUT — failure bound on the provider being asked, never the winning arm of a green run
         var otherHandledInTime = false;
         Task? other = null;
         if (providerEntered)
         {
             // The caller's own next frames, delivered on another thread while the provider is still answering.
             other = Task.Run(() => rig.Deliver(hangup[3], hangup[4]));
-            otherHandledInTime = await Task.WhenAny(other, Task.Delay(Bound, TimeProvider.System)) == other; // fence-allow: GUARD-TIMEOUT — failure bound on the other thread's frames, never the winning arm of a green run
+            otherHandledInTime = await BoundedWait.WhenAnyAsync(other, token => Task.Delay(Bound, TimeProvider.System, token)) == other; // fence-allow: GUARD-TIMEOUT — failure bound on the other thread's frames, never the winning arm of a green run
         }
 
         gate.TrySetResult();

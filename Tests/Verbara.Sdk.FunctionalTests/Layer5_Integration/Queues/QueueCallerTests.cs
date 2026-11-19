@@ -50,7 +50,7 @@ public sealed class QueueCallerTests : FunctionalTestBase
         });
 
         // Wait for the caller to join the queue
-        var joined = await Task.WhenAny(callerJoinedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var joined = await BoundedWait.WhenAnyAsync(callerJoinedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         joined.Should().Be(callerJoinedTcs.Task, "caller should join the queue within timeout");
 
         // Verify the entry is tracked in QueueManager
@@ -98,14 +98,14 @@ public sealed class QueueCallerTests : FunctionalTestBase
         });
 
         // Wait for join
-        var joinTask = await Task.WhenAny(callerJoinedTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var joinTask = await BoundedWait.WhenAnyAsync(callerJoinedTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         joinTask.Should().Be(callerJoinedTcs.Task, "caller should join within timeout");
 
         // Hangup via CLI to trigger leave
         await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
 
         // Wait for leave event
-        var leftTask = await Task.WhenAny(callerLeftTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var leftTask = await BoundedWait.WhenAnyAsync(callerLeftTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         leftTask.Should().Be(callerLeftTcs.Task, "caller should leave the queue after hangup");
 
         // Verify metrics captured the wait time
@@ -147,7 +147,7 @@ public sealed class QueueCallerTests : FunctionalTestBase
         await connection.SendActionAsync(new CommandAction { Command = "channel request hangup all" });
 
         // Wait for the abandon event
-        var result = await Task.WhenAny(abandonTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var result = await BoundedWait.WhenAnyAsync(abandonTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         result.Should().Be(abandonTcs.Task, "QueueCallerAbandonEvent should fire after caller hangs up");
 
         var abandonEvent = await abandonTcs.Task;

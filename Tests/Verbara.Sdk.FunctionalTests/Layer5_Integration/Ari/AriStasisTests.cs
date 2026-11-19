@@ -54,7 +54,7 @@ public sealed class AriStasisTests : FunctionalTestBase
             ActionId = "stasis-start-01"
         });
 
-        var result = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var result = await BoundedWait.WhenAnyAsync(tcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         result.Should().Be(tcs.Task, StasisStartReason);
 
         var evt = await tcs.Task;
@@ -100,7 +100,7 @@ public sealed class AriStasisTests : FunctionalTestBase
             ActionId = "stasis-end-01"
         });
 
-        var startResult = await Task.WhenAny(startTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var startResult = await BoundedWait.WhenAnyAsync(startTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         startResult.Should().Be(startTcs.Task, StasisStartReason);
 
         var startEvt = await startTcs.Task;
@@ -109,7 +109,7 @@ public sealed class AriStasisTests : FunctionalTestBase
         // Hang up to trigger StasisEnd
         await ariClient.Channels.HangupAsync(channelId);
 
-        var endResult = await Task.WhenAny(endTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var endResult = await BoundedWait.WhenAnyAsync(endTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         endResult.Should().Be(endTcs.Task, "hanging up a channel in Stasis must produce a StasisEnd within 10 s");
 
         var endEvt = await endTcs.Task;
@@ -149,7 +149,7 @@ public sealed class AriStasisTests : FunctionalTestBase
             ActionId = "stasis-answer-01"
         });
 
-        var result = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var result = await BoundedWait.WhenAnyAsync(tcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         result.Should().Be(tcs.Task, StasisStartReason);
 
         var evt = await tcs.Task;
@@ -198,7 +198,7 @@ public sealed class AriStasisTests : FunctionalTestBase
             ActionId = "stasis-hangup-01"
         });
 
-        var startResult = await Task.WhenAny(startTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var startResult = await BoundedWait.WhenAnyAsync(startTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         startResult.Should().Be(startTcs.Task, StasisStartReason);
 
         var startEvt = await startTcs.Task;
@@ -206,7 +206,7 @@ public sealed class AriStasisTests : FunctionalTestBase
 
         await ariClient.Channels.HangupAsync(channelId);
 
-        var endResult = await Task.WhenAny(endTcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var endResult = await BoundedWait.WhenAnyAsync(endTcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         endResult.Should().Be(endTcs.Task, "hanging up a channel in Stasis must produce a StasisEnd within 10 s");
 
         var endEvt = await endTcs.Task;
@@ -277,7 +277,7 @@ public sealed class AriStasisTests : FunctionalTestBase
             ActionId = "stasis-bridge-add-01"
         });
 
-        var result = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        var result = await BoundedWait.WhenAnyAsync(tcs.Task, token => Task.Delay(TimeSpan.FromSeconds(10), token));
         if (result != tcs.Task)
         {
             // Cleanup bridge even if channel never arrived

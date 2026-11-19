@@ -277,7 +277,7 @@ public sealed class AriClientEventDeliveryTests
             await sut.ConnectAsync();
             var secondConsumer = ConsumerOf(sut);
             var all = await WaitForAsync(() => observer.Total == events);
-            var firstEnded = await Task.WhenAny(firstConsumer, Task.Delay(WaitLimit)) == firstConsumer; // fence-allow: GUARD-TIMEOUT — bounds a wait on a task that should already have ended
+            var firstEnded = await BoundedWait.WhenAnyAsync(firstConsumer, token => Task.Delay(WaitLimit, token)) == firstConsumer; // fence-allow: GUARD-TIMEOUT — bounds a wait on a task that should already have ended
 
             using (new AssertionScope())
             {
@@ -308,7 +308,7 @@ public sealed class AriClientEventDeliveryTests
         {
             await sut.ConnectAsync();
             await observer.Held.WaitAsync(WaitLimit);
-            var counted = await Task.WhenAny(dropped.BufferFullReached, Task.Delay(WaitLimit)) == dropped.BufferFullReached; // fence-allow: GUARD-TIMEOUT — bounds the wait for the counter
+            var counted = await BoundedWait.WhenAnyAsync(dropped.BufferFullReached, token => Task.Delay(WaitLimit, token)) == dropped.BufferFullReached; // fence-allow: GUARD-TIMEOUT — bounds the wait for the counter
 
             using (new AssertionScope())
             {

@@ -161,7 +161,7 @@ public sealed class ConnectionCutTests : FunctionalTestBase
                 reconnected.TrySetResult();
 
             // Wait for reconnection (60s for proxy reconnect); a reconnect that never happens fails the test
-            var completed = await Task.WhenAny(reconnected.Task, Task.Delay(TimeSpan.FromSeconds(60))); // fence-allow: GUARD-TIMEOUT — failure bound on an observed condition; a green run leaves on the condition
+            var completed = await BoundedWait.WhenAnyAsync(reconnected.Task, token => Task.Delay(TimeSpan.FromSeconds(60), token)); // fence-allow: GUARD-TIMEOUT — failure bound on an observed condition; a green run leaves on the condition
             completed.Should().Be(reconnected.Task,
                 "once the toxic is removed, AutoReconnect must restore the AMI connection through the proxy within 60 s");
             connection.State.Should().Be(AmiConnectionState.Connected);
