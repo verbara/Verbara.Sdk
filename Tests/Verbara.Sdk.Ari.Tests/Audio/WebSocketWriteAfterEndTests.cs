@@ -269,7 +269,7 @@ public sealed class WebSocketWriteAfterEndTests
 
             // Assert input — each write's outcome, or `pending` when it had not finished one signal timeout later
             var both = Task.WhenAll(blocked, queued);
-            var finished = await Task.WhenAny(both, Task.Delay(SignalTimeout, CancellationToken.None)) == both; // fence-allow: GUARD-TIMEOUT — a write that never completes is the defect; the bound turns the hang into a census entry
+            var finished = await BoundedWait.WhenAnyAsync(both, token => Task.Delay(SignalTimeout, token)) == both; // fence-allow: GUARD-TIMEOUT — a write that never completes is the defect; the bound turns the hang into a census entry
             outcomes.Add($"blocked:{(blocked.IsCompleted ? blocked.Result : "pending")}");
             outcomes.Add($"queued:{(queued.IsCompleted ? queued.Result : "pending")}");
             if (!finished)
