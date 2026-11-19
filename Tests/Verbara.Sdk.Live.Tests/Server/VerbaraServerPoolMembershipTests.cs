@@ -186,6 +186,49 @@ public sealed class VerbaraServerPoolMembershipTests
         logs.Entries.Select(e => e.Exception).Should().Equal(exceptions);
     }
 
+    /// <summary>
+    /// The first subscriber throws, and the host's logger throws on the report of it. The report is not a second
+    /// failure: the pool's caller returns normally, the subscriber after it is still told, and the server is added.
+    /// </summary>
+    [Fact]
+    public async Task AddServer_ShouldReturnNormallyAndReachTheLaterSubscribers_WhenASubscriberAndTheLoggerThrow()
+    {
+        var logs = new ThrowingLogs();
+        await using var rig = new Rig(logs: logs);
+        var server = rig.NewServer();
+        var seen = 0;
+        rig.Pool.ServerAdded += (_, _) => throw new InvalidOperationException("first");
+        rig.Pool.ServerAdded += (_, _) => seen++;
+
+        var add = () => rig.Pool.AddExistingServer("n1", server);
+
+        add.Should().NotThrow("nothing the logger throws reaches the pool's caller");
+        seen.Should().Be(1, "the subscriber after the one that threw is told");
+        rig.Pool.GetServer("n1").Should().BeSameAs(server);
+        logs.Thrown.Should().Be(1, "the logger was asked for the one report, and failed on it");
+    }
+
+    /// <summary>The removal twin of the test above.</summary>
+    [Fact]
+    public async Task RemoveServer_ShouldReturnNormallyAndReachTheLaterSubscribers_WhenASubscriberAndTheLoggerThrow()
+    {
+        var logs = new ThrowingLogs();
+        await using var rig = new Rig(logs: logs);
+        var server = rig.NewServer();
+        var seen = 0;
+        rig.Pool.AddExistingServer("n1", server);
+        rig.Pool.ServerRemoved += (_, _) => throw new InvalidOperationException("first");
+        rig.Pool.ServerRemoved += (_, _) => seen++;
+
+        var remove = async () => await rig.Pool.RemoveServerAsync("n1");
+
+        await remove.Should().NotThrowAsync("nothing the logger throws reaches the pool's caller");
+        seen.Should().Be(1, "the subscriber after the one that threw is told");
+        rig.Pool.GetServer("n1").Should().BeNull();
+        await server.Connection.Received(1).DisposeAsync();
+        logs.Thrown.Should().Be(1, "the logger was asked for the one report, and failed on it");
+    }
+
     [Theory]
     [InlineData(false, "remove")]
     [InlineData(false, "dispose")]
@@ -582,5 +625,19 @@ public sealed class VerbaraServerPoolMembershipTests
             public bool IsEnabled(LogLevel logLevel) => true;
             public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) => owner.Entries.Add((logLevel, exception));
         }
+    }
+
+    /// <summary>A host's logger factory whose loggers throw on the membership failure report, and write nothing else.</summary>
+    private sealed class ThrowingLogs : ILoggerFactory
+    {
+        private readonly ReportThrowingLogger<VerbaraServerPool> _logger = new("[POOL] Membership subscriber failed");
+
+        public int Thrown => _logger.Thrown;
+
+        public ILogger CreateLogger(string categoryName) => _logger;
+
+        public void AddProvider(ILoggerProvider provider) { }
+
+        public void Dispose() { }
     }
 }

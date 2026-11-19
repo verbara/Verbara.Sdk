@@ -204,6 +204,55 @@ public sealed class AudioSocketSessionHangupTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// The first <c>OnHangup</c> handler throws, and the host's logger throws on the report of it. The report is not a
+    /// second failure: the handler after it still runs, and the session is released. Before, the logger's exception
+    /// left the guard's catch and the later handlers were never called.
+    /// </summary>
+    [Fact]
+    public async Task OnHangup_ShouldReachTheLaterHandlersAndRelease_WhenAHandlerAndTheLoggerThrow()
+    {
+        var logger = new ReportThrowingLogger<AudioSocketServer>("A hangup handler failed");
+        await using var server = new AudioSocketServer(
+            new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 }, logger);
+        await server.StartAsync(CancellationToken.None);
+        var started = new TaskCompletionSource<AudioSocketSession>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.OnSessionStarted += session =>
+        {
+            started.TrySetResult(session);
+            return ValueTask.CompletedTask;
+        };
+        using var peer = await RawPeer.ConnectAsync(server.BoundPort);
+        var session = await started.Task.WaitAsync(SignalTimeout);
+        var later = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.OnHangup += () => throw new InvalidOperationException("a consumer's handler that throws");
+        session.OnHangup += () => later.TrySetResult();
+
+        await peer.SendHangupAsync();
+        var reached = await CompletesWithinAsync(later.Task);
+        var released = await CompletesWithinAsync(session.HungUp);
+
+        using (new AssertionScope())
+        {
+            reached.Should().BeTrue("a handler and a logger that throw do not keep the later handlers from the hangup");
+            released.Should().BeTrue("the session is released after its handlers");
+            logger.Thrown.Should().Be(1, "the logger was asked for the one report, and failed on it");
+        }
+    }
+
+    private static async Task<bool> CompletesWithinAsync(Task task)
+    {
+        try
+        {
+            await task.WaitAsync(SignalTimeout);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+    }
+
     public async Task InitializeAsync() => await _server.StartAsync(CancellationToken.None);
 
     public async Task DisposeAsync()

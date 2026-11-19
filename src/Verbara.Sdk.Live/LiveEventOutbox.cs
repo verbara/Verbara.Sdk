@@ -68,6 +68,9 @@ internal sealed class LiveEventOutbox
         }
     }
 
+    /// <summary>Notifications posted and not yet raised to the end; exposed for deterministic tests.</summary>
+    internal int Queued => Volatile.Read(ref _count);
+
     /// <summary>
     /// Null outside deterministic tests; runs on a drain's thread, with its frame still current, after its last
     /// notification was raised and before the drain hands back what it did not raise.
@@ -188,7 +191,7 @@ internal sealed class LiveEventOutbox
                     {
                         var unownedFailure = Raise(unowned[i]);
                         if (unownedFailure is not null)
-                            _reportUnownedFailure(unownedFailure);
+                            ReportUnownedFailure(unownedFailure);
                     }
                 }
 
@@ -217,6 +220,21 @@ internal sealed class LiveEventOutbox
         }
 
         failure?.Throw();
+    }
+
+    // The report writes the host's log line. A logger that throws on it must not leave the drain loop: the unowned
+    // entries after this one and this drain's own are already claimed, and only their raise marks them done, so an
+    // abandoned raise would hold the head of the list, and every later drain would wait out its turn behind it.
+    private void ReportUnownedFailure(Exception failure)
+    {
+        try
+        {
+            _reportUnownedFailure(failure);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the line is lost, and the drain goes on.
+        }
     }
 
     private Entry? FirstOwnedBy(Frame frame)

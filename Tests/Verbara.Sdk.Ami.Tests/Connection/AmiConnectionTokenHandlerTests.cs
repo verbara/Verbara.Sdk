@@ -76,6 +76,49 @@ public sealed partial class AmiConnectionTokenHandlerTests
         }
     }
 
+    /// <summary>
+    /// Two token handlers hold one event and honour their token, and the host's logger throws on the Debug line that
+    /// records each stop. The line is lost, not the stop: the ending completes, nothing is counted as a fault, and the
+    /// second handler's stop is reported too. Before, the first throw left the loop that awaits the handlers, so the
+    /// second handler's stop was never reported.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_ShouldReportEveryStoppedHandler_WhenTheLoggerThrowsOnTheStoppedLine()
+    {
+        using var peer = new CancellationTokenSource(Bound * 2);
+        using var counters = new AmiCounterTotals(HandlerFaults);
+        var factory = new PipedSocketFactory();
+        var logger = new ReportThrowingLogger<AmiConnection>(StoppedFragment);
+        var connection = Create(factory, logger);
+        var firstEntered = NewSignal();
+        var secondEntered = NewSignal();
+        using var first = connection.Subscribe(async (_, ct) =>
+        {
+            firstEntered.TrySetResult();
+            await Task.Delay(HandlerWait, ct); // fence-allow: SIMULATED-WORK — the handler's long work, which its token ends
+        });
+        using var second = connection.Subscribe(async (_, ct) =>
+        {
+            secondEntered.TrySetResult();
+            await Task.Delay(HandlerWait, ct); // fence-allow: SIMULATED-WORK — the handler's long work, which its token ends
+        });
+        var socket = await ConnectAsync(connection, factory, peer);
+
+        await WritePeersAsync(socket, 0, 1);
+        (await CompletesWithinBoundAsync(Task.WhenAll(firstEntered.Task, secondEntered.Task))).Should().BeTrue(
+            "both handlers start on the event");
+        var dispose = connection.DisposeAsync().AsTask();
+        var ended = await CompletesWithinBoundAsync(dispose);
+
+        using (new AssertionScope())
+        {
+            ended.Should().BeTrue("the ending completes, though the logger fails on each stop's line");
+            dispose.IsCompletedSuccessfully.Should().BeTrue("nothing the logger throws reaches the caller's ending");
+            logger.Thrown.Should().Be(2, "each handler's stop was reported, and the logger failed on each line");
+            counters.Total(HandlerFaults).Should().Be(0, "honouring the token is not counted as a fault");
+        }
+    }
+
     [Fact]
     public async Task Subscribe_ShouldStillHoldTheEnding_WhenTheHandlerIgnoresItsToken()
     {

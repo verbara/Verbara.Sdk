@@ -126,6 +126,42 @@ public sealed class AmiConnectionObserverFaultTests
     }
 
     /// <summary>
+    /// The first of two observers throws on every event, and the host's logger throws on the report of it. The report
+    /// is not a second failure: the second observer and the handler still receive every event, and every fault is
+    /// counted. Before, the logger's exception left the guard's catch and ended the pump's consumer.
+    /// </summary>
+    [Fact]
+    public async Task OnNext_ShouldReachTheLaterObserversAndHandlers_WhenAnObserverAndTheLoggerThrow()
+    {
+        using var peer = new CancellationTokenSource(Bound * 2);
+        using var counters = new AmiCounterTotals(ObserverFaults, HandlerFaults);
+        var factory = new PipedSocketFactory();
+        var logger = new ReportThrowingLogger<AmiConnection>(ObserverFaultFragment);
+        await using var connection = Create(factory, logger);
+        var throwing = new CountingObserver(throwOn: _ => true);
+        var second = new CountingObserver(throwOn: _ => false);
+        var fence = new CountingObserver(throwOn: _ => false);
+        using var s1 = connection.Subscribe(throwing);
+        using var s2 = connection.Subscribe(second);
+        connection.OnEvent += fence.HandleAsync;
+        var socket = await ConnectAsync(connection, factory, peer);
+
+        await WritePeersAsync(socket, 0, 10);
+        await WriteSentinelAsync(socket);
+        var reached = await CompletesWithinBoundAsync(fence.SentinelReached);
+
+        using (new AssertionScope())
+        {
+            reached.Should().BeTrue("the handler receives every event up to the sentinel written last");
+            throwing.Count.Should().Be(11, "the observer that throws stays subscribed and receives all eleven events");
+            second.Count.Should().Be(throwing.Count, "the second observer receives every event the first one threw on");
+            fence.Count.Should().Be(throwing.Count, "the handler receives every event the observer threw on");
+            counters.Total(ObserverFaults).Should().Be(throwing.Count, "every failure is counted, before its line");
+            logger.Thrown.Should().Be(throwing.Count, "the logger was asked for every report, and failed on every one");
+        }
+    }
+
+    /// <summary>
     /// An observer and an <c>OnEvent</c> handler at once: counts every event it receives, records it before it throws
     /// when <c>throwOn</c> says so (by delivery number, from 1), and completes <see cref="SentinelReached"/> on the
     /// sentinel.

@@ -184,6 +184,53 @@ public sealed class AmiConnectionStateChangedTests : IAsyncLifetime, IDisposable
         }
     }
 
+    /// <summary>
+    /// The first handler throws on every change, and the host's logger throws on the report of it. The report is not a
+    /// second failure: the handler after it still receives every change, and the queue drains without a fault. Before,
+    /// the logger's exception left the guard's catch: the later handler missed the change, and the queue's task faulted.
+    /// </summary>
+    [Fact]
+    public async Task StateChanged_ShouldReachTheLaterHandlers_WhenAHandlerAndTheLoggerThrow()
+    {
+        var sockets = new PipedSocketFactory();
+        Serve(sockets);
+        var logger = new ReportThrowingLogger<AmiConnection>("[AMI] State-change handler error");
+        var connection = Create(sockets, logger);
+        var seen = new ConcurrentQueue<AmiConnectionStateChange>();
+        var thrown = 0;
+        connection.StateChanged += _ =>
+        {
+            Interlocked.Increment(ref thrown);
+            throw new InvalidOperationException("a subscriber's own failure");
+        };
+        connection.StateChanged += seen.Enqueue;
+        var reconnected = NewSignal();
+        connection.Reconnected += () => reconnected.TrySetResult();
+        await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+
+        sockets.Created[0].CloseFromPeer();
+        var back = await CompletesWithinBoundAsync(reconnected.Task);
+        var disposed = await CompletesWithinBoundAsync(connection.DisposeAsync().AsTask());
+        var drain = connection.PendingNotifications;
+        var drained = await CompletesWithinBoundAsync(drain.ContinueWith(static _ => { }, TaskScheduler.Default));
+
+        using (new AssertionScope())
+        {
+            back.Should().BeTrue("the connection reconnects");
+            disposed.Should().BeTrue("the dispose returns");
+            drained.Should().BeTrue("every queued change is delivered");
+            drain.IsFaulted.Should().BeFalse("nothing the logger throws leaves the notification queue");
+            seen.Select(c => c.Current).Should().Equal(
+                [
+                    AmiConnectionState.Connecting, AmiConnectionState.Connected, AmiConnectionState.Reconnecting,
+                    AmiConnectionState.Connecting, AmiConnectionState.Connected, AmiConnectionState.Disconnecting,
+                    AmiConnectionState.Disconnected,
+                ],
+                "the handler after the one that throws receives every change");
+            logger.Thrown.Should().Be(Volatile.Read(ref thrown), "the logger was asked for every report, and failed on every one");
+        }
+    }
+
     [Fact]
     public async Task StateChanged_ShouldNotDeadlock_WhenAHandlerDisposesTheConnectionAndWaits()
     {
@@ -342,7 +389,7 @@ public sealed class AmiConnectionStateChangedTests : IAsyncLifetime, IDisposable
 
     // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-    private AmiConnection Create(ISocketConnectionFactory sockets, SignalingLogger<AmiConnection>? logger = null)
+    private AmiConnection Create(ISocketConnectionFactory sockets, ILogger<AmiConnection>? logger = null)
     {
         var connection = new AmiConnection(Options.Create(new AmiConnectionOptions
         {

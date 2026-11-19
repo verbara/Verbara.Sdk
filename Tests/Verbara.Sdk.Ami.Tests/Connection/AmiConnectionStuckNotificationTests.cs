@@ -110,6 +110,50 @@ public sealed class AmiConnectionStuckNotificationTests
         }
     }
 
+    /// <summary>
+    /// The host's logger throws on the stuck line. The watchdog runs as a timer callback, where an exception that escapes
+    /// ends the process with the system clock; on the fake clock it would reach <see cref="FakeTimeProvider.Advance"/>.
+    /// The line is lost, nothing else: the callback throws nothing, and the queue drains once the handler returns.
+    /// </summary>
+    [Fact]
+    public async Task Notify_ShouldThrowNothingFromTheWatchdog_WhenTheLoggerThrowsOnTheStuckLine()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 3);
+        var stuck = new ThreadHold();
+        var sockets = new PipedSocketFactory();
+        var logger = new ReportThrowingLogger<AmiConnection>(StuckLine);
+        var clock = new FakeTimeProvider();
+        var connection = Create(sockets, logger, clock);
+        try
+        {
+            connection.Lost += _ =>
+            {
+                stuck.Hold(Bound * 3);
+            };
+            var served = ServeFirstAsync(sockets, peerCts.Token);
+            await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+            await served.WaitAsync(Bound);
+            sockets.Created[0].CloseFromPeer();
+            await stuck.Held.WaitAsync(Bound);
+
+            var advance = Record.Exception(() => clock.Advance(StuckBound));
+            stuck.Release();
+            var drained = await Record.ExceptionAsync(() => connection.PendingNotifications.WaitAsync(Bound));
+
+            using (new AssertionScope())
+            {
+                advance.Should().BeNull("a timer callback must never throw: the logger's failure costs the line, nothing else");
+                logger.Thrown.Should().Be(1, "the watchdog asked for the stuck line once, and the logger failed on it");
+                drained.Should().BeNull("the notification goes on, and the queue drains once its handler returns");
+            }
+        }
+        finally
+        {
+            stuck.Free();
+            await connection.DisposeAsync().AsTask().WaitAsync(Bound);
+        }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
     private static List<(LogLevel Level, string Line)> StuckWarnings(SignalingLogger<AmiConnection> logger) =>

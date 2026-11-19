@@ -2798,7 +2798,15 @@ public sealed class VerbaraServer : IVerbaraServer
 
     private void OnConnectionLost(Exception? cause)
     {
-        VerbaraServerLog.AmiConnectionLost(_logger, cause);
+        try
+        {
+            VerbaraServerLog.AmiConnectionLost(_logger, cause);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the line: it is lost, and the subscribers are still told of the loss.
+        }
+
         RaiseConnectionLost(cause);
     }
 
@@ -2820,8 +2828,20 @@ public sealed class VerbaraServer : IVerbaraServer
                 // A subscriber's handler is foreign code: whatever it throws is logged, so that the handlers after it
                 // are still told of the loss. Running out of memory is the process's failure, not the handler's, so it
                 // is not swallowed here.
-                VerbaraServerLog.ConnectionLostHandlerError(_logger, ex);
+                ReportConnectionLostHandlerFailure(ex);
             }
+        }
+    }
+
+    private void ReportConnectionLostHandlerFailure(Exception failure)
+    {
+        try
+        {
+            VerbaraServerLog.ConnectionLostHandlerError(_logger, failure);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the line is lost, and the handlers after this one are still told.
         }
     }
 

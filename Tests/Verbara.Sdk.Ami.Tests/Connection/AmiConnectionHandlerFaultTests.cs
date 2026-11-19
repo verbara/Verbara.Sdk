@@ -212,6 +212,113 @@ public sealed class AmiConnectionHandlerFaultTests
         }
     }
 
+    /// <summary>
+    /// The first of two handlers throws on every PeerStatus, and so does the host's logger on the report of it. The
+    /// report is not a second failure: the second handler still receives every event, and every fault is counted. Before,
+    /// the logger's exception left the guard's catch, ended the dispatch, and with it the pump's consumer.
+    /// </summary>
+    [Fact]
+    public async Task OnEvent_ShouldDeliverEveryLaterEventToEveryHandler_WhenAHandlerAndTheLoggerThrow()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        using var faults = new HandlerFaults();
+        var factory = new PipedSocketFactory();
+        var logger = new ReportThrowingLogger<AmiConnection>("OnEvent handler threw on");
+        await using var connection = Create(factory, autoReconnect: false, logger);
+        var second = new Recorder();
+        connection.OnEvent += ThrowOnPeerStatus;
+        connection.OnEvent += second.HandleAsync;
+        var socket = await ConnectAsync(connection, factory, peerCts);
+
+        await WritePeersAsync(socket, 0, Later);
+        (await socket.WriteEventAsync("PeerStatus", [new("Peer", Sentinel)])).Should().BeTrue();
+        var reached = await CompletesWithinBoundAsync(second.SentinelReached);
+
+        using (new AssertionScope())
+        {
+            reached.Should().BeTrue("the second handler receives every event up to the sentinel written last");
+            second.Peers().Should().Equal(Peers(0, Later), $"the second handler receives all {Later} events, in order");
+            faults.Total.Should().Be(Later + 1, "every failure is counted, the sentinel's included, before its line");
+            logger.Thrown.Should().Be(Later + 1, "the logger was asked for every report, and failed on every one");
+        }
+    }
+
+    /// <summary>
+    /// The faulted-task path: the first handler's task faults on every PeerStatus, and the logger throws on the report
+    /// made where the task is awaited. The next event is still delivered, to both handlers.
+    /// </summary>
+    [Fact]
+    public async Task OnEvent_ShouldDeliverTheNextEvent_WhenAnAwaitedHandlerFaultsAndTheLoggerThrows()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        using var faults = new HandlerFaults();
+        var factory = new PipedSocketFactory();
+        var logger = new ReportThrowingLogger<AmiConnection>("OnEvent handler threw on");
+        await using var connection = Create(factory, autoReconnect: false, logger);
+        var second = new Recorder();
+        connection.OnEvent += FaultOnPeerStatus;
+        connection.OnEvent += second.HandleAsync;
+        var socket = await ConnectAsync(connection, factory, peerCts);
+
+        await WritePeersAsync(socket, 0, Later);
+        (await socket.WriteEventAsync("PeerStatus", [new("Peer", Sentinel)])).Should().BeTrue();
+        var reached = await CompletesWithinBoundAsync(second.SentinelReached);
+
+        // The pump awaits each event's handlers before it dispatches the next one, so once the sentinel reaches the
+        // second handler every earlier fault has been awaited and reported; the sentinel itself does not fault.
+        using (new AssertionScope())
+        {
+            reached.Should().BeTrue("the second handler receives every event up to the sentinel written last");
+            second.Peers().Should().Equal(Peers(0, Later), $"the second handler receives all {Later} events, in order");
+            faults.Total.Should().Be(Later, "every awaited fault before the sentinel is counted");
+            logger.Thrown.Should().Be(Later, "the logger was asked for every counted report on the awaited path, and failed on each");
+        }
+    }
+
+    /// <summary>
+    /// The premise of the rule, on a real <see cref="LoggerFactory"/>: of two providers, the first throws on the report
+    /// and the second records it. <c>Microsoft.Extensions.Logging</c> writes through every provider before it throws its
+    /// <see cref="AggregateException"/>, so the healthy provider holds every line; and the dispatch goes on.
+    /// </summary>
+    [Fact]
+    public async Task OnEvent_ShouldReachTheSecondHandlerForEveryEvent_WhenAProviderOfARealLoggerFactoryThrows()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 2);
+        var recording = new RecordingProvider();
+        using var loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder.AddProvider(new ThrowingProvider("OnEvent handler threw on"));
+            builder.AddProvider(recording);
+        });
+        var factory = new PipedSocketFactory();
+        await using var connection = Create(factory, autoReconnect: false, loggerFactory.CreateLogger<AmiConnection>());
+        var second = new Recorder();
+        connection.OnEvent += ThrowOnPeerStatus;
+        connection.OnEvent += second.HandleAsync;
+        var socket = await ConnectAsync(connection, factory, peerCts);
+
+        await WritePeersAsync(socket, 0, Later);
+        (await socket.WriteEventAsync("PeerStatus", [new("Peer", Sentinel)])).Should().BeTrue();
+        var reached = await CompletesWithinBoundAsync(second.SentinelReached);
+
+        var written = recording.Lines.Where(l => l.Contains("OnEvent handler threw on", StringComparison.Ordinal)).ToList();
+        using (new AssertionScope())
+        {
+            reached.Should().BeTrue("the second handler receives every event up to the sentinel written last");
+            second.Peers().Should().Equal(Peers(0, Later), $"the second handler receives all {Later} events, in order");
+            written.Should().HaveCount(Later + 1,
+                "the healthy provider wrote every report, though the provider before it threw on each one");
+        }
+    }
+
+    private static ValueTask ThrowOnPeerStatus(ManagerEvent evt) =>
+        evt is PeerStatusEvent ? throw new InvalidOperationException("The handler fails on this event.") : ValueTask.CompletedTask;
+
+    private static ValueTask FaultOnPeerStatus(ManagerEvent evt) =>
+        evt is PeerStatusEvent { Peer: not Sentinel }
+            ? ValueTask.FromException(new InvalidOperationException("The handler's task faults."))
+            : ValueTask.CompletedTask;
+
     // ── Helpers ──────────────────────────────────────────────────────────────────────────────────────
 
     private const string Sentinel = "SIP/sentinel";
@@ -524,5 +631,53 @@ public sealed class AmiConnectionHandlerFaultTests
         public long Total => Interlocked.Read(ref _total);
 
         public void Dispose() => _listener.Dispose();
+    }
+
+    /// <summary>A logging provider whose loggers throw on every line containing the fragment, and write nothing.</summary>
+    private sealed class ThrowingProvider(string fragment) : ILoggerProvider
+    {
+        public ILogger CreateLogger(string categoryName) => new ReportThrowingLogger<AmiConnection>(fragment);
+
+        public void Dispose()
+        {
+        }
+    }
+
+    /// <summary>A logging provider that keeps every line its loggers are given.</summary>
+    private sealed class RecordingProvider : ILoggerProvider, ILogger
+    {
+        private readonly Lock _gate = new();
+        private readonly List<string> _lines = [];
+
+        public IReadOnlyList<string> Lines
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return [.. _lines];
+                }
+            }
+        }
+
+        public ILogger CreateLogger(string categoryName) => this;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            var line = formatter(state, exception);
+            lock (_gate)
+            {
+                _lines.Add(line);
+            }
+        }
+
+        public void Dispose()
+        {
+        }
     }
 }

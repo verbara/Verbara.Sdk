@@ -281,6 +281,48 @@ public sealed class LiveEventOrderAcrossThreadsTests
         reported.Should().Equal("abandoned-handler");
     }
 
+    /// <summary>
+    /// Two notifications posted by a thread that never drains them both fail, and the report of the first one throws, as
+    /// the host's logger does when it fails on the line. The report is not a second failure: the drain raises the second
+    /// unowned notification and its own, throws nothing, and leaves the outbox empty, so the next drain does not wait out
+    /// its turn behind an entry that was claimed and never raised. Before, the report's exception left the drain loop.
+    /// </summary>
+    [Fact]
+    public void Drain_ShouldRaiseEveryClaimedNotificationAndEmptyTheOutbox_WhenTheUnownedFailureReportThrows()
+    {
+        var reports = 0;
+        var outbox = new LiveEventOutbox(_ =>
+        {
+            Interlocked.Increment(ref reports);
+            throw new InvalidOperationException("the host's logger fails on the report");
+        }, TimeSpan.FromMilliseconds(50));
+        var raised = new List<string>();
+        var poster = new Thread(() =>
+        {
+            outbox.Post(() =>
+            {
+                raised.Add("abandoned-1");
+                throw new InvalidOperationException("abandoned-handler-1");
+            });
+            outbox.Post(() =>
+            {
+                raised.Add("abandoned-2");
+                throw new InvalidOperationException("abandoned-handler-2");
+            });
+        });
+        poster.Start();
+        poster.Join();
+        outbox.Post(() => raised.Add("mine"));
+
+        var drain = outbox.Drain;
+
+        drain.Should().NotThrow("neither the abandoned handlers' failures nor the report's are this caller's");
+        using var scope = new AssertionScope();
+        raised.Should().Equal("abandoned-1", "abandoned-2", "mine");
+        Volatile.Read(ref reports).Should().Be(2, "each unowned failure is reported, though the report throws");
+        outbox.Queued.Should().Be(0, "every claimed notification was raised to the end, so none holds the head");
+    }
+
     // The window is the moment a drain has raised its last notification and has not yet left its frame. The hook holds
     // the drain there while a thread started from its frame (as a handler's task would be) posts and drains, so the
     // interleaving is forced rather than hoped for.

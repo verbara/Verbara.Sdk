@@ -199,6 +199,86 @@ public sealed class WebSocketControlMessageGuardTests
         }
     }
 
+    // ============================================================ the report is not a second failure
+
+    /// <summary>
+    /// A subscriber throws on every message, and the host's logger throws on the report of it. The report is not a
+    /// second failure: each fault is counted, the other subscriber receives every message, and the pump goes on.
+    /// Before, the line came before the count, and the logger's exception left the guard and ended the read pump.
+    /// </summary>
+    [Fact]
+    public async Task ControlMessages_ShouldCountTheFaultAndKeepReading_WhenASubscriberAndTheLoggerThrow()
+    {
+        // Arrange
+        using var faults = new TransportFailureCounter(MeterName, SubscriberFaults);
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        var logger = new ReportThrowingLogger<WebSocketAudioSession>("A ControlMessages subscriber threw");
+        await using var connection = await GuardedConnection.OpenAsync(bound.Token, logger);
+        using var throwing = connection.Session.ControlMessages.Subscribe(_ => throw new InvalidOperationException("consumer fault"));
+        var second = new ConcurrentQueue<ChanWebSocketControlMessage>();
+        using var other = connection.Session.ControlMessages.Subscribe(second.Enqueue);
+
+        // Act — two control messages, then an audio frame the consumer reads
+        await connection.Peer.SendTextAsync(CapturedDtmf.Text);
+        await connection.Peer.SendTextAsync(CapturedXoff.Text);
+        await connection.Peer.SendBinaryAsync(new byte[AudioFrameBytes]);
+        var read = await ReadFrameLengthAsync(connection.Session, bound.Token);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            faults.Total.Should().Be(2, "each failure is counted, before its line");
+            second.Should().HaveCount(2, "the other subscriber receives the next message too");
+            read.Should().Be(AudioFrameBytes, "the read pump goes on and reads the next frame");
+            logger.Thrown.Should().Be(2, "the logger was asked for the report of each message, and failed on each");
+        }
+    }
+
+    /// <summary>
+    /// A subscriber throws on the completion, and the host's logger throws on the report of it: the disposal still
+    /// returns normally and releases the connection, and the fault is counted.
+    /// </summary>
+    [Fact]
+    public async Task DisposeAsync_ShouldComplete_WhenACompletionSubscriberAndTheLoggerThrow()
+    {
+        // Arrange
+        using var faults = new TransportFailureCounter(MeterName, SubscriberFaults);
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        var logger = new ReportThrowingLogger<WebSocketAudioSession>("A ControlMessages subscriber threw on the completion");
+        await using var connection = await GuardedConnection.OpenAsync(bound.Token, logger);
+        using var throwing = connection.Session.ControlMessages.Subscribe(Observer.Create<ChanWebSocketControlMessage>(
+            _ => { },
+            () => throw new InvalidOperationException("consumer fault on completion")));
+
+        // Act
+        var disposal = await Record.ExceptionAsync(() => connection.Session.DisposeAsync().AsTask().WaitAsync(bound.Token));
+        var released = await EndsWithinAsync(connection.Peer.Ended, ReleaseWait);
+
+        // Assert
+        using (new AssertionScope())
+        {
+            disposal.Should().BeNull("nothing the logger throws stops the disposal");
+            released.Should().BeTrue("the disposal releases the connection");
+            faults.Total.Should().Be(1, "the failure on the completion is counted once, before its line");
+            logger.Thrown.Should().Be(1, "the logger was asked for the report, and failed on it");
+        }
+    }
+
+    /// <summary>The length of the next frame the session reads, or -1 when the read ends without one.</summary>
+    private static async Task<int> ReadFrameLengthAsync(WebSocketAudioSession session, CancellationToken token)
+    {
+        try
+        {
+            var frame = await session.ReadFrameAsync(token).AsTask().WaitAsync(token);
+            return frame.Length;
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException or InvalidOperationException
+            or WebSocketException or ObjectDisposedException)
+        {
+            return -1;
+        }
+    }
+
     /// <summary>Whether <paramref name="ended"/> completes within <paramref name="wait"/>; running out is the failure asserted.</summary>
     private static async Task<bool> EndsWithinAsync(Task ended, TimeSpan wait)
     {
@@ -238,7 +318,8 @@ public sealed class WebSocketControlMessageGuardTests
 
         public CapturingLogger<WebSocketAudioSession> Logger { get; }
 
-        public static async Task<GuardedConnection> OpenAsync(CancellationToken token)
+        public static async Task<GuardedConnection> OpenAsync(CancellationToken token,
+            ILogger<WebSocketAudioSession>? sessionLogger = null)
         {
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
@@ -256,7 +337,7 @@ public sealed class WebSocketControlMessageGuardTests
                 WebSocket.CreateFromStream(stream, new WebSocketCreationOptions { IsServer = true }),
                 id,
                 "slin16",
-                logger);
+                sessionLogger ?? logger);
             peer.AnswerCloseWhenReceived();
             session.Start();
             return new GuardedConnection(listener, accepted, peer, session, logger);

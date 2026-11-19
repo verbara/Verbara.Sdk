@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
+using FluentAssertions.Execution;
 
 namespace Verbara.Sdk.Push.Tests;
 
@@ -279,6 +280,140 @@ public class RxPushEventBusTests
         dropped.Measurements.Should().ContainSingle().Which.Tags.Should().Equal(new[] { WriterClosed });
         logger.Messages.Should().ContainSingle()
             .Which.Should().Contain("'test.event'").And.Contain("disposed").And.NotContain("full buffer");
+    }
+
+    /// <summary>
+    /// Two observers throw on every event, and the host's logger throws on the report of it. The report is not a second
+    /// failure: every observer receives both events. Before, the logger's exception left the per-observer catch and
+    /// ended the dispatch loop at the first throwing observer, so nothing after it was delivered, then or later.
+    /// </summary>
+    [Fact]
+    public async Task PublishAsync_ShouldReachTheLaterObserversForEveryEvent_WhenAnObserverAndTheLoggerThrow()
+    {
+        var logger = new ReportThrowingLogger<RxPushEventBus>("Observer threw while handling push event");
+        using var bus = new RxPushEventBus(Options.Create(new PushEventBusOptions()), logger, new PushMetrics());
+        var first = new ThrowingObserver(onNext: true);
+        var second = new ThrowingObserver(onNext: true);
+        var capture = new CapturingObserver<PushEvent>();
+        using var s1 = bus.AsObservable().Subscribe(first);
+        using var s2 = bus.AsObservable().Subscribe(capture);
+        using var s3 = bus.AsObservable().Subscribe(second);
+
+        await bus.PublishAsync(TestEventFactory.Create("a"));
+        await bus.PublishAsync(TestEventFactory.Create("b"));
+        await WaitFor(() => first.Calls == 2 && second.Calls == 2 && capture.Items.Count == 2);
+
+        using var scope = new AssertionScope();
+        first.Calls.Should().Be(2, "each throwing observer receives both events");
+        second.Calls.Should().Be(2, "each throwing observer receives both events");
+        capture.Items.Should().HaveCount(2, "the healthy observer receives both events");
+        logger.Thrown.Should().Be(4, "the logger was asked for every report, and failed on every one");
+    }
+
+    /// <summary>
+    /// Two observers throw on the completion, and the host's logger throws on the report of it: the disposal still
+    /// completes every observer.
+    /// </summary>
+    [Fact]
+    public void Dispose_ShouldCompleteEveryObserver_WhenACompletionObserverAndTheLoggerThrow()
+    {
+        var logger = new ReportThrowingLogger<RxPushEventBus>("Observer threw while handling push event");
+        var bus = new RxPushEventBus(Options.Create(new PushEventBusOptions()), logger, new PushMetrics());
+        var first = new ThrowingObserver(onCompleted: true);
+        var second = new ThrowingObserver(onCompleted: true);
+        var capture = new CapturingObserver<PushEvent>();
+        using var s1 = bus.AsObservable().Subscribe(first);
+        using var s2 = bus.AsObservable().Subscribe(capture);
+        using var s3 = bus.AsObservable().Subscribe(second);
+
+        var disposal = Record.Exception(bus.Dispose);
+
+        using var scope = new AssertionScope();
+        disposal.Should().BeNull("nothing the logger throws reaches the disposer");
+        first.Completions.Should().Be(1, "every observer is completed");
+        second.Completions.Should().Be(1, "every observer is completed");
+        capture.Completed.Should().BeTrue("every observer is completed");
+    }
+
+    /// <summary>
+    /// Out of memory is the process's failure, not the observer's: the dispatch does not catch nor report it, and the
+    /// loop ends, completing its observers. Before, the catch had no filter: it was logged as an observer fault.
+    /// </summary>
+    [Fact]
+    public async Task PublishAsync_ShouldNotCatchOutOfMemory_WhenAnObserverThrowsIt()
+    {
+        var logger = new CapturingLogger();
+        using var bus = new RxPushEventBus(Options.Create(new PushEventBusOptions()), logger, new PushMetrics());
+        var oom = new ThrowingObserver(onNext: true, outOfMemory: true);
+        var capture = new CapturingObserver<PushEvent>();
+        using var s1 = bus.AsObservable().Subscribe(oom);
+        using var s2 = bus.AsObservable().Subscribe(capture);
+
+        await bus.PublishAsync(TestEventFactory.Create("a"));
+        await WaitFor(() => capture.Completed);
+
+        using var scope = new AssertionScope();
+        oom.Calls.Should().Be(1, "the observer receives the event");
+        logger.Messages.Should().NotContain(m => m.Contains("Observer threw", StringComparison.Ordinal),
+            "out of memory is not reported as an observer's failure");
+        capture.Completed.Should().BeTrue("out of memory ends the dispatch loop, which completes its observers");
+    }
+
+    /// <summary>
+    /// The completion's catch has the same filter: an observer that throws out of memory on the completion is neither
+    /// caught nor reported as an observer's failure. Before, the catch had no filter, and logged it as one.
+    /// </summary>
+    [Fact]
+    public void Dispose_ShouldNotCatchOutOfMemory_WhenACompletionObserverThrowsIt()
+    {
+        var logger = new CapturingLogger();
+        // Disposed in the act; the using is a no-op then, and disposes it if the arrange throws.
+        using var bus = new RxPushEventBus(Options.Create(new PushEventBusOptions()), logger, new PushMetrics());
+        var oom = new ThrowingObserver(onCompleted: true, outOfMemory: true);
+        using var s1 = bus.AsObservable().Subscribe(oom);
+
+        bus.Dispose();
+
+        using var scope = new AssertionScope();
+        oom.Completions.Should().Be(1, "the observer is completed");
+        logger.Messages.Should().NotContain(m => m.Contains("<completion>", StringComparison.Ordinal),
+            "out of memory on the completion is not reported as an observer's failure");
+    }
+
+    /// <summary>An observer that throws on every event, on the completion, or both, and counts each call.</summary>
+    private sealed class ThrowingObserver(bool onNext = false, bool onCompleted = false, bool outOfMemory = false)
+        : IObserver<PushEvent>
+    {
+        private int _calls;
+        private int _completions;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public int Completions => Volatile.Read(ref _completions);
+
+        public void OnNext(PushEvent value)
+        {
+            Interlocked.Increment(ref _calls);
+            if (onNext)
+                throw Failure();
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void OnCompleted()
+        {
+            Interlocked.Increment(ref _completions);
+            if (onCompleted)
+                throw Failure();
+        }
+
+        // The one exception type the isolation lets through; only the runtime may throw it, so the test raises it itself.
+#pragma warning disable CA2201, MA0012
+        private Exception Failure() =>
+            outOfMemory ? new OutOfMemoryException("observer-oom") : new InvalidOperationException("observer fault");
+#pragma warning restore CA2201, MA0012
     }
 
     private sealed class CapturingLogger : ILogger<RxPushEventBus>
