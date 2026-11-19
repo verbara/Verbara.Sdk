@@ -20,17 +20,6 @@ public sealed class CoverageActionPropertyTests2
         action.Conference.Should().Be("1000");
     }
 
-#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
-    [Fact]
-    public void DbPrefixGetAction_ShouldHaveProperties()
-    {
-        var action = new DbPrefixGetAction { Family = "cidname", Key = "123" };
-        action.Family.Should().Be("cidname");
-        action.Key.Should().Be("123");
-        action.Should().BeAssignableTo<IEventGeneratingAction>();
-    }
-#pragma warning restore VSDK0007
-
     [Fact]
     public void DongleSendSMSAction_ShouldHaveProperties()
     {

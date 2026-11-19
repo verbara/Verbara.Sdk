@@ -9,7 +9,7 @@ namespace Verbara.Sdk.Ami.Tests.Events.StatusWire;
 /// </summary>
 public sealed class StatusEventExtensionWireTests
 {
-    /// <summary>The members no supported version sends a header for.</summary>
+    /// <summary>The headers no supported version sends; 2.11.0 removed the members named after them.</summary>
     private static readonly string[] NeverSentHeaders =
         ["State", "CallerId", "Account", "BridgedChannel", "Link", "BridgedUniqueId"];
 
@@ -38,7 +38,7 @@ public sealed class StatusEventExtensionWireTests
 
     [Theory]
     [MemberData(nameof(Versions))]
-    public async Task Deserialize_ShouldLeaveTheNeverSentMembersNull_WhenTheFrameIsACapturedStatus(string version)
+    public async Task Deserialize_ShouldFindNoNeverSentHeader_WhenTheFrameIsACapturedStatus(string version)
     {
         var frames = await StatusWireReplies.ParseAsync(version);
 
@@ -46,15 +46,6 @@ public sealed class StatusEventExtensionWireTests
         using var scope = new AssertionScope();
         foreach (var frame in frames)
         {
-            // These six are obsolete because no version fills them; reading them is the point here.
-#pragma warning disable VSDK0002
-            frame.State.Should().BeNull();
-            frame.CallerId.Should().BeNull();
-            frame.Account.Should().BeNull();
-            frame.BridgedChannel.Should().BeNull();
-            frame.Link.Should().BeNull();
-            frame.BridgedUniqueId.Should().BeNull();
-#pragma warning restore VSDK0002
             frame.RawFields.Should().NotBeNull();
             frame.RawFields!.Keys.Should().NotContain(
                 key => NeverSentHeaders.Contains(key, StringComparer.OrdinalIgnoreCase),

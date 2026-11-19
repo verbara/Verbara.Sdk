@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: six `StatusEvent` members and seven AMI types deprecated for 2.11.0 are removed (#621)
+
+The symbols whose 2.10.0 warning said "Removed in Verbara.Sdk 2.11.0." are gone from `Verbara.Sdk.Ami`, and their ids
+`VSDK0002` and `VSDK0007` are retired. The [2.11.0 migration guide](docs/guides/migration-2.11.0.md) has, for each one,
+who is affected, the compiler error and what to write instead.
+
+- **`StatusEvent.State`, `CallerId`, `Account`, `BridgedChannel`, `Link` and `BridgedUniqueId`** (`VSDK0002`). Each
+  bound a header no supported Asterisk sends on a `Status` frame, so each was always null; re-measured on the pinned
+  22.12.0, 23.6.0 and 24.0.0 images before the removal. Read `ChannelStateDesc`, `CallerIdNum`, `AccountCode` or
+  `BridgeId` instead. A frame that did carry one of the headers keeps it in `RawFields`.
+- **`DbPrefixGetAction`, `ExecAction`, `JitterBufStatsEvent`, `MasqueradeEvent`, `PriEventEvent`,
+  `RtpReceiverStatEvent` and `RtpSenderStatEvent`** (`VSDK0007`). No Asterisk registers the two actions, and no
+  supported Asterisk emits the five events. Use `DbGetTreeAction` or `CommandAction`/`RawAction` for the actions. An
+  event of one of the five names still reaches every subscriber, as a base `ManagerEvent` with its headers in
+  `RawFields`.
+
+A binary built against 2.10.x that names one of these symbols fails with `MissingMethodException` or
+`TypeLoadException` when it reaches it, until it is recompiled against 2.11.0.
+
 ### Added: `CallConnectedEvent.AgentInterface` names the member whose connection the event announces
 
 `CallConnectedEvent` gains `string? AgentInterface { get; init; }`: the interface of the member whose connect the event

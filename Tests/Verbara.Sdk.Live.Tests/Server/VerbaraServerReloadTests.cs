@@ -473,25 +473,21 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RequestInitialStateAsync_ShouldIgnoreTheHeadersNoVersionSends_WhenStatusEventCarriesThemAnyway()
+    public async Task RequestInitialStateAsync_ShouldIgnoreTheHeadersNoVersionSends_WhenTheFrameCarriesThemAnyway()
     {
-        // The negative control for design D5: State and CallerId are set here to values that
-        // contradict the wire, so a reload that still read them would report Up / 9999999. Nothing
-        // on any measured version populates them, and nothing in the reload may consume them.
+        // The negative control for design D5: State and CallerID headers are set here to values that
+        // contradict the wire, so a reload that read them would report Up / 9999999. No measured
+        // version sends a header by either name, and nothing in the reload may consume them.
         _statusReply =
         [
             new StatusEvent
             {
                 UniqueId = "1700000000.7",
                 Channel = "PJSIP/trunk-0007",
-                // The negative control writes the two obsolete members on purpose: they stand for a
-                // value no version sends, and the assertions below show the reload never reads them.
-#pragma warning disable VSDK0002
-                State = nameof(ChannelState.Up),
-                CallerId = "9999999",
-#pragma warning restore VSDK0002
                 RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
+                    ["State"] = nameof(ChannelState.Up),
+                    ["CallerID"] = "9999999",
                     ["ChannelState"] = "4",           // AST_STATE_RING
                     ["ChannelStateDesc"] = "Ring",
                     ["CallerIDNum"] = "5551234",
@@ -504,10 +500,10 @@ public sealed class VerbaraServerReloadTests : IAsyncLifetime
         var admitted = _sut.Channels.GetByUniqueId("1700000000.7");
         admitted.Should().NotBeNull($"Measured: {Describe()}");
         admitted!.State.Should().Be(ChannelState.Ring,
-            "the wire header wins; StatusEvent.State is a property no Asterisk version fills and "
+            "the ChannelState header wins; a State header is one no Asterisk version sends and "
             + "the reload must not read it");
         admitted.CallerIdNum.Should().Be("5551234",
-            "likewise StatusEvent.CallerId — the calling number arrives as CallerIDNum");
+            "likewise a CallerID header — the calling number arrives as CallerIDNum");
     }
 
     [Fact]

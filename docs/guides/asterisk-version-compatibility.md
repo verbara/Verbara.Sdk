@@ -51,9 +51,9 @@ Measured on 23.4.1 and 22.10.1: 5 of about 5.4 million events and 7 of about 3.9
 
 ## `StatusEvent` members no supported version sends
 
-The `Status` reply was measured on Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1: six legs per version, 24 frames in all. Six `StatusEvent` members name a header that none of those frames carries, so on every supported version they are always null. Since 2.9.0 they are `[Obsolete]` under the diagnostic id `VSDK0002`, and each message names where the value is:
+The `Status` reply was measured on Asterisk 18.26.4, 20.20.1, 22.9.0 and 23.4.1: six legs per version, 24 frames in all. Six `StatusEvent` members named a header that none of those frames carries, so on every supported version they were always null. 2.9.0 marked them `[Obsolete]` under the diagnostic id `VSDK0002`, and 2.11.0 removes them. Each value is read from another member:
 
-| Member | Always null because no frame carries | Read instead |
+| Removed member | Was always null because no frame carries | Read instead |
 |--------|--------------------------------------|--------------|
 | `State` | a `State` header | `ChannelStateDesc` (text, for example `Up`) or `ChannelState` (numeric, for example `6`) |
 | `CallerId` | a `CallerID` header | `CallerIdNum` (number) or `CallerIdName` (name) |
@@ -80,15 +80,7 @@ static async Task PrintChannelsAsync(AmiConnection connection)
 }
 ```
 
-**`VSDK0002`.** A project that reads one of the six members gets warning `VSDK0002`, and with `TreatWarningsAsErrors` its build fails. Move the read to the member in the table, or suppress this one obsoletion without muting any other:
-
-```xml
-<PropertyGroup>
-  <NoWarn>$(NoWarn);VSDK0002</NoWarn>
-</PropertyGroup>
-```
-
-**The six members stay until 2.11.0.** They still compile and still bind in 2.9.0 and 2.10.0, and a program compiled against an earlier release keeps running without recompiling, reading null from them as it always did. From 2.10.0 the warning's message ends `Removed in Verbara.Sdk 2.11.0.`: 2.11.0 removes them.
+**Removed in 2.11.0.** Code that reads one of the six members no longer compiles; move the read to the member in the table. A program compiled against 2.10.x or earlier that reads one fails with `MissingMethodException` until it is recompiled. A `NoWarn` or pragma kept for `VSDK0002` suppresses nothing any more and can go. If a server did send one of these headers, it would be in `RawFields`. See [Upgrading from 2.10.x to 2.11.0](migration-2.11.0.md#six-statusevent-members-no-asterisk-fills-are-removed).
 
 **`Extension` reads `Exten`.** Every measured version sends the dialplan extension under the header `Exten`, never `Extension`, so before 2.9.0 `StatusEvent.Extension` was always null. It now reads `Exten`, also for a program compiled against an earlier release, because the binding lives in `Verbara.Sdk.Ami`. A leg whose `Exten` is empty, such as the dialled leg of a `Dial()` that is running `AppDial`, reads `""`, not null.
 

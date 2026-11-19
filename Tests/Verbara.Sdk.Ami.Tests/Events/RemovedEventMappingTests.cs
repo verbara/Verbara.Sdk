@@ -9,8 +9,8 @@ using FluentAssertions.Execution;
 namespace Verbara.Sdk.Ami.Tests.Events;
 
 /// <summary>
-/// The AMI event types that no supported Asterisk sends are gone from the generated registry: the 26 removed in 2.9.0
-/// and the 15 removed in 2.10.0. None of their mapping names resolves to a typed class, the deserializer turns each
+/// The AMI event types that no supported Asterisk sends are gone from the generated registry: the 26 removed in 2.9.0,
+/// the 15 removed in 2.10.0 and the 5 removed in 2.11.0. None of their mapping names resolves to a typed class, the deserializer turns each
 /// into a base <see cref="ManagerEvent"/>, and the registry holds exactly the mapped types that are not among them. <c>PeerEntry</c> stays typed, and carries no
 /// <c>[Obsolete]</c>, because IAX still answers <c>IAXpeerlist</c> and <c>IAXpeers</c> with it.
 /// </summary>
@@ -38,7 +38,18 @@ public sealed class RemovedEventMappingTests
         "AgiExec", "AsyncAgi", "SendFaxStatus", "BridgeExec", "ModuleLoadReport",
     ];
 
+    /// <summary>
+    /// The mapping names of the 5 event types removed in 2.11.0, whose wire name no supported Asterisk emits. Named by
+    /// string, so the list compiles with and without the types.
+    /// </summary>
+    private static readonly string[] NamesRemovedIn2110 =
+    [
+        "JitterBufStats", "Masquerade", "PriEvent", "RtpReceiverStat", "RtpSenderStat",
+    ];
+
     public static TheoryData<string> RemovedNames => new(Names);
+
+    public static TheoryData<string> RemovedIn2110Names => new(NamesRemovedIn2110);
 
     public static TheoryData<string> RemovedIn2100Names => new(NamesRemovedIn2100);
 
@@ -60,9 +71,21 @@ public sealed class RemovedEventMappingTests
         }
     }
 
+    [Fact]
+    public void RemovedIn2110Names_ShouldNameFiveDistinctTypesNotInTheEarlierLists_WhenListed()
+    {
+        using (new AssertionScope())
+        {
+            NamesRemovedIn2110.Distinct(StringComparer.OrdinalIgnoreCase).Should().HaveCount(5);
+            NamesRemovedIn2110.Intersect([.. Names, .. NamesRemovedIn2100], StringComparer.OrdinalIgnoreCase).Should().BeEmpty(
+                "each list counts its own removal");
+        }
+    }
+
     [Theory]
     [MemberData(nameof(RemovedNames))]
     [MemberData(nameof(RemovedIn2100Names))]
+    [MemberData(nameof(RemovedIn2110Names))]
     public void Registry_ShouldResolveNoTypedClass_WhenGivenARemovedMappingName(string name)
     {
         var created = GeneratedEventRegistry.Create(name);
@@ -82,10 +105,10 @@ public sealed class RemovedEventMappingTests
     /// reason moves both sides alike: only a removed name still mapped in the assembly can make it fail.
     /// </summary>
     [Fact]
-    public void Registry_ShouldHoldFortyOneEntriesFewer_WhenTheRemovedTypesAreGone()
+    public void Registry_ShouldHoldFortySixEntriesFewer_WhenTheRemovedTypesAreGone()
     {
         var mapped = MappedEventNames();
-        var removed = new HashSet<string>([.. Names, .. NamesRemovedIn2100], StringComparer.OrdinalIgnoreCase);
+        var removed = new HashSet<string>([.. Names, .. NamesRemovedIn2100, .. NamesRemovedIn2110], StringComparer.OrdinalIgnoreCase);
         var kept = mapped.Count(name => !removed.Contains(name));
 
         using (new AssertionScope())
@@ -93,7 +116,7 @@ public sealed class RemovedEventMappingTests
             mapped.Should().HaveCount(GeneratedEventRegistry.Count,
                 "the registry holds one entry per event mapping of the Ami assembly (the reading's control)");
             GeneratedEventRegistry.Count.Should().Be(kept,
-                "the registry holds the mapped event types that are not among the 41 removed ones, and nothing else; "
+                "the registry holds the mapped event types that are not among the 46 removed ones, and nothing else; "
                 + "still mapped: {0}", string.Join(", ", mapped.Where(removed.Contains)));
         }
     }

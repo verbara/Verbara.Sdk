@@ -846,6 +846,8 @@ From 2.10.0 each of these warnings links to its id's heading below, not to the c
 |---|---|---|
 | `VSDK0002` | `StatusEvent.State`, `CallerId`, `Account`, `BridgedChannel`, `Link`, `BridgedUniqueId` | 2.11.0 |
 
+2.11.0 removed them: see [Six `StatusEvent` members no Asterisk fills are removed](migration-2.11.0.md#six-statusevent-members-no-asterisk-fills-are-removed).
+
 #### VSDK0003
 
 | Id | Member | Removed in |
@@ -899,6 +901,8 @@ with an error; a handler for one of the five events never runs.
 | `PriEventEvent` | `PRIEvent`, emitted by chan_dahdi in Asterisk 1.6, gone by 11 | nothing: no supported Asterisk sends it | 2.11.0 |
 | `RtpReceiverStatEvent` | `RTPReceiverStat`, emitted by the core in Asterisk 1.6, gone by 11 | nothing: no supported Asterisk sends it | 2.11.0 |
 | `RtpSenderStatEvent` | `RTPSenderStat`, emitted by the core in Asterisk 1.6, gone by 11 | nothing: no supported Asterisk sends it | 2.11.0 |
+
+2.11.0 removed them: see [Seven AMI types whose wire name no Asterisk knows are removed](migration-2.11.0.md#seven-ami-types-whose-wire-name-no-asterisk-knows-are-removed).
 
 **Who is affected.** Code that names one of these types. A build with TreatWarningsAsErrors fails on `VSDK0007`
 until the code moves or suppresses the id; any other build shows the warning. Nothing changes at run time.

@@ -33,21 +33,6 @@ public sealed class CoverageEventPropertyTests2
         evt.ListContexts.Should().Be(3);
     }
 
-#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
-    [Fact]
-    public void RtpReceiverStatEvent_ShouldHaveAllProperties()
-    {
-        var evt = new RtpReceiverStatEvent
-        {
-            ReceivedPackets = 1000, Transit = 1.5, RrCount = 10, AccountCode = "acc1"
-        };
-        evt.ReceivedPackets.Should().Be(1000);
-        evt.Transit.Should().Be(1.5);
-        evt.RrCount.Should().Be(10);
-        evt.AccountCode.Should().Be("acc1");
-    }
-#pragma warning restore VSDK0007
-
     [Fact]
     public void VoicemailUserEntryEvent_ShouldHaveAllProperties()
     {
@@ -276,15 +261,6 @@ public sealed class CoverageEventPropertyTests2
         evt.Address.Should().Be("192.168.1.100:5060");
     }
 
-#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
-    [Fact]
-    public void PriEventEvent_ShouldHaveAllProperties()
-    {
-        var evt = new PriEventEvent { PriEvent = "RING" };
-        evt.PriEvent.Should().Be("RING");
-    }
-#pragma warning restore VSDK0007
-
     [Fact]
     public void DndStateEvent_ShouldHaveAllProperties()
     {
@@ -308,24 +284,6 @@ public sealed class CoverageEventPropertyTests2
         evt.Channel.Should().Be("console");
         evt.Enabled.Should().BeTrue();
     }
-
-#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
-    [Fact]
-    public void MasqueradeEvent_ShouldHaveAllProperties()
-    {
-        var evt = new MasqueradeEvent
-        {
-            Clone = "SIP/100-001", CloneState = 6, CloneStateDesc = "Up",
-            Original = "SIP/200-001", OriginalState = 6, OriginalStateDesc = "Up"
-        };
-        evt.Clone.Should().Be("SIP/100-001");
-        evt.CloneState.Should().Be(6);
-        evt.CloneStateDesc.Should().Be("Up");
-        evt.Original.Should().Be("SIP/200-001");
-        evt.OriginalState.Should().Be(6);
-        evt.OriginalStateDesc.Should().Be("Up");
-    }
-#pragma warning restore VSDK0007
 
     [Fact]
     public void NewCallerIdEvent_ShouldHaveAllProperties()

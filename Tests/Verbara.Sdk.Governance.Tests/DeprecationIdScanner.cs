@@ -87,7 +87,10 @@ internal static class DeprecationIdScanner
         return new DeprecationIdReport(srcFiles.Count, scan.MarksFound, scan.Violations);
     }
 
-    /// <summary>A retired id's removed set: a symbol of it declared again in the package that declared it.</summary>
+    /// <summary>
+    /// A retired id's removed set: a symbol of it declared again in the package that declared it. A record's positional
+    /// parameter is keyed <c>Record.Parameter</c>, as a mark on it is: it declares the property the compiler generates.
+    /// </summary>
     private static void CheckRemovedDeclarations(SyntaxTree tree, string package, string relative, ScanState scan)
     {
         var inPackage = scan.Register
@@ -105,6 +108,8 @@ internal static class DeprecationIdScanner
                 DelegateDeclarationSyntax del => del.Identifier.ValueText,
                 PropertyDeclarationSyntax or MethodDeclarationSyntax or FieldDeclarationSyntax or EventDeclarationSyntax
                     or EventFieldDeclarationSyntax => MemberKey(node),
+                ParameterSyntax { Parent: ParameterListSyntax { Parent: RecordDeclarationSyntax record } } parameter
+                    => record.Identifier.ValueText + "." + parameter.Identifier.ValueText,
                 _ => null,
             };
             if (key is null)

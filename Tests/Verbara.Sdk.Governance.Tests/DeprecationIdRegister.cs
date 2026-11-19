@@ -66,7 +66,7 @@ internal static class DeprecationIdRegister
     public static IReadOnlyList<DeprecationIdRow> Rows { get; } =
     [
         new("VSDK0001", DeprecationIdState.Retired, "2.9.0", null, [], []),
-        Marked("VSDK0002",
+        new("VSDK0002", DeprecationIdState.Retired, "2.11.0", MigrationGuide2_10, [],
             [
                 new(Ami, "StatusEvent.CallerId"), new(Ami, "StatusEvent.Account"), new(Ami, "StatusEvent.State"),
                 new(Ami, "StatusEvent.BridgedChannel"), new(Ami, "StatusEvent.Link"), new(Ami, "StatusEvent.BridgedUniqueId"),
@@ -79,7 +79,7 @@ internal static class DeprecationIdRegister
             ]),
         new("VSDK0005", DeprecationIdState.Retired, "2.10.0", RemovalGuide2_9, [], BuildVsdk0005RemovedSet()),
         Marked("VSDK0006", [new(Sessions, "SessionMetrics.SessionsTimedOut"), new(Sessions, "SessionMetrics.SessionsOrphaned")]),
-        Marked("VSDK0007",
+        new("VSDK0007", DeprecationIdState.Retired, "2.11.0", MigrationGuide2_10, [],
             [
                 new(Ami, "DbPrefixGetAction"), new(Ami, "ExecAction"), new(Ami, "JitterBufStatsEvent"), new(Ami, "MasqueradeEvent"),
                 new(Ami, "PriEventEvent"), new(Ami, "RtpReceiverStatEvent"), new(Ami, "RtpSenderStatEvent"),
