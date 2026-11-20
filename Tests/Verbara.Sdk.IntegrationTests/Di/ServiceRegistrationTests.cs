@@ -131,6 +131,9 @@ public class ServiceRegistrationTests
         var hostedServices = provider.GetServices<IHostedService>().ToList();
 
         hostedServices.Should().Contain(s => s.GetType().Name == "SessionManagerHostedService");
+        hostedServices.Should().ContainSingle(
+            s => s.GetType().Name == "SessionPersistenceTokenService",
+            "the single-server registration has the same one owner of the persistence token as the multi-server one");
     }
 
     [Fact]
@@ -145,9 +148,9 @@ public class ServiceRegistrationTests
         var hostedServices = provider.GetServices<IHostedService>().Select(s => s.GetType().Name).ToList();
 
         hostedServices.Should().BeEquivalentTo(
-            ["HealthCheckPublisherHostedService", "PoolReconciliationService"],
-            "the multi-server registration adds the pool's reconciliation sweep and no service that attaches a server: "
-            + "the host attaches each server of the pool itself");
+            ["HealthCheckPublisherHostedService", "SessionPersistenceTokenService", "PoolReconciliationService"],
+            "the multi-server registration adds the owner of the persistence token and the pool's reconciliation sweep, "
+            + "and no service that attaches a server: the host attaches each server of the pool itself");
     }
 
     [Fact]

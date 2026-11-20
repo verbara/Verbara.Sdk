@@ -106,6 +106,23 @@ The push bus caught every exception an observer threw, `OutOfMemoryException` in
 completes its observers. Any other exception from an observer is still caught, logged and counted as a dropped
 delivery.
 
+### Fixed: a multi-server sessions host ends its session saves with the stop phase (#623)
+
+`AddVerbaraSessionsMultiServer` and `AddVerbaraSessionsMultiServerBuilder` never handed the session manager a
+persistence token, so on a pool host every session save ran under a token nothing could cancel. When a stop was no
+longer graceful, it did not cut an in-flight save short. The host's teardown did not end that save either. Every
+sessions registration now has one internal hosted service that owns that token, single-server and multi-server alike.
+A host that calls more than one registration still has exactly one owner. The token is handed before any hosted
+service starts. The host's stop token is wired on only after every hosted service's `StopAsync` has returned, so a
+pool host that detaches its servers in its own stop finishes the detach before any save is cancelled. The token is
+cancelled before it is released at teardown, so a save that outlived the stop ends there.
+
+A graceful stop still cancels nothing. On a single-server host, the cut-short of a non-graceful stop now runs after
+every hosted service's stop has returned rather than inside the SDK's own stop. Every sessions host has one more
+internal hosted service. No public API changes.
+
+To roll back, revert the package. A pool host then saves under a token that cannot be cancelled again.
+
 ## [2.10.1] - 2026-11-16
 
 ### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#584)

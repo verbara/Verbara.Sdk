@@ -143,9 +143,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     /// <summary>
     /// Sets the token <em>every</em> persistence call runs under, not only the ones at shutdown.
-    /// With the SDK's hosted service the token comes from a source that service owns, and the stop
-    /// phase is what cancels it: the host withdrawing its graceful shutdown, or that service's own
-    /// teardown. An aborted start does not cancel it.
+    /// On a host built with any of the SDK's sessions registrations the token comes from a source
+    /// the SDK's token-only persistence service owns, and the stop phase is what cancels it: the host
+    /// withdrawing its graceful shutdown, or that service's own teardown. An aborted start does not
+    /// cancel it.
     /// </summary>
     internal void SetShutdownToken(CancellationToken token) => _shutdownToken = token;
 
@@ -176,8 +177,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         }
         catch (OperationCanceledException) when (_shutdownToken.IsCancellationRequested)
         {
-            // The persistence token was cancelled — with the SDK's hosted service, by the host
-            // withdrawing its graceful shutdown or by that service's teardown. The save was cut
+            // The persistence token was cancelled — on an SDK sessions host, by the host withdrawing
+            // its graceful shutdown or by the token-only persistence service's teardown. The save was cut
             // short on purpose, so it is not a persistence failure and is not logged. A cancellation
             // while the token is still live, such as a store-side timeout, is still logged below.
         }
