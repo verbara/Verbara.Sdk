@@ -359,6 +359,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     public void AttachToServer(VerbaraServer server, string serverId)
     {
+        Interlocked.Increment(ref _attachCalls);
         if (t_notificationDepth > 0)
             throw AttachRefused(serverId);
 

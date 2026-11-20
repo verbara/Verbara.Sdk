@@ -1,3 +1,5 @@
+using Verbara.Sdk.Live.Server;
+
 namespace Verbara.Sdk.Sessions.Manager;
 
 public sealed partial class CallSessionManager
@@ -18,6 +20,28 @@ public sealed partial class CallSessionManager
 
     /// <summary>The releases running now, by server id. Read and written only under <c>_attachLock</c>.</summary>
     private readonly Dictionary<string, ReleaseInProgress> _releasesInProgress = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Every call of <see cref="AttachToServer"/> this engine has received, counted on entry whatever its outcome. Read
+    /// through <see cref="AttachCalls"/>.
+    /// </summary>
+    private long _attachCalls;
+
+    /// <summary>
+    /// How many calls of <see cref="AttachToServer"/> this engine has received. The single-server hosted service reads it
+    /// before and after its own attach to learn whether that attach reached this engine or another manager.
+    /// </summary>
+    internal long AttachCalls => Interlocked.Read(ref _attachCalls);
+
+    /// <summary>
+    /// The server attached under <paramref name="serverId"/> now, or <see langword="null"/>; read under the attach lock.
+    /// The single-server hosted service reads it before its attach to learn whether the host installed the id first.
+    /// </summary>
+    internal VerbaraServer? AttachedServer(string serverId)
+    {
+        lock (_attachLock)
+            return _serverSubs.TryGetValue(serverId, out var subs) ? subs.Server : null;
+    }
 
     /// <summary>
     /// How deep the current thread is inside the session engine's own work: entered by every handler of an
