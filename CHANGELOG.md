@@ -110,6 +110,28 @@ Warning instead. Why: one subscriber's bug should not silence the others, and it
 did nothing wrong. See the
 [troubleshooting guide](docs/guides/troubleshooting.md#what-a-live-event-handler-may-do).
 
+### Changed — BREAKING: an `AgentManager` or `BridgeManager` subscriber that throws stops nothing else (#626)
+
+`AgentManager` (`AgentLoggedIn`, `AgentLoggedOff`, `AgentStateChanged`, `AgentConnected`) and `BridgeManager`
+(`BridgeCreated`, `BridgeDestroyed`, `ChannelEntered`, `ChannelLeft`, `TransferOccurred`) now raise each event subscriber
+by subscriber, as `ChannelManager`, `QueueManager` and `MeetMeManager` do: every subscriber receives the event in
+subscription order, whatever an earlier one threw. The failure is counted on `live.agents.subscriber_faults` or
+`live.bridges.subscriber_faults` (meter `Verbara.Sdk.Live`) and logged once at Warning, with the exception:
+`[AGENT] Subscriber failed: event=<Event> subject=<AgentId>; …` or
+`[BRIDGE] Subscriber failed: event=<Event> bridge_id=<BridgeId> channel=<Channel>; …`. The fault is counted before the
+line is written, and a logger that throws on that line is ignored. The events that follow in the same report are still
+raised: a throwing `AgentStateChanged` subscriber no longer skips the `AgentConnected` after it, and a throwing
+`ChannelEntered` subscriber no longer leaves the bridge's two channels unlinked. Nothing is thrown from any call: the live
+AMI event that made the change, `StartAsync`, a reconnect's reload (its `AgentLoggedIn` announcements and its bridge
+reconciliation) and `ReconcileQueuesAsync` all finish their work. A subscriber stays subscribed, and
+`OutOfMemoryException` is not caught. The SDK's own subscribers, the session engine included, are isolated the same way.
+What breaks: up to 2.10.x, a throwing subscriber kept the later subscribers and the events after it in the same report
+from running, and its exception left the manager call: a live event's surfaced as `[AMI_EVENT] Observer threw on
+<EventType>`, a load or a reload failed with it, and `ReconcileQueuesAsync` rethrew it after settling the other agents.
+Code that relied on that exception has to make that decision itself: read the counter or the Warning instead. Why: one
+subscriber's bug should not silence the others, skip the events after it, or fail a start or a reload that did nothing
+wrong. See the [troubleshooting guide](docs/guides/troubleshooting.md#what-a-live-event-handler-may-do).
+
 ### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.35 (#619)
 
 `Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.35` instead of `>= 3.4.31`. A patch release of

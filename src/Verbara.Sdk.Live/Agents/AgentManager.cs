@@ -23,6 +23,9 @@ internal static partial class AgentManagerLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AGENT] Unknown agent: agent_id={AgentId}")]
     public static partial void UnknownAgent(ILogger logger, string agentId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AGENT] Subscriber failed: event={EventName} subject={Subject}; the other subscribers still receive it")]
+    public static partial void SubscriberFailed(ILogger logger, Exception exception, string eventName, string? subject);
 }
 
 /// <summary>
@@ -120,7 +123,7 @@ public sealed class AgentManager
             agent.LastCallTalkTimeSecs = 0;
         }
         AgentManagerLog.Login(_logger, agentId, channel);
-        AgentLoggedIn?.Invoke(agent);
+        RaiseAgent(AgentLoggedIn, nameof(AgentLoggedIn), agent);
     }
 
     /// <summary>Handle AgentLogoff event.</summary>
@@ -135,7 +138,7 @@ public sealed class AgentManager
                 agent.LastStateChangeAt = DateTimeOffset.UtcNow;
             }
             AgentManagerLog.Logoff(_logger, agentId);
-            AgentLoggedOff?.Invoke(agent);
+            RaiseAgent(AgentLoggedOff, nameof(AgentLoggedOff), agent);
         }
         else
         {
@@ -157,8 +160,9 @@ public sealed class AgentManager
             }
             AgentManagerLog.Connect(_logger, agentId, talkingTo);
             LiveMetrics.AgentStateChanges.Add(1);
-            AgentStateChanged?.Invoke(agent);
-            AgentConnected?.Invoke(agentId, linkedId, memberInterface);
+            // Each in its own guard: a throwing state subscriber skips neither the connect nor what the server raises next.
+            RaiseAgent(AgentStateChanged, nameof(AgentStateChanged), agent);
+            RaiseConnected(AgentConnected, agentId, linkedId, memberInterface);
         }
     }
 
@@ -168,14 +172,14 @@ public sealed class AgentManager
     /// run first and see the call as they always did.
     /// </summary>
     internal void OnQueueCallerConnected(string? callerUniqueId, string? memberName, string? memberInterface) =>
-        QueueCallerConnected?.Invoke(callerUniqueId, memberName, memberInterface);
+        RaiseCallerConnected(QueueCallerConnected, callerUniqueId, memberName, memberInterface);
 
     /// <summary>
     /// Raise <see cref="QueueCallerCompleted"/> for an <c>AgentComplete</c>. The server calls it after
     /// <see cref="OnAgentComplete"/>, so a known agent's state handlers run first, as they always did.
     /// </summary>
     internal void OnQueueCallerCompleted(QueueCallerCompletion completion) =>
-        QueueCallerCompleted?.Invoke(completion);
+        RaiseCallerCompleted(QueueCallerCompleted, completion);
 
     /// <summary>Handle AgentComplete event (agent finished a queue call).</summary>
     public void OnAgentComplete(string agentId, long talkTimeSecs = 0, long holdTimeSecs = 0)
@@ -194,7 +198,7 @@ public sealed class AgentManager
             }
             AgentManagerLog.Complete(_logger, agentId, talkTimeSecs, holdTimeSecs, agent.CallsTaken);
             LiveMetrics.AgentStateChanges.Add(1);
-            AgentStateChanged?.Invoke(agent);
+            RaiseAgent(AgentStateChanged, nameof(AgentStateChanged), agent);
         }
     }
 
@@ -210,7 +214,7 @@ public sealed class AgentManager
             }
             AgentManagerLog.PauseChanged(_logger, agentId, paused);
             LiveMetrics.AgentStateChanges.Add(1);
-            AgentStateChanged?.Invoke(agent);
+            RaiseAgent(AgentStateChanged, nameof(AgentStateChanged), agent);
         }
     }
 
@@ -254,7 +258,7 @@ public sealed class AgentManager
 
         AgentManagerLog.PauseChanged(_logger, agentId, state == AgentState.Paused);
         LiveMetrics.AgentStateChanges.Add(1);
-        AgentStateChanged?.Invoke(agent);
+        RaiseAgent(AgentStateChanged, nameof(AgentStateChanged), agent);
     }
 
     /// <summary>Register an agent definition without logging it in (appears as LoggedOff).</summary>
@@ -410,7 +414,171 @@ public sealed class AgentManager
             return;
 
         AgentManagerLog.Login(_logger, agent.AgentId, agent.Channel);
-        AgentLoggedIn?.Invoke(agent);
+        RaiseAgent(AgentLoggedIn, nameof(AgentLoggedIn), agent);
+    }
+
+    /// <summary>
+    /// Delivers one agent event to each of <paramref name="handlers"/> in subscription order, each in its own guard, as
+    /// <c>ChannelManager</c> does: a subscriber that throws is counted on <c>live.agents.subscriber_faults</c> and logged
+    /// once at Warning with the event and the agent it names (the queue caller's <c>Uniqueid</c> for the two queue-caller
+    /// reports), and the later subscribers still receive the event. Nothing a subscriber throws leaves this method, so a
+    /// throwing <see cref="AgentStateChanged"/> subscriber skips neither the <see cref="AgentConnected"/> that follows nor
+    /// the server's queue-caller report after it, and a load or a reload goes on. A logger that throws while reporting is
+    /// ignored: the fault is already counted. <see cref="OutOfMemoryException"/> is not caught. Only what throws on the
+    /// delivering thread is caught. The invocation list is walked with a struct enumerator, so a delivery allocates
+    /// nothing whatever the number of subscribers. One non-generic method per delegate type: a generic one over reference
+    /// types runs shared code that looks the enumerator up at run time, measurably slower on a path this short.
+    /// </summary>
+    private void RaiseAgent(Action<AsteriskAgent>? handlers, string eventName, AsteriskAgent agent)
+    {
+        if (handlers is null)
+            return;
+
+        // One subscriber, the usual case: called straight, so the runtime can devirtualize it as it does a bare Invoke.
+        if (handlers.HasSingleTarget)
+        {
+            try
+            {
+                handlers(agent);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, eventName, agent.AgentId);
+            }
+
+            return;
+        }
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(agent);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, eventName, agent.AgentId);
+            }
+        }
+    }
+
+    /// <summary>The <see cref="AgentConnected"/> shape of <see cref="RaiseAgent"/>.</summary>
+    private void RaiseConnected(Action<string, string?, string?>? handlers, string agentId, string? linkedId,
+        string? memberInterface)
+    {
+        if (handlers is null)
+            return;
+
+        // One subscriber, the usual case: called straight, so the runtime can devirtualize it as it does a bare Invoke.
+        if (handlers.HasSingleTarget)
+        {
+            try
+            {
+                handlers(agentId, linkedId, memberInterface);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, nameof(AgentConnected), agentId);
+            }
+
+            return;
+        }
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(agentId, linkedId, memberInterface);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, nameof(AgentConnected), agentId);
+            }
+        }
+    }
+
+    /// <summary>The <see cref="QueueCallerConnected"/> shape of <see cref="RaiseAgent"/>.</summary>
+    private void RaiseCallerConnected(Action<string?, string?, string?>? handlers, string? callerUniqueId,
+        string? memberName, string? memberInterface)
+    {
+        if (handlers is null)
+            return;
+
+        // One subscriber, the usual case: called straight, so the runtime can devirtualize it as it does a bare Invoke.
+        if (handlers.HasSingleTarget)
+        {
+            try
+            {
+                handlers(callerUniqueId, memberName, memberInterface);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, nameof(QueueCallerConnected), callerUniqueId);
+            }
+
+            return;
+        }
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(callerUniqueId, memberName, memberInterface);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, nameof(QueueCallerConnected), callerUniqueId);
+            }
+        }
+    }
+
+    /// <summary>The <see cref="QueueCallerCompleted"/> shape of <see cref="RaiseAgent"/>.</summary>
+    private void RaiseCallerCompleted(Action<QueueCallerCompletion>? handlers, QueueCallerCompletion completion)
+    {
+        if (handlers is null)
+            return;
+
+        // One subscriber, the usual case: called straight, so the runtime can devirtualize it as it does a bare Invoke.
+        if (handlers.HasSingleTarget)
+        {
+            try
+            {
+                handlers(completion);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, nameof(QueueCallerCompleted), completion.CallerUniqueId);
+            }
+
+            return;
+        }
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(completion);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, nameof(QueueCallerCompleted), completion.CallerUniqueId);
+            }
+        }
+    }
+
+    // The counter first, then the line: a logger that throws on it leaves the fault counted and the delivery going on.
+    private void ReportSubscriberFailure(Exception failure, string eventName, string? subject)
+    {
+        LiveMetrics.AgentSubscriberFaults.Add(1);
+        try
+        {
+            AgentManagerLog.SubscriberFailed(_logger, failure, eventName, subject);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The log line is the only trace a subscriber's failure leaves besides the counter; when the logger fails
+            // too, the fault stays counted and the event goes on to the later subscribers.
+        }
     }
 
     // Read under the agent's lock, so that a live change in progress is read before it or after it. _liveEvents may be

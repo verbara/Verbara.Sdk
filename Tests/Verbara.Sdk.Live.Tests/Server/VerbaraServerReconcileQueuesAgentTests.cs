@@ -243,7 +243,7 @@ public sealed class VerbaraServerReconcileQueuesAgentTests
     }
 
     [Fact]
-    public async Task ReconcileQueuesAsync_ShouldSettleEveryAgent_WhenAnAgentStateChangedSubscriberThrows()
+    public async Task ReconcileQueuesAsync_ShouldCompleteAndSettleEveryAgent_WhenAnAgentStateChangedSubscriberThrows()
     {
         await using var rig = await AgentRig.StartAsync(
             [new ListedQueue(Sales, [AgentMember, OtherAgentMember], [], PausedMembers: [AgentMember, OtherAgentMember])],
@@ -257,7 +257,7 @@ public sealed class VerbaraServerReconcileQueuesAgentTests
 
         using (new AssertionScope())
         {
-            outcome.Should().NotBeNull("an agent subscriber's failure leaves the call, as from a live member event");
+            outcome.Should().BeNull("an agent subscriber's failure is its own: it no longer leaves the reload");
             rig.State(Agent).Should().Be(AgentState.Available, "every agent whose membership was removed is settled");
             rig.State(OtherAgent).Should().Be(AgentState.Available, "the failure of one agent's handler does not skip the other");
             rig.Changes(Agent).Should().Be(1);

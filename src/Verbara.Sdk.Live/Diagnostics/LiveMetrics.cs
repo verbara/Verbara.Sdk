@@ -79,6 +79,22 @@ public static class LiveMetrics
         Meter.CreateCounter<long>("live.meetme.subscriber_faults", "faults",
             "Conference subscriber failures (a conference event handler threw); delivery goes on");
 
+    /// <summary>
+    /// Agent subscriber failures: a handler of an <c>AgentManager</c> event that threw, one per failure. Each is also
+    /// logged at Warning; the later subscribers, the events that follow and the table's work go on.
+    /// </summary>
+    internal static readonly Counter<long> AgentSubscriberFaults =
+        Meter.CreateCounter<long>("live.agents.subscriber_faults", "faults",
+            "Agent subscriber failures (an agent event handler threw); delivery goes on");
+
+    /// <summary>
+    /// Bridge subscriber failures: a handler of a <c>BridgeManager</c> event that threw, one per failure. Each is also
+    /// logged at Warning; the later subscribers and the table's work go on.
+    /// </summary>
+    internal static readonly Counter<long> BridgeSubscriberFaults =
+        Meter.CreateCounter<long>("live.bridges.subscriber_faults", "faults",
+            "Bridge subscriber failures (a bridge event handler threw); delivery goes on");
+
     // --- Histograms ---
 
     /// <summary>Time a caller waited in queue before being answered.</summary>

@@ -16,6 +16,8 @@ Micro-benchmarks for the SDK's hot paths, driven by [BenchmarkDotNet](https://be
 | `ChannelLocationFollowBenchmark` | `ChannelManager.OnNewExten` per-report cost on 1,000 held channels (fresh and at the 100-entry history bound) and the cost of reading `ExtensionHistory` |
 | `QueueManagerBenchmark` | `QueueManager` per-event cost of member, device, caller-status, abandon and join/leave events, with and without one subscriber |
 | `MeetMeManagerBenchmark` | `MeetMeManager` per-event cost of a participant's mute change, with and without one subscriber |
+| `AgentManagerBenchmark` | `AgentManager` per-event cost of a pause change and of an answered queue call (`AgentStateChanged` then `AgentConnected`), with and without one subscriber |
+| `BridgeManagerBenchmark` | `BridgeManager` per-event cost of a channel entering and leaving a bridge and of a blind transfer, with and without one subscriber |
 | `ObserverDispatchBenchmark` | Copy-on-write volatile array observer dispatch |
 | `ConcurrentThroughputBenchmark` | AMI end-to-end on a single connection |
 | `AriJsonBenchmark` | ARI source-generated JSON deserialization |
