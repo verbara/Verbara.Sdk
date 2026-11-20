@@ -522,7 +522,12 @@ public static class ServiceCollectionExtensions
     {
         services.TryAddSingleton<ICallSessionManager, CallSessionManager>();
         services.TryAddSingleton<IAgentSessionTracker, AgentSessionTracker>();
-        services.TryAddSingleton<IQueueSessionTracker, QueueSessionTracker>();
+        // Domain events from the manager the host resolves, visit signals from the engine behind it (a decorator
+        // implements no IQueueVisitSource): through an explicit factory, as the token and the sweep.
+        services.TryAdd(ServiceDescriptor.Singleton<IQueueSessionTracker, QueueSessionTracker>(sp => new QueueSessionTracker(
+            sp.GetRequiredService<ICallSessionManager>(),
+            SessionEngine.Resolve(sp),
+            sp.GetRequiredService<IOptions<SessionOptions>>())));
         services.TryAddSingleton<SessionStoreBase, InMemorySessionStore>();
         // Resolve ISessionStore through SessionStoreBase so custom overrides registered
         // by consumers (e.g. AddSingleton<SessionStoreBase, MyStore>()) continue to flow

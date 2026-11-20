@@ -19,10 +19,10 @@ namespace Verbara.Sdk.Hosting;
 /// </para>
 /// <para>
 /// A caller that drives this service as a plain <see cref="IHostedService"/> — <see cref="StartAsync"/> alone — still
-/// attaches, in <see cref="StartAsync"/>. Whichever of the two runs first attaches and the other does nothing: a second
-/// attach under the same id would replace the subscriptions without removing the first ones, so the stop's detach would
-/// remove only the second set and the first would go on opening sessions after the stop. A stop detaches, so a start
-/// after a stop attaches again.
+/// attaches, in <see cref="StartAsync"/>. Whichever of the two runs first attaches and the other does nothing, so the
+/// manager the host resolves sees one attach per start whatever its type: the engine takes a repeated attach of the same
+/// server under the same id as a no-op, but a decorator or a manager of the host's own would see the second call. A stop
+/// detaches, so a start after a stop attaches again.
 /// </para>
 /// </remarks>
 internal sealed class SessionManagerHostedService(

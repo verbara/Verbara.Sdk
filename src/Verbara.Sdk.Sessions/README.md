@@ -248,9 +248,10 @@ the queue's `servicelevel` when you compare it with Asterisk's.
 
 ### Over a custom session manager
 
-The tracker reads Asterisk's leave, abandon report and `QUEUESTATUS` through the SDK's own `CallSessionManager`.
-Over another `ICallSessionManager` it reads the domain events only: a visit ends at its connection, at the caller's
-next join or at its hang-up, abandoned unless connected (key exits included), and no timeout is counted.
+The tracker reads Asterisk's leave, abandon report and `QUEUESTATUS` through the SDK's own `CallSessionManager`: the
+manager itself, or the engine behind a decorator you registered as the next section shows. Over another
+`ICallSessionManager` it reads the domain events only: a visit ends at its connection, at the caller's next join or at
+its hang-up, abandoned unless connected (key exits included), and no timeout is counted.
 
 ## Decorating the session manager
 
@@ -277,17 +278,17 @@ Such a host gets what an undecorated host gets:
   the token and the sweep go to that idle instance.
 - **The reconciliation sweep.** The single-server and pool sweeps read that registered engine, and decide its calls as
   they decide an undecorated host's.
+- **The queue counters.** `IQueueSessionTracker` reads the domain events through your manager and Asterisk's leave,
+  abandon report and `QUEUESTATUS` from that registered engine, so a key exit, a timeout and the end of the wait are
+  counted as on an undecorated host.
 - **The teardown.** `CallSessionManager.DisposeAsync` may be called more than once, so your wrapper may forward its
   own disposal to the engine the container also disposes.
 
-The queue counters are the exception: behind a wrapper they still read the domain events only (see *Over a custom
-session manager* above).
-
 When no engine is reachable — the wrapper builds its own `CallSessionManager` with `new` or `ActivatorUtilities`, or
 your manager wraps no engine at all — the attach still goes through your manager, but no engine receives the token:
-saves run under a token the host's stop never cancels, and the sweep treats the calls as a custom manager's. The host
-logs one Warning at start, EventId 1 under the `Verbara.Sdk.Hosting.SessionPersistenceTokenService` category, naming
-your manager's type. The SDK never builds an engine of its own to reach.
+saves run under a token the host's stop never cancels, the sweep treats the calls as a custom manager's, and the queue
+counters read the domain events only. The host logs one Warning at start, EventId 1 under the
+`Verbara.Sdk.Hosting.SessionPersistenceTokenService` category, naming your manager's type. The SDK never builds an engine of its own to reach.
 
 ## Custom Persistence
 
