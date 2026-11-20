@@ -314,6 +314,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>Null in production; observes a load whose <c>Agents</c> list has passed its fence, before it is applied.</summary>
     internal Func<ValueTask>? AgentsListFenced { get; set; }
 
+    /// <summary>Null in production; observes a channel read that has begun and has not yet opened its read.</summary>
+    internal Func<ValueTask>? ChannelReadBegun { get; set; }
+
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
 
@@ -1370,6 +1373,10 @@ public sealed class VerbaraServer : IVerbaraServer
         // order a dropped Hangup the epoch counts has its channel's creation event at or below the position.
         var sampled = ReadCurrentEventLossEpoch();
         var received = session?.Connection.ReceivedThrough ?? default;
+
+        // TEMPORARY (H243 red): observes a read that has sampled and not yet opened. Removed by the fix.
+        if (ChannelReadBegun is { } begun)
+            await begun();
 
         // Counted before its window opens and until after the window has closed, so the read is counted at every instant
         // at which it can still admit a channel another read's window would keep.

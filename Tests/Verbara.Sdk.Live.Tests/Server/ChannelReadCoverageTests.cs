@@ -374,6 +374,40 @@ public sealed class ChannelReadCoverageTests
         }
     }
 
+    [Fact]
+    public async Task ReconcileChannelsAsync_ShouldLeaveACoveredLossCovered_WhenAReadThatBeganEarlierOpensAfterAnotherCovered()
+    {
+        using var spans = new Spans();
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await StartAsync(peer);
+
+        // Inside A, which has begun and not opened: an event is dropped and delivered, and B runs to a covering completion.
+        Activity? spanB = null;
+        var heldA = 0;
+        run.Server.ChannelReadBegun = async () =>
+        {
+            if (Interlocked.Exchange(ref heldA, 1) != 0) return;
+            using (var hold = await HoldAndDropAsync(run, peer, "begun-1"))
+                await DeliverAsync(run, peer, hold, "begun-1");
+            spanB = await spans.TraceAsync(() => run.Server.ReconcileChannelsAsync().AsTask());
+        };
+        var spanA = await spans.TraceAsync(() => run.Server.ReconcileChannelsAsync().AsTask());
+        run.Server.ChannelReadBegun = null;
+        var statusAsked = peer.Asked("Status");
+
+        using (new AssertionScope())
+        {
+            spanB.Should().NotBeNull("premise: B ran inside A's begun and unopened read");
+            Tag(spanB!, Covered).Should().Be("True", "premise: B covered the drop");
+            Tag(spanA, Overlapped).Should().BeNull("premise: A opened after B had finished, so nothing overlapped it");
+            run.Server.HasPendingLoss.Should().BeFalse(
+                "B covered the drop and A, opened after B, cannot publish an older sample over B's");
+            run.Server.HasDeliveredUnreconciledLoss.Should().BeFalse(
+                "the reading the session sweep sends a Status on reads false, so its next tick sends none for the drop");
+            peer.Asked("Status").Should().Be(statusAsked, "nothing else asked for a Status after the two reads");
+        }
+    }
+
     // ---- Around a session start ----
 
     [Fact]
