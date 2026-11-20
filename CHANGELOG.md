@@ -49,6 +49,19 @@ are gone, and their ids `VSDK0003`, `VSDK0004` and `VSDK0006` are retired. The
 A binary built against 2.10.x that names one of these symbols fails with `MissingMethodException`,
 `MissingFieldException` (the three meter fields) or `TypeLoadException` when it reaches it, until it is recompiled.
 
+### Changed — BREAKING: the bridge format arguments are named for what they format (#624)
+
+`Bridges.PlayAsync(…, format:)` becomes `announcerFormat:` and `Bridges.RecordAsync(…, format:)` becomes
+`recorderFormat:`, on `IAriBridgesResource` and `AriBridgesResource`. They are the audio formats of the Announcer and
+Recorder channels, sent as `announcer_format` and `recorder_format`. Under the old name one `RecordAsync` call carried
+two "formats" whose names inverted their wire keys: `RecordAsync(id, "rec", "slin16", format: "wav")` compiled and
+asked for a `slin16` file recorded through a `wav` channel. `recordingFormat`, the file format (`format` on the wire),
+keeps its name, and the channel `Channels.RecordAsync` is not renamed.
+
+Only a call site that names `format:` on either member is affected: it reports `CS1739` until the argument is
+renamed. Each argument keeps its position, type and default, the request is the same byte for byte, and a binary built
+against 2.10.x keeps running. The [2.11.0 migration guide](docs/guides/migration-2.11.0.md) has the before and after.
+
 ### Added: `CallConnectedEvent.AgentInterface` names the member whose connection the event announces
 
 `CallConnectedEvent` gains `string? AgentInterface { get; init; }`: the interface of the member whose connect the event
