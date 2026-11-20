@@ -782,16 +782,23 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         _cts.Dispose();
     }
 
-    // One failure of a ControlMessages subscriber: written once at Warning, with the exception, and counted once.
-    // A null message is the completion.
+    // One failure of a ControlMessages subscriber: counted once, then written once at Warning, with the exception.
+    // A null message is the completion. The count comes first, so a logger that fails on the line loses only the line.
     private void ReportControlSubscriberFailure(Exception exception, ChanWebSocketControlMessage? message)
     {
-        if (message is null)
-            WebSocketAudioSessionLog.ControlMessageSubscriberFailedOnCompletion(_logger, exception, ChannelId);
-        else
-            WebSocketAudioSessionLog.ControlMessageSubscriberFailed(_logger, exception, message.GetType().Name, ChannelId);
-
         AudioStreamMetrics.ControlMessageSubscriberFaults.Add(1);
+        try
+        {
+            if (message is null)
+                WebSocketAudioSessionLog.ControlMessageSubscriberFailedOnCompletion(_logger, exception, ChannelId);
+            else
+                WebSocketAudioSessionLog.ControlMessageSubscriberFailed(_logger, exception, message.GetType().Name, ChannelId);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the fault stays counted, and the read pump, a disposal and the
+            // other subscribers go on.
+        }
     }
 
     /// <summary>

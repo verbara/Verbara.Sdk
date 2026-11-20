@@ -136,10 +136,12 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
                         kv.Value.OnNext(evt);
                         deliveredCount++;
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) when (ex is not OutOfMemoryException)
                     {
+                        // An observer's failure is its own: reported, and the observers after it still receive the event.
+                        // Running out of memory is the process's failure, not the observer's, so it is not caught here.
                         droppedCount++;
-                        LogObserverFault(_logger, ex, evt.EventType);
+                        ReportObserverFault(ex, evt.EventType);
                     }
                 }
                 PushActivitySource.SetDeliveryResult(deliveryActivity, deliveredCount, droppedCount);
@@ -155,8 +157,21 @@ public sealed partial class RxPushEventBus : IPushEventBus, IDisposable
             foreach (var kv in _observers)
             {
                 try { kv.Value.OnCompleted(); }
-                catch (Exception ex) { LogObserverFault(_logger, ex, "<completion>"); }
+                catch (Exception ex) when (ex is not OutOfMemoryException) { ReportObserverFault(ex, "<completion>"); }
             }
+        }
+    }
+
+    private void ReportObserverFault(Exception failure, string eventType)
+    {
+        try
+        {
+            LogObserverFault(_logger, failure, eventType);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the line is lost, and the dispatch goes on to the later observers
+            // and events.
         }
     }
 

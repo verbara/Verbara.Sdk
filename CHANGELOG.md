@@ -76,6 +76,36 @@ the same library, with the same `Microsoft.Extensions.*` floors. The upstream ch
 server that announces a `MOVING` handoff, new commands wait in the backlog while the in-flight ones drain, so the
 connection is recycled within a round trip instead of at the end of the handoff window. No public API change.
 
+### Fixed: a logger that throws while reporting a subscriber's failure no longer stops the dispatch (#620)
+
+When a handler or observer failed, the SDK caught the failure and logged it, but the log call itself was not guarded.
+If the application's logger threw on that line, its exception left the catch meant to contain the subscriber, with these
+effects:
+
+- **AMI:** the handlers and observers after the failing one did not receive the event, and the event pump stopped
+  for good. A `StateChanged`, `Reconnected` or `Lost` handler's report faulted the notification queue. The warning for a
+  handler stuck on a notification runs on a timer thread, and a throw there ended the process.
+- **Live:** the `ConnectionLost` handlers after the failing one were skipped, and so were all of them when the logger
+  threw on the loss line written before them. `VerbaraServerPool.AddServerAsync` and `RemoveServerAsync` threw the logger's
+  exception to their caller. A queue, conference or channel notification whose report threw left the notifications
+  queued after it unraised, so every later delivery waited out its turn behind them.
+- **ARI:** the `WebSocketAudioSession.ControlMessages` reader stopped, and the subscriber fault was not counted.
+- **VoiceAi AudioSocket:** the `OnHangup` handlers after the failing one were skipped.
+- **Push:** the observers after the failing one missed the event, and the dispatch loop ended.
+
+Now every one of these reports writes its line inside its own guard. The dispatch goes on, and where the site has a fault
+counter (`ami.events.handler_faults`, `ami.events.observer_faults`, `audio.control_messages.subscriber_faults`), the
+fault is counted before the line, so it is counted even when the line is lost. The line the logger throws on is
+dropped, and nothing else records it. With `Microsoft.Extensions.Logging`, the other logging providers have already
+written it by then. `OutOfMemoryException` is not caught.
+
+### Changed: an `OutOfMemoryException` from a push observer now ends `RxPushEventBus`'s dispatch (#620)
+
+The push bus caught every exception an observer threw, `OutOfMemoryException` included, and went on. It now lets
+`OutOfMemoryException` through, as every other notification surface of the SDK already did: the dispatch loop ends and
+completes its observers. Any other exception from an observer is still caught, logged and counted as a dropped
+delivery.
+
 ## [2.10.1] - 2026-11-16
 
 ### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#584)

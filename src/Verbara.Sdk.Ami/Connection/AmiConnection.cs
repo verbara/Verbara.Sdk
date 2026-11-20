@@ -1172,8 +1172,20 @@ public sealed class AmiConnection : IAmiConnection
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 // A subscriber's failure is its own: logged, and the handlers after it still run.
-                AmiConnectionLog.StateChangedHandlerError(_logger, ex);
+                ReportStateChangedHandlerFailure(ex);
             }
+        }
+    }
+
+    private void ReportStateChangedHandlerFailure(Exception failure)
+    {
+        try
+        {
+            AmiConnectionLog.StateChangedHandlerError(_logger, failure);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the line is lost, and the handlers after this one still run.
         }
     }
 
@@ -2069,7 +2081,7 @@ public sealed class AmiConnection : IAmiConnection
                     {
                         // A subscriber's failure is its own: logged, and the handlers after it still run. Running out of
                         // memory is the process's failure, not the subscriber's, so it is not swallowed here.
-                        AmiConnectionLog.ReconnectHandlerError(_logger, ex);
+                        ReportReconnectHandlerFailure(ex);
                     }
                 }
             }
@@ -2097,7 +2109,7 @@ public sealed class AmiConnection : IAmiConnection
                     }
                     catch (Exception ex) when (ex is not OutOfMemoryException)
                     {
-                        AmiConnectionLog.ReconnectHandlerError(_logger, ex);
+                        ReportReconnectHandlerFailure(ex);
                     }
                 }
             }
@@ -2130,10 +2142,34 @@ public sealed class AmiConnection : IAmiConnection
                 {
                     // A subscriber's failure is its own: logged, and the handlers after it still run. Running out of
                     // memory is the process's failure, not the subscriber's, so it is not swallowed here.
-                    AmiConnectionLog.LostHandlerError(_logger, ex);
+                    ReportLostHandlerFailure(ex);
                 }
             }
         });
+    }
+
+    private void ReportReconnectHandlerFailure(Exception failure)
+    {
+        try
+        {
+            AmiConnectionLog.ReconnectHandlerError(_logger, failure);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the line is lost, and the delivery goes on and settles.
+        }
+    }
+
+    private void ReportLostHandlerFailure(Exception failure)
+    {
+        try
+        {
+            AmiConnectionLog.LostHandlerError(_logger, failure);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the line is lost, and the handlers after this one still run.
+        }
     }
 
     /// <summary>
@@ -2192,8 +2228,19 @@ public sealed class AmiConnection : IAmiConnection
             deliver();
         }
 
-        private void ReportStuck() =>
-            AmiConnectionLog.NotificationHandlerStuck(owner._logger, eventName, StuckNotificationBound.TotalSeconds);
+        // Runs as a timer callback, on a thread-pool timer thread with the system clock: whatever escapes it ends the
+        // process, so a host logger that fails on the line costs the line, never more.
+        private void ReportStuck()
+        {
+            try
+            {
+                AmiConnectionLog.NotificationHandlerStuck(owner._logger, eventName, StuckNotificationBound.TotalSeconds);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The host's logger failed on the line: it is lost, and the notification goes on running.
+            }
+        }
     }
 
     private ValueTask DispatchEventAsync(ManagerEvent evt, AmiEventLossMark lossMark, long ordinal)
@@ -2303,7 +2350,14 @@ public sealed class AmiConnection : IAmiConnection
     private void RecordObserverFault(ManagerEvent evt, Exception exception)
     {
         AmiMetrics.ObserverFaults.Add(1);
-        AmiConnectionLog.ObserverFault(_logger, evt.EventType, exception);
+        try
+        {
+            AmiConnectionLog.ObserverFault(_logger, evt.EventType, exception);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the fault stays counted, and the dispatch goes on.
+        }
     }
 
     /// <summary>A handler's task still running when every handler has been started, and which kind of handler it is.</summary>
@@ -2316,12 +2370,27 @@ public sealed class AmiConnection : IAmiConnection
         // timeout still counts as honouring it. An OnEvent handler keeps the rule it always had.
         if (takesToken && exception is OperationCanceledException && _lifetime.IsCancellationRequested)
         {
-            AmiConnectionLog.HandlerStoppedOnCallerEnding(_logger, evt.EventType);
+            try
+            {
+                AmiConnectionLog.HandlerStoppedOnCallerEnding(_logger, evt.EventType);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The host's logger failed on the line: it is lost, and the dispatch goes on.
+            }
+
             return;
         }
 
         AmiMetrics.HandlerFaults.Add(1);
-        AmiConnectionLog.HandlerFault(_logger, evt.EventType, exception);
+        try
+        {
+            AmiConnectionLog.HandlerFault(_logger, evt.EventType, exception);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the fault stays counted, and the dispatch goes on.
+        }
     }
 
     /// <inheritdoc />

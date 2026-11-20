@@ -178,6 +178,82 @@ public sealed partial class VerbaraServerConnectionLostTests
         await serving;
     }
 
+    /// <summary>
+    /// The first handler throws, and the host's logger throws on the report of it. The report is not a second failure:
+    /// the handler after it is still told of the loss, and the connection still reconnects.
+    /// </summary>
+    [Fact]
+    public async Task ConnectionLost_ShouldReachTheLaterHandlers_WhenAHandlerAndTheLoggerThrow()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 3);
+        var sockets = new PipedSocketFactory();
+        var serving = ServeEverySocketAsync(sockets, answerPings: true, peerCts.Token);
+        await using var connection = Create(sockets);
+        await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+        var logger = new ReportThrowingLogger<VerbaraServer>("[LIVE] ConnectionLost handler error");
+        await using var server = new VerbaraServer(connection, logger);
+        await server.StartAsync().WaitAsync(Bound);
+        var second = NewSignal();
+        var reconnected = NewSignal();
+        server.ConnectionLost += _ => throw new InvalidOperationException("a consumer's handler that throws");
+        server.ConnectionLost += _ => second.TrySetResult();
+        connection.Reconnected += () => reconnected.TrySetResult();
+
+        sockets.Created[0].CloseFromPeer();
+        var secondReached = await CompletesWithinBoundAsync(second.Task);
+        var back = await CompletesWithinBoundAsync(reconnected.Task);
+
+        using (new AssertionScope())
+        {
+            secondReached.Should().BeTrue("a handler and a logger that throw do not keep the handlers after it from being told");
+            back.Should().BeTrue("the connection reconnects");
+            logger.Thrown.Should().Be(1, "the logger was asked for the one report, and failed on it");
+        }
+
+        await peerCts.CancelAsync();
+        await serving;
+    }
+
+    /// <summary>
+    /// The host's logger throws on the server's own line about the loss, written before any subscriber is told. The
+    /// line is lost, not the loss: every ConnectionLost handler is still told. Before, the logger's exception left before
+    /// the fan-out, so no handler ran, and the connection's own guard swallowed it without a trace.
+    /// </summary>
+    [Fact]
+    public async Task ConnectionLost_ShouldReachEveryHandler_WhenTheLoggerThrowsOnTheLossLine()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 3);
+        var sockets = new PipedSocketFactory();
+        var serving = ServeEverySocketAsync(sockets, answerPings: true, peerCts.Token);
+        await using var connection = Create(sockets);
+        await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+        var logger = new ReportThrowingLogger<VerbaraServer>(VerbaraServerLog.AmiConnectionLostLine);
+        await using var server = new VerbaraServer(connection, logger);
+        await server.StartAsync().WaitAsync(Bound);
+        var first = NewSignal();
+        var second = NewSignal();
+        var reconnected = NewSignal();
+        server.ConnectionLost += _ => first.TrySetResult();
+        server.ConnectionLost += _ => second.TrySetResult();
+        connection.Reconnected += () => reconnected.TrySetResult();
+
+        sockets.Created[0].CloseFromPeer();
+        var firstReached = await CompletesWithinBoundAsync(first.Task);
+        var secondReached = await CompletesWithinBoundAsync(second.Task);
+        var back = await CompletesWithinBoundAsync(reconnected.Task);
+
+        using (new AssertionScope())
+        {
+            firstReached.Should().BeTrue("a logger that fails on the loss line does not keep the handlers from being told");
+            secondReached.Should().BeTrue("a logger that fails on the loss line does not keep the handlers from being told");
+            back.Should().BeTrue("the connection reconnects");
+            logger.Thrown.Should().Be(1, "the logger was asked for the one loss line, and failed on it");
+        }
+
+        await peerCts.CancelAsync();
+        await serving;
+    }
+
     [Fact]
     public async Task ConnectionLost_ShouldNotDeadlock_WhenAHandlerDisposesTheConnectionAndWaits()
     {

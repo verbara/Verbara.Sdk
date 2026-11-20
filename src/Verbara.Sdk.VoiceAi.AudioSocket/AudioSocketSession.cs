@@ -413,8 +413,20 @@ public sealed class AudioSocketSession : IAsyncDisposable
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                AudioSocketLog.HangupHandlerFailed(_logger, ex, ChannelId);
+                ReportHangupHandlerFailure(ex);
             }
+        }
+    }
+
+    private void ReportHangupHandlerFailure(Exception failure)
+    {
+        try
+        {
+            AudioSocketLog.HangupHandlerFailed(_logger, failure, ChannelId);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the line is lost, and the handlers after this one still run.
         }
     }
 

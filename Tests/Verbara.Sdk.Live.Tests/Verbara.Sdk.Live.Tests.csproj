@@ -29,4 +29,8 @@
     <Compile Include="..\Shared\Timing\BoundedWait.cs" Link="Shared\Timing\BoundedWait.cs" />
     <Using Include="Verbara.Sdk.Tests.Shared.Timing" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\Logging\ReportThrowingLogger.cs" Link="Shared\Logging\ReportThrowingLogger.cs" />
+    <Using Include="Verbara.Sdk.Tests.Shared.Logging" />
+  </ItemGroup>
 </Project>

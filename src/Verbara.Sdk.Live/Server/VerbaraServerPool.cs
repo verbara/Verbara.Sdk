@@ -350,8 +350,21 @@ public sealed class VerbaraServerPool : IAsyncDisposable
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                VerbaraServerPoolLog.MembershipSubscriberFailed(_logger, notification, serverId, ex);
+                ReportMembershipSubscriberFailure(ex, notification, serverId);
             }
+        }
+    }
+
+    private void ReportMembershipSubscriberFailure(Exception failure, string notification, string serverId)
+    {
+        try
+        {
+            VerbaraServerPoolLog.MembershipSubscriberFailed(_logger, notification, serverId, failure);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the line is lost, the later subscribers are still told, and the
+            // pool's caller returns normally.
         }
     }
 

@@ -63,6 +63,94 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
     }
 
     /// <summary>
+    /// The first handler throws, and the host's logger throws on the report of it. The report is not a second failure:
+    /// the handler after it still hears the reconnect, the reconnect settles, and the queue drains without a fault.
+    /// </summary>
+    [Fact]
+    public async Task Reconnected_ShouldReachTheLaterHandlersAndSettleTheReconnect_WhenAHandlerAndTheLoggerThrow()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 3);
+        var sockets = new PipedSocketFactory();
+        var serving = ServeEverySocketAsync(sockets, peerCts.Token);
+        var logger = new ReportThrowingLogger<AmiConnection>("[AMI] Reconnect handler error");
+        await using var connection = CreateReconnecting(sockets, logger);
+        await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+        var later = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Reconnected += () => throw new InvalidOperationException("a consumer's handler that throws");
+        connection.Reconnected += () => later.TrySetResult();
+        connection.ReconnectSettled += _ => settled.TrySetResult();
+
+        sockets.Created[0].CloseFromPeer();
+        var reached = await CompletesWithinBoundAsync(later.Task);
+        var wasSettled = await CompletesWithinBoundAsync(settled.Task);
+        var drain = connection.PendingNotifications;
+        var drained = await CompletesWithinBoundAsync(drain.ContinueWith(static _ => { }, TaskScheduler.Default));
+
+        using (new AssertionScope())
+        {
+            reached.Should().BeTrue("a handler and a logger that throw do not keep the later handlers from the reconnect");
+            wasSettled.Should().BeTrue("the reconnect settles after its handlers");
+            drained.Should().BeTrue("the notification queue drains");
+            drain.IsFaulted.Should().BeFalse("nothing the logger throws leaves the notification queue");
+            logger.Thrown.Should().Be(1, "the logger was asked for the one report, and failed on it");
+        }
+
+        await peerCts.CancelAsync();
+        await serving;
+    }
+
+    /// <summary>
+    /// The sibling on the loss: the first <see cref="AmiConnection.Lost"/> handler throws, and the host's logger throws on
+    /// the report of it. The handler after it is still told of the loss, and the queue drains without a fault.
+    /// </summary>
+    [Fact]
+    public async Task Lost_ShouldReachTheLaterHandlers_WhenAHandlerAndTheLoggerThrow()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 3);
+        var sockets = new PipedSocketFactory();
+        var serving = ServeEverySocketAsync(sockets, peerCts.Token);
+        var logger = new ReportThrowingLogger<AmiConnection>("[AMI] Connection-lost handler error");
+        await using var connection = CreateReconnecting(sockets, logger);
+        await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+        var later = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Lost += _ => throw new InvalidOperationException("a consumer's handler that throws");
+        connection.Lost += _ => later.TrySetResult();
+        connection.Reconnected += () => reconnected.TrySetResult();
+
+        sockets.Created[0].CloseFromPeer();
+        var reached = await CompletesWithinBoundAsync(later.Task);
+        var back = await CompletesWithinBoundAsync(reconnected.Task);
+        var drain = connection.PendingNotifications;
+        var drained = await CompletesWithinBoundAsync(drain.ContinueWith(static _ => { }, TaskScheduler.Default));
+
+        using (new AssertionScope())
+        {
+            reached.Should().BeTrue("a handler and a logger that throw do not keep the later handlers from the loss");
+            back.Should().BeTrue("the connection reconnects after the loss");
+            drained.Should().BeTrue("the notification queue drains");
+            drain.IsFaulted.Should().BeFalse("nothing the logger throws leaves the notification queue");
+            logger.Thrown.Should().Be(1, "the logger was asked for the one report, and failed on it");
+        }
+
+        await peerCts.CancelAsync();
+        await serving;
+    }
+
+    private static AmiConnection CreateReconnecting(PipedSocketFactory sockets, ILogger<AmiConnection> logger) =>
+        new(Options.Create(new AmiConnectionOptions
+        {
+            Hostname = "localhost",
+            Username = "admin",
+            Password = "secret",
+            EnableHeartbeat = false,
+            AutoReconnect = true,
+            ReconnectInitialDelay = TimeSpan.FromMilliseconds(50),
+            ReconnectMaxDelay = TimeSpan.FromMilliseconds(50),
+        }), sockets, logger);
+
+    /// <summary>
     /// A reconnect completes while a <see cref="AmiConnection.Lost"/> handler of the same outage still holds the
     /// notification queue, so its <see cref="AmiConnection.Reconnected"/> waits in the queue; the caller then ends the
     /// connection. <c>DisconnectAsync</c> and <c>DisposeAsync</c> raise no <see cref="AmiConnection.Reconnected"/>

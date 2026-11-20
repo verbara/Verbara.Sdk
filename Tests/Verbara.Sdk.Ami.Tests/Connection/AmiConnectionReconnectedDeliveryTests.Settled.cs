@@ -58,6 +58,43 @@ public sealed partial class AmiConnectionReconnectedDeliveryTests
         }
     }
 
+    /// <summary>
+    /// The <see cref="AmiConnection.ReconnectSettled"/> subscriber throws, and the host's logger throws on the report of
+    /// it: the report is not a second failure, so the delivery returns and the notification queue does not fault.
+    /// </summary>
+    [Fact]
+    public async Task ReconnectSettled_ShouldLeaveTheQueueUnfaulted_WhenItsSubscriberAndTheLoggerThrow()
+    {
+        using var peerCts = new CancellationTokenSource(Bound * 3);
+        var sockets = new PipedSocketFactory();
+        var serving = ServeEverySocketAsync(sockets, peerCts.Token);
+        var logger = new ReportThrowingLogger<AmiConnection>("[AMI] Reconnect handler error");
+        await using var connection = CreateReconnecting(sockets, logger);
+        var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.Reconnected += () => { };
+        connection.ReconnectSettled += _ =>
+        {
+            settled.TrySetResult();
+            throw new InvalidOperationException("the settled subscriber fails");
+        };
+        await connection.ConnectAsync().AsTask().WaitAsync(Bound);
+
+        sockets.Created[0].CloseFromPeer();
+        var raised = await CompletesWithinBoundAsync(settled.Task);
+        var drain = connection.PendingNotifications;
+        var drained = await CompletesWithinBoundAsync(drain.ContinueWith(static _ => { }, TaskScheduler.Default));
+        await peerCts.CancelAsync();
+        await serving;
+
+        using (new AssertionScope())
+        {
+            raised.Should().BeTrue("the reconnect settles");
+            drained.Should().BeTrue("the notification queue drains");
+            drain.IsFaulted.Should().BeFalse("nothing the logger throws leaves the notification queue");
+            logger.Thrown.Should().Be(1, "the logger was asked for the one report, and failed on it");
+        }
+    }
+
     [Fact]
     public async Task ReconnectSettled_ShouldFollowTheCallerReconnectedHandlers_WhenTheCallerBringsTheSessionBack()
     {
