@@ -164,6 +164,25 @@ public sealed class SessionManagerHostedServiceOwnershipTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task StopAsync_ShouldDetachDefault_WhenTheHostAttachedTheServerUnderAnotherIdBeforeStart()
+    {
+        ForwardingManager? decorator = null;
+        var host = BuildHost(decorated: true, onDecorator: d => decorator = d);
+        await using var disposal = (IAsyncDisposable)host;
+        var manager = host.Services.GetRequiredService<ICallSessionManager>();
+        manager.AttachToServer(_server, "mine");
+
+        await host.StartAsync(CancellationToken.None).WaitAsync(Bound);
+        await host.StopAsync(CancellationToken.None).WaitAsync(Bound);
+        _server.Channels.OnNewChannel("uid-2", "PJSIP/100-002", ChannelState.Up, linkedId: "linked-2");
+
+        decorator!.Calls.Should().Equal(["attach:mine", "attach:default", "detach:default"],
+            "the host held this server under another id, not under \"default\", so the SDK installed \"default\" and its "
+            + "stop releases it");
+        manager.GetByLinkedId("linked-2").Should().NotBeNull("the host's attachment under its own id survives the stop");
+    }
+
+    [Fact]
     public async Task StartAsync_ShouldAttachAndStopShouldDetachTheOwnManager_WhenNoEngineIsRegistered()
     {
         ForwardingManager? own = null;
