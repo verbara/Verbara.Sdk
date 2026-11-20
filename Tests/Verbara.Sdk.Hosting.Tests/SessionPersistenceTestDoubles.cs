@@ -181,3 +181,143 @@ internal sealed class ParkedStartHostedService : IHostedService
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
+
+/// <summary>
+/// A pass-through decorator over a session manager, the shape a host writes for logging or metrics. It records the
+/// attach and detach calls it forwards, and forwards <see cref="DisposeAsync"/> only when it owns the manager it wraps.
+/// It implements nothing but <see cref="ICallSessionManager"/>: no SDK seam lets the SDK see through it.
+/// </summary>
+internal sealed class ForwardingManager(ICallSessionManager inner, bool ownsInner) : ICallSessionManager
+{
+    private readonly ConcurrentQueue<string> _calls = new();
+
+    /// <summary>The attach and detach calls forwarded, in order, as <c>attach:{id}</c> and <c>detach:{id}</c>.</summary>
+    public IReadOnlyList<string> Calls => [.. _calls];
+
+    public CallSession? GetById(string sessionId) => inner.GetById(sessionId);
+
+    public CallSession? GetByLinkedId(string linkedId) => inner.GetByLinkedId(linkedId);
+
+    public CallSession? GetByChannelId(string uniqueId) => inner.GetByChannelId(uniqueId);
+
+    public CallSession? GetByBridgeId(string bridgeId) => inner.GetByBridgeId(bridgeId);
+
+    public CallSession? GetByLinkedId(string serverId, string linkedId) => inner.GetByLinkedId(serverId, linkedId);
+
+    public CallSession? GetByChannelId(string serverId, string uniqueId) => inner.GetByChannelId(serverId, uniqueId);
+
+    public CallSession? GetByBridgeId(string serverId, string bridgeId) => inner.GetByBridgeId(serverId, bridgeId);
+
+    public IEnumerable<CallSession> ActiveSessions => inner.ActiveSessions;
+
+    public IEnumerable<CallSession> GetRecentCompleted(int count = 100) => inner.GetRecentCompleted(count);
+
+    public IObservable<SessionDomainEvent> Events => inner.Events;
+
+    public void AttachToServer(Verbara.Sdk.Live.Server.VerbaraServer server, string serverId)
+    {
+        _calls.Enqueue($"attach:{serverId}");
+        inner.AttachToServer(server, serverId);
+    }
+
+    public void DetachFromServer(string serverId)
+    {
+        _calls.Enqueue($"detach:{serverId}");
+        inner.DetachFromServer(serverId);
+    }
+
+    public IReadOnlyList<CallSession> DetachFromServer(string serverId, DetachedCalls calls)
+    {
+        _calls.Enqueue($"detach:{serverId}");
+        return inner.DetachFromServer(serverId, calls);
+    }
+
+    public ValueTask AdmitExistingCalls(string serverId, CancellationToken cancellationToken = default) =>
+        inner.AdmitExistingCalls(serverId, cancellationToken);
+
+    public bool RegisterReconstructedSession(CallSession session) => inner.RegisterReconstructedSession(session);
+
+    public ValueTask DisposeAsync() => ownsInner ? inner.DisposeAsync() : ValueTask.CompletedTask;
+}
+
+/// <summary>A host's own session manager, or a test fake, that wraps no engine and opens no session.</summary>
+internal sealed class ForeignManager : ICallSessionManager
+{
+    private readonly System.Reactive.Subjects.Subject<SessionDomainEvent> _events = new();
+
+    public CallSession? GetById(string sessionId) => null;
+
+    public CallSession? GetByLinkedId(string linkedId) => null;
+
+    public CallSession? GetByChannelId(string uniqueId) => null;
+
+    public CallSession? GetByBridgeId(string bridgeId) => null;
+
+    public IEnumerable<CallSession> ActiveSessions => [];
+
+    public IEnumerable<CallSession> GetRecentCompleted(int count = 100) => [];
+
+    public IObservable<SessionDomainEvent> Events => _events;
+
+    public void AttachToServer(Verbara.Sdk.Live.Server.VerbaraServer server, string serverId)
+    {
+        // Opens no session: this manager wraps no engine.
+    }
+
+    public void DetachFromServer(string serverId)
+    {
+        // Nothing attached.
+    }
+
+    public bool RegisterReconstructedSession(CallSession session) => false;
+
+    public ValueTask DisposeAsync()
+    {
+        _events.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>
+/// One log entry with its category, as <see cref="CategoryLogCapture"/> keeps it. <see cref="Values"/> holds the entry's
+/// named arguments, so a test checks what a message carries without matching its prose.
+/// </summary>
+internal sealed record CategorizedLogEntry(
+    string Category, LogLevel Level, EventId EventId, string Message, IReadOnlyDictionary<string, object?> Values);
+
+/// <summary>Keeps every log entry of every category and level a host writes.</summary>
+internal sealed class CategoryLogCapture : ILoggerProvider
+{
+    private readonly ConcurrentQueue<CategorizedLogEntry> _entries = new();
+
+    public IReadOnlyList<CategorizedLogEntry> Entries => [.. _entries];
+
+    public ILogger CreateLogger(string categoryName) => new Logger(this, categoryName);
+
+    public void Dispose()
+    {
+        // Nothing to release.
+    }
+
+    private sealed class Logger(CategoryLogCapture owner, string category) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            // A later pair of the same name wins, so a state that repeats a name cannot fail the capture.
+            var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+            if (state is IReadOnlyList<KeyValuePair<string, object?>> pairs)
+            {
+                foreach (var pair in pairs)
+                    values[pair.Key] = pair.Value;
+            }
+
+            owner._entries.Enqueue(
+                new CategorizedLogEntry(category, logLevel, eventId, formatter(state, exception), values));
+        }
+    }
+}

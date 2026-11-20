@@ -252,6 +252,43 @@ The tracker reads Asterisk's leave, abandon report and `QUEUESTATUS` through the
 Over another `ICallSessionManager` it reads the domain events only: a visit ends at its connection, at the caller's
 next join or at its hang-up, abandoned unless connected (key exits included), and no timeout is counted.
 
+## Decorating the session manager
+
+To wrap the engine in a manager of your own (for logging, metrics or tests), register the engine as
+`CallSessionManager` and your wrapper as `ICallSessionManager` over that registered instance, before or after the
+sessions call:
+
+```csharp
+services.AddVerbaraSessions();
+services.AddSingleton<CallSessionManager>();
+services.AddSingleton<ICallSessionManager>(sp =>
+    new LoggingSessionManager(sp.GetRequiredService<CallSessionManager>()));
+```
+
+Such a host gets what an undecorated host gets:
+
+- **The attach.** The single-server registrations attach the DI server under `default` at start and detach it at stop
+  by calling `AttachToServer` and `DetachFromServer` on the `ICallSessionManager` you registered, whatever its type.
+  Your wrapper sees both calls and forwards them. A pool host attaches its servers through it as before.
+- **The persistence token.** The SDK takes a `CallSessionManager` you registered as itself as the engine behind your
+  manager, and hands it the token every save runs under, so a stop that is no longer graceful cuts an in-flight save
+  short and the host's teardown ends it. It takes that registration as the engine whether or not your manager wraps
+  it: a host whose own manager wraps no engine should not also register a `CallSessionManager` it never attaches, or
+  the token and the sweep go to that idle instance.
+- **The reconciliation sweep.** The single-server and pool sweeps read that registered engine, and decide its calls as
+  they decide an undecorated host's.
+- **The teardown.** `CallSessionManager.DisposeAsync` may be called more than once, so your wrapper may forward its
+  own disposal to the engine the container also disposes.
+
+The queue counters are the exception: behind a wrapper they still read the domain events only (see *Over a custom
+session manager* above).
+
+When no engine is reachable — the wrapper builds its own `CallSessionManager` with `new` or `ActivatorUtilities`, or
+your manager wraps no engine at all — the attach still goes through your manager, but no engine receives the token:
+saves run under a token the host's stop never cancels, and the sweep treats the calls as a custom manager's. The host
+logs one Warning at start, EventId 1 under the `Verbara.Sdk.Hosting.SessionPersistenceTokenService` category, naming
+your manager's type. The SDK never builds an engine of its own to reach.
+
 ## Custom Persistence
 
 ```csharp

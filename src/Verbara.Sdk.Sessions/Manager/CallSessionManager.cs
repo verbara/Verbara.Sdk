@@ -147,6 +147,13 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// the SDK's token-only persistence service owns, and the stop phase is what cancels it: the host
     /// withdrawing its graceful shutdown, or that service's own teardown. An aborted start does not
     /// cancel it.
+    /// <para>
+    /// That service hands the token to the engine it finds, not to the <see cref="ICallSessionManager"/> the host
+    /// resolves: this instance when the interface resolves to it, else the instance the host registered as
+    /// <see cref="CallSessionManager"/> behind its own decorator. An engine it does not find — built by a decorator
+    /// with <c>new</c> or <c>ActivatorUtilities</c>, unknown to the container — never receives it, and the host logs
+    /// one Warning at start saying so.
+    /// </para>
     /// </summary>
     internal void SetShutdownToken(CancellationToken token) => _shutdownToken = token;
 
@@ -2015,8 +2022,20 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         Message = "Reconstructed session {SessionId} did not join channel {ChannelId}: another call owns it")]
     private partial void LogRegistrationJoinSkipped(string sessionId, string channelId);
 
+    /// <summary>Set by the first <see cref="DisposeAsync"/>; every later call returns at once.</summary>
+    private int _disposeStarted;
+
+    /// <summary>
+    /// Detaches every server, ends the wrap-ups, completes <see cref="Events"/> and withdraws the gauges. A second and
+    /// every later call returns without doing anything: a host whose container holds this engine as itself and behind a
+    /// decorator that forwards its disposal disposes it twice. A call that overlaps the first returns at once too,
+    /// before the first has finished: only a caller that awaits the first call knows the disposal is complete.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposeStarted, 1) != 0)
+            return;
+
         foreach (var serverId in _serverSubs.Keys.ToArray())
             DetachFromServer(serverId);
 

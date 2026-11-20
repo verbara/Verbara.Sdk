@@ -5,7 +5,8 @@ using Microsoft.Extensions.Hosting;
 namespace Verbara.Sdk.Hosting;
 
 /// <summary>
-/// Attaches the session engine to the single <see cref="VerbaraServer"/> and detaches it on stop.
+/// Attaches the session manager the host resolves to the single <see cref="VerbaraServer"/> and detaches it on stop,
+/// through <see cref="ICallSessionManager"/>: the SDK's engine, a decorator over it, or a manager of the host's own.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -79,16 +80,13 @@ internal sealed class SessionManagerHostedService(
     {
         // The start token is deliberately not taken: it means the start was aborted, and this start begins nothing
         // that can be aborted. The token the manager saves under is SessionPersistenceTokenService's, not this one's.
-        if (sessionManager is not CallSessionManager csm)
-            return;
-
         lock (_lifecycleGate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_attached)
                 return;
 
-            csm.AttachToServer(server, "default");
+            sessionManager.AttachToServer(server, "default");
             _attached = true;
         }
     }
@@ -105,11 +103,8 @@ internal sealed class SessionManagerHostedService(
             if (_disposed)
                 return Task.CompletedTask;
 
-            if (sessionManager is CallSessionManager csm)
-            {
-                csm.DetachFromServer("default");
-                _attached = false;
-            }
+            sessionManager.DetachFromServer("default");
+            _attached = false;
         }
 
         return Task.CompletedTask;

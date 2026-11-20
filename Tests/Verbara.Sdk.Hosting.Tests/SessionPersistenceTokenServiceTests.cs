@@ -456,9 +456,18 @@ public sealed class SessionPersistenceTokenServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task StartAsync_ShouldNotThrow_WhenNotConcreteCallSessionManager()
+    public async Task StartAsync_ShouldWarnOnce_WhenTheManagerIsNotTheEngine()
     {
-        using var sut = new SessionPersistenceTokenService(Substitute.For<ICallSessionManager>());
+        // Was StartAsync_ShouldNotThrow_WhenNotConcreteCallSessionManager, which asserted the old silent skip. The
+        // service is built by the sessions registration, as a host builds it, over a substitute and no registered engine.
+        var capture = new CategoryLogCapture();
+        var services = new ServiceCollection();
+        services.AddLogging(logging => logging.AddProvider(capture));
+        services.AddVerbaraSessionsMultiServer();
+        services.AddSingleton(Substitute.For<ICallSessionManager>());
+        await using var provider = services.BuildServiceProvider();
+        var sut = (IHostedLifecycleService)provider.GetServices<IHostedService>()
+            .Single(s => s.GetType().Name == "SessionPersistenceTokenService");
 
         var act = async () =>
         {
@@ -468,7 +477,36 @@ public sealed class SessionPersistenceTokenServiceTests : IAsyncLifetime
             await sut.StoppedAsync(CancellationToken.None);
         };
 
-        await act.Should().NotThrowAsync("a manager that is not the SDK's gets no token, as before");
+        await act.Should().NotThrowAsync("a manager that is not the SDK's gets no token");
+        capture.Entries.Where(e => e.Level >= LogLevel.Warning).Should().ContainSingle(
+                "the first hand that reaches no engine says so, once")
+            .Which.EventId.Id.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldWarnOnce_WhenAPlainCallerReachesNoEngine()
+    {
+        // A caller that drives the service as a plain IHostedService — StartAsync alone, never StartingAsync — still
+        // hears, once, that the token reached no engine.
+        var capture = new CategoryLogCapture();
+        var services = new ServiceCollection();
+        services.AddLogging(logging => logging.AddProvider(capture));
+        services.AddVerbaraSessionsMultiServer();
+        services.AddSingleton(Substitute.For<ICallSessionManager>());
+        await using var provider = services.BuildServiceProvider();
+        var managerType = provider.GetRequiredService<ICallSessionManager>().GetType().FullName;
+        var sut = provider.GetServices<IHostedService>()
+            .Single(s => s.GetType().Name == "SessionPersistenceTokenService");
+
+        await sut.StartAsync(CancellationToken.None);
+        await sut.StartAsync(CancellationToken.None);
+        await sut.StopAsync(CancellationToken.None);
+
+        var warning = capture.Entries.Where(e => e.Level >= LogLevel.Warning).Should().ContainSingle(
+            "the first plain start that reaches no engine says so, and the second does not").Subject;
+        warning.Level.Should().Be(LogLevel.Warning);
+        warning.EventId.Id.Should().Be(1);
+        warning.Values.Should().Contain("ManagerType", managerType);
     }
 
     /// <summary>Attaches the manager to the server, raises one channel and returns its one save.</summary>

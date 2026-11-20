@@ -1,5 +1,7 @@
 using Verbara.Sdk.Sessions.Manager;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Verbara.Sdk.Hosting;
 
@@ -24,10 +26,39 @@ namespace Verbara.Sdk.Hosting;
 /// wiring in <see cref="StopAsync"/>. The disposal cancels the source before releasing it, so a save that outlived the
 /// whole stop ends there instead of holding a token nothing could ever cancel.
 /// </para>
+/// <para>
+/// The token goes to the engine <see cref="SessionEngine.Resolve"/> finds: the resolved manager when it is the
+/// engine, else the <see cref="CallSessionManager"/> the host registered as itself behind a decorator. When no engine
+/// is reachable the first hand logs one Warning (EventId 1) naming the resolved manager's type, and hands nothing.
+/// </para>
 /// </remarks>
-internal sealed class SessionPersistenceTokenService(ICallSessionManager sessionManager)
-    : IHostedLifecycleService, IDisposable
+internal sealed partial class SessionPersistenceTokenService : IHostedLifecycleService, IDisposable
 {
+    /// <summary>The engine the token goes to, or <see langword="null"/> when none is reachable.</summary>
+    private readonly CallSessionManager? _engine;
+
+    /// <summary>The manager the host resolves, named by the Warning when no engine is reachable.</summary>
+    private readonly ICallSessionManager _resolved;
+
+    private readonly ILogger<SessionPersistenceTokenService> _logger;
+
+    /// <summary>Built by the sessions registrations, with the engine <see cref="SessionEngine.Resolve"/> found.</summary>
+    public SessionPersistenceTokenService(
+        CallSessionManager? engine,
+        ICallSessionManager resolved,
+        ILogger<SessionPersistenceTokenService> logger)
+    {
+        _engine = engine;
+        _resolved = resolved;
+        _logger = logger;
+    }
+
+    /// <summary>Over <paramref name="sessionManager"/> alone: the engine when it is one, no logger.</summary>
+    public SessionPersistenceTokenService(ICallSessionManager sessionManager)
+        : this(sessionManager as CallSessionManager, sessionManager, NullLogger<SessionPersistenceTokenService>.Instance)
+    {
+    }
+
     /// <summary>
     /// The source behind the token every persistence call runs under. This service owns it because the manager keeps
     /// that token for the whole process: the token the host hands to <c>StartAsync</c> means the start was aborted, and
@@ -64,6 +95,12 @@ internal sealed class SessionPersistenceTokenService(ICallSessionManager session
     /// <see cref="StopAsync"/>. Read and written under <see cref="_lifecycleGate"/>.
     /// </summary>
     private bool _lifecycleDriven;
+
+    /// <summary>
+    /// Whether the Warning that no engine is reachable was logged: once per instance, at the first hand. Read and
+    /// written under <see cref="_lifecycleGate"/>.
+    /// </summary>
+    private bool _warnedNoEngine;
 
     /// <summary>Hands the token before any hosted service starts, and marks the host as a lifecycle host.</summary>
     public Task StartingAsync(CancellationToken cancellationToken)
@@ -104,23 +141,40 @@ internal sealed class SessionPersistenceTokenService(ICallSessionManager session
     }
 
     /// <summary>
-    /// Hands the manager the token this service owns. A start after disposal throws <see cref="ObjectDisposedException"/>
-    /// and hands nothing. The start token is deliberately not taken: it means the start was aborted, and this start begins
-    /// nothing that can be aborted.
+    /// Hands the engine the token this service owns; with no engine reachable, the first hand logs one Warning and
+    /// every hand hands nothing. A start after disposal throws <see cref="ObjectDisposedException"/> and hands nothing.
+    /// The start token is deliberately not taken: it means the start was aborted, and this start begins nothing that
+    /// can be aborted.
     /// </summary>
     private void Hand(bool lifecycle)
     {
-        if (sessionManager is not CallSessionManager csm)
-            return;
-
+        bool warn;
         lock (_lifecycleGate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (lifecycle)
                 _lifecycleDriven = true;
-            csm.SetShutdownToken(_shutdown.Token);
+            if (_engine is not null)
+            {
+                _engine.SetShutdownToken(_shutdown.Token);
+                return;
+            }
+
+            warn = !_warnedNoEngine;
+            _warnedNoEngine = true;
         }
+
+        // Logged outside the gate: the flag already makes it once, and a host's logger is not run under this lock.
+        if (warn)
+            LogNoEngine(_resolved.GetType().FullName ?? _resolved.GetType().Name);
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning,
+        Message = "The registered ICallSessionManager is {ManagerType} and no CallSessionManager is registered, so the "
+            + "SDK handed the persistence token to no engine. If this manager wraps the SDK's engine, its saves are not "
+            + "cancelled when the host stops and the reconciliation sweep treats its calls as a custom manager's. "
+            + "Register the engine as CallSessionManager and build the wrapper over the registered instance.")]
+    private partial void LogNoEngine(string managerType);
 
     /// <summary>
     /// Wires the host's stop token onto the persistence source, from the entry point this host's kind calls for. A stop

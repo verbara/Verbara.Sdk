@@ -311,7 +311,7 @@ public static class ServiceCollectionExtensions
     {
         AddSessionsCore(services, configure);
         services.AddSingleton<IHostedService, SessionManagerHostedService>();
-        services.AddSingleton<IHostedService, SessionReconciliationService>();
+        AddSingleServerSweep(services);
         services.TryAddSingleton(SingleServerSweepRegistration.Instance);
         return services;
     }
@@ -330,7 +330,7 @@ public static class ServiceCollectionExtensions
     {
         AddSessionsCore(services, configure);
         services.AddSingleton<IHostedService, SessionManagerHostedService>();
-        services.AddSingleton<IHostedService, SessionReconciliationService>();
+        AddSingleServerSweep(services);
         services.TryAddSingleton(SingleServerSweepRegistration.Instance);
         return new SessionsBuilder(services);
     }
@@ -475,13 +475,28 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Registers the single DI server's reconciliation sweep through an explicit factory (no constructor reflection),
+    /// over the engine <see cref="SessionEngine.Resolve"/> finds, else the resolved manager: behind a decorator over a
+    /// registered engine the sweep reads that engine and decides as an undecorated host's, and any other manager keeps
+    /// the custom-manager path.
+    /// </summary>
+    private static void AddSingleServerSweep(IServiceCollection services) =>
+        services.AddSingleton<IHostedService, SessionReconciliationService>(sp =>
+            new SessionReconciliationService(
+                SessionEngine.Resolve(sp) ?? sp.GetRequiredService<ICallSessionManager>(),
+                sp.GetRequiredService<VerbaraServer>(),
+                sp.GetRequiredService<IOptions<SessionOptions>>(),
+                sp.GetRequiredService<ILogger<SessionReconciliationService>>()));
+
+    /// <summary>
     /// Registers the pool's reconciliation sweep once, however many multi-server registrations call it, through an
-    /// explicit factory (no constructor reflection).
+    /// explicit factory (no constructor reflection), over the engine <see cref="SessionEngine.Resolve"/> finds, else
+    /// the resolved manager, as the single-server sweep.
     /// </summary>
     private static void AddPoolSweep(IServiceCollection services) =>
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, PoolReconciliationService>(sp =>
             new PoolReconciliationService(
-                sp.GetRequiredService<ICallSessionManager>(),
+                SessionEngine.Resolve(sp) ?? sp.GetRequiredService<ICallSessionManager>(),
                 sp.GetService<VerbaraServerPool>(),
                 sp.GetService<SingleServerSweepRegistration>() is null ? null : sp.GetService<VerbaraServer>(),
                 sp.GetRequiredService<IOptions<SessionOptions>>(),
@@ -515,9 +530,13 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<ISessionStore>(sp => sp.GetRequiredService<SessionStoreBase>());
         // The one owner of the token every save runs under, on every sessions host: TryAddEnumerable keeps one however
         // many registrations a host makes, so no two services write that token. Registered here, ahead of the
-        // single-server attach service, and through an explicit factory (no constructor reflection).
+        // single-server attach service, and through an explicit factory (no constructor reflection). The token goes to
+        // the engine SessionEngine finds, which may sit behind a host's decorator; the SDK registers no engine for it.
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, SessionPersistenceTokenService>(sp =>
-            new SessionPersistenceTokenService(sp.GetRequiredService<ICallSessionManager>())));
+            new SessionPersistenceTokenService(
+                SessionEngine.Resolve(sp),
+                sp.GetRequiredService<ICallSessionManager>(),
+                sp.GetRequiredService<ILogger<SessionPersistenceTokenService>>())));
 
         if (configure is not null)
             services.Configure(configure);
