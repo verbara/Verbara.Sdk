@@ -196,7 +196,7 @@ public sealed class AsyncEventPumpLossDeliveredTests
         await inCallback.Task.WaitAsync(Bound);
 
         pump.TryEnqueue(new HangupEvent { Channel = "later" }, collected: false).Should().BeTrue();
-        var delivered = await Task.WhenAny(later.Task, Task.Delay(Bound)) == later.Task;
+        var delivered = await Record.ExceptionAsync(() => later.Task.WaitAsync(Bound)) is null;
         releaseCallback.TrySetResult();
         await pump.LossWatcher.WaitAsync(Bound);
 

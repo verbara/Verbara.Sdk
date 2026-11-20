@@ -274,7 +274,7 @@ public sealed partial class ChannelReadCoverageTests
                 later.TrySetResult();
         }));
         await peer.SendEventAsync("UserEvent", DispatchGate.Frame("after-held-notice"));
-        var delivered = await Task.WhenAny(later.Task, Task.Delay(Run.Bound)) == later.Task;
+        var delivered = await Record.ExceptionAsync(() => later.Task.WaitAsync(Run.Bound)) is null;
         var pingAnswered = await Record.ExceptionAsync(() => FenceAsync(run));
         release.Set();
 
