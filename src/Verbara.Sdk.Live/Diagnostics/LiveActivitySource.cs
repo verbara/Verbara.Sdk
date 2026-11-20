@@ -6,6 +6,14 @@ namespace Verbara.Sdk.Live.Diagnostics;
 /// OpenTelemetry-compatible ActivitySource for distributed tracing of Live state operations.
 /// Produces spans for state loads, channel reconciliations and originate requests.
 /// <para>
+/// The <c>live state-load</c>, <c>live channel-reconcile</c> and <c>live originate</c> spans of a server in a
+/// <c>VerbaraServerPool</c> carry <c>server.id</c>, the pool id it was added under, read when the span starts; a server
+/// in no pool puts no <c>server.id</c> on them. The first two also carry <c>live.server</c>, which holds the Asterisk
+/// version, not a server identity: it is obsolete, keeps that value through 2.11.x and is removed in 2.12.0 — identify a
+/// pooled server by <c>server.id</c>. The Asterisk version is a Resource attribute (<c>asterisk.server.version</c>),
+/// never a span tag.
+/// </para>
+/// <para>
 /// To enable tracing, register the source name with your OpenTelemetry tracer:
 /// <c>builder.AddSource("Verbara.Sdk.Live")</c>
 /// </para>
@@ -14,15 +22,28 @@ public static class LiveActivitySource
 {
     public static readonly ActivitySource Source = new("Verbara.Sdk.Live", "1.0.0");
 
-    internal static Activity? StartStateLoad(string serverIdentifier)
+    /// <summary>The key a pooled server's id is tagged with, on these spans and on <c>live.status.refused</c>.</summary>
+    internal const string ServerIdTag = "server.id";
+
+    // Obsolete: the Asterisk version, not the server; removed in 2.12.0.
+    private const string LiveServerTag = "live.server";
+
+    internal static Activity? StartStateLoad(string asteriskVersion, string? serverId)
     {
         var activity = Source.StartActivity("live state-load", ActivityKind.Client);
         if (activity is not null)
         {
-            activity.SetTag("live.server", serverIdentifier);
+            activity.SetTag(LiveServerTag, asteriskVersion);
+            TagServerId(activity, serverId);
         }
 
         return activity;
+    }
+
+    private static void TagServerId(Activity activity, string? serverId)
+    {
+        if (serverId is not null)
+            activity.SetTag(ServerIdTag, serverId);
     }
 
     internal static void SetStateLoadResult(Activity? activity, int channels, int queues, int agents)
@@ -35,10 +56,15 @@ public static class LiveActivitySource
         activity.SetStatus(ActivityStatusCode.Ok);
     }
 
-    internal static Activity? StartChannelReconcile(string serverIdentifier)
+    internal static Activity? StartChannelReconcile(string asteriskVersion, string? serverId)
     {
         var activity = Source.StartActivity("live channel-reconcile", ActivityKind.Client);
-        activity?.SetTag("live.server", serverIdentifier);
+        if (activity is not null)
+        {
+            activity.SetTag(LiveServerTag, asteriskVersion);
+            TagServerId(activity, serverId);
+        }
+
         return activity;
     }
 
@@ -86,7 +112,7 @@ public static class LiveActivitySource
             activity.SetTag("live.reconcile.overlapped", true);
     }
 
-    internal static Activity? StartOriginate(string channel, string context, string extension)
+    internal static Activity? StartOriginate(string channel, string context, string extension, string? serverId)
     {
         var activity = Source.StartActivity($"live originate {channel}", ActivityKind.Client);
         if (activity is not null)
@@ -94,6 +120,7 @@ public static class LiveActivitySource
             activity.SetTag("asterisk.channel.name", channel);
             activity.SetTag("dialplan.context", context);
             activity.SetTag("dialplan.extension", extension);
+            TagServerId(activity, serverId);
         }
 
         return activity;

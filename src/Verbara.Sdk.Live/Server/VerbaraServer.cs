@@ -131,6 +131,10 @@ internal static partial class VerbaraServerLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[LIVE] ConnectionLost handler error")]
     public static partial void ConnectionLostHandlerError(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[LIVE] An UnreconciledLossDelivered subscriber threw; the other subscribers were still told")]
+    public static partial void UnreconciledLossSubscriberFailed(ILogger logger, Exception exception);
 }
 
 /// <summary>
@@ -471,9 +475,124 @@ public sealed class VerbaraServer : IVerbaraServer
 
     /// <summary>
     /// Whether a loss is pending and the connection has delivered through it: every event received before it has been
-    /// dispatched, and no reconnect is pending. The loss a covering channel read sent now would cover.
+    /// dispatched, and no reconnect is pending. The loss a covering channel read sent now would cover. The name the
+    /// session sweep reads; the same reading as the public <see cref="HasUnreconciledLoss"/>.
     /// </summary>
-    internal bool HasDeliveredUnreconciledLoss => ReadLossState() == LossState.Delivered;
+    internal bool HasDeliveredUnreconciledLoss => HasUnreconciledLoss;
+
+    /// <summary>
+    /// Whether this server has a lost event to reconcile now: <see langword="false"/> does not mean that nothing was
+    /// lost. <see langword="true"/> when an event the connection's full buffer dropped (one no action had received in its
+    /// answer) has been delivered through — every event received before it has been dispatched to its handlers — and no
+    /// covering channel read (<see cref="ReconcileChannelsAsync"/>, a load or the reload after a reconnect) has covered
+    /// it since.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It reads <see langword="false"/> in four cases although an event may have been lost: while the loss is still
+    /// behind the backlog (an event received before it is buffered or in its handler: a <c>Status</c> sent then would
+    /// queue behind the events it should see past); while a reconnect is pending or the connection is not
+    /// <see cref="AmiConnectionState.Connected"/> (the reload after the reconnect owns that loss); once a covering
+    /// channel read has covered it; and always over an <see cref="IAmiConnection"/> that is not the SDK's own
+    /// <see cref="AmiConnection"/>, which reports no loss.
+    /// </para>
+    /// <para>
+    /// A reconciliation covers the loss when its <c>live channel-reconcile</c> span carries
+    /// <c>live.reconcile.covered = true</c>: one that was refused, ran out of its wait for the event pump, overlapped
+    /// another channel read or ran inside an event handler leaves this reading <see langword="true"/>. Read it after
+    /// the call to know whether to try again. <see cref="UnreconciledLossDelivered"/> is raised when it turns true.
+    /// One non-blocking read, no lock.
+    /// </para>
+    /// </remarks>
+    public bool HasUnreconciledLoss => ReadLossState() == LossState.Delivered;
+
+    /// <summary>
+    /// Raised, naming this server, each time <see cref="HasUnreconciledLoss"/> turns true: when the connection's delivery
+    /// passes a lost event, and when a pending reconnect settles with a loss its reload did not cover. It says "look
+    /// now"; the reading says what to do.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Drops delivered through together give one notice, and a later drop delivered through gives another. One notice
+    /// per loss: when the reconciliation a handler starts does not cover (it was refused, overlapped another channel
+    /// read, or ran out of its wait), the reading stays true and no second notice comes for the same loss, so read
+    /// <see cref="HasUnreconciledLoss"/> after the reconciliation and try again yourself. A notice may find the reading
+    /// <see langword="false"/> by the time a handler reads it, when another read covered the loss meanwhile.
+    /// </para>
+    /// <para>
+    /// Raised on a thread-pool thread, never on the connection's reader and never inside an event dispatch, so a
+    /// <see cref="ReconcileChannelsAsync"/> started from a handler waits for the backlog and can cover the loss. Return
+    /// quickly: start the reconciliation, do not wait for it inside the handler. A handler that does not return delays
+    /// neither the connection's reading nor its event delivery. Each subscriber is invoked on its own: one that throws is
+    /// logged once at Warning and counted on <c>live.server.subscriber_faults</c>, and the others are still invoked.
+    /// Not raised once <see cref="DisposeAsync"/> has begun, and never over an <see cref="IAmiConnection"/> that is not
+    /// the SDK's own <see cref="AmiConnection"/>.
+    /// </para>
+    /// </remarks>
+    public event Action<VerbaraServer>? UnreconciledLossDelivered;
+
+    // The loss mark of the last notice raised: one notice per mark, compared by equality like every loss mark.
+    private readonly Lock _noticeGate = new();
+    private EventLossEpoch? _notifiedMark;
+
+    private void OnLossDeliveredThrough(long session) => AnnounceUnreconciledLoss();
+
+    // Evaluated at each moment the reading can turn true. The mark is read before the reading: a drop counted between
+    // the two either leaves the reading false (it is not delivered yet) or is delivered and announced again later, so a
+    // mark is never recorded for a drop whose delivery has not been read.
+    private void AnnounceUnreconciledLoss()
+    {
+        if (_disposing.IsCancellationRequested || UnreconciledLossDelivered is null)
+            return;
+
+        var mark = ReadCurrentEventLossEpoch();
+        if (!HasUnreconciledLoss)
+            return;
+
+        lock (_noticeGate)
+        {
+            if (mark == _notifiedMark)
+                return;
+            _notifiedMark = mark;
+        }
+
+        // Posted with no execution context: never on the caller's thread (the connection's notification queue, or its
+        // loss watcher), and with no dispatch frame flowing, so a reconciliation started from a handler can cover.
+        ThreadPool.UnsafeQueueUserWorkItem(static server => server.RaiseUnreconciledLossDelivered(), this, preferLocal: false);
+    }
+
+    private void RaiseUnreconciledLossDelivered()
+    {
+        if (_disposing.IsCancellationRequested || UnreconciledLossDelivered is not { } handlers)
+            return;
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(this);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportNoticeSubscriberFailure(ex);
+            }
+        }
+    }
+
+    // The counter first, then the line: a logger that throws on it leaves the fault counted and the later subscribers told.
+    private void ReportNoticeSubscriberFailure(Exception failure)
+    {
+        LiveMetrics.ServerSubscriberFaults.Add(1);
+        try
+        {
+            VerbaraServerLog.UnreconciledLossSubscriberFailed(_logger, failure);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the line is lost, the fault stays counted, and the subscribers
+            // after this one are still told.
+        }
+    }
 
     /// <summary>
     /// Whether the channel table is complete (<see cref="ChannelTableComplete"/>) and no loss is pending since the epoch
@@ -658,6 +777,7 @@ public sealed class VerbaraServer : IVerbaraServer
             amiConnection.Lost += OnConnectionLost;
             amiConnection.CallerReconnected += OnCallerReconnected;
             amiConnection.ReconnectSettled += OnReconnectSettled;
+            amiConnection.LossDeliveredThrough += OnLossDeliveredThrough;
         }
 
         // Register observable gauges for live state (all typed as long for consistent metric reporting)
@@ -698,7 +818,11 @@ public sealed class VerbaraServer : IVerbaraServer
 
     private void OnReconnected() => ReloadNewSession(_disposing.Token);
 
-    private void OnReconnectSettled(long session) => AnnounceSettledTable();
+    private void OnReconnectSettled(long session)
+    {
+        AnnounceSettledTable();
+        AnnounceUnreconciledLoss();
+    }
 
     // A table can become covered at a moment no channel read's own completion announces: the end of a pending reconnect,
     // and the exit of an application that waited out its bound behind one that verified the table while it was still
@@ -957,7 +1081,7 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </exception>
     public async ValueTask ReconcileChannelsAsync(CancellationToken cancellationToken = default)
     {
-        using var activity = LiveActivitySource.StartChannelReconcile(_connection.AsteriskVersion ?? "unknown");
+        using var activity = LiveActivitySource.StartChannelReconcile(_connection.AsteriskVersion ?? "unknown", PoolId);
 
         var states = new LoadConnectionStates(_connection);
         var session = _connection is AmiConnection ami ? new LoadSession(ami, TimeProvider) : null;
@@ -1774,7 +1898,7 @@ public sealed class VerbaraServer : IVerbaraServer
     private async ValueTask ReadStateAsync(LoadConnectionStates states, Barriers barriers,
         CancellationToken cancellationToken)
     {
-        using var activity = LiveActivitySource.StartStateLoad(_connection.AsteriskVersion ?? "unknown");
+        using var activity = LiveActivitySource.StartStateLoad(_connection.AsteriskVersion ?? "unknown", PoolId);
 
         // Bound once, here: every decision this load takes about a starting Asterisk is about the session it began on.
         var session = _connection is AmiConnection ami ? new LoadSession(ami, TimeProvider) : null;
@@ -2282,7 +2406,7 @@ public sealed class VerbaraServer : IVerbaraServer
             Volatile.Write(ref _lastStatusRefusal, new StatusRefusal(rejection, TimeProvider.GetUtcNow()));
             var readerTag = new KeyValuePair<string, object?>("live.status.reader", reader.MetricName);
             if (PoolId is { } serverId)
-                LiveMetrics.StatusRefused.Add(1, readerTag, new KeyValuePair<string, object?>("server.id", serverId));
+                LiveMetrics.StatusRefused.Add(1, readerTag, new KeyValuePair<string, object?>(LiveActivitySource.ServerIdTag, serverId));
             else
                 LiveMetrics.StatusRefused.Add(1, readerTag);
             if (!reader.WarnsOncePerSession || Interlocked.Exchange(ref _statusRefusalWarned, 1) == 0)
@@ -2660,7 +2784,7 @@ public sealed class VerbaraServer : IVerbaraServer
         string? callerId = null, TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
-        using var activity = LiveActivitySource.StartOriginate(channel, context, extension);
+        using var activity = LiveActivitySource.StartOriginate(channel, context, extension, PoolId);
 
         var ringFor = timeout ?? TimeSpan.FromMilliseconds(30000);
         var action = new OriginateAction
@@ -2792,6 +2916,7 @@ public sealed class VerbaraServer : IVerbaraServer
                 amiConnection.Lost -= OnConnectionLost;
                 amiConnection.CallerReconnected -= OnCallerReconnected;
                 amiConnection.ReconnectSettled -= OnReconnectSettled;
+                amiConnection.LossDeliveredThrough -= OnLossDeliveredThrough;
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)

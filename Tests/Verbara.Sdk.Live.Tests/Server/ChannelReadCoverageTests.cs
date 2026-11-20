@@ -32,7 +32,7 @@ namespace Verbara.Sdk.Live.Tests.Server;
 /// inside an activity of this class's own source, so a span of another test running in parallel is never read.
 /// </para>
 /// </remarks>
-public sealed class ChannelReadCoverageTests
+public sealed partial class ChannelReadCoverageTests
 {
     private const int Capacity = 2;
     private const string ReconcileSpan = "live channel-reconcile";

@@ -1,1 +1,3 @@
 #nullable enable
+Verbara.Sdk.Live.Server.VerbaraServer.HasUnreconciledLoss.get -> bool
+Verbara.Sdk.Live.Server.VerbaraServer.UnreconciledLossDelivered -> System.Action<Verbara.Sdk.Live.Server.VerbaraServer!>?

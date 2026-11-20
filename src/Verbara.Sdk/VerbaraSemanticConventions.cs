@@ -12,7 +12,10 @@ public static class VerbaraSemanticConventions
     /// <summary>Resource-level attributes (set once on the <c>Resource</c>, not per span).</summary>
     public static class Resource
     {
-        /// <summary>Logical Asterisk node name. Matches <c>VerbaraServer.Name</c>.</summary>
+        /// <summary>
+        /// Logical Asterisk node name, set by the application on its OpenTelemetry Resource; the SDK does not set it.
+        /// Live's spans identify a pooled server with <c>server.id</c>.
+        /// </summary>
         public const string ServerName = "asterisk.server.name";
 
         /// <summary>Asterisk version reported by <c>GetInfoAsync</c>.</summary>
