@@ -186,7 +186,7 @@ public sealed partial class ChannelReadCoverageTests
     }
 
     [Fact]
-    public async Task UnreconciledLossDelivered_ShouldBeRaisedWithTheReadingTrue_WhenAPendingReconnectSettlesWithALossItsReloadDidNotCover()
+    public async Task UnreconciledLossDelivered_ShouldBeRaisedWithTheReadingTrue_WhenTheReloadAfterAReconnectEndsWithALossItDidNotCover()
     {
         var first = new BootingAsterisk { BootedAtLogin = true, StatusChannels = [] };
         var second = new BootingAsterisk { BootedAtLogin = true, StatusRefusedFromAsk = 1 };

@@ -476,9 +476,10 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>
     /// Whether a loss is pending and the connection has delivered through it: every event received before it has been
     /// dispatched, and no reconnect is pending. The loss a covering channel read sent now would cover. The name the
-    /// session sweep reads; the same reading as the public <see cref="HasUnreconciledLoss"/>.
+    /// session sweep reads: the public <see cref="HasUnreconciledLoss"/> without its condition that no load of the server
+    /// runs, because the sweep applies that condition itself (<see cref="IsLoadInFlight"/>) and tags its skip for it.
     /// </summary>
-    internal bool HasDeliveredUnreconciledLoss => HasUnreconciledLoss;
+    internal bool HasDeliveredUnreconciledLoss => ReadLossState() == LossState.Delivered;
 
     /// <summary>
     /// Whether this server has a lost event to reconcile now: <see langword="false"/> does not mean that nothing was
@@ -489,11 +490,13 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </summary>
     /// <remarks>
     /// <para>
-    /// It reads <see langword="false"/> in four cases although an event may have been lost: while the loss is still
+    /// It reads <see langword="false"/> in five cases although an event may have been lost: while the loss is still
     /// behind the backlog (an event received before it is buffered or in its handler: a <c>Status</c> sent then would
     /// queue behind the events it should see past); while a reconnect is pending or the connection is not
-    /// <see cref="AmiConnectionState.Connected"/> (the reload after the reconnect owns that loss); once a covering
-    /// channel read has covered it; and always over an <see cref="IAmiConnection"/> that is not the SDK's own
+    /// <see cref="AmiConnectionState.Connected"/> (the reload after the reconnect owns that loss); while a load of this
+    /// server is running — its start's, the reload after a reconnect, or <see cref="RequestInitialStateAsync"/> — which
+    /// reads the channels itself (a reconciliation started then would overlap its read, and neither would cover); once a
+    /// covering channel read has covered it; and always over an <see cref="IAmiConnection"/> that is not the SDK's own
     /// <see cref="AmiConnection"/>, which reports no loss.
     /// </para>
     /// <para>
@@ -504,12 +507,12 @@ public sealed class VerbaraServer : IVerbaraServer
     /// One non-blocking read, no lock.
     /// </para>
     /// </remarks>
-    public bool HasUnreconciledLoss => ReadLossState() == LossState.Delivered;
+    public bool HasUnreconciledLoss => ReadLossState() == LossState.Delivered && !IsLoadInFlight;
 
     /// <summary>
     /// Raised, naming this server, each time <see cref="HasUnreconciledLoss"/> turns true: when the connection's delivery
-    /// passes a lost event, and when a pending reconnect settles with a loss its reload did not cover. It says "look
-    /// now"; the reading says what to do.
+    /// passes a lost event, and when a load of this server or a pending reconnect ends with a delivered loss it did not
+    /// cover. It says "look now"; the reading says what to do.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -517,7 +520,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// per loss: when the reconciliation a handler starts does not cover (it was refused, overlapped another channel
     /// read, or ran out of its wait), the reading stays true and no second notice comes for the same loss, so read
     /// <see cref="HasUnreconciledLoss"/> after the reconciliation and try again yourself. A notice may find the reading
-    /// <see langword="false"/> by the time a handler reads it, when another read covered the loss meanwhile.
+    /// <see langword="false"/> by the time a handler reads it, when another read covered the loss meanwhile. A subscriber
+    /// added after the reading turned true hears nothing for that loss: subscribe before <see cref="StartAsync"/>, or read
+    /// <see cref="HasUnreconciledLoss"/> once after subscribing.
     /// </para>
     /// <para>
     /// Raised on a thread-pool thread, never on the connection's reader and never inside an event dispatch, so a
@@ -525,8 +530,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// quickly: start the reconciliation, do not wait for it inside the handler. A handler that does not return delays
     /// neither the connection's reading nor its event delivery. Each subscriber is invoked on its own: one that throws is
     /// logged once at Warning and counted on <c>live.server.subscriber_faults</c>, and the others are still invoked.
-    /// Not raised once <see cref="DisposeAsync"/> has begun, and never over an <see cref="IAmiConnection"/> that is not
-    /// the SDK's own <see cref="AmiConnection"/>.
+    /// No notice is started once <see cref="DisposeAsync"/> has begun; one whose raise had already begun may still reach
+    /// its handlers. Never raised over an <see cref="IAmiConnection"/> that is not the SDK's own
+    /// <see cref="AmiConnection"/>.
     /// </para>
     /// </remarks>
     public event Action<VerbaraServer>? UnreconciledLossDelivered;
@@ -544,7 +550,9 @@ public sealed class VerbaraServer : IVerbaraServer
 
     private void OnLossDeliveredThrough(long session) => AnnounceUnreconciledLoss();
 
-    // Evaluated at each moment the reading can turn true. The mark is read before the reading: a drop counted between
+    // Evaluated at each moment the reading can turn true: the delivery passing a loss, a pending reconnect settling, and
+    // the last running load of this server ending. Each of the three writes its own state with a full fence and only then
+    // evaluates, so whichever happens last sees all three. The mark is read before the reading: a drop counted between
     // the two either leaves the reading false (it is not delivered yet) or is delivered and announced again later, so a
     // mark is never recorded for a drop whose delivery has not been read.
     private void AnnounceUnreconciledLoss()
@@ -1784,6 +1792,10 @@ public sealed class VerbaraServer : IVerbaraServer
             // Agents is still part of the active load. A stop there cannot leave an owner for the queue batch.
             if (!transferred)
                 barriers.QueueReports?.Dispose();
+
+            // While the load ran, the public reading was false: the load owned any loss it would read. It ended — covered,
+            // refused, failed or cut short — so the reading may turn true now. After the decrement, however the load ended.
+            AnnounceUnreconciledLoss();
         }
 
         if (barriers.DeferredOn is null)

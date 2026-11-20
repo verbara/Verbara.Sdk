@@ -357,8 +357,8 @@ public sealed class AmiConnection : IAmiConnection
     /// passed together, again for a later drop passed later, and not for a drop the session's buffer was released before
     /// passing. A dropped copy of an event an action had already received is no loss here either. Raised on a thread-pool
     /// thread, never on the reader's, never on the one that dispatches events and never inside an event dispatch; a
-    /// subscriber that does not return holds no delivery, only the next signal of the same buffer. A subscriber's failure
-    /// is logged at Warning.
+    /// subscriber that does not return holds no delivery, only the next signal of the same buffer. Each subscriber is
+    /// invoked on its own: one that throws is logged at Warning, and the subscribers after it are still told.
     /// </summary>
     /// <remarks>
     /// Subscribed to by Verbara.Sdk.Live (since 2.11.0), which raises its public loss notice from it; kept with this
@@ -366,21 +366,28 @@ public sealed class AmiConnection : IAmiConnection
     /// </remarks>
     internal event Action<long>? LossDeliveredThrough;
 
+    // Internal, not private: a test raises it directly, as the pump's watcher does.
     internal void RaiseLossDeliveredThrough(long session)
     {
-        try
-        {
-            LossDeliveredThrough?.Invoke(session);
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+        if (LossDeliveredThrough is not { } handlers)
+            return;
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
         {
             try
             {
-                AmiConnectionLog.LossDeliveredHandlerError(_logger, ex);
+                handler(session);
             }
-            catch (Exception logFailure) when (logFailure is not OutOfMemoryException)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // The host's logger failed on the report: the line is lost, and the next signal is still raised.
+                try
+                {
+                    AmiConnectionLog.LossDeliveredHandlerError(_logger, ex);
+                }
+                catch (Exception logFailure) when (logFailure is not OutOfMemoryException)
+                {
+                    // The host's logger failed on the report: the line is lost, and the later subscribers are still told.
+                }
             }
         }
     }

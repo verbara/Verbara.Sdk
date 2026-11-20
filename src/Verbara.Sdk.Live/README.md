@@ -94,8 +94,9 @@ await server.ReconcileChannelsAsync(cancellationToken);
   `live.status.refused`, and logged at Debug. It is not reported as a state load. From 2.11.0 the `live channel-reconcile`,
   `live state-load` and `live originate` activities of a pooled server carry `server.id` (its pool id); `live.server`
   carries the Asterisk version, not the server, and is obsolete (removed in 2.12.0).
-- From 2.11.0 `server.HasUnreconciledLoss` says whether an event the full buffer dropped has been delivered through and
-  no covering read has covered it yet, and `server.UnreconciledLossDelivered` is raised each time that turns true: the
+- From 2.11.0 `server.HasUnreconciledLoss` says whether an event the full buffer dropped has been delivered through, no
+  covering read has covered it yet and no load of the server is running, and `server.UnreconciledLossDelivered` is raised
+  each time that turns true: the
   route for a host without the session sweep (see the
   [high-load guide](../../docs/guides/high-load-tuning.md#session-reconciliation)).
 
