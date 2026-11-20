@@ -56,14 +56,14 @@ public sealed class BridgeRetentionTests
     }
 
     [Fact]
-    public void GetById_ShouldReturnNull_WhenBridgeDestroyedSubscriberThrowsAndRetentionPasses()
+    public void GetById_ShouldReturnNullAndThrowNothing_WhenBridgeDestroyedSubscriberThrowsAndRetentionPasses()
     {
         _sut.BridgeDestroyed += _ => throw new InvalidOperationException("subscriber failed");
         _sut.OnBridgeCreated("pinned", "basic", "simple_bridge", null, null);
 
-        // The event pump swallows a subscriber's exception; here it reaches the caller, which does the same.
+        // The subscriber's failure stays with it: it is counted and logged, and nothing leaves the call.
         var destroy = () => _sut.OnBridgeDestroyed("pinned");
-        destroy.Should().Throw<InvalidOperationException>();
+        destroy.Should().NotThrow("a BridgeDestroyed subscriber's failure no longer leaves the call that destroyed the bridge");
 
         _clock.Now += Retention;
         _sut.OnBridgeCreated("later", "basic", "simple_bridge", null, null);

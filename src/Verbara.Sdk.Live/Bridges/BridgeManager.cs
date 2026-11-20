@@ -26,6 +26,11 @@ internal static partial class BridgeManagerLog
         Message = "[BRIDGE] Bridges reconciled: listed={Listed} admitted={Admitted} removed={Removed} newer_than_snapshot={NewerThanSnapshot} destroyed_during_read={DestroyedDuringRead} removes_omitted={RemovesOmitted}")]
     public static partial void Reconciled(ILogger logger, int listed, int admitted, int removed, int newerThanSnapshot,
         int destroyedDuringRead, bool removesOmitted);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[BRIDGE] Subscriber failed: event={EventName} bridge_id={BridgeId} channel={Channel}; the other subscribers still receive it")]
+    public static partial void SubscriberFailed(ILogger logger, Exception exception, string eventName, string bridgeId,
+        string? channel);
 }
 
 /// <summary>
@@ -160,7 +165,7 @@ public sealed class BridgeManager
         if (observedSnapshotCreation)
             BridgeManagerLog.SnapshotBridgeCreateObserved(_logger, bridgeId);
         if (announced is not null)
-            BridgeCreated?.Invoke(announced);
+            RaiseBridge(BridgeCreated, nameof(BridgeCreated), announced);
         else
             BridgeManagerLog.DuplicateBridgeCreate(_logger, bridgeId);
     }
@@ -185,7 +190,7 @@ public sealed class BridgeManager
         }
 
         TransitionObserver?.Invoke(BridgeTransitionPoint.LiveMembershipApplied, bridge);
-        ChannelEntered?.Invoke(bridge, uniqueId);
+        RaiseMembership(ChannelEntered, nameof(ChannelEntered), bridge, uniqueId);
     }
 
     /// <summary>Called when Asterisk fires a BridgeLeave event.</summary>
@@ -209,7 +214,7 @@ public sealed class BridgeManager
             }
         }
 
-        ChannelLeft?.Invoke(bridge, uniqueId);
+        RaiseMembership(ChannelLeft, nameof(ChannelLeft), bridge, uniqueId);
     }
 
     /// <summary>Called when Asterisk fires a BridgeDestroy event.</summary>
@@ -256,7 +261,7 @@ public sealed class BridgeManager
             {
                 Interlocked.Decrement(ref _active);
                 LiveMetrics.BridgesDestroyed.Add(1);
-                // Queue before a subscriber can clear/recreate the manager. Throwing subscribers cannot pin it.
+                // Queue before a subscriber can clear/recreate the manager. No subscriber, throwing or not, can pin it.
                 lock (_destroyedOrderLock)
                     _destroyedOrder.Enqueue((bridgeId, bridge, destroyedAt));
             }
@@ -264,11 +269,12 @@ public sealed class BridgeManager
         return true;
     }
 
+    // Every subscriber is isolated (see RaiseBridge); the finally still releases when what leaves is out of memory.
     private void AnnounceDestruction(AsteriskBridge bridge)
     {
         try
         {
-            BridgeDestroyed?.Invoke(bridge);
+            RaiseBridge(BridgeDestroyed, nameof(BridgeDestroyed), bridge);
         }
         finally
         {
@@ -305,14 +311,142 @@ public sealed class BridgeManager
     public void OnBlindTransfer(string bridgeId, string? targetChannel, string? extension, string? context)
     {
         var info = new BridgeTransferInfo(bridgeId, "Blind", targetChannel, null, null, null);
-        TransferOccurred?.Invoke(info);
+        // Checked here: the guarded raise is a call of its own, which a transfer no one hears should not pay for.
+        if (TransferOccurred is { } handlers)
+            RaiseTransfer(handlers, info, targetChannel);
     }
 
     /// <summary>Called when Asterisk fires an AttendedTransfer event.</summary>
     public void OnAttendedTransfer(string origBridgeId, string? secondBridgeId, string? destType, string? result)
     {
         var info = new BridgeTransferInfo(origBridgeId, "Attended", null, secondBridgeId, destType, result);
-        TransferOccurred?.Invoke(info);
+        if (TransferOccurred is { } handlers)
+            RaiseTransfer(handlers, info, null);
+    }
+
+    /// <summary>
+    /// Delivers one bridge event to each of <paramref name="handlers"/> in subscription order, each in its own guard, as
+    /// <c>ChannelManager</c> does: a subscriber that throws is counted on <c>live.bridges.subscriber_faults</c> and logged
+    /// once at Warning with the event, the bridge and the channel it names, and the later subscribers still receive the
+    /// event. Nothing a subscriber throws leaves this method, so it reaches neither the call that made the change nor the
+    /// server's AMI observer (which links a bridge's two channels after <see cref="ChannelEntered"/>), and a reload's
+    /// reconciliation goes on. A logger that throws while reporting is ignored: the fault is already counted.
+    /// <see cref="OutOfMemoryException"/> is not caught. Only what throws on the delivering thread is caught. The
+    /// invocation list is walked with a struct enumerator, so a delivery allocates nothing whatever the number of
+    /// subscribers. One non-generic method per delegate type: a generic one over reference types runs shared code that
+    /// looks the enumerator up at run time, measurably slower on a path this short.
+    /// </summary>
+    private void RaiseBridge(Action<AsteriskBridge>? handlers, string eventName, AsteriskBridge bridge)
+    {
+        if (handlers is null)
+            return;
+
+        // One subscriber, the usual case: called straight, so the runtime can devirtualize it as it does a bare Invoke.
+        if (handlers.HasSingleTarget)
+        {
+            try
+            {
+                handlers(bridge);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, eventName, bridge.BridgeUniqueid, null);
+            }
+
+            return;
+        }
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(bridge);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, eventName, bridge.BridgeUniqueid, null);
+            }
+        }
+    }
+
+    /// <summary>The <see cref="TransferOccurred"/> shape of <see cref="RaiseBridge"/>.</summary>
+    private void RaiseTransfer(Action<BridgeTransferInfo> handlers, BridgeTransferInfo info, string? channel)
+    {
+        // One subscriber, the usual case: called straight, so the runtime can devirtualize it as it does a bare Invoke.
+        if (handlers.HasSingleTarget)
+        {
+            try
+            {
+                handlers(info);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, nameof(TransferOccurred), info.BridgeId, channel);
+            }
+
+            return;
+        }
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(info);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, nameof(TransferOccurred), info.BridgeId, channel);
+            }
+        }
+    }
+
+    /// <summary>The channel-membership shape of <see cref="RaiseBridge"/>: the bridge and the channel's unique id.</summary>
+    private void RaiseMembership(Action<AsteriskBridge, string>? handlers, string eventName, AsteriskBridge bridge, string uniqueId)
+    {
+        if (handlers is null)
+            return;
+
+        // One subscriber, the usual case: called straight, so the runtime can devirtualize it as it does a bare Invoke.
+        if (handlers.HasSingleTarget)
+        {
+            try
+            {
+                handlers(bridge, uniqueId);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, eventName, bridge.BridgeUniqueid, uniqueId);
+            }
+
+            return;
+        }
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(bridge, uniqueId);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, eventName, bridge.BridgeUniqueid, uniqueId);
+            }
+        }
+    }
+
+    // The counter first, then the line: a logger that throws on it leaves the fault counted and the delivery going on.
+    private void ReportSubscriberFailure(Exception failure, string eventName, string bridgeId, string? channel)
+    {
+        LiveMetrics.BridgeSubscriberFaults.Add(1);
+        try
+        {
+            BridgeManagerLog.SubscriberFailed(_logger, failure, eventName, bridgeId, channel);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The log line is the only trace a subscriber's failure leaves besides the counter; when the logger fails
+            // too, the fault stays counted and the event goes on to the later subscribers.
+        }
     }
 
     /// <summary>

@@ -54,7 +54,7 @@ internal static partial class VerbaraServerLog
     public static partial void QueuesReconciled(ILogger logger, int queues, bool refused);
 
     [LoggerMessage(Level = LogLevel.Error,
-        Message = "[LIVE] An agent state handler failed while a queue listing that had already failed settled the agents it changed")]
+        Message = "[LIVE] Settling the agents failed while a queue listing that had already failed settled the agents it changed")]
     public static partial void AgentSettleFailedAfterListingFailure(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "[LIVE] Queue discovery asked: queue={Queue}")]
@@ -534,9 +534,10 @@ public sealed class VerbaraServer : IVerbaraServer
 
     /// <summary>
     /// Settles, as a live member event does, every member interface a queue listing applied or removed. Each in its own
-    /// attempt, so a handler of <see cref="AgentManager.AgentStateChanged"/> that throws for one agent does not skip the
-    /// next. Returns what the handlers threw: <see langword="null"/>, the one failure, or an
-    /// <see cref="AggregateException"/> of several.
+    /// attempt, so a failure settling one agent does not skip the next. A subscriber of
+    /// <see cref="AgentManager.AgentStateChanged"/> that throws never reaches here: the manager isolates it, counts it on
+    /// <c>live.agents.subscriber_faults</c> and logs it. Returns what settling threw: <see langword="null"/>, the one
+    /// failure, or an <see cref="AggregateException"/> of several.
     /// </summary>
     private Exception? SettleAgentMembers(HashSet<string> memberInterfaces)
     {
@@ -985,9 +986,10 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <para>
     /// The agents of the <c>Agent/</c> memberships it adds, removes or changes are settled as a live member event settles
     /// them: <see cref="AgentManager.AgentStateChanged"/> is raised once for an agent whose state changed, and not for an
-    /// agent logged off or on a call; no agents listing is asked. A handler of the queue table that throws stops neither:
-    /// its failure is counted on <c>live.queues.subscriber_faults</c> and logged at Warning, and nothing is thrown from
-    /// this call. They are settled also when applying the snapshot fails, for what was applied before it; that failure
+    /// agent logged off or on a call; no agents listing is asked. A handler of the queue table or of
+    /// <see cref="AgentManager.AgentStateChanged"/> that throws stops neither: its failure is counted on
+    /// <c>live.queues.subscriber_faults</c> or <c>live.agents.subscriber_faults</c> and logged at Warning, the other
+    /// agents are still settled, and nothing is thrown from this call. They are settled also when applying the snapshot fails, for what was applied before it; that failure
     /// then leaves this call.
     /// </para>
     /// <para>
@@ -1053,7 +1055,7 @@ public sealed class VerbaraServer : IVerbaraServer
             settleFailure = SettleAgentMembers(touched);
             if (settleFailure is not null && !transferred)
             {
-                // The read's own failure leaves the call; the agent handler's is not lost.
+                // The read's own failure leaves the call; a failure settling the agents is not lost.
                 VerbaraServerLog.AgentSettleFailedAfterListingFailure(_logger, settleFailure);
                 settleFailure = null;
             }
