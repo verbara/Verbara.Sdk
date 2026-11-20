@@ -31,8 +31,9 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
 
         report.SourceFiles.Should().BeGreaterThan(0, "a guard that read no source would pass on nothing");
         report.IsClean.Should().BeTrue(
-            "none of the 49 types and the member is declared again; nothing in src/, Tests/ or the build configuration " +
-            $"uses \"{Id}\"; the guide holds one heading for it; and every other id of DeprecationIdRegister holds. Found:" +
+            "no symbol of any retired id's removed set is declared again (" + Id + "'s 49 types and member, and the " +
+            "symbols removed in 2.11.0); nothing in src/, Tests/ or the build configuration uses a retired id; each id's " +
+            "guide holds one heading for it; and every other id of DeprecationIdRegister holds. Found:" +
             Environment.NewLine + report);
     }
 
@@ -99,6 +100,33 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
         var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
         report.Violations.Should().ContainSingle(v => v == "src/Pkg/Activity.cs:5: Activity.UseOld is declared again; it was removed in 2.10.0");
+    }
+
+    [Fact]
+    public void Scan_ShouldNameTheParameter_WhenARemovedRecordPositionalParameterIsDeclaredAgain()
+    {
+        // A positional parameter declares the property the compiler generates, so re-adding it re-declares the member.
+        using var tree = GreenTree();
+        tree.Write("src/Pkg/Dtmf.cs", "namespace Pkg;\n\npublic sealed record ChanWebSocketDtmf(\n    string Digit,\n    int DurationMs);\n");
+
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([new("Pkg", "ChanWebSocketDtmf.DurationMs")]));
+        output.WriteLine(report.ToString());
+
+        report.Violations.Should().ContainSingle(v => v == "src/Pkg/Dtmf.cs:5: ChanWebSocketDtmf.DurationMs is declared again; it was removed in 2.10.0");
+    }
+
+    [Fact]
+    public void Scan_ShouldPass_WhenAnotherTypeDeclaresAMemberOfTheRemovedMembersName()
+    {
+        // The key is Type.Member: a member of the same name in another type of the package is not the removed one.
+        using var tree = GreenTree();
+        tree.Write("src/Pkg/Extension.cs",
+            "namespace Pkg;\n\npublic sealed class ExtensionStatusEvent\n{\n    public string? CallerId { get; set; }\n}\n\n" +
+            "public sealed record ExtensionDtmf(string Digit, int CallerId);\n");
+
+        var report = DeprecationIdScanner.Scan(tree.Root, Register([new("Pkg", "StatusEvent.CallerId")]));
+
+        report.IsClean.Should().BeTrue(report.ToString());
     }
 
     [Theory]

@@ -23,6 +23,8 @@ public sealed class DeprecationIdGuardTests(ITestOutputHelper output)
 
     private static readonly string Pragma = "#" + "pragma warning";
 
+    private static readonly string[] AmiIdsRemovedIn2_11_0 = ["VSDK0002", "VSDK0007"];
+
     private static readonly IReadOnlyList<DeprecationIdRow> Register =
     [
         new("VSDK0001", DeprecationIdState.Retired, "2.9.0", null, [], []),
@@ -35,31 +37,42 @@ public sealed class DeprecationIdGuardTests(ITestOutputHelper output)
     // ---- The register -------------------------------------------------------------------------------------------
 
     [Fact]
-    public void Register_ShouldHoldTwoRetiredAndFiveMarkedIds_WhenReadOn2_10_0()
+    public void Register_ShouldHoldFourRetiredAndThreeMarkedIds_WhenReadBetweenTheTwo2_11_0Removals()
     {
         var rows = DeprecationIdRegister.Rows;
 
         rows.Select(r => r.Id).Should().Equal("VSDK0001", "VSDK0002", "VSDK0003", "VSDK0004", "VSDK0005", "VSDK0006", "VSDK0007");
-        rows.Where(r => r.State == DeprecationIdState.Retired).Select(r => r.Id).Should().Equal("VSDK0001", "VSDK0005");
+        rows.Where(r => r.State == DeprecationIdState.Retired).Select(r => (r.Id, r.Release))
+            .Should().Equal(("VSDK0001", "2.9.0"), ("VSDK0002", "2.11.0"), ("VSDK0005", "2.10.0"), ("VSDK0007", "2.11.0"));
         rows.Where(r => r.State == DeprecationIdState.Marked).Select(r => (r.Id, r.Members.Count))
-            .Should().Equal(("VSDK0002", 6), ("VSDK0003", 1), ("VSDK0004", 5), ("VSDK0006", 2), ("VSDK0007", 7));
+            .Should().Equal(("VSDK0003", 1), ("VSDK0004", 5), ("VSDK0006", 2));
         rows.Where(r => r.State == DeprecationIdState.Marked).Should().OnlyContain(r => r.Release == "2.11.0");
-        rows.SelectMany(r => r.Members).Should().HaveCount(21).And.OnlyHaveUniqueItems();
+        rows.Where(r => r.State == DeprecationIdState.Retired).Should().OnlyContain(r => r.Members.Count == 0);
+        rows.SelectMany(r => r.Members).Should().HaveCount(8).And.OnlyHaveUniqueItems();
     }
 
     [Fact]
-    public void Register_ShouldHoldTheTwentyOneMembersByPackage_WhenRead()
+    public void Register_ShouldHoldTheEightMarkedMembersByPackage_WhenRead()
     {
         DeprecationIdRegister.Rows.SelectMany(r => r.Members.Select(m => $"{r.Id} {m.Package} {m.Key}")).Should().BeEquivalentTo(
         [
-            "VSDK0002 Verbara.Sdk.Ami StatusEvent.CallerId", "VSDK0002 Verbara.Sdk.Ami StatusEvent.Account",
-            "VSDK0002 Verbara.Sdk.Ami StatusEvent.State", "VSDK0002 Verbara.Sdk.Ami StatusEvent.BridgedChannel",
-            "VSDK0002 Verbara.Sdk.Ami StatusEvent.Link", "VSDK0002 Verbara.Sdk.Ami StatusEvent.BridgedUniqueId",
             "VSDK0003 Verbara.Sdk.Ari AudioStreamMetrics.BufferUnderruns",
             "VSDK0004 Verbara.Sdk.Ari IChanWebSocketSession.SendXonAsync", "VSDK0004 Verbara.Sdk.Ari IChanWebSocketSession.SendXoffAsync",
             "VSDK0004 Verbara.Sdk.Ari ChanWebSocketHangup", "VSDK0004 Verbara.Sdk.Ari ChanWebSocketMediaBuffering",
             "VSDK0004 Verbara.Sdk.Ari ChanWebSocketDtmf.DurationMs",
             "VSDK0006 Verbara.Sdk.Sessions SessionMetrics.SessionsTimedOut", "VSDK0006 Verbara.Sdk.Sessions SessionMetrics.SessionsOrphaned",
+        ]);
+    }
+
+    [Fact]
+    public void Register_ShouldKeepTheThirteenAmiSymbolsRemovedIn2_11_0AsRemovedSets_WhenRead()
+    {
+        AmiIdsRemovedIn2_11_0
+            .SelectMany(id => DeprecationIdRegister.Row(id).RemovedSet.Select(m => $"{id} {m.Package} {m.Key}")).Should().BeEquivalentTo(
+        [
+            "VSDK0002 Verbara.Sdk.Ami StatusEvent.CallerId", "VSDK0002 Verbara.Sdk.Ami StatusEvent.Account",
+            "VSDK0002 Verbara.Sdk.Ami StatusEvent.State", "VSDK0002 Verbara.Sdk.Ami StatusEvent.BridgedChannel",
+            "VSDK0002 Verbara.Sdk.Ami StatusEvent.Link", "VSDK0002 Verbara.Sdk.Ami StatusEvent.BridgedUniqueId",
             "VSDK0007 Verbara.Sdk.Ami DbPrefixGetAction", "VSDK0007 Verbara.Sdk.Ami ExecAction",
             "VSDK0007 Verbara.Sdk.Ami JitterBufStatsEvent", "VSDK0007 Verbara.Sdk.Ami MasqueradeEvent",
             "VSDK0007 Verbara.Sdk.Ami PriEventEvent", "VSDK0007 Verbara.Sdk.Ami RtpReceiverStatEvent",

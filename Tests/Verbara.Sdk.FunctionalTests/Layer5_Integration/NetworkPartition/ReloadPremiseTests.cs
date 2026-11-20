@@ -81,6 +81,59 @@ public sealed class ReloadPremiseTests : FunctionalTestBase
         }
     }
 
+    // The wire headers the six StatusEvent members removed in 2.11.0 (VSDK0002) used to bind, each with the member it
+    // fed. RawFields compares names case-insensitively, as the reader stores them.
+    private static readonly (string Member, string Header)[] RemovedMemberHeaders =
+    [
+        ("CallerId", "CallerID"),
+        ("Account", "Account"),
+        ("State", "State"),
+        ("BridgedChannel", "BridgedChannel"),
+        ("Link", "Link"),
+        ("BridgedUniqueId", "BridgedUniqueID"),
+    ];
+
+    [Fact]
+    public async Task Status_ShouldCarryNoHeaderOfARemovedMember_WhenOneBridgedCallIsUp()
+    {
+        await using var connection = AmiConnectionFactory.Create(LoggerFactory, opts =>
+        {
+            opts.DefaultResponseTimeout = TimeSpan.FromSeconds(15);
+            opts.AutoReconnect = false;
+        });
+        await connection.ConnectAsync();
+
+        try
+        {
+            await OriginateBridgedCallAsync(connection);
+            var legs = await WaitForBridgedStatusLegsAsync(connection);
+
+            legs.Should().HaveCountGreaterThanOrEqualTo(2, "the originate builds a call with at least two legs");
+            legs.Should().Contain(leg => leg.RawFields != null
+                    && !string.IsNullOrEmpty(leg.RawFields.GetValueOrDefault("BridgeID")),
+                "a leg of the call is in a bridge, so a bridge-only header would have had its chance to appear");
+
+            foreach (var leg in legs)
+            {
+                leg.RawFields.Should().NotBeNull("a Status frame read off the wire keeps its headers");
+                leg.RawFields!.Should().ContainKey("ChannelStateDesc",
+                    "the negative control: the header the State member gave way to is on every leg");
+                leg.RawFields!.Should().ContainKey("CallerIDNum",
+                    "the negative control: the header the CallerId member gave way to is on every leg");
+                foreach (var (member, header) in RemovedMemberHeaders)
+                {
+                    leg.RawFields!.Should().NotContainKey(header,
+                        "2.11.0 removed StatusEvent.{0} because no supported Asterisk sends {1}; leg {2} sent it",
+                        member, header, leg.Channel);
+                }
+            }
+        }
+        finally
+        {
+            await BestEffort.SendAsync(connection, new CommandAction { Command = HangupEverything });
+        }
+    }
+
     // The typed StatusEvent member and the wire header it reads. Each typed member must equal the raw
     // header on every leg a real Asterisk reports, so a binding regression shows up against the live
     // server, not only against the recorded frames.
@@ -277,6 +330,27 @@ public sealed class ReloadPremiseTests : FunctionalTestBase
         {
             if (evt is StatusEvent status)
                 legs.Add(status);
+        }
+
+        return legs;
+    }
+
+    // Polls Status until a leg reports a non-empty BridgeID: the two-leg count alone can be reached while the legs
+    // are still Down/Ring, before Dial bridges them.
+    private static async Task<List<StatusEvent>> WaitForBridgedStatusLegsAsync(AmiConnection connection)
+    {
+        var legs = new List<StatusEvent>();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while (!cts.IsCancellationRequested)
+        {
+            legs = await ReadStatusLegsAsync(connection);
+            if (legs.Count >= 2 && legs.Exists(leg => leg.RawFields != null
+                    && leg.RawFields.TryGetValue("BridgeID", out var bridge) && !string.IsNullOrEmpty(bridge)))
+                return legs;
+
+            // fence-allow: LOOP-DRIVER — paces polling until Asterisk bridges the legs; cts bounds it
+            try { await Task.Delay(TimeSpan.FromMilliseconds(250), cts.Token); }
+            catch (OperationCanceledException) { break; }
         }
 
         return legs;

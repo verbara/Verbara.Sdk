@@ -2192,8 +2192,8 @@ public sealed class VerbaraServer : IVerbaraServer
                 continue;
 
             // Every field below that Asterisk really sends is read from RawFields, on purpose: one route for
-            // every header. StatusEvent's State, CallerId, Account, BridgedChannel, Link and BridgedUniqueId
-            // are [Obsolete] (VSDK0002) because no supported version sends a header by those names, and the
+            // every header. No supported version sends a State, CallerID, Account, BridgedChannel, Link or
+            // BridgedUniqueId header (StatusEvent dropped those members in 2.11.0), and the
             // typed ChannelState, CallerIdNum and Extension are not read here either: they carry the same
             // headers, but a StatusEvent built by hand can set them to something its RawFields contradict.
             var rawFields = se.RawFields;

@@ -55,6 +55,52 @@ public sealed class RemovedDeadModuleEventDeliveryTests
         }
     }
 
+    /// <summary>The event names whose types 2.11.0 removed, spelled as the Asterisk versions that emitted them did.</summary>
+    public static TheoryData<string> RemovedIn2110EventNames => new(
+    [
+        "JitterBufStats",
+        "Masquerade",
+        "PRIEvent",
+        "RTPReceiverStat",
+        "RTPSenderStat",
+    ]);
+
+    [Theory]
+    [MemberData(nameof(RemovedIn2110EventNames))]
+    public async Task Subscribers_ShouldReceiveABaseManagerEvent_WhenAnEventNameRemovedIn2110Arrives(string wireName)
+    {
+        var received = await DeliverAsync(wireName, [new("Channel", "SIP/100-00000001"), new("Owner", "SIP/100")]);
+
+        using (new AssertionScope())
+        {
+            received.Should().ContainSingle("the one event written before the sentinel reaches the subscriber");
+            var evt = received.Count > 0 ? received[0] : null;
+            evt?.GetType().Should().Be<ManagerEvent>("{0} has no typed class once its type is removed", wireName);
+            evt?.EventType.Should().Be(wireName, "the event keeps the name Asterisk sent, spelled as sent");
+            evt?.RawFields.Should().Contain("Channel", "SIP/100-00000001", "every header is kept");
+            evt?.RawFields.Should().Contain("Owner", "SIP/100", "every header is kept");
+        }
+    }
+
+    [Fact]
+    public async Task Subscribers_ShouldKeepTheCloneAndOriginalHeaders_WhenMasqueradeArrives()
+    {
+        // What MasqueradeEvent used to bind, as Asterisk 11 sent it: the two channels and their states.
+        var received = await DeliverAsync("Masquerade",
+            [new("Clone", "SIP/100-00000001"), new("CloneState", "6"), new("Original", "SIP/200-00000002"), new("OriginalState", "6")]);
+
+        using (new AssertionScope())
+        {
+            received.Should().ContainSingle();
+            var evt = received.Count > 0 ? received[0] : null;
+            evt?.GetType().Should().Be<ManagerEvent>("Masquerade has no typed class from 2.11.0 on");
+            evt?.RawFields.Should().Contain("Clone", "SIP/100-00000001");
+            evt?.RawFields.Should().Contain("CloneState", "6");
+            evt?.RawFields.Should().Contain("Original", "SIP/200-00000002");
+            evt?.RawFields.Should().Contain("OriginalState", "6");
+        }
+    }
+
     /// <summary>
     /// A removed name is not manufactured into the type of the name that replaced it: the replacement name, written
     /// next, still arrives typed, and the removed one does not.

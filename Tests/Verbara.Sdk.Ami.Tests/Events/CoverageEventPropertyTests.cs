@@ -27,59 +27,6 @@ public sealed class CoverageEventPropertyTests
         evt.LongestHoldTime.Should().Be(45);
     }
 
-#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
-    [Fact]
-    public void JitterBufStatsEvent_ShouldHaveAllProperties()
-    {
-        var evt = new JitterBufStatsEvent
-        {
-            Owner = "SIP/100",
-            Ping = 20,
-            LocalJitter = 5,
-            LocalJbDelay = 10,
-            LocalTotalLost = 0,
-            LocalLossPercent = 0,
-            LocalDropped = 0,
-            Localooo = 0,
-            LocalReceived = 1000,
-            RemoteJitter = 8,
-            RemoteJbDelay = 15,
-            RemoteTotalLost = 2,
-            RemoteLossPercent = 1,
-            RemoteDropped = 1,
-            Remoteooo = 0,
-            RemoteReceived = 998
-        };
-        evt.Owner.Should().Be("SIP/100");
-        evt.Ping.Should().Be(20);
-        evt.LocalJitter.Should().Be(5);
-        evt.LocalJbDelay.Should().Be(10);
-        evt.LocalReceived.Should().Be(1000);
-        evt.RemoteJitter.Should().Be(8);
-        evt.RemoteReceived.Should().Be(998);
-        evt.RemoteLossPercent.Should().Be(1);
-        evt.RemoteDropped.Should().Be(1);
-        evt.LocalTotalLost.Should().Be(0);
-        evt.LocalLossPercent.Should().Be(0);
-        evt.LocalDropped.Should().Be(0);
-        evt.Localooo.Should().Be(0);
-        evt.RemoteJbDelay.Should().Be(15);
-        evt.RemoteTotalLost.Should().Be(2);
-        evt.Remoteooo.Should().Be(0);
-    }
-#pragma warning restore VSDK0007
-
-#pragma warning disable VSDK0007 // the marked type is the subject; it leaves in 2.11.0
-    [Fact]
-    public void RtpSenderStatEvent_ShouldHaveAllProperties()
-    {
-        var evt = new RtpSenderStatEvent { SentPackets = 5000, SrCount = 10, Rtt = 0.025 };
-        evt.SentPackets.Should().Be(5000);
-        evt.SrCount.Should().Be(10);
-        evt.Rtt.Should().Be(0.025);
-    }
-#pragma warning restore VSDK0007
-
     [Fact]
     public void RtcpSentEvent_ShouldHaveAllProperties()
     {
