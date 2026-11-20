@@ -55,6 +55,10 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// <c>AmiConnection.ReconnectSettled</c>, an event of <see cref="Action{T}"/> of a <see cref="long"/>, which Live
 /// subscribes to and unsubscribes from (since 2.10.0);
 /// </description></item>
+/// <item><description>
+/// <c>AmiConnection.LossDeliveredThrough</c>, an event of <see cref="Action{T}"/> of a <see cref="long"/>, which Live
+/// subscribes to and unsubscribes from (since 2.11.0);
+/// </description></item>
 /// <item><description><c>AmiConnection.InDispatch</c>, a <see cref="bool"/>;</description></item>
 /// <item><description><c>AmiConnection.ReconnectPending</c>, a <see cref="bool"/>;</description></item>
 /// <item><description><c>AmiConnection.EventLossMark</c>, an <see cref="AmiEventLossMark"/>;</description></item>
@@ -130,6 +134,11 @@ public sealed class AmiInternalsUsedByLiveTests
         Action<long> onReconnectSettled = _ => { };
         connection.ReconnectSettled += onReconnectSettled;
         connection.ReconnectSettled -= onReconnectSettled;
+
+        // AmiConnection.LossDeliveredThrough: the same, with a handler declared exactly as Live's is.
+        Action<long> onLossDeliveredThrough = _ => { };
+        connection.LossDeliveredThrough += onLossDeliveredThrough;
+        connection.LossDeliveredThrough -= onLossDeliveredThrough;
 
         // AmiConnection.InDispatch and AmiConnection.StateAndWriter: their getters, by their exact types.
         var inDispatch = connection.InDispatch;

@@ -91,6 +91,9 @@ internal static partial class AmiConnectionLog
     [LoggerMessage(Level = LogLevel.Error, Message = "[AMI] State-change handler error")]
     public static partial void StateChangedHandlerError(ILogger logger, Exception exception);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AMI] Loss-delivered handler error")]
+    public static partial void LossDeliveredHandlerError(ILogger logger, Exception exception);
+
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "[AMI] A {Event} handler has not returned after {Seconds} s; later notifications wait for it")]
     public static partial void NotificationHandlerStuck(ILogger logger, string @event, double seconds);
@@ -347,6 +350,40 @@ public sealed class AmiConnection : IAmiConnection
     /// 2.x line runs on any newer Ami.
     /// </remarks>
     internal event Action<long>? ReconnectSettled;
+
+    /// <summary>
+    /// Raised, with the session's ordinal, once that session's buffer has dispatched every event received before the last
+    /// one it dropped because it was full (<see cref="DeliveredThroughLastLoss"/> has turned true): once for the drops
+    /// passed together, again for a later drop passed later, and not for a drop the session's buffer was released before
+    /// passing. A dropped copy of an event an action had already received is no loss here either. Raised on a thread-pool
+    /// thread, never on the reader's, never on the one that dispatches events and never inside an event dispatch; a
+    /// subscriber that does not return holds no delivery, only the next signal of the same buffer. A subscriber's failure
+    /// is logged at Warning.
+    /// </summary>
+    /// <remarks>
+    /// Subscribed to by Verbara.Sdk.Live (since 2.11.0), which raises its public loss notice from it; kept with this
+    /// signature until 3.0, because a Live package of the 2.x line runs on any newer Ami.
+    /// </remarks>
+    internal event Action<long>? LossDeliveredThrough;
+
+    private void RaiseLossDeliveredThrough(long session)
+    {
+        try
+        {
+            LossDeliveredThrough?.Invoke(session);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            try
+            {
+                AmiConnectionLog.LossDeliveredHandlerError(_logger, ex);
+            }
+            catch (Exception logFailure) when (logFailure is not OutOfMemoryException)
+            {
+                // The host's logger failed on the report: the line is lost, and the next signal is still raised.
+            }
+        }
+    }
 
     /// <summary>
     /// What this connection may have lost before the event being delivered, for a reader that compares two such marks
@@ -959,6 +996,7 @@ public sealed class AmiConnection : IAmiConnection
                 else
                     AmiConnectionLog.EventDroppedInEpisode(_logger, evt.EventType, channel);
             };
+            pump.OnLossDeliveredThrough = () => RaiseLossDeliveredThrough(ordinal);
             pump.OnDropEpisodeEnded = (count, duration) =>
                 AmiConnectionLog.DropEpisodeEnded(_logger, count, (long)duration.TotalMilliseconds);
 
