@@ -11,6 +11,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [Two WebSocket control records nothing published are removed](#two-websocket-control-records-nothing-published-are-removed) | removed types, BREAKING |
 | `Verbara.Sdk.Ari` | [`ChanWebSocketDtmf` carries the digit alone: its constructor and `Deconstruct` change](#chanwebsocketdtmf-carries-the-digit-alone-its-constructor-and-deconstruct-change) | removed member, changed constructor and `Deconstruct`, BREAKING |
 | `Verbara.Sdk.Ari`, `Verbara.Sdk.Sessions` | [Three meter instruments nothing records are removed](#three-meter-instruments-nothing-records-are-removed) | removed fields and meter instruments, BREAKING |
+| `Verbara.Sdk`, `Verbara.Sdk.Ari` | [The bridge `format` arguments are named for what they format](#the-bridge-format-arguments-are-named-for-what-they-format) | renamed arguments, BREAKING (named arguments only) |
 
 ## Before you start: move every package at once
 
@@ -293,4 +294,48 @@ using Verbara.Sdk.Sessions.Diagnostics;
 
 static (Counter<long> Completed, Counter<long> Failed) Endings() =>
     (SessionMetrics.SessionsCompleted, SessionMetrics.SessionsFailed);
+```
+
+## Renamed arguments
+
+### The bridge `format` arguments are named for what they format
+
+**What changed.** The optional `format` argument of `Bridges.PlayAsync` and `Bridges.RecordAsync` is renamed, on
+`IAriBridgesResource` and on `AriBridgesResource`:
+
+| Member | 2.10.x | 2.11.0 | Sent as |
+|---|---|---|---|
+| `PlayAsync` | `format` | `announcerFormat` | `announcer_format`, the Announcer channel's audio format |
+| `RecordAsync` | `format` | `recorderFormat` | `recorder_format`, the Recorder channel's audio format |
+
+`RecordAsync` keeps `recordingFormat`, the recording's file format (`format` on the wire). Each argument keeps its
+position, type and default, and the request on the wire is the same byte for byte. Under the old name one
+`RecordAsync` call carried two "formats" whose names inverted their wire keys: `RecordAsync(id, "rec", "slin16",
+format: "wav")` compiled and asked for a `slin16` file recorded through a `wav` channel.
+
+**Who is affected.** A call site that names `format:` on either member. It reports `CS1739` against 2.11.0
+(`The best overload for 'RecordAsync' does not have a parameter named 'format'`); no call binds the old name to another
+argument. A call that passes the argument by position and a binary compiled against 2.10.x are not affected. An
+implementation of `IAriBridgesResource` keeps compiling; rename its parameters too if it enables CA1725 (parameter
+names should match the base declaration), and its own named callers keep binding to whatever it names them. The
+channel `Channels.RecordAsync(…, format, …)`, whose `format` is the file format, is not renamed.
+
+**What to do.** Rename the argument at the call site. Before (2.10.x; does not compile against 2.11.0):
+
+<!-- skip-doc-snippet -->
+```csharp
+await ari.Bridges.PlayAsync(bridgeId, "tone:440", format: "slin16");
+await ari.Bridges.RecordAsync(bridgeId, "call-1", "wav", format: "slin16");
+```
+
+After:
+
+```csharp
+using Verbara.Sdk;
+
+static async Task PlayAndRecord(IAriClient ari, string bridgeId)
+{
+    await ari.Bridges.PlayAsync(bridgeId, "tone:440", announcerFormat: "slin16");
+    await ari.Bridges.RecordAsync(bridgeId, "call-1", recordingFormat: "wav", recorderFormat: "slin16");
+}
 ```

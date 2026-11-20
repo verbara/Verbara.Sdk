@@ -194,12 +194,12 @@ public sealed class AriChannelControlVerbTests : FunctionalTestBase, IClassFixtu
             await ari.Bridges.AddChannelAsync(bridge.Id, a);
 
             // A tone, because the image carries no sound files, and a tone does not end by itself.
-            var playback = await ari.Bridges.PlayAsync(bridge.Id, "tone:440", format: "slin16");
+            var playback = await ari.Bridges.PlayAsync(bridge.Id, "tone:440", announcerFormat: "slin16");
             var announcer = await BridgeChannelFormatAsync(bridge.Id, "Announcer/", "WriteFormat");
             await ari.Playbacks.StopAsync(playback.Id);
 
             var recording = "verbs-" + Guid.NewGuid().ToString("N")[..8];
-            await ari.Bridges.RecordAsync(bridge.Id, recording, "wav", format: "slin16");
+            await ari.Bridges.RecordAsync(bridge.Id, recording, "wav", recorderFormat: "slin16");
             var recorder = await BridgeChannelFormatAsync(bridge.Id, "Recorder/", "ReadFormat");
             await ari.Recordings.StopAsync(recording);
 

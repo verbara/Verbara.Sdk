@@ -185,13 +185,13 @@ public sealed class AriBridgesResourceTests
         "{\"id\":\"833dcc33-7238-4e81-9af1-4d42b233551c\",\"media_uri\":\"tone:440\",\"target_uri\":\"bridge:45f040b2-cefc-4dc9-9d4d-ecf5c7752ebd\",\"language\":\"en\",\"state\":\"queued\"}";
 
     [Fact]
-    public async Task PlayAsync_ShouldSendAnnouncerFormat_WhenFormatIsGiven()
+    public async Task PlayAsync_ShouldSendAnnouncerFormat_WhenAnnouncerFormatIsGiven()
     {
         using var handler = new FakeHttpHandler(CapturedBridgePlayback201, HttpStatusCode.Created);
         using var http = CreateHttpClient(handler);
         var sut = new AriBridgesResource(http, DefaultOptions);
 
-        var result = await sut.PlayAsync("45f040b2-cefc-4dc9-9d4d-ecf5c7752ebd", "tone:440", format: "slin16");
+        var result = await sut.PlayAsync("45f040b2-cefc-4dc9-9d4d-ecf5c7752ebd", "tone:440", announcerFormat: "slin16");
 
         result.Id.Should().Be("833dcc33-7238-4e81-9af1-4d42b233551c");
         var pairs = QueryPairs(handler.LastRequestQuery!);
@@ -200,7 +200,7 @@ public sealed class AriBridgesResourceTests
     }
 
     [Fact]
-    public async Task PlayAsync_ShouldOmitAnnouncerFormat_WhenFormatIsNull()
+    public async Task PlayAsync_ShouldOmitAnnouncerFormat_WhenAnnouncerFormatIsNull()
     {
         using var handler = new FakeHttpHandler(CapturedBridgePlayback201, HttpStatusCode.Created);
         using var http = CreateHttpClient(handler);
@@ -218,14 +218,14 @@ public sealed class AriBridgesResourceTests
         "{\"name\":\"c04d-037f4ffe-0-declared\",\"format\":\"wav\",\"state\":\"queued\",\"target_uri\":\"bridge:497c55a4-f29f-45de-a433-90be5694a208\"}";
 
     [Fact]
-    public async Task RecordAsync_ShouldSendRecorderFormat_WhenFormatIsGiven()
+    public async Task RecordAsync_ShouldSendRecorderFormat_WhenRecorderFormatIsGiven()
     {
         using var handler = new FakeHttpHandler(CapturedBridgeLiveRecording201, HttpStatusCode.Created);
         using var http = CreateHttpClient(handler);
         var sut = new AriBridgesResource(http, DefaultOptions);
 
         var result = await sut.RecordAsync(
-            "497c55a4-f29f-45de-a433-90be5694a208", "c04d-037f4ffe-0-declared", "wav", format: "slin16");
+            "497c55a4-f29f-45de-a433-90be5694a208", "c04d-037f4ffe-0-declared", "wav", recorderFormat: "slin16");
 
         result.Name.Should().Be("c04d-037f4ffe-0-declared");
         var pairs = QueryPairs(handler.LastRequestQuery!);
@@ -235,7 +235,7 @@ public sealed class AriBridgesResourceTests
     }
 
     [Fact]
-    public async Task RecordAsync_ShouldOmitRecorderFormat_WhenFormatIsNull()
+    public async Task RecordAsync_ShouldOmitRecorderFormat_WhenRecorderFormatIsNull()
     {
         using var handler = new FakeHttpHandler(CapturedBridgeLiveRecording201, HttpStatusCode.Created);
         using var http = CreateHttpClient(handler);
@@ -245,6 +245,73 @@ public sealed class AriBridgesResourceTests
 
         QueryPairs(handler.LastRequestQuery!).Select(p => p.Key + "=" + p.Value)
             .Should().Equal("name=c04d-037f4ffe-0-declared", "format=wav");
+    }
+
+    // The two "formats" of one record call reach the key each name says, whatever order the caller writes them in:
+    // recordingFormat is the file format (format=), recorderFormat the Recorder channel's (recorder_format=). The
+    // values differ, so a swap of the two arguments shows.
+    [Fact]
+    public async Task RecordAsync_ShouldSendEachFormatUnderItsOwnKey_WhenAllThreeAreNamed()
+    {
+        using var handler = new FakeHttpHandler(CapturedBridgeLiveRecording201, HttpStatusCode.Created);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriBridgesResource(http, DefaultOptions);
+
+        await sut.RecordAsync(
+            bridgeId: "497c55a4-f29f-45de-a433-90be5694a208",
+            recorderFormat: "slin16",
+            name: "c04d-037f4ffe-0-declared",
+            recordingFormat: "wav");
+
+        var pairs = QueryPairs(handler.LastRequestQuery!);
+        pairs.Should().ContainSingle(p => p.Key == "format").Which.Value.Should().Be("wav");
+        pairs.Should().ContainSingle(p => p.Key == "recorder_format").Which.Value.Should().Be("slin16");
+        pairs.Select(p => p.Key).Should().NotContain("announcer_format");
+    }
+
+    [Fact]
+    public async Task PlayAsync_ShouldSendAnnouncerFormatOnlyUnderItsKey_WhenItIsNamedFirst()
+    {
+        using var handler = new FakeHttpHandler(CapturedBridgePlayback201, HttpStatusCode.Created);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriBridgesResource(http, DefaultOptions);
+
+        await sut.PlayAsync(announcerFormat: "slin16", bridgeId: "45f040b2-cefc-4dc9-9d4d-ecf5c7752ebd", media: "tone:440");
+
+        QueryPairs(handler.LastRequestQuery!).Select(p => p.Key + "=" + p.Value)
+            .Should().Equal("media=tone:440", "announcer_format=slin16");
+    }
+
+    // A caller that passes every argument by position keeps the request it sent before the rename: the format
+    // arguments kept their places. Each argument gets a distinct value, so a reordered signature (two string?
+    // arguments trading places; CA1725 makes the interface follow the implementation) changes the query and shows.
+    [Fact]
+    public async Task PlayAsync_ShouldSendEachArgumentUnderItsKey_WhenEveryArgumentIsPositional()
+    {
+        using var handler = new FakeHttpHandler(CapturedBridgePlayback201, HttpStatusCode.Created);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriBridgesResource(http, DefaultOptions);
+
+        await sut.PlayAsync("45f040b2-cefc-4dc9-9d4d-ecf5c7752ebd", "tone:440", "en", 250, 500, "pb-1", "slin16");
+
+        QueryPairs(handler.LastRequestQuery!).Select(p => p.Key + "=" + p.Value).Should().Equal(
+            "media=tone:440", "lang=en", "offsetms=250", "skipms=500", "playbackId=pb-1", "announcer_format=slin16");
+    }
+
+    [Fact]
+    public async Task RecordAsync_ShouldSendEachArgumentUnderItsKey_WhenEveryArgumentIsPositional()
+    {
+        using var handler = new FakeHttpHandler(CapturedBridgeLiveRecording201, HttpStatusCode.Created);
+        using var http = CreateHttpClient(handler);
+        var sut = new AriBridgesResource(http, DefaultOptions);
+
+        await sut.RecordAsync(
+            "497c55a4-f29f-45de-a433-90be5694a208", "c04d-037f4ffe-0-declared", "wav", 30, 5, "overwrite", true, "#",
+            "slin16");
+
+        QueryPairs(handler.LastRequestQuery!).Select(p => p.Key + "=" + p.Value).Should().Equal(
+            "name=c04d-037f4ffe-0-declared", "format=wav", "maxDurationSeconds=30", "maxSilenceSeconds=5",
+            "ifExists=overwrite", "beep=true", "terminateOn=#", "recorder_format=slin16");
     }
 
     [Fact]

@@ -96,6 +96,70 @@ public sealed class DocSnippetCompilationTests
     }
 
     /// <summary>
+    /// A caller that still names the 2.10 <c>format:</c> argument on <c>Bridges.PlayAsync</c> must get a compile
+    /// error, never a call that binds the value to some other argument. <c>format</c> is the only named argument here,
+    /// so the one <c>CS1739</c> can only be about it.
+    /// </summary>
+    [Fact]
+    public void BridgePlayAsync_ShouldNotCompile_WhenACallerNamesTheOldFormatArgument()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk;
+
+            IAriClient ari = null!;
+            await ari.Bridges.PlayAsync("br-1", "tone:440", format: "slin16");
+            """);
+
+        errors.Should().Equal("CS1739");
+    }
+
+    /// <summary>
+    /// The same guard on <c>Bridges.RecordAsync</c>. Had the rename moved the name <c>format</c> onto the file-format
+    /// argument, this call would fail with <c>CS1744</c> instead (<c>wav</c> already fills that position), so the test
+    /// still rejects it.
+    /// </summary>
+    [Fact]
+    public void BridgeRecordAsync_ShouldNotCompile_WhenACallerNamesTheOldFormatArgument()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk;
+
+            IAriClient ari = null!;
+            await ari.Bridges.RecordAsync("br-1", "rec-1", "wav", format: "slin16");
+            """);
+
+        errors.Should().Equal("CS1739");
+    }
+
+    [Fact]
+    public void BridgeFormatArguments_ShouldCompile_WhenACallerNamesThemForWhatTheyFormat()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk;
+
+            IAriClient ari = null!;
+            await ari.Bridges.PlayAsync("br-1", "tone:440", announcerFormat: "slin16");
+            await ari.Bridges.RecordAsync("br-1", "rec-1", recordingFormat: "wav", recorderFormat: "slin16");
+            """);
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BridgeRecordAsync_ShouldCompile_WhenEveryArgumentIsPositional()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk;
+
+            IAriClient ari = null!;
+            await ari.Bridges.PlayAsync("br-1", "tone:440", null, null, null, null, "slin16");
+            await ari.Bridges.RecordAsync("br-1", "rec-1", "wav", null, null, null, null, null, "slin16");
+            """);
+
+        errors.Should().BeEmpty();
+    }
+
+    /// <summary>
     /// Compiles <paramref name="source"/> as a consumer does, under an assembly name no SDK package grants friend
     /// access to, and returns the ids of its errors.
     /// </summary>
