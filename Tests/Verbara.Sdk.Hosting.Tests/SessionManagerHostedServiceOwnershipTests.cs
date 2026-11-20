@@ -216,6 +216,177 @@ public sealed class SessionManagerHostedServiceOwnershipTests : IAsyncLifetime
         engine.GetByLinkedId("linked-2").Should().NotBeNull("the engine the host attached by hand keeps its attachment");
     }
 
+    // --- the SDK's own attach, not any attach, decides whether it reached the engine ---
+
+    [Theory]
+    [InlineData("another server under another id")]
+    [InlineData("this server under another id")]
+    [InlineData("another server under default")]
+    public async Task StopAsync_ShouldDetachTheOwnManager_WhenAnotherAttachReachesTheHandAttachedEngineDuringTheStart(
+        string otherAttach)
+    {
+        ForwardingManager? own = null;
+        CallSessionManager? engine = null;
+        Exception? otherAttachFailure = null;
+        var host = BuildOwnManagerHost(registerEngine: true, onOwn: o => own = o, attachVia: forward =>
+        {
+            forward();
+            // Another attach lands on the engine the host attached by hand, inside the SDK's attach and on its thread.
+            otherAttachFailure = Record.Exception(() =>
+            {
+                switch (otherAttach)
+                {
+                    case "another server under another id": engine!.AttachToServer(_other, "x"); break;
+                    case "this server under another id": engine!.AttachToServer(_server, "x"); break;
+                    default: engine!.AttachToServer(_other, "default"); break;
+                }
+            });
+        });
+        await using var disposal = (IAsyncDisposable)host;
+        engine = host.Services.GetRequiredService<CallSessionManager>();
+        var manager = host.Services.GetRequiredService<ICallSessionManager>();
+        engine.AttachToServer(_server, "default");
+
+        await host.StartAsync(CancellationToken.None).WaitAsync(Bound);
+        await host.StopAsync(CancellationToken.None).WaitAsync(Bound);
+        _server.Channels.OnNewChannel("uid-2", "PJSIP/100-002", ChannelState.Up, linkedId: "linked-2");
+
+        if (otherAttach == "another server under default")
+            otherAttachFailure.Should().BeOfType<InvalidOperationException>("\"default\" already holds this server");
+        else
+            otherAttachFailure.Should().BeNull();
+        own!.Calls.Should().Equal(["attach:default", "detach:default"],
+            "the SDK's own attach went to the host's own manager; another attach on the engine does not make it the host's");
+        manager.GetByLinkedId("linked-2").Should().BeNull("the own manager hears nothing after the SDK's stop");
+        // Server-qualified: in the "this server under another id" row the engine holds the server under two ids.
+        engine.GetByLinkedId("default", "linked-2").Should().NotBeNull(
+            "the engine the host attached by hand keeps its attachment");
+    }
+
+    [Fact]
+    public async Task StopAsync_ShouldDetachTheOwnManager_WhenAnotherThreadAttachesDefaultOnTheHandAttachedEngineDuringTheStart()
+    {
+        ForwardingManager? own = null;
+        using var release = new ManualResetEventSlim();
+        using var attached = new ManualResetEventSlim();
+        var otherThreadAttached = false;
+        var host = BuildOwnManagerHost(registerEngine: true, onOwn: o => own = o, attachVia: forward =>
+        {
+            forward();
+            release.Set();
+            otherThreadAttached = attached.Wait(Bound);
+        });
+        await using var disposal = (IAsyncDisposable)host;
+        var engine = host.Services.GetRequiredService<CallSessionManager>();
+        var manager = host.Services.GetRequiredService<ICallSessionManager>();
+        engine.AttachToServer(_server, "default");
+        // A thread that already ran before the start, as a host's own worker would: it makes the very attach the SDK
+        // would make on the engine, during the SDK's attach, but it is not the SDK's call.
+        var other = new Thread(() =>
+        {
+            if (!release.Wait(Bound))
+                return;
+            engine.AttachToServer(_server, "default");
+            attached.Set();
+        }) { IsBackground = true };
+        other.Start();
+
+        await host.StartAsync(CancellationToken.None).WaitAsync(Bound);
+        await host.StopAsync(CancellationToken.None).WaitAsync(Bound);
+        other.Join(Bound).Should().BeTrue();
+        _server.Channels.OnNewChannel("uid-2", "PJSIP/100-002", ChannelState.Up, linkedId: "linked-2");
+
+        otherThreadAttached.Should().BeTrue("the other thread attached during the SDK's attach");
+        own!.Calls.Should().Equal(["attach:default", "detach:default"],
+            "the SDK's own attach went to the host's own manager; the other thread's attach was not the SDK's");
+        manager.GetByLinkedId("linked-2").Should().BeNull("the own manager hears nothing after the SDK's stop");
+        engine.GetByLinkedId("linked-2").Should().NotBeNull("the engine the host attached by hand keeps its attachment");
+    }
+
+    [Fact]
+    public async Task StopAsync_ShouldNotDetachThroughTheDecorator_WhenItForwardsTheAttachOnAnotherThreadAndWaits()
+    {
+        ForwardingManager? decorator = null;
+        var host = BuildHost(decorated: true, onDecorator: d => decorator = d,
+            attachVia: forward => Task.Run(forward).GetAwaiter().GetResult());
+        await using var disposal = (IAsyncDisposable)host;
+        var manager = host.Services.GetRequiredService<ICallSessionManager>();
+        manager.AttachToServer(_server, "default");
+
+        await host.StartAsync(CancellationToken.None).WaitAsync(Bound);
+        await host.StopAsync(CancellationToken.None).WaitAsync(Bound);
+        _server.Channels.OnNewChannel("uid-2", "PJSIP/100-002", ChannelState.Up, linkedId: "linked-2");
+
+        decorator!.Calls.Should().Equal(["attach:default", "attach:default"],
+            "the decorator forwarded the SDK's attach to the engine within the call, so the host's attachment is kept");
+        manager.GetByLinkedId("linked-2").Should().NotBeNull("the host's attachment survives the SDK's stop");
+    }
+
+    // --- the service driven directly: a start after a stop, and a stop without a start ---
+
+    [Fact]
+    public async Task StopAsync_ShouldKeepTheHostsAttach_WhenTheServiceIsStartedAndStoppedTwice()
+    {
+        ForwardingManager? decorator = null;
+        var host = BuildHost(decorated: true, onDecorator: d => decorator = d);
+        await using var disposal = (IAsyncDisposable)host;
+        var manager = host.Services.GetRequiredService<ICallSessionManager>();
+        var engine = host.Services.GetRequiredService<CallSessionManager>();
+        manager.AttachToServer(_server, "default");
+        using var service = new SessionManagerHostedService(manager, _server, engine);
+
+        await service.StartingAsync(CancellationToken.None);
+        await service.StartAsync(CancellationToken.None);
+        await service.StopAsync(CancellationToken.None);
+        await service.StartingAsync(CancellationToken.None);
+        await service.StopAsync(CancellationToken.None);
+        _server.Channels.OnNewChannel("uid-2", "PJSIP/100-002", ChannelState.Up, linkedId: "linked-2");
+
+        decorator!.Calls.Should().Equal(["attach:default", "attach:default", "attach:default"],
+            "the host's attach and one SDK attach per start, and no detach: neither start installed \"default\"");
+        manager.GetByLinkedId("linked-2").Should().NotBeNull("the host's attachment survives both stops");
+    }
+
+    [Fact]
+    public async Task StartAsync_ShouldInstallAndStopShouldReleaseDefault_WhenTheHostDetachedItsOwnAttachBetweenTwoStarts()
+    {
+        var host = BuildHost(decorated: false);
+        await using var disposal = (IAsyncDisposable)host;
+        var manager = (CallSessionManager)host.Services.GetRequiredService<ICallSessionManager>();
+        manager.AttachToServer(_server, "default");
+        using var service = new SessionManagerHostedService(manager, _server, manager);
+
+        await service.StartingAsync(CancellationToken.None);
+        await service.StopAsync(CancellationToken.None);
+        manager.DetachFromServer("default");
+        await service.StartingAsync(CancellationToken.None);
+        _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Up, linkedId: "linked-1");
+        var openedAfterSecondStart = manager.GetByLinkedId("linked-1");
+        await service.StopAsync(CancellationToken.None);
+        _server.Channels.OnNewChannel("uid-2", "PJSIP/100-002", ChannelState.Up, linkedId: "linked-2");
+
+        openedAfterSecondStart.Should().NotBeNull("the second start installed \"default\" after the host released it");
+        manager.GetByLinkedId("linked-2").Should().BeNull("the second stop releases what the second start installed");
+    }
+
+    [Fact]
+    public async Task StopAsync_ShouldDetachNothing_WhenItRunsAgainWithoutAStart()
+    {
+        var host = BuildHost(decorated: false);
+        await using var disposal = (IAsyncDisposable)host;
+        var manager = (CallSessionManager)host.Services.GetRequiredService<ICallSessionManager>();
+        using var service = new SessionManagerHostedService(manager, _server, manager);
+
+        await service.StartingAsync(CancellationToken.None);
+        await service.StopAsync(CancellationToken.None);
+        manager.AttachToServer(_server, "default");
+        await service.StopAsync(CancellationToken.None);
+        _server.Channels.OnNewChannel("uid-2", "PJSIP/100-002", ChannelState.Up, linkedId: "linked-2");
+
+        manager.GetByLinkedId("linked-2").Should().NotBeNull(
+            "no start ran before the second stop, so it installed nothing and the host's later attach stays");
+    }
+
     // --- helpers ---
 
     private static CallSession OpenCall(VerbaraServer server, string uniqueId, string linkedId, ICallSessionManager manager)
@@ -228,7 +399,11 @@ public sealed class SessionManagerHostedServiceOwnershipTests : IAsyncLifetime
 
     private static void SweepOff(SessionOptions options) => options.ReconciliationInterval = Timeout.InfiniteTimeSpan;
 
-    private IHost BuildHost(bool decorated, Action<ForwardingManager>? onDecorator = null, bool earlierThrowingService = false) =>
+    private IHost BuildHost(
+        bool decorated,
+        Action<ForwardingManager>? onDecorator = null,
+        bool earlierThrowingService = false,
+        Action<Action>? attachVia = null) =>
         new HostBuilder()
             .ConfigureServices(services =>
             {
@@ -242,7 +417,8 @@ public sealed class SessionManagerHostedServiceOwnershipTests : IAsyncLifetime
                     services.AddSingleton<CallSessionManager>();
                     services.Replace(ServiceDescriptor.Singleton<ICallSessionManager>(sp =>
                     {
-                        var decorator = new ForwardingManager(sp.GetRequiredService<CallSessionManager>(), ownsInner: false);
+                        var decorator = new ForwardingManager(
+                            sp.GetRequiredService<CallSessionManager>(), ownsInner: false, attachVia);
                         onDecorator?.Invoke(decorator);
                         return decorator;
                     }));
@@ -255,7 +431,7 @@ public sealed class SessionManagerHostedServiceOwnershipTests : IAsyncLifetime
     /// <c>new</c>, which the container does not know; with or without a <see cref="CallSessionManager"/> the host
     /// registered as itself beside it.
     /// </summary>
-    private IHost BuildOwnManagerHost(bool registerEngine, Action<ForwardingManager> onOwn) =>
+    private IHost BuildOwnManagerHost(bool registerEngine, Action<ForwardingManager> onOwn, Action<Action>? attachVia = null) =>
         new HostBuilder()
             .ConfigureServices(services =>
             {
@@ -270,7 +446,7 @@ public sealed class SessionManagerHostedServiceOwnershipTests : IAsyncLifetime
                         sp.GetRequiredService<IOptions<SessionOptions>>(),
                         NullLogger<CallSessionManager>.Instance,
                         sp.GetRequiredService<SessionStoreBase>());
-                    var own = new ForwardingManager(ownEngine, ownsInner: true);
+                    var own = new ForwardingManager(ownEngine, ownsInner: true, attachVia);
                     onOwn(own);
                     return own;
                 }));
