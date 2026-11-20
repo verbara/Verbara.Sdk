@@ -408,6 +408,30 @@ public sealed class ChannelReadCoverageTests
         }
     }
 
+    [Fact]
+    public async Task ReconcileChannelsAsync_ShouldSampleTheLossInsideItsOpening_WhenAReadOpens()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await StartAsync(peer);
+        using (var hold = await HoldAndDropAsync(run, peer, "opening-1"))
+            await DeliverAsync(run, peer, hold, "opening-1");
+        var seen = new ConcurrentQueue<(bool Held, long Opening)>();
+        run.Server.ChannelReadOpened = opening => seen.Enqueue((run.Server.ChannelReadGateHeld, opening));
+
+        await run.Server.ReconcileChannelsAsync().AsTask().WaitAsync(Run.Bound);
+        run.Server.ChannelReadOpened = null;
+
+        using (new AssertionScope())
+        {
+            seen.Should().ContainSingle("premise: one channel read opened");
+            seen.Single().Held.Should().BeTrue(
+                "the loss sample is taken inside the acquisition of the read gate that assigns the read its opening number");
+            run.Server.CoveredOpening.Should().Be(seen.Single().Opening,
+                "the read publishes its sample under the opening number it was observed with");
+            run.Server.HasPendingLoss.Should().BeFalse("premise: the read covered the delivered drop");
+        }
+    }
+
     // ---- Around a session start ----
 
     [Fact]

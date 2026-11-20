@@ -314,7 +314,10 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <summary>Null in production; observes a load whose <c>Agents</c> list has passed its fence, before it is applied.</summary>
     internal Func<ValueTask>? AgentsListFenced { get; set; }
 
-    /// <summary>Null in production; observes a channel read that has begun and has not yet opened its read.</summary>
+    /// <summary>
+    /// Null in production; observes a channel read that has begun and has not yet opened: before its loss sample, its
+    /// opening number and its count, which it takes together.
+    /// </summary>
     internal Func<ValueTask>? ChannelReadBegun { get; set; }
 
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
@@ -478,12 +481,42 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </summary>
     internal bool ChannelTableCovered => ChannelTableComplete && !HasPendingLoss;
 
+    // Opens a channel read: its loss sample, then its opening number and its count, in one acquisition of the gate, so
+    // that sample order is opening order and PublishCoveredEpoch's "highest opening wins" means "newest sample wins".
     // Counted before the read opens its window: overlapped when another read is in flight then.
-    private (long Opening, bool Overlapped) RaiseChannelRead()
+    private (EventLossEpoch Sampled, (long Session, long Ordinal) Received, (long Opening, bool Overlapped) Count)
+        OpenChannelRead(LoadSession? session)
     {
         lock (_channelReadGate)
-            return (++_channelReadOpenings, ++_channelReadsInFlight > 1);
+        {
+            var (sampled, received) = SampleChannelRead(session);
+            return (sampled, received, (++_channelReadOpenings, ++_channelReadsInFlight > 1));
+        }
     }
+
+    // The loss epoch, then the reader's position, both before the read is counted and before Status is sent. In this order
+    // a dropped Hangup the epoch counts has its channel's creation event at or below the position. Two lock-free volatile
+    // reads of values that only grow: nothing here takes a lock, so taking them under the read gate orders no other lock.
+    // Called with the read gate held, by OpenChannelRead only.
+    private (EventLossEpoch Sampled, (long Session, long Ordinal) Received) SampleChannelRead(LoadSession? session)
+    {
+        var sampled = ReadCurrentEventLossEpoch();
+        var received = session?.Connection.ReceivedThrough ?? default;
+        ChannelReadOpened?.Invoke(_channelReadOpenings + 1);
+        return (sampled, received);
+    }
+
+    /// <summary>
+    /// Null in production; observes a channel read's loss sample as it is taken, with the opening number the read takes:
+    /// the guard that the sample stays inside the read gate's acquisition that assigns that number.
+    /// </summary>
+    internal Action<long>? ChannelReadOpened { get; set; }
+
+    /// <summary>Whether the current thread holds the channel-read gate; read by a test from <see cref="ChannelReadOpened"/>.</summary>
+    internal bool ChannelReadGateHeld => _channelReadGate.IsHeldByCurrentThread;
+
+    /// <summary>The opening number of the newest covering channel read, 0 before any; read by tests.</summary>
+    internal long CoveredOpening => Volatile.Read(ref _coveredEpoch)?.Opening ?? 0;
 
     // Whether another read was counted after the one opened as opening, whether or not it has ended since.
     private bool ChannelReadRaisedSince(long opening)
@@ -1369,18 +1402,13 @@ public sealed class VerbaraServer : IVerbaraServer
         var traced = ReferenceEquals(reader, ChannelReader.Reconciliation) ? activity : null;
         LiveActivitySource.SetReconcileCovered(traced, false);
 
-        // The loss epoch, then the reader's position, both before the read is counted and before Status is sent. In this
-        // order a dropped Hangup the epoch counts has its channel's creation event at or below the position.
-        var sampled = ReadCurrentEventLossEpoch();
-        var received = session?.Connection.ReceivedThrough ?? default;
-
-        // TEMPORARY (H243 red): observes a read that has sampled and not yet opened. Removed by the fix.
         if (ChannelReadBegun is { } begun)
             await begun();
 
         // Counted before its window opens and until after the window has closed, so the read is counted at every instant
-        // at which it can still admit a channel another read's window would keep.
-        var count = RaiseChannelRead();
+        // at which it can still admit a channel another read's window would keep. Its loss sample is taken in the same
+        // step: a read opened later never carries an older sample.
+        var (sampled, received, count) = OpenChannelRead(session);
         try
         {
             return await ReadAndApplyChannelSnapshotAsync(session, states, activity, traced, reader, barriers, sampled,
