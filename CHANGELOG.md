@@ -69,6 +69,28 @@ previous stream, which `AmiConnection` never does. A custom `IAmiConnection` tha
 each session keeps being subscribed again on each reconnect, as before; it must end them before it raises
 `Reconnected`.
 
+### Changed — BREAKING: a `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else (#625)
+
+`QueueManager` (`QueueUpdated`, `MemberAdded`, `MemberRemoved`, `MemberStatusChanged`, `MemberPaused`, `CallerJoined`,
+`CallerLeft`) and `MeetMeManager` (`UserJoined`, `UserLeft`, `UserStateChanged`) now raise each event subscriber by
+subscriber, as `ChannelManager` does: every subscriber receives the event in subscription order, whatever an earlier one
+threw. The failure is counted on `live.queues.subscriber_faults` or `live.meetme.subscriber_faults` (meter
+`Verbara.Sdk.Live`) and logged once at Warning, with the exception:
+`[QUEUE] Subscriber failed: event=<Event> queue=<Queue> subject=<Subject>; …` or
+`[CONFERENCE] Subscriber failed: event=<Event> room=<Room> channel=<Channel>; …`. The fault is counted before the line is
+written, and a logger that throws on that line is ignored. Nothing is thrown from any call: the live AMI event that made
+the change, `StartAsync`, a reconnect's reload and `ReconcileQueuesAsync` all finish their work. A subscriber stays
+subscribed, and `OutOfMemoryException` is not caught. The SDK's own subscribers, including the session engine, are isolated
+the same way. The last-resort Error line of the three managers' notification queues now reads
+`[CHANNEL|QUEUE|CONFERENCE] Event notification failed outside its subscribers; nothing was thrown from the call`.
+What breaks: up to 2.10.x, a throwing subscriber kept the later subscribers of that notification from running. The first
+exception was also rethrown from the manager call that made the change, as the troubleshooting guide documented. A live
+event's failure therefore surfaced as `[AMI_EVENT] Observer threw on <EventType>`, and a load or a reload failed with it.
+Code that relied on that exception to stop a start or a reload has to make that decision itself: read the counter or the
+Warning instead. Why: one subscriber's bug should not silence the others, and it should not fail a start or a reload that
+did nothing wrong. See the
+[troubleshooting guide](docs/guides/troubleshooting.md#what-a-live-event-handler-may-do).
+
 ### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.35 (#619)
 
 `Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.35` instead of `>= 3.4.31`. A patch release of

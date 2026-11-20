@@ -758,7 +758,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
     }
 
     [Fact]
-    public async Task QueueMemberAdded_ShouldAskForTheQueueAlone_WhenAQueueHandlerThrewWhileTheStartsListingWasApplied()
+    public async Task QueueMemberAdded_ShouldAskForTheQueueAloneAndCompleteTheStart_WhenAQueueHandlerThrewWhileTheStartsListingWasApplied()
     {
         var peer = new BootingAsterisk { BootedAtLogin = true, OtherQueues = [new ListedQueue("q1", ["PJSIP/2001"], [])] };
         var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -790,10 +790,10 @@ public sealed class VerbaraServerQueueDiscoveryTests
 
             using (new AssertionScope())
             {
-                startFault.Should().NotBeNull("the handler's fault leaves the start");
-                startFault?.ToString().Should().Contain("a queue handler fault");
+                Volatile.Read(ref thrown).Should().Be(1, "premise: the handler threw while the start's listing was applied");
+                startFault.Should().BeNull("a queue handler's fault is its own: it no longer leaves the start");
                 pendingDuringListing.Should().Be(0, "nothing is asked alone while the start's listing is read");
-                ghostAsked.Should().BeTrue("a listing cut short by a handler ends, and the name it left unlisted is asked");
+                ghostAsked.Should().BeTrue("the listing ends past the handler's fault, and the name it left unlisted is asked");
                 laterAsked.Should().BeTrue("the session asks for a queue created after the load");
                 peer.QueueStatusFilters.Should().Equal([null, "ghost", "later"]);
                 Held(run, "later").Members.Keys.Should().Equal(["PJSIP/2009"]);
@@ -807,7 +807,7 @@ public sealed class VerbaraServerQueueDiscoveryTests
     }
 
     [Fact]
-    public async Task QueueMemberAdded_ShouldAskForTheQueueAlone_WhenAQueueHandlerThrewWhileTheReconnectReloadsListingWasApplied()
+    public async Task QueueMemberAdded_ShouldAskForTheQueueAloneAndCompleteTheReload_WhenAQueueHandlerThrewWhileTheReconnectReloadsListingWasApplied()
     {
         var first = new BootingAsterisk { BootedAtLogin = true };
         var second = new BootingAsterisk { BootedAtLogin = true, OtherQueues = [new ListedQueue("q1", ["PJSIP/2001"], [])] };
@@ -819,19 +819,22 @@ public sealed class VerbaraServerQueueDiscoveryTests
             if (queue == "q1" && Interlocked.Exchange(ref thrown, 1) == 0)
                 throw new InvalidOperationException("a queue handler fault");
         };
-        var failed = run.ServerLog.Logged("[LIVE] Reconnect reload failed");
+        var loaded = run.ServerLog.Logged("[LIVE] State loaded", 2);
 
         first.CloseSession();
         await run.SecondSocketCreated.WaitAsync(Run.Bound);
         run.ReleaseSecondPeer();
-        var reloadFailed = await CompletesWithinBoundAsync(failed);
+        var reloadLoaded = await CompletesWithinBoundAsync(loaded);
         second.OtherQueues = [.. second.OtherQueues, new ListedQueue("later", ["PJSIP/2009"], [])];
         await second.SendEventAsync("QueueMemberAdded", AsteriskFrames.QueueMember("later", "PJSIP/2009"));
         var discovered = await DiscoveredAsync(run, second, "later");
 
         using (new AssertionScope())
         {
-            reloadFailed.Should().BeTrue("the handler's fault ends the reconnect's reload");
+            Volatile.Read(ref thrown).Should().Be(1, "premise: the handler threw while the reload's listing was applied");
+            reloadLoaded.Should().BeTrue("a queue handler's fault is its own: the reconnect's reload completes past it");
+            run.ServerLog.Entries.Should().NotContain(e => e.Line.Contains("[LIVE] Reconnect reload failed", StringComparison.Ordinal),
+                "nothing the handler threw fails the reload");
             discovered.Should().BeTrue("the reload's listing ended on the new session, which then asks for a new queue");
             second.QueueStatusFilters.Should().Equal([null, "later"]);
             Held(run, "later").Members.Keys.Should().Equal(["PJSIP/2009"]);

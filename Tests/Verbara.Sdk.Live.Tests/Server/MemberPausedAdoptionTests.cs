@@ -111,8 +111,9 @@ public sealed class MemberPausedAdoptionTests(ITestOutputHelper output)
             (adopterFinished && posterFinished && blockerFinished).Should().BeTrue("every thread finishes");
             memberPausedThreads.Should().Equal([adopterThread], "the claimed notification is raised once, by the drain that claimed it");
             posterFailure.Should().BeNull("an adopted notification's handler failure does not reach the call that posted it");
-            logger.Errors.Should().ContainSingle(e => e is InvalidOperationException && e.Message == "member-paused handler",
-                "it reaches the unowned-failure report");
+            logger.Warnings.Should().ContainSingle(e => e is InvalidOperationException && e.Message == "member-paused handler",
+                "it is reported once as that queue subscriber's failure, on the thread that raised it");
+            logger.Errors.Should().BeEmpty("nothing a subscriber throws reaches the outbox's own report");
             agentChanges.Should().Equal([(AgentState.Paused, poster.ManagedThreadId)], "the agent is still derived on the posting thread");
             server.Agents.GetById("1001")!.State.Should().Be(AgentState.Paused);
         }
@@ -134,8 +135,11 @@ public sealed class MemberPausedAdoptionTests(ITestOutputHelper output)
     private sealed class CapturingLogger : ILogger<VerbaraServer>
     {
         private readonly ConcurrentQueue<Exception> _errors = new();
+        private readonly ConcurrentQueue<Exception> _warnings = new();
 
         public IReadOnlyList<Exception> Errors => [.. _errors];
+
+        public IReadOnlyList<Exception> Warnings => [.. _warnings];
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
@@ -146,6 +150,8 @@ public sealed class MemberPausedAdoptionTests(ITestOutputHelper output)
         {
             if (logLevel >= LogLevel.Error && exception is not null)
                 _errors.Enqueue(exception);
+            else if (logLevel == LogLevel.Warning && exception is not null)
+                _warnings.Enqueue(exception);
         }
     }
 }

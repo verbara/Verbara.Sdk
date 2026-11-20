@@ -67,7 +67,7 @@ public sealed class LiveEventOrderAcrossThreadsTests
     private static readonly TimeSpan OtherThreadWait = TimeSpan.FromSeconds(10);
 
     [Fact]
-    public void OnCallerLeaveReported_ShouldThrowItsOwnHandlersFailure_WhenAnotherThreadIsRaisingThisManagersEvents()
+    public void OnCallerLeaveReported_ShouldThrowNothingAndStillRunItsHandler_WhenAnotherThreadIsRaisingThisManagersEvents()
     {
         using var inHandler = new ManualResetEventSlim();
         using var reported = new ManualResetEventSlim();
@@ -76,7 +76,12 @@ public sealed class LiveEventOrderAcrossThreadsTests
             inHandler.Set();
             reported.Wait(OtherThreadWait);
         };
-        _queues.CallerLeaveReported += _ => throw new InvalidOperationException("leave-handler");
+        var leaveHandlerRan = 0;
+        _queues.CallerLeaveReported += _ =>
+        {
+            Interlocked.Increment(ref leaveHandlerRan);
+            throw new InvalidOperationException("leave-handler");
+        };
         Exception? reportFailure = null;
         var dispatch = new Thread(() =>
         {
@@ -104,13 +109,13 @@ public sealed class LiveEventOrderAcrossThreadsTests
         dispatch.Join(OtherThreadWait).Should().BeTrue();
 
         using var scope = new AssertionScope();
-        reportFailure.Should().BeOfType<InvalidOperationException>().Which.Message.Should().Be("leave-handler",
-            "the throwing handler ran for the report, so the report's call must see its failure");
+        Volatile.Read(ref leaveHandlerRan).Should().Be(1, "the throwing handler ran for the report");
+        reportFailure.Should().BeNull("a subscriber's failure is its own: it reaches neither the report's call nor any other");
         loadFailure.Should().BeNull("the snapshot row's own handler did not throw");
     }
 
     [Fact]
-    public void OnCallerLeft_ShouldNotThrowAnotherThreadsHandlerFailure_WhenItsHandlerRunsWhileThatThreadRaises()
+    public void OnCallerLeft_ShouldThrowNothingOnEitherThread_WhenAnotherThreadsHandlerThrowsWhileItsHandlerRuns()
     {
         _queues.OnCallerJoined(Queue, "PJSIP/caller-1", "100", 1, "u1", Epoch);
         using var inHandler = new ManualResetEventSlim();
@@ -120,7 +125,12 @@ public sealed class LiveEventOrderAcrossThreadsTests
             inHandler.Set();
             loaded.Wait(OtherThreadWait);
         };
-        _queues.MemberAdded += (_, _) => throw new InvalidOperationException("snapshot-member-handler");
+        var memberHandlerRan = 0;
+        _queues.MemberAdded += (_, _) =>
+        {
+            Interlocked.Increment(ref memberHandlerRan);
+            throw new InvalidOperationException("snapshot-member-handler");
+        };
         Exception? loadFailure = null;
         var load = new Thread(() =>
         {
@@ -137,8 +147,8 @@ public sealed class LiveEventOrderAcrossThreadsTests
 
         using var scope = new AssertionScope();
         leftFailure.Should().BeNull("the leave's own handler did not throw");
-        loadFailure.Should().BeOfType<InvalidOperationException>().Which.Message.Should().Be("snapshot-member-handler",
-            "a reload row whose handler throws must fail the row's call, not an unrelated one");
+        Volatile.Read(ref memberHandlerRan).Should().Be(1, "the throwing handler ran for the reload's row");
+        loadFailure.Should().BeNull("a reload row whose handler throws fails neither the row's call nor an unrelated one");
     }
 
     [Fact]
@@ -357,9 +367,10 @@ public sealed class LiveEventOrderAcrossThreadsTests
     }
 
     [Fact]
-    public void Drain_ShouldRaiseEveryNotificationAndRethrowTheFirstFailure_WhenAHandlerThrows()
+    public void Drain_ShouldRaiseEveryNotificationAndReportEachFailureInsteadOfThrowingIt_WhenANotificationThrows()
     {
-        var outbox = new LiveEventOutbox(_ => { }, LiveEventOutbox.DefaultTurnWait);
+        var reported = new List<string>();
+        var outbox = new LiveEventOutbox(ex => reported.Add(ex.Message), LiveEventOutbox.DefaultTurnWait);
         var raised = new List<int>();
         outbox.Post(() => throw new InvalidOperationException("first"));
         outbox.Post(() => raised.Add(2));
@@ -367,8 +378,9 @@ public sealed class LiveEventOrderAcrossThreadsTests
 
         var drain = outbox.Drain;
 
-        drain.Should().Throw<InvalidOperationException>().WithMessage("first");
+        drain.Should().NotThrow("a notification's failure is reported, never thrown into the call that drains it");
         raised.Should().Equal(2);
+        reported.Should().Equal("first", "third");
         outbox.Post(() => raised.Add(4));
         outbox.Drain();
         raised.Should().Equal(2, 4);

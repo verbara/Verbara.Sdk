@@ -43,8 +43,12 @@ internal static partial class QueueManagerLog
     [LoggerMessage(Level = LogLevel.Information, Message = "[QUEUE] Member removed, the completed queue snapshot no longer lists it: queue={QueueName} interface={Interface}")]
     public static partial void MemberRemovedBySnapshot(ILogger logger, string queueName, string @interface);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "[QUEUE] Event handler failed for a change whose call did not raise it")]
-    public static partial void UnownedHandlerFailed(ILogger logger, Exception exception);
+    // What a notification throws past the per-subscriber guard reaches the outbox's report: never a subscriber's failure.
+    [LoggerMessage(Level = LogLevel.Error, Message = "[QUEUE] Event notification failed outside its subscribers; nothing was thrown from the call")]
+    public static partial void NotificationFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[QUEUE] Subscriber failed: event={EventName} queue={QueueName} subject={Subject}; the other subscribers still receive it")]
+    public static partial void SubscriberFailed(ILogger logger, Exception exception, string eventName, string? queueName, string? subject);
 }
 
 /// <summary>
@@ -100,6 +104,106 @@ public sealed class QueueManager
             _events.Drain();
     }
 
+    private void RaiseQueueUpdated(AsteriskQueue queue) =>
+        Raise(QueueUpdated, nameof(QueueUpdated), queue, queue.Name, queue.Name);
+
+    private void RaiseMember(Action<string, AsteriskQueueMember>? handlers, string eventName, string queueName,
+        AsteriskQueueMember member) =>
+        Raise(handlers, eventName, queueName, member, queueName, member.Interface);
+
+    private void RaiseCaller(Action<string, AsteriskQueueEntry>? handlers, string eventName, string queueName,
+        AsteriskQueueEntry entry) =>
+        Raise(handlers, eventName, queueName, entry, queueName, entry.Channel);
+
+    private void RaiseCallerLeaveReported(QueueCallerLeaveReport report) =>
+        Raise(CallerLeaveReported, nameof(CallerLeaveReported), report, report.Queue, report.UniqueId);
+
+    private void RaiseCallerAbandonReported(string uniqueId, string queueName) =>
+        Raise(CallerAbandonReported, nameof(CallerAbandonReported), uniqueId, queueName, queueName, uniqueId);
+
+    private void RaiseCallerQueueStatus(string uniqueId, string channel, string status)
+    {
+        if (CallerQueueStatus is not { } handlers)
+            return;
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(uniqueId, channel, status);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, nameof(CallerQueueStatus), null, uniqueId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Delivers one queue event to each of <paramref name="handlers"/> in subscription order, each in its own guard, as
+    /// <c>ChannelManager</c> does: a subscriber that throws is counted on <c>live.queues.subscriber_faults</c> and logged
+    /// once at Warning with the event, the queue and the member or caller it names, and the later subscribers still
+    /// receive the event. Nothing a subscriber throws leaves this method, so it reaches neither the outbox nor the call
+    /// that made the change, and a load or a reload goes on. A logger that throws while reporting is ignored: the fault is
+    /// already counted. <see cref="OutOfMemoryException"/> is not caught. Only what throws on the delivering thread is
+    /// caught. The invocation list is walked with a struct enumerator, so a delivery allocates nothing whatever the
+    /// number of subscribers.
+    /// </summary>
+    private void Raise<T>(Action<T>? handlers, string eventName, T arg, string? queueName, string? subject)
+    {
+        if (handlers is null)
+            return;
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(arg);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, eventName, queueName, subject);
+            }
+        }
+    }
+
+    /// <summary>The two-value shape of <see cref="Raise{T}"/>.</summary>
+    private void Raise<T1, T2>(Action<T1, T2>? handlers, string eventName, T1 arg1, T2 arg2, string? queueName,
+        string? subject)
+    {
+        if (handlers is null)
+            return;
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(arg1, arg2);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, eventName, queueName, subject);
+            }
+        }
+    }
+
+    // The counter first, then the line: a logger that throws on it leaves the fault counted and the delivery going on.
+    private void ReportSubscriberFailure(Exception failure, string eventName, string? queueName, string? subject)
+    {
+        LiveMetrics.QueueSubscriberFaults.Add(1);
+        try
+        {
+            QueueManagerLog.SubscriberFailed(_logger, failure, eventName, queueName, subject);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The log line is the only trace a subscriber's failure leaves besides the counter; when the logger fails
+            // too, the fault stays counted and the event goes on to the later subscribers.
+        }
+    }
+
+    // Every queue event isolates each subscriber: see Raise. A subscriber's failure is logged at Warning and counted on
+    // live.queues.subscriber_faults; the later subscribers still receive the event and nothing leaves the table.
     public event Action<AsteriskQueue>? QueueUpdated;
     public event Action<string, AsteriskQueueMember>? MemberAdded;
     public event Action<string, AsteriskQueueMember>? MemberRemoved;
@@ -153,7 +257,7 @@ public sealed class QueueManager
     public QueueManager(ILogger logger)
     {
         _logger = logger;
-        _events = new LiveEventOutbox(ex => QueueManagerLog.UnownedHandlerFailed(logger, ex), LiveEventOutbox.DefaultTurnWait);
+        _events = new LiveEventOutbox(ex => QueueManagerLog.NotificationFailed(logger, ex), LiveEventOutbox.DefaultTurnWait);
         _queuesByMemberSpan = _queuesByMember.GetAlternateLookup<ReadOnlySpan<char>>();
     }
 
@@ -250,7 +354,7 @@ public sealed class QueueManager
             queue.Completed = completed;
             queue.Abandoned = abandoned;
             if (QueueUpdated is not null)
-                _events.Post(static (m, q, _) => ((QueueManager)m).QueueUpdated?.Invoke((AsteriskQueue)q!), this, queue, null);
+                _events.Post(static (m, q, _) => ((QueueManager)m).RaiseQueueUpdated((AsteriskQueue)q!), this, queue, null);
         }
         QueueManagerLog.Params(_logger, queueName, strategy, calls, completed, abandoned);
         RaisePending();
@@ -330,7 +434,7 @@ public sealed class QueueManager
                 if (MemberAdded is not null && IsCurrentMemberLocked(queue, member))
                 {
                     _events.Post(static (m, q, member) =>
-                        ((QueueManager)m).MemberAdded?.Invoke((string)q!, (AsteriskQueueMember)member!), this, queueName, member);
+                        ((QueueManager)m).RaiseMember(((QueueManager)m).MemberAdded, nameof(MemberAdded), (string)q!, (AsteriskQueueMember)member!), this, queueName, member);
                 }
                 return;
             }
@@ -361,7 +465,7 @@ public sealed class QueueManager
                     if (MemberRemoved is not null)
                     {
                         _events.Post(static (m, q, member) =>
-                            ((QueueManager)m).MemberRemoved?.Invoke((string)q!, (AsteriskQueueMember)member!), this, queueName, member);
+                            ((QueueManager)m).RaiseMember(((QueueManager)m).MemberRemoved, nameof(MemberRemoved), (string)q!, (AsteriskQueueMember)member!), this, queueName, member);
                     }
                 }
             }
@@ -394,7 +498,7 @@ public sealed class QueueManager
                     if (MemberPaused is not null && IsCurrentMemberLocked(queue, member))
                     {
                         _events.Post(static (m, q, member) =>
-                            ((QueueManager)m).MemberPaused?.Invoke((string)q!, (AsteriskQueueMember)member!), this, queue.Name, member);
+                            ((QueueManager)m).RaiseMember(((QueueManager)m).MemberPaused, nameof(MemberPaused), (string)q!, (AsteriskQueueMember)member!), this, queue.Name, member);
                     }
                 }
             }
@@ -454,7 +558,7 @@ public sealed class QueueManager
             if (MemberStatusChanged is not null && IsCurrentMemberLocked(queue, member))
             {
                 _events.Post(static (m, q, member) =>
-                    ((QueueManager)m).MemberStatusChanged?.Invoke((string)q!, (AsteriskQueueMember)member!), this, queue.Name, member);
+                    ((QueueManager)m).RaiseMember(((QueueManager)m).MemberStatusChanged, nameof(MemberStatusChanged), (string)q!, (AsteriskQueueMember)member!), this, queue.Name, member);
             }
         }
     }
@@ -593,7 +697,7 @@ public sealed class QueueManager
             if (QueueSnapshotCompleted is not null)
             {
                 _events.Post(static (m, c, _) =>
-                    ((QueueManager)m).QueueSnapshotCompleted?.Invoke((QueueSnapshotCompletion)c!), this, completion, null);
+                    ((QueueManager)m).Raise(((QueueManager)m).QueueSnapshotCompleted, nameof(QueueSnapshotCompleted), (QueueSnapshotCompletion)c!, null, null), this, completion, null);
             }
         }
         RaisePending();
@@ -690,7 +794,7 @@ public sealed class QueueManager
         if (CallerJoined is not null)
         {
             _events.Post(static (m, q, e) =>
-                ((QueueManager)m).CallerJoined?.Invoke((string)q!, (AsteriskQueueEntry)e!), this, queueName, entry);
+                ((QueueManager)m).RaiseCaller(((QueueManager)m).CallerJoined, nameof(CallerJoined), (string)q!, (AsteriskQueueEntry)e!), this, queueName, entry);
         }
     }
 
@@ -699,7 +803,7 @@ public sealed class QueueManager
         if (CallerLeft is not null)
         {
             _events.Post(static (m, q, e) =>
-                ((QueueManager)m).CallerLeft?.Invoke((string)q!, (AsteriskQueueEntry)e!), this, queueName, entry);
+                ((QueueManager)m).RaiseCaller(((QueueManager)m).CallerLeft, nameof(CallerLeft), (string)q!, (AsteriskQueueEntry)e!), this, queueName, entry);
         }
     }
 
@@ -1054,7 +1158,7 @@ public sealed class QueueManager
 
             if (CallerLeaveReported is not null)
             {
-                _events.Post(static (m, r, _) => ((QueueManager)m).CallerLeaveReported?.Invoke((QueueCallerLeaveReport)r!),
+                _events.Post(static (m, r, _) => ((QueueManager)m).RaiseCallerLeaveReported((QueueCallerLeaveReport)r!),
                     this, new QueueCallerLeaveReport(uniqueId, queueName, channel, lossEpoch), null);
             }
         }
@@ -1066,7 +1170,7 @@ public sealed class QueueManager
     {
         if (CallerAbandonReported is not null)
         {
-            _events.Post(static (m, u, q) => ((QueueManager)m).CallerAbandonReported?.Invoke((string)u!, (string)q!),
+            _events.Post(static (m, u, q) => ((QueueManager)m).RaiseCallerAbandonReported((string)u!, (string)q!),
                 this, uniqueId, queueName);
         }
         RaisePending();
@@ -1077,7 +1181,7 @@ public sealed class QueueManager
     {
         if (CallerQueueStatus is not null)
         {
-            _events.Post(static (m, u, c, s) => ((QueueManager)m).CallerQueueStatus?.Invoke((string)u!, (string)c!, (string)s!),
+            _events.Post(static (m, u, c, s) => ((QueueManager)m).RaiseCallerQueueStatus((string)u!, (string)c!, (string)s!),
                 this, uniqueId, channel, status);
         }
         RaisePending();
