@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Verbara.Sdk.Ari.Audio;
@@ -139,9 +140,7 @@ public class ChanWebSocketControlMessageTests
         nameof(ChanWebSocketMediaStart), nameof(ChanWebSocketMediaXoff), nameof(ChanWebSocketMediaXon),
         nameof(ChanWebSocketMediaMarkProcessed), nameof(ChanWebSocketDtmf), nameof(ChanWebSocketError),
         nameof(ChanWebSocketStatus), nameof(ChanWebSocketMediaBufferingCompleted), nameof(ChanWebSocketQueueDrained),
-#pragma warning disable VSDK0004 // the obsolete type is the point: a record no capture shows Asterisk sending has no command form either
-        nameof(ChanWebSocketUnknownMessage), nameof(ChanWebSocketHangup), nameof(ChanWebSocketMediaBuffering),
-#pragma warning restore VSDK0004
+        nameof(ChanWebSocketUnknownMessage),
     ];
 
     [Theory]
@@ -173,16 +172,12 @@ public class ChanWebSocketControlMessageTests
         nameof(ChanWebSocketMediaXoff) => new ChanWebSocketMediaXoff(),
         nameof(ChanWebSocketMediaXon) => new ChanWebSocketMediaXon(),
         nameof(ChanWebSocketMediaMarkProcessed) => new ChanWebSocketMediaMarkProcessed("m"),
-        nameof(ChanWebSocketDtmf) => new ChanWebSocketDtmf("1", 0),
+        nameof(ChanWebSocketDtmf) => new ChanWebSocketDtmf("1"),
         nameof(ChanWebSocketError) => new ChanWebSocketError("c", "e"),
         nameof(ChanWebSocketStatus) => new ChanWebSocketStatus("c", 0, 800, 900, false, false, false),
         nameof(ChanWebSocketMediaBufferingCompleted) => new ChanWebSocketMediaBufferingCompleted("b4-0"),
         nameof(ChanWebSocketQueueDrained) => new ChanWebSocketQueueDrained(),
         nameof(ChanWebSocketUnknownMessage) => new ChanWebSocketUnknownMessage("FUTURE_EVENT", "FUTURE_EVENT"),
-#pragma warning disable VSDK0004 // the obsolete type is the point: it has no command form either
-        nameof(ChanWebSocketHangup) => new ChanWebSocketHangup(null),
-        nameof(ChanWebSocketMediaBuffering) => new ChanWebSocketMediaBuffering(0),
-#pragma warning restore VSDK0004
         _ => throw new ArgumentOutOfRangeException(nameof(recordType), recordType, null),
     };
 
@@ -237,6 +232,39 @@ public class ChanWebSocketControlMessageTests
                 dtmf.ChannelId.Should().Be(captured.ChannelId);
             }
         }
+    }
+
+    [Fact]
+    public void JsonContext_ShouldWriteTheDigitAndNoDuration_WhenItSerializesADtmf()
+    {
+        // Arrange — the record carries what DTMF_END carries: the digit, and the channel as an init member
+        var dtmf = new ChanWebSocketDtmf("7") { ChannelId = "ch-1" };
+
+        // Act
+        var json = JsonSerializer.Serialize(dtmf, ChanWebSocketJsonContext.Default.ChanWebSocketDtmf);
+
+        // Assert — the SDK's own shape: the digit, no duration, and the channel ignored as before
+        using var document = JsonDocument.Parse(json);
+        document.RootElement.EnumerateObject().Select(p => p.Name).Should().Equal(["digit"],
+            "DTMF_END carries no duration, so the record writes none");
+        document.RootElement.GetProperty("digit").GetString().Should().Be("7");
+    }
+
+    [Fact]
+    public void Dtmf_ShouldConstructAndDeconstructWithTheDigitAlone_WhenUsedPositionally()
+    {
+        // Arrange — the 2.11.0 shape: one positional parameter
+        var dtmf = new ChanWebSocketDtmf("5");
+
+        // Act
+        dtmf.Deconstruct(out var digit);
+        var matched = dtmf is ChanWebSocketDtmf(var positional) ? positional : string.Empty;
+
+        // Assert
+        digit.Should().Be("5");
+        matched.Should().Be("5");
+        typeof(ChanWebSocketDtmf).GetConstructors().Should().ContainSingle()
+            .Which.GetParameters().Select(p => p.ParameterType).Should().Equal([typeof(string)]);
     }
 
     [Theory]

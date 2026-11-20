@@ -115,8 +115,8 @@ public sealed class ReconciliationSweepTests : FunctionalTestBase, IClassFixture
                 State = session?.State,
                 HasTalkTime = session?.TalkTime is not null,
                 CallEndedEvents = endings.Count(e => e.SessionId == ending.SessionId),
-                counters.TimedOut,
-                counters.Orphaned,
+                TimedOutPublished = MetricsCapture.WasPublished("sessions.timed_out"),
+                OrphanedPublished = MetricsCapture.WasPublished("sessions.orphaned"),
                 counters.Completed,
             }.Should().BeEquivalentTo(
                 new
@@ -124,12 +124,13 @@ public sealed class ReconciliationSweepTests : FunctionalTestBase, IClassFixture
                     State = (CallSessionState?)CallSessionState.Completed,
                     HasTalkTime = true,
                     CallEndedEvents = 1,
-                    TimedOut = 0L,
-                    Orphaned = 0L,
+                    TimedOutPublished = false,
+                    OrphanedPublished = false,
                     Completed = 1L,
                 },
                 "the call's channels were up at every sweep, so Asterisk listed them and the sweep ended nothing; the "
-                + "call was answered, talked and hung up normally, so it ends completed, once, with its talk time. "
+                + "call was answered, talked and hung up normally, so it ends completed, once, with its talk time; "
+                + "2.11.0 removed sessions.timed_out and sessions.orphaned from the meter. "
                 + $"Session: {(session is null ? "not held" : Describe(session))}");
         }
         finally
@@ -140,9 +141,7 @@ public sealed class ReconciliationSweepTests : FunctionalTestBase, IClassFixture
 
     private CounterReading Counters() => new(
         MetricsCapture.Get("sessions.completed"),
-        MetricsCapture.Get("sessions.failed"),
-        MetricsCapture.Get("sessions.timed_out"),
-        MetricsCapture.Get("sessions.orphaned"));
+        MetricsCapture.Get("sessions.failed"));
 
     private static string Describe(CallSession session) =>
         string.Create(CultureInfo.InvariantCulture,
@@ -150,10 +149,9 @@ public sealed class ReconciliationSweepTests : FunctionalTestBase, IClassFixture
             $"talk={session.TalkTime?.ToString() ?? "-"} legs={session.Participants.Count} " +
             $"events=[{string.Join(", ", session.Events.Select(e => e.Type))}]");
 
-    private sealed record CounterReading(long Completed, long Failed, long TimedOut, long Orphaned)
+    private sealed record CounterReading(long Completed, long Failed)
     {
-        public CounterReading Since(CounterReading earlier) => new(
-            Completed - earlier.Completed, Failed - earlier.Failed, TimedOut - earlier.TimedOut, Orphaned - earlier.Orphaned);
+        public CounterReading Since(CounterReading earlier) => new(Completed - earlier.Completed, Failed - earlier.Failed);
     }
 
     private sealed class EndingObserver(

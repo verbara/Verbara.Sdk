@@ -54,7 +54,7 @@ public sealed class SweepRecordedRingTests
                 FinalState = CallSessionState.Failed,
                 FinalHangupCause = default(HangupCause?),
                 Endings = 1,
-                Counters = new CounterDeltas(Completed: 0, Failed: 1, TimedOut: 0, Orphaned: 0),
+                Counters = new CounterDeltas(Completed: 0, Failed: 1),
             },
             "a young call is no candidate; an old one is verified, left alone while listed, and ended failed with no "
             + "cause when Asterisk no longer lists it — never timed out");

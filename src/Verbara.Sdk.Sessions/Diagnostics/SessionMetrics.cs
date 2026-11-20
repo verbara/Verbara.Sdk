@@ -14,53 +14,6 @@ public static class SessionMetrics
         Meter.CreateCounter<long>("sessions.failed", "sessions", "Total sessions failed");
 
     /// <summary>
-    /// The <c>sessions.timed_out</c> counter. Not emitted: the SDK adds nothing to it since 2.7.0, since
-    /// it ends no call in <see cref="CallSessionState.TimedOut"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Kept, and still published until 2.11.0, so that code and dashboards that read it keep binding: the instrument
-    /// is still created on the meter under the same name. 2.11.0 removes the field; it is the instrument's only
-    /// creation, so the instrument leaves the meter with it.
-    /// </para>
-    /// <para>
-    /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
-    /// deprecation with <c>&lt;NoWarn&gt;$(NoWarn);VSDK0006&lt;/NoWarn&gt;</c> instead of silencing every
-    /// <c>CS0618</c> in their tree.
-    /// </para>
-    /// </remarks>
-    [Obsolete(
-        "Not emitted: nothing in the SDK records sessions.timed_out. The reconciliation sweep ends a call it finds gone as a reload ends it and counts it in sessions.completed or sessions.failed; nothing in the SDK counts a call as timed out. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0006",
-        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0006")]
-    public static readonly Counter<long> SessionsTimedOut =
-        Meter.CreateCounter<long>("sessions.timed_out", "sessions", "Total sessions timed out");
-
-    /// <summary>
-    /// The <c>sessions.orphaned</c> counter. Not emitted: the SDK adds nothing to it since 2.7.0. A call
-    /// the reconciliation sweep finds gone ends as a reload ends it and is counted in
-    /// <c>sessions.completed</c> or <c>sessions.failed</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Kept, and still published until 2.11.0, so that code and dashboards that read it keep binding: the instrument
-    /// is still created on the meter under the same name. 2.11.0 removes the field; it is the instrument's only
-    /// creation, so the instrument leaves the meter with it.
-    /// </para>
-    /// <para>
-    /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
-    /// deprecation with <c>&lt;NoWarn&gt;$(NoWarn);VSDK0006&lt;/NoWarn&gt;</c> instead of silencing every
-    /// <c>CS0618</c> in their tree.
-    /// </para>
-    /// </remarks>
-    [Obsolete(
-        "Not emitted: nothing in the SDK records sessions.orphaned. The reconciliation sweep ends a call it finds gone as a reload ends it and counts it in sessions.completed or sessions.failed; nothing in the SDK counts a call as orphaned. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0006",
-        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0006")]
-    public static readonly Counter<long> SessionsOrphaned =
-        Meter.CreateCounter<long>("sessions.orphaned", "sessions", "Orphaned sessions detected");
-
-    /// <summary>
     /// Subscriber failures: a subscriber of the session notifications, or of the agent tracker's state changes, whose
     /// handler threw, one per failure. Each is also logged at Warning; the other subscribers and the session engine go
     /// on, and a subscriber subscribed directly stays subscribed.

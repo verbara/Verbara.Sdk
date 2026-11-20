@@ -88,15 +88,16 @@ internal static class DeprecationIdScanner
     }
 
     /// <summary>
-    /// A retired id's removed set: a symbol of it declared again in the package that declared it. A record's positional
-    /// parameter is keyed <c>Record.Parameter</c>, as a mark on it is: it declares the property the compiler generates.
+    /// A retired id's removed set: a symbol of it declared again in the package that declared it, named with the id and
+    /// the release that removed it. A record's positional parameter is keyed <c>Record.Parameter</c>, as a mark on it is:
+    /// it declares the property the compiler generates.
     /// </summary>
     private static void CheckRemovedDeclarations(SyntaxTree tree, string package, string relative, ScanState scan)
     {
         var inPackage = scan.Register
             .Where(r => r.State == DeprecationIdState.Retired)
-            .SelectMany(r => r.RemovedSet.Where(s => s.Package == package).Select(s => (s.Key, r.Release)))
-            .ToDictionary(p => p.Key, p => p.Release, StringComparer.Ordinal);
+            .SelectMany(r => r.RemovedSet.Where(s => s.Package == package).Select(s => (s.Key, Removal: $"{r.Id} removed it in {r.Release}")))
+            .ToDictionary(p => p.Key, p => p.Removal, StringComparer.Ordinal);
         if (inPackage.Count == 0)
             return;
 
@@ -116,7 +117,7 @@ internal static class DeprecationIdScanner
                 continue;
 
             foreach (var candidate in key.Split('|').Where(inPackage.ContainsKey))
-                scan.Violations.Add($"{relative}:{Line(node)}: {candidate} is declared again; it was removed in {inPackage[candidate]}");
+                scan.Violations.Add($"{relative}:{Line(node)}: {candidate} is declared again; {inPackage[candidate]}");
         }
     }
 

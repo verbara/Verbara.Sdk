@@ -10,9 +10,9 @@ namespace Verbara.Sdk.Ari.Audio;
 /// Zero runtime reflection — safe under Native AOT and aggressive trimming.
 /// </summary>
 /// <remarks>
-/// The context still serves its <see cref="System.Text.Json.Serialization.Metadata.JsonTypeInfo"/> getters, kept so
-/// nothing shipped is removed, for an application that serializes the records itself (for example to store or log
-/// them). Their shape is the SDK's own, not Asterisk's: no Asterisk frame looks like it. The SDK reads and writes the wire
+/// The context serves its <see cref="System.Text.Json.Serialization.Metadata.JsonTypeInfo"/> getters for an
+/// application that serializes the records itself (for example to store or log them); 2.11.0 removed the getters of
+/// the two records no session published. Their shape is the SDK's own, not Asterisk's: no Asterisk frame looks like it. The SDK reads and writes the wire
 /// through <see cref="ChanWebSocketControlMessageSerializer"/>, which does not use this context.
 /// </remarks>
 [JsonSourceGenerationOptions(
@@ -24,14 +24,8 @@ namespace Verbara.Sdk.Ari.Audio;
 [JsonSerializable(typeof(ChanWebSocketMediaStart))]
 [JsonSerializable(typeof(ChanWebSocketMediaXoff))]
 [JsonSerializable(typeof(ChanWebSocketMediaXon))]
-#pragma warning disable VSDK0004 // the shipped context keeps its row and getter for the deprecated record until 2.11.0
-[JsonSerializable(typeof(ChanWebSocketMediaBuffering))]
-#pragma warning restore VSDK0004
 [JsonSerializable(typeof(ChanWebSocketMediaMarkProcessed))]
 [JsonSerializable(typeof(ChanWebSocketDtmf))]
-#pragma warning disable VSDK0004 // the shipped context keeps its row and getter for the deprecated record until 2.11.0
-[JsonSerializable(typeof(ChanWebSocketHangup))]
-#pragma warning restore VSDK0004
 [JsonSerializable(typeof(ChanWebSocketMarkMedia))]
 [JsonSerializable(typeof(ChanWebSocketSetMediaDirection))]
 [JsonSerializable(typeof(ChanWebSocketMediaDirection))]

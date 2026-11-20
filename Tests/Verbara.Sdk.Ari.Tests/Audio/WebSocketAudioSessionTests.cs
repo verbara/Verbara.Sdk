@@ -289,9 +289,6 @@ public class WebSocketAudioSessionTests
                     var dtmf = message.Should().BeOfType<ChanWebSocketDtmf>().Subject;
                     dtmf.Digit.Should().Be(captured.Value);
                     dtmf.ChannelId.Should().Be(captured.ChannelId);
-#pragma warning disable VSDK0004 // the obsolete read is the point: DTMF_END carries no duration
-                    dtmf.DurationMs.Should().Be(0);
-#pragma warning restore VSDK0004
                     break;
                 case "MEDIA_XOFF":
                     message.Should().BeOfType<ChanWebSocketMediaXoff>().Which.ChannelId.Should().Be(captured.ChannelId);
@@ -1315,57 +1312,6 @@ public class WebSocketAudioSessionTests
         }
 
         await sut.DisposeAsync();
-    }
-
-    public static TheoryData<string, string> EveryStateForTheDeprecatedSends()
-    {
-        var data = new TheoryData<string, string>();
-        foreach (var method in new[] { "Xon", "Xoff" })
-        {
-            foreach (var state in new[] { "none", "plain", "json" })
-                data.Add(method, state);
-        }
-
-        return data;
-    }
-
-    [Theory]
-    [MemberData(nameof(EveryStateForTheDeprecatedSends))]
-    public async Task SendXonAndSendXoff_ShouldThrowNotSupportedExceptionSynchronouslyAndWriteNothing_InEveryState(string method, string state)
-    {
-        // Arrange — (r)/(s): no MEDIA_START, a plain-text one, a JSON one
-        var s = state switch
-        {
-            "none" => StartedFedNothing(),
-            "plain" => await NegotiatedAsync(ChanWebSocketCaptureFormat.PlainText),
-            _ => await NegotiatedAsync(ChanWebSocketCaptureFormat.Json),
-        };
-        try
-        {
-            var mediaStart = ((IChanWebSocketSession)s.Session).MediaStart;
-            var sentBefore = s.Ws.Sent.Length;
-
-            // Act — never awaited: the throw is the method's first statement
-#pragma warning disable VSDK0004 // the obsolete call is the point
-            var thrown = method == "Xon"
-                ? Synchronously<NotSupportedException>(() => _ = s.Session.SendXonAsync())
-                : Synchronously<NotSupportedException>(() => _ = s.Session.SendXoffAsync());
-#pragma warning restore VSDK0004
-
-            // Assert
-            using (new AssertionScope($"{method} {state}"))
-            {
-                s.Ws.Sent.Should().HaveCount(sentBefore).And.BeEmpty();
-                ((IChanWebSocketSession)s.Session).MediaStart.Should().BeSameAs(mediaStart);
-                thrown.Should().BeOfType<NotSupportedException>()
-                    .Which.Message.Should().Contain("no XON/XOFF command").And.Contain("ChanWebSocketMediaXoff")
-                    .And.Contain("ChanWebSocketMediaXon");
-            }
-        }
-        finally
-        {
-            await DisposeAsync(s);
-        }
     }
 
     // -- The commands this release adds -----------------------------------------

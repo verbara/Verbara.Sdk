@@ -81,7 +81,7 @@ The last line appears when the call hangs up. If the connection fails under the 
 - `WebSocketAudioServer` — RFC 6455 server built on `TcpListener` + `WebSocket.CreateFromStream()`.
 - `IChanWebSocketSession` — sub-interface that exposes the control messages Asterisk sends, read in either format, as an `IObservable<ChanWebSocketControlMessage>`, and the connection's `MEDIA_START` as `MediaStart`.
 - Pattern-matching over the message records, with `ChanWebSocketUnknownMessage` for a message the SDK does not model (AOT-clean, no reflection).
-- `SendMarkAsync`, `SendSetMediaDirectionAsync`, and `SendFlushMediaAsync` with `SendGetStatusAsync` for barge-in. The session also writes `PAUSE_MEDIA`, `CONTINUE_MEDIA`, `START_MEDIA_BUFFERING`, `STOP_MEDIA_BUFFERING` and `REPORT_QUEUE_DRAINED` (`SendXonAsync`/`SendXoffAsync` are deprecated, `VSDK0004`: Asterisk has no such command, and they throw).
+- `SendMarkAsync`, `SendSetMediaDirectionAsync`, and `SendFlushMediaAsync` with `SendGetStatusAsync` for barge-in. The session also writes `PAUSE_MEDIA`, `CONTINUE_MEDIA`, `START_MEDIA_BUFFERING`, `STOP_MEDIA_BUFFERING` and `REPORT_QUEUE_DRAINED`. Asterisk has no XON/XOFF command: flow control arrives as `ChanWebSocketMediaXoff`/`ChanWebSocketMediaXon`.
 - No `ANSWER` and no `HANGUP` on the session: answer with ARI `AnswerAsync`, whose relation to chan_websocket's `ANSWER` was not measured, and end the call with ARI `HangupAsync`.
 - `IAudioStream.StateChanges` — the stream's ending, which is how a hangup reaches the application: `Disconnected` once, last, after `Error` when the connection failed rather than closed.
 

@@ -135,7 +135,7 @@ public sealed class SnoopChannelReloadTests : IAsyncLifetime
         _sessionEvents.OfType<CallStartedEvent>().Count(),
         _sessionEvents.Count(e => e is CallEndedEvent or CallFailedEvent),
         meters.Get("sessions.created"),
-        meters.Get("sessions.completed") + meters.Get("sessions.failed") + meters.Get("sessions.timed_out"));
+        meters.Get("sessions.completed") + meters.Get("sessions.failed"));
 
     /// <summary>A channel in state Up as <c>Status</c> reports it: the state in the raw <c>ChannelState</c> header.</summary>
     private static StatusEvent Entry(string uniqueId, string channel, string linkedId) => new()

@@ -157,32 +157,32 @@ whose hangup the SDK never received — ends the way a reconnect's reload ends i
 | A call that rang past the timeouts and was then answered | `TimedOut`, no talk time, no `CallConnectedEvent` | `Completed` with its talk time, as any answered call |
 | A call whose hangup was lost (Asterisk dropped it, the SDK never saw it go) | held for the life of the process, still active in a durable store; a connected call was never ended | ended at the first sweep after Asterisk dropped it: `Completed` if it was answered, `Failed` otherwise, no `HangupCause`, `Metadata["cause"] == "reload"`, one `CallEndedEvent`, saved to the store and released after `CompletedRetention` |
 | A queued call whose hangup was lost | held | ended as above (`Failed`), and its queue visit counted abandoned once |
-| `sessions.timed_out`, `sessions.orphaned` | moved by the sweep (`sessions.timed_out` twice per call) | never move; a call the sweep ends is counted once, in `sessions.completed` or `sessions.failed` |
+| `sessions.timed_out`, `sessions.orphaned` | moved by the sweep (`sessions.timed_out` twice per call) | never move, and 2.11.0 removed both; a call the sweep ends is counted once, in `sessions.completed` or `sessions.failed` |
 
 **How late.** A call whose hangup was lost ends at the first sweep after Asterisk dropped it once it is older than
 `DialingTimeout`: at worst `DialingTimeout` plus one interval after the call was opened, 90 s with the defaults.
 
-**Kept, no longer produced.** `CallSessionState.TimedOut`, `CallSessionEventType.TimedOut`,
-`SessionMetrics.SessionsTimedOut` and `SessionMetrics.SessionsOrphaned` stay, so that code, dashboards and sessions
-stored by earlier versions keep binding; the SDK no longer produces them, and the stores still read `TimedOut` as an
-ended state. `SessionOptions.RingingTimeout` is not read any more and is kept so that configuration keeps binding. A
-session read back from a store may still carry `cause=orphaned`; the SDK no longer writes it.
-`SessionMetrics.SessionsTimedOut` and `SessionMetrics.SessionsOrphaned` are marked `[Obsolete]` with the diagnostic
-id `VSDK0006`: code that reads either field gets a warning, or `error VSDK0006` when it builds with
-`TreatWarningsAsErrors`. Both instruments are still published on the `Verbara.Sdk.Sessions` meter until 2.11.0,
-which removes both fields and, with them, the instruments. The SDK has recorded neither since 2.7.0 (through 2.6.x
-the sweep moved both, as the table above says), so an exporter that subscribes by meter name receives no new point
-from either, and a series it stored from 2.6.x or earlier keeps that history. To keep reading a field, add
-`<NoWarn>$(NoWarn);VSDK0006</NoWarn>` to the project, which silences this deprecation and no other.
+**Kept, no longer produced.** `CallSessionState.TimedOut` and `CallSessionEventType.TimedOut` stay, so that code and
+sessions stored by earlier versions keep binding; the SDK no longer produces them, and the stores still read `TimedOut`
+as an ended state. `SessionOptions.RingingTimeout` is not read any more and is kept so that configuration keeps
+binding. A session read back from a store may still carry `cause=orphaned`; the SDK no longer writes it.
+**Removed in 2.11.0.** `SessionMetrics.SessionsTimedOut` and `SessionMetrics.SessionsOrphaned`, marked `[Obsolete]`
+with the diagnostic id `VSDK0006` in 2.9.0 and 2.10.x, are removed in 2.11.0, and the `sessions.timed_out` and
+`sessions.orphaned` instruments leave the `Verbara.Sdk.Sessions` meter with them: each field was its instrument's only
+creation. The SDK has recorded neither since 2.7.0 (through 2.6.x the sweep moved both, as the table above says), so an
+exporter that subscribes by meter name loses two series that received no point since then, and a series it stored
+from 2.6.x or earlier keeps that history. Code that reads either field no longer compiles: delete the read, as
+[Upgrading to 2.11.0](migration-2.11.0.md#three-meter-instruments-nothing-records-are-removed) says. A
+`<NoWarn>$(NoWarn);VSDK0006</NoWarn>` kept for them suppresses nothing any more and can be deleted.
 
 ### What you have to do
 
 1. **The AMI user needs `Status`.** Put `system`, `call` or `reporting` in its `write` line in `manager.conf`
    (`write = all` includes them). Without it Asterisk refuses the snapshot, the sweep ends nothing, and the server logs
    `[LIVE] Status refused: …` at Warning once per AMI session (Debug after that).
-2. **Dashboards and alerts on `sessions.timed_out` or `sessions.orphaned`.** They stay at zero. A call whose hangup
-   was lost now shows up in `sessions.completed` or `sessions.failed`, with `Metadata["cause"] == "reload"` and no
-   `HangupCause`; a consumer cannot tell it from a call a reconnect's reload ended, by design.
+2. **Dashboards and alerts on `sessions.timed_out` or `sessions.orphaned`.** Delete them: 2.11.0 no longer publishes
+   either instrument. A call whose hangup was lost shows up in `sessions.completed` or `sessions.failed`, with
+   `Metadata["cause"] == "reload"` and no `HangupCause`; a consumer cannot tell it from a call a reload ended, by design.
 3. **Code that reads `TimedOut` or `cause=orphaned` as "the call went too long".** Long calls are no longer cut; read
    `Duration`, `RingingAt` and `ConnectedAt` instead.
 

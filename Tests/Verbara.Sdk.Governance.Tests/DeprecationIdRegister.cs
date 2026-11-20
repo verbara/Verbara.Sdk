@@ -71,14 +71,15 @@ internal static class DeprecationIdRegister
                 new(Ami, "StatusEvent.CallerId"), new(Ami, "StatusEvent.Account"), new(Ami, "StatusEvent.State"),
                 new(Ami, "StatusEvent.BridgedChannel"), new(Ami, "StatusEvent.Link"), new(Ami, "StatusEvent.BridgedUniqueId"),
             ]),
-        Marked("VSDK0003", [new(Ari, "AudioStreamMetrics.BufferUnderruns")]),
-        Marked("VSDK0004",
+        new("VSDK0003", DeprecationIdState.Retired, "2.11.0", MigrationGuide2_10, [], [new(Ari, "AudioStreamMetrics.BufferUnderruns")]),
+        new("VSDK0004", DeprecationIdState.Retired, "2.11.0", MigrationGuide2_10, [],
             [
                 new(Ari, "IChanWebSocketSession.SendXonAsync"), new(Ari, "IChanWebSocketSession.SendXoffAsync"),
                 new(Ari, "ChanWebSocketHangup"), new(Ari, "ChanWebSocketMediaBuffering"), new(Ari, "ChanWebSocketDtmf.DurationMs"),
             ]),
         new("VSDK0005", DeprecationIdState.Retired, "2.10.0", RemovalGuide2_9, [], BuildVsdk0005RemovedSet()),
-        Marked("VSDK0006", [new(Sessions, "SessionMetrics.SessionsTimedOut"), new(Sessions, "SessionMetrics.SessionsOrphaned")]),
+        new("VSDK0006", DeprecationIdState.Retired, "2.11.0", MigrationGuide2_10, [],
+            [new(Sessions, "SessionMetrics.SessionsTimedOut"), new(Sessions, "SessionMetrics.SessionsOrphaned")]),
         new("VSDK0007", DeprecationIdState.Retired, "2.11.0", MigrationGuide2_10, [],
             [
                 new(Ami, "DbPrefixGetAction"), new(Ami, "ExecAction"), new(Ami, "JitterBufStatsEvent"), new(Ami, "MasqueradeEvent"),
@@ -87,9 +88,6 @@ internal static class DeprecationIdRegister
     ];
 
     public static DeprecationIdRow Row(string id) => Rows.Single(r => r.Id == id);
-
-    private static DeprecationIdRow Marked(string id, IReadOnlyList<RemovedSymbol> members) =>
-        new(id, DeprecationIdState.Marked, "2.11.0", MigrationGuide2_10, members, []);
 
     /// <summary>The surface of dead Asterisk modules that 2.9.0 marked with <c>VSDK0005</c> and 2.10.0 removed: 49 types and one member.</summary>
     private static List<RemovedSymbol> BuildVsdk0005RemovedSet()

@@ -856,6 +856,8 @@ From 2.10.0 each of these warnings links to its id's heading below, not to the c
 
 The instrument leaves the meter with its field; see **Who is affected** below.
 
+2.11.0 removed it: see [Three meter instruments nothing records are removed](migration-2.11.0.md#three-meter-instruments-nothing-records-are-removed).
+
 #### VSDK0004
 
 | Id | Member | Removed in |
@@ -864,6 +866,8 @@ The instrument leaves the meter with its field; see **Who is affected** below.
 | `VSDK0004` | `ChanWebSocketHangup`, `ChanWebSocketMediaBuffering` | 2.11.0 |
 | `VSDK0004` | `ChanWebSocketDtmf.DurationMs` | 2.11.0 |
 
+2.11.0 removed them: see [Two flow-control send methods Asterisk never acted on are removed](migration-2.11.0.md#two-flow-control-send-methods-asterisk-never-acted-on-are-removed), [Two WebSocket control records nothing published are removed](migration-2.11.0.md#two-websocket-control-records-nothing-published-are-removed) and [`ChanWebSocketDtmf` carries the digit alone](migration-2.11.0.md#chanwebsocketdtmf-carries-the-digit-alone-its-constructor-and-deconstruct-change), which also changes its constructor and `Deconstruct`.
+
 #### VSDK0006
 
 | Id | Member | Removed in |
@@ -871,6 +875,8 @@ The instrument leaves the meter with its field; see **Who is affected** below.
 | `VSDK0006` | `SessionMetrics.SessionsTimedOut` (`sessions.timed_out`), `SessionsOrphaned` (`sessions.orphaned`) | 2.11.0 |
 
 The instruments leave the meter with their fields; see **Who is affected** below.
+
+2.11.0 removed them: see [Three meter instruments nothing records are removed](migration-2.11.0.md#three-meter-instruments-nothing-records-are-removed).
 
 **Who is affected.** Code that reads one of these members: the warning it already reported now names 2.11.0. For
 `VSDK0003` and `VSDK0006`, a dashboard or exporter that lists the meter's instruments: each field is its instrument's

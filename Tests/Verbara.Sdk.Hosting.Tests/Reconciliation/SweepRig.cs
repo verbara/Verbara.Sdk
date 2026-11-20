@@ -614,26 +614,32 @@ internal sealed class Pulse
 }
 
 /// <summary>
-/// Sums what the session engine adds to <c>sessions.completed</c>, <c>sessions.failed</c>,
-/// <c>sessions.timed_out</c> and <c>sessions.orphaned</c> from the moment it is created until it is disposed,
-/// as an exporter subscribed to the instruments would receive it. Matched by meter and instrument name, the
-/// contract an exporter subscribes by.
+/// Sums what the session engine adds to <c>sessions.completed</c> and <c>sessions.failed</c> from the moment it is
+/// created until it is disposed, as an exporter subscribed to the instruments would receive it, and keeps the name of
+/// every instrument the session meter publishes. Matched by meter and instrument name, the contract an exporter
+/// subscribes by.
 /// </summary>
 internal sealed class SessionCounters : IDisposable
 {
     public const string MeterName = "Verbara.Sdk.Sessions";
 
-    private static readonly string[] Instruments =
-        ["sessions.completed", "sessions.failed", "sessions.timed_out", "sessions.orphaned"];
+    /// <summary>The two instruments 2.11.0 removed from the meter: neither may be published.</summary>
+    public static readonly string[] RemovedInstruments = ["sessions.timed_out", "sessions.orphaned"];
+
+    private static readonly string[] Instruments = ["sessions.completed", "sessions.failed"];
 
     private readonly MeterListener _listener = new();
     private readonly ConcurrentDictionary<string, long> _sums = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> _published = new(StringComparer.Ordinal);
 
     public SessionCounters()
     {
         _listener.InstrumentPublished = (instrument, listener) =>
         {
-            if (instrument.Meter.Name == MeterName && Instruments.Contains(instrument.Name))
+            if (instrument.Meter.Name != MeterName)
+                return;
+            _published.TryAdd(instrument.Name, 0);
+            if (Instruments.Contains(instrument.Name))
                 listener.EnableMeasurementEvents(instrument);
         };
         _listener.SetMeasurementEventCallback<long>(
@@ -641,24 +647,24 @@ internal sealed class SessionCounters : IDisposable
         _listener.Start();
     }
 
-    /// <summary>What the four counters have recorded since this reader started.</summary>
+    /// <summary>What the two counters have recorded since this reader started.</summary>
     public CounterDeltas Deltas => new(
         _sums.GetValueOrDefault("sessions.completed"),
-        _sums.GetValueOrDefault("sessions.failed"),
-        _sums.GetValueOrDefault("sessions.timed_out"),
-        _sums.GetValueOrDefault("sessions.orphaned"));
+        _sums.GetValueOrDefault("sessions.failed"));
+
+    /// <summary>The names of every instrument the session meter published to this reader.</summary>
+    public IReadOnlyCollection<string> Published => [.. _published.Keys];
 
     public void Dispose() => _listener.Dispose();
 }
 
-/// <summary>The four session-ending counters' deltas.</summary>
-internal sealed record CounterDeltas(long Completed, long Failed, long TimedOut, long Orphaned)
+/// <summary>The two session-ending counters' deltas.</summary>
+internal sealed record CounterDeltas(long Completed, long Failed)
 {
-    public static readonly CounterDeltas None = new(0, 0, 0, 0);
+    public static readonly CounterDeltas None = new(0, 0);
 
     /// <summary>What was counted since <paramref name="earlier"/> was read.</summary>
-    public CounterDeltas Since(CounterDeltas earlier) => new(
-        Completed - earlier.Completed, Failed - earlier.Failed, TimedOut - earlier.TimedOut, Orphaned - earlier.Orphaned);
+    public CounterDeltas Since(CounterDeltas earlier) => new(Completed - earlier.Completed, Failed - earlier.Failed);
 }
 
 /// <summary>

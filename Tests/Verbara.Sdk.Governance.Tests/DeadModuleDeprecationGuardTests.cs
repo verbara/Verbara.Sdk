@@ -76,7 +76,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
 
         var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
-        report.Violations.Should().ContainSingle(v => v == "src/Pkg/Elsewhere/Gone.cs:3: GoneAction is declared again; it was removed in 2.10.0");
+        report.Violations.Should().ContainSingle(v => v == "src/Pkg/Elsewhere/Gone.cs:3: GoneAction is declared again; VSDK0005 removed it in 2.10.0");
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
 
         var report = DeprecationIdScanner.Scan(tree.Root, Register([RemovedType, RemovedMember]));
 
-        report.Violations.Should().ContainSingle(v => v == "src/Pkg/Activity.cs:5: Activity.UseOld is declared again; it was removed in 2.10.0");
+        report.Violations.Should().ContainSingle(v => v == "src/Pkg/Activity.cs:5: Activity.UseOld is declared again; VSDK0005 removed it in 2.10.0");
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public sealed class DeadModuleDeprecationGuardTests(ITestOutputHelper output)
         var report = DeprecationIdScanner.Scan(tree.Root, Register([new("Pkg", "ChanWebSocketDtmf.DurationMs")]));
         output.WriteLine(report.ToString());
 
-        report.Violations.Should().ContainSingle(v => v == "src/Pkg/Dtmf.cs:5: ChanWebSocketDtmf.DurationMs is declared again; it was removed in 2.10.0");
+        report.Violations.Should().ContainSingle(v => v == "src/Pkg/Dtmf.cs:5: ChanWebSocketDtmf.DurationMs is declared again; VSDK0005 removed it in 2.10.0");
     }
 
     [Fact]

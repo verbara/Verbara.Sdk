@@ -26,18 +26,12 @@ namespace Verbara.Sdk.Ari.Diagnostics;
 /// <item><description>AudioSocket only: <see cref="HangupFrames"/> and <see cref="ErrorFrames"/>, counted
 /// whenever they arrive, before the identification frame too, since they were received from Asterisk (a
 /// connection that ends that way never opened, so it counts no <see cref="StreamsOpened"/> or
-/// <see cref="StreamsClosed"/>). A WebSocket has no such frames; its hangup is a text control message,
+/// <see cref="StreamsClosed"/>). A WebSocket has no such frames; its hangup is a close frame,
 /// counted by neither.</description></item>
 /// <item><description>WebSocket only: <c>audio.frames.dropped</c>, each frame received and then discarded because the
 /// stream's receive buffer was full (the consumer fell behind, and the oldest frame goes), counted at the discard and
 /// also counted in <see cref="FramesReceived"/>.</description></item>
 /// </list>
-/// </para>
-/// <para>
-/// One public instrument is not emitted: <see cref="BufferUnderruns"/> (<c>audio.buffer.underruns</c>).
-/// The SDK has no write pump, since audio goes out when the caller writes it, so nothing can observe
-/// an underrun. The field is obsolete with <c>VSDK0003</c>, and the instrument stays published until 2.11.0, which
-/// removes the field and, with it, the instrument.
 /// </para>
 /// </summary>
 public static class AudioStreamMetrics
@@ -100,28 +94,6 @@ public static class AudioStreamMetrics
             "Total bytes sent to Asterisk");
 
     // --- Health ---
-
-    /// <summary>Write pump starved — no audio to send. Not emitted: nothing records this instrument.</summary>
-    /// <remarks>
-    /// <para>
-    /// The SDK has no write pump. Audio goes out when the caller writes it, so the SDK never sees the far
-    /// end starve, and <c>audio.buffer.underruns</c> stays at zero. The instrument is still published on the
-    /// meter under the same name, and the field still compiles. 2.11.0 removes the field; it is the instrument's
-    /// only creation, so the instrument leaves the meter with it.
-    /// </para>
-    /// <para>
-    /// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can
-    /// suppress this one deprecation with <c>&lt;NoWarn&gt;VSDK0003&lt;/NoWarn&gt;</c> instead of
-    /// silencing every <c>CS0618</c> in their tree.
-    /// </para>
-    /// </remarks>
-    [Obsolete(
-        "Not emitted: nothing records audio.buffer.underruns. The SDK has no write pump; audio goes out when the caller writes it, so the SDK never sees the far end starve. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0003",
-        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0003")]
-    public static readonly Counter<long> BufferUnderruns =
-        Meter.CreateCounter<long>("audio.buffer.underruns", "underruns",
-            "Write pump starved - no audio to send");
 
     /// <summary>AudioSocket hangup frames received.</summary>
     public static readonly Counter<long> HangupFrames =

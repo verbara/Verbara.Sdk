@@ -9,7 +9,7 @@ Session Engine for the Verbara.Sdk ecosystem. Provides call session correlation,
 - **Reconciliation sweep** - Registered by `AddVerbaraSessions`: when a held call is older than `DialingTimeout`, it checks the held calls against Asterisk's channel snapshot and ends, as a reload ends it, a call whose channels Asterisk no longer reports. It never ends a call for its age. See [the migration guide](../../docs/guides/call-session-ending-migration.md#the-reconciliation-sweep-and-long-answered-calls)
 - **Domain Events** - Observable stream of CallStarted, CallConnected, CallQueued, CallHeld, CallEnded, CallReleased and the other notifications of a call
 - **Extension Points** - Abstract base classes for custom routing (CallRouterBase), agent selection (AgentSelectorBase), and persistence (SessionStoreBase)
-- **SessionMetrics** - System.Diagnostics.Metrics counters for sessions created, completed and failed, and for calls released on detach (`sessions.released_on_detach`); `sessions.timed_out` and `sessions.orphaned` are still published, and no longer incremented since 2.7.0
+- **SessionMetrics** - System.Diagnostics.Metrics counters for sessions created, completed and failed, and for calls released on detach (`sessions.released_on_detach`); `sessions.timed_out` and `sessions.orphaned`, which nothing incremented since 2.7.0, were removed in 2.11.0
 - **Resident-count gauges** - `sessions.active` (calls in progress) and `sessions.retained` (ended calls still held), published by each `CallSessionManager` under the `Verbara.Sdk.Sessions` meter name and withdrawn when it is disposed
 
 ## Quick Start

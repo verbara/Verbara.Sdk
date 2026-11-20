@@ -486,11 +486,6 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
         "f(json) as the TransportData of a channel you create through ARI externalMedia, add f(json) to a dial string " +
         "you write, or set control_message_format = json in chan_websocket.conf.";
 
-    private const string NoXonXoffCommandMessage =
-        "chan_websocket has no XON/XOFF command in any spelling (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and " +
-        "24.0.0-rc2: 'command unknown', no reply); nothing was written. Flow control is Asterisk's to send: read " +
-        "ChanWebSocketMediaXoff and ChanWebSocketMediaXon on ControlMessages.";
-
     public ValueTask SendMarkAsync(string mark, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(mark);
@@ -509,12 +504,6 @@ internal sealed class WebSocketAudioSession : IChanWebSocketSession
 
         return SendCommandAsync(command, cancellationToken);
     }
-
-    public ValueTask SendXonAsync(CancellationToken cancellationToken = default)
-        => throw new NotSupportedException(NoXonXoffCommandMessage);
-
-    public ValueTask SendXoffAsync(CancellationToken cancellationToken = default)
-        => throw new NotSupportedException(NoXonXoffCommandMessage);
 
     public ValueTask SendSetMediaDirectionAsync(
         ChanWebSocketMediaDirection direction,

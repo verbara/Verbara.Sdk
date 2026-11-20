@@ -18,8 +18,8 @@ namespace Verbara.Sdk.Ari.Audio;
 ///   </item>
 /// </list>
 /// <see cref="ChanWebSocketControlMessageSerializer"/> reads and writes them, with no runtime reflection. The
-/// <c>kind</c> polymorphism attributes on this type are 2.8.0's shape, kept so nothing shipped is removed before
-/// 2.11.0; no Asterisk frame carries a <c>kind</c> property.
+/// <c>kind</c> polymorphism attributes on this type are 2.8.0's shape, kept for an application that serializes the
+/// records itself through <see cref="ChanWebSocketJsonContext"/>; no Asterisk frame carries a <c>kind</c> property.
 /// </remarks>
 [JsonPolymorphic(
     TypeDiscriminatorPropertyName = "kind",
@@ -27,14 +27,8 @@ namespace Verbara.Sdk.Ari.Audio;
 [JsonDerivedType(typeof(ChanWebSocketMediaStart), "media_start")]
 [JsonDerivedType(typeof(ChanWebSocketMediaXoff), "media_xoff")]
 [JsonDerivedType(typeof(ChanWebSocketMediaXon), "media_xon")]
-#pragma warning disable VSDK0004 // the shipped polymorphism keeps its rows for the deprecated records until 2.11.0
-[JsonDerivedType(typeof(ChanWebSocketMediaBuffering), "media_buffering")]
-#pragma warning restore VSDK0004
 [JsonDerivedType(typeof(ChanWebSocketMediaMarkProcessed), "media_mark_processed")]
 [JsonDerivedType(typeof(ChanWebSocketDtmf), "dtmf")]
-#pragma warning disable VSDK0004 // the shipped polymorphism keeps its rows for the deprecated records until 2.11.0
-[JsonDerivedType(typeof(ChanWebSocketHangup), "hangup")]
-#pragma warning restore VSDK0004
 [JsonDerivedType(typeof(ChanWebSocketMarkMedia), "mark_media")]
 [JsonDerivedType(typeof(ChanWebSocketSetMediaDirection), "set_media_direction")]
 public abstract record ChanWebSocketControlMessage;
@@ -150,30 +144,6 @@ public sealed record ChanWebSocketMediaXon : ChanWebSocketControlMessage
 }
 
 /// <summary>
-/// Never published: no chan_websocket message reports a buffer fill in bytes. Flow control arrives as
-/// <see cref="ChanWebSocketMediaXoff"/> and <see cref="ChanWebSocketMediaXon"/>; the queue length is
-/// <see cref="ChanWebSocketStatus.QueueLength"/>, the reply to <see cref="IChanWebSocketSession.SendGetStatusAsync"/>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2, in both control formats: no message carries a
-/// buffer fill, and <c>MEDIA_BUFFERING_COMPLETED</c> is never mapped onto this record: it is read as
-/// <see cref="ChanWebSocketMediaBufferingCompleted"/>. The type still compiles; it is removed in 2.11.0.
-/// </para>
-/// <para>
-/// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
-/// deprecation with <c>&lt;NoWarn&gt;$(NoWarn);VSDK0004&lt;/NoWarn&gt;</c> instead of silencing every <c>CS0618</c> in
-/// their tree.
-/// </para>
-/// </remarks>
-/// <param name="Bytes">Never set by the SDK.</param>
-[Obsolete(
-    "Never published: no chan_websocket message reports a buffer fill in bytes. Flow control arrives as ChanWebSocketMediaXoff / ChanWebSocketMediaXon; the queue length is ChanWebSocketStatus.QueueLength, the reply to SendGetStatusAsync. Removed in Verbara.Sdk 2.11.0.",
-    DiagnosticId = "VSDK0004",
-    UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
-public sealed record ChanWebSocketMediaBuffering(int Bytes) : ChanWebSocketControlMessage;
-
-/// <summary>
 /// Inbound. <c>MEDIA_MARK_PROCESSED</c>: acknowledges that a previously-sent <see cref="ChanWebSocketMarkMedia"/>
 /// has been processed by Asterisk's playback pipeline. Captured in both control formats on 22.10.1, 23.4.1,
 /// 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2.
@@ -197,32 +167,14 @@ public sealed record ChanWebSocketMediaMarkProcessed(string Mark) : ChanWebSocke
 /// 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2.
 /// </summary>
 /// <param name="Digit">The DTMF digit (<c>0</c>-<c>9</c>, <c>*</c>, <c>#</c>, <c>A</c>-<c>D</c>).</param>
-/// <param name="DurationMs">
-/// Always 0: chan_websocket's <c>DTMF_END</c> carries <c>digit</c> and <c>channel_id</c> only, on every supported version
-/// and in both control formats (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2). Read the duration
-/// from the ARI <c>ChannelDtmfReceived</c> event of the bridged peer channel that received the digit
-/// (<c>ChannelDtmfReceivedEvent.DurationMs</c>; seen when the peer is in Stasis or the application subscribes to all) or
-/// from AMI <c>DTMFEnd</c> on that peer (<c>DtmfEndEvent.DurationMs</c>), never from the WebSocket channel's.
-/// </param>
 /// <remarks>
-/// <para>
-/// <see cref="DurationMs"/> is deprecated: the wire never carries it. The constructor, <c>Deconstruct</c> and the
-/// property still compile, and only a read of the property warns. The property is removed in 2.11.0.
-/// </para>
-/// <para>
-/// It carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
-/// deprecation with <c>&lt;NoWarn&gt;$(NoWarn);VSDK0004&lt;/NoWarn&gt;</c> instead of silencing every <c>CS0618</c> in
-/// their tree.
-/// </para>
+/// chan_websocket's <c>DTMF_END</c> carries <c>digit</c> and <c>channel_id</c> only, on every supported version and in
+/// both control formats (measured on 22.10.1, 23.4.1, 22.12.0-rc2, 23.6.0-rc2 and 24.0.0-rc2), so the record carries no
+/// duration. Read the duration from the ARI <c>ChannelDtmfReceived</c> event of the bridged peer channel that received
+/// the digit (<c>ChannelDtmfReceivedEvent.DurationMs</c>; seen when the peer is in Stasis or the application subscribes
+/// to all) or from AMI <c>DTMFEnd</c> on that peer (<c>DtmfEndEvent.DurationMs</c>), never from the WebSocket channel's.
 /// </remarks>
-public sealed record ChanWebSocketDtmf(
-    string Digit,
-    [property: JsonPropertyName("duration_ms")]
-    [property: Obsolete(
-        "Always 0: chan_websocket's DTMF_END carries digit and channel_id only, on every supported version and in both control formats. Read the duration from the bridged peer channel's ARI ChannelDtmfReceived event (ChannelDtmfReceivedEvent.DurationMs; seen when the peer is in Stasis or the application subscribes to all) or from AMI DTMFEnd on the peer (DtmfEndEvent.DurationMs), never from the WebSocket channel's. Removed in Verbara.Sdk 2.11.0.",
-        DiagnosticId = "VSDK0004",
-        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
-    int DurationMs) : ChanWebSocketControlMessage
+public sealed record ChanWebSocketDtmf(string Digit) : ChanWebSocketControlMessage
 {
     /// <summary>The frame's <c>channel_id</c>: the call the digit was sent on.</summary>
     [JsonIgnore]
@@ -283,7 +235,7 @@ public sealed record ChanWebSocketStatus(
 /// before it is answered with this record on 20.20.1, 22.10.1, 22.11.0, 23.4.1 and 23.5.0, and with a
 /// <see cref="ChanWebSocketError"/> from 22.12.
 /// </summary>
-/// <remarks>Not <see cref="ChanWebSocketMediaBuffering"/>, which stays unpublished: this frame reports no buffer fill.</remarks>
+/// <remarks>It reports no buffer fill: the queue length is <see cref="ChanWebSocketStatus.QueueLength"/>.</remarks>
 /// <param name="CorrelationId">
 /// The id of the stop it answers, as Asterisk echoes it: the value after the event name in plain text,
 /// <c>correlation_id</c> in JSON; empty when the reply carries none.
@@ -312,28 +264,6 @@ public sealed record ChanWebSocketQueueDrained : ChanWebSocketControlMessage
     [JsonIgnore]
     public string? ChannelId { get; init; }
 }
-
-/// <summary>
-/// Never published: chan_websocket signals a hangup with a WebSocket close frame, never a text message. The session's
-/// ending is published on <see cref="IAudioStream.StateChanges"/>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Measured on 22.10.1 through 24.0.0-rc2, on every hangup path: Asterisk closes the connection and sends no hangup
-/// message. The type still compiles; it is removed in 2.11.0.
-/// </para>
-/// <para>
-/// Carries <c>DiagnosticId</c> so a consumer building with <c>TreatWarningsAsErrors</c> can suppress this one
-/// deprecation with <c>&lt;NoWarn&gt;$(NoWarn);VSDK0004&lt;/NoWarn&gt;</c> instead of silencing every <c>CS0618</c> in
-/// their tree.
-/// </para>
-/// </remarks>
-/// <param name="Cause">Never set by the SDK.</param>
-[Obsolete(
-    "Never published: chan_websocket signals a hangup with a WebSocket close frame, never a text message (measured on 22.10.1 through 24.0.0-rc2, every hangup path). Read the session's ending on IAudioStream.StateChanges. Removed in Verbara.Sdk 2.11.0.",
-    DiagnosticId = "VSDK0004",
-    UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.10.0.md#vsdk0004")]
-public sealed record ChanWebSocketHangup(string? Cause) : ChanWebSocketControlMessage;
 
 // ---------------------------------------------------------------------------
 // Outbound: SDK -> Asterisk
