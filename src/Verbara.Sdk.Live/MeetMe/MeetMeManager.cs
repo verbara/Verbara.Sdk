@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using Verbara.Sdk.Live.Diagnostics;
 
 namespace Verbara.Sdk.Live.MeetMe;
 
@@ -34,8 +35,12 @@ internal static partial class MeetMeManagerLog
     public static partial void Reconciled(ILogger logger, int roomsListed, int admitted, int removed, int newerThanSnapshot,
         int leftDuringRead, bool removesOmitted);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFERENCE] Event handler failed for a change whose call did not raise it")]
-    public static partial void UnownedHandlerFailed(ILogger logger, Exception exception);
+    // What a notification throws past the per-subscriber guard reaches the outbox's report: never a subscriber's failure.
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CONFERENCE] Event notification failed outside its subscribers; nothing was thrown from the call")]
+    public static partial void NotificationFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[CONFERENCE] Subscriber failed: event={EventName} room={RoomNumber} channel={Channel}; the other subscribers still receive it")]
+    public static partial void SubscriberFailed(ILogger logger, Exception exception, string eventName, string roomNumber, string channel);
 }
 
 /// <summary>
@@ -75,6 +80,48 @@ public sealed class MeetMeManager
             _events.Drain();
     }
 
+    /// <summary>
+    /// Delivers one conference event to each of <paramref name="handlers"/> in subscription order, each in its own
+    /// guard, as <c>ChannelManager</c> does: a subscriber that throws is counted on <c>live.meetme.subscriber_faults</c>
+    /// and logged once at Warning with the event, the room and the participant's channel, and the later subscribers
+    /// still receive the event. Nothing a subscriber throws leaves this method, so it reaches neither the outbox nor the
+    /// call that made the change, and a reload's reconciliation goes on. A logger that throws while reporting is ignored:
+    /// the fault is already counted. <see cref="OutOfMemoryException"/> is not caught. Only what throws on the delivering
+    /// thread is caught. The invocation list is walked with a struct enumerator, so a delivery allocates nothing whatever
+    /// the number of subscribers.
+    /// </summary>
+    private void Raise(Action<MeetMeRoom, MeetMeUser>? handlers, string eventName, MeetMeRoom room, MeetMeUser user)
+    {
+        if (handlers is null)
+            return;
+
+        foreach (var handler in Delegate.EnumerateInvocationList(handlers))
+        {
+            try
+            {
+                handler(room, user);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                LiveMetrics.MeetMeSubscriberFaults.Add(1);
+                ReportSubscriberFailure(ex, eventName, room.RoomNumber, user.Channel);
+            }
+        }
+    }
+
+    private void ReportSubscriberFailure(Exception failure, string eventName, string roomNumber, string channel)
+    {
+        try
+        {
+            MeetMeManagerLog.SubscriberFailed(_logger, failure, eventName, roomNumber, channel);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The log line is the only trace a subscriber's failure leaves besides the counter; when the logger fails
+            // too, the fault stays counted and the event goes on to the later subscribers.
+        }
+    }
+
     internal int ActiveSnapshotWindowCount
     {
         get
@@ -109,7 +156,7 @@ public sealed class MeetMeManager
     public MeetMeManager(ILogger logger)
     {
         _logger = logger;
-        _events = new LiveEventOutbox(ex => MeetMeManagerLog.UnownedHandlerFailed(logger, ex), LiveEventOutbox.DefaultTurnWait);
+        _events = new LiveEventOutbox(ex => MeetMeManagerLog.NotificationFailed(logger, ex), LiveEventOutbox.DefaultTurnWait);
     }
 
     public IReadOnlyCollection<MeetMeRoom> Rooms => _rooms.Values.ToList().AsReadOnly();
@@ -191,7 +238,7 @@ public sealed class MeetMeManager
                 MeetMeManagerLog.UserJoined(_logger, roomNumber, channel, userNum);
                 if (UserJoined is not null)
                 {
-                    _events.Post(static (m, r, u) => ((MeetMeManager)m).UserJoined?.Invoke((MeetMeRoom)r!, (MeetMeUser)u!),
+                    _events.Post(static (m, r, u) => ((MeetMeManager)m).Raise(((MeetMeManager)m).UserJoined, nameof(UserJoined), (MeetMeRoom)r!, (MeetMeUser)u!),
                         this, room, user);
                 }
             }
@@ -335,7 +382,7 @@ public sealed class MeetMeManager
 
         if (changed && UserStateChanged is not null)
         {
-            _events.Post(static (m, r, u) => ((MeetMeManager)m).UserStateChanged?.Invoke((MeetMeRoom)r!, (MeetMeUser)u!),
+            _events.Post(static (m, r, u) => ((MeetMeManager)m).Raise(((MeetMeManager)m).UserStateChanged, nameof(UserStateChanged), (MeetMeRoom)r!, (MeetMeUser)u!),
                 this, room, user);
         }
     }
@@ -346,7 +393,7 @@ public sealed class MeetMeManager
     {
         if (UserLeft is not null)
         {
-            _events.Post(static (m, r, u) => ((MeetMeManager)m).UserLeft?.Invoke((MeetMeRoom)r!, (MeetMeUser)u!),
+            _events.Post(static (m, r, u) => ((MeetMeManager)m).Raise(((MeetMeManager)m).UserLeft, nameof(UserLeft), (MeetMeRoom)r!, (MeetMeUser)u!),
                 this, room, user);
         }
     }

@@ -797,7 +797,7 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EventObserver_ShouldStillReportTheLeave_WhenACallerLeftHandlerThrows()
+    public async Task EventObserver_ShouldReportTheLeaveAndThrowNothing_WhenACallerLeftHandlerThrows()
     {
         await StartAndGetObserverAsync();
         _observer!.OnNext(VisitJoin());
@@ -808,7 +808,7 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
         var leave = () => _observer!.OnNext(VisitLeave());
 
         using var scope = new AssertionScope();
-        leave.Should().Throw<InvalidOperationException>().WithMessage("caller-left-handler");
+        leave.Should().NotThrow("a CallerLeft handler's failure is its own: it no longer reaches the AMI event observer");
         reported.Should().Equal([VisitCaller],
             "Asterisk's leave is recorded for the open reload windows and the session layer whatever a CallerLeft handler does");
     }

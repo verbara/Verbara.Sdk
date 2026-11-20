@@ -967,7 +967,7 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <para>
     /// It asks for a queue alone only once a listing of every queue on that AMI session (the start's load, a reconnect's
     /// reload, or this call) has ended, and never while one is read. A listing ends however it ends: applied, refused by
-    /// Asterisk, or cut short by its token or by a handler of the queue table that threw. A load on that session that
+    /// Asterisk, or cut short by its token or by a failure while it was applied. A load on that session that
     /// ended before its listing (an earlier step threw, or its token was cancelled) counts as one that ended. Only a
     /// listing or a load whose AMI session ended first leaves that session asking for no queue alone; the next
     /// session's reload lists the queues. An event that names a queue before or during that listing waits for it to end,
@@ -985,8 +985,10 @@ public sealed class VerbaraServer : IVerbaraServer
     /// <para>
     /// The agents of the <c>Agent/</c> memberships it adds, removes or changes are settled as a live member event settles
     /// them: <see cref="AgentManager.AgentStateChanged"/> is raised once for an agent whose state changed, and not for an
-    /// agent logged off or on a call; no agents listing is asked. They are settled also when a handler of the queue table
-    /// throws while the snapshot is applied, for what was applied before it; that failure then leaves this call.
+    /// agent logged off or on a call; no agents listing is asked. A handler of the queue table that throws stops neither:
+    /// its failure is counted on <c>live.queues.subscriber_faults</c> and logged at Warning, and nothing is thrown from
+    /// this call. They are settled also when applying the snapshot fails, for what was applied before it; that failure
+    /// then leaves this call.
     /// </para>
     /// <para>
     /// The reconciliation holds to the rules of a load's queues. A held caller the snapshot still lists keeps its entry
@@ -1046,7 +1048,7 @@ public sealed class VerbaraServer : IVerbaraServer
             if (!transferred)
                 barriers.QueueReports?.Dispose();
 
-            // Also when a queue handler, a row or the completion threw: what was committed before is settled. Outside
+            // Also when a row or the completion threw: what was committed before is settled. Outside
             // every queue lock and the window gate, as the live member routes settle.
             settleFailure = SettleAgentMembers(touched);
             if (settleFailure is not null && !transferred)
@@ -1198,7 +1200,7 @@ public sealed class VerbaraServer : IVerbaraServer
 
     /// <summary>
     /// A listing of every queue counted by <see cref="BeginFullQueueListing"/> ended, however it ended: applied, refused,
-    /// or cut short by its token or by a queue handler that threw. See <see cref="OpenDiscoveryLocked"/>.
+    /// or cut short by its token or by a failure while it was applied. See <see cref="OpenDiscoveryLocked"/>.
     /// </summary>
     private void EndFullQueueListing(LoadSession session)
     {
@@ -1296,7 +1298,7 @@ public sealed class VerbaraServer : IVerbaraServer
                 if (!transferred)
                     barriers.QueueReports?.Dispose();
 
-                // What was committed is settled, also when a queue handler threw: in this task, never on the dispatch.
+                // What was committed is settled, also when applying the listing threw: in this task, never on the dispatch.
                 if (SettleAgentMembers(touched) is { } settleFailure)
                     VerbaraServerLog.QueueDiscoveryFailed(_logger, discovery.Name, settleFailure);
             }
@@ -2913,8 +2915,9 @@ public sealed class VerbaraServer : IVerbaraServer
 
                 // Queue events
                 // An Agent/<id> member's add, removal or pause re-derives that agent's state from the queue table, in a
-                // finally: the queue call raises its own notification first, and a queue handler's failure, which the
-                // call rethrows, does not skip the agent.
+                // finally: the queue call raises its own notification first. A queue handler's failure stays inside the
+                // call (QueueManager reports it per subscriber), and the finally keeps the agent from being skipped by
+                // anything else the call throws.
                 // Every queue event, once applied, also names its queue to NoteQueueNamed, in a finally too: a queue the
                 // table holds no listing of (Asterisk announces no queue it creates) is asked for, outside the dispatch.
                 case QueueMemberAddedEvent qma:
@@ -3040,8 +3043,8 @@ public sealed class VerbaraServer : IVerbaraServer
                 }
 
                 // agent class. The table's leave (CallerLeft, raised only for a caller the table holds), then Asterisk's
-                // own report, raised whatever the table holds: also when a CallerLeft handler throws, since the open
-                // reload windows and the session layer count on every report.
+                // own report, raised whatever the table holds: the open reload windows and the session layer count on
+                // every report, so the finally keeps it from being skipped by anything the table's leave throws.
                 case QueueCallerLeaveEvent qcl:
                 {
                     var queue = qcl.RawFields?.GetValueOrDefault("Queue") ?? "";

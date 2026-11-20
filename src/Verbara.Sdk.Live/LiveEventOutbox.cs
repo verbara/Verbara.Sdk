@@ -1,5 +1,3 @@
-using System.Runtime.ExceptionServices;
-
 namespace Verbara.Sdk.Live;
 
 /// <summary>
@@ -7,8 +5,13 @@ namespace Verbara.Sdk.Live;
 /// <para>
 /// A transition posts its notification while it still holds the lock that orders it, so posting order is transition
 /// order. The manager drains once it has released every lock, and each call raises its own notifications before it
-/// returns, on its own thread, so a handler's failure reaches the call that made the change and a caller that goes on
-/// to another manager has already told this one's subscribers.
+/// returns, on its own thread, so a caller that goes on to another manager has already told this one's subscribers.
+/// </para>
+/// <para>
+/// A notification's failure never leaves a drain: each manager raises its events subscriber by subscriber and reports
+/// a subscriber's failure itself, so nothing a subscriber throws reaches the outbox. Whatever a notification still
+/// throws (<see cref="OutOfMemoryException"/> excepted) is handed to the failure report, whether the drain raising it is
+/// the posting call's or another's, and the drain goes on to the next notification.
 /// </para>
 /// <para>
 /// A notification waits for the ones posted before it to finish, so subscribers see one at a time in transition
@@ -44,17 +47,18 @@ internal sealed class LiveEventOutbox
     // The drain whose handler is running in this execution context, if any.
     private readonly AsyncLocal<Frame?> _current = new();
 
-    private readonly Action<Exception> _reportUnownedFailure;
+    private readonly Action<Exception> _reportFailure;
     private readonly TimeSpan _turnWait;
 
-    /// <param name="reportUnownedFailure">
-    /// Receives the failure of a handler raised for a notification whose posting call never drained it (that call threw
-    /// before it could): no caller is waiting for it, so it is reported instead of thrown into an unrelated call.
+    /// <param name="reportFailure">
+    /// Receives whatever a notification throws, whichever drain raises it: the posting call's own, or another's for a
+    /// notification whose posting call never drained it (that call threw before it could). It is reported, never thrown
+    /// into a call.
     /// </param>
     /// <param name="turnWait">How long a notification waits for the earlier ones; see <see cref="DefaultTurnWait"/>.</param>
-    internal LiveEventOutbox(Action<Exception> reportUnownedFailure, TimeSpan turnWait)
+    internal LiveEventOutbox(Action<Exception> reportFailure, TimeSpan turnWait)
     {
-        _reportUnownedFailure = reportUnownedFailure;
+        _reportFailure = reportFailure;
         _turnWait = turnWait;
     }
 
@@ -124,8 +128,8 @@ internal sealed class LiveEventOutbox
     /// <summary>
     /// Raises the notifications this thread posted, each once the earlier ones have finished or the turn wait ran out.
     /// Inside a handler of this outbox it returns at once: the handler's drain raises them after the handler returns. A
-    /// handler that throws does not stop the others: the first exception is rethrown once this call's notifications
-    /// have all been raised. With nothing queued it returns at once and allocates nothing.
+    /// notification that throws does not stop the others, and its failure is reported, not thrown. With nothing queued
+    /// it returns at once and allocates nothing.
     /// </summary>
     internal void Drain()
     {
@@ -162,7 +166,6 @@ internal sealed class LiveEventOutbox
         // One turn wait per drain, not per notification: once it ran out, this call's later notifications do not wait
         // again behind the same blocked handler.
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        ExceptionDispatchInfo? failure = null;
         try
         {
             while (true)
@@ -191,13 +194,13 @@ internal sealed class LiveEventOutbox
                     {
                         var unownedFailure = Raise(unowned[i]);
                         if (unownedFailure is not null)
-                            ReportUnownedFailure(unownedFailure);
+                            ReportFailure(unownedFailure);
                     }
                 }
 
                 var own = Raise(next);
                 if (own is not null)
-                    failure ??= ExceptionDispatchInfo.Capture(own);
+                    ReportFailure(own);
             }
         }
         finally
@@ -218,18 +221,16 @@ internal sealed class LiveEventOutbox
 
             _current.Value = outer;
         }
-
-        failure?.Throw();
     }
 
-    // The report writes the host's log line. A logger that throws on it must not leave the drain loop: the unowned
-    // entries after this one and this drain's own are already claimed, and only their raise marks them done, so an
-    // abandoned raise would hold the head of the list, and every later drain would wait out its turn behind it.
-    private void ReportUnownedFailure(Exception failure)
+    // The report writes the host's log line. A logger that throws on it must not leave the drain loop: the entries
+    // after this one are already claimed, and only their raise marks them done, so an abandoned raise would hold the
+    // head of the list, and every later drain would wait out its turn behind it.
+    private void ReportFailure(Exception failure)
     {
         try
         {
-            _reportUnownedFailure(failure);
+            _reportFailure(failure);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

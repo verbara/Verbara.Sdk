@@ -192,7 +192,7 @@ public sealed class VerbaraServerReconcileQueuesAgentTests
     }
 
     [Fact]
-    public async Task ReconcileQueuesAsync_ShouldStillSettleTheAdmittedMembership_WhenAMemberAddedSubscriberThrows()
+    public async Task ReconcileQueuesAsync_ShouldCompleteAndSettleTheAdmittedMembership_WhenAMemberAddedSubscriberThrows()
     {
         await using var rig = await AgentRig.StartAsync(new ListedQueue(Sales, [AgentMember], [], PausedMembers: [AgentMember]));
         var failure = new InvalidOperationException("member-added subscriber");
@@ -212,15 +212,15 @@ public sealed class VerbaraServerReconcileQueuesAgentTests
 
         using (new AssertionScope())
         {
-            outcome.Should().BeSameAs(failure, "the subscriber's failure still leaves the call, as before");
-            rig.Run.Server.Queues.GetByName(Support)!.Members.Should().ContainKey(AgentMember, "the row was committed before the drain");
-            rig.State(Agent).Should().Be(AgentState.Available, "the committed membership is settled although the drain threw");
+            outcome.Should().BeNull("a subscriber's failure is its own: it no longer leaves the reload");
+            rig.Run.Server.Queues.GetByName(Support)!.Members.Should().ContainKey(AgentMember, "the row was committed");
+            rig.State(Agent).Should().Be(AgentState.Available, "the committed membership is settled");
             rig.Changes(Agent).Should().Be(1);
         }
     }
 
     [Fact]
-    public async Task ReconcileQueuesAsync_ShouldStillSettleTheRemovedMembership_WhenACallerLeftSubscriberThrowsInTheCompletion()
+    public async Task ReconcileQueuesAsync_ShouldCompleteAndSettleTheRemovedMembership_WhenACallerLeftSubscriberThrowsInTheCompletion()
     {
         await using var rig = await AgentRig.StartAsync(new ListedQueue(Sales, [AgentMember, "PJSIP/2001"], [], PausedMembers: [AgentMember]),
             mainCallers: [HeldCaller]);
@@ -234,9 +234,9 @@ public sealed class VerbaraServerReconcileQueuesAgentTests
 
         using (new AssertionScope())
         {
-            outcome.Should().BeSameAs(failure, "the subscriber's failure still leaves the call, as before");
+            outcome.Should().BeNull("a subscriber's failure is its own: it no longer leaves the reload");
             rig.Run.Server.Queues.GetByName(Sales)!.Members.Should().NotContainKey(AgentMember, "the completion committed the removal");
-            rig.State(Agent).Should().Be(AgentState.Available, "the removal is settled although the completion's drain threw");
+            rig.State(Agent).Should().Be(AgentState.Available, "the removal is settled");
             rig.Changes(Agent).Should().Be(1);
             rig.AssertCountEqualsTable();
         }

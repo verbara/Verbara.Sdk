@@ -58,7 +58,9 @@ A channel's `Context`, `Extension` and `Priority` follow each `Newexten` the con
 `dialplan` class, and the filter the [troubleshooting guide](../../docs/guides/troubleshooting.md#the-cost-of-dialplan-and-a-filter-that-removes-it)
 recommends excludes it to save most of that class's volume, so behind it a channel keeps the location it was created with.
 A `ChannelManager` subscriber that throws is logged at Warning and counted on `live.channels.subscriber_faults`; the other
-subscribers still receive the event.
+subscribers still receive the event. From 2.11.0 a `QueueManager` or `MeetMeManager` subscriber that throws is handled the
+same way, counted on `live.queues.subscriber_faults` or `live.meetme.subscriber_faults`, and nothing is thrown from the
+call that made the change.
 
 ## Reconciling the channels
 

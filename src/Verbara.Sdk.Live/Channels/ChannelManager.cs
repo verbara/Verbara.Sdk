@@ -32,8 +32,9 @@ internal static partial class ChannelManagerLog
     [LoggerMessage(Level = LogLevel.Debug, Message = "[CHANNEL] Reconciled: snapshot={SnapshotCount} added={Added} removed={Removed} newer_than_snapshot={NewerThanSnapshot} departed_during_read={DepartedDuringRead}")]
     public static partial void Reconciled(ILogger logger, int snapshotCount, int added, int removed, int newerThanSnapshot, int departedDuringRead);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "[CHANNEL] Event handler failed for a change whose call did not raise it")]
-    public static partial void UnownedHandlerFailed(ILogger logger, Exception exception);
+    // What a notification throws past the per-subscriber guard reaches the outbox's report: never a subscriber's failure.
+    [LoggerMessage(Level = LogLevel.Error, Message = "[CHANNEL] Event notification failed outside its subscribers; nothing was thrown from the call")]
+    public static partial void NotificationFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[CHANNEL] Subscriber failed: event={EventName} unique_id={UniqueId}; the other subscribers still receive it")]
     public static partial void SubscriberFailed(ILogger logger, Exception exception, string eventName, string uniqueId);
@@ -194,7 +195,7 @@ public sealed class ChannelManager
     public ChannelManager(ILogger logger)
     {
         _logger = logger;
-        _events = new LiveEventOutbox(ex => ChannelManagerLog.UnownedHandlerFailed(_logger, ex), LiveEventOutbox.DefaultTurnWait);
+        _events = new LiveEventOutbox(ex => ChannelManagerLog.NotificationFailed(_logger, ex), LiveEventOutbox.DefaultTurnWait);
     }
 
     public IEnumerable<AsteriskChannel> ActiveChannels => _channelsByUniqueId.Values;
