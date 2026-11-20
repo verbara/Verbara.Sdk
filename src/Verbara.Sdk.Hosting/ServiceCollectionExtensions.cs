@@ -366,6 +366,14 @@ public static class ServiceCollectionExtensions
     /// The sessions are found by the channel ids Asterisk issues, so the servers of a pool must not issue the same ids:
     /// give every Asterisk of the pool its own <c>systemname</c>.
     /// </para>
+    /// <para>
+    /// Every save runs under a token the host's stop phase ends, as on a single-server host: a stop inside its budget
+    /// leaves an in-flight save running, a stop whose token is cancelled (the shutdown is no longer graceful) cuts it
+    /// short, and the host's teardown ends whatever is still in flight. The cancellation comes only after every hosted
+    /// service's <c>StopAsync</c> has returned, so detach your servers in your own hosted service's stop and no server
+    /// event starts a save after it. The token is handed in the hosted services' <c>StartingAsync</c> phase; a server
+    /// you attach there from a hosted service registered before this call saves under no token until then.
+    /// </para>
     /// </remarks>
     public static IServiceCollection AddVerbaraSessionsMultiServer(
         this IServiceCollection services,
@@ -505,6 +513,11 @@ public static class ServiceCollectionExtensions
         // by consumers (e.g. AddSingleton<SessionStoreBase, MyStore>()) continue to flow
         // through to anyone depending on the interface. TryAdd keeps this idempotent.
         services.TryAddSingleton<ISessionStore>(sp => sp.GetRequiredService<SessionStoreBase>());
+        // The one owner of the token every save runs under, on every sessions host: TryAddEnumerable keeps one however
+        // many registrations a host makes, so no two services write that token. Registered here, ahead of the
+        // single-server attach service, and through an explicit factory (no constructor reflection).
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, SessionPersistenceTokenService>(sp =>
+            new SessionPersistenceTokenService(sp.GetRequiredService<ICallSessionManager>())));
 
         if (configure is not null)
             services.Configure(configure);

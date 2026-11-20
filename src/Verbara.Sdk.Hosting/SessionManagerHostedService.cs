@@ -29,33 +29,14 @@ internal sealed class SessionManagerHostedService(
     VerbaraServer server) : IHostedLifecycleService, IDisposable
 {
     /// <summary>
-    /// The source behind the token every persistence call runs under. This service owns it because
-    /// the manager keeps that token for the whole process: the token the host hands to
-    /// <c>StartAsync</c> means the start was aborted, and the host releases the source behind it the
-    /// moment the start returns, so a token borrowed from there can never be cancelled again.
-    /// </summary>
-    private readonly CancellationTokenSource _shutdown = new();
-
-    /// <summary>
-    /// The host's stop token wired onto <c>_shutdown</c>, kept so a second stop disposes the first
-    /// registration instead of leaking it.
-    /// </summary>
-    private CancellationTokenRegistration _stopRegistration;
-
-    /// <summary>
-    /// Serializes the attach, <see cref="StopAsync"/> and <see cref="Dispose"/>. A stop reads
-    /// <see cref="_disposed"/> and wires the stop token onto <see cref="_shutdown"/> under it, and the
-    /// disposal sets the flag and releases both under it; a check of the flag without the lock lets a stop
-    /// pass the check, the disposal release the source, and the stop then register on a released source
-    /// that a later cancel of the host's token would hit.
+    /// Serializes the attach, <see cref="StopAsync"/> and <see cref="Dispose"/>, so a start that races the disposal
+    /// either attaches before it or is refused after it.
     /// </summary>
     private readonly Lock _lifecycleGate = new();
 
     /// <summary>
-    /// Set by <see cref="Dispose"/> under <see cref="_lifecycleGate"/>. <see cref="IDisposable"/> requires
-    /// a second call to be ignored rather than throw, and <c>Cancel</c> on an already-released source throws
-    /// <see cref="ObjectDisposedException"/> — so the release needs a gate, not just an ordering. A stop
-    /// that finds it set does nothing.
+    /// Set by <see cref="Dispose"/> under <see cref="_lifecycleGate"/>. A start that finds it set throws
+    /// <see cref="ObjectDisposedException"/> and attaches nothing; a stop that finds it set does nothing.
     /// </summary>
     private bool _disposed;
 
@@ -97,7 +78,7 @@ internal sealed class SessionManagerHostedService(
     private void Attach()
     {
         // The start token is deliberately not taken: it means the start was aborted, and this start begins nothing
-        // that can be aborted. The manager gets the token this service owns.
+        // that can be aborted. The token the manager saves under is SessionPersistenceTokenService's, not this one's.
         if (sessionManager is not CallSessionManager csm)
             return;
 
@@ -107,16 +88,15 @@ internal sealed class SessionManagerHostedService(
             if (_attached)
                 return;
 
-            csm.SetShutdownToken(_shutdown.Token);
             csm.AttachToServer(server, "default");
             _attached = true;
         }
     }
 
     /// <summary>
-    /// Detaches the manager and wires the host's stop token onto the persistence token. A stop after
-    /// disposal does nothing: it registers nothing on the token, so a later cancel of it reaches no
-    /// released source.
+    /// Detaches the manager, so no server event can start a new save while the shutdown budget runs. The host's stop
+    /// token is wired onto the persistence token by <see cref="SessionPersistenceTokenService"/>, after every hosted
+    /// service's stop has returned. A stop after disposal does nothing.
     /// </summary>
     public Task StopAsync(CancellationToken cancellationToken)
     {
@@ -125,21 +105,11 @@ internal sealed class SessionManagerHostedService(
             if (_disposed)
                 return Task.CompletedTask;
 
-            // Detach first, so no server event can start a new save while the shutdown budget runs.
             if (sessionManager is CallSessionManager csm)
             {
                 csm.DetachFromServer("default");
                 _attached = false;
             }
-
-            // The source is not cancelled here — a graceful stop is exactly the case in which an
-            // in-flight save is still worth its budget. The registration cancels it when the host says
-            // the shutdown is no longer graceful, and runs inline when that token arrives already
-            // cancelled — under the lock, so on a source the disposal has not released. Static callback
-            // with the source as state: no closure, no ExecutionContext.
-            _stopRegistration.Dispose();
-            _stopRegistration = cancellationToken.UnsafeRegister(
-                static state => ((CancellationTokenSource)state!).Cancel(), _shutdown);
         }
 
         return Task.CompletedTask;
@@ -148,21 +118,6 @@ internal sealed class SessionManagerHostedService(
     public void Dispose()
     {
         lock (_lifecycleGate)
-        {
-            if (_disposed)
-                return;
-
-            // Set first: the cancel below runs the persistence token's callbacks inline, and a stop one
-            // of them makes on this thread re-enters the lock and must find the service disposed.
             _disposed = true;
-
-            // Released before the source, and it waits for a callback another thread is running: once it
-            // returns, nothing cancels the source but this method.
-            _stopRegistration.Dispose();
-            // Cancel before releasing: a save that outlived the whole stop ends here, instead of being
-            // left holding a token nothing could ever cancel.
-            _shutdown.Cancel();
-            _shutdown.Dispose();
-        }
     }
 }
