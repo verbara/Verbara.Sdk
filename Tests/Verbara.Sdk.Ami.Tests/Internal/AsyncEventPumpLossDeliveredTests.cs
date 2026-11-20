@@ -1,3 +1,4 @@
+using System.Reflection;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Verbara.Sdk.Ami.Events;
@@ -202,6 +203,181 @@ public sealed class AsyncEventPumpLossDeliveredTests
 
         delivered.Should().BeTrue("the signal runs on its own thread, so a held callback holds no dispatch");
     }
+
+    [Fact]
+    public async Task OnLossDeliveredThrough_ShouldBeCalledOnceWithTheNewerDropDeliveredThrough_WhenADropArrivesWhileAnEarlierOneIsWatched()
+    {
+        await using var pump = new AsyncEventPump(capacity: 1);
+        var seen = new System.Collections.Concurrent.ConcurrentQueue<bool>();
+        pump.OnLossDeliveredThrough = () => seen.Enqueue(pump.DeliveredThroughLastLoss);
+        var gates = new Dictionary<string, TaskCompletionSource>
+        {
+            ["a"] = NewSignal(), ["b"] = NewSignal(), ["d"] = NewSignal(), ["f"] = NewSignal(),
+        };
+        var entered = new Dictionary<string, TaskCompletionSource>
+        {
+            ["a"] = NewSignal(), ["b"] = NewSignal(), ["d"] = NewSignal(), ["f"] = NewSignal(),
+        };
+        pump.Start(async evt =>
+        {
+            if (evt is HangupEvent { Channel: { } c } && gates.TryGetValue(c, out var gate))
+            {
+                entered[c].TrySetResult();
+                await gate.Task.WaitAsync(Bound);
+            }
+        });
+
+        // a (1) in its handler, b (2) buffered, c (3) dropped: the watcher waits for 3.
+        pump.TryEnqueue(new HangupEvent { Channel = "a" }, collected: false);
+        await entered["a"].Task.WaitAsync(Bound);
+        pump.TryEnqueue(new HangupEvent { Channel = "b" }, collected: false);
+        pump.TryEnqueue(new HangupEvent { Channel = "c" }, collected: false).Should().BeFalse();
+        // fence-allow: LOOP-DRIVER — waits for the watcher to register its wait for the first drop, so the second drop falls while it waits
+        SpinWait.SpinUntil(() => WaiterCount(pump) == 1, Bound).Should().BeTrue("premise: the watcher waits for c");
+
+        // b (2) in its handler, d (4) buffered, e (5) dropped while the watcher still waits for 3.
+        gates["a"].TrySetResult();
+        await entered["b"].Task.WaitAsync(Bound);
+        pump.TryEnqueue(new HangupEvent { Channel = "d" }, collected: false);
+        pump.TryEnqueue(new HangupEvent { Channel = "e" }, collected: false).Should().BeFalse();
+
+        // d (4) returns, which passes c; f (6), received after e, is held, so e is not passed yet.
+        gates["b"].TrySetResult();
+        await entered["d"].Task.WaitAsync(Bound);
+        pump.TryEnqueue(new HangupEvent { Channel = "f" }, collected: false);
+        gates["d"].TrySetResult();
+        await entered["f"].Task.WaitAsync(Bound);
+        // fence-allow: LOOP-DRIVER — waits for the watcher, woken by c's passing, to register its wait for e
+        SpinWait.SpinUntil(() => WaiterCount(pump) == 1, Bound).Should().BeTrue("premise: the watcher now waits for e");
+        var passedTheFirstDrop = pump.DispatchedThrough >= 3;
+        gates["f"].TrySetResult();
+        await pump.LossWatcher.WaitAsync(Bound);
+
+        using (new AssertionScope())
+        {
+            passedTheFirstDrop.Should().BeTrue("premise: delivery passed c while e was not yet passed");
+            seen.Should().Equal([true], "the watcher re-armed on the newer drop and signalled once, with it delivered through");
+        }
+    }
+
+    [Fact]
+    public async Task OnLossDeliveredThrough_ShouldBeCalledAgain_WhenADropIsRefusedWhileItsCallbackRuns()
+    {
+        await using var pump = new AsyncEventPump(capacity: 1);
+        var calls = 0;
+        var inCallback = NewSignal();
+        using var releaseCallback = new ManualResetEventSlim();
+        pump.OnLossDeliveredThrough = () =>
+        {
+            if (Interlocked.Increment(ref calls) != 1)
+                return;
+            inCallback.TrySetResult();
+            releaseCallback.Wait(Bound);
+        };
+        var gates = new Dictionary<string, TaskCompletionSource> { ["a"] = NewSignal(), ["g"] = NewSignal() };
+        var entered = new Dictionary<string, TaskCompletionSource> { ["a"] = NewSignal(), ["g"] = NewSignal() };
+        pump.Start(async evt =>
+        {
+            if (evt is HangupEvent { Channel: { } c } && gates.TryGetValue(c, out var gate))
+            {
+                entered[c].TrySetResult();
+                await gate.Task.WaitAsync(Bound);
+            }
+        });
+
+        pump.TryEnqueue(new HangupEvent { Channel = "a" }, collected: false);
+        await entered["a"].Task.WaitAsync(Bound);
+        pump.TryEnqueue(new HangupEvent { Channel = "b" }, collected: false);
+        pump.TryEnqueue(new HangupEvent { Channel = "c" }, collected: false).Should().BeFalse();
+        gates["a"].TrySetResult();
+        await inCallback.Task.WaitAsync(Bound);
+
+        // While the first signal's callback runs, the watcher is still marked running: this drop starts none.
+        pump.TryEnqueue(new HangupEvent { Channel = "g" }, collected: false);
+        await entered["g"].Task.WaitAsync(Bound);
+        pump.TryEnqueue(new HangupEvent { Channel = "h" }, collected: false);
+        pump.TryEnqueue(new HangupEvent { Channel = "i" }, collected: false).Should().BeFalse();
+        var secondDropStartedNoWatcher = WaiterCount(pump) == 0;
+        gates["g"].TrySetResult();
+        releaseCallback.Set();
+        await pump.LossWatcher.WaitAsync(Bound);
+
+        using (new AssertionScope())
+        {
+            secondDropStartedNoWatcher.Should().BeTrue("premise: the running watcher was in its callback, waiting for nothing");
+            Volatile.Read(ref calls).Should().Be(2, "the leaving watcher took over the drop refused while its callback ran");
+            pump.DeliveredThroughLastLoss.Should().BeTrue();
+        }
+    }
+
+    [Fact]
+    public async Task OnLossDeliveredThrough_ShouldStartNoWatcher_WhenOnlyEventsAnActionAlreadyReceivedAreDropped()
+    {
+        await using var pump = new AsyncEventPump(capacity: 1);
+        var calls = 0;
+        pump.OnLossDeliveredThrough = () => Interlocked.Increment(ref calls);
+        var entered = NewSignal();
+        var open = NewSignal();
+        pump.Start(async evt =>
+        {
+            if (evt is HangupEvent { Channel: "a" })
+            {
+                entered.TrySetResult();
+                await open.Task.WaitAsync(Bound);
+            }
+        });
+        var idle = pump.LossWatcher;
+
+        pump.TryEnqueue(new HangupEvent { Channel = "a" }, collected: false);
+        await entered.Task.WaitAsync(Bound);
+        pump.TryEnqueue(new HangupEvent { Channel = "b" }, collected: false);
+        pump.TryEnqueue(new HangupEvent { Channel = "c" }, collected: true).Should().BeFalse();
+        var watcherAfterTheDrop = pump.LossWatcher;
+        open.TrySetResult();
+        await watcherAfterTheDrop.WaitAsync(Bound);
+
+        using (new AssertionScope())
+        {
+            pump.DroppedEvents.Should().Be(1, "premise: the collected copy was refused");
+            watcherAfterTheDrop.Should().BeSameAs(idle, "a dropped copy an action already received is no loss: no watcher");
+            Volatile.Read(ref calls).Should().Be(0);
+        }
+    }
+
+    [Fact]
+    public async Task OnLossDeliveredThrough_ShouldRunWithoutTheWritersExecutionContext_WhenTheWriterSetAnAsyncLocalBeforeTheDrop()
+    {
+        await using var pump = new AsyncEventPump(capacity: 1);
+        var writersValue = new AsyncLocal<string?>();
+        var seen = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        pump.OnLossDeliveredThrough = () => seen.TrySetResult(writersValue.Value);
+        var entered = NewSignal();
+        var open = NewSignal();
+        pump.Start(async evt =>
+        {
+            if (evt is HangupEvent { Channel: "a" })
+            {
+                entered.TrySetResult();
+                await open.Task.WaitAsync(Bound);
+            }
+        });
+        pump.TryEnqueue(new HangupEvent { Channel = "a" }, collected: false);
+        await entered.Task.WaitAsync(Bound);
+        pump.TryEnqueue(new HangupEvent { Channel = "b" }, collected: false);
+
+        // As a writer inside an event dispatch carries that dispatch's frame: none of it may reach the watcher.
+        writersValue.Value = "the writer's frame";
+        pump.TryEnqueue(new HangupEvent { Channel = "c" }, collected: false).Should().BeFalse();
+        writersValue.Value = null;
+        open.TrySetResult();
+        var inCallback = await seen.Task.WaitAsync(Bound);
+
+        inCallback.Should().BeNull("the watcher starts with the writer's execution context suppressed");
+    }
+
+    // The pump's count of registered dispatch-barrier waiters: the watcher's wait is the only one in these tests.
+    private static int WaiterCount(AsyncEventPump pump) =>
+        (int)typeof(AsyncEventPump).GetField("_waiterCount", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pump)!;
 
     private static TaskCompletionSource NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 

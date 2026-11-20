@@ -534,6 +534,13 @@ public sealed class VerbaraServer : IVerbaraServer
     // The loss mark of the last notice raised: one notice per mark, compared by equality like every loss mark.
     private readonly Lock _noticeGate = new();
     private EventLossEpoch? _notifiedMark;
+    private long _lossNoticesPosted;
+
+    /// <summary>
+    /// How many notices this server has decided to raise, counted when the decision is taken (the raise itself is posted
+    /// to the thread pool); read by tests, which can then tell "no notice" from "not yet" without waiting.
+    /// </summary>
+    internal long LossNoticesPosted => Interlocked.Read(ref _lossNoticesPosted);
 
     private void OnLossDeliveredThrough(long session) => AnnounceUnreconciledLoss();
 
@@ -554,6 +561,7 @@ public sealed class VerbaraServer : IVerbaraServer
             if (mark == _notifiedMark)
                 return;
             _notifiedMark = mark;
+            Interlocked.Increment(ref _lossNoticesPosted);
         }
 
         // Posted with no execution context: never on the caller's thread (the connection's notification queue, or its
@@ -609,7 +617,10 @@ public sealed class VerbaraServer : IVerbaraServer
         lock (_channelReadGate)
         {
             var (sampled, received) = SampleChannelRead(session);
-            return (sampled, received, (++_channelReadOpenings, ++_channelReadsInFlight > 1));
+            var opening = ++_channelReadOpenings;
+            var overlapped = ++_channelReadsInFlight > 1;
+            ChannelReadOpened?.Invoke(opening, sampled);
+            return (sampled, received, (opening, overlapped));
         }
     }
 
@@ -621,15 +632,15 @@ public sealed class VerbaraServer : IVerbaraServer
     {
         var sampled = ReadCurrentEventLossEpoch();
         var received = session?.Connection.ReceivedThrough ?? default;
-        ChannelReadOpened?.Invoke(_channelReadOpenings + 1);
         return (sampled, received);
     }
 
     /// <summary>
-    /// Null in production; observes a channel read's loss sample as it is taken, with the opening number the read takes:
-    /// the guard that the sample stays inside the read gate's acquisition that assigns that number.
+    /// Null in production; called inside the read gate's acquisition that opens a channel read, after its sample and its
+    /// count, with the opening number the read took and the loss sample it returns and publishes: the guard that the
+    /// sample is taken inside that acquisition, not before it.
     /// </summary>
-    internal Action<long>? ChannelReadOpened { get; set; }
+    internal Action<long, EventLossEpoch>? ChannelReadOpened { get; set; }
 
     /// <summary>Whether the current thread holds the channel-read gate; read by a test from <see cref="ChannelReadOpened"/>.</summary>
     internal bool ChannelReadGateHeld => _channelReadGate.IsHeldByCurrentThread;

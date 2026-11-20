@@ -366,7 +366,7 @@ public sealed class AmiConnection : IAmiConnection
     /// </remarks>
     internal event Action<long>? LossDeliveredThrough;
 
-    private void RaiseLossDeliveredThrough(long session)
+    internal void RaiseLossDeliveredThrough(long session)
     {
         try
         {

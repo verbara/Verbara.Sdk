@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Threading.Channels;
@@ -134,6 +135,8 @@ public sealed partial class ChannelReadCoverageTests
             first.Server.Should().BeSameAs(run.Server, "the notice names its server");
             first.Reading.Should().BeTrue("the reading is true when the notice is raised");
             notices.Reader.TryRead(out _).Should().BeFalse("the two drops were delivered through together: one notice");
+            run.Server.LossNoticesPosted.Should().Be(1,
+                "counted when the notice is decided, so a duplicate still on its way to the thread pool is seen too");
         }
     }
 
@@ -304,6 +307,278 @@ public sealed partial class ChannelReadCoverageTests
 
         fromDisposed.Reader.TryRead(out _).Should().BeFalse(
             "the same signal reached the witness, and a server whose disposal has begun raises nothing");
+    }
+
+    // ---- A load of the server owns the loss while it runs ----
+
+    [Fact]
+    public async Task UnreconciledLossDelivered_ShouldNotBeRaised_WhenTheReloadAfterAReconnectCoversTheLossItReads()
+    {
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = new BootingAsterisk { BootedAtLogin = true };
+        var second = new BootingAsterisk { BootedAtLogin = true, StatusAnsweredAfter = answer.Task };
+        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+        var notices = Notices(run.Server);
+
+        first.CloseSession();
+        run.ReleaseSecondPeer();
+        await second.AskedAtLeast("Status", 1).WaitAsync(Run.Bound);
+        await PendingNotificationsAsync(run);
+        var settled = !run.Server.IsReconnectPending;
+        var postedDuringTheReload = run.Server.LossNoticesPosted;
+        var readingDuringTheReload = run.Server.HasUnreconciledLoss;
+        var reload = run.Server.ReconnectReload;
+        answer.SetResult();
+        await reload.WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            settled.Should().BeTrue("premise: the reconnect has settled while the reload's Status is unanswered");
+            postedDuringTheReload.Should().Be(0, "the reload, still reading the channels, owns the session change");
+            readingDuringTheReload.Should().BeFalse("a load of the server is running, and it reads the channels itself");
+            run.Server.LossNoticesPosted.Should().Be(0, "the reload covered the session change: nothing to announce");
+            notices.Reader.TryRead(out _).Should().BeFalse();
+            second.Asked("Status").Should().Be(1, "the reload's Status is the only one");
+            run.Server.HasUnreconciledLoss.Should().BeFalse("premise: the reload covered");
+        }
+    }
+
+    [Fact]
+    public async Task UnreconciledLossDelivered_ShouldStartNoReconciliation_WhenAHandlerFollowsTheGuideWhileTheReloadAfterAReconnectCovers()
+    {
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = new BootingAsterisk { BootedAtLogin = true };
+        var second = new BootingAsterisk { BootedAtLogin = true, StatusAnsweredAfter = answer.Task };
+        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+        var reconciliations = new ConcurrentQueue<Task>();
+        run.Server.UnreconciledLossDelivered += server => reconciliations.Enqueue(server.ReconcileChannelsAsync().AsTask());
+
+        first.CloseSession();
+        run.ReleaseSecondPeer();
+        await second.AskedAtLeast("Status", 1).WaitAsync(Run.Bound);
+        await PendingNotificationsAsync(run);
+        var reload = run.Server.ReconnectReload;
+        answer.SetResult();
+        await reload.WaitAsync(Run.Bound);
+        await Task.WhenAll(reconciliations).WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            run.Server.LossNoticesPosted.Should().Be(0, "the reload covered the loss it read: no notice");
+            reconciliations.Should().BeEmpty("no notice, so the handler started nothing");
+            second.Asked("Status").Should().Be(1, "the reload's Status is the only one");
+            run.Server.HasUnreconciledLoss.Should().BeFalse("the reload covered");
+            run.Server.HasPendingLoss.Should().BeFalse("nothing overlapped the reload's read");
+        }
+    }
+
+    [Fact]
+    public async Task UnreconciledLossDelivered_ShouldBeRaisedOnceTheReloadEnds_WhenTheReloadAfterAReconnectDoesNotCover()
+    {
+        using var spans = new Spans();
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = new BootingAsterisk { BootedAtLogin = true };
+        var second = new BootingAsterisk { BootedAtLogin = true, StatusAnsweredAfter = answer.Task, StatusRefusedFromAsk = 1 };
+        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+        var started = new TaskCompletionSource<(bool Reading, Task<Activity> Read)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        run.Server.UnreconciledLossDelivered += server =>
+        {
+            // The guide's handler. The reload's Status has been refused by now; the peer answers this one.
+            second.StatusRefusedFromAsk = 0;
+            started.TrySetResult((server.HasUnreconciledLoss, spans.TraceAsync(() => server.ReconcileChannelsAsync().AsTask())));
+        };
+
+        first.CloseSession();
+        run.ReleaseSecondPeer();
+        await second.AskedAtLeast("Status", 1).WaitAsync(Run.Bound);
+        await PendingNotificationsAsync(run);
+        var postedWhileTheReloadReads = run.Server.LossNoticesPosted;
+        var reload = run.Server.ReconnectReload;
+        answer.SetResult();
+        await reload.WaitAsync(Run.Bound);
+        var postedOnceTheReloadEnded = run.Server.LossNoticesPosted;
+        var (readingAtTheNotice, read) = await started.Task.WaitAsync(Run.Bound);
+        var span = await read.WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            postedWhileTheReloadReads.Should().Be(0, "the reload has not ended: it still owns the loss");
+            postedOnceTheReloadEnded.Should().Be(1, "the reload ended without covering: the end of the load announces it");
+            readingAtTheNotice.Should().BeTrue("the notice finds the reading true");
+            Tag(span, Covered).Should().Be("True", "no load runs any more, so the handler's reconciliation covers");
+            Tag(span, Overlapped).Should().BeNull("the reload's read had ended before the notice");
+            second.Asked("Status").Should().Be(2, "the refused reload's and the handler's");
+            run.Server.HasUnreconciledLoss.Should().BeFalse("the handler's reconciliation covered");
+        }
+    }
+
+    [Fact]
+    public async Task UnreconciledLossDelivered_ShouldBeRaisedWhenTheReconnectSettles_WhenTheReloadEndedWithoutCoveringWhileItWasPending()
+    {
+        var first = new BootingAsterisk { BootedAtLogin = true, StatusChannels = [] };
+        var second = new BootingAsterisk { BootedAtLogin = true, StatusRefusedFromAsk = 1 };
+        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+        var notices = Notices(run.Server);
+        using var hold = new HandlerHold();
+        run.Connection.Reconnected += () => hold.Block();
+
+        first.CloseSession();
+        run.ReleaseSecondPeer();
+        await hold.Held.WaitAsync(Run.Bound);
+
+        // The server's handler ran before the host's: the reload is the server's, and it ends while the host's is held.
+        var reload = run.Server.ReconnectReload;
+        await reload.WaitAsync(Run.Bound);
+        var pendingWhileHeld = run.Server.IsReconnectPending;
+        var postedWhileHeld = run.Server.LossNoticesPosted;
+        var readingWhileHeld = run.Server.HasUnreconciledLoss;
+        hold.Release();
+        await PendingNotificationsAsync(run);
+        var postedOnceSettled = run.Server.LossNoticesPosted;
+        var notice = await notices.Reader.ReadAsync().AsTask().WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            second.Asked("Status").Should().Be(1, "premise: the reload sent its Status and it was refused");
+            pendingWhileHeld.Should().BeTrue("premise: a handler of the reconnect has not returned");
+            postedWhileHeld.Should().Be(0, "a pending reconnect owns the loss");
+            readingWhileHeld.Should().BeFalse();
+            postedOnceSettled.Should().Be(1, "the reconnect settled with a loss its reload did not cover");
+            notice.Reading.Should().BeTrue();
+        }
+    }
+
+    [Fact]
+    public async Task UnreconciledLossDelivered_ShouldBeRaisedOnceTheLoadEnds_WhenADropIsDeliveredWhileRequestInitialStateAsyncRuns()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await StartAsync(peer);
+        var notices = Notices(run.Server);
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var agents = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.StatusAnsweredAfter = answer.Task;
+        peer.AnsweredAfter = new Dictionary<string, Task> { ["Agents"] = agents.Task };
+        var atBarrier = BarrierSignal(run);
+        var statusAsked = peer.Asked("Status") + 1;
+        var agentsAsked = peer.Asked("Agents") + 1;
+        var load = Task.Run(async () => await run.Server.RequestInitialStateAsync());
+        await peer.AskedAtLeast("Status", statusAsked).WaitAsync(Run.Bound);
+
+        // Lost after the load's Status was sent, so the load's sample does not hold it, and delivered while the load runs.
+        using (var hold = await HoldAndDropAsync(run, peer, "during-load-1", fence: false))
+        {
+            answer.SetResult();
+            await atBarrier.WaitAsync(Run.Bound);
+            await DeliverAsync(run, peer, hold, "during-load-1");
+        }
+        await peer.AskedAtLeast("Agents", agentsAsked).WaitAsync(Run.Bound);
+        var loadRunning = run.Server.IsLoadInFlight;
+        var readingDuringTheLoad = run.Server.HasUnreconciledLoss;
+        var postedDuringTheLoad = run.Server.LossNoticesPosted;
+        agents.SetResult();
+        await load.WaitAsync(Run.Bound);
+        var postedOnceTheLoadEnded = run.Server.LossNoticesPosted;
+        var notice = await notices.Reader.ReadAsync().AsTask().WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            loadRunning.Should().BeTrue("premise: the load waits for its Agents answer");
+            readingDuringTheLoad.Should().BeFalse("a load of the server is running");
+            postedDuringTheLoad.Should().Be(0, "no notice while a load of the server runs");
+            postedOnceTheLoadEnded.Should().Be(1, "the load ended without covering the drop delivered during it");
+            notice.Reading.Should().BeTrue();
+            run.Server.HasUnreconciledLoss.Should().BeTrue("nothing has covered the drop");
+        }
+    }
+
+    [Fact]
+    public async Task UnreconciledLossDelivered_ShouldNotBeRaisedAgain_WhenALoadEndsWithTheLossAlreadyAnnounced()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await StartAsync(peer);
+        var notices = Notices(run.Server);
+        using (var hold = await HoldAndDropAsync(run, peer, "announced-1"))
+            await DeliverAsync(run, peer, hold, "announced-1");
+        var first = await notices.Reader.ReadAsync().AsTask().WaitAsync(Run.Bound);
+        var postedBefore = run.Server.LossNoticesPosted;
+
+        peer.StatusRefusedFromAsk = peer.Asked("Status") + 1;
+        await run.Server.RequestInitialStateAsync().AsTask().WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            first.Reading.Should().BeTrue();
+            postedBefore.Should().Be(1, "premise: the delivered drop was announced");
+            run.Server.HasUnreconciledLoss.Should().BeTrue("premise: the load's Status was refused, so it covered nothing");
+            run.Server.LossNoticesPosted.Should().Be(1, "the end of the load found the same loss mark: one notice per loss");
+        }
+    }
+
+    [Fact]
+    public async Task UnreconciledLossDelivered_ShouldLetTheReloadEnd_WhenAHandlerOfANoticeTheReloadsEndRaisedDoesNotReturn()
+    {
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = new BootingAsterisk { BootedAtLogin = true, StatusChannels = [] };
+        var second = new BootingAsterisk { BootedAtLogin = true, StatusAnsweredAfter = answer.Task, StatusRefusedFromAsk = 1 };
+        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        run.Server.UnreconciledLossDelivered += _ =>
+        {
+            entered.TrySetResult();
+            release.Wait(Run.Bound + Run.Bound);
+        };
+
+        first.CloseSession();
+        run.ReleaseSecondPeer();
+        await second.AskedAtLeast("Status", 1).WaitAsync(Run.Bound);
+        await PendingNotificationsAsync(run);
+        var reload = run.Server.ReconnectReload;
+        answer.SetResult();
+        var handlerHeld = await Record.ExceptionAsync(() => entered.Task.WaitAsync(Run.Bound)) is null;
+        var reloadEnded = await Record.ExceptionAsync(() => reload.WaitAsync(Run.Bound)) is null;
+        release.Set();
+
+        using (new AssertionScope())
+        {
+            handlerHeld.Should().BeTrue("premise: the end of the reload raised the notice and its handler is held");
+            reloadEnded.Should().BeTrue("the notice is posted to the thread pool, so a held handler does not hold the reload");
+        }
+    }
+
+    [Fact]
+    public async Task UnreconciledLossDelivered_ShouldLetTheConnectionsNotificationsGoOn_WhenAHandlerOfANoticeTheSettleRaisedDoesNotReturn()
+    {
+        var first = new BootingAsterisk { BootedAtLogin = true, StatusChannels = [] };
+        var second = new BootingAsterisk { BootedAtLogin = true, StatusRefusedFromAsk = 1 };
+        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        run.Server.UnreconciledLossDelivered += _ =>
+        {
+            entered.TrySetResult();
+            release.Wait(Run.Bound + Run.Bound);
+        };
+        using var hold = new HandlerHold();
+        run.Connection.Reconnected += () => hold.Block();
+
+        first.CloseSession();
+        run.ReleaseSecondPeer();
+        await hold.Held.WaitAsync(Run.Bound);
+        await run.Server.ReconnectReload.WaitAsync(Run.Bound);
+        var postedWhileHeld = run.Server.LossNoticesPosted;
+        hold.Release();
+        var handlerHeld = await Record.ExceptionAsync(() => entered.Task.WaitAsync(Run.Bound)) is null;
+        var notificationsWentOn = await Record.ExceptionAsync(() => PendingNotificationsAsync(run)) is null;
+        release.Set();
+
+        using (new AssertionScope())
+        {
+            postedWhileHeld.Should().Be(0, "premise: the reload ended while the reconnect was pending");
+            handlerHeld.Should().BeTrue("premise: the settle raised the notice and its handler is held");
+            notificationsWentOn.Should().BeTrue(
+                "the notice is posted to the thread pool, so a held handler does not hold the connection's notifications");
+        }
     }
 
     // ---- Subscriber isolation ----
