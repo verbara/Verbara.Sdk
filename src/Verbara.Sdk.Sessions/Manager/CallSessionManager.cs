@@ -359,6 +359,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     public void AttachToServer(VerbaraServer server, string serverId)
     {
+        s_attachProbe.Value?.Observe(this, server, serverId);
         if (t_notificationDepth > 0)
             throw AttachRefused(serverId);
 

@@ -249,14 +249,55 @@ changes.
 - Behind a decorator over a registered engine, the sweep now sends `Status` and ends calls, and the queue counters now
   count key exits, timeouts and the end of the wait, as they do for an undecorated host. `CallsAbandoned` drops by the
   key exits and `CallsTimedOut` rises from 0.
-- A decorated host that attached the DI server by hand under `default` before the start now has that attach detached
-  by the SDK's stop, as an undecorated host always had.
 - A host that registers a `CallSessionManager` as itself beside a manager of its own that does not wrap it now hands
   the token and the sweep to that idle instance. Do not register an engine you never attach.
 
 To roll back, revert the package. A decorated single-server host then opens no session until it attaches the server by
 hand, its saves again run under a token that cannot be cancelled, and its queue counters again count key exits as
 abandoned and no timeouts.
+
+### Fixed: the single-server stop detaches only the attachment its own start installed (#629)
+
+`AddVerbaraSessions` and `AddVerbaraSessionsBuilder` attach the DI server under `default` at start, and called
+`DetachFromServer("default")` at stop without checking who had installed that attachment. Three kinds of undecorated
+host lost an attachment the SDK never made (a released SDK neither attached nor detached a manager that is not its
+engine):
+
+- **A host that attached the DI server under `default` before the start.** The start's attach added
+  nothing to the engine, and the stop then released the host's attachment: after the stop no new channel opened a
+  session, and the call in flight stayed `Created` when it hung up.
+- **A host whose start's attach threw** because its code had attached another server under `default`. The stop
+  released that other server's attachment.
+- **A host whose start failed before the SDK's attach ran** because an earlier hosted service threw. The stop released
+  the host's own attachment.
+
+Now the stop detaches only an attachment its start installed. The attachment is the host's when the SDK engine the host
+reaches already held `default` for the DI server before the start, and the start's own attach call reached that engine
+within the call, directly or through a decorator that forwards it; another attach landing on the engine meanwhile does
+not count. A start whose attach threw or never ran detaches nothing. The start still calls
+`AttachToServer` on the registered `ICallSessionManager` every time, so a decorator still sees one attach per start. No
+public API changes.
+
+**Behaviour change:** nothing changes for a host that attaches nothing by hand. For other hosts:
+
+- On an undecorated host, a `default` attachment of the DI server made before the start now survives the stop. New
+  channels keep opening sessions, and calls in flight keep ending, until the host detaches it. Saves started after the
+  stop still run under the token the host's stop cancels. A decorated host already kept such an attachment in released
+  versions, where the SDK neither attached nor detached a manager that is not its engine; it still keeps it, and its
+  decorator sees the SDK's attach (decorated-manager entry) and no detach.
+- A start whose attach threw or never ran now leaves every attachment in place at stop.
+- A `default` attachment made after the start still belongs to the SDK, and the stop still releases it. Attach again
+  after the stop if you need it.
+- A host's own `ICallSessionManager` received neither an attach nor a detach from the SDK in released versions. It is
+  now attached at start (decorated-manager entry) and detached at stop, also beside an SDK engine the host attached by
+  hand, which stays attached.
+- A decorator that does not forward `AttachToServer` to the engine it wraps within the call (it does not forward it,
+  forwards it later, or forwards it from a thread that was already running) is treated as a manager of the host's own:
+  it is attached at start and detached at stop, so a `default` attached through it before the start is released at
+  the stop. In released versions the SDK did not touch it.
+
+To roll back, revert the package. An undecorated host that attached `default` by hand before the start then loses that
+attachment at the SDK's stop again.
 
 ### Fixed: a multi-server sessions host ends its session saves with the stop phase (#623)
 

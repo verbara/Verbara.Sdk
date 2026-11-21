@@ -26,6 +26,14 @@ var sessionManager = app.Services.GetRequiredService<ICallSessionManager>();
 sessionManager.Events.Subscribe(evt => Console.WriteLine(evt));
 ```
 
+**The host's stop releases only what its start attached.** `AddVerbaraSessions` and `AddVerbaraSessionsBuilder` attach
+the DI server under `default` at start and detach it at stop. If your code attached that same server under `default`
+before the host started, the start's attach adds nothing and the stop leaves your attachment in place: new channels
+still open sessions after the stop and the calls in flight still end, until you detach it. A start whose attach threw
+(another server already under `default`) or never ran (an earlier hosted service failed the start) detaches nothing.
+An attach you make after the start adds nothing to the SDK's, so the stop releases it; attach again after the stop if
+you need it. Saves started after the stop still run under the token the host's stop cancels.
+
 ## Domain Events
 
 `ICallSessionManager.Events` delivers each notification to every subscriber in turn, on the thread that raised it — the
@@ -270,7 +278,12 @@ Such a host gets what an undecorated host gets:
 
 - **The attach.** The single-server registrations attach the DI server under `default` at start and detach it at stop
   by calling `AttachToServer` and `DetachFromServer` on the `ICallSessionManager` you registered, whatever its type.
-  Your wrapper sees both calls and forwards them. A pool host attaches its servers through it as before.
+  Your wrapper sees both calls and forwards them. As on an undecorated host, a `default` you attached through your
+  wrapper before the start is yours: your wrapper sees the start's attach and no detach from the stop. The SDK tells
+  the two apart by whether its own attach call reached the registered engine before returning; another attach that
+  lands on the engine meanwhile does not count. A wrapper that does not forward that call to the engine within the
+  call (it does not forward it, forwards it later, or forwards it from a thread that was already running) is taken
+  for a manager of its own, and the stop detaches it. A pool host attaches its servers through it as before.
 - **The persistence token.** The SDK takes a `CallSessionManager` you registered as itself as the engine behind your
   manager, and hands it the token every save runs under, so a stop that is no longer graceful cuts an in-flight save
   short and the host's teardown ends it. It takes that registration as the engine whether or not your manager wraps

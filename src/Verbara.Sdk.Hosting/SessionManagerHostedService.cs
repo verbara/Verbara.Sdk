@@ -22,13 +22,31 @@ namespace Verbara.Sdk.Hosting;
 /// attaches, in <see cref="StartAsync"/>. Whichever of the two runs first attaches and the other does nothing, so the
 /// manager the host resolves sees one attach per start whatever its type: the engine takes a repeated attach of the same
 /// server under the same id as a no-op, but a decorator or a manager of the host's own would see the second call. A stop
-/// detaches, so a start after a stop attaches again.
+/// clears that state whether or not it detaches, so a start after a stop attaches again.
+/// </para>
+/// <para>
+/// The stop detaches only an attachment this service's start installed. When the SDK's engine the host reaches already
+/// held <c>"default"</c> for this server before the attach, and this service's own attach call reached that engine
+/// (directly, or through a decorator that forwards it within the call), the host installed the id first: the attach was a no-op on the engine, and the stop leaves the host's
+/// attachment in place. A start whose attach threw or never ran installed nothing, and its stop detaches nothing. An
+/// attach that went to a manager other than that engine, or a host attach made after start, is this service's to
+/// release.
 /// </para>
 /// </remarks>
 internal sealed class SessionManagerHostedService(
     ICallSessionManager sessionManager,
-    VerbaraServer server) : IHostedLifecycleService, IDisposable
+    VerbaraServer server,
+    CallSessionManager? engine) : IHostedLifecycleService, IDisposable
 {
+    /// <summary>
+    /// Builds the service as the unit tests do, with the engine read from the manager itself: the manager when it is the
+    /// SDK's engine, else none. The sessions registrations pass the engine <see cref="SessionEngine.Resolve"/> finds.
+    /// </summary>
+    public SessionManagerHostedService(ICallSessionManager sessionManager, VerbaraServer server)
+        : this(sessionManager, server, sessionManager as CallSessionManager)
+    {
+    }
+
     /// <summary>
     /// Serializes the attach, <see cref="StopAsync"/> and <see cref="Dispose"/>, so a start that races the disposal
     /// either attaches before it or is refused after it.
@@ -43,9 +61,16 @@ internal sealed class SessionManagerHostedService(
 
     /// <summary>
     /// Whether the manager is attached to the server now. Set by the first of <see cref="StartingAsync"/> and
-    /// <see cref="StartAsync"/>, cleared by the stop's detach, read and written under <see cref="_lifecycleGate"/>.
+    /// <see cref="StartAsync"/>, cleared by the stop, read and written under <see cref="_lifecycleGate"/>.
     /// </summary>
     private bool _attached;
+
+    /// <summary>
+    /// Whether the attachment under <c>"default"</c> is the one this service's start installed, so the stop releases it.
+    /// Set with <see cref="_attached"/> by a start whose attach returned, cleared by the stop, read and written under
+    /// <see cref="_lifecycleGate"/>.
+    /// </summary>
+    private bool _owned;
 
     /// <summary>
     /// Attaches the manager before any hosted service starts, so the server's first load reaches it.
@@ -86,15 +111,35 @@ internal sealed class SessionManagerHostedService(
             if (_attached)
                 return;
 
-            sessionManager.AttachToServer(server, "default");
+            // The host installed "default" first when the engine held it for this server before the attach and this
+            // service's own attach reached that engine; a held id whose engine the attach did not reach belongs to another
+            // manager, and this service's attach of its own manager is its own. The probe sees only this call's attach of
+            // this server under "default" to that engine, not another attach on it. A hand attach racing this start is
+            // out of scope.
+            var heldBefore = engine is not null && ReferenceEquals(engine.AttachedServer("default"), server);
+            var reachedEngine = false;
+            if (heldBefore)
+            {
+                using var probe = engine!.ProbeAttach(server, "default");
+                sessionManager.AttachToServer(server, "default");
+                reachedEngine = probe.Reached;
+            }
+            else
+            {
+                sessionManager.AttachToServer(server, "default");
+            }
+
             _attached = true;
+            _owned = !(heldBefore && reachedEngine);
         }
     }
 
     /// <summary>
-    /// Detaches the manager, so no server event can start a new save while the shutdown budget runs. The host's stop
-    /// token is wired onto the persistence token by <see cref="SessionPersistenceTokenService"/>, after every hosted
-    /// service's stop has returned. A stop after disposal does nothing.
+    /// Detaches the manager when this service's start installed the attachment, so no server event can start a new save
+    /// while the shutdown budget runs. An attachment the host installed before start stays; saves it starts after this
+    /// stop still run under the persistence token, which the host's stop token cuts. The host's stop token is wired onto
+    /// the persistence token by <see cref="SessionPersistenceTokenService"/>, after every hosted service's stop has
+    /// returned. A stop after disposal does nothing.
     /// </summary>
     public Task StopAsync(CancellationToken cancellationToken)
     {
@@ -103,8 +148,10 @@ internal sealed class SessionManagerHostedService(
             if (_disposed)
                 return Task.CompletedTask;
 
-            sessionManager.DetachFromServer("default");
+            if (_owned)
+                sessionManager.DetachFromServer("default");
             _attached = false;
+            _owned = false;
         }
 
         return Task.CompletedTask;

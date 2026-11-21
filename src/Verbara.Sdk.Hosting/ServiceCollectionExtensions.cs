@@ -310,7 +310,7 @@ public static class ServiceCollectionExtensions
         Action<SessionOptions>? configure = null)
     {
         AddSessionsCore(services, configure);
-        services.AddSingleton<IHostedService, SessionManagerHostedService>();
+        services.AddSingleton<IHostedService>(NewSessionManagerHostedService);
         AddSingleServerSweep(services);
         services.TryAddSingleton(SingleServerSweepRegistration.Instance);
         return services;
@@ -329,11 +329,18 @@ public static class ServiceCollectionExtensions
         Action<SessionOptions>? configure = null)
     {
         AddSessionsCore(services, configure);
-        services.AddSingleton<IHostedService, SessionManagerHostedService>();
+        services.AddSingleton<IHostedService>(NewSessionManagerHostedService);
         AddSingleServerSweep(services);
         services.TryAddSingleton(SingleServerSweepRegistration.Instance);
         return new SessionsBuilder(services);
     }
+
+    /// <summary>
+    /// Builds the single-server attach service with the engine the host reaches, which it reads to tell its own attach
+    /// from one the host installed before start.
+    /// </summary>
+    private static SessionManagerHostedService NewSessionManagerHostedService(IServiceProvider sp) =>
+        new(sp.GetRequiredService<ICallSessionManager>(), sp.GetRequiredService<VerbaraServer>(), SessionEngine.Resolve(sp));
 
     /// <summary>
     /// Add session engine services for multi-server deployments using <see cref="VerbaraServerPool"/>, and the

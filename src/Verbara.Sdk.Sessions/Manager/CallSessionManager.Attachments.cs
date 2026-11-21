@@ -1,3 +1,5 @@
+using Verbara.Sdk.Live.Server;
+
 namespace Verbara.Sdk.Sessions.Manager;
 
 public sealed partial class CallSessionManager
@@ -18,6 +20,84 @@ public sealed partial class CallSessionManager
 
     /// <summary>The releases running now, by server id. Read and written only under <c>_attachLock</c>.</summary>
     private readonly Dictionary<string, ReleaseInProgress> _releasesInProgress = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The attach probe the current call carries, or <see langword="null"/>. An <see cref="AsyncLocal{T}"/>, so it flows
+    /// with the caller's execution context: into the forward a decorator makes on the caller's thread, or on a thread it
+    /// starts from the call and waits for, and into nothing that already ran before the probe was opened.
+    /// </summary>
+    private static readonly AsyncLocal<AttachProbe?> s_attachProbe = new();
+
+    /// <summary>
+    /// Opens a probe for an attach of <paramref name="server"/> under <paramref name="serverId"/> to this engine, made by
+    /// the caller while the probe is open. The single-server hosted service opens one around its own attach to learn
+    /// whether that attach reached this engine, directly or through a decorator, or went to another manager. Dispose it
+    /// as soon as the attach returns.
+    /// </summary>
+    internal AttachProbe ProbeAttach(VerbaraServer server, string serverId) => new(this, server, serverId);
+
+    /// <summary>
+    /// Whether one attach reached one engine, set by that engine's <see cref="AttachToServer"/> on entry, whatever the
+    /// attach's outcome, when the attach is the very one probed: the same engine and server by reference and the same id
+    /// by ordinal comparison, made while the probe is open and inside the call that opened it. Another attach on the
+    /// engine, from this thread or any other, does not set it; nor does the probed attach made later from a context the
+    /// call left behind, because <see cref="Dispose"/> seals the probe. It sees only a forward made within the call: one
+    /// made later, without waiting, or from a thread that was already running is not seen.
+    /// </summary>
+    internal sealed class AttachProbe : IDisposable
+    {
+        private readonly AttachProbe? _previous;
+        private CallSessionManager? _engine;
+        private VerbaraServer? _server;
+        private string? _serverId;
+        private int _sealed;
+        private int _reached;
+
+        internal AttachProbe(CallSessionManager engine, VerbaraServer server, string serverId)
+        {
+            _engine = engine;
+            _server = server;
+            _serverId = serverId;
+            _previous = s_attachProbe.Value;
+            s_attachProbe.Value = this;
+        }
+
+        /// <summary>Whether the probed attach reached the engine while the probe was open.</summary>
+        public bool Reached => Volatile.Read(ref _reached) != 0;
+
+        /// <summary>Marks the probe reached when this attach is the probed one and the probe is still open.</summary>
+        internal void Observe(CallSessionManager engine, VerbaraServer server, string serverId)
+        {
+            if (Volatile.Read(ref _sealed) != 0)
+                return;
+            if (ReferenceEquals(_engine, engine) && ReferenceEquals(_server, server)
+                && string.Equals(_serverId, serverId, StringComparison.Ordinal))
+                Volatile.Write(ref _reached, 1);
+        }
+
+        /// <summary>
+        /// Restores the probe the context carried before this one, seals this one and drops its references, so a context
+        /// that captured it holds neither the engine nor the server.
+        /// </summary>
+        public void Dispose()
+        {
+            s_attachProbe.Value = _previous;
+            Volatile.Write(ref _sealed, 1);
+            _engine = null;
+            _server = null;
+            _serverId = null;
+        }
+    }
+
+    /// <summary>
+    /// The server attached under <paramref name="serverId"/> now, or <see langword="null"/>; read under the attach lock.
+    /// The single-server hosted service reads it before its attach to learn whether the host installed the id first.
+    /// </summary>
+    internal VerbaraServer? AttachedServer(string serverId)
+    {
+        lock (_attachLock)
+            return _serverSubs.TryGetValue(serverId, out var subs) ? subs.Server : null;
+    }
 
     /// <summary>
     /// How deep the current thread is inside the session engine's own work: entered by every handler of an

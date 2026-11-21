@@ -185,9 +185,12 @@ internal sealed class ParkedStartHostedService : IHostedService
 /// <summary>
 /// A pass-through decorator over a session manager, the shape a host writes for logging or metrics. It records the
 /// attach and detach calls it forwards, and forwards <see cref="DisposeAsync"/> only when it owns the manager it wraps.
-/// It implements nothing but <see cref="ICallSessionManager"/>: no SDK seam lets the SDK see through it.
+/// It implements nothing but <see cref="ICallSessionManager"/>: no SDK seam lets the SDK see through it. A test that
+/// needs another forwarding shape passes <c>attachVia</c>, which receives the forward of the attach and decides how,
+/// and on which thread, it runs; without it the attach is forwarded inline.
 /// </summary>
-internal sealed class ForwardingManager(ICallSessionManager inner, bool ownsInner) : ICallSessionManager
+internal sealed class ForwardingManager(ICallSessionManager inner, bool ownsInner, Action<Action>? attachVia = null)
+    : ICallSessionManager
 {
     private readonly ConcurrentQueue<string> _calls = new();
 
@@ -217,7 +220,10 @@ internal sealed class ForwardingManager(ICallSessionManager inner, bool ownsInne
     public void AttachToServer(Verbara.Sdk.Live.Server.VerbaraServer server, string serverId)
     {
         _calls.Enqueue($"attach:{serverId}");
-        inner.AttachToServer(server, serverId);
+        if (attachVia is null)
+            inner.AttachToServer(server, serverId);
+        else
+            attachVia(() => inner.AttachToServer(server, serverId));
     }
 
     public void DetachFromServer(string serverId)
