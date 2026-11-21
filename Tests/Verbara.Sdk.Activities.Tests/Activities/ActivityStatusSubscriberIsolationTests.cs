@@ -347,7 +347,7 @@ public sealed class ActivityStatusSubscriberIsolationTests(ITestOutputHelper out
             else
             {
                 release.TrySetResult();
-                SpinWait.SpinUntil(() => Volatile.Read(ref returned) == 1 || start.IsCompleted, SignalTimeout);
+                SpinWait.SpinUntil(() => Volatile.Read(ref returned) == 1 || start.IsCompleted, SignalTimeout); // fence-allow: GUARD-TIMEOUT — failure bound on the body's return signal, never the winning arm of a green run
                 ending = Task.CompletedTask;
             }
 
