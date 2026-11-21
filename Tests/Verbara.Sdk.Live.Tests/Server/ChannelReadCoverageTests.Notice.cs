@@ -492,6 +492,59 @@ public sealed partial class ChannelReadCoverageTests
     }
 
     [Fact]
+    public async Task UnreconciledLossDelivered_ShouldBeRaisedOnceTheLoadEnds_WhenALoadCutShortByItsCallerLeavesADeliveredDrop()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await StartAsync(peer);
+        var notices = Notices(run.Server);
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var agents = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.StatusAnsweredAfter = answer.Task;
+        peer.AnsweredAfter = new Dictionary<string, Task> { ["Agents"] = agents.Task };
+        var atBarrier = BarrierSignal(run);
+        var statusAsked = peer.Asked("Status") + 1;
+        var agentsAsked = peer.Asked("Agents") + 1;
+        using var cts = new CancellationTokenSource();
+        var load = Task.Run(async () => await run.Server.RequestInitialStateAsync(cts.Token));
+        await peer.AskedAtLeast("Status", statusAsked).WaitAsync(Run.Bound);
+
+        // Lost after the load's Status was sent and delivered while the load runs; the caller then cuts the load short while
+        // it waits for its Agents answer, so the load ends by an exception, never having transferred its read.
+        using (var hold = await HoldAndDropAsync(run, peer, "cut-1", fence: false))
+        {
+            answer.SetResult();
+            await atBarrier.WaitAsync(Run.Bound);
+            await DeliverAsync(run, peer, hold, "cut-1");
+        }
+        await peer.AskedAtLeast("Agents", agentsAsked).WaitAsync(Run.Bound);
+        var loadRunning = run.Server.IsLoadInFlight;
+        var readingDuringTheLoad = run.Server.HasUnreconciledLoss;
+        var postedDuringTheLoad = run.Server.LossNoticesPosted;
+        cts.Cancel();
+        var thrown = await Record.ExceptionAsync(() => load.WaitAsync(Run.Bound));
+        var postedOnceTheLoadEnded = run.Server.LossNoticesPosted;
+        agents.SetResult();
+        // Waited for only once posted: a notice that was never posted fails the count below, not the hang bound.
+        (VerbaraServer Server, bool Reading)? notice = postedOnceTheLoadEnded == 0
+            ? null
+            : await notices.Reader.ReadAsync().AsTask().WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            loadRunning.Should().BeTrue("premise: the load waits for its Agents answer");
+            readingDuringTheLoad.Should().BeFalse("a load of the server is running");
+            postedDuringTheLoad.Should().Be(0, "no notice while a load of the server runs");
+            thrown.Should().BeAssignableTo<OperationCanceledException>("premise: the caller's token cut the load short");
+            postedOnceTheLoadEnded.Should().Be(1, "a load that ends by an exception announces the loss it leaves, as one that completes does");
+            notice.Should().NotBeNull("the posted notice reaches the subscriber");
+            notice?.Server.Should().BeSameAs(run.Server);
+            notice?.Reading.Should().BeTrue("the notice finds the reading true");
+            run.Server.HasUnreconciledLoss.Should().BeTrue("nothing has covered the drop");
+            run.Server.LossNoticesPosted.Should().Be(1, "one notice per loss");
+        }
+    }
+
+    [Fact]
     public async Task UnreconciledLossDelivered_ShouldNotBeRaisedAgain_WhenALoadEndsWithTheLossAlreadyAnnounced()
     {
         var peer = new BootingAsterisk { BootedAtLogin = true };
