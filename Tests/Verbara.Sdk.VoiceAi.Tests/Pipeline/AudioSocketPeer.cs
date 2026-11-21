@@ -48,7 +48,7 @@ internal static class AudioSocketPeer
 /// channel, that the server has raised that channel's session.
 /// </summary>
 /// <remarks>
-/// The server invokes its multicast delegate in subscription order and awaits only the last result.
+/// The server invokes every subscriber in subscription order before it awaits any of their tasks.
 /// A probe subscribed after the broker has started therefore fires only after the broker's delegate
 /// has returned for the same session, and the broker starts its handler inline. So when
 /// <see cref="Started"/> completes, the broker has already handed that session on, or it never will

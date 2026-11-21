@@ -502,6 +502,24 @@ The refused connection receives a hangup frame, so on Asterisk 20 and later `Aud
 
 **Solutions:** raise `MaxConcurrentSessions` if the host has room, or spread calls over more servers. The refused connection receives a hangup frame, with the same Asterisk 20 and later / Asterisk 18 behaviour as above. Refused connections are not counted in `audiosocket.connections.accepted` and open no `audiosocket.session` activity.
 
+### `SessionStartedSubscriberFailed`: an `OnSessionStarted` subscriber failed
+
+**Symptoms:** `[AudioSocket] An OnSessionStarted subscriber failed for channel <uuid>`, at Warning, with the exception, from `Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer`; `voiceai.audiosocket.subscriber_faults` (meter `Verbara.Sdk.VoiceAi.AudioSocket`) grows by one per failure.
+
+**Cause:** a handler of `AudioSocketServer.OnSessionStarted` threw, or returned a task that faulted. From 2.11.0 the server invokes every subscriber in subscription order, whatever an earlier one threw, and then awaits all of their tasks together; each failure is counted and logged when it happens, not when the other subscribers finish. What happens to the connection then:
+
+- **At least one subscriber completed:** the connection stays open. It belongs to the subscriber that completed (for example the session broker of `AddVoiceAiPipeline` or `AddOpenAiRealtimeBridge`, which returns at once and serves the call in the background), so a side handler's failure no longer ends that call.
+- **Every subscriber failed** (with one subscriber, its failure): the server writes a hangup frame and closes the connection, so on Asterisk 20 and later the call goes on in the dialplan after `AudioSocket()`; on Asterisk 18 any end from the server fails the application.
+
+`OutOfMemoryException` is not caught. A logger that throws while writing the Warning is ignored; the fault is already counted. A failure inside work a subscriber started in the background (the broker's handler) is that subscriber's to report: the broker logs it and hangs the session up itself.
+
+**Up to 2.10.x** only the last subscriber's task was awaited: a synchronous throw skipped every later subscriber and closed the connection with no hangup frame; an earlier subscriber's faulted task was lost without a trace; the last subscriber's failure closed the connection even when another one was serving the call. The failure was logged at Error as `[AudioSocket] Error handling connection` (`HandleConnectionError`), which a subscriber's failure no longer produces.
+
+**Solutions:**
+1. Fix what throws (the exception is attached to the Warning).
+2. If your code relied on a throw to end the call while another subscriber completed, end it yourself: call `session.HangupAsync()` and return.
+3. A subscriber that owns the call and fails next to another one that completes (a passive observer, say) leaves the connection open, and Asterisk keeps the caller until the far end hangs up. Have the owner catch its own failure and call `HangupAsync`, or keep the observer on its own server.
+
 ### `StreamLimitReached`: an ARI audio server is at `MaxConcurrentStreams`
 
 **Symptoms:** `[AudioSocket] Stream limit reached (<limit>), rejecting connection` from `Verbara.Sdk.Ari.Audio.AudioSocketServer`, or `[WebSocketAudio] Stream limit reached (<limit>), rejecting connection` from `Verbara.Sdk.Ari.Audio.WebSocketAudioServer`, at Warning. The ExternalMedia call whose connection was refused gets no audio.

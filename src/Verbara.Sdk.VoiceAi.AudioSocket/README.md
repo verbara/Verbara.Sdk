@@ -36,7 +36,10 @@ server.OnSessionStarted += async session =>
 - `AudioSocketServer` — `IHostedService` TCP server; accepts Asterisk AudioSocket connections
 - `AudioSocketSession` — per-call session with `ReadAudioAsync()` and `WriteAudioAsync()` for 20 ms PCM16 frames, and an idempotent `HangupAsync()`
 - UUID handshake: automatically reads the channel UUID frame from Asterisk on connection
-- `OnSessionStarted` event for routing sessions to custom handlers
+- `OnSessionStarted` event for routing sessions to custom handlers. Every subscriber runs and is awaited
+  whatever another one throws; each failure is logged at Warning and counted on
+  `voiceai.audiosocket.subscriber_faults`, and the connection is closed (with a hangup frame) only when every
+  subscriber failed
 - `AddAudioSocketServer()` DI extension for one-line registration
 - Zero-copy `System.IO.Pipelines` framing; Native AOT compatible
 
