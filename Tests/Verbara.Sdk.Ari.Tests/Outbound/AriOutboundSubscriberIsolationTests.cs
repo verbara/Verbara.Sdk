@@ -62,6 +62,7 @@ public sealed class AriOutboundSubscriberIsolationTests
         // Assert
         using (new AssertionScope())
         {
+            events.Count.Should().Be(1, "the later observer subscribed once, to the one connection it was told about");
             delivered!.Type.Should().Be("StasisStart");
             connection!.IsConnected.Should().BeTrue("an observer that throws does not close the connection");
             listener.ActiveConnectionCount.Should().Be(1, "the connection stays tracked");
@@ -211,6 +212,7 @@ public sealed class AriOutboundSubscriberIsolationTests
         // Assert
         using (new AssertionScope())
         {
+            subscriptions.Count.Should().Be(2, "both observers subscribed once, to the one connection announced");
             received.Should().HaveCount(2);
             Volatile.Read(ref thrower).Should().Be(2, "a direct subscriber that threw stays subscribed");
             connection!.IsConnected.Should().BeTrue("an observer that throws does not close the connection");
@@ -255,6 +257,7 @@ public sealed class AriOutboundSubscriberIsolationTests
         // Assert
         using (new AssertionScope())
         {
+            subscriptions.Count.Should().Be(2, "both observers subscribed once, to the one connection announced");
             ended.Should().BeTrue("the later observer receives the completion the first one threw on");
             faults.For("events").Should().Be(1);
             logger.Entries.Should().ContainSingle(
@@ -301,6 +304,7 @@ public sealed class AriOutboundSubscriberIsolationTests
         // Assert
         using (new AssertionScope())
         {
+            subscriptions.Count.Should().Be(2, "the composed and the direct observer subscribed once, to the one connection announced");
             Volatile.Read(ref composedCalls).Should().Be(1, "the operator ends its subscription on the first failure");
             faults.For("events").Should().Be(1, "the composed subscription's failure is counted once");
             connection!.IsConnected.Should().BeTrue();
@@ -340,6 +344,7 @@ public sealed class AriOutboundSubscriberIsolationTests
         // Assert
         using (new AssertionScope())
         {
+            subscriptions.Count.Should().Be(2, "both observers subscribed once, to the one connection announced");
             faults.For("events").Should().Be(2, "each fault is counted before the line that failed");
             connection!.IsConnected.Should().BeTrue();
         }
