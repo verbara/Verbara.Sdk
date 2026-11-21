@@ -53,8 +53,9 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
         _server.Channels.OnNewChannel("uid-1", "PJSIP/100-001", ChannelState.Ring, linkedId: "linked-1");
 
         // Ends on the attach's own signal: a channel the server reports opens a session. Calling
-        // AttachToServer again and expecting no throw proved nothing — a second attach under the same id
-        // replaces the subscription set without detaching the first, so it is green with no attach at all.
+        // AttachToServer again and expecting no throw proved nothing — a repeated attach of the same server
+        // under the same id is a no-op, and a first one throws no more, so it is green whether the service
+        // attached or not.
         csm.ActiveSessions.Should().ContainSingle("the started service attached the manager to the server")
             .Which.LinkedId.Should().Be("linked-1");
 
@@ -81,25 +82,30 @@ public sealed class SessionManagerHostedServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task StartAsync_ShouldNotThrow_WhenNotConcreteCallSessionManager()
+    public async Task StartAsync_ShouldAttachThroughTheInterface_WhenTheManagerIsNotTheEngine()
     {
         var mockManager = Substitute.For<ICallSessionManager>();
         var sut = new SessionManagerHostedService(mockManager, _server);
 
-        var act = () => sut.StartAsync(CancellationToken.None);
+        await sut.StartingAsync(CancellationToken.None);
+        await sut.StartAsync(CancellationToken.None);
 
-        await act.Should().NotThrowAsync();
+        // Was StartAsync_ShouldNotThrow_WhenNotConcreteCallSessionManager, which asserted the old skip: a manager that is
+        // not the engine (a decorator, a host's own, a substitute) is attached through the interface, once.
+        mockManager.Received(1).AttachToServer(_server, "default");
     }
 
     [Fact]
-    public async Task StopAsync_ShouldNotThrow_WhenNotConcreteCallSessionManager()
+    public async Task StopAsync_ShouldDetachThroughTheInterface_WhenTheManagerIsNotTheEngine()
     {
         var mockManager = Substitute.For<ICallSessionManager>();
         var sut = new SessionManagerHostedService(mockManager, _server);
+        await sut.StartAsync(CancellationToken.None);
 
-        var act = () => sut.StopAsync(CancellationToken.None);
+        await sut.StopAsync(CancellationToken.None);
 
-        await act.Should().NotThrowAsync();
+        // Was StopAsync_ShouldNotThrow_WhenNotConcreteCallSessionManager, which asserted the old skip.
+        mockManager.Received(1).DetachFromServer("default");
     }
 
     [Fact]

@@ -4,9 +4,9 @@ using Microsoft.Extensions.Options;
 namespace Verbara.Sdk.Sessions.Manager;
 
 /// <summary>
-/// Counts each queue's calls from the session manager's domain events and, over a manager that is an
-/// <see cref="IQueueVisitSource"/> (the SDK's own <see cref="CallSessionManager"/>), from Asterisk's reports on each
-/// visit: the leave, the abandon report and the timeout.
+/// Counts each queue's calls from the session manager's domain events and, when a visit source is reachable (the SDK's
+/// own <see cref="CallSessionManager"/>, whether it is the manager itself or the engine behind a host's decorator), from
+/// Asterisk's reports on each visit: the leave, the abandon report and the timeout.
 /// <para>
 /// A visit is <b>open</b> from its join (counted offered and waiting), <b>left</b> once Asterisk reports the caller
 /// leaving the queue (no longer waiting), and <b>gone</b> once the queue connects it. Every transition happens under
@@ -30,8 +30,9 @@ namespace Verbara.Sdk.Sessions.Manager;
 /// <item>A call released with its server (<see cref="CallReleasedEvent"/>) is not an ending: its visit closes counted
 /// neither answered nor abandoned, a visit still open stops counting as waiting, and the offered count is unchanged.</item>
 /// </list>
-/// Over any other <see cref="ICallSessionManager"/> no visit signal arrives: a visit closes only at its connect, at the
-/// call's next join or at its end, abandoned unless connected, and <see cref="QueueSession.CallsTimedOut"/> stays 0.
+/// With no visit source (a manager of the host's own, or a decorator over an engine the container does not know) no
+/// visit signal arrives: a visit closes only at its connect, at the call's next join or at its end, abandoned unless
+/// connected, and <see cref="QueueSession.CallsTimedOut"/> stays 0.
 /// </summary>
 internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
 {
@@ -43,12 +44,22 @@ internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
     private readonly IDisposable _subscription;
     private readonly IQueueVisitSource? _visitSource;
 
+    /// <summary>Over <paramref name="manager"/> alone: its visit signals when it is the engine itself.</summary>
     public QueueSessionTracker(ICallSessionManager manager, IOptions<SessionOptions> options)
+        : this(manager, manager as IQueueVisitSource, options)
+    {
+    }
+
+    /// <summary>
+    /// Domain events from <paramref name="manager"/>, the manager the host resolves (a decorator included), and visit
+    /// signals from <paramref name="visitSource"/>, the engine behind it, or none.
+    /// </summary>
+    public QueueSessionTracker(ICallSessionManager manager, IQueueVisitSource? visitSource, IOptions<SessionOptions> options)
     {
         _metricsWindow = options.Value.QueueMetricsWindow;
         _slaThreshold = options.Value.SlaThreshold;
         _subscription = manager.Events.Subscribe(new EventObserver(this));
-        _visitSource = manager as IQueueVisitSource;
+        _visitSource = visitSource;
         if (_visitSource is not null)
         {
             _visitSource.VisitLeft += HandleVisitLeft;
