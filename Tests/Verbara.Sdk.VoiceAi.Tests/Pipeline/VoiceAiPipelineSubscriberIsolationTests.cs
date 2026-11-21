@@ -206,6 +206,58 @@ public sealed class VoiceAiPipelineSubscriberIsolationTests
         logger.SubscriberWarnings.Should().ContainSingle().Which.Message.Should().Contain("error");
     }
 
+    /// <summary>
+    /// The three events published inside a provider's or the handler's own error handling. Up to 2.10.x a subscriber
+    /// that threw on one of them did not end the session: its exception was taken for a failure of the step around the
+    /// publish, so it counted <c>stt.transcriptions.failed</c> or <c>tts.syntheses.failed</c>, raised a
+    /// <see cref="PipelineErrorEvent"/> naming that step, and dropped the rest of the turn. The subscriber's failure is
+    /// now its own, so the turn finishes and no step is reported failed.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(TranscriptReceivedEvent))]
+    [InlineData(nameof(ResponseGeneratedEvent))]
+    [InlineData(nameof(SynthesisEndedEvent))]
+    public async Task HandleSessionAsync_ShouldFinishTheTurnAndReportNoStepFailed_WhenASubscriberThrowsOnlyOnAnEventPublishedInsideAStep(
+        string eventType)
+    {
+        using var metrics = new MeterCapture(MeterName);
+        using var stt = new MeterCapture("Verbara.Sdk.VoiceAi.Stt");
+        using var tts = new MeterCapture("Verbara.Sdk.VoiceAi.Tts");
+        await using var pipeline = BuildPipeline(new CapturingLogger());
+        using var first = pipeline.Events.Subscribe(e =>
+        {
+            if (e.GetType().Name == eventType)
+                throw new InvalidOperationException("selective-handler");
+        });
+        using var capture = new PipelineEventCapture(pipeline);
+
+        var run = await RunSingleUtteranceAsync(pipeline, capture);
+
+        var seen = string.Join(",", capture.Events.Select(static e =>
+            e is PipelineErrorEvent error ? $"PipelineError({error.Source})" : e.GetType().Name));
+        var observed = $"fault={run.Fault?.GetType().Name ?? "none"} events=[{seen}] " +
+            $"stt.failed={stt.Get("stt.transcriptions.failed")} tts.failed={tts.Get("tts.syntheses.failed")} " +
+            $"subscriber_faults={metrics.Get(SubscriberFaults)}";
+        observed.Should().Be(
+            "fault=none events=[SpeechStartedEvent,SpeechEndedEvent,TranscriptReceivedEvent,ResponseGeneratedEvent," +
+            "SynthesisStartedEvent,SynthesisEndedEvent] stt.failed=0 tts.failed=0 subscriber_faults=1",
+            "a subscriber's failure on an event published inside a step is the subscriber's, not the step's: the turn " +
+            "finishes, no recognition or synthesis is counted failed, no PipelineErrorEvent is raised, and the failure " +
+            "is counted once as the subscriber's");
+    }
+
+    [Fact]
+    public async Task Events_ShouldThrowArgumentNullAndCountNothing_WhenTheObserverIsNull()
+    {
+        using var metrics = new MeterCapture(MeterName);
+        await using var pipeline = BuildPipeline(new CapturingLogger());
+
+        var subscribing = () => pipeline.Events.Subscribe(null!);
+
+        subscribing.Should().Throw<ArgumentNullException>("a null observer is the caller's error, as on the subject itself");
+        metrics.Get(SubscriberFaults).Should().Be(0, "no subscriber exists, so none failed");
+    }
+
     // The only exception the guard lets through is one only the runtime may throw; a test has to raise it itself.
 #pragma warning disable CA1859, CA2201, MA0012
     private static Exception OutOfMemory() => new OutOfMemoryException();

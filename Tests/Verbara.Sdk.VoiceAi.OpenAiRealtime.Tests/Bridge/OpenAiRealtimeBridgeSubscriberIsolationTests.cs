@@ -70,6 +70,9 @@ public sealed class OpenAiRealtimeBridgeSubscriberIsolationTests
         warnings.Select(w => w.Message).Should().Contain(
             m => m.Contains(nameof(RealtimeSpeechStartedEvent), StringComparison.Ordinal),
             "the Warning names the event the subscriber threw on");
+        seen.ChannelId.Should().NotBe(Guid.Empty);
+        warnings.Should().OnlyContain(w => w.Message.StartsWith($"[{seen.ChannelId}] ", StringComparison.Ordinal),
+            "each Warning opens with the channel id of the call whose event the subscriber threw on");
     }
 
     [Fact]
@@ -200,13 +203,28 @@ public sealed class OpenAiRealtimeBridgeSubscriberIsolationTests
         log.SubscriberWarnings.Should().ContainSingle().Which.Message.Should().Contain("error");
     }
 
+    [Fact]
+    public async Task Events_ShouldThrowArgumentNullAndCountNothing_WhenTheObserverIsNull()
+    {
+        using var metrics = new MeterCapture(MeterName);
+        await using var bridge = new OpenAiRealtimeBridge(
+            Options.Create(new OpenAiRealtimeOptions { ApiKey = "test-key" }), new RealtimeFunctionRegistry([]),
+            NullLogger<OpenAiRealtimeBridge>.Instance);
+
+        var subscribing = () => bridge.Events.Subscribe(null!);
+
+        subscribing.Should().Throw<ArgumentNullException>("a null observer is the caller's error, as on the subject itself");
+        metrics.Get(SubscriberFaults).Should().Be(0, "no subscriber exists, so none failed");
+    }
+
     // The only exception the guard lets through is one only the runtime may throw; a test has to raise it itself.
 #pragma warning disable CA1859, CA2201, MA0012
     private static Exception OutOfMemory() => new OutOfMemoryException();
 #pragma warning restore CA1859, CA2201, MA0012
 
     private sealed record Observation(
-        Exception? Fault, bool EndedWhileServed, IReadOnlyList<RealtimeEvent> Events, long SubscriberFaults, long Failed)
+        Exception? Fault, bool EndedWhileServed, IReadOnlyList<RealtimeEvent> Events, long SubscriberFaults, long Failed,
+        Guid ChannelId)
     {
         public string FaultText => Fault is null ? "none" : $"{Fault.GetType().FullName}: {Fault.Message}";
     }
@@ -272,7 +290,8 @@ public sealed class OpenAiRealtimeBridgeSubscriberIsolationTests
             EndedWhileServed: sessionTask.IsCompleted,
             Events: collector.Events,
             SubscriberFaults: metrics.Get(SubscriberFaults),
-            Failed: metrics.Get(Failed));
+            Failed: metrics.Get(Failed),
+            ChannelId: session.ChannelId);
 
         await cts.CancelAsync();
         await Record.ExceptionAsync(() => sessionTask.WaitAsync(SignalTimeout));

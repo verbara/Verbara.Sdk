@@ -8,6 +8,7 @@ using Verbara.Sdk.Activities.Internal;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using NSubstitute;
+using Xunit.Abstractions;
 
 namespace Verbara.Sdk.Activities.Tests.Activities;
 
@@ -23,7 +24,7 @@ namespace Verbara.Sdk.Activities.Tests.Activities;
 /// <para>The counter is read by name, meter and tag, so this class compiles on a tree without it, and only this class's
 /// activity types are counted: another class's activities never reach the tally.</para>
 /// </remarks>
-public sealed class ActivityStatusSubscriberIsolationTests
+public sealed class ActivityStatusSubscriberIsolationTests(ITestOutputHelper output)
 {
     private const string MeterName = "Verbara.Sdk.Activities";
     private const string SubscriberFaults = "activities.status.subscriber_faults";
@@ -188,6 +189,53 @@ public sealed class ActivityStatusSubscriberIsolationTests
     }
 
     /// <summary>
+    /// Up to 2.10.x a throw on <c>InProgress</c> left the base's <c>SetStatus</c> inside the execution's <c>try</c>, so
+    /// the activity ended <c>Failed</c> without ever executing. The subscriber's failure is now its own: the activity
+    /// executes (its side effects happen) and ends <c>Completed</c>.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ActivityBases))]
+    public async Task StartAsync_ShouldExecuteAndComplete_WhenASubscriberThrowsOnInProgress(string activityBase)
+    {
+        using var faults = new FaultCounter();
+        var executions = 0;
+        var activity = IsolationActivities.Create(activityBase, _ =>
+        {
+            Interlocked.Increment(ref executions);
+            return ValueTask.CompletedTask;
+        });
+        using var subscription = activity.StatusChanges.Subscribe(status =>
+        {
+            if (status == ActivityStatus.InProgress)
+                throw new InvalidOperationException("in-progress-handler");
+        });
+
+        var starting = await Record.ExceptionAsync(() => activity.StartAsync().AsTask());
+        var status = activity.Status;
+        await activity.DisposeAsync();
+
+        using var scope = new AssertionScope();
+        starting.Should().BeNull("a status subscriber's failure is its own: StartAsync does not see it");
+        Volatile.Read(ref executions).Should().Be(1, "the activity executes whatever its subscriber threw on InProgress");
+        status.Should().Be(ActivityStatus.Completed, "the activity ends as it would with no failing subscriber, not Failed");
+        faults.Count(activity).Should().Be(1);
+    }
+
+    [Theory]
+    [MemberData(nameof(ActivityBases))]
+    public async Task StatusChanges_ShouldThrowArgumentNullAndCountNothing_WhenTheObserverIsNull(string activityBase)
+    {
+        using var faults = new FaultCounter();
+        var activity = IsolationActivities.Create(activityBase, _ => ValueTask.CompletedTask);
+
+        var subscribing = () => activity.StatusChanges.Subscribe(null!);
+
+        subscribing.Should().Throw<ArgumentNullException>("a null observer is the caller's error, as on the subject itself");
+        faults.Count(activity).Should().Be(0, "no subscriber exists, so the replay of Pending is no subscriber's failure");
+        await activity.DisposeAsync();
+    }
+
+    /// <summary>
     /// The arm no activity reaches: nothing raises <c>OnError</c> on an activity's subject, and the guard still has to
     /// keep what a subscriber throws on it away from the next subscriber.
     /// </summary>
@@ -216,24 +264,71 @@ public sealed class ActivityStatusSubscriberIsolationTests
     /// <c>CancelAsync</c>, and the disposal's completion follows. Whichever ending wins, the second subscriber sees it
     /// once, last, and then the completion; every failure is counted once; and no call throws.
     /// </summary>
+    /// <remarks>
+    /// Cancelled wins almost every round here (the release has to reach a thread-pool thread first): the split is
+    /// written to the test output. The leg below takes the other side of the race.
+    /// </remarks>
     [Theory]
     [MemberData(nameof(ActivityBases))]
     public async Task CancelAsync_ShouldDeliverOneEndingAndTheCompletionToTheOtherSubscriber_WhenTheExecutionEndsOnAnotherThreadAsItIsCancelled(
         string activityBase)
     {
+        var race = await RaceEndingsAsync(activityBase, RaceStart.ReleaseConcurrently);
+
+        race.Outcomes.Should().BeEmpty(
+            "a status subscriber's failure is its own on every round, whichever ending wins the race ({0})", race.Split);
+    }
+
+    /// <summary>
+    /// The other side of the race above: the test releases the execution and waits until its body has returned, so
+    /// the base is between the end of <c>ExecuteAsync</c> and the lock it takes to raise Completed when
+    /// <c>CancelAsync</c> takes the same lock. The same rules hold on every round; and since the execution has
+    /// already returned, Completed has to win some rounds, which is what the leg is for.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ActivityBases))]
+    public async Task CancelAsync_ShouldDeliverOneEndingAndTheCompletionToTheOtherSubscriber_WhenTheExecutionHasJustReturnedAsItIsCancelled(
+        string activityBase)
+    {
+        var race = await RaceEndingsAsync(activityBase, RaceStart.ReleaseAndWaitForTheBodyToReturn);
+
+        using var scope = new AssertionScope();
+        race.Outcomes.Should().BeEmpty(
+            "a status subscriber's failure is its own on every round, whichever ending wins the race ({0})", race.Split);
+        race.CompletedWins.Should().BePositive(
+            "the leg exists to exercise the Completed side of the race ({0})", race.Split);
+    }
+
+    private enum RaceStart
+    {
+        ReleaseConcurrently,
+        ReleaseAndWaitForTheBodyToReturn,
+    }
+
+    private sealed record RaceResult(IReadOnlyList<string> Outcomes, int CompletedWins, int CancelledWins)
+    {
+        public string Split => $"Completed won {CompletedWins}, Cancelled won {CancelledWins}";
+    }
+
+    private async Task<RaceResult> RaceEndingsAsync(string activityBase, RaceStart raceStart)
+    {
         const int Rounds = 50;
         using var faults = new FaultCounter();
         var outcomes = new List<string>();
+        var completedWins = 0;
+        var cancelledWins = 0;
 
         for (var round = 0; round < Rounds; round++)
         {
             var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var running = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var returned = 0;
             var activity = IsolationActivities.Create(activityBase, async _ =>
             {
                 running.TrySetResult();
                 // Released on the thread pool: the execution ends there, racing the test's CancelAsync.
                 await release.Task.ConfigureAwait(false);
+                Volatile.Write(ref returned, 1);
             });
             var thrower = new ThrowingObserver();
             var recorder = new RecordingObserver();
@@ -244,12 +339,28 @@ public sealed class ActivityStatusSubscriberIsolationTests
 
             var start = activity.StartAsync().AsTask();
             await Task.WhenAny(running.Task, start).WaitAsync(SignalTimeout);
-            var ending = Task.Run(release.TrySetResult);
+            Task ending;
+            if (raceStart == RaceStart.ReleaseConcurrently)
+            {
+                ending = Task.Run(release.TrySetResult);
+            }
+            else
+            {
+                release.TrySetResult();
+                SpinWait.SpinUntil(() => Volatile.Read(ref returned) == 1, SignalTimeout);
+                ending = Task.CompletedTask;
+            }
+
             var cancelling = await Record.ExceptionAsync(() => activity.CancelAsync().AsTask());
             await ending.WaitAsync(SignalTimeout);
             var startEnd = await Record.ExceptionAsync(() => start.WaitAsync(SignalTimeout));
             var finalStatus = activity.Status;
             var disposing = await Record.ExceptionAsync(() => activity.DisposeAsync().AsTask());
+
+            if (finalStatus == ActivityStatus.Completed)
+                completedWins++;
+            else if (finalStatus == ActivityStatus.Cancelled)
+                cancelledWins++;
 
             var statuses = recorder.Statuses;
             var delivered = statuses.Count + recorder.Completions;
@@ -269,8 +380,9 @@ public sealed class ActivityStatusSubscriberIsolationTests
                 outcomes.Add($"round {round}: " + string.Join("; ", wrong));
         }
 
-        outcomes.Should().BeEmpty(
-            "a status subscriber's failure is its own on every round, whichever ending wins the race");
+        var result = new RaceResult(outcomes, completedWins, cancelledWins);
+        output.WriteLine($"{activityBase} {raceStart}: {result.Split} of {Rounds} rounds");
+        return result;
     }
 
     /// <summary>Subscribes, keeping the subscription in <paramref name="subscriptions"/>; returns what the call threw.</summary>
