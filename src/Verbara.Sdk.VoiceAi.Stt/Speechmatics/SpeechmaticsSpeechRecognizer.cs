@@ -327,7 +327,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
             SpeechmaticsTranscriptMessage? msg;
             try
             {
-                msg = JsonSerializer.Deserialize(json, VoiceAiSttJsonContext.Default.SpeechmaticsTranscriptMessage);
+                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.For<SpeechmaticsTranscriptMessage>.TypeInfo);
             }
             catch (JsonException)
             {
@@ -341,6 +341,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
                 continue;
             }
 
+            // A JSON null root is outside the member fence: it carries no message to dispatch.
             if (msg is null) continue;
 
             // Door 1 (ADR-0049 D1, remedied under ADR-0050 E1). `Error` was in the list of lifecycle
@@ -362,7 +363,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
                 SpeechmaticsRecognitionStartedMessage? started;
                 try
                 {
-                    started = JsonSerializer.Deserialize(json, VoiceAiSttJsonContext.Default.SpeechmaticsRecognitionStartedMessage);
+                    started = JsonSerializer.Deserialize(json, SttJsonReadOptions.For<SpeechmaticsRecognitionStartedMessage>.TypeInfo);
                 }
                 catch (JsonException)
                 {
@@ -370,6 +371,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
                     continue;
                 }
 
+                // A null root (or omitted pack/delimiter) leaves the session's delimiter fallback intact.
                 if (started?.LanguagePackInfo?.WordDelimiter is { } declared) wordDelimiter = declared;
                 continue;
             }
@@ -394,8 +396,13 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
             for (var i = 0; i < msg.Results.Length; i++)
             {
                 var r = msg.Results[i];
+                // Collection elements are outside the member fence. Missing results/alternatives
+                // supply no confidence sample, so neither the sum nor its denominator includes them.
+                if (r is null) continue;
                 if (r.Alternatives is null || r.Alternatives.Length == 0) continue;
-                confSum += r.Alternatives[0].Confidence;
+                var alternative = r.Alternatives[0];
+                if (alternative is null) continue;
+                confSum += alternative.Confidence;
                 confCount++;
             }
 
@@ -478,14 +485,19 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
     /// session, not assumed, and the attachment is read from the result, not inferred from the
     /// content being a period.
     /// </remarks>
-    private static string AssembleFromTokens(SpeechmaticsResult[] results, string wordDelimiter)
+    private static string AssembleFromTokens(SpeechmaticsResult?[] results, string wordDelimiter)
     {
         var sb = new StringBuilder();
         for (var i = 0; i < results.Length; i++)
         {
             var r = results[i];
+            // Skip missing collection elements independently of the confidence pass: they contain
+            // no token to append and must not add a separator to the assembled transcript.
+            if (r is null) continue;
             if (r.Alternatives is null || r.Alternatives.Length == 0) continue;
-            var content = r.Alternatives[0].Content;
+            var alternative = r.Alternatives[0];
+            if (alternative is null) continue;
+            var content = alternative.Content;
             if (string.IsNullOrEmpty(content)) continue;
 
             var attachesToPrevious = string.Equals(r.AttachesTo, "previous", StringComparison.Ordinal);

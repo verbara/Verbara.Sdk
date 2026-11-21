@@ -160,6 +160,52 @@ public sealed class AssemblyAiUnparseableMessageTests : IAsyncLifetime
         _unparseable.Count.Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StreamAsync_ShouldIgnoreUnknownKindWithoutCounting_WhenAssemblyAiTypeIsNullOrAbsent(bool absent)
+    {
+        var frame = JsonNode.Parse(AssemblyAiFakeServer.BuildTurnJson("survived", endOfTurn: true))!;
+        if (absent) frame.AsObject().Remove("type");
+        else frame["type"] = null;
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(frame.ToJsonString());
+        _server.ResultMessages.Add(AssemblyAiFakeServer.BuildTurnJson("survived", endOfTurn: true));
+
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be("survived");
+        _unparseable.Count.Should().Be(0, "an unknown discriminator is tolerated where no licensed contract establishes non-nullability");
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldYieldEmptyTranscriptWithoutCounting_WhenAssemblyAiTranscriptIsNull()
+    {
+        var frame = JsonNode.Parse(AssemblyAiFakeServer.BuildTurnJson("survived", endOfTurn: true))!;
+        frame["transcript"] = null;
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(frame.ToJsonString());
+
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().BeEmpty(
+            "the public result cannot distinguish absent text from empty text, so null is deliberately coalesced");
+        _unparseable.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldSkipNullRoot_WhenAssemblyAiSendsJsonNull()
+    {
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add("null");
+        _server.ResultMessages.Add(AssemblyAiFakeServer.BuildTurnJson("survived", endOfTurn: true));
+
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be("survived");
+        _unparseable.Count.Should().Be(0);
+    }
+
     private AssemblyAiSpeechRecognizer BuildRecognizer() => new(Options.Create(new AssemblyAiOptions
     {
         ApiKey = "test-key",

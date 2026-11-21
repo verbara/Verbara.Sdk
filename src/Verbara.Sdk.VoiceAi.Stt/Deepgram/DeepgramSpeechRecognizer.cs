@@ -270,7 +270,7 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
             DeepgramResultMessage? msg;
             try
             {
-                msg = JsonSerializer.Deserialize(json, VoiceAiSttJsonContext.Default.DeepgramResultMessage);
+                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.For<DeepgramResultMessage>.TypeInfo);
             }
             catch (JsonException)
             {
@@ -284,6 +284,7 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
                 continue;
             }
 
+            // A JSON null root is outside the member fence: it carries no message to dispatch.
             if (msg is null) continue;
 
             // Door 1 (ADR-0050 E1) — and the one branch of this change on this surface with no
@@ -300,6 +301,7 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
             if (!string.Equals(msg.Type, "Results", StringComparison.Ordinal)) continue;
 
             var alt = msg.Channel?.Alternatives?.FirstOrDefault();
+            // The fence does not reject null array elements; a missing first alternative has no result.
             if (alt is null) continue;
 
             var stt = new SpeechRecognitionResult(alt.Transcript, alt.Confidence, msg.IsFinal, TimeSpan.Zero);

@@ -164,6 +164,32 @@ public class WhisperSpeechRecognizerTests
         server.ReceivedRequests.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task StreamAsync_ShouldRejectNullText_WhenWhisperViolatesItsTextContract()
+    {
+        // Mutate the vendor capture; the fence must reject explicit null rather than silently
+        // turn a contract violation into an empty recognition result.
+        var frame = System.Text.Json.Nodes.JsonNode.Parse(ProviderRecordings.Locate().ReadText(RecordedResponse))!;
+        frame["text"] = null;
+        await using var server = HttpProviderMockServer.Start();
+        server.Stub(TranscriptionRequest(), HttpProviderResponse.Json(frame.ToJsonString()));
+
+        var act = async () => await RecognizerFor(server).StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        await act.Should().ThrowAsync<JsonException>();
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldReturnNoResults_WhenWhisperRootIsNull()
+    {
+        await using var server = HttpProviderMockServer.Start();
+        server.Stub(TranscriptionRequest(), HttpProviderResponse.Json("null"));
+
+        var results = await RecognizerFor(server).StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().BeEmpty();
+    }
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];

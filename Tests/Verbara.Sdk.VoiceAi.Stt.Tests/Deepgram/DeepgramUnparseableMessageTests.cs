@@ -411,6 +411,41 @@ public sealed class DeepgramUnparseableMessageTests : IAsyncLifetime
         _unparseable.Deepgram.Should().Be(0, "a partial message is discarded, not counted");
     }
 
+    [Theory]
+    [InlineData("type")]
+    [InlineData("transcript")]
+    public async Task StreamAsync_ShouldCountAndSkipNullContractMember_WhenDeepgramSendsExplicitNull(string member)
+    {
+        // Hand-authored mutation of the fixture-backed fake's Results frame. These are new
+        // explicit reference-null cases; null is_final already threw before the read fence.
+        var frame = System.Text.Json.Nodes.JsonNode.Parse(DeepgramFakeServer.BuildResultJson("lost", 0.9f, isFinal: true))!;
+        if (member == "type") frame["type"] = null;
+        else frame["channel"]!["alternatives"]![0]!["transcript"] = null;
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(frame.ToJsonString());
+        _server.ResultMessages.Add(DeepgramFakeServer.BuildResultJson("survived", 0.95f, isFinal: true));
+
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be("survived");
+        _unparseable.Deepgram.Should().Be(1, "the null contract member costs a counted frame, never the session");
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{\"type\":\"Results\",\"channel\":{\"alternatives\":[null]}}")]
+    public async Task StreamAsync_ShouldSkipNullOutsideTheMemberFence_WhenDeepgramRootOrAlternativeIsNull(string frame)
+    {
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(frame);
+        _server.ResultMessages.Add(DeepgramFakeServer.BuildResultJson("survived", 0.95f, isFinal: true));
+
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be("survived");
+        _unparseable.Deepgram.Should().Be(0, "root and element nulls are explicitly ignored outside the member fence");
+    }
+
     private DeepgramSpeechRecognizer BuildRecognizer() => new(Options.Create(new DeepgramOptions
     {
         ApiKey = "test-key",
