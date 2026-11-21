@@ -15,7 +15,7 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Bridge;
 /// <summary>
 /// A bridge event subscriber's failure is its own: every other subscriber of <see cref="OpenAiRealtimeBridge.Events"/>
 /// still receives every event, the session goes on serving the call and is not counted failed, and each failure is
-/// counted once on <c>voiceai.realtime.subscriber_faults</c> and then logged once at Warning. A logger that throws on
+/// counted once on <c>openai_realtime.subscriber_faults</c> and then logged once at Warning. A logger that throws on
 /// that Warning changes none of it.
 /// </summary>
 /// <remarks>
@@ -29,7 +29,7 @@ public sealed class OpenAiRealtimeBridgeSubscriberIsolationTests
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
 
     private const string MeterName = "Verbara.Sdk.VoiceAi.OpenAiRealtime";
-    private const string SubscriberFaults = "voiceai.realtime.subscriber_faults";
+    private const string SubscriberFaults = "openai_realtime.subscriber_faults";
     private const string Failed = "openai_realtime.sessions.failed";
 
     private static readonly string[] VendorScript =

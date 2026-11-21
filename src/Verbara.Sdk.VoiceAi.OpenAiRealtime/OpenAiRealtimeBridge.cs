@@ -114,7 +114,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     /// <remarks>
     /// A subscriber that throws (<see cref="OutOfMemoryException"/> excepted) stops nothing else: every other subscriber
     /// still receives the event, the session goes on serving the call and is not counted failed, and nothing is thrown
-    /// from <see cref="DisposeAsync"/>. Each failure is counted on <c>voiceai.realtime.subscriber_faults</c> (meter
+    /// from <see cref="DisposeAsync"/>. Each failure is counted on <c>openai_realtime.subscriber_faults</c> (meter
     /// <c>Verbara.Sdk.VoiceAi.OpenAiRealtime</c>) and then logged once at Warning with the exception; a logger that throws
     /// on that line is ignored. A subscriber subscribed directly stays subscribed; one composed through an operator
     /// (<c>Where</c>, <c>OfType</c>, …) is ended by that operator on its first failure. Only what throws on the delivering

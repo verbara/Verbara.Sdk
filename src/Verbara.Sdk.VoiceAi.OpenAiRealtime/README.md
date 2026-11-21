@@ -79,7 +79,7 @@ at Warning and counted on `openai_realtime.frames.unparseable` like any other ev
 `delta` is empty, or too short to make one sample at the caller's rate, carries no audio and is skipped without a count;
 the call goes on either way. An `Events` subscriber that throws stops nothing else either (from 2.11.0): every other
 subscriber still receives the event, the session goes on serving the call and is not counted failed, and the failure is
-counted on `voiceai.realtime.subscriber_faults` and logged once at Warning, `[<ChannelId>] A Realtime event subscriber
+counted on `openai_realtime.subscriber_faults` and logged once at Warning, `[<ChannelId>] A Realtime event subscriber
 threw on <EventType>; …`, with the exception. A subscriber subscribed directly stays subscribed; one composed through an
 operator (`Where`, `OfType`, …) is ended on its first failure. Up to 2.10.x such an exception ended the session and
 counted in `openai_realtime.sessions.failed`.

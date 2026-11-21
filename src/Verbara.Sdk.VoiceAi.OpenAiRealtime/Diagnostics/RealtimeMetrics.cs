@@ -108,7 +108,7 @@ public static class RealtimeMetrics
     /// go on, and the session is not counted failed for it. Internal, as <see cref="FramesUnparseable"/>.
     /// </summary>
     internal static readonly Counter<long> SubscriberFaults =
-        Meter.CreateCounter<long>("voiceai.realtime.subscriber_faults", "faults",
+        Meter.CreateCounter<long>("openai_realtime.subscriber_faults", "faults",
             "Realtime bridge event subscriber failures (an Events subscriber threw); delivery goes on");
 
     // --- Histograms ---
