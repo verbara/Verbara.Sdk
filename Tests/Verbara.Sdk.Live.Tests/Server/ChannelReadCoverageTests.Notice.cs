@@ -377,11 +377,13 @@ public sealed partial class ChannelReadCoverageTests
     {
         var peer = new BootingAsterisk { BootedAtLogin = true };
         await using var run = await StartAsync(peer);
+        var noticed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var proceed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var reconciled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         // The guide's handler, with its notice held until another read has covered the loss: a stale notice.
         run.Server.UnreconciledLossDelivered += server => _ = Task.Run(async () =>
         {
+            noticed.TrySetResult();
             await proceed.Task;
             if (!server.HasUnreconciledLoss)
             {
@@ -394,6 +396,9 @@ public sealed partial class ChannelReadCoverageTests
 
         using (var hold = await HoldAndDropAsync(run, peer, "stale-notice-1"))
             await DeliverAsync(run, peer, hold, "stale-notice-1");
+        // The pump's loss watcher announces the drop on its own thread, after the dispatch DeliverAsync waits for: the
+        // covering read starts once the handler has the notice, or it can cover first and leave nothing to announce.
+        await noticed.Task.WaitAsync(Run.Bound);
         var posted = run.Server.LossNoticesPosted;
         await run.Server.ReconcileChannelsAsync().AsTask().WaitAsync(Run.Bound);
         var coveredFirst = !run.Server.HasUnreconciledLoss;
