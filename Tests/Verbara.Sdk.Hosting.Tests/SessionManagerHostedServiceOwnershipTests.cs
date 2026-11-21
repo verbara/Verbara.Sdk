@@ -370,6 +370,24 @@ public sealed class SessionManagerHostedServiceOwnershipTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task StopAsync_ShouldKeepTheHostsAttach_WhenTheServiceIsBuiltWithoutAnExplicitEngine()
+    {
+        var host = BuildHost(decorated: false);
+        await using var disposal = (IAsyncDisposable)host;
+        var manager = (CallSessionManager)host.Services.GetRequiredService<ICallSessionManager>();
+        manager.AttachToServer(_server, "default");
+        // The two-argument constructor takes the manager itself as the engine when it is one.
+        using var service = new SessionManagerHostedService(manager, _server);
+
+        await service.StartAsync(CancellationToken.None);
+        await service.StopAsync(CancellationToken.None);
+        _server.Channels.OnNewChannel("uid-2", "PJSIP/100-002", ChannelState.Up, linkedId: "linked-2");
+
+        manager.GetByLinkedId("linked-2").Should().NotBeNull(
+            "the manager is the engine and held \"default\" before the start, so the host's attachment survives the stop");
+    }
+
+    [Fact]
     public async Task StopAsync_ShouldDetachNothing_WhenItRunsAgainWithoutAStart()
     {
         var host = BuildHost(decorated: false);
