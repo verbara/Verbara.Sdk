@@ -236,6 +236,34 @@ public class GoogleSpeechRecognizerTests
         server.ReceivedRequests.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task StreamAsync_ShouldYieldEmptyTranscript_WhenGoogleTranscriptIsNull()
+    {
+        var frame = System.Text.Json.Nodes.JsonNode.Parse(ProviderRecordings.Locate().ReadText(RecordedResponse))!;
+        frame["results"]![0]!["alternatives"]![0]!["transcript"] = null;
+        await using var server = HttpProviderMockServer.Start();
+        server.Stub(RecognizeRequest(), HttpProviderResponse.Json(frame.ToJsonString()));
+
+        var results = await RecognizerFor(server).StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().BeEmpty(
+            "Discovery does not establish nullability, and the public result represents absent text as empty");
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{\"results\":[null]}")]
+    [InlineData("{\"results\":[{\"alternatives\":[null]}]}")]
+    public async Task StreamAsync_ShouldReturnNoResults_WhenGoogleRootOrCollectionElementIsNull(string frame)
+    {
+        await using var server = HttpProviderMockServer.Start();
+        server.Stub(RecognizeRequest(), HttpProviderResponse.Json(frame));
+
+        var results = await RecognizerFor(server).StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().BeEmpty();
+    }
+
     private static async IAsyncEnumerable<ReadOnlyMemory<byte>> SingleFrame()
     {
         yield return new byte[320];

@@ -162,6 +162,52 @@ public sealed class CartesiaUnparseableMessageTests : IAsyncLifetime
         _unparseable.Count.Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StreamAsync_ShouldIgnoreUnknownKindWithoutCounting_WhenCartesiaTypeIsNullOrAbsent(bool absent)
+    {
+        var frame = JsonNode.Parse(CartesiaFakeServer.BuildTranscriptJson("survived", 0.95f, isFinal: true))!;
+        if (absent) frame.AsObject().Remove("type");
+        else frame["type"] = null;
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(frame.ToJsonString());
+        _server.ResultMessages.Add(CartesiaFakeServer.BuildTranscriptJson("survived", 0.95f, isFinal: true));
+
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be("survived");
+        _unparseable.Count.Should().Be(0, "an unknown discriminator is tolerated where no licensed contract establishes non-nullability");
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldYieldEmptyTranscriptWithoutCounting_WhenCartesiaTranscriptIsNull()
+    {
+        var frame = JsonNode.Parse(CartesiaFakeServer.BuildTranscriptJson("survived", 0.95f, isFinal: true))!;
+        frame["text"] = null;
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(frame.ToJsonString());
+
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().BeEmpty(
+            "the public result cannot distinguish absent text from empty text, so null is deliberately coalesced");
+        _unparseable.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldSkipNullRoot_WhenCartesiaSendsJsonNull()
+    {
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add("null");
+        _server.ResultMessages.Add(CartesiaFakeServer.BuildTranscriptJson("survived", 0.95f, isFinal: true));
+
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be("survived");
+        _unparseable.Count.Should().Be(0);
+    }
+
     private CartesiaSpeechRecognizer BuildRecognizer() => new(Options.Create(new CartesiaOptions
     {
         ApiKey = "test-key",

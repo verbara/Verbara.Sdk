@@ -189,6 +189,63 @@ public sealed class SpeechmaticsUnparseableMessageTests : IAsyncLifetime
         _unparseable.Count.Should().Be(0);
     }
 
+    [Theory]
+    [InlineData("message")]
+    [InlineData("content")]
+    public async Task StreamAsync_ShouldCountAndSkipNullContractMember_WhenSpeechmaticsSendsExplicitNull(string member)
+    {
+        var frame = JsonNode.Parse(SpeechmaticsFakeServer.BuildFinalTranscriptJson("lost", 0.9f))!;
+        if (member == "message") frame["message"] = null;
+        else frame["results"]![0]!["alternatives"]![0]!["content"] = null;
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(frame.ToJsonString());
+        _server.ResultMessages.Add(SpeechmaticsFakeServer.BuildFinalTranscriptJson("survived", 0.95f));
+
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be("survived");
+        _unparseable.Count.Should().Be(1, "an explicit null contract member is counted and skipped");
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task StreamAsync_ShouldSkipNullElementsAndPreserveValidTokens_WhenSpeechmaticsResultOrAlternativeIsNull(
+        bool nullResult, bool withMetadata)
+    {
+        // Both collection reads are exercised twice: confidence always reads the elements;
+        // token assembly reads them only when metadata.transcript is absent.
+        var frame = JsonNode.Parse(SpeechmaticsFakeServer.BuildFinalTranscriptJson("survived", 0.95f))!;
+        var resultsNode = (JsonArray)frame["results"]!;
+        if (nullResult) resultsNode.Insert(0, null);
+        else resultsNode.Insert(0, JsonNode.Parse("{\"alternatives\":[null]}"));
+        if (!withMetadata) frame.AsObject().Remove("metadata");
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add(frame.ToJsonString());
+
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        var result = results.Should().ContainSingle().Subject;
+        result.Transcript.Should().Be("survived");
+        result.Confidence.Should().BeApproximately(0.95f, 0.00001f, "null elements do not enter the confidence denominator");
+        _unparseable.Count.Should().Be(0, "collection elements are handled explicitly outside the member fence");
+    }
+
+    [Fact]
+    public async Task StreamAsync_ShouldSkipNullRoot_WhenSpeechmaticsSendsJsonNull()
+    {
+        _server.ResultMessages.Clear();
+        _server.ResultMessages.Add("null");
+        _server.ResultMessages.Add(SpeechmaticsFakeServer.BuildFinalTranscriptJson("survived", 0.95f));
+
+        var results = await BuildRecognizer().StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();
+
+        results.Should().ContainSingle().Which.Transcript.Should().Be("survived");
+        _unparseable.Count.Should().Be(0);
+    }
+
     private SpeechmaticsSpeechRecognizer BuildRecognizer() => new(Options.Create(new SpeechmaticsOptions
     {
         ApiKey = "test-key",
