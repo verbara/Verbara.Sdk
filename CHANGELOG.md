@@ -104,6 +104,49 @@ the five packages move together. One consequence reaches every application that 
 
 The SDK's own meters and activity sources are unaffected: the scrape and OTLP export tests pass unchanged. No public API change.
 
+### Added: `VerbaraServer.HasUnreconciledLoss` and `UnreconciledLossDelivered` say, per server, when a lost event is due for reconciliation (#630)
+
+A host that runs `Verbara.Sdk.Live` without the session sweep can now tell which server lost an event and when a
+reconciliation can cover it, without a `MeterListener` and without attributing spans by parent.
+
+- **`VerbaraServer.HasUnreconciledLoss`** is `true` when an event the full buffer dropped has been delivered through
+  (every event received before it has been dispatched) and no covering channel read has covered it since. It is the
+  reading the session sweep acts on since 2.10.0, now public. `false` means "nothing to reconcile now", not "nothing
+  lost": it also reads `false` while the drop is behind the backlog, while a reconnect is pending, while a load of the
+  server is running (its start's, the reload after a reconnect, or `RequestInitialStateAsync`, which reads the
+  channels itself), and over a connection that is not the SDK's own `AmiConnection`.
+- **`VerbaraServer.UnreconciledLossDelivered`** (`Action<VerbaraServer>`) is raised each time that reading turns true:
+  when delivery passes a drop (drops passed together give one notice), and when a load of the server or a pending
+  reconnect ends with a delivered loss it did not cover. A reconnect whose reload covers raises none, so a handler
+  never starts a reconciliation that would overlap the reload. Subscribe before `StartAsync`, or read the property once
+  after subscribing: a handler added later hears nothing for a loss already announced. It runs on a thread-pool
+  thread, outside the AMI reader and any event dispatch, so a `ReconcileChannelsAsync` started from it can cover the
+  drop. One notice per loss: a reconciliation that does not
+  cover leaves the reading `true`, so read it after the call and retry. A subscriber that throws is logged at Warning
+  and counted on the new `live.server.subscriber_faults`; the others still run.
+- The [high-load guide](docs/guides/high-load-tuning.md#session-reconciliation)'s *Live without Hosting* section now
+  starts from this route; the counter route stays, unchanged, for versions before 2.11.0.
+
+### Added: Live's spans of a pooled server carry `server.id` (#630)
+
+`live channel-reconcile`, `live state-load` and `live originate` carry `server.id`, the pool id, when the server is in
+a `VerbaraServerPool` (read when the span starts); a standalone server's spans carry none.
+
+### Changed: `live.server` is documented obsolete; it is removed in 2.12.0 (#630)
+
+`live.server` on `live channel-reconcile` and `live state-load` holds the Asterisk version, not a server identity. It
+keeps that value through 2.11.x; a dashboard that wants the server should read `server.id` before 2.12.0, which
+removes the tag. `VerbaraSemanticConventions.Resource.ServerName`'s documentation no longer cites a
+`VerbaraServer.Name` that does not exist: the SDK does not set that Resource attribute.
+
+### Fixed: a covered lost event could read pending again and cost one extra `Status` (#630)
+
+A channel read took its loss sample before it took its opening number, so a read that sampled before another read's
+whole run and opened after it published the older sample over the newer one: a loss the other read had covered read
+pending again, and the session sweep (or a host's own loop) sent one more `Status` than it needed. The sample is now
+taken in the same step as the opening, so a read opened later never carries an older sample. It never read an
+uncovered loss as covered.
+
 ### Fixed: a reconnect reload no longer drops the events dispatched while it replaces its subscription (#600)
 
 On every reconnect, on the reconnect loop and on the caller's own `ConnectAsync`, `VerbaraServer` released its event
