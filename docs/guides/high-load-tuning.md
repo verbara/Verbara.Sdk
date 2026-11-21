@@ -262,6 +262,7 @@ mute far ends cost one second, not N. See the [ARI package README](../../src/Ver
 - `VerbaraServer.HasUnreconciledLoss` is `true` when an event the full buffer dropped has been delivered through (every event received before it has been dispatched to its handlers) and no covering channel read has covered it since. `false` means "nothing to reconcile now", not "nothing lost": it also reads `false` while the drop is still behind the backlog, while a reconnect is pending (the reload after it owns that loss), while a load of the server is running (its start's, the reload after a reconnect, or `RequestInitialStateAsync`), which reads the channels itself, and over a connection that is not the SDK's own `AmiConnection`.
 - `VerbaraServer.UnreconciledLossDelivered` is raised, naming the server, once for each loss, when that reading first reads true for it: when delivery passes a drop (drops passed together give one notice), or, when a load of the server or a pending reconnect was holding the reading `false` then, when it ends without having covered the loss. A handler added after the reading turned true hears nothing for that loss: subscribe before `StartAsync`, or read `HasUnreconciledLoss` once after subscribing. It runs on a thread-pool thread, outside the connection's reader and any event dispatch, so a `ReconcileChannelsAsync` started from it waits for the backlog and can cover the drop. Start the reconciliation there; do not wait for it inside the handler. A handler that throws is logged at Warning and counted on `live.server.subscriber_faults`, and the other handlers still run.
 - One notice per loss: a reconciliation that does not cover (refused, overlapped by another channel read, or out of its 10 s wait for the backlog) leaves the reading `true` and no second notice comes for the same loss, and none comes when a later load of the server ends without covering it. Read `HasUnreconciledLoss` after the call and try again on a later tick, as the sample does.
+- A notice says "look now", and the reading says whether: by the time a handler runs, a load of the server may have started or another read may have covered the loss, and the reading is then `false`. The sample reads it before it reconciles, whether a notice or the tick started it. That check narrows the window and does not close it: a load that starts right after it still overlaps the reconciliation, which then does not cover, and the reading after the call says so.
 
 ```csharp
 using System.Collections.Concurrent;
@@ -290,6 +291,9 @@ async Task ReconcileAsync(VerbaraServer server)
         return; // a reconciliation of this server is in flight: a second one would overlap it, and neither would cover
     try
     {
+        // A notice can arrive stale: a load may have started, or another read covered the loss, since it was raised.
+        if (!server.HasUnreconciledLoss)
+            return;
         await server.ReconcileChannelsAsync(ct);
         if (server.HasUnreconciledLoss)
             Console.Error.WriteLine("the reconciliation did not cover the drop; the next tick retries"); // your logger

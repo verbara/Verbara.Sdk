@@ -373,6 +373,44 @@ public sealed partial class ChannelReadCoverageTests
     }
 
     [Fact]
+    public async Task UnreconciledLossDelivered_ShouldLeadToNoStatus_WhenAHandlerFollowsTheGuideOnANoticeAnotherReadCoveredFirst()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await StartAsync(peer);
+        var proceed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reconciled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // The guide's handler, with its notice held until another read has covered the loss: a stale notice.
+        run.Server.UnreconciledLossDelivered += server => _ = Task.Run(async () =>
+        {
+            await proceed.Task;
+            if (!server.HasUnreconciledLoss)
+            {
+                reconciled.TrySetResult(false);
+                return;
+            }
+            await server.ReconcileChannelsAsync();
+            reconciled.TrySetResult(true);
+        });
+
+        using (var hold = await HoldAndDropAsync(run, peer, "stale-notice-1"))
+            await DeliverAsync(run, peer, hold, "stale-notice-1");
+        var posted = run.Server.LossNoticesPosted;
+        await run.Server.ReconcileChannelsAsync().AsTask().WaitAsync(Run.Bound);
+        var coveredFirst = !run.Server.HasUnreconciledLoss;
+        var statusBefore = peer.Asked("Status");
+        proceed.SetResult();
+        var handlerReconciled = await reconciled.Task.WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            posted.Should().Be(1, "premise: the delivered drop was announced");
+            coveredFirst.Should().BeTrue("premise: another read covered the loss before the handler ran");
+            handlerReconciled.Should().BeFalse("the guide's handler reads the reading first, and it is false");
+            peer.Asked("Status").Should().Be(statusBefore, "a stale notice sends no Status");
+        }
+    }
+
+    [Fact]
     public async Task UnreconciledLossDelivered_ShouldBeRaisedOnceTheReloadEnds_WhenTheReloadAfterAReconnectDoesNotCover()
     {
         using var spans = new Spans();
