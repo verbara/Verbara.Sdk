@@ -22,12 +22,12 @@ namespace Verbara.Sdk.Hosting;
 /// attaches, in <see cref="StartAsync"/>. Whichever of the two runs first attaches and the other does nothing, so the
 /// manager the host resolves sees one attach per start whatever its type: the engine takes a repeated attach of the same
 /// server under the same id as a no-op, but a decorator or a manager of the host's own would see the second call. A stop
-/// detaches, so a start after a stop attaches again.
+/// clears that state whether or not it detaches, so a start after a stop attaches again.
 /// </para>
 /// <para>
 /// The stop detaches only an attachment this service's start installed. When the SDK's engine the host reaches already
-/// held <c>"default"</c> for this server before the attach, and the attach reached that engine (directly or through a
-/// decorator), the host installed the id first: the attach was a no-op on the engine, and the stop leaves the host's
+/// held <c>"default"</c> for this server before the attach, and this service's own attach call reached that engine
+/// (directly, or through a decorator that forwards it within the call), the host installed the id first: the attach was a no-op on the engine, and the stop leaves the host's
 /// attachment in place. A start whose attach threw or never ran installed nothing, and its stop detaches nothing. An
 /// attach that went to a manager other than that engine, or a host attach made after start, is this service's to
 /// release.
@@ -61,7 +61,7 @@ internal sealed class SessionManagerHostedService(
 
     /// <summary>
     /// Whether the manager is attached to the server now. Set by the first of <see cref="StartingAsync"/> and
-    /// <see cref="StartAsync"/>, cleared by the stop's detach, read and written under <see cref="_lifecycleGate"/>.
+    /// <see cref="StartAsync"/>, cleared by the stop, read and written under <see cref="_lifecycleGate"/>.
     /// </summary>
     private bool _attached;
 

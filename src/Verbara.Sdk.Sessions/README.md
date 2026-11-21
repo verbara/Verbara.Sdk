@@ -280,9 +280,10 @@ Such a host gets what an undecorated host gets:
   by calling `AttachToServer` and `DetachFromServer` on the `ICallSessionManager` you registered, whatever its type.
   Your wrapper sees both calls and forwards them. As on an undecorated host, a `default` you attached through your
   wrapper before the start is yours: your wrapper sees the start's attach and no detach from the stop. The SDK tells
-  the two apart by whether its attach reached the registered engine, so a wrapper that does not forward
-  `AttachToServer` to that engine is taken for a manager of its own, and the stop detaches it. A pool host attaches its
-  servers through it as before.
+  the two apart by whether its own attach call reached the registered engine before returning; another attach that
+  lands on the engine meanwhile does not count. A wrapper that does not forward that call to the engine within the
+  call (it does not forward it, forwards it later, or forwards it from a thread that was already running) is taken
+  for a manager of its own, and the stop detaches it. A pool host attaches its servers through it as before.
 - **The persistence token.** The SDK takes a `CallSessionManager` you registered as itself as the engine behind your
   manager, and hands it the token every save runs under, so a stop that is no longer graceful cuts an in-flight save
   short and the host's teardown ends it. It takes that registration as the engine whether or not your manager wraps
