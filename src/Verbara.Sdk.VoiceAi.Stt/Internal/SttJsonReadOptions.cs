@@ -8,8 +8,17 @@ internal static class SttJsonReadOptions
 {
     internal static JsonSerializerOptions StrictOptions { get; } = CreateStrictOptions();
 
-    internal static JsonTypeInfo<T> TypeInfo<T>() =>
-        (JsonTypeInfo<T>)StrictOptions.GetTypeInfo(typeof(T));
+    /// <summary>
+    /// The strict metadata for <typeparamref name="T"/>, resolved once per type and held in a static
+    /// field, so a receive loop pays no options lookup per frame.
+    /// </summary>
+    internal static JsonTypeInfo<T> TypeInfo<T>() => Cache<T>.Value;
+
+    private static class Cache<T>
+    {
+        internal static readonly JsonTypeInfo<T> Value =
+            (JsonTypeInfo<T>)StrictOptions.GetTypeInfo(typeof(T));
+    }
 
     private static JsonSerializerOptions CreateStrictOptions()
     {

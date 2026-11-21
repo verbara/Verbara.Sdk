@@ -485,7 +485,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
     /// session, not assumed, and the attachment is read from the result, not inferred from the
     /// content being a period.
     /// </remarks>
-    private static string AssembleFromTokens(SpeechmaticsResult[] results, string wordDelimiter)
+    private static string AssembleFromTokens(SpeechmaticsResult?[] results, string wordDelimiter)
     {
         var sb = new StringBuilder();
         for (var i = 0; i < results.Length; i++)

@@ -210,7 +210,9 @@ internal sealed class SpeechmaticsTranscriptMessage
     /// </summary>
     [JsonPropertyName("message")] public string Message { get; set; } = string.Empty;
 
-    [JsonPropertyName("results")] public SpeechmaticsResult[]? Results { get; set; }
+    // Elements are nullable in the type: the read fence checks members, not collection elements,
+    // so the compiler is what makes every element read check for null.
+    [JsonPropertyName("results")] public SpeechmaticsResult?[]? Results { get; set; }
 
     /// <summary>
     /// Carries the vendor's assembled <c>transcript</c> for this segment. Present on every
@@ -233,7 +235,9 @@ internal sealed class SpeechmaticsTranscriptMessage
 
 internal sealed class SpeechmaticsResult
 {
-    [JsonPropertyName("alternatives")] public SpeechmaticsAlternative[]? Alternatives { get; set; }
+    // Elements are nullable in the type: the read fence checks members, not collection elements,
+    // so the compiler is what makes every element read check for null.
+    [JsonPropertyName("alternatives")] public SpeechmaticsAlternative?[]? Alternatives { get; set; }
 
     /// <summary>The token's kind — <c>word</c>, <c>punctuation</c>. Observed live on 2026-08-18.</summary>
     [JsonPropertyName("type")] public string? Type { get; set; }
