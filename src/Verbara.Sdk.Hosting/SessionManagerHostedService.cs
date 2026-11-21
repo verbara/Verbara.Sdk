@@ -111,13 +111,24 @@ internal sealed class SessionManagerHostedService(
             if (_attached)
                 return;
 
-            // The host installed "default" first when the engine held it for this server before the attach and the attach
-            // reached that engine; a held id whose engine the attach did not reach belongs to another manager, and this
-            // service's attach of its own manager is its own. A hand attach racing this start is out of scope.
+            // The host installed "default" first when the engine held it for this server before the attach and this
+            // service's own attach reached that engine; a held id whose engine the attach did not reach belongs to another
+            // manager, and this service's attach of its own manager is its own. The probe sees only this call's attach of
+            // this server under "default" to that engine, not another attach on it. A hand attach racing this start is
+            // out of scope.
             var heldBefore = engine is not null && ReferenceEquals(engine.AttachedServer("default"), server);
-            var callsBefore = engine?.AttachCalls ?? 0L;
-            sessionManager.AttachToServer(server, "default");
-            var reachedEngine = engine is not null && engine.AttachCalls != callsBefore;
+            var reachedEngine = false;
+            if (heldBefore)
+            {
+                using var probe = engine!.ProbeAttach(server, "default");
+                sessionManager.AttachToServer(server, "default");
+                reachedEngine = probe.Reached;
+            }
+            else
+            {
+                sessionManager.AttachToServer(server, "default");
+            }
+
             _attached = true;
             _owned = !(heldBefore && reachedEngine);
         }
