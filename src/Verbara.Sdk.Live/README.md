@@ -96,7 +96,7 @@ await server.ReconcileChannelsAsync(cancellationToken);
   carries the Asterisk version, not the server, and is obsolete (removed in 2.12.0).
 - From 2.11.0 `server.HasUnreconciledLoss` says whether an event the full buffer dropped has been delivered through, no
   covering read has covered it yet and no load of the server is running, and `server.UnreconciledLossDelivered` is raised
-  each time that turns true: the
+  once for each loss, when that first reads true: the
   route for a host without the session sweep (see the
   [high-load guide](../../docs/guides/high-load-tuning.md#session-reconciliation)).
 

@@ -503,22 +503,24 @@ public sealed class VerbaraServer : IVerbaraServer
     /// A reconciliation covers the loss when its <c>live channel-reconcile</c> span carries
     /// <c>live.reconcile.covered = true</c>: one that was refused, ran out of its wait for the event pump, overlapped
     /// another channel read or ran inside an event handler leaves this reading <see langword="true"/>. Read it after
-    /// the call to know whether to try again. <see cref="UnreconciledLossDelivered"/> is raised when it turns true.
-    /// One non-blocking read, no lock.
+    /// the call to know whether to try again. <see cref="UnreconciledLossDelivered"/> is raised once for each loss,
+    /// when this first reads true for it. One non-blocking read, no lock.
     /// </para>
     /// </remarks>
     public bool HasUnreconciledLoss => ReadLossState() == LossState.Delivered && !IsLoadInFlight;
 
     /// <summary>
-    /// Raised, naming this server, each time <see cref="HasUnreconciledLoss"/> turns true: when the connection's delivery
-    /// passes a lost event, and when a load of this server or a pending reconnect ends with a delivered loss it did not
-    /// cover. It says "look now"; the reading says what to do.
+    /// Raised, naming this server, once for each loss, when <see cref="HasUnreconciledLoss"/> first reads true for it:
+    /// when the connection's delivery passes a lost event, or, when a load of this server or a pending reconnect was
+    /// holding the reading false then, when that load or reconnect ends without having covered it. It says "look now";
+    /// the reading says what to do.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Drops delivered through together give one notice, and a later drop delivered through gives another. One notice
     /// per loss: when the reconciliation a handler starts does not cover (it was refused, overlapped another channel
-    /// read, or ran out of its wait), the reading stays true and no second notice comes for the same loss, so read
+    /// read, or ran out of its wait), the reading stays true and no second notice comes for the same loss, nor when a
+    /// later load of this server (<see cref="RequestInitialStateAsync"/>, a reload) ends without covering it, so read
     /// <see cref="HasUnreconciledLoss"/> after the reconciliation and try again yourself. A notice may find the reading
     /// <see langword="false"/> by the time a handler reads it, when another read covered the loss meanwhile. A subscriber
     /// added after the reading turned true hears nothing for that loss: subscribe before <see cref="StartAsync"/>, or read
