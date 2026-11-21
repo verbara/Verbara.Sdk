@@ -81,6 +81,37 @@ To roll back, keep the property and stop setting it (it then reads `null`), or r
 that reads it: a consumer compiled against the property does not build, or fails to bind at run time, against a
 package that lacks it.
 
+### Fixed: an STT provider reply with `null` in a required field is skipped and counted, not passed on (#636)
+
+The STT recognizers now check, when they read a provider reply, that a field the vendor contract says is never `null`
+is not `null`. Before, an explicit `null` there was read without an error and reached the caller as a result with no
+text or no kind.
+
+- **Deepgram and Speechmatics (WebSocket).** A frame with `null` in a required field is skipped. It counts once on
+  `stt.frames.unparseable`, and the stream goes on with the next frame. The fields are Deepgram's `type` and
+  `transcript`, and Speechmatics' `message` and `content`.
+- **Whisper and Azure Whisper (HTTP) — behaviour change.** A `{"text":null}` reply now makes `StreamAsync` throw
+  `JsonException`. Before, it returned no result and no error, silently. Both vendor contracts require `text`.
+  `VoiceAiPipeline` absorbs the exception: it counts the transcription as failed, publishes a `PipelineErrorEvent` and
+  goes back to listening. A caller that drives `StreamAsync` directly sees the exception and must handle it.
+- **Speechmatics.** A `null` entry in `results`, or a `null` first alternative, is skipped. The entries left keep
+  their text and their confidence. Before, it threw `NullReferenceException` and ended the stream.
+
+### Changed: STT transcript and kind fields with no vendor guarantee accept `null` (#636)
+
+Google's `transcript`, Cartesia's `type` and `text`, and AssemblyAI's `type` and `transcript` have no vendor contract
+that says they are never `null`. So these fields accept `null`:
+
+- A `null` transcript is read as empty text. The result does not tell a missing transcript from an empty one.
+- A `null` kind is read as an empty kind. The frame is ignored, as a frame of an unknown kind is, and is not counted.
+
+Two read sites go through the same check but cannot reject anything today, by design: the Google reply, because it has
+no field left that must not be `null`, and Speechmatics' second read of the `RecognitionStarted` greeting, because the
+first read already rejects a `null` kind. They use the check so that a field added later is held to its contract.
+
+The requests the SDK sends do not change: every request type serializes to the same bytes as before. No public API
+changes.
+
 ### Changed: `Verbara.Sdk.OpenTelemetry` moves to OpenTelemetry 1.21 (#618)
 
 `Verbara.Sdk.OpenTelemetry` now declares `OpenTelemetry`, `OpenTelemetry.Extensions.Hosting`,
