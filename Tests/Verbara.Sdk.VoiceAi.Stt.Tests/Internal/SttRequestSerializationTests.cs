@@ -8,12 +8,14 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Internal;
 
 /// <summary>
 /// Frozen UTF-8 payloads from the unfenced source-generated request context. Each reachable request
-/// DTO is covered, including null constructions that would throw if strict options reached sends.
+/// DTO is covered, including null constructions that would throw under the strict read options.
+/// These tests freeze what the context writes; they do not see which options a send site passes.
+/// That wiring is held by the governance guard <c>SttSendContextGuardTests</c>.
 /// </summary>
 public sealed class SttRequestSerializationTests
 {
     [Fact]
-    public void Serialize_ShouldKeepGoogleRequestBytes_WhenReadOptionsBecomeStrict()
+    public void Serialize_ShouldKeepGoogleRequestBytes_WhenSerializedByTheRequestContext()
     {
         JsonSerializer.SerializeToUtf8Bytes(new GoogleSpeechRequest(), VoiceAiSttJsonContext.Default.GoogleSpeechRequest)
             .Should().Equal(Encoding.UTF8.GetBytes(
@@ -24,7 +26,7 @@ public sealed class SttRequestSerializationTests
     }
 
     [Fact]
-    public void Serialize_ShouldKeepGoogleConfigBytes_WhenReadOptionsBecomeStrict()
+    public void Serialize_ShouldKeepGoogleConfigBytes_WhenSerializedByTheRequestContext()
     {
         JsonSerializer.SerializeToUtf8Bytes(new GoogleSpeechConfig(), VoiceAiSttJsonContext.Default.GoogleSpeechConfig)
             .Should().Equal(Encoding.UTF8.GetBytes(
@@ -35,7 +37,7 @@ public sealed class SttRequestSerializationTests
     }
 
     [Fact]
-    public void Serialize_ShouldKeepGoogleAudioBytes_WhenReadOptionsBecomeStrict()
+    public void Serialize_ShouldKeepGoogleAudioBytes_WhenSerializedByTheRequestContext()
     {
         JsonSerializer.SerializeToUtf8Bytes(new GoogleSpeechAudio { Content = "AQID" }, VoiceAiSttJsonContext.Default.GoogleSpeechAudio)
             .Should().Equal(Encoding.UTF8.GetBytes(
@@ -46,7 +48,7 @@ public sealed class SttRequestSerializationTests
     }
 
     [Fact]
-    public void Serialize_ShouldKeepSpeechmaticsStartBytes_WhenReadOptionsBecomeStrict()
+    public void Serialize_ShouldKeepSpeechmaticsStartBytes_WhenSerializedByTheRequestContext()
     {
         JsonSerializer.SerializeToUtf8Bytes(new SpeechmaticsStartRecognitionMessage(), VoiceAiSttJsonContext.Default.SpeechmaticsStartRecognitionMessage)
             .Should().Equal(Encoding.UTF8.GetBytes(
@@ -58,7 +60,7 @@ public sealed class SttRequestSerializationTests
     }
 
     [Fact]
-    public void Serialize_ShouldKeepSpeechmaticsAudioFormatBytes_WhenReadOptionsBecomeStrict()
+    public void Serialize_ShouldKeepSpeechmaticsAudioFormatBytes_WhenSerializedByTheRequestContext()
     {
         JsonSerializer.SerializeToUtf8Bytes(new SpeechmaticsAudioFormat(), VoiceAiSttJsonContext.Default.SpeechmaticsAudioFormat)
             .Should().Equal(Encoding.UTF8.GetBytes(
@@ -69,7 +71,7 @@ public sealed class SttRequestSerializationTests
     }
 
     [Fact]
-    public void Serialize_ShouldKeepSpeechmaticsConfigBytes_WhenReadOptionsBecomeStrict()
+    public void Serialize_ShouldKeepSpeechmaticsConfigBytes_WhenSerializedByTheRequestContext()
     {
         JsonSerializer.SerializeToUtf8Bytes(new SpeechmaticsTranscriptionConfig(), VoiceAiSttJsonContext.Default.SpeechmaticsTranscriptionConfig)
             .Should().Equal(Encoding.UTF8.GetBytes(
@@ -81,7 +83,7 @@ public sealed class SttRequestSerializationTests
     }
 
     [Fact]
-    public void Serialize_ShouldKeepSpeechmaticsEndBytes_WhenReadOptionsBecomeStrict()
+    public void Serialize_ShouldKeepSpeechmaticsEndBytes_WhenSerializedByTheRequestContext()
     {
         JsonSerializer.SerializeToUtf8Bytes(new SpeechmaticsEndOfStreamMessage { LastSeqNo = 7 }, VoiceAiSttJsonContext.Default.SpeechmaticsEndOfStreamMessage)
             .Should().Equal(Encoding.UTF8.GetBytes(
