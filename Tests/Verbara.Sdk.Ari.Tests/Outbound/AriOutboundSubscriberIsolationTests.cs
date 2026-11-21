@@ -246,12 +246,14 @@ public sealed class AriOutboundSubscriberIsolationTests
         await using var listener = CreateListener(logger);
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var subscriptions = new ConcurrentBag<IDisposable>();
+        var told = new TaskCompletionSource<AriOutboundConnection>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var announced = listener.OnConnectionAccepted.Subscribe(connection =>
         {
             subscriptions.Add(connection.Events.Subscribe(
                 static _ => { },
                 static () => throw new InvalidOperationException("the first events observer failed on the completion")));
             subscriptions.Add(connection.Events.Subscribe(static _ => { }, () => completed.TrySetResult()));
+            told.TrySetResult(connection);
         });
         await listener.StartAsync();
 
@@ -259,10 +261,12 @@ public sealed class AriOutboundSubscriberIsolationTests
         {
             // Act — the peer closes, the read pump ends and the connection completes its events
             using var peer = await ConnectAsync(listener.BoundPort, "first-app");
-            await WithinLimitAsync(WhenAsync(() => listener.ActiveConnectionCount == 1), "the connection is served");
+            await WithinLimitAsync(told.Task, "the connection is announced");
             await peer.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None).WaitAsync(WaitLimit);
-            var ended = await Task.WhenAny(completed.Task, Task.Delay(WaitLimit)) == completed.Task;
-            await WithinLimitAsync(WhenAsync(() => listener.ActiveConnectionCount == 0), "the connection is released");
+            var ended = await EndsWithinLimitAsync(completed.Task);
+            await WithinLimitAsync(
+                logger.WhenLogged(e => e.EventName == "ConnectionClosed"),
+                "the read pump ends and releases the connection");
 
             // Assert
             using (new AssertionScope())
@@ -408,24 +412,28 @@ public sealed class AriOutboundSubscriberIsolationTests
             .WaitAsync(WaitLimit);
     }
 
-    /// <summary>The task's result, or null after <see cref="WaitLimit"/>; reaching the limit fails the test.</summary>
+    /// <summary>The task's result; not completing within <see cref="WaitLimit"/> fails the test.</summary>
     private static async Task<T?> WithinLimitAsync<T>(Task<T> task, string because)
     {
-        var finished = await Task.WhenAny(task, Task.Delay(WaitLimit));
-        (finished == task).Should().BeTrue(because);
-        return finished == task ? await task : default;
+        await WithinLimitAsync((Task)task, because);
+        return await task;
     }
 
-    private static async Task WithinLimitAsync(Task task, string because)
-    {
-        var finished = await Task.WhenAny(task, Task.Delay(WaitLimit));
-        (finished == task).Should().BeTrue(because);
-    }
+    private static async Task WithinLimitAsync(Task task, string because) =>
+        (await EndsWithinLimitAsync(task)).Should().BeTrue(because);
 
-    private static async Task WhenAsync(Func<bool> predicate)
+    /// <summary>Whether the task ends within <see cref="WaitLimit"/>; the wait ends on the task, never on a clock.</summary>
+    private static async Task<bool> EndsWithinLimitAsync(Task task)
     {
-        while (!predicate())
-            await Task.Delay(10);
+        try
+        {
+            await task.WaitAsync(WaitLimit);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
     }
 
     private static string Describe(CapturingLogger<AriOutboundListener> logger) =>
