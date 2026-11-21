@@ -418,6 +418,7 @@ public sealed class AudioSocketServerSessionStartedFaultTests
         var decidedFault = await Record.ExceptionAsync(() => decided);
         var frames = await peer.ReadFramesToEndAsync();
         var writeFault = await Record.ExceptionAsync(() => (inFlight ?? Task.CompletedTask).WaitAsync(SignalTimeout));
+        var writeFailed = writeFault is not null;
 
         // Assert
         using (new AssertionScope())
@@ -428,7 +429,7 @@ public sealed class AudioSocketServerSessionStartedFaultTests
             decidedFault.Should().BeNull("the server closes the connection once its bound has run out");
             frames.ReachedEnd.Should().BeTrue("the connection is closed");
             frames.Types.Should().NotContain(AudioSocketFrameType.Hangup, "no hangup frame is written once the bound ran out");
-            writeFault.Should().NotBeNull("the write in flight fails when the connection is closed under it");
+            writeFailed.Should().BeTrue("the write in flight fails when the connection is closed under it");
             rig.Faults.Total.Should().Be(1, "the subscriber's failure is counted once");
             rig.Logger.Errors.Should().BeEmpty("a bounded close is not a connection error");
         }
