@@ -121,24 +121,30 @@ public class WebSocketAudioServerTests
     }
 
     [Fact]
-    public async Task HandleConnectionAsync_ShouldRemoveAndDisposeSession_WhenStreamConnectedSubscriberThrows()
+    public async Task HandleConnectionAsync_ShouldKeepTheSessionRegisteredAndOpen_WhenStreamConnectedSubscriberThrows()
     {
         var (started, port) = await StartOnLoopbackAsync();
         await using var server = started;
-        var disposedSignal = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
-        // Observers run in subscription order: this one sees the session before the next one throws.
-        using var tracking = server.OnStreamConnected.Subscribe(stream => disposedSignal.TrySetResult(WhenDisposed(stream)));
+        var announced = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Observers run in subscription order: the throwing one first, then the one the test waits on, which is called
+        // only once the throw has been reported.
         using var throwing = server.OnStreamConnected.Subscribe(static _ => throw new InvalidOperationException("subscriber failure"));
+        using var tracking = server.OnStreamConnected.Subscribe(stream => announced.TrySetResult(stream));
 
         using var client = new ClientWebSocket();
         await client.ConnectAsync(ChannelUri(port, "ch-throw"), CancellationToken.None);
-        var disposed = await disposedSignal.Task.WaitAsync(WaitLimit);
+        var session = await announced.Task.WaitAsync(WaitLimit);
 
-        // The client stays open, so only the failed connection's own cleanup can dispose the session.
-        await disposed.WaitAsync(WaitLimit);
+        // The session's audio still flows from the client: the connection was not closed under it.
+        await client.SendAsync(new byte[320], WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None);
+        var frame = await session.ReadFrameAsync().AsTask().WaitAsync(WaitLimit);
 
-        server.ActiveStreamCount.Should().Be(0);
-        server.GetStream("ch-throw").Should().BeNull();
+        using (new AssertionScope())
+        {
+            frame.Length.Should().Be(320, "an observer that throws loses nothing but its own call: the session stays open");
+            server.ActiveStreamCount.Should().Be(1);
+            server.GetStream("ch-throw").Should().BeSameAs(session);
+        }
     }
 
     [Fact]
@@ -458,33 +464,31 @@ public class WebSocketAudioServerTests
     }
 
     [Fact]
-    public async Task HandleConnectionAsync_ShouldNotAnnounceToLaterObservers_WhenAnEarlierObserverThrows()
+    public async Task HandleConnectionAsync_ShouldAnnounceToLaterObservers_WhenAnEarlierObserverThrows()
     {
         // Arrange — three observers in subscription order: one that records, one that throws, one that records.
         var (started, port) = await StartOnLoopbackAsync();
         await using var server = started;
-        var disposedSignal = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var laterObserverCalls = 0;
-        using var earlier = server.OnStreamConnected.Subscribe(stream => disposedSignal.TrySetResult(WhenDisposed(stream)));
+        var earlierSaw = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var laterSaw = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var earlier = server.OnStreamConnected.Subscribe(stream => earlierSaw.TrySetResult(stream));
         using var throwing = server.OnStreamConnected.Subscribe(static _ => throw new InvalidOperationException("subscriber failure"));
-        using var later = server.OnStreamConnected.Subscribe(_ => Interlocked.Increment(ref laterObserverCalls));
+        using var later = server.OnStreamConnected.Subscribe(stream => laterSaw.TrySetResult(stream));
 
-        // Act — the client stays open, so only the failed connection's own cleanup can dispose the session, and
-        // that cleanup runs after the announcement has ended.
+        // Act
         using var client = new ClientWebSocket();
         await client.ConnectAsync(ChannelUri(port, "ch-throw-order"), CancellationToken.None);
-        var disposed = await disposedSignal.Task.WaitAsync(WaitLimit);
-        await disposed.WaitAsync(WaitLimit);
+        var seen = await earlierSaw.Task.WaitAsync(WaitLimit);
+        var laterSeen = await laterSaw.Task.WaitAsync(WaitLimit);
 
         // Assert
         using (new AssertionScope())
         {
-            Volatile.Read(ref laterObserverCalls).Should().Be(
-                0,
-                "the announcement ends at the observer that throws, so an observer subscribed after it never " +
-                "receives that stream");
-            server.ActiveStreamCount.Should().Be(0, "the connection whose announcement failed is released");
-            server.GetStream("ch-throw-order").Should().BeNull();
+            laterSeen.Should().BeSameAs(seen,
+                "the announcement goes on past the observer that throws, so an observer subscribed after it receives " +
+                "that stream too");
+            server.ActiveStreamCount.Should().Be(1, "the connection whose observer threw is kept");
+            server.GetStream("ch-throw-order").Should().BeSameAs(seen);
         }
     }
 

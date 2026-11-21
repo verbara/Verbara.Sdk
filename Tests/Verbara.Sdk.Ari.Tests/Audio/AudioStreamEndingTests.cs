@@ -333,18 +333,20 @@ public sealed class AudioStreamEndingTests
     }
 
     [Fact]
-    public async Task OnStreamConnected_ShouldPropagateTheReplayThrowToTheHandler_WhenAnObserverThrowsOnEveryState()
+    public async Task OnStreamConnected_ShouldReportTheReplayThrowAndKeepTheConnection_WhenAnObserverThrowsOnEveryState()
     {
-        // A pin, green before and after: the throw on the state replayed inside Subscribe reaches the
-        // subscriber's caller, and the server reports the failed announcement as a connection error
+        // The throw on the state replayed inside Subscribe still reaches the subscriber's caller, the
+        // OnStreamConnected observer; what that observer then throws is its own failure: the server reports it once
+        // at Warning and keeps the connection (up to 2.10.x it closed it and logged a connection error)
         var cell = await MeasureReplayThrowCellAsync();
 
         using (new AssertionScope($"cell: {cell}"))
         {
             cell.SubscribeThrewIntoHandler.Should().Be(ObserverStreams);
             cell.SecondSubscribed.Should().Be(0, "the handler did not get past the throwing subscription");
-            cell.ClosedByServer.Should().Be(ObserverStreams);
-            cell.ConnectionErrors.Should().Be(ObserverStreams, "counted by event name, not by level");
+            cell.ObserverWarnings.Should().Be(ObserverStreams, "one Warning per announcement the observer threw on");
+            cell.ClosedBeforeDispose.Should().Be(0, "an observer's failure closes no connection");
+            cell.ConnectionErrors.Should().Be(0, "and is not a connection error");
         }
     }
 
@@ -397,7 +399,8 @@ public sealed class AudioStreamEndingTests
     private sealed record ReplayThrowCell(
         int SubscribeThrewIntoHandler,
         int SecondSubscribed,
-        int ClosedByServer,
+        int ObserverWarnings,
+        int ClosedBeforeDispose,
         int ConnectionErrors,
         int OtherErrors,
         int ExtraCalls,
@@ -585,22 +588,26 @@ public sealed class AudioStreamEndingTests
             Interlocked.Increment(ref secondSubscribed);
         });
         var peers = new List<AudioSocketTestPeer>();
-        int closed, connectionErrors, otherErrors;
+        int closed = 0, observerWarnings, connectionErrors, otherErrors;
         try
         {
             using var bound = new CancellationTokenSource(SignalTimeout);
             for (var i = 0; i < ObserverStreams; i++)
                 peers.Add((await harness.IdentifyAsync(Guid.NewGuid(), bound.Token)).Peer);
 
-            await Signalled(Task.WhenAll(peers.Select(p => p.Closed)), bound.Token);
-            await Signalled(harness.Logger.WhenCount(e => e.EventName == "ConnectionError", ObserverStreams), bound.Token);
+            // The report is written inside the announcement, before the handler waits on the stream's ending, so once
+            // every Warning is in, a connection the failure closed would already be closing.
+            await Signalled(
+                harness.Logger.WhenCount(e => e.EventName == "StreamConnectedObserverFailed", ObserverStreams), bound.Token);
+            closed = peers.Count(p => p.Closed.IsCompleted);
         }
         finally
         {
             await harness.DisposeAsync().AsTask().WaitAsync(SignalTimeout);
         }
 
-        closed = peers.Count(p => p.Closed.IsCompleted);
+        observerWarnings = harness.Logger.Entries.Count(
+            e => e.EventName == "StreamConnectedObserverFailed" && e.Level == LogLevel.Warning);
         connectionErrors = harness.Logger.Entries.Count(e => e.EventName == "ConnectionError");
         otherErrors = harness.Logger.Entries.Count(e => e.Level >= LogLevel.Error && e.EventName != "ConnectionError");
         foreach (var peer in peers)
@@ -610,6 +617,7 @@ public sealed class AudioStreamEndingTests
         return new ReplayThrowCell(
             threwIntoHandler,
             secondSubscribed,
+            observerWarnings,
             closed,
             connectionErrors,
             otherErrors,

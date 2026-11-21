@@ -24,8 +24,8 @@ internal static partial class AudioSocketSessionLog
 /// <remarks>
 /// Records the <c>Verbara.Sdk.Ari.Audio</c> instruments, each measurement tagged
 /// <c>audio.transport=audiosocket</c>: the stream opened at its first identification and closed at its one
-/// ending, the audio frames and payload bytes received and sent (empty audio counts as neither), the hangup
-/// and error frames, and the time from receipt to the consumer's read.
+/// ending, the audio frames and payload bytes received and sent (empty audio counts as neither), each frame its
+/// full receive buffer discards, the hangup and error frames, and the time from receipt to the consumer's read.
 /// </remarks>
 internal sealed class AudioSocketSession : IAudioStream
 {
@@ -86,12 +86,18 @@ internal sealed class AudioSocketSession : IAudioStream
             useSynchronizationContext: false);
 
         _inputPipe = new Pipe(pipeOptions);
-        _audioInChannel = Channel.CreateBounded<ReceivedAudioFrame>(new BoundedChannelOptions(1000)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true,
-            SingleWriter = true
-        });
+
+        // DropOldest never refuses a write for a full buffer: the channel discards its oldest frame instead, and
+        // reports it only through this callback, so the TryWrite in the read pump cannot see a drop. The read never
+        // waits for a slow consumer. Counted as the WebSocket session counts its own drops.
+        _audioInChannel = Channel.CreateBounded<ReceivedAudioFrame>(
+            new BoundedChannelOptions(1000)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+                SingleWriter = true
+            },
+            static _ => AudioStreamMetrics.FramesDropped.Add(1, AudioStreamMetrics.AudioSocketTransport));
     }
 
     internal void Start()

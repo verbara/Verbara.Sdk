@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using System.Reactive.Subjects;
 using Microsoft.Extensions.Logging;
 using Verbara.Sdk.Ari.Diagnostics;
 using Verbara.Sdk.Ari.Internal;
@@ -51,7 +50,8 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
     // A connection enters it pending, before the stop is read a second time, and is announced only once
     // admitted; the stop claims a pending entry for its registrant to withdraw.
     private readonly ConcurrentDictionary<AudioSocketSession, RegistryEntry> _live = new();
-    private readonly Subject<IAudioStream> _streamSubject = new();
+    // Each observer behind its own guard: what it throws is reported and loses nothing but its own call.
+    private readonly StreamAnnouncements _announcements;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
@@ -66,7 +66,7 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
     /// runs. The connection's place in <see cref="AudioServerOptions.MaxConcurrentStreams"/> comes back only when
     /// the observer returns.
     /// </remarks>
-    public IObservable<IAudioStream> OnStreamConnected => _streamSubject;
+    public IObservable<IAudioStream> OnStreamConnected => _announcements;
 
     /// <summary>
     /// Get an active stream by the UUID Asterisk sent in its AudioSocket identification frame, in
@@ -119,6 +119,7 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
         _options = options;
         _logger = logger;
         _timeProvider = timeProvider;
+        _announcements = new StreamAnnouncements(logger, "[AudioSocket]", AudioStreamMetrics.AudioSocketTransport);
     }
 
     /// <summary>
@@ -474,7 +475,9 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
                 if (ct.IsCancellationRequested || !entry.TryAdmit())
                     return;
 
-                _streamSubject.OnNext(session);
+                // Each observer stands behind its own guard, so what one throws is reported there and the
+                // announcement goes on to the next: nothing an observer throws reaches this handler.
+                _announcements.Announce(session);
 
                 // The session completes this signal when its ending is published, before any consumer
                 // observer is notified, so the release does not depend on what those observers do.
@@ -492,8 +495,8 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
             catch (ObjectDisposedException) when (ct.IsCancellationRequested)
             {
                 // An announcement that met the subject a racing DisposeAsync released: that is the
-                // stop, not a connection error. A consumer's own handler that throws
-                // ObjectDisposedException while the server runs still reaches the catch below.
+                // stop, not a connection error. What a consumer's own observer throws, an
+                // ObjectDisposedException included, never reaches here: its guard reports it.
                 /* Best effort — the server is being disposed */
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -552,8 +555,8 @@ public sealed class AudioSocketServer : IAudioServer, IAsyncDisposable
             return;
 
         if (IsRunning) await StopAsync();
-        _streamSubject.OnCompleted();
-        _streamSubject.Dispose();
+        _announcements.Complete();
+        _announcements.Dispose();
         _cts?.Dispose();
     }
 

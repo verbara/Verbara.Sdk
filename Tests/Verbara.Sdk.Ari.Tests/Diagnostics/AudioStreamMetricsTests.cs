@@ -46,6 +46,7 @@ public sealed class AudioStreamMetricsTests
                 ("audio.transport.failures", "sessions"),
                 ("audio.connections.refused", "connections"),
                 ("audio.control_messages.subscriber_faults", "faults"),
+                ("audio.stream_connected.subscriber_faults", "faults"),
                 ("audio.frame.latency", "ms"),
             });
     }

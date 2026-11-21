@@ -965,58 +965,60 @@ public class AudioSocketServerTests : IAsyncLifetime
     // -------------------------------------- a connection that fails after the server took it on
 
     [Fact]
-    public async Task HandleConnection_ShouldReportIt_WhenAnObserverOfNewStreamsThrows()
+    public async Task HandleConnection_ShouldKeepTheConnectionAndLogOneWarning_WhenAnObserverOfNewStreamsThrows()
     {
-        // Arrange — OnStreamConnected is published from inside the connection handler, synchronously,
-        // so a consumer's subscription throwing is an exception the handler is left holding. Until
-        // this test that arm had no coverage of any kind, which left "a consumer's fault is not the
-        // server's" as an intention rather than a fact.
+        // Arrange — OnStreamConnected is published from inside the connection handler, synchronously. An observer
+        // that throws there is the observer's failure, not the connection's: the server reports it and goes on.
         var logger = new CapturingLogger();
         var (server, port) = await StartOnLoopbackAsync(logger: logger);
+        var announced = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         using var sub = server.OnStreamConnected.Subscribe(
             _ => throw new InvalidOperationException("the consumer's handler failed"));
+        using var after = server.OnStreamConnected.Subscribe(stream => announced.TrySetResult(stream));
+        var uuid = Guid.NewGuid();
 
         using var client = await ConnectAsync(port);
         var stream = client.GetStream();
 
-        // Act — a UUID frame is what takes the connection past the handler's wait and into the
-        // publish that throws
-        await stream.WriteAsync(BuildUuidFrame(Guid.NewGuid()));
+        // Act — a UUID frame is what takes the connection past the handler's wait and into the publish that throws
+        await stream.WriteAsync(BuildUuidFrame(uuid));
         await stream.FlushAsync();
 
-        // Assert — the read returns 0 only once the handler has released the connection, so the wait
-        // is on the server winding it up and not on a clock. By then the catch has already logged.
-        var buffer = new byte[1];
-        var read = await stream.ReadAsync(buffer).AsTask().WaitAsync(SignalTimeout);
+        // Assert — the observer after the throwing one is called only once the throw has been reported, so the wait is
+        // on the announcement and not on a clock. Its audio then reaches the stream: the connection is open.
+        var seen = await announced.Task.WaitAsync(SignalTimeout);
+        await stream.WriteAsync(BuildFrame(AudioFrameType.Audio, new byte[320]));
+        var frame = await seen.ReadFrameAsync().AsTask().WaitAsync(SignalTimeout);
 
-        read.Should().Be(
-            0,
-            "the handler releases the connection on the failing path too, rather than leaking it");
-        logger.Entries.Should().ContainSingle(
-            entry => entry.Level == LogLevel.Error
-                && entry.EventName == "ConnectionError"
-                && entry.ExceptionType == nameof(InvalidOperationException),
-            "a failure that is neither the stop nor the idle deadline is the loss of that " +
-            "connection, so it is logged at Error instead of vanishing into the unobserved task " +
-            "the accept loop started the handler in");
-        server.ActiveStreamCount.Should().Be(
-            0,
-            "the finally deregisters the session on the failing path as well as the clean one");
-        server.IsRunning.Should().BeTrue("one connection failing is not the server failing");
+        using (new AssertionScope())
+        {
+            frame.Length.Should().Be(320, "the connection whose observer threw stays open and its audio flows");
+            server.GetStream(uuid.ToString()).Should().BeSameAs(seen, "and stays registered");
+            server.ActiveStreamCount.Should().Be(1, "and keeps its place");
+            logger.Entries.Should().ContainSingle(
+                entry => entry.Level == LogLevel.Warning
+                    && entry.EventName == "StreamConnectedObserverFailed"
+                    && entry.ExceptionType == nameof(InvalidOperationException),
+                "the observer's failure is logged once at Warning");
+            logger.Entries.Should().NotContain(
+                entry => entry.EventName == "ConnectionError",
+                "an observer's failure is not the loss of the connection");
+            server.IsRunning.Should().BeTrue("one observer failing is not the server failing");
+        }
     }
 
     [Fact]
-    public async Task HandleConnection_ShouldNotAnnounceToLaterObservers_WhenAnEarlierObserverThrows()
+    public async Task HandleConnection_ShouldAnnounceToLaterObservers_WhenAnEarlierObserverThrows()
     {
         // Arrange — three observers in subscription order: one that records, one that throws, one that records.
         var (server, port) = await StartOnLoopbackAsync();
         var earlierSaw = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var laterObserverCalls = 0;
+        var laterSaw = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var earlier = server.OnStreamConnected.Subscribe(stream => earlierSaw.TrySetResult(stream));
         using var throwing = server.OnStreamConnected.Subscribe(
             static _ => throw new InvalidOperationException("the consumer's handler failed"));
-        using var later = server.OnStreamConnected.Subscribe(_ => Interlocked.Increment(ref laterObserverCalls));
+        using var later = server.OnStreamConnected.Subscribe(stream => laterSaw.TrySetResult(stream));
         var uuid = Guid.NewGuid();
 
         using var client = await ConnectAsync(port);
@@ -1026,20 +1028,17 @@ public class AudioSocketServerTests : IAsyncLifetime
         await stream.WriteAsync(BuildUuidFrame(uuid));
         await stream.FlushAsync();
 
-        // Assert — the read returns 0 only once the handler has released the connection, which it does after the
-        // announcement has ended.
-        var read = await stream.ReadAsync(new byte[1]).AsTask().WaitAsync(SignalTimeout);
+        // Assert
         var seen = await earlierSaw.Task.WaitAsync(SignalTimeout);
+        var laterSeen = await laterSaw.Task.WaitAsync(SignalTimeout);
 
         using (new AssertionScope())
         {
-            read.Should().Be(0, "the connection whose announcement failed is released");
             seen.ChannelId.Should().Be(uuid.ToString(), "the observer subscribed first received this stream");
-            Volatile.Read(ref laterObserverCalls).Should().Be(
-                0,
-                "the announcement ends at the observer that throws, so an observer subscribed after it never " +
-                "receives that stream");
-            server.ActiveStreamCount.Should().Be(0);
+            laterSeen.Should().BeSameAs(seen,
+                "the announcement goes on past the observer that throws, so an observer subscribed after it receives " +
+                "that stream too");
+            server.ActiveStreamCount.Should().Be(1, "the connection whose observer threw is kept");
         }
     }
 

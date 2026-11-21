@@ -11,8 +11,10 @@ namespace Verbara.Sdk.Ari.Audio;
 /// aggregated server keeps it: each subscription is made on every server's own announcement, and each stream
 /// reaches the observer from the handler of the connection that carries it, with no lock and no catch in between. An observer may
 /// therefore be invoked concurrently for different connections, on the same server or on different ones; one that
-/// blocks holds only the connection it was handed; and one that throws loses that connection, as the server that
-/// accepted it states, and stays subscribed for the later streams of every server.
+/// blocks holds only the connection it was handed; and one that throws loses nothing but its own call: the server that
+/// accepted the connection reports the failure, keeps the connection and announces it to the later observers, and the
+/// observer stays subscribed for the later streams of every server. The composite adds no guard of its own, because
+/// each server's announcement is already guarded per observer.
 /// </para>
 /// <para>
 /// <see cref="ActiveStreams"/> and <see cref="ActiveStreamCount"/> only merge: the list holds every
@@ -82,7 +84,9 @@ public sealed class CompositeAudioServer : IAudioServer
     /// <summary>
     /// Subscribes each subscriber to every server's own announcement, forwarding every notification as it arrives: no
     /// gate, no catch around forwarding, no safe-observer wrapper. That is what keeps the servers' contract, where a
-    /// merge operator would serialize all connections behind one gate and end a subscription whose observer threw.
+    /// merge operator would serialize all connections behind one gate and end a subscription whose observer threw. No
+    /// catch is needed here: each server guards every subscription to its announcement, so what the subscriber throws
+    /// is caught and reported by the server whose stream or completion it was handed.
     /// </summary>
     private sealed class Announcements(IAudioServer[] servers) : IObservable<IAudioStream>
     {
