@@ -169,6 +169,14 @@ What this cannot do for you:
 - Only what throws on the delivering thread is caught. An `async void` handler or a task nobody awaits fails outside it.
 - An observer that blocks still holds every later event, and `OutOfMemoryException` is not caught.
 
+The outbound listener follows the same rule, from 2.11.0. An observer of `OnConnectionAccepted` or of an
+`AriOutboundConnection`'s `Events` that throws loses only its own call: the connection stays open, tracked and read, the
+other observers are still told, and the listener's `DisposeAsync` finishes. Each failure logs one Warning,
+`[AriOutbound] OnConnectionAccepted observer threw on <Notification>` or `[AriOutbound] Events observer threw on
+<EventType>`, with the exception, and adds one to `ari.outbound.subscriber_faults` (tag `surface`: `connection_accepted`
+or `events`). Up to 2.10.x such an observer closed the connection. To refuse a connection, call `DisconnectAsync` on it
+instead of throwing.
+
 ## Documentation
 
 - [High-Load Tuning Guide](../../docs/guides/high-load-tuning.md)

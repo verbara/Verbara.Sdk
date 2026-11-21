@@ -903,12 +903,12 @@ public sealed class AriOutboundListenerTests
     }
 
     [Fact]
-    public async Task HandleConnectionAsync_ShouldReportItAndKeepListening_WhenAnObserverOfAcceptedConnectionsThrows()
+    public async Task HandleConnectionAsync_ShouldReportItAtWarningAndKeepTheConnection_WhenAnObserverOfAcceptedConnectionsThrows()
     {
-        // Arrange — OnConnectionAccepted is published from inside the handler, synchronously, so a
-        // consumer's subscription throwing is an exception the handler is left holding. It throws on
-        // the first connection only, which makes what happens to the SECOND one the evidence: a
-        // listener that survived a consumer's fault still accepts, and one that did not, does not.
+        // Arrange — OnConnectionAccepted is published from inside the handler, synchronously. Each
+        // observer is guarded at its subscription, so what one throws stays with that observer: it is
+        // reported once at Warning, and the connection it threw on is still served. It throws on the
+        // first connection only, and the second one shows the listener still accepts.
         var logger = new CapturingLogger();
         var (listener, _) = CreateListener(logger: logger);
         var observed = 0;
@@ -925,25 +925,29 @@ public sealed class AriOutboundListenerTests
             using var first = await ConnectClientAsync(listener.BoundPort, app: "first");
 
             (await WaitForAsync(
-                    () => logger.Entries.Any(entry => entry.EventName == "ConnectionError"),
+                    () => logger.Entries.Any(entry => entry.EventName is "AcceptedObserverFault" or "ConnectionError"),
                     SignalTimeout))
-                .Should().BeTrue("the observer's failure reached the handler and was reported");
+                .Should().BeTrue("the observer's failure was reported");
 
             // Assert
             logger.Entries.Should().ContainSingle(
-                entry => entry.Level == LogLevel.Error
-                    && entry.EventName == "ConnectionError"
+                entry => entry.Level == LogLevel.Warning
+                    && entry.EventName == "AcceptedObserverFault"
                     && entry.ExceptionType == nameof(InvalidOperationException),
-                "a failure that is neither the stop nor the transport is still the loss of that " +
-                "connection, so it is logged at Error instead of escaping into the unobserved " +
-                "Task.Run the accept loop started the handler in");
+                "the observer's failure is its own, so it is logged once at Warning with its exception; " +
+                "the listener logged [{0}]",
+                Describe(logger));
+            logger.Entries.Should().NotContain(
+                entry => entry.EventName == "ConnectionError",
+                "the connection did not fail, its observer did");
+            listener.GetByApplication("first").Should().ContainSingle(
+                "the connection the observer threw on is still served");
 
             using var second = await ConnectClientAsync(listener.BoundPort, app: "second");
 
             (await WaitForAsync(() => listener.GetByApplication("second").Any(), SignalTimeout))
-                .Should().BeTrue(
-                    "one observer throwing costs the connection it threw on and nothing else — the " +
-                    "listener is still accepting");
+                .Should().BeTrue("the listener is still accepting");
+            listener.ActiveConnectionCount.Should().Be(2, "neither connection was lost to the observer");
             listener.IsRunning.Should().BeTrue();
         }
         finally
@@ -1025,26 +1029,28 @@ public sealed class AriOutboundListenerTests
     // ------------------------------------------------------------ a connection whose announcement fails
 
     [Fact]
-    public async Task HandleConnectionAsync_ShouldReleaseTheConnection_WhenAnObserverOfAcceptedConnectionsThrows()
+    public async Task HandleConnectionAsync_ShouldKeepServingTheConnection_WhenAnObserverOfAcceptedConnectionsThrows()
     {
-        // Arrange — the listener tracks a connection before it announces it, and only the read pump's
-        // `finally` untracks it. An observer that throws during the announcement means the read pump
-        // never runs, so this test follows the connection that observer was told about. The observer
-        // subscribes to that connection's events while it is being told, the one moment it can: a
-        // released connection's event stream takes no more subscribers. The accept seam hands the
-        // listener a loopback connection this test accepted itself, and the wait ends on the handler
-        // releasing it, which is the handler's last step.
+        // Arrange — the listener tracks a connection before it announces it, and each observer of the
+        // announcement is guarded at its subscription. An observer that throws while it is told about a
+        // connection loses its own call and nothing else: the read pump runs, the connection stays
+        // tracked, and its events reach the subscription the observer made before it threw. The accept
+        // seam hands the listener a loopback connection this test accepted itself, so the test can see
+        // the handler has not released it.
         var logger = new CapturingLogger();
         var (listener, _) = CreateListener(logger: logger);
         using var seam = new LoopbackAcceptSeam();
         listener.AcceptOverride = seam.AcceptAsync;
         AriOutboundConnection? announced = null;
         IDisposable? eventsSubscription = null;
+        var eventReceived = new TaskCompletionSource<AriEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         var eventsCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var sub = listener.OnConnectionAccepted.Subscribe(connection =>
         {
             announced = connection;
-            eventsSubscription = connection.Events.Subscribe(_ => { }, () => eventsCompleted.TrySetResult());
+            eventsSubscription = connection.Events.Subscribe(
+                evt => eventReceived.TrySetResult(evt),
+                () => eventsCompleted.TrySetResult());
             throw new InvalidOperationException("the consumer's handler failed");
         });
 
@@ -1058,31 +1064,32 @@ public sealed class AriOutboundListenerTests
             // Act
             using var peer = await ConnectClientAsync(seam.Port, app: "first").WaitAsync(SignalTimeout);
             var served = await seam.NextHandedOverAsync();
-            await served.Released.WaitAsync(SignalTimeout);
-            var peerSawItClosed = await SeesItsConnectionClosedAsync(peer);
+            const string json = """{"type":"StasisStart","application":"first","timestamp":"2026-04-19T10:00:00Z","args":[],"channel":{"id":"ch-1","name":"PJSIP/test","state":"Up"}}""";
+            await peer.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
+            var delivered = await eventReceived.Task.WaitAsync(SignalTimeout);
 
             // Assert
             announced.Should().NotBeNull("the handler announced the connection before the observer threw");
             using (new AssertionScope())
             {
-                listener.ActiveConnectionCount.Should().Be(
-                    0,
-                    "a connection whose handler already ended and closed its socket is not active");
-                listener.GetByApplication("first").Should().BeEmpty(
-                    "a lookup returns the connections the listener serves, and it serves this one no more");
-                announced!.IsConnected.Should().BeFalse(
-                    "the connection the observer was told about has been closed");
-                eventsCompleted.Task.IsCompleted.Should().BeTrue(
-                    "a released connection completes its event stream, so no subscriber waits on events " +
-                    "that will never come");
-                peerSawItClosed.Should().BeTrue("the far end sees its connection closed");
+                delivered.Should().BeOfType<Verbara.Sdk.Ari.Events.StasisStartEvent>(
+                    "the read pump runs and serves the connection the observer threw on");
+                listener.ActiveConnectionCount.Should().Be(1, "the connection is still active");
+                listener.GetByApplication("first").Should().ContainSingle(
+                    tracked => ReferenceEquals(tracked, announced),
+                    "a lookup still returns the connection");
+                announced!.IsConnected.Should().BeTrue("the connection the observer was told about is open");
+                eventsCompleted.Task.IsCompleted.Should().BeFalse("its event stream has not ended");
+                served.Released.IsCompleted.Should().BeFalse("the handler has not released the connection");
                 logger.Entries.Should().ContainSingle(
-                    entry => entry.Level == LogLevel.Error
-                        && entry.EventName == "ConnectionError"
+                    entry => entry.Level == LogLevel.Warning
+                        && entry.EventName == "AcceptedObserverFault"
                         && entry.ExceptionType == nameof(InvalidOperationException),
-                    "the observer's failure is reported once, as that connection's error; the listener " +
-                    "logged [{0}]",
+                    "the observer's failure is reported once, at Warning; the listener logged [{0}]",
                     Describe(logger));
+                logger.Entries.Should().NotContain(
+                    entry => entry.EventName == "ConnectionError",
+                    "the connection did not fail, its observer did");
             }
         }
         finally
@@ -1092,13 +1099,12 @@ public sealed class AriOutboundListenerTests
     }
 
     [Fact]
-    public async Task HandleConnectionAsync_ShouldReportTheFailureWithinABound_WhenTheFarEndDoesNotRead()
+    public async Task HandleConnectionAsync_ShouldReportTheFailureWithinABoundAndKeepTheConnection_WhenTheFarEndDoesNotRead()
     {
         // Arrange — a raw peer that sends its upgrade request and never reads again, so it never answers
-        // a close frame. A graceful close sends one and then waits for the answer with no bound, so a
-        // release that closed gracefully would hold the handler for as long as this peer stays
-        // connected. The bound starts once the observer is being told, after the handshake, so it
-        // measures the release and the report alone.
+        // a close frame. The report of an observer's failure must not wait on the far end at all: the
+        // bound starts once the observer is being told, after the handshake, so it measures the report
+        // alone, and the connection is still served after it.
         var logger = new CapturingLogger();
         var (listener, _) = CreateListener(logger: logger);
         using var seam = new LoopbackAcceptSeam();
@@ -1120,19 +1126,25 @@ public sealed class AriOutboundListenerTests
             await announcing.Task.WaitAsync(SignalTimeout);
 
             // Act
-            var release = () => served.Released;
+            var reported = await WaitForAsync(
+                () => logger.Entries.Any(entry => entry.EventName is "AcceptedObserverFault" or "ConnectionError"),
+                ReleaseBound);
 
-            // Assert — the handler's last step is the release, so once it has returned, what it
-            // reports is already logged
-            await release.Should().CompleteWithinAsync(
-                ReleaseBound,
-                "a failed announcement is released without waiting for the far end to answer a close, " +
-                "and this far end never answers one");
-            logger.Entries.Should().ContainSingle(
-                entry => entry.Level == LogLevel.Error
-                    && entry.EventName == "ConnectionError"
-                    && entry.ExceptionType == nameof(InvalidOperationException),
-                "the observer's failure is reported once, as that connection's error");
+            // Assert
+            using (new AssertionScope())
+            {
+                reported.Should().BeTrue(
+                    "an observer's failure is reported without waiting for the far end, and this far end " +
+                    "never answers anything");
+                logger.Entries.Should().ContainSingle(
+                    entry => entry.Level == LogLevel.Warning
+                        && entry.EventName == "AcceptedObserverFault"
+                        && entry.ExceptionType == nameof(InvalidOperationException),
+                    "the observer's failure is reported once, at Warning; the listener logged [{0}]",
+                    Describe(logger));
+                served.Released.IsCompleted.Should().BeFalse("the connection is still served");
+                listener.ActiveConnectionCount.Should().Be(1);
+            }
         }
         finally
         {
@@ -1144,7 +1156,7 @@ public sealed class AriOutboundListenerTests
     public async Task HandleConnectionAsync_ShouldAnnounceTheNextConnection_WhenTheObserverThrewForThePreviousOne()
     {
         // Arrange — the observer throws for the first connection only. The second connection is made
-        // once the handler has released the first, so by then the observer has already thrown.
+        // once that failure has been reported, so by then the observer has already thrown.
         var logger = new CapturingLogger();
         var (listener, _) = CreateListener(logger: logger);
         using var seam = new LoopbackAcceptSeam();
@@ -1165,14 +1177,17 @@ public sealed class AriOutboundListenerTests
         {
             using var first = await ConnectClientAsync(seam.Port, app: "first").WaitAsync(SignalTimeout);
             var firstServed = await seam.NextHandedOverAsync();
-            await firstServed.Released.WaitAsync(SignalTimeout);
+            (await WaitForAsync(
+                    () => logger.Entries.Any(entry => entry.EventName is "AcceptedObserverFault" or "ConnectionError"),
+                    SignalTimeout))
+                .Should().BeTrue("the observer's failure on the first connection is reported");
 
             // Act — a second connection, which sends one event once it has been announced
             var connecting = ConnectClientAsync(seam.Port, app: "second");
             var announcement = () => secondAnnounced.Task;
             var connection = (await announcement.Should().CompleteWithinAsync(
                 SignalTimeout,
-                "one observer throwing costs only the connection it threw on, so the listener goes on " +
+                "an observer that threw stays subscribed and costs no connection, so the listener goes on " +
                 "accepting and announcing")).Which;
             using var second = await connecting.WaitAsync(SignalTimeout);
             var received = new TaskCompletionSource<AriEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1196,8 +1211,11 @@ public sealed class AriOutboundListenerTests
                 delivered.Should().BeOfType<Verbara.Sdk.Ari.Events.StasisStartEvent>(
                     "its events reach its subscribers as they did before");
                 logger.Entries.Should().ContainSingle(
-                    entry => entry.EventName == "ConnectionError",
-                    "only the announcement the observer threw on failed");
+                    entry => entry.EventName == "AcceptedObserverFault",
+                    "only the announcement the observer threw on failed, and only for that observer");
+                logger.Entries.Should().NotContain(entry => entry.EventName == "ConnectionError");
+                firstServed.Released.IsCompleted.Should().BeFalse(
+                    "the connection the observer threw on is still served");
             }
         }
         finally

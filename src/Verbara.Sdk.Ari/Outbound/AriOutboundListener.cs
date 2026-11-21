@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Verbara.Sdk;
 using Verbara.Sdk.Ari.Client;
+using Verbara.Sdk.Ari.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Verbara.Sdk.Ari.Internal;
 using Microsoft.Extensions.Options;
@@ -39,6 +40,12 @@ internal static partial class AriOutboundListenerLog
 
     [LoggerMessage(Level = LogLevel.Error, Message = "[AriOutbound] Accept failed — the listener stays bound and accepts again after a backoff")]
     public static partial void AcceptLoopFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AriOutbound] OnConnectionAccepted observer threw on {Notification}: remote={RemoteEndpoint} app={Application}; the connection and the other observers are unaffected")]
+    public static partial void AcceptedObserverFault(ILogger logger, Exception exception, string notification, string? remoteEndpoint, string? application);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AriOutbound] Events observer threw on {EventType}: remote={RemoteEndpoint} app={Application}; the connection and the other observers are unaffected")]
+    public static partial void EventsObserverFault(ILogger logger, Exception exception, string eventType, string remoteEndpoint, string application);
 }
 
 /// <summary>
@@ -70,6 +77,7 @@ public sealed class AriOutboundListener : IAriOutboundListener
     private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<Guid, TrackedConnection> _connections = new();
     private readonly Subject<AriOutboundConnection> _connectionSubject = new();
+    private readonly OutboundGuardedStream<AriOutboundConnection> _connectionAccepted;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
@@ -104,6 +112,7 @@ public sealed class AriOutboundListener : IAriOutboundListener
         _options = options.Value;
         _logger = logger;
         _timeProvider = timeProvider;
+        _connectionAccepted = new OutboundGuardedStream<AriOutboundConnection>(_connectionSubject, ReportAcceptedObserverFault);
     }
 
     /// <summary>
@@ -116,7 +125,39 @@ public sealed class AriOutboundListener : IAriOutboundListener
 
     public int ActiveConnectionCount => _connections.Count;
 
-    public IObservable<AriOutboundConnection> OnConnectionAccepted => _connectionSubject;
+    /// <summary>
+    /// Observable that emits each accepted connection once the WebSocket handshake has completed and the <c>app</c>
+    /// query parameter has been validated, and completes when the listener is disposed.
+    /// </summary>
+    /// <remarks>
+    /// Each subscription is guarded on its own. An observer that throws loses only its own call: the connection it
+    /// was told about stays open, tracked and served, the later observers are still told about it, the observer stays
+    /// subscribed, and a throw on the completion does not keep <see cref="DisposeAsync"/> from finishing. Each failure
+    /// is counted on <c>ari.outbound.subscriber_faults</c> (tag <c>surface=connection_accepted</c>) and then logged
+    /// once at Warning with the exception; a logger that throws on that line is ignored. Only what throws on the
+    /// delivering thread is caught, and <see cref="OutOfMemoryException"/> is not.
+    /// </remarks>
+    public IObservable<AriOutboundConnection> OnConnectionAccepted => _connectionAccepted;
+
+    // The report of an announcement observer's failure: counted first, then logged, and whatever the logger throws is
+    // dropped, so the handler goes on to serve the connection and the next observer is still told.
+    private void ReportAcceptedObserverFault(Exception failure, string notification, AriOutboundConnection? connection)
+    {
+        AriMetrics.OutboundSubscriberFaults.Add(1, new KeyValuePair<string, object?>("surface", "connection_accepted"));
+        try
+        {
+            AriOutboundListenerLog.AcceptedObserverFault(
+                _logger,
+                failure,
+                connection is null ? notification : "connection",
+                connection?.RemoteEndpoint,
+                connection?.ApplicationName);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The fault is already counted; a failing log provider is the host's, and it stops nothing here.
+        }
+    }
 
     public IEnumerable<AriOutboundConnection> ActiveConnections =>
         _connections.Values.Select(static c => c.Connection);
@@ -380,20 +421,21 @@ public sealed class AriOutboundListener : IAriOutboundListener
                     new WebSocketCreationOptions { IsServer = true });
 
                 var subject = new Subject<AriEvent>();
-                var connection = new AriOutboundConnection(appName!, remoteEndpoint, webSocket, subject);
+                var connection = new AriOutboundConnection(appName!, remoteEndpoint, webSocket, subject, _logger);
                 var tracked = new TrackedConnection(Guid.NewGuid(), connection, client, subject);
                 _connections.TryAdd(tracked.Id, tracked);
 
                 AriOutboundListenerLog.ConnectionAccepted(_logger, remoteEndpoint, appName!);
 
                 // The connection is tracked before it is announced, so an observer can look up the
-                // connection it is being told about. Only the read pump's `finally` untracks it, and an
-                // observer that throws here means the read pump never runs. So a failed announcement is
-                // released where it failed: untracked, aborted, then disposed, which completes its event
-                // stream. The observer's exception then goes on to the catch below, which reports it
-                // once as this connection's error. The abort comes first because a graceful dispose
-                // sends a close frame and waits, with no bound, for the far end to answer it, and a far
-                // end that does not read never does.
+                // connection it is being told about. Every observer is guarded at its subscription, so what
+                // one throws is reported by its guard and the announcement goes on to the next observer and
+                // then to the read pump: an observer's failure costs no connection. Only what no guard
+                // catches (OutOfMemoryException) can end the announcement here, and the read pump's
+                // `finally`, the only other place that untracks, would then never run. So such an
+                // announcement is released where it failed: untracked, aborted, then disposed, which
+                // completes its event stream. The abort comes first because a graceful dispose sends a
+                // close frame and waits, with no bound, for the far end to answer it.
                 var announced = false;
                 try
                 {

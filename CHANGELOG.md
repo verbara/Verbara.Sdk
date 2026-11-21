@@ -222,6 +222,29 @@ Warning instead. Why: one subscriber's bug should not silence the others, and it
 did nothing wrong. See the
 [troubleshooting guide](docs/guides/troubleshooting.md#what-a-live-event-handler-may-do).
 
+### Changed — BREAKING: an ARI outbound observer that throws keeps its connection (#632)
+
+`AriOutboundListener.OnConnectionAccepted` and `AriOutboundConnection.Events` now guard each subscription on its own,
+as `IAriClient` does: an observer that throws from `OnNext`, `OnCompleted` or `OnError` loses only that call. The
+connection it was told about stays open, tracked (`ActiveConnectionCount`, `GetByApplication`) and read; the later
+observers are still told about the connection, the event or the end of the stream; an observer subscribed directly
+stays subscribed; and an observer that throws on the listener's completion no longer keeps `DisposeAsync` from
+finishing. The failure is counted on `ari.outbound.subscriber_faults` (meter `Verbara.Sdk.Ari`, tag `surface`:
+`connection_accepted` or `events`) and logged once at Warning, with the exception:
+`[AriOutbound] OnConnectionAccepted observer threw on <Notification>: remote=<RemoteEndpoint> app=<Application>; …` or
+`[AriOutbound] Events observer threw on <EventType>: remote=<RemoteEndpoint> app=<Application>; …`. The fault is counted
+before the line is written, and a logger that throws on that line is ignored. `OutOfMemoryException` is not caught, and
+a subscription composed through an Rx operator (`Where`, `Select`, …) is ended by that operator on its first failure,
+which is still counted and logged. No public symbol is added or removed.
+What breaks: up to 2.10.x, an `OnConnectionAccepted` observer that threw closed the connection it was told about, kept
+the later observers from it and was logged as `[AriOutbound] Connection error` at Error (the 2.6.1 entry "no longer
+counts a connection an observer rejected" described that release); an `Events` observer that threw on an event ended
+the read pump and closed the connection; and one that threw on a completion kept the later observers from it. Code that
+threw from an observer to refuse a connection has to refuse it itself: call `DisconnectAsync` on the connection, or
+restrict `AllowedApplications`. Why: one observer's bug should not cost a connection that did nothing wrong, nor
+silence the other observers. See the
+[troubleshooting guide](docs/guides/troubleshooting.md#missing-events).
+
 ### Changed — BREAKING: an `AgentManager` or `BridgeManager` subscriber that throws stops nothing else (#626)
 
 `AgentManager` (`AgentLoggedIn`, `AgentLoggedOff`, `AgentStateChanged`, `AgentConnected`) and `BridgeManager`
