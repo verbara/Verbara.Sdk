@@ -46,6 +46,16 @@ public static class AriMetrics
             "ARI observer failures (an observer threw); delivery goes on");
 
     /// <summary>
+    /// Observer failures on the ARI outbound listener, one per failure, tagged <c>surface</c>:
+    /// <c>connection_accepted</c> for an observer of <c>OnConnectionAccepted</c>, <c>events</c> for an observer of an
+    /// outbound connection's <c>Events</c>. Each is also logged at Warning; the connection stays open, the other
+    /// observers are still told, and an observer subscribed directly stays subscribed.
+    /// </summary>
+    internal static readonly Counter<long> OutboundSubscriberFaults =
+        Meter.CreateCounter<long>("ari.outbound.subscriber_faults", "faults",
+            "ARI outbound observer failures (an observer threw); the connection and delivery go on");
+
+    /// <summary>
     /// Total ARI REST requests sent to Asterisk. Incremented by one for every request the ARI client issues, when
     /// the request enters the client's HTTP pipeline and before it is sent: a request that then fails at the
     /// transport (refused, reset, timed out or cancelled) still counts. Recorded whatever the log level.

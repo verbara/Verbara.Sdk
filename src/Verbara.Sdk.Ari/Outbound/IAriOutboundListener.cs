@@ -36,6 +36,11 @@ public interface IAriOutboundListener : IAsyncDisposable
     /// Observable that emits each accepted connection once the WebSocket handshake
     /// has completed and the <c>app</c> query parameter has been validated.
     /// </summary>
+    /// <remarks>
+    /// In <see cref="AriOutboundListener"/> an observer that throws loses only its own call: the connection stays
+    /// open and served, and the other observers are still told about it. The failure is counted on
+    /// <c>ari.outbound.subscriber_faults</c> and logged once at Warning.
+    /// </remarks>
     IObservable<AriOutboundConnection> OnConnectionAccepted { get; }
 
     /// <summary>All currently active outbound connections.</summary>

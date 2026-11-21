@@ -1,6 +1,8 @@
 using System.Net.WebSockets;
 using System.Reactive.Subjects;
+using Microsoft.Extensions.Logging;
 using Verbara.Sdk;
+using Verbara.Sdk.Ari.Diagnostics;
 
 namespace Verbara.Sdk.Ari.Outbound;
 
@@ -13,6 +15,8 @@ public sealed class AriOutboundConnection : IAsyncDisposable
 {
     private readonly WebSocket _webSocket;
     private readonly Subject<AriEvent> _eventSubject;
+    private readonly OutboundGuardedStream<AriEvent> _events;
+    private readonly ILogger _logger;
     private int _disposed;
     private int _released;
     private int _completed;
@@ -65,12 +69,15 @@ public sealed class AriOutboundConnection : IAsyncDisposable
         string applicationName,
         string remoteEndpoint,
         WebSocket webSocket,
-        Subject<AriEvent> eventSubject)
+        Subject<AriEvent> eventSubject,
+        ILogger logger)
     {
         ApplicationName = applicationName;
         RemoteEndpoint = remoteEndpoint;
         _webSocket = webSocket;
         _eventSubject = eventSubject;
+        _logger = logger;
+        _events = new OutboundGuardedStream<AriEvent>(eventSubject, ReportObserverFault);
         ConnectedAt = DateTimeOffset.UtcNow;
     }
 
@@ -88,7 +95,33 @@ public sealed class AriOutboundConnection : IAsyncDisposable
         Volatile.Read(ref _disposed) == 0 && _webSocket.State == WebSocketState.Open;
 
     /// <summary>Stream of ARI events received from Asterisk over this session.</summary>
-    public IObservable<AriEvent> Events => _eventSubject;
+    /// <remarks>
+    /// Each subscription is guarded on its own. An observer that throws from <c>OnNext</c>, <c>OnCompleted</c> or
+    /// <c>OnError</c> loses only that call: the other observers still receive the event or the end of the stream, the
+    /// connection stays open and goes on reading, and an observer subscribed directly stays subscribed. Each failure
+    /// is counted on <c>ari.outbound.subscriber_faults</c> (tag <c>surface=events</c>) and then logged once at
+    /// Warning with the exception; a logger that throws on that line is ignored. A subscription composed through an
+    /// Rx operator (<c>Where</c>, <c>Select</c>, …) is ended by that operator on its first failure, which is reported
+    /// the same way. Only what throws on the delivering thread is caught, and <see cref="OutOfMemoryException"/> is
+    /// not.
+    /// </remarks>
+    public IObservable<AriEvent> Events => _events;
+
+    // The report of an observer's failure: counted first, then logged, and whatever the logger throws is dropped, so
+    // the read pump goes on and the next observer is still told.
+    private void ReportObserverFault(Exception failure, string notification, AriEvent? value)
+    {
+        AriMetrics.OutboundSubscriberFaults.Add(1, new KeyValuePair<string, object?>("surface", "events"));
+        try
+        {
+            AriOutboundListenerLog.EventsObserverFault(
+                _logger, failure, value is null ? notification : value.Type ?? "unknown", RemoteEndpoint, ApplicationName);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The fault is already counted; a failing log provider is the host's, and it stops nothing here.
+        }
+    }
 
     // The clock the wait for Asterisk to answer a disconnect's close runs on. Settable by tests (via
     // InternalsVisibleTo) to drive it on a manual clock; the listener's own clock is not passed in.
@@ -196,8 +229,11 @@ public sealed class AriOutboundConnection : IAsyncDisposable
         try
         {
             CompletionStarting?.Invoke();
+            // Every subscription is guarded, so an observer that throws on the completion is reported by its guard and
+            // the later observers still complete. This catch stays as the last line of defence: the subject itself
+            // cannot prevent transport shutdown or resource release either.
             try { _eventSubject.OnCompleted(); }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { /* An observer cannot prevent transport shutdown or resource release. */ }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { /* Nothing else may stop the release. */ }
         }
         finally
         {
