@@ -324,6 +324,13 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </summary>
     internal Func<ValueTask>? ChannelReadBegun { get; set; }
 
+    /// <summary>
+    /// Null in production; observes a notice evaluation that has read the public reading true and has not yet decided
+    /// whether to post. Not awaited, unlike the seams above: the evaluation is synchronous, so a test that holds it there
+    /// blocks the evaluating thread, which must be a thread-pool thread (the end of a load, or the loss watcher's signal).
+    /// </summary>
+    internal Action? LossNoticeDeciding { get; set; }
+
     // How many reconnects this server has started to reload after. Moves the event-loss epoch.
     private long _reconnects;
 
@@ -566,6 +573,7 @@ public sealed class VerbaraServer : IVerbaraServer
         if (!HasUnreconciledLoss)
             return;
 
+        LossNoticeDeciding?.Invoke();
         lock (_noticeGate)
         {
             if (mark == _notifiedMark)

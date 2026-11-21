@@ -568,6 +568,55 @@ public sealed partial class ChannelReadCoverageTests
     }
 
     [Fact]
+    public async Task UnreconciledLossDelivered_ShouldNotAnnounceAnAnnouncedLossAgain_WhenAnEvaluationThatReadItDecidesAfterANewerLossWasAnnounced()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await StartAsync(peer);
+        var notices = Notices(run.Server);
+        using (var hold = await HoldAndDropAsync(run, peer, "stale-1"))
+            await DeliverAsync(run, peer, hold, "stale-1");
+        _ = await notices.Reader.ReadAsync().AsTask().WaitAsync(Run.Bound);
+
+        // The next evaluation that reads the reading true is held before it decides: the end of the refused load below,
+        // on a thread-pool thread. While the load ran the reading was false, so no other evaluation gets this far first.
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new ManualResetEventSlim();
+        var armed = 1;
+        run.Server.LossNoticeDeciding = () =>
+        {
+            if (Interlocked.Exchange(ref armed, 0) == 0)
+                return;
+            held.TrySetResult();
+            release.Wait(Run.Bound + Run.Bound);
+        };
+        peer.StatusRefusedFromAsk = peer.Asked("Status") + 1;
+        var load = run.Server.RequestInitialStateAsync().AsTask();
+        var heldAtTheLoadsEnd = await Record.ExceptionAsync(() => held.Task.WaitAsync(Run.Bound)) is null;
+
+        // A newer drop, delivered and announced while the load's evaluation is held.
+        using (var hold = await HoldAndDropAsync(run, peer, "stale-2"))
+            await DeliverAsync(run, peer, hold, "stale-2");
+        var newer = await notices.Reader.ReadAsync().AsTask().WaitAsync(Run.Bound);
+        release.Set();
+        await load.WaitAsync(Run.Bound);
+        var postedOnceTheHeldLoadEnded = run.Server.LossNoticesPosted;
+
+        // A later load that covers nothing ends with the newer loss already announced.
+        peer.StatusRefusedFromAsk = peer.Asked("Status") + 1;
+        await run.Server.RequestInitialStateAsync().AsTask().WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            heldAtTheLoadsEnd.Should().BeTrue("premise: the end of the refused load read the first loss true and is held");
+            newer.Reading.Should().BeTrue("premise: the newer drop is announced while the load's evaluation is held");
+            postedOnceTheHeldLoadEnded.Should().Be(2,
+                "posted 2: the first loss and the newer one, each once; the held evaluation read the first loss, already announced");
+            run.Server.LossNoticesPosted.Should().Be(2, "a later load ending over the newer, announced loss announces nothing");
+            run.Server.HasUnreconciledLoss.Should().BeTrue("premise: nothing has covered the newer drop");
+        }
+    }
+
+    [Fact]
     public async Task UnreconciledLossDelivered_ShouldLetTheReloadEnd_WhenAHandlerOfANoticeTheReloadsEndRaisedDoesNotReturn()
     {
         var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
