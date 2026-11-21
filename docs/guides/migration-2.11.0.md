@@ -12,6 +12,8 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [`ChanWebSocketDtmf` carries the digit alone: its constructor and `Deconstruct` change](#chanwebsocketdtmf-carries-the-digit-alone-its-constructor-and-deconstruct-change) | removed member, changed constructor and `Deconstruct`, BREAKING |
 | `Verbara.Sdk.Ari`, `Verbara.Sdk.Sessions` | [Three meter instruments nothing records are removed](#three-meter-instruments-nothing-records-are-removed) | removed fields and meter instruments, BREAKING |
 | `Verbara.Sdk`, `Verbara.Sdk.Ari` | [The bridge `format` arguments are named for what they format](#the-bridge-format-arguments-are-named-for-what-they-format) | renamed arguments, BREAKING (named arguments only) |
+| `Verbara.Sdk.Live` | [A `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else](#a-queuemanager-or-meetmemanager-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error) |
+| `Verbara.Sdk.Live` | [An `AgentManager` or `BridgeManager` subscriber that throws stops nothing else](#an-agentmanager-or-bridgemanager-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error) |
 
 ## Before you start: move every package at once
 
@@ -337,5 +339,152 @@ static async Task PlayAndRecord(IAriClient ari, string bridgeId)
 {
     await ari.Bridges.PlayAsync(bridgeId, "tone:440", announcerFormat: "slin16");
     await ari.Bridges.RecordAsync(bridgeId, "call-1", recordingFormat: "wav", recorderFormat: "slin16");
+}
+```
+
+## Subscribers that throw
+
+From 2.11.0 the Live managers raise each event subscriber by subscriber, as `ChannelManager` has since 2.10.0. Code
+that changes nothing on a subscriber's failure is not affected; code that threw from a handler to stop something is.
+The [troubleshooting guide](troubleshooting.md#what-a-live-event-handler-may-do) has the full rule for each manager.
+
+### A `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else
+
+**What changed.** `QueueManager` (`QueueUpdated`, `MemberAdded`, `MemberRemoved`, `MemberStatusChanged`,
+`MemberPaused`, `CallerJoined`, `CallerLeft`) and `MeetMeManager` (`UserJoined`, `UserLeft`, `UserStateChanged`)
+deliver each event to every subscriber, in subscription order, whatever an earlier one threw. A failure is counted on
+`live.queues.subscriber_faults` or `live.meetme.subscriber_faults` (meter `Verbara.Sdk.Live`), then logged once at
+Warning with the exception:
+
+- `[QUEUE] Subscriber failed: event=<Event> queue=<Queue> subject=<Subject>; …`, where the subject is the member's
+  interface, the caller's channel or, for `QueueUpdated`, the queue;
+- `[CONFERENCE] Subscriber failed: event=<Event> room=<Room> channel=<Channel>; …`.
+
+Nothing is thrown from any call: the live AMI event that made the change, `StartAsync`, a reconnect's reload and
+`ReconcileQueuesAsync` all finish their work. The subscriber stays subscribed. `OutOfMemoryException` is not caught,
+and only what throws on the delivering thread is. The last-resort Error line of the channel, queue and conference
+notification queues now reads
+`[CHANNEL|QUEUE|CONFERENCE] Event notification failed outside its subscribers; nothing was thrown from the call`.
+
+**Who is affected.** Nothing reports a compiler error: no public symbol changes, and a binary built against 2.10.x
+runs unchanged. What changes is behavior that 2.10.x documented in the troubleshooting guide:
+
+- a subscriber after one that throws now receives the event (up to 2.10.x it did not);
+- the first exception is no longer rethrown from the manager call that made the change, so a live event's failure no
+  longer surfaces as `[AMI_EVENT] Observer threw on <EventType>`, and `StartAsync` or a reload no longer fails with it;
+- a log query or alert on `[AMI_EVENT] Observer threw on` for these events sees nothing; read the Warning above or the
+  counter instead.
+
+**What to do.** If a handler threw to stop a start or a reload, make that decision in your own code. Before (2.10.x:
+the exception left `StartAsync`; from 2.11.0 it is counted and `StartAsync` completes):
+
+<!-- skip-doc-snippet -->
+```csharp
+server.Queues.MemberAdded += (queue, member) =>
+{
+    if (member.Penalty > 10)
+        throw new InvalidOperationException($"{member.Interface} is misconfigured in {queue}");
+};
+await server.StartAsync(ct); // threw up to 2.10.x
+```
+
+After, the handler records what it found and the caller decides once the start is done:
+
+```csharp
+using Verbara.Sdk.Live.Server;
+
+static async Task<IReadOnlyList<string>> StartAndCheckAsync(VerbaraServer server, CancellationToken ct)
+{
+    var misconfigured = new System.Collections.Concurrent.ConcurrentQueue<string>();
+    server.Queues.MemberAdded += (queue, member) =>
+    {
+        if (member.Penalty > 10)
+            misconfigured.Enqueue($"{member.Interface} in {queue}");
+    };
+    await server.StartAsync(ct);
+    return [.. misconfigured];
+}
+```
+
+To watch for subscriber failures, read the counters by name; they are not exposed as fields:
+
+```csharp
+using System.Diagnostics.Metrics;
+
+static MeterListener CountSubscriberFaults(Action<string, long> onFault)
+{
+    var listener = new MeterListener
+    {
+        InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == "Verbara.Sdk.Live" && instrument.Name.EndsWith(".subscriber_faults", StringComparison.Ordinal))
+                l.EnableMeasurementEvents(instrument);
+        },
+    };
+    listener.SetMeasurementEventCallback<long>((instrument, value, _, _) => onFault(instrument.Name, value));
+    listener.Start();
+    return listener;
+}
+```
+
+### An `AgentManager` or `BridgeManager` subscriber that throws stops nothing else
+
+**What changed.** `AgentManager` (`AgentLoggedIn`, `AgentLoggedOff`, `AgentStateChanged`, `AgentConnected`) and
+`BridgeManager` (`BridgeCreated`, `BridgeDestroyed`, `ChannelEntered`, `ChannelLeft`, `TransferOccurred`) follow the
+same rule: every subscriber receives the event, in subscription order, whatever an earlier one threw. A failure is
+counted on `live.agents.subscriber_faults` or `live.bridges.subscriber_faults` (meter `Verbara.Sdk.Live`), then logged
+once at Warning with the exception:
+
+- `[AGENT] Subscriber failed: event=<Event> subject=<AgentId>; …`;
+- `[BRIDGE] Subscriber failed: event=<Event> bridge_id=<BridgeId> channel=<Channel>; …`, the channel being the one
+  that entered or left, or a blind transfer's target.
+
+The events that follow in the same report are still raised: an `AgentConnect` raises `AgentStateChanged` and then
+`AgentConnected` whatever a state subscriber threw, and a `BridgeEnter` still links the bridge's two channels
+(`AsteriskChannel.LinkedChannel`) after `ChannelEntered`. Nothing is thrown from any call: the live AMI event,
+`StartAsync`, a reconnect's reload (its agents' `AgentLoggedIn` and its bridge reconciliation's `BridgeDestroyed`
+included) and `ReconcileQueuesAsync` when it settles an agent all finish their work. The subscriber stays subscribed,
+and `OutOfMemoryException` is not caught.
+
+**Who is affected.** Nothing reports a compiler error, and a binary built against 2.10.x runs unchanged. What changes:
+
+- up to 2.10.x a throwing subscriber skipped the later subscribers **and the events after it in the same report**: a
+  throwing `AgentStateChanged` subscriber skipped `AgentConnected`, and a throwing `ChannelEntered` one left the two
+  channels unlinked. Code that compensated for a missing `AgentConnected` or an unset `LinkedChannel` after its own
+  handler failed no longer needs to;
+- the exception no longer leaves the call: a live event's no longer surfaces as `[AMI_EVENT] Observer threw on
+  <EventType>`, a load or a reload no longer fails with it, and `ReconcileQueuesAsync` no longer rethrows it after
+  settling the other agents.
+
+**What to do.** As for the queue and conference managers: if a handler threw to stop a start, a reload or a
+reconciliation, record the finding in the handler and decide in the caller. Before (2.10.x: the exception left
+`StartAsync`, raised from the load's `AgentLoggedIn`; from 2.11.0 it is counted and the start completes):
+
+<!-- skip-doc-snippet -->
+```csharp
+server.Agents.AgentLoggedIn += agent =>
+{
+    if (!allowed.Contains(agent.Id))
+        throw new InvalidOperationException($"agent {agent.Id} is not provisioned");
+};
+await server.StartAsync(ct); // threw up to 2.10.x
+```
+
+After:
+
+```csharp
+using Verbara.Sdk.Live.Server;
+
+static async Task<IReadOnlyList<string>> StartAndFindUnprovisionedAsync(
+    VerbaraServer server, IReadOnlySet<string> allowed, CancellationToken ct)
+{
+    var unprovisioned = new System.Collections.Concurrent.ConcurrentQueue<string>();
+    server.Agents.AgentLoggedIn += agent =>
+    {
+        if (!allowed.Contains(agent.Id))
+            unprovisioned.Enqueue(agent.Id);
+    };
+    await server.StartAsync(ct);
+    return [.. unprovisioned];
 }
 ```
