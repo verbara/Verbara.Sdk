@@ -243,7 +243,7 @@ public sealed class VoiceAiPipelineSubscriberIsolationTests
             "SynthesisStartedEvent,SynthesisEndedEvent] stt.failed=0 tts.failed=0 subscriber_faults=1",
             "a subscriber's failure on an event published inside a step is the subscriber's, not the step's: the turn " +
             "finishes, no recognition or synthesis is counted failed, no PipelineErrorEvent is raised, and the failure " +
-            "is counted once as the subscriber's");
+            "is counted once as the subscriber's (observed: {0})", observed);
     }
 
     [Fact]
