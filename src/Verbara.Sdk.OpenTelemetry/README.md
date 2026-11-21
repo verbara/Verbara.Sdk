@@ -8,7 +8,7 @@ Batteries-included OpenTelemetry wiring for `Verbara.Sdk`. One call enrolls ever
 using Verbara.Sdk.OpenTelemetry;
 
 builder.Services.AddVerbaraOpenTelemetry(b => b
-    .WithAllSources()                                      // enlist the 9 ActivitySources + 15 Meters
+    .WithAllSources()                                      // enlist the 9 ActivitySources + 16 Meters
     .WithPrometheusExporter()                              // /metrics for scraping
     .WithOtlpExporter(o => o.Endpoint = new("http://tempo:4317")));
 

@@ -27,6 +27,7 @@ public static class VerbaraTelemetry
         "Verbara.Sdk.Ari",
         "Verbara.Sdk.Ari.Audio",
         "Verbara.Sdk.Agi",
+        "Verbara.Sdk.Activities",
         "Verbara.Sdk.Live",
         "Verbara.Sdk.Sessions",
         "Verbara.Sdk.Push",

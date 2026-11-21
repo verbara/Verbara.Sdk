@@ -28,4 +28,8 @@ internal static partial class VoiceAiLog
 
     [LoggerMessage(LogLevel.Debug, "VoiceAi session [{ChannelId}]: the broker's ending did not complete")]
     internal static partial void SessionEndFailed(ILogger logger, Guid channelId, Exception exception);
+
+    [LoggerMessage(LogLevel.Warning,
+        "VoiceAi pipeline event subscriber threw on {Notification}; the other subscribers and the session went on")]
+    internal static partial void EventSubscriberFailed(ILogger logger, Exception exception, string notification);
 }

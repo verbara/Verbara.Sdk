@@ -26,6 +26,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
     private readonly VoiceAiPipelineOptions _options;
     private readonly ILogger<VoiceAiPipeline> _logger;
     private readonly Subject<VoiceAiPipelineEvent> _events = new();
+    private readonly GuardedEvents _guardedEvents;
 
     private volatile PipelineState _state = PipelineState.Idle;
     private int _disposed;
@@ -54,7 +55,16 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
     private string? _ttsEnding;
 
     /// <summary>Observable stream of pipeline lifecycle events.</summary>
-    public IObservable<VoiceAiPipelineEvent> Events => _events;
+    /// <remarks>
+    /// A subscriber that throws (<see cref="OutOfMemoryException"/> excepted) stops nothing else: every other subscriber
+    /// still receives the event, the session goes on, and nothing is thrown from <see cref="HandleSessionAsync"/> or
+    /// <see cref="DisposeAsync"/>. Each failure is counted on <c>voiceai.pipeline.subscriber_faults</c> (meter
+    /// <c>Verbara.Sdk.VoiceAi</c>) and then logged once at Warning with the exception; a logger that throws on that line
+    /// is ignored. A subscriber subscribed directly stays subscribed; one composed through an operator (<c>Where</c>,
+    /// <c>OfType</c>, …) is ended by that operator on its first failure. Only what throws on the delivering thread is
+    /// caught.
+    /// </remarks>
+    public IObservable<VoiceAiPipelineEvent> Events => _guardedEvents;
 
     /// <summary>Creates a new pipeline instance.</summary>
     public VoiceAiPipeline(
@@ -69,6 +79,7 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
         _scopeFactory = scopeFactory;
         _options = options.Value;
         _logger = logger;
+        _guardedEvents = new GuardedEvents(this);
     }
 
     /// <summary>
@@ -520,6 +531,77 @@ public sealed class VoiceAiPipeline : ISessionHandler, IAsyncDisposable
     }
 
     private void Publish(VoiceAiPipelineEvent evt) => _events.OnNext(evt);
+
+    /// <summary>
+    /// Counts a subscriber's failure, then logs it; what the logger throws goes no further, so the fault stays counted
+    /// and the event goes on to the later subscribers.
+    /// </summary>
+    private void ReportSubscriberFailure(Exception failure, string notification)
+    {
+        VoiceAiMetrics.PipelineSubscriberFaults.Add(1);
+        try
+        {
+            VoiceAiLog.EventSubscriberFailed(_logger, failure, notification);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The report is the only trace a subscriber's failure leaves besides the count; when it fails too, the
+            // fault stays counted and delivery goes on.
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Events"/>: every subscriber is wrapped in its own guard, subscribed to the subject in its place, so
+    /// it covers every publish, present and future, with no site to forget.
+    /// </summary>
+    private sealed class GuardedEvents(VoiceAiPipeline owner) : IObservable<VoiceAiPipelineEvent>
+    {
+        public IDisposable Subscribe(IObserver<VoiceAiPipelineEvent> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+            return owner._events.Subscribe(new SubscriberGuard(owner, observer));
+        }
+    }
+
+    /// <summary>One subscriber behind its guard. Internal so a test can reach the arm no publish does (<c>OnError</c>).</summary>
+    internal sealed class SubscriberGuard(VoiceAiPipeline owner, IObserver<VoiceAiPipelineEvent> inner) : IObserver<VoiceAiPipelineEvent>
+    {
+        public void OnNext(VoiceAiPipelineEvent value)
+        {
+            try
+            {
+                inner.OnNext(value);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                owner.ReportSubscriberFailure(ex, value.GetType().Name);
+            }
+        }
+
+        public void OnError(Exception error)
+        {
+            try
+            {
+                inner.OnError(error);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                owner.ReportSubscriberFailure(ex, "error");
+            }
+        }
+
+        public void OnCompleted()
+        {
+            try
+            {
+                inner.OnCompleted();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                owner.ReportSubscriberFailure(ex, "completion");
+            }
+        }
+    }
 
     /// <summary>
     /// Asks the synthesis in flight, if any, to stop. This is the only way anything other than

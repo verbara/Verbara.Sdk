@@ -55,4 +55,8 @@ internal static partial class RealtimeLog
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "[{ChannelId}] {EventType} raised after the bridge was disposed; dropped")]
     public static partial void EventDroppedAfterDisposal(ILogger logger, Guid channelId, string eventType);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "[{ChannelId}] A Realtime event subscriber threw on {Notification}; the other subscribers and the session went on")]
+    public static partial void EventSubscriberFailed(ILogger logger, Exception exception, Guid channelId, string notification);
 }

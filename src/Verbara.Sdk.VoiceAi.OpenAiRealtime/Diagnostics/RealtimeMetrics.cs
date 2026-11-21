@@ -102,6 +102,15 @@ public static class RealtimeMetrics
     internal static void CountUnparseable(string provider) =>
         FramesUnparseable.Add(1, new KeyValuePair<string, object?>("voiceai.provider", provider));
 
+    /// <summary>
+    /// Bridge event subscriber failures: a subscriber of <c>OpenAiRealtimeBridge.Events</c> that threw on an event, the
+    /// completion or an error, one per failure. Each is also logged at Warning; the other subscribers and the session
+    /// go on, and the session is not counted failed for it. Internal, as <see cref="FramesUnparseable"/>.
+    /// </summary>
+    internal static readonly Counter<long> SubscriberFaults =
+        Meter.CreateCounter<long>("openai_realtime.subscriber_faults", "faults",
+            "Realtime bridge event subscriber failures (an Events subscriber threw); delivery goes on");
+
     // --- Histograms ---
 
     /// <summary>

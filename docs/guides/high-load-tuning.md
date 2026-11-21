@@ -129,7 +129,7 @@ builder.Services
     .WithMetrics(m => m.AddMeter([.. VerbaraTelemetry.MeterNames]));
 ```
 
-`ActivitySourceNames` contains 9 sources, `MeterNames` contains 15 meters. Both lists grow automatically as new packages register; consumer code written today keeps working when future packages join the stack.
+`ActivitySourceNames` contains 9 sources, `MeterNames` contains 16 meters. Both lists grow automatically as new packages register; consumer code written today keeps working when future packages join the stack.
 
 ### Provider Identification on the Hot Path (v1.10.0+)
 

@@ -23,8 +23,9 @@ public sealed class VerbaraTelemetryTests
     [Fact]
     public void MeterNames_ShouldContainAllPackages()
     {
-        VerbaraTelemetry.MeterNames.Should().HaveCount(15);
+        VerbaraTelemetry.MeterNames.Should().HaveCount(16);
         VerbaraTelemetry.MeterNames.Should().Contain("Verbara.Sdk.Ami");
+        VerbaraTelemetry.MeterNames.Should().Contain("Verbara.Sdk.Activities");
         VerbaraTelemetry.MeterNames.Should().Contain("Verbara.Sdk.Ari");
         VerbaraTelemetry.MeterNames.Should().Contain("Verbara.Sdk.Ari.Audio");
         VerbaraTelemetry.MeterNames.Should().Contain("Verbara.Sdk.Agi");
