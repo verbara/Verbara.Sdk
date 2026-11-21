@@ -208,6 +208,56 @@ The push bus caught every exception an observer threw, `OutOfMemoryException` in
 completes its observers. Any other exception from an observer is still caught, logged and counted as a dropped
 delivery.
 
+### Fixed: a decorated session manager keeps its attach, its persistence token, its sweep and its queue counters (#628)
+
+The hosting services that act on the session manager tested the resolved `ICallSessionManager` for the concrete
+`CallSessionManager` and skipped anything else. A host that registered its own manager over the SDK's engine — a
+logging or metrics decorator, the shape the Sessions README already supported — therefore lost five things an
+undecorated host has:
+
+- **The attach.** `AddVerbaraSessions` never attached the DI server, so the decorated host opened no session at all.
+- **The persistence token.** The engine saved under a token the host's stop never cancelled, so a stop that was no
+  longer graceful did not cut an in-flight save short and the teardown did not end it.
+- **The reconciliation sweep.** The single-server and pool sweeps took the custom-manager path, so a young call
+  reconstructed on an incomplete table got no `Status` and was never ended with cause `reload`.
+- **The queue counters.** `IQueueSessionTracker` read Asterisk's leave, abandon report and timeout only off the
+  resolved manager, so behind a decorator it counted from the domain events alone: a caller that left a queue by key
+  was counted abandoned, a `Queue()` timeout was never counted in `CallsTimedOut`, and every caller kept counting in
+  `CallsWaiting` until it hung up or was connected instead of at its leave.
+- **The teardown.** A decorator that forwarded its disposal to an engine the container also disposed made
+  `CallSessionManager.DisposeAsync` run twice, and the second run threw `ObjectDisposedException`.
+
+Now the single-server attach and detach go through the registered `ICallSessionManager`, whatever its type. The token
+and both sweeps go to the engine the SDK finds behind it: the resolved interface when it is a `CallSessionManager`,
+else a `CallSessionManager` the host registered as itself. The queue tracker takes its domain events from the
+resolved manager and its visit signals from that engine, on the single-server and the multi-server registrations. The
+SDK never builds an engine of its own to reach.
+`CallSessionManager.DisposeAsync` returns at once on a second call. The Sessions README has a recipe: register the
+engine as `CallSessionManager` and your wrapper as `ICallSessionManager` over that registered instance. No public API
+changes.
+
+**Behaviour change:** an undecorated host sees no difference. For other hosts:
+
+- The single-server registrations now call `AttachToServer` and `DetachFromServer` on any registered manager, a test
+  substitute included, so a manager whose `AttachToServer` throws now fails the host's start.
+- A decorated host that also attaches the DI server by hand under another id now gets two sessions and two saves per
+  call. Remove the hand attach.
+- A hand attach of another server under `default` now throws `InvalidOperationException` at start.
+- A host whose token reaches no engine logs one Warning at start: EventId 1 in the
+  `Verbara.Sdk.Hosting.SessionPersistenceTokenService` category, naming the manager's type. This happens when the
+  wrapper builds its engine with `new` or `ActivatorUtilities`, or when the manager wraps no engine.
+- Behind a decorator over a registered engine, the sweep now sends `Status` and ends calls, and the queue counters now
+  count key exits, timeouts and the end of the wait, as they do for an undecorated host. `CallsAbandoned` drops by the
+  key exits and `CallsTimedOut` rises from 0.
+- A decorated host that attached the DI server by hand under `default` before the start now has that attach detached
+  by the SDK's stop, as an undecorated host always had.
+- A host that registers a `CallSessionManager` as itself beside a manager of its own that does not wrap it now hands
+  the token and the sweep to that idle instance. Do not register an engine you never attach.
+
+To roll back, revert the package. A decorated single-server host then opens no session until it attaches the server by
+hand, its saves again run under a token that cannot be cancelled, and its queue counters again count key exits as
+abandoned and no timeouts.
+
 ### Fixed: a multi-server sessions host ends its session saves with the stop phase (#623)
 
 `AddVerbaraSessionsMultiServer` and `AddVerbaraSessionsMultiServerBuilder` never handed the session manager a
