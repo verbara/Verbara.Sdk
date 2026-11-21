@@ -115,14 +115,15 @@ reconciliation can cover it, without a `MeterListener` and without attributing s
   lost": it also reads `false` while the drop is behind the backlog, while a reconnect is pending, while a load of the
   server is running (its start's, the reload after a reconnect, or `RequestInitialStateAsync`, which reads the
   channels itself), and over a connection that is not the SDK's own `AmiConnection`.
-- **`VerbaraServer.UnreconciledLossDelivered`** (`Action<VerbaraServer>`) is raised each time that reading turns true:
-  when delivery passes a drop (drops passed together give one notice), and when a load of the server or a pending
-  reconnect ends with a delivered loss it did not cover. A reconnect whose reload covers raises none, so a handler
+- **`VerbaraServer.UnreconciledLossDelivered`** (`Action<VerbaraServer>`) is raised once for each loss, when that
+  reading first reads true for it: when delivery passes a drop (drops passed together give one notice), or, when a
+  load of the server or a pending reconnect was holding the reading `false` then, when it ends without having covered
+  the loss. One notice per loss: none is repeated when a reconciliation or a later load does not cover it. A reconnect whose reload covers raises none, so a handler
   never starts a reconciliation that would overlap the reload. Subscribe before `StartAsync`, or read the property once
   after subscribing: a handler added later hears nothing for a loss already announced. It runs on a thread-pool
   thread, outside the AMI reader and any event dispatch, so a `ReconcileChannelsAsync` started from it can cover the
-  drop. One notice per loss: a reconciliation that does not
-  cover leaves the reading `true`, so read it after the call and retry. A subscriber that throws is logged at Warning
+  drop. A reconciliation that does not cover leaves the
+  reading `true`, so read it after the call and retry. A subscriber that throws is logged at Warning
   and counted on the new `live.server.subscriber_faults`; the others still run.
 - The [high-load guide](docs/guides/high-load-tuning.md#session-reconciliation)'s *Live without Hosting* section now
   starts from this route; the counter route stays, unchanged, for versions before 2.11.0.
