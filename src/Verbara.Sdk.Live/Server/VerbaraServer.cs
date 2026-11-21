@@ -529,7 +529,9 @@ public sealed class VerbaraServer : IVerbaraServer
     /// read, or ran out of its wait), the reading stays true and no second notice comes for the same loss, nor when a
     /// later load of this server (<see cref="RequestInitialStateAsync"/>, a reload) ends without covering it, so read
     /// <see cref="HasUnreconciledLoss"/> after the reconciliation and try again yourself. A notice may find the reading
-    /// <see langword="false"/> by the time a handler reads it, when another read covered the loss meanwhile. A subscriber
+    /// <see langword="false"/> by the time a handler reads it, when a load of this server started or another read covered
+    /// the loss meanwhile: read <see cref="HasUnreconciledLoss"/> before reconciling, and reconcile only while it reads
+    /// <see langword="true"/>. A subscriber
     /// added after the reading turned true hears nothing for that loss: subscribe before <see cref="StartAsync"/>, or read
     /// <see cref="HasUnreconciledLoss"/> once after subscribing.
     /// </para>
