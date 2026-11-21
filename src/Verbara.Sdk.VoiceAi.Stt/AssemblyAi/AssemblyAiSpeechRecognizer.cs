@@ -380,7 +380,7 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
             AssemblyAiTurnMessage? msg;
             try
             {
-                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.TypeInfo<AssemblyAiTurnMessage>());
+                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.For<AssemblyAiTurnMessage>.TypeInfo);
             }
             catch (JsonException)
             {

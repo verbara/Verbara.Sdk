@@ -270,7 +270,7 @@ public sealed class DeepgramSpeechRecognizer : SpeechRecognizer
             DeepgramResultMessage? msg;
             try
             {
-                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.TypeInfo<DeepgramResultMessage>());
+                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.For<DeepgramResultMessage>.TypeInfo);
             }
             catch (JsonException)
             {

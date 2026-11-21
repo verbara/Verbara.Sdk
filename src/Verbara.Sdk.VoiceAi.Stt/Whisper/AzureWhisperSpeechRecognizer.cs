@@ -54,7 +54,7 @@ public sealed class AzureWhisperSpeechRecognizer : SpeechRecognizer
 
         var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         var result = JsonSerializer.Deserialize(json,
-            SttJsonReadOptions.TypeInfo<WhisperTranscriptionResponse>());
+            SttJsonReadOptions.For<WhisperTranscriptionResponse>.TypeInfo);
 
         // A null response root is outside the member fence and represents no recognition result.
         if (!string.IsNullOrEmpty(result?.Text))

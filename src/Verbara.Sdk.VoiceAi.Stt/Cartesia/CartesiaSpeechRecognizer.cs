@@ -292,7 +292,7 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
             CartesiaSttTranscriptMessage? msg;
             try
             {
-                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.TypeInfo<CartesiaSttTranscriptMessage>());
+                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.For<CartesiaSttTranscriptMessage>.TypeInfo);
             }
             catch (JsonException)
             {

@@ -11,7 +11,7 @@ namespace Verbara.Sdk.Governance.Tests;
 /// <remarks>
 /// The request-byte tests in the STT test project freeze what the plain source-generated context
 /// writes; they cannot see which options a send site passes. This guard holds that wiring: switching
-/// a send to <c>SttJsonReadOptions.TypeInfo&lt;T&gt;()</c> turns it red, where every behavioural test
+/// a send to <c>SttJsonReadOptions.For&lt;T&gt;.TypeInfo</c> turns it red, where every behavioural test
 /// stays green because the options only differ on a null non-nullable member.
 /// </remarks>
 public sealed class SttSendContextGuardTests
@@ -55,7 +55,7 @@ public sealed class SttSendContextGuardTests
             "static class C {\n" +
             "    static string M(Msg m) => JsonSerializer.Serialize(\n" +
             "        m,\n" +
-            "        SttJsonReadOptions.TypeInfo<Msg>());\n" +
+            "        SttJsonReadOptions.For<Msg>.TypeInfo);\n" +
             "}\n";
 
         var violations = SttSendContextScanner.Scan(source, "x.cs");
@@ -83,7 +83,7 @@ public sealed class SttSendContextGuardTests
         // The indirection a call-site check alone would miss: a field reaches a send unnamed.
         const string source =
             "static class C {\n" +
-            "    static readonly JsonTypeInfo<Msg> Info = SttJsonReadOptions.TypeInfo<Msg>();\n" +
+            "    static readonly JsonTypeInfo<Msg> Info = SttJsonReadOptions.For<Msg>.TypeInfo;\n" +
             "    static string M(Msg m) => JsonSerializer.Serialize(m, Info);\n" +
             "}\n";
 
@@ -97,7 +97,7 @@ public sealed class SttSendContextGuardTests
     {
         const string source =
             "static class C {\n" +
-            "    static Msg? R(string json) => JsonSerializer.Deserialize(json, SttJsonReadOptions.TypeInfo<Msg>());\n" +
+            "    static Msg? R(string json) => JsonSerializer.Deserialize(json, SttJsonReadOptions.For<Msg>.TypeInfo);\n" +
             "    static string W(Msg m) => JsonSerializer.Serialize(m, VoiceAiSttJsonContext.Default.Msg);\n" +
             "}\n";
 
@@ -111,7 +111,7 @@ public sealed class SttSendContextGuardTests
     {
         const string source =
             "static class C {\n" +
-            "    // JsonSerializer.Serialize(m, SttJsonReadOptions.TypeInfo<Msg>());\n" +
+            "    // JsonSerializer.Serialize(m, SttJsonReadOptions.For<Msg>.TypeInfo);\n" +
             "    const string S = \"SttJsonReadOptions\";\n" +
             "}\n";
 

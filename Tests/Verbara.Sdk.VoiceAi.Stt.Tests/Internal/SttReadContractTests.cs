@@ -19,7 +19,7 @@ public sealed class SttReadContractTests
     {
         var json = member == "type" ? "{\"type\":null}" : "{\"text\":null}";
 
-        var result = JsonSerializer.Deserialize(json, SttJsonReadOptions.TypeInfo<CartesiaSttTranscriptMessage>());
+        var result = JsonSerializer.Deserialize(json, SttJsonReadOptions.For<CartesiaSttTranscriptMessage>.TypeInfo);
 
         result.Should().NotBeNull();
         if (member == "type") result!.Type.Should().BeNull();
@@ -33,7 +33,7 @@ public sealed class SttReadContractTests
     {
         var json = member == "type" ? "{\"type\":null}" : "{\"transcript\":null}";
 
-        var result = JsonSerializer.Deserialize(json, SttJsonReadOptions.TypeInfo<AssemblyAiTurnMessage>());
+        var result = JsonSerializer.Deserialize(json, SttJsonReadOptions.For<AssemblyAiTurnMessage>.TypeInfo);
 
         result.Should().NotBeNull();
         if (member == "type") result!.Type.Should().BeNull();
@@ -43,7 +43,7 @@ public sealed class SttReadContractTests
     [Fact]
     public void Deserialize_ShouldAcceptNullUnderStrictOptions_WhenGoogleTranscriptIsNullable()
     {
-        var result = JsonSerializer.Deserialize("{\"transcript\":null}", SttJsonReadOptions.TypeInfo<GoogleSpeechAlternative>());
+        var result = JsonSerializer.Deserialize("{\"transcript\":null}", SttJsonReadOptions.For<GoogleSpeechAlternative>.TypeInfo);
 
         result.Should().NotBeNull();
         result!.Transcript.Should().BeNull();
@@ -55,7 +55,7 @@ public sealed class SttReadContractTests
         // This member is unused by dispatch: the first transcript decode already rejects
         // message:null, so no socket payload can reach this second DTO with a null kind.
         // This is an annotation compatibility control: it holds with or without the null fixes.
-        var act = () => JsonSerializer.Deserialize("{\"message\":null}", SttJsonReadOptions.TypeInfo<SpeechmaticsRecognitionStartedMessage>());
+        var act = () => JsonSerializer.Deserialize("{\"message\":null}", SttJsonReadOptions.For<SpeechmaticsRecognitionStartedMessage>.TypeInfo);
 
         act.Should().Throw<JsonException>();
     }

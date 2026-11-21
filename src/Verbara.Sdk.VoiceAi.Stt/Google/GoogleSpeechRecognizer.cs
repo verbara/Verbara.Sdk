@@ -90,7 +90,7 @@ public sealed class GoogleSpeechRecognizer : SpeechRecognizer
 
         var responseJson = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         var result = JsonSerializer.Deserialize(responseJson,
-            SttJsonReadOptions.TypeInfo<GoogleSpeechResponse>());
+            SttJsonReadOptions.For<GoogleSpeechResponse>.TypeInfo);
 
         var alt = result?.Results?.FirstOrDefault()?.Alternatives?.FirstOrDefault();
         if (alt is not null)

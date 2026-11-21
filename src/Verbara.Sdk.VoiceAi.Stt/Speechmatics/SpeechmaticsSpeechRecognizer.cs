@@ -327,7 +327,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
             SpeechmaticsTranscriptMessage? msg;
             try
             {
-                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.TypeInfo<SpeechmaticsTranscriptMessage>());
+                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.For<SpeechmaticsTranscriptMessage>.TypeInfo);
             }
             catch (JsonException)
             {
@@ -363,7 +363,7 @@ public sealed class SpeechmaticsSpeechRecognizer : SpeechRecognizer
                 SpeechmaticsRecognitionStartedMessage? started;
                 try
                 {
-                    started = JsonSerializer.Deserialize(json, SttJsonReadOptions.TypeInfo<SpeechmaticsRecognitionStartedMessage>());
+                    started = JsonSerializer.Deserialize(json, SttJsonReadOptions.For<SpeechmaticsRecognitionStartedMessage>.TypeInfo);
                 }
                 catch (JsonException)
                 {

@@ -10,13 +10,12 @@ internal static class SttJsonReadOptions
 
     /// <summary>
     /// The strict metadata for <typeparamref name="T"/>, resolved once per type and held in a static
-    /// field, so a receive loop pays no options lookup per frame.
+    /// readonly field, so a receive loop pays no options lookup per frame. It is a field rather than
+    /// a method so that a decode <c>try</c> still makes exactly one invocation, the decode itself.
     /// </summary>
-    internal static JsonTypeInfo<T> TypeInfo<T>() => Cache<T>.Value;
-
-    private static class Cache<T>
+    internal static class For<T>
     {
-        internal static readonly JsonTypeInfo<T> Value =
+        internal static readonly JsonTypeInfo<T> TypeInfo =
             (JsonTypeInfo<T>)StrictOptions.GetTypeInfo(typeof(T));
     }
 
