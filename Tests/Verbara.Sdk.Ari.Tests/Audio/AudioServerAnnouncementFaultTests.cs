@@ -87,6 +87,47 @@ public sealed class AudioServerAnnouncementFaultTests
     [Theory]
     [InlineData(Transport.AudioSocket)]
     [InlineData(Transport.WebSocket)]
+    public async Task OnStreamConnected_ShouldAnnounceToTheLaterObserverKeepTheStreamAndReportOnce_WhenTheFirstObserverThrowsObjectDisposedOnARunningServer(
+        Transport transport)
+    {
+        // Arrange — the first observer throws ObjectDisposedException, the type each server's connection handler also
+        // catches when its own disposal races an announcement; the server is running, so this one is the observer's
+        using var recorder = new AudioMeasurementRecorder(SubscriberFaults);
+        await using var door = await Door.StartAsync(transport);
+        var later = new TaskCompletionSource<IAudioStream>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var throwing = door.Server.OnStreamConnected.Subscribe(
+            static _ => throw new ObjectDisposedException("the first observer's own disposed resource"));
+        using var laterSubscription = door.Server.OnStreamConnected.Subscribe(stream => later.TrySetResult(stream));
+
+        // Act — a stream connects
+        using var call = await door.ConnectAsync();
+        // A wait that ends at the bound fails the test here: the exception reached the connection's handler.
+        var announced = await later.Task.WaitAsync(SignalTimeout);
+
+        // Assert — the guard reports it as any other observer failure; the connection never sees it
+        var audioFlows = await call.AudioFlowsAsync(announced);
+        using (var scope = new AssertionScope())
+        {
+            scope.AddReportable("measurements", recorder.Describe);
+            scope.AddReportable("log", door.Log.Describe);
+            announced.ChannelId.Should().Be(call.Key, "an observer subscribed after the one that throws still receives that stream");
+            door.Server.GetStream(call.Key).Should().BeSameAs(announced, "the connection stays registered");
+            door.Server.ActiveStreamCount.Should().Be(1, "and keeps its place");
+            audioFlows.Should().BeTrue("and stays open: its audio still reaches the stream");
+            door.Log.Entries.Should().ContainSingle(
+                e => e.Level == LogLevel.Warning
+                    && e.EventName == "StreamConnectedObserverFailed"
+                    && e.Exception is ObjectDisposedException
+                    && Equals(e.Value("ChannelId"), call.Key),
+                "the failure is logged once at Warning, naming the stream");
+            door.Log.Entries.Should().NotContain(e => e.Level >= LogLevel.Error, "an observer's failure is not the connection's");
+            recorder.Total(SubscriberFaults).Should().Be(1, "and counted once");
+        }
+    }
+
+    [Theory]
+    [InlineData(Transport.AudioSocket)]
+    [InlineData(Transport.WebSocket)]
     public async Task DisposeAsync_ShouldCompleteTheLaterObserverAndReportOnce_WhenTheFirstObserverThrowsOnTheCompletion(
         Transport transport)
     {
