@@ -118,4 +118,55 @@ public sealed class PostgresSessionStoreTwoServersTests : IAsyncLifetime
         byLinked.Should().NotBeNull("server-b still holds the linkedid, and it is now the only server that does");
         byLinked!.SessionId.Should().Be("session-b");
     }
+
+    [Fact]
+    public async Task GetByLinkedIdAsync_ShouldReturnTheNamedServersSession_WhenTwoServersHoldTheLinkedId()
+    {
+        var store = CreateStore();
+        await store.SaveAsync(CreateSession("session-a", "server-a"), CancellationToken.None);
+        await store.SaveAsync(CreateSession("session-b", "server-b"), CancellationToken.None);
+
+        var a = await store.GetByLinkedIdAsync("server-a", SharedLinkedId, CancellationToken.None);
+        var b = await store.GetByLinkedIdAsync("server-b", SharedLinkedId, CancellationToken.None);
+        var c = await store.GetByLinkedIdAsync("server-c", SharedLinkedId, CancellationToken.None);
+
+        new { A = a?.SessionId, B = b?.SessionId, C = c?.SessionId }.Should().BeEquivalentTo(
+            new { A = "session-a", B = "session-b", C = default(string) },
+            "a lookup that names a server returns that server's session, and nothing for a server holding none");
+    }
+
+    [Fact]
+    public async Task GetByLinkedIdAsync_ShouldReturnTheNewestSession_WhenOneServerHoldsTheLinkedIdTwice()
+    {
+        var store = CreateStore();
+        var now = DateTimeOffset.UtcNow;
+        await store.SaveAsync(
+            new CallSession("session-newer", SharedLinkedId, "server-a", CallDirection.Inbound) { CreatedAt = now },
+            CancellationToken.None);
+        await store.SaveAsync(
+            new CallSession("session-older", SharedLinkedId, "server-a", CallDirection.Inbound) { CreatedAt = now.AddMinutes(-1) },
+            CancellationToken.None);
+
+        var unscoped = await store.GetByLinkedIdAsync(SharedLinkedId, CancellationToken.None);
+        var scoped = await store.GetByLinkedIdAsync("server-a", SharedLinkedId, CancellationToken.None);
+
+        new { Unscoped = unscoped?.SessionId, Scoped = scoped?.SessionId }.Should().BeEquivalentTo(
+            new { Unscoped = "session-newer", Scoped = "session-newer" },
+            "one server holds the linkedid, so both lookups answer with its newest session");
+    }
+
+    [Fact]
+    public async Task GetByLinkedIdAsync_ShouldReturnNothing_WhenTwoServersHoldTheLinkedIdAndOneHasEnded()
+    {
+        var store = CreateStore();
+        var a = CreateSession("session-a", "server-a");
+        await store.SaveAsync(a, CancellationToken.None);
+        await store.SaveAsync(CreateSession("session-b", "server-b"), CancellationToken.None);
+        a.Transition(CallSessionState.Failed);
+        await store.SaveAsync(a, CancellationToken.None);
+
+        var found = await store.GetByLinkedIdAsync(SharedLinkedId, CancellationToken.None);
+
+        found.Should().BeNull("this store keeps ended rows, so both servers still hold the linkedid");
+    }
 }

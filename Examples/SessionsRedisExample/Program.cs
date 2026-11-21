@@ -64,9 +64,12 @@ foreach (var s in active)
 }
 Console.WriteLine();
 
-// 4. Look up by linked id — RedisSessionStore uses a secondary index for O(1) lookup.
+// 4. Look up by linked id — RedisSessionStore uses a secondary index for O(1) lookup. The unscoped lookup answers only
+//    when one server holds the id; naming the server answers for that server whatever another server holds.
 var byLinked = await store.GetByLinkedIdAsync("demo-linked-2", default);
 Console.WriteLine($"GetByLinkedId('demo-linked-2') -> {byLinked?.SessionId ?? "(null)"}");
+var byServerAndLinked = await store.GetByLinkedIdAsync(byLinked?.ServerId ?? "demo-server", "demo-linked-2", default);
+Console.WriteLine($"GetByLinkedId(server, 'demo-linked-2') -> {byServerAndLinked?.SessionId ?? "(null)"}");
 
 // 5. Cleanup (so a re-run starts clean).
 foreach (var s in active)

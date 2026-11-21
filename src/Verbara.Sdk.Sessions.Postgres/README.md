@@ -62,3 +62,8 @@ CREATE INDEX IF NOT EXISTS ix_asterisk_sessions_active
   `^[A-Za-z_][A-Za-z0-9_]*$` at registration time and must be trusted inputs.
 - Partial index on `state` with `WHERE completed_at IS NULL` keeps the active scan fast even at
   scale.
+- Two lookups by `linkedid`, both through `ix_asterisk_sessions_linked_id` (no migration needed):
+  `GetByLinkedIdAsync(serverId, linkedId, ct)` returns the named server's newest row;
+  `GetByLinkedIdAsync(linkedId, ct)` answers only when every row under the id belongs to one server, and returns
+  `null` when two or more servers have one. Rows are kept until deleted, so a `linkedid` two servers ever used stays
+  ambiguous to the unscoped lookup for as long as both rows are kept: use the scoped one.

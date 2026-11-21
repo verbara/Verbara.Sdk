@@ -28,8 +28,33 @@ internal sealed class InMemorySessionStore : SessionStoreBase
         return ValueTask.CompletedTask;
     }
 
+    /// <summary>
+    /// The newest session under <paramref name="linkedId"/> when exactly one server holds it; <c>null</c> when none
+    /// or two or more servers do.
+    /// </summary>
     public override ValueTask<CallSession?> GetByLinkedIdAsync(string linkedId, CancellationToken ct)
-        => ValueTask.FromResult(_store.Values.FirstOrDefault(s => s.LinkedId == linkedId));
+    {
+        CallSession? newest = null;
+        foreach (var session in _store.Values.Where(s => string.Equals(s.LinkedId, linkedId, StringComparison.Ordinal)))
+        {
+            if (newest is not null && !string.Equals(newest.ServerId, session.ServerId, StringComparison.Ordinal))
+                return ValueTask.FromResult<CallSession?>(null);
+            if (newest is null || session.CreatedAt > newest.CreatedAt) newest = session;
+        }
+
+        return ValueTask.FromResult(newest);
+    }
+
+    /// <summary>The newest session the named server holds under <paramref name="linkedId"/>.</summary>
+    public override ValueTask<CallSession?> GetByLinkedIdAsync(string serverId, string linkedId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(serverId);
+        ArgumentNullException.ThrowIfNull(linkedId);
+        return ValueTask.FromResult(_store.Values
+            .Where(s => string.Equals(s.LinkedId, linkedId, StringComparison.Ordinal)
+                && string.Equals(s.ServerId, serverId, StringComparison.Ordinal))
+            .MaxBy(s => s.CreatedAt));
+    }
 
     /// <summary>
     /// Lets go of the session the manager released. This store keeps the manager's own object, so

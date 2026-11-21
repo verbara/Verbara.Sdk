@@ -25,6 +25,15 @@ public abstract class SessionStoreBase : ISessionStore
     public virtual ValueTask<CallSession?> GetByLinkedIdAsync(string linkedId, CancellationToken ct)
         => ValueTask.FromResult<CallSession?>(null);
 
+    /// <inheritdoc cref="ISessionStore.GetByLinkedIdAsync(string, string, CancellationToken)" />
+    public virtual async ValueTask<CallSession?> GetByLinkedIdAsync(string serverId, string linkedId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(serverId);
+        ArgumentNullException.ThrowIfNull(linkedId);
+        var session = await GetByLinkedIdAsync(linkedId, ct).ConfigureAwait(false);
+        return session is not null && string.Equals(session.ServerId, serverId, StringComparison.Ordinal) ? session : null;
+    }
+
     /// <summary>
     /// Told by the session manager that it has released <paramref name="session"/>: the call ended
     /// more than <see cref="Manager.SessionOptions.CompletedRetention"/> ago, and the manager no longer

@@ -29,6 +29,7 @@ public sealed class PostgresSessionStore : SessionStoreBase
     private readonly string _getByIdSql;
     private readonly string _getActiveSql;
     private readonly string _getByLinkedIdSql;
+    private readonly string _getByServerAndLinkedIdSql;
     private readonly string _deleteSql;
 
     /// <summary>
@@ -74,7 +75,12 @@ public sealed class PostgresSessionStore : SessionStoreBase
 
         _getByLinkedIdSql = string.Format(
             CultureInfo.InvariantCulture,
-            "SELECT snapshot FROM {0} WHERE linked_id = @linked ORDER BY created_at DESC LIMIT 1",
+            "SELECT DISTINCT ON (server_id) snapshot FROM {0} WHERE linked_id = @linked ORDER BY server_id, created_at DESC LIMIT 2",
+            _qualifiedTable);
+
+        _getByServerAndLinkedIdSql = string.Format(
+            CultureInfo.InvariantCulture,
+            "SELECT snapshot FROM {0} WHERE linked_id = @linked AND server_id = @server ORDER BY created_at DESC LIMIT 1",
             _qualifiedTable);
 
         _deleteSql = string.Format(
@@ -139,12 +145,36 @@ public sealed class PostgresSessionStore : SessionStoreBase
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Answers with the newest row under <paramref name="linkedId"/> only when every row under it belongs to one
+    /// server; when two or more servers have a row it returns <c>null</c>. This store keeps rows until they are
+    /// deleted, so a LinkedID that two servers ever used stays ambiguous here for as long as both rows are kept: use
+    /// <see cref="GetByLinkedIdAsync(string, string, CancellationToken)"/> to name the server.
+    /// </remarks>
     public override async ValueTask<CallSession?> GetByLinkedIdAsync(string linkedId, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(linkedId);
-        var json = await _dataSource.QuerySingleOrDefaultAsync(_getByLinkedIdSql,
+        var jsons = await _dataSource.QueryListAsync(_getByLinkedIdSql,
             p => p.Add(new NpgsqlParameter("linked", linkedId)),
+            static r => r.GetStringOrNull("snapshot"), ct).ConfigureAwait(false);
+        return jsons.Count == 1 ? Deserialize(jsons[0])?.ToSession() : null;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Returns the newest row the named server has under <paramref name="linkedId"/>.</remarks>
+    public override async ValueTask<CallSession?> GetByLinkedIdAsync(
+        string serverId, string linkedId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(serverId);
+        ArgumentNullException.ThrowIfNull(linkedId);
+        var json = await _dataSource.QueryFirstOrDefaultAsync(_getByServerAndLinkedIdSql,
+            p =>
+            {
+                p.Add(new NpgsqlParameter("linked", NpgsqlDbType.Text) { Value = linkedId });
+                p.Add(new NpgsqlParameter("server", NpgsqlDbType.Text) { Value = serverId });
+            },
             static r => r.GetStringOrNull("snapshot"), ct).ConfigureAwait(false);
         return Deserialize(json)?.ToSession();
     }

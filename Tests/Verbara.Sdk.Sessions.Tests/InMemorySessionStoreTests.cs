@@ -82,4 +82,63 @@ public sealed class InMemorySessionStoreTests
             "the release names one session object; a different session saved under the same id since "
             + "is not removed on the released one's account");
     }
+
+    [Fact]
+    public async Task GetByLinkedIdAsync_ShouldReturnNothing_WhenTwoServersHoldTheLinkedId()
+    {
+        await _sut.SaveAsync(new CallSession("session-a", "shared", "server-a", CallDirection.Inbound), CancellationToken.None);
+        await _sut.SaveAsync(new CallSession("session-b", "shared", "server-b", CallDirection.Inbound), CancellationToken.None);
+
+        var found = await _sut.GetByLinkedIdAsync("shared", CancellationToken.None);
+
+        found.Should().BeNull("two servers hold the linkedid, so a lookup that names no server cannot pick one of them");
+    }
+
+    [Fact]
+    public async Task GetByLinkedIdAsync_ShouldReturnTheNamedServersSession_WhenTwoServersHoldTheLinkedId()
+    {
+        await _sut.SaveAsync(new CallSession("session-a", "shared", "server-a", CallDirection.Inbound), CancellationToken.None);
+        await _sut.SaveAsync(new CallSession("session-b", "shared", "server-b", CallDirection.Inbound), CancellationToken.None);
+
+        var a = await _sut.GetByLinkedIdAsync("server-a", "shared", CancellationToken.None);
+        var b = await _sut.GetByLinkedIdAsync("server-b", "shared", CancellationToken.None);
+        var c = await _sut.GetByLinkedIdAsync("server-c", "shared", CancellationToken.None);
+
+        new { A = a?.SessionId, B = b?.SessionId, C = c?.SessionId }.Should().BeEquivalentTo(
+            new { A = "session-a", B = "session-b", C = default(string) },
+            "a lookup that names a server returns that server's session, and nothing for a server holding none");
+    }
+
+    [Fact]
+    public async Task GetByLinkedIdAsync_ShouldReturnTheNewestSession_WhenOneServerHoldsTheLinkedIdTwice()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await _sut.SaveAsync(
+            new CallSession("newer", "shared", "server-a", CallDirection.Inbound) { CreatedAt = now }, CancellationToken.None);
+        await _sut.SaveAsync(
+            new CallSession("older", "shared", "server-a", CallDirection.Inbound) { CreatedAt = now.AddMinutes(-1) },
+            CancellationToken.None);
+
+        var unscoped = await _sut.GetByLinkedIdAsync("shared", CancellationToken.None);
+        var scoped = await _sut.GetByLinkedIdAsync("server-a", "shared", CancellationToken.None);
+
+        new { Unscoped = unscoped?.SessionId, Scoped = scoped?.SessionId }.Should().BeEquivalentTo(
+            new { Unscoped = "newer", Scoped = "newer" },
+            "one server holds the linkedid, so both lookups answer with its newest session");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ShouldLeaveTheOtherServersSessionFoundByLinkedId_WhenTwoServersShareOneLinkedId()
+    {
+        await _sut.SaveAsync(new CallSession("session-a", "shared", "server-a", CallDirection.Inbound), CancellationToken.None);
+        await _sut.SaveAsync(new CallSession("session-b", "shared", "server-b", CallDirection.Inbound), CancellationToken.None);
+
+        await _sut.DeleteAsync("session-a", CancellationToken.None);
+
+        var unscoped = await _sut.GetByLinkedIdAsync("shared", CancellationToken.None);
+        var scoped = await _sut.GetByLinkedIdAsync("server-b", "shared", CancellationToken.None);
+        new { Unscoped = unscoped?.SessionId, Scoped = scoped?.SessionId }.Should().BeEquivalentTo(
+            new { Unscoped = "session-b", Scoped = "session-b" },
+            "server-b still holds the linkedid, and it is now the only server that does");
+    }
 }
