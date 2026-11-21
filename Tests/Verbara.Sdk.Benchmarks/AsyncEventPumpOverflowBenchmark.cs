@@ -69,8 +69,8 @@ public class AsyncEventPumpOverflowBenchmark
         // The waiter's target is the refused event, the last one received: passed only once the buffer is empty.
         if (pump.LastLossOrdinal != 10_001)
             throw new InvalidOperationException("The refused event is not the last one received.");
-        if (WatcherArmed && !SpinWait.SpinUntil(() => pump.RegisteredWaiters != 0, TimeSpan.FromSeconds(5)))
-            throw new InvalidOperationException("The loss watcher's wait was not registered before the drain.");
+        if (WatcherArmed)
+            AwaitWaiterRegistered(pump);
 
         var drained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         pump.Start(evt =>
@@ -84,6 +84,20 @@ public class AsyncEventPumpOverflowBenchmark
         if (WatcherArmed)
             await signalled.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await pump.LossWatcher;
+    }
+
+    // Spins until the loss watcher's wait is registered, allocating nothing (no closure or delegate, so the armed arm's
+    // bytes are the pump's own), and fails the row if it is not registered within 5 s.
+    private static void AwaitWaiterRegistered(AsyncEventPump pump)
+    {
+        var deadline = Environment.TickCount64 + 5_000;
+        var spin = default(SpinWait);
+        while (pump.RegisteredWaiters == 0)
+        {
+            if (Environment.TickCount64 > deadline)
+                throw new InvalidOperationException("The loss watcher's wait was not registered before the drain.");
+            spin.SpinOnce();
+        }
     }
 
     // C: sustained overflow, 100,000 events offered from this thread to a running pump of 1,000 slots with an empty
