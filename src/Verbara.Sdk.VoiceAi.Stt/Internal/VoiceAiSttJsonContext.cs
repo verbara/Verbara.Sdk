@@ -72,15 +72,21 @@ internal sealed class GoogleSpeechResult
 
 internal sealed class GoogleSpeechAlternative
 {
-    [JsonPropertyName("transcript")] public string Transcript { get; set; } = string.Empty;
+    // Discovery has no response required-set or nullability guarantee. Accept null text;
+    // the public recognition result represents an absent transcript as empty text.
+    [JsonPropertyName("transcript")] public string? Transcript { get; set; } = string.Empty;
     [JsonPropertyName("confidence")] public float Confidence { get; set; }
 }
 
 // --- Cartesia STT DTOs ---
 internal sealed class CartesiaSttTranscriptMessage
 {
-    [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
-    [JsonPropertyName("text")] public string Text { get; set; } = string.Empty;
+    // No openly licensed surface contract establishes non-nullability. A null kind
+    // cannot be dispatched and is ignored, like an unknown message kind.
+    [JsonPropertyName("type")] public string? Type { get; set; } = string.Empty;
+    // No openly licensed surface contract establishes non-nullability. Accept null text;
+    // the public recognition result represents an absent transcript as empty text.
+    [JsonPropertyName("text")] public string? Text { get; set; } = string.Empty;
     [JsonPropertyName("is_final")] public bool IsFinal { get; set; }
     [JsonPropertyName("confidence")] public float? Confidence { get; set; }
 
@@ -99,8 +105,12 @@ internal sealed class CartesiaSttTranscriptMessage
 // --- AssemblyAI Universal Streaming v3 DTOs ---
 internal sealed class AssemblyAiTurnMessage
 {
-    [JsonPropertyName("type")] public string Type { get; init; } = string.Empty;
-    [JsonPropertyName("transcript")] public string Transcript { get; init; } = string.Empty;
+    // No machine-readable surface contract establishes non-nullability. A null kind
+    // cannot be dispatched and is ignored, like an unknown message kind.
+    [JsonPropertyName("type")] public string? Type { get; init; } = string.Empty;
+    // No machine-readable surface contract establishes non-nullability. Accept null text;
+    // the public recognition result represents an absent transcript as empty text.
+    [JsonPropertyName("transcript")] public string? Transcript { get; init; } = string.Empty;
     [JsonPropertyName("end_of_turn")] public bool EndOfTurn { get; init; }
     [JsonPropertyName("turn_is_formatted")] public bool TurnIsFormatted { get; init; }
 

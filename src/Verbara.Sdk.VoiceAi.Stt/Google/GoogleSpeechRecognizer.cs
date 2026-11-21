@@ -90,11 +90,16 @@ public sealed class GoogleSpeechRecognizer : SpeechRecognizer
 
         var responseJson = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         var result = JsonSerializer.Deserialize(responseJson,
-            VoiceAiSttJsonContext.Default.GoogleSpeechResponse);
+            SttJsonReadOptions.TypeInfo<GoogleSpeechResponse>());
 
         var alt = result?.Results?.FirstOrDefault()?.Alternatives?.FirstOrDefault();
         if (alt is not null)
-            yield return new SpeechRecognitionResult(alt.Transcript, alt.Confidence, true, TimeSpan.Zero);
+        {
+            // Provider null is treated as an empty transcript: the public result does not
+            // model absent text separately from empty text.
+            var transcript = alt.Transcript ?? string.Empty;
+            yield return new SpeechRecognitionResult(transcript, alt.Confidence, true, TimeSpan.Zero);
+        }
     }
 
     private static async Task<byte[]> DrainFramesAsync(

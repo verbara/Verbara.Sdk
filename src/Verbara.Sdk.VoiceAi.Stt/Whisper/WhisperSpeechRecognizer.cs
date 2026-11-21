@@ -53,8 +53,9 @@ public sealed class WhisperSpeechRecognizer : SpeechRecognizer
 
         var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         var result = JsonSerializer.Deserialize(json,
-            VoiceAiSttJsonContext.Default.WhisperTranscriptionResponse);
+            SttJsonReadOptions.TypeInfo<WhisperTranscriptionResponse>());
 
+        // A null response root is outside the member fence and represents no recognition result.
         if (!string.IsNullOrEmpty(result?.Text))
             yield return new SpeechRecognitionResult(result.Text, 1.0f, true, TimeSpan.Zero);
     }

@@ -380,7 +380,7 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
             AssemblyAiTurnMessage? msg;
             try
             {
-                msg = JsonSerializer.Deserialize(json, VoiceAiSttJsonContext.Default.AssemblyAiTurnMessage);
+                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.TypeInfo<AssemblyAiTurnMessage>());
             }
             catch (JsonException)
             {
@@ -396,11 +396,15 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
 
             if (msg is null) continue;
 
+            // A null kind is undispatchable. Coalesce to an empty kind so the frame is
+            // ignored, as an unknown kind is, without inventing a provider contract.
+            var messageType = msg.Type ?? string.Empty;
+
             // Door 1 (ADR-0049 D1, remedied under ADR-0050 E1). This is the message §4.15 named: the
             // error frame that answered every 20 ms-framed session went straight through the Turn
             // test below and onto the floor, which is why sending audio the vendor rejected produced
             // an empty transcript and no error to explain it.
-            if (string.Equals(msg.Type, "Error", StringComparison.Ordinal))
+            if (string.Equals(messageType, "Error", StringComparison.Ordinal))
             {
                 throw SpeechProviderFailureException.FromErrorFrame(
                     provider,
@@ -409,10 +413,13 @@ public sealed class AssemblyAiSpeechRecognizer : SpeechRecognizer
             }
 
             // Only "Turn" messages carry transcripts. Begin/Termination are lifecycle.
-            if (!string.Equals(msg.Type, "Turn", StringComparison.Ordinal)) continue;
+            if (!string.Equals(messageType, "Turn", StringComparison.Ordinal)) continue;
 
+            // Provider null is treated as an empty transcript: the public result does not
+            // model absent text separately from empty text.
+            var transcript = msg.Transcript ?? string.Empty;
             var stt = new SpeechRecognitionResult(
-                msg.Transcript,
+                transcript,
                 // AssemblyAI v3 Turn messages do not include a per-turn confidence scalar;
                 // Note: surface 0f (consistent with other providers when absent).
                 0f,

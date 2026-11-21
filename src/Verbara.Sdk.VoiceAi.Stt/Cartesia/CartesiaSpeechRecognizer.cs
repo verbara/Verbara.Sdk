@@ -292,7 +292,7 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
             CartesiaSttTranscriptMessage? msg;
             try
             {
-                msg = JsonSerializer.Deserialize(json, VoiceAiSttJsonContext.Default.CartesiaSttTranscriptMessage);
+                msg = JsonSerializer.Deserialize(json, SttJsonReadOptions.TypeInfo<CartesiaSttTranscriptMessage>());
             }
             catch (JsonException)
             {
@@ -308,11 +308,15 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
 
             if (msg is null) continue;
 
+            // A null kind is undispatchable. Coalesce to an empty kind so the frame is
+            // ignored, as an unknown kind is, without inventing a provider contract.
+            var messageType = msg.Type ?? string.Empty;
+
             // Door 1 (ADR-0049 D1, remedied under ADR-0050 E1). Measured in band alongside that close
             // code: `{"type":"error","code":400,"message":"Missing sample_rate: …"}` — a frame the
             // transcript test below dropped, so the vendor named the defect and the client said
             // nothing.
-            if (string.Equals(msg.Type, "error", StringComparison.Ordinal))
+            if (string.Equals(messageType, "error", StringComparison.Ordinal))
             {
                 throw SpeechProviderFailureException.FromErrorFrame(
                     provider,
@@ -320,10 +324,13 @@ public sealed class CartesiaSpeechRecognizer : SpeechRecognizer
                     msg.Message);
             }
 
-            if (!string.Equals(msg.Type, "transcript", StringComparison.Ordinal)) continue;
+            if (!string.Equals(messageType, "transcript", StringComparison.Ordinal)) continue;
 
+            // Provider null is treated as an empty transcript: the public result does not
+            // model absent text separately from empty text.
+            var transcript = msg.Text ?? string.Empty;
             var stt = new SpeechRecognitionResult(
-                msg.Text,
+                transcript,
                 msg.Confidence ?? 0f,
                 msg.IsFinal,
                 TimeSpan.Zero);
