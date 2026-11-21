@@ -307,8 +307,20 @@ public sealed class SessionManagerHostedServiceOwnershipTests : IAsyncLifetime
     public async Task StopAsync_ShouldNotDetachThroughTheDecorator_WhenItForwardsTheAttachOnAnotherThreadAndWaits()
     {
         ForwardingManager? decorator = null;
-        var host = BuildHost(decorated: true, onDecorator: d => decorator = d,
-            attachVia: forward => Task.Run(forward).GetAwaiter().GetResult());
+        var forwardedOnAnotherThread = new System.Collections.Concurrent.ConcurrentQueue<bool>();
+        // A dedicated thread, started from the call (it inherits the caller's execution context) and joined: unlike a
+        // waited Task.Run, it can never be inlined on the caller's thread.
+        var host = BuildHost(decorated: true, onDecorator: d => decorator = d, attachVia: forward =>
+        {
+            var caller = Environment.CurrentManagedThreadId;
+            var worker = new Thread(() =>
+            {
+                forwardedOnAnotherThread.Enqueue(Environment.CurrentManagedThreadId != caller);
+                forward();
+            }) { IsBackground = true };
+            worker.Start();
+            worker.Join(Bound).Should().BeTrue("the forwarding thread finished within the bound");
+        });
         await using var disposal = (IAsyncDisposable)host;
         var manager = host.Services.GetRequiredService<ICallSessionManager>();
         manager.AttachToServer(_server, "default");
@@ -317,6 +329,8 @@ public sealed class SessionManagerHostedServiceOwnershipTests : IAsyncLifetime
         await host.StopAsync(CancellationToken.None).WaitAsync(Bound);
         _server.Channels.OnNewChannel("uid-2", "PJSIP/100-002", ChannelState.Up, linkedId: "linked-2");
 
+        forwardedOnAnotherThread.Should().NotBeEmpty().And.OnlyContain(other => other,
+            "every forward ran on a thread of its own, not the caller's");
         decorator!.Calls.Should().Equal(["attach:default", "attach:default"],
             "the decorator forwarded the SDK's attach to the engine within the call, so the host's attachment is kept");
         manager.GetByLinkedId("linked-2").Should().NotBeNull("the host's attachment survives the SDK's stop");
