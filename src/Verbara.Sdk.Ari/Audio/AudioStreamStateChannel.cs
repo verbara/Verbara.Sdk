@@ -36,7 +36,8 @@ internal static partial class AudioStreamStateLog
 /// <para>
 /// <b>The guard.</b> Each subscriber gets its own guarded observer. An exception it throws on a
 /// notification the stream publishes is logged once at Error and delivery goes on to the next
-/// subscriber. An exception it throws on the state the subject replays inside its own
+/// subscriber; a logger that throws while writing that line is ignored, so the report stops nothing
+/// either. An exception it throws on the state the subject replays inside its own
 /// <c>Subscribe</c> call is not a publication: it reaches the caller of that call, as it always did,
 /// and the subscription it was made in is dropped first, so that observer receives nothing afterwards.
 /// The replay is told apart by thread: the subject replays synchronously on the subscribing thread
@@ -159,8 +160,18 @@ internal sealed class AudioStreamStateChannel : IObservable<AudioStreamState>, I
         _state.OnNext(state);
     }
 
-    private void Report(Exception exception) =>
-        AudioStreamStateLog.ObserverFailed(_logger, exception, _channelId());
+    private void Report(Exception exception)
+    {
+        try
+        {
+            AudioStreamStateLog.ObserverFailed(_logger, exception, _channelId());
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The line is the only trace an observer's failure leaves (this channel has no counter); when the logger
+            // fails too, the notification still goes on to the next observer and nothing reaches the publisher.
+        }
+    }
 
     /// <summary>One subscriber, behind the guard.</summary>
     private sealed class GuardedObserver(AudioStreamStateChannel owner, IObserver<AudioStreamState> inner) : IObserver<AudioStreamState>

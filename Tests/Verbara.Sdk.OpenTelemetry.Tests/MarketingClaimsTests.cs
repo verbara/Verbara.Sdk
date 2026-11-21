@@ -52,8 +52,8 @@ public sealed class MarketingClaimsTests
     [Fact]
     public void MeterNames_Count_ShouldMatchReadmeClaim()
     {
-        // README.md "Observability" claims 15 Meters.
-        VerbaraTelemetry.MeterNames.Should().HaveCount(15);
+        // README.md "Observability" claims 16 Meters.
+        VerbaraTelemetry.MeterNames.Should().HaveCount(16);
     }
 
     [Fact]

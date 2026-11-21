@@ -69,6 +69,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     private readonly RealtimeFunctionRegistry _registry;
     private readonly ILogger<OpenAiRealtimeBridge> _logger;
     private readonly Subject<RealtimeEvent> _events = new();
+    private readonly GuardedEvents _guardedEvents;
 
     /// <summary>
     /// Set by the first <see cref="DisposeAsync"/>, which every later call then ignores. The SDK's own
@@ -110,7 +111,16 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
     internal Action? AwaitingLoopsOnExit { get; set; }
 
     /// <summary>Observable stream of Realtime bridge events from all active sessions.</summary>
-    public IObservable<RealtimeEvent> Events => _events;
+    /// <remarks>
+    /// A subscriber that throws (<see cref="OutOfMemoryException"/> excepted) stops nothing else: every other subscriber
+    /// still receives the event, the session goes on serving the call and is not counted failed, and nothing is thrown
+    /// from <see cref="DisposeAsync"/>. Each failure is counted on <c>voiceai.realtime.subscriber_faults</c> (meter
+    /// <c>Verbara.Sdk.VoiceAi.OpenAiRealtime</c>) and then logged once at Warning with the exception; a logger that throws
+    /// on that line is ignored. A subscriber subscribed directly stays subscribed; one composed through an operator
+    /// (<c>Where</c>, <c>OfType</c>, …) is ended by that operator on its first failure. Only what throws on the delivering
+    /// thread is caught.
+    /// </remarks>
+    public IObservable<RealtimeEvent> Events => _guardedEvents;
 
     /// <summary>
     /// What the vendor did with this bridge's sessions, written once per session by the terminal block and read by
@@ -133,6 +143,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         FunctionCallTimeoutRule.ThrowIfUnusable(_options);
         _registry = registry;
         _logger = logger;
+        _guardedEvents = new GuardedEvents(this);
     }
 
     /// <inheritdoc/>
@@ -1052,6 +1063,77 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         }
 
         RealtimeLog.EventDroppedAfterDisposal(_logger, evt.ChannelId, evt.GetType().Name);
+    }
+
+    /// <summary>
+    /// Counts a subscriber's failure, then logs it; what the logger throws goes no further, so the fault stays counted
+    /// and the event goes on to the later subscribers.
+    /// </summary>
+    private void ReportSubscriberFailure(Exception failure, Guid channelId, string notification)
+    {
+        RealtimeMetrics.SubscriberFaults.Add(1);
+        try
+        {
+            RealtimeLog.EventSubscriberFailed(_logger, failure, channelId, notification);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The report is the only trace a subscriber's failure leaves besides the count; when it fails too, the
+            // fault stays counted and delivery goes on.
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Events"/>: every subscriber is wrapped in its own guard, subscribed to the subject in its place, so
+    /// it covers every publish, present and future, with no site to forget.
+    /// </summary>
+    private sealed class GuardedEvents(OpenAiRealtimeBridge owner) : IObservable<RealtimeEvent>
+    {
+        public IDisposable Subscribe(IObserver<RealtimeEvent> observer)
+        {
+            ArgumentNullException.ThrowIfNull(observer);
+            return owner._events.Subscribe(new SubscriberGuard(owner, observer));
+        }
+    }
+
+    /// <summary>One subscriber behind its guard. Internal so a test can reach the arm no publish does (<c>OnError</c>).</summary>
+    internal sealed class SubscriberGuard(OpenAiRealtimeBridge owner, IObserver<RealtimeEvent> inner) : IObserver<RealtimeEvent>
+    {
+        public void OnNext(RealtimeEvent value)
+        {
+            try
+            {
+                inner.OnNext(value);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                owner.ReportSubscriberFailure(ex, value.ChannelId, value.GetType().Name);
+            }
+        }
+
+        public void OnError(Exception error)
+        {
+            try
+            {
+                inner.OnError(error);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                owner.ReportSubscriberFailure(ex, Guid.Empty, "error");
+            }
+        }
+
+        public void OnCompleted()
+        {
+            try
+            {
+                inner.OnCompleted();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                owner.ReportSubscriberFailure(ex, Guid.Empty, "completion");
+            }
+        }
     }
 
     /// <inheritdoc/>

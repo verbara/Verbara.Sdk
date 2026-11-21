@@ -55,7 +55,7 @@ The `[.. Collection]` spread syntax is important: `AddSource` / `AddMeter` each 
 
 ## Why the discovery pattern matters
 
-Hard-coding the 9 `ActivitySource` names and 15 `Meter` names locks you to a specific SDK version. When future releases add new packages, you would need to update the consumer. Reading from `VerbaraTelemetry.*Names` keeps the consumer forward-compatible — the SDK is the single source of truth for what telemetry it publishes.
+Hard-coding the 9 `ActivitySource` names and 16 `Meter` names locks you to a specific SDK version. When future releases add new packages, you would need to update the consumer. Reading from `VerbaraTelemetry.*Names` keeps the consumer forward-compatible — the SDK is the single source of truth for what telemetry it publishes.
 
 ## See also
 

@@ -136,7 +136,8 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
         await using var fake = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
         fake.Start();
         await using var rig = await AudioRig.StartAsync();
-        await using var bridge = Create(fake);
+        var options = DefaultOptions();
+        await using var bridge = Create(fake, options);
         var clock = new FakeTimeProvider();
         bridge.TimeProvider = clock;
         using var transport = new HeldWriteTransport();
@@ -146,15 +147,9 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
         CancellationTokenRegistration registration = default;
         bridge.InputReadStarting = token => registration = token.Register(() => inputStop.TrySetResult());
         using var metrics = new MeterCapture(Meter);
-        // Arm -1: a receive-side fault that is neither a close nor a cancel — an Events subscriber that
-        // throws on the transcript the vendor sends.
-        using var subscriber = code == -1
-            ? bridge.Events.Subscribe(e =>
-            {
-                if (e is RealtimeTranscriptEvent)
-                    throw new InvalidOperationException("thrown by a subscriber during a stalled send");
-            })
-            : null;
+        // Arm -1: a receive-side fault that is neither a close nor a cancel — the function call the vendor sends
+        // finds a FunctionCallTimeout made unusable after construction, and the receive loop throws on it. (Up to
+        // 2.10.x this arm used an Events subscriber that threw; a subscriber's failure no longer faults the session.)
         var run = bridge.HandleSessionAsync(rig.Session, host.Token).AsTask();
         try
         {
@@ -164,7 +159,12 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
             await rig.Caller.SendAudioAsync(new byte[320]);
             await transport.Entered.Task.WaitAsync(Limit);
             if (code == 0) fake.Abort();
-            else if (code == -1) await fake.SendEventAsync("{\"type\":\"response.output_audio_transcript.delta\",\"delta\":\"x\"}");
+            else if (code == -1)
+            {
+                options.FunctionCallTimeout = Timeout.InfiniteTimeSpan;
+                await fake.SendEventAsync(
+                    "{\"type\":\"response.function_call_arguments.done\",\"call_id\":\"call_1\",\"name\":\"probe\",\"arguments\":\"{}\"}");
+            }
             else await fake.SendCloseAsync((WebSocketCloseStatus)code, "vendor ends during permanently held send");
             await inputStop.Task.WaitAsync(Limit);
             if (code == 0)
@@ -203,7 +203,7 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
                 transport.Release.Task.IsCompleted.Should().BeFalse("only transport teardown ended the stalled write");
                 if (code == 1000) fault.Should().BeNull();
                 else if (code == 3000) fault.Should().BeOfType<SpeechProviderFailureException>().Which.Code.Should().Be("3000");
-                else fault.Should().BeOfType<InvalidOperationException>();
+                else fault.Should().BeOfType<ArgumentOutOfRangeException>();
                 metrics.Get("openai_realtime.sessions.completed").Should().Be(code == 1000 ? 1 : 0);
                 metrics.Get("openai_realtime.sessions.failed").Should().Be(code == 1000 ? 0 : 1);
                 metrics.Get("openai_realtime.sessions.cancelled").Should().Be(0);
@@ -361,8 +361,11 @@ public sealed class OpenAiRealtimeClosingTests(ITestOutputHelper output)
         failures.Should().BeEmpty("all 200 partial-read hook runs must classify host cancellation as cancelled, including send-side socket-state errors");
     }
 
-    private static OpenAiRealtimeBridge Create(RealtimeFakeServer fake) => new(
-        Options.Create(new OpenAiRealtimeOptions { ApiKey = "test-key", Model = "gpt-realtime", InputFormat = AudioFormat.Slin16Mono8kHz }),
+    private static OpenAiRealtimeOptions DefaultOptions() =>
+        new() { ApiKey = "test-key", Model = "gpt-realtime", InputFormat = AudioFormat.Slin16Mono8kHz };
+
+    private static OpenAiRealtimeBridge Create(RealtimeFakeServer fake, OpenAiRealtimeOptions? options = null) => new(
+        Options.Create(options ?? DefaultOptions()),
         new RealtimeFunctionRegistry([]), NullLogger<OpenAiRealtimeBridge>.Instance)
         { BaseUri = new Uri($"ws://127.0.0.1:{fake.Port}/") };
 

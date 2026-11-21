@@ -58,4 +58,13 @@ public static class VoiceAiMetrics
     /// </remarks>
     public static readonly Histogram<double> SessionDurationMs =
         Meter.CreateHistogram<double>("voiceai.session.duration_ms", "ms", "Pipeline session duration");
+
+    /// <summary>
+    /// Pipeline event subscriber failures: a subscriber of <c>VoiceAiPipeline.Events</c> that threw on an event, the
+    /// completion or an error, one per failure. Each is also logged at Warning; the other subscribers and the session
+    /// go on.
+    /// </summary>
+    internal static readonly Counter<long> PipelineSubscriberFaults =
+        Meter.CreateCounter<long>("voiceai.pipeline.subscriber_faults", "faults",
+            "Pipeline event subscriber failures (an Events subscriber threw); delivery goes on");
 }

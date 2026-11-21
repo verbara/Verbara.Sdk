@@ -1,5 +1,6 @@
 using System.Reactive.Subjects;
 using Verbara.Sdk;
+using Verbara.Sdk.Activities.Internal;
 
 namespace Verbara.Sdk.Activities.Activities;
 
@@ -13,14 +14,26 @@ public abstract class AriActivityBase : IActivity
     private readonly Lock _lock = new();
     private CancellationTokenSource? _executionCts;
     private volatile bool _cancelRequested;
+    private readonly GuardedStatusStream _statusChanges;
 
     public ActivityStatus Status => _statusSubject.Value;
-    public IObservable<ActivityStatus> StatusChanges => _statusSubject;
+    /// <summary>The activity's statuses: the current one on subscription, then every change, then the completion at disposal.</summary>
+    /// <remarks>
+    /// A subscriber that throws (<see cref="OutOfMemoryException"/> excepted) stops nothing else: every other subscriber
+    /// still receives the status, the activity goes on with its work, and nothing is thrown from the call that raised it
+    /// (<c>StartAsync</c>, <c>CancelAsync</c>, <c>DisposeAsync</c>) nor from <c>Subscribe</c> when the subscriber throws on
+    /// the replay of the current status. The failure is counted on <c>activities.status.subscriber_faults</c> (meter
+    /// <c>Verbara.Sdk.Activities</c>, tag <c>activity.type</c>) and not logged: this base holds no logger. A subscriber
+    /// subscribed directly stays subscribed; one composed through an operator (<c>Where</c>, <c>Select</c>, …) is ended by
+    /// that operator on its first failure.
+    /// </remarks>
+    public IObservable<ActivityStatus> StatusChanges => _statusChanges;
 
     protected IAriClient AriClient { get; }
 
     protected AriActivityBase(IAriClient ariClient)
     {
+        _statusChanges = new GuardedStatusStream(_statusSubject, GetType().Name);
         AriClient = ariClient;
     }
 

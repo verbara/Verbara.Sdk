@@ -33,7 +33,7 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Bridge;
 /// </para>
 /// <para>
 /// The controls fence the fix: a readable event keeps its meaning, and an exception thrown by an event
-/// subscriber still ends the session as it does today, uncounted, because only the decode is guarded.
+/// subscriber is not a decode failure: it is the subscriber's own, counted and logged as one, and the session goes on.
 /// </para>
 /// </remarks>
 public sealed class OpenAiRealtimeBridgeUnreadableEventTests
@@ -217,7 +217,7 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
     // ── (d) control: a subscriber's exception is not a decode failure ──────────
 
     [Fact]
-    public async Task HandleSessionAsync_ShouldFailUncounted_WhenAnEventSubscriberThrowsJsonException()
+    public async Task HandleSessionAsync_ShouldKeepServingAndReportTheSubscriber_WhenAnEventSubscriberThrowsJsonException()
     {
         var thrown = new JsonException("thrown by a subscriber, not by the decode");
 
@@ -231,10 +231,16 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
 
         using (new AssertionScope())
         {
-            seen.Fault.Should().BeSameAs(
-                thrown, "an exception a subscriber throws propagates as it does today: only the decode is guarded");
-            seen.Failed.Should().Be(1, "the subscriber's exception ends the session as a failure, as today");
+            seen.FaultText.Should().Be(
+                "none", $"a subscriber's exception is its own: it no longer ends the session (fault: {seen.FaultText})");
+            seen.EndedWhileServed.Should().BeFalse("the session goes on while the caller is on the line");
+            seen.Failed.Should().Be(0, "a subscriber's exception no longer fails the session");
             seen.Unparseable.Should().Be(0, "nothing the vendor sent was unreadable");
+            seen.Log.Where(e => e.Level == LogLevel.Warning).Should().ContainSingle(
+                    "the subscriber's failure is logged once at Warning, as a subscriber's, not as a skipped frame")
+                .Which.Exception.Should().BeSameAs(thrown);
+            seen.FinalTranscripts.Should().Equal(FinalTranscript);
+            seen.AudioReachedCaller.Should().BeTrue("the audio after the transcript reaches the caller");
         }
     }
 
