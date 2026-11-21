@@ -200,6 +200,72 @@ each discarded frame now adds one to `audio.frames.dropped` (meter `Verbara.Sdk.
 transports report loss alike. The frame is still counted in `audio.frames.received`. No public API change. See the
 [troubleshooting guide](docs/guides/troubleshooting.md#audioframesdropped-an-ari-audio-streams-consumer-fell-behind).
 
+### Changed — BREAKING: an activity, voice pipeline or realtime bridge subscriber that throws stops nothing else (#633)
+
+A subscriber of an activity's `StatusChanges` (`ActivityBase`, `AmiActivityBase`, `AriActivityBase` and every shipped
+activity), of `VoiceAiPipeline.Events` or of `OpenAiRealtimeBridge.Events` now has its own guard, put in place when it
+subscribes. If it throws from `OnNext`, `OnError` or `OnCompleted`, every other subscriber still gets the notification,
+in subscription order. Nothing is thrown from the call that raised it. For an activity that call is `Subscribe` (for the
+replay of the current status), `StartAsync`, `CancelAsync` or `DisposeAsync`. For the pipeline and the bridge it is the
+session loop or `DisposeAsync`. An activity ends as it would with no failing subscriber and runs its cancellation work:
+an ARI activity whose subscriber throws on `Cancelled` still runs `OnCancellingAsync`. A voice session goes on serving
+the call and is not counted failed.
+
+The pipeline and the bridge count each failure first and then log one Warning with the exception:
+- the pipeline counts on `voiceai.pipeline.subscriber_faults` (meter `Verbara.Sdk.VoiceAi`) and logs
+  `VoiceAi pipeline event subscriber threw on <EventType>; …`;
+- the bridge counts on `openai_realtime.subscriber_faults` (meter `Verbara.Sdk.VoiceAi.OpenAiRealtime`) and logs
+  `[<ChannelId>] A Realtime event subscriber threw on <EventType>; …`, with the channel id of the call whose event it
+  was.
+
+The event type reads `completion` for a failure at the disposal. That line belongs to no call, so the bridge's reads
+`[00000000-0000-0000-0000-000000000000]`. If the logger throws on that line, the exception is ignored.
+
+An activity's failure is **counted, not logged**, because the activity bases hold no logger. It is counted on
+`activities.status.subscriber_faults`, tagged `activity.type` with the activity's type name, on a new meter
+`Verbara.Sdk.Activities`. `VerbaraTelemetry.MeterNames` now lists that meter, so a host that registers the SDK's
+meters sees it: the list has 16 meters, where it had 15.
+
+A subscriber subscribed directly stays subscribed. One composed through an Rx operator (`Where`, `Select`, `OfType`, …)
+is ended by that operator on its first failure; that failure is counted once, and the other subscribers go on.
+`OutOfMemoryException` is not caught. No public symbol is added or removed.
+`StatusChanges` is still typed `IObservable<ActivityStatus>`, but it is no longer the
+activity's `BehaviorSubject`: a cast of it to `BehaviorSubject<ActivityStatus>` or `ISubject<ActivityStatus>` now
+fails.
+
+What breaks: up to 2.10.x, a throwing subscriber kept the later subscribers from that notification. Its exception also
+left the call that raised it:
+- an activity could be left in `Starting`, with `StartAsync`, `CancelAsync` or `DisposeAsync` throwing the
+  subscriber's exception, and an ARI activity skipped `OnCancellingAsync`;
+- an activity whose subscriber threw on `InProgress` ended `Failed` without executing, and `StartAsync` threw the
+  subscriber's exception; one that threw on `Completed` turned a completed activity into a `Failed` one. From 2.11.0
+  the activity executes, so its side effects happen (a dial dials), and it ends `Completed`;
+- the pipeline's or the bridge's session ended as failed (`voiceai.sessions.failed`, `openai_realtime.sessions.failed`).
+  The realtime bridge README documented this ("still ends the session");
+- not so for a pipeline subscriber that threw on `TranscriptReceivedEvent`, `ResponseGeneratedEvent` or
+  `SynthesisEndedEvent`. The pipeline publishes them inside its recognition, handler and synthesis steps, and the step
+  took the exception for its own failure. It logged `VoiceAi pipeline error [<Stt|Handler|Tts>] …` at Warning, raised a
+  `PipelineErrorEvent` naming that step, counted `stt.transcriptions.failed` or `tts.syntheses.failed`, and dropped
+  the rest of the turn. On a transcript no reply was generated, on a reply none was spoken, and on the synthesis's end
+  the turn was left out of the conversation history and its synthesis was counted both completed and failed. The
+  session ended only if the subscriber also threw on that `PipelineErrorEvent`. From 2.11.0 none of these appear for a
+  subscriber's failure: a dashboard or alert on those two counters, on `PipelineErrorEvent` or on that log line sees
+  fewer, and the turn finishes.
+
+Code that ended a session by throwing from a subscriber has to end it another way. Cancel the token passed to
+`HandleSessionAsync`, or let the conversation handler return. Read the counter, or the Warning where the publisher logs.
+Why: one subscriber's bug should not silence the others, nor end a call or an activity that did nothing wrong. See the
+[troubleshooting guide](docs/guides/troubleshooting.md#missing-events), items 13 and 14.
+
+### Fixed: a logger that throws on an audio stream's observer report no longer stops the stream's notifications (#633)
+
+When a `StateChanges` observer of an ARI audio stream threw, the stream reported it on one Error line. If the logger
+threw on that line, its exception left the report. The observers after it then missed the state, and the party that
+published it threw: the session's read loop as the stream connected or ended, or the stream's disposal. That exception
+is now ignored, and the
+notification goes on to the next observer. As with every other subscriber report since #620, an `OutOfMemoryException`
+is not caught.
+
 ### Changed — BREAKING: a `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else (#625)
 
 `QueueManager` (`QueueUpdated`, `MemberAdded`, `MemberRemoved`, `MemberStatusChanged`, `MemberPaused`, `CallerJoined`,
