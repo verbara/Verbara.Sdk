@@ -149,7 +149,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// <para>Every subscriber is invoked, in subscription order, whatever an earlier one threw; then all of
     /// their tasks are awaited together, so no subscriber's start waits for another's completion. A
     /// subscriber that throws or whose task faults is logged once at Warning and counted on
-    /// <c>voiceai.audiosocket.subscriber_faults</c> when the failure happens. The connection is then closed,
+    /// <c>audiosocket.subscriber_faults</c> when the failure happens. The connection is then closed,
     /// with a hangup frame first, only when every subscriber failed; when one completed, the connection is
     /// left to it, so a side subscriber's failure does not end the call a session broker is serving.
     /// <see cref="OutOfMemoryException"/> is not caught. Up to 2.10.x only the last subscriber's task was

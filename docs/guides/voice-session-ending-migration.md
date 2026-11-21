@@ -109,7 +109,7 @@ session for your handler too, as soon as the broker's handler is done. Move your
 run the two on separate servers.
 
 The other way round, from 2.11.0, your handler's failure does not end the broker's call: the server invokes every
-subscriber, awaits them all, counts and logs each failure (`voiceai.audiosocket.subscriber_faults`, a Warning), and
+subscriber, awaits them all, counts and logs each failure (`audiosocket.subscriber_faults`, a Warning), and
 closes the connection only when every subscriber failed. Up to 2.10.x a failure of the last subscriber closed the
 connection under the broker's call, and a synchronous throw from an earlier one kept the broker from ever seeing it.
 

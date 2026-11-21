@@ -51,7 +51,7 @@ public static class AudioSocketMetrics
     /// subscriber failed.
     /// </summary>
     internal static readonly Counter<long> SessionStartedSubscriberFaults =
-        Meter.CreateCounter<long>("voiceai.audiosocket.subscriber_faults", "faults",
+        Meter.CreateCounter<long>("audiosocket.subscriber_faults", "faults",
             "OnSessionStarted subscriber failures (a subscriber threw or its task faulted); the others still run");
 
     // --- Histograms ---

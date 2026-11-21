@@ -30,7 +30,7 @@ public sealed class AudioSocketServerSessionStartedFaultTests
     /// <summary>Upper bound on any single wait. Reaching it is a failure, never a pace.</summary>
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
 
-    private const string FaultCounterName = "voiceai.audiosocket.subscriber_faults";
+    private const string FaultCounterName = "audiosocket.subscriber_faults";
 
     private const string FaultEventName = "SessionStartedSubscriberFailed";
 
@@ -381,6 +381,81 @@ public sealed class AudioSocketServerSessionStartedFaultTests
 
     public enum BrokerOrder { BrokerThenFault, FaultThenBroker, ThrowThenBroker }
 
+    /// <summary>
+    /// The close after every subscriber failed is bounded as the stop's endings are. The only subscriber leaves an audio
+    /// write in flight that the far end never lets complete (it reads nothing), then fails, so the hangup frame waits
+    /// behind that write. The server waits no longer than <see cref="AudioSocketServer.StopEndingBound"/> on its own
+    /// clock, a fake here that the test moves past the bound once it is armed, then closes the connection without a frame.
+    /// </summary>
+    [Fact]
+    public async Task OnSessionStarted_ShouldCloseWithoutAFrameOnceTheBoundRunsOut_WhenEverySubscriberFailedBehindAWriteThatNeverCompletes()
+    {
+        // Arrange
+        await using var rig = await Rig.StartAsync();
+        Task? inFlight = null;
+        rig.Server.OnSessionStarted += session =>
+        {
+            // The loop bound is a failure bound: loopback buffers hold far less than this many frames.
+            var frame = new byte[32_000];
+            for (var i = 0; i < 2_000 && inFlight is null; i++)
+            {
+                var write = session.WriteAudioAsync(frame, AudioSocketFrameType.Audio);
+                if (write.IsCompleted)
+                    write.GetAwaiter().GetResult();
+                else
+                    inFlight = write.AsTask();
+            }
+
+            return ValueTask.FromException(new InvalidOperationException("the only subscriber's own failure"));
+        };
+
+        // Act
+        using var peer = await StalledPeer.ConnectAsync(rig.Server.BoundPort);
+        var decided = rig.DecidedAsync(peer.ChannelId);
+        var armed = await NextTimerAsync(rig.Clock, AudioSocketServer.StopEndingBound);
+        var heldBeforeTheBound = !decided.IsCompleted;
+        rig.Clock.Advance(AudioSocketServer.StopEndingBound);
+        var decidedFault = await Record.ExceptionAsync(() => decided);
+        var frames = await peer.ReadFramesToEndAsync();
+        var writeFault = await Record.ExceptionAsync(() => (inFlight ?? Task.CompletedTask).WaitAsync(SignalTimeout));
+
+        // Assert
+        using (new AssertionScope())
+        {
+            inFlight.Should().NotBeNull("the far end reads nothing, so a write eventually waits for the transport");
+            armed.Should().BeTrue("the close arms its bound on the server's clock");
+            heldBeforeTheBound.Should().BeTrue("the hangup frame waits behind the write in flight until the bound runs out");
+            decidedFault.Should().BeNull("the server closes the connection once its bound has run out");
+            frames.ReachedEnd.Should().BeTrue("the connection is closed");
+            frames.Types.Should().NotContain(AudioSocketFrameType.Hangup, "no hangup frame is written once the bound ran out");
+            writeFault.Should().NotBeNull("the write in flight fails when the connection is closed under it");
+            rig.Faults.Total.Should().Be(1, "the subscriber's failure is counted once");
+            rig.Logger.Errors.Should().BeEmpty("a bounded close is not a connection error");
+        }
+    }
+
+    /// <summary>
+    /// Waits until <paramref name="clock"/> has a timer due after <paramref name="dueTime"/>: the moment the code under
+    /// test is parked on it. False when no such timer is created within the signal bound.
+    /// </summary>
+    private static async Task<bool> NextTimerAsync(FakeTimeProvider clock, TimeSpan dueTime)
+    {
+        using var bound = new CancellationTokenSource(SignalTimeout);
+        try
+        {
+            while (true)
+            {
+                var timer = await clock.TimersCreated.ReadAsync(bound.Token);
+                if (timer.DueTime == dueTime)
+                    return true;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
     private static TaskCompletionSource Gate() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private static Func<AudioSocketSession, ValueTask> Faulting(FaultShape shape, TaskCompletionSource gate) => shape switch
@@ -537,16 +612,95 @@ public sealed class AudioSocketServerSessionStartedFaultTests
         }
     }
 
+    /// <summary>The frame types a <see cref="StalledPeer"/> read, and whether the server ended the stream.</summary>
+    private sealed record FramesRead(bool ReachedEnd, IReadOnlyList<AudioSocketFrameType> Types);
+
+    /// <summary>
+    /// A far end that sends its UUID frame and then reads nothing until asked, with a small receive buffer, so that the
+    /// server's writes stall; disposed, it resets the connection, which ends any write still in flight.
+    /// </summary>
+    private sealed class StalledPeer : IDisposable
+    {
+        private readonly TcpClient _client;
+
+        private StalledPeer(TcpClient client, Guid channelId)
+        {
+            _client = client;
+            ChannelId = channelId;
+        }
+
+        public Guid ChannelId { get; }
+
+        public static async Task<StalledPeer> ConnectAsync(int port)
+        {
+            var client = new TcpClient { ReceiveBufferSize = 4096 };
+            try
+            {
+                // 127.0.0.1, never "localhost": the name resolves ::1 first on this host (ADR-0044).
+                await client.ConnectAsync(IPAddress.Loopback, port).WaitAsync(SignalTimeout);
+                var channelId = Guid.NewGuid();
+                await SendFrameAsync(client, AudioSocketFrameType.Uuid, channelId.ToByteArray(bigEndian: true));
+                return new StalledPeer(client, channelId);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                client.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>Reads until the server ends the stream or the signal bound runs out, and parses the whole frames.</summary>
+        public async Task<FramesRead> ReadFramesToEndAsync()
+        {
+            using var all = new MemoryStream();
+            var buffer = new byte[4096];
+            var reachedEnd = false;
+            using var bound = new CancellationTokenSource(SignalTimeout);
+            try
+            {
+                int read;
+                while ((read = await _client.GetStream().ReadAsync(buffer, bound.Token)) > 0)
+                    all.Write(buffer, 0, read);
+                reachedEnd = true;
+            }
+            catch (IOException)
+            {
+                reachedEnd = true; // a reset is also an end of the connection; the bytes before it are kept
+            }
+            catch (OperationCanceledException)
+            {
+                // The line is still open: reported by the caller's assertion.
+            }
+
+            var bytes = all.ToArray();
+            var types = new List<AudioSocketFrameType>();
+            var offset = 0;
+            while (bytes.Length - offset >= 3)
+            {
+                var length = (bytes[offset + 1] << 8) | bytes[offset + 2];
+                if (bytes.Length - offset - 3 < length)
+                    break;
+                types.Add((AudioSocketFrameType)bytes[offset]);
+                offset += 3 + length;
+            }
+
+            return new FramesRead(reachedEnd, types);
+        }
+
+        public void Dispose() => _client.Dispose();
+    }
+
     /// <summary>One server, its logger, its fault counter and its per-connection "decided" signal.</summary>
     private sealed class Rig : IAsyncDisposable
     {
         private readonly ActivityListener _activities;
         private readonly ConcurrentDictionary<string, TaskCompletionSource> _decided = new();
 
-        private Rig(AudioSocketServer server, CapturingLogger logger)
+        private Rig(AudioSocketServer server, CapturingLogger logger, FakeTimeProvider clock)
         {
             Server = server;
             Logger = logger;
+            Clock = clock;
             Faults = new FaultCounter();
             _activities = new ActivityListener
             {
@@ -567,16 +721,20 @@ public sealed class AudioSocketServerSessionStartedFaultTests
 
         public FaultCounter Faults { get; }
 
+        /// <summary>The server's clock: it moves only when a test advances it.</summary>
+        public FakeTimeProvider Clock { get; }
+
         public static Task<Rig> StartAsync() => StartAsync(null);
 
         public static async Task<Rig> StartAsync(ILogger<AudioSocketServer>? logger)
         {
             var capturing = new CapturingLogger();
+            var clock = new FakeTimeProvider();
             var server = new AudioSocketServer(
                 new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0, ConnectionTimeout = TimeSpan.FromSeconds(30) },
                 logger ?? capturing,
-                new FakeTimeProvider());
-            var rig = new Rig(server, capturing);
+                clock);
+            var rig = new Rig(server, capturing, clock);
             await server.StartAsync(CancellationToken.None);
             return rig;
         }
@@ -584,8 +742,11 @@ public sealed class AudioSocketServerSessionStartedFaultTests
         public Task<Peer> ConnectAsync() => Peer.ConnectAsync(Server.BoundPort);
 
         /// <summary>Completes once the server has awaited every subscriber of <paramref name="peer"/>'s session and acted.</summary>
-        public Task DecidedAsync(Peer peer) =>
-            DecidedSignal(peer.ChannelId.ToString()).Task.WaitAsync(SignalTimeout);
+        public Task DecidedAsync(Peer peer) => DecidedAsync(peer.ChannelId);
+
+        /// <summary>Completes once the server has awaited every subscriber of <paramref name="channelId"/>'s session and acted.</summary>
+        public Task DecidedAsync(Guid channelId) =>
+            DecidedSignal(channelId.ToString()).Task.WaitAsync(SignalTimeout);
 
         /// <summary>
         /// The connection is still served after the server decided: a frame the peer sends reaches the session, a frame
@@ -620,7 +781,7 @@ public sealed class AudioSocketServerSessionStartedFaultTests
             _decided.GetOrAdd(channelId, _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
     }
 
-    /// <summary>Totals <c>voiceai.audiosocket.subscriber_faults</c>, found by name so the test builds before it exists.</summary>
+    /// <summary>Totals <c>audiosocket.subscriber_faults</c>, found by name so the test builds before it exists.</summary>
     private sealed class FaultCounter : IDisposable
     {
         private readonly MeterListener _listener = new();

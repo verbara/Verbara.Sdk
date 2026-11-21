@@ -504,7 +504,7 @@ The refused connection receives a hangup frame, so on Asterisk 20 and later `Aud
 
 ### `SessionStartedSubscriberFailed`: an `OnSessionStarted` subscriber failed
 
-**Symptoms:** `[AudioSocket] An OnSessionStarted subscriber failed for channel <uuid>`, at Warning, with the exception, from `Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer`; `voiceai.audiosocket.subscriber_faults` (meter `Verbara.Sdk.VoiceAi.AudioSocket`) grows by one per failure.
+**Symptoms:** `[AudioSocket] An OnSessionStarted subscriber failed for channel <uuid>`, at Warning, with the exception, from `Verbara.Sdk.VoiceAi.AudioSocket.AudioSocketServer`; `audiosocket.subscriber_faults` (meter `Verbara.Sdk.VoiceAi.AudioSocket`) grows by one per failure.
 
 **Cause:** a handler of `AudioSocketServer.OnSessionStarted` threw, or returned a task that faulted. From 2.11.0 the server invokes every subscriber in subscription order, whatever an earlier one threw, and then awaits all of their tasks together; each failure is counted and logged when it happens, not when the other subscribers finish. What happens to the connection then:
 
