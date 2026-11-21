@@ -9,6 +9,7 @@ using Verbara.Sdk.Ari.Tests.TestSupport;
 using Verbara.Sdk.Tests.Shared.Sockets;
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Microsoft.Extensions.Logging;
 using Xunit.Abstractions;
 
 namespace Verbara.Sdk.Ari.Tests.Audio;
@@ -401,18 +402,19 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
     [InlineData(Route.Composite, Transport.WebSocket)]
     [InlineData(Route.Direct, Transport.AudioSocket)]
     [InlineData(Route.Direct, Transport.WebSocket)]
-    public async Task OnStreamConnected_ShouldCloseAndLogOnlyThatConnectionAndKeepAnnouncing_WhenAnObserverThrows(
+    public async Task OnStreamConnected_ShouldKeepThatConnectionAnnounceItToLaterObserversAndLogOnce_WhenAnObserverThrows(
         Route route, Transport first)
     {
         var outcome = await ThrowingScenarioAsync(route, first);
 
         using var scope = new AssertionScope();
-        outcome.ClosedByServer.Should().BeTrue("an observer that throws loses that connection: the server closes it");
-        outcome.RegisteredAfterClose.Should().BeFalse("and releases it");
-        outcome.CountAfterClose.Should().Be(0, "and gives its place back");
-        outcome.Logged.Should().BeTrue("the server logs the failure");
+        outcome.LaterGotFirst.Should().BeTrue("observers subscribed after the throwing one still receive that stream");
         outcome.EarlierGotFirst.Should().BeTrue("an observer subscribed before the throwing one receives the stream");
-        outcome.LaterGotFirst.Should().BeFalse("observers subscribed after the throwing one do not receive that stream");
+        outcome.RegisteredAfterThrow.Should().BeTrue("an observer that throws loses nothing but its own call: the connection stays registered");
+        outcome.CountAfterThrow.Should().Be(1, "and keeps its place");
+        outcome.AudioFlowsAfterThrow.Should().BeTrue("and stays open: its audio still reaches the stream");
+        outcome.Warnings.Should().Be(1, "the server that accepted it logs the observer's failure once at Warning");
+        outcome.ConnectionErrors.Should().Be(0, "an observer's failure is not the connection's");
         outcome.EarlierGotLater.Should().Be(2, "a subscriber from before the throw is still announced later streams of both servers");
         outcome.LaterGotLater.Should().Be(2, "so is one subscribed after the throwing one");
         outcome.FreshGotLater.Should().Be(2, "and a subscription made after the throw");
@@ -424,8 +426,8 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
     public async Task OnStreamConnected_ShouldKeepAnnouncingLaterStreamsToTheObserverThatThrew_WhenSubscribedThroughTheComposite(
         Transport first)
     {
-        // The published text says the throwing observer loses that connection and stays subscribed for the later
-        // streams of every server; this pins that second half, in parity with the Direct theory below.
+        // The published text says the throwing observer loses nothing but its own call and stays subscribed for the
+        // later streams of every server; this pins that second half, in parity with the Direct theory below.
         var outcome = await ThrowingScenarioAsync(Route.Composite, first);
 
         outcome.ThrowerGotLater.Should().Be(2, "a direct subscriber that threw is still announced later streams of both servers");
@@ -525,12 +527,13 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
     }
 
     private sealed record ThrowOutcome(
-        bool ClosedByServer,
-        bool RegisteredAfterClose,
-        int CountAfterClose,
-        bool Logged,
-        bool EarlierGotFirst,
         bool LaterGotFirst,
+        bool RegisteredAfterThrow,
+        int CountAfterThrow,
+        bool AudioFlowsAfterThrow,
+        int Warnings,
+        int ConnectionErrors,
+        bool EarlierGotFirst,
         int EarlierGotLater,
         int ThrowerGotLater,
         int LaterGotLater,
@@ -555,11 +558,19 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
 
         using var callA = await Call.OpenAsync(rig, first);
         var earlierGotFirst = await earlier.WaitAsync(callA.Key, WaitLimit);
-        var closed = await callA.ClosedByServerAsync(WaitLimit);
-        var registeredAfterClose = rig.Composite.GetStream(callA.Key) is not null;
-        var countAfterClose = rig.Composite.ActiveStreamCount;
-        var logged = await rig.WhenConnectionErrorLogged(first, "an observer's own failure", WaitLimit);
-        var laterGotFirst = later.Contains(callA.Key);
+
+        // The observers are called in the order they subscribed, synchronously, and the server reports the throwing
+        // one's failure before it calls the next: once the later observer has the stream, the report is written.
+        var laterGotFirst = await later.WaitAsync(callA.Key, WaitLimit);
+        var streamA = rig.Composite.GetStream(callA.Key);
+        var registeredAfterThrow = streamA is not null;
+        var countAfterThrow = rig.Composite.ActiveStreamCount;
+        var audioFlowsAfterThrow = await callA.AudioFlowsAsync(streamA);
+        var warnings = rig.Entries(first).Count(e =>
+            e.Level == LogLevel.Warning
+            && e.EventName == "StreamConnectedObserverFailed"
+            && e.Exception?.Message == "an observer's own failure");
+        var connectionErrors = rig.Entries(first).Count(e => e.EventName == "ConnectionError");
 
         var fresh = new Announcements();
         using var freshSubscription = rig.Subscribe(route, fresh.Add);
@@ -578,10 +589,10 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
             laterGot += later.Contains(call.Key) ? 1 : 0;
         }
 
-        var outcome = new ThrowOutcome(closed, registeredAfterClose, countAfterClose, logged, earlierGotFirst,
-            laterGotFirst, earlierGot, throwerGot, laterGot, freshGot);
+        var outcome = new ThrowOutcome(laterGotFirst, registeredAfterThrow, countAfterThrow, audioFlowsAfterThrow,
+            warnings, connectionErrors, earlierGotFirst, earlierGot, throwerGot, laterGot, freshGot);
         output.WriteLine(
-            $"THROW route={route} A={first}: closedByServer={closed} registeredAfterClose={registeredAfterClose} countAfterClose={countAfterClose} logged={logged} earlierGotA={earlierGotFirst} laterGotA={laterGotFirst} laterStreams(of 2): earlier={earlierGot} thrower={throwerGot} later={laterGot} fresh={freshGot}");
+            $"THROW route={route} A={first}: laterGotA={laterGotFirst} registeredAfterThrow={registeredAfterThrow} countAfterThrow={countAfterThrow} audioFlowsAfterThrow={audioFlowsAfterThrow} warnings={warnings} connectionErrors={connectionErrors} earlierGotA={earlierGotFirst} laterStreams(of 2): earlier={earlierGot} thrower={throwerGot} later={laterGot} fresh={freshGot}");
         return outcome;
     }
 
@@ -682,24 +693,9 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
                 WebSocket.OnStreamConnected.Subscribe(onNext)),
         };
 
-        public async Task<bool> WhenConnectionErrorLogged(Transport transport, string message, TimeSpan limit)
-        {
-            bool Match(CapturedLogEntry entry) =>
-                entry.EventName == "ConnectionError" && entry.Exception?.Message == message;
-
-            try
-            {
-                if (transport == Transport.AudioSocket)
-                    await AudioSocketLog.WhenLogged(Match).WaitAsync(limit);
-                else
-                    await WebSocketLog.WhenLogged(Match).WaitAsync(limit);
-                return true;
-            }
-            catch (TimeoutException)
-            {
-                return false;
-            }
-        }
+        /// <summary>What the server of <paramref name="transport"/> has logged so far.</summary>
+        public IReadOnlyList<CapturedLogEntry> Entries(Transport transport) =>
+            transport == Transport.AudioSocket ? AudioSocketLog.Entries : WebSocketLog.Entries;
 
         public async ValueTask DisposeAsync()
         {
@@ -787,43 +783,6 @@ public sealed class CompositeAudioServerObserverTests(ITestOutputHelper output)
             catch (TimeoutException)
             {
                 return false;
-            }
-        }
-
-        /// <summary>Whether the server ended the connection within the bound.</summary>
-        public async Task<bool> ClosedByServerAsync(TimeSpan limit)
-        {
-            if (_webSocket is not null)
-            {
-                try
-                {
-                    var end = await _webSocket.Ended.WaitAsync(limit);
-                    return end is RawConnectionEnd.Fin or RawConnectionEnd.Reset;
-                }
-                catch (TimeoutException)
-                {
-                    return false;
-                }
-            }
-
-            using var bound = new CancellationTokenSource(limit);
-            var buffer = new byte[256];
-            try
-            {
-                while (true)
-                {
-                    var read = await _audioSocket!.GetStream().ReadAsync(buffer, bound.Token);
-                    if (read == 0)
-                        return true;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                return false;
-            }
-            catch (IOException)
-            {
-                return true;
             }
         }
 

@@ -28,9 +28,12 @@ namespace Verbara.Sdk.Ari.Diagnostics;
 /// connection that ends that way never opened, so it counts no <see cref="StreamsOpened"/> or
 /// <see cref="StreamsClosed"/>). A WebSocket has no such frames; its hangup is a close frame,
 /// counted by neither.</description></item>
-/// <item><description>WebSocket only: <c>audio.frames.dropped</c>, each frame received and then discarded because the
-/// stream's receive buffer was full (the consumer fell behind, and the oldest frame goes), counted at the discard and
-/// also counted in <see cref="FramesReceived"/>.</description></item>
+/// <item><description>Both transports, since 2.11.0 for AudioSocket: <c>audio.frames.dropped</c>, each frame received
+/// and then discarded because the stream's receive buffer was full (the consumer fell behind, and the oldest frame
+/// goes), counted at the discard and also counted in <see cref="FramesReceived"/>.</description></item>
+/// <item><description>Both servers: <c>audio.stream_connected.subscriber_faults</c>, each exception an
+/// <c>OnStreamConnected</c> observer throws, tagged with the transport of the server that announced the
+/// stream.</description></item>
 /// </list>
 /// </para>
 /// </summary>
@@ -74,14 +77,14 @@ public static class AudioStreamMetrics
             "Audio frames sent to Asterisk");
 
     /// <summary>
-    /// Audio frames a WebSocket stream received and then discarded, because its receive buffer was full: a consumer
-    /// that fell behind loses the oldest frame, one count each, tagged with the WebSocket transport. An AudioSocket
-    /// stream does not record it. Internal: the instrument's name is the contract an exporter sees, and the field adds
-    /// no public API.
+    /// Audio frames a stream received and then discarded, because its receive buffer was full: a consumer that fell
+    /// behind loses the oldest frame, one count each, tagged with the transport the stream came through (AudioSocket
+    /// since 2.11.0, WebSocket since 2.10.0). Internal: the instrument's name is the contract an exporter sees, and the
+    /// field adds no public API.
     /// </summary>
     internal static readonly Counter<long> FramesDropped =
         Meter.CreateCounter<long>("audio.frames.dropped", "frames",
-            "Audio frames a WebSocket stream discarded because its receive buffer was full; an AudioSocket stream does not record it");
+            "Audio frames an AudioSocket or WebSocket stream discarded because its receive buffer was full");
 
     /// <summary>Total bytes received from Asterisk.</summary>
     public static readonly Counter<long> BytesReceived =
@@ -140,6 +143,17 @@ public static class AudioStreamMetrics
     internal static readonly Counter<long> ControlMessageSubscriberFaults =
         Meter.CreateCounter<long>("audio.control_messages.subscriber_faults", "faults",
             "Exceptions thrown by WebSocket ControlMessages subscribers, caught and reported without stopping the stream");
+
+    /// <summary>
+    /// Failures of an audio server's <c>OnStreamConnected</c> observers: each exception an observer throws on the
+    /// delivering thread, on a stream or on the completion the server's disposal raises, counted once, before its
+    /// Warning, and tagged with the transport of the server that announced it. The connection, the other observers and
+    /// the disposal go on. Internal: the instrument's name is the contract an exporter sees, and the field adds no
+    /// public API.
+    /// </summary>
+    internal static readonly Counter<long> StreamConnectedSubscriberFaults =
+        Meter.CreateCounter<long>("audio.stream_connected.subscriber_faults", "faults",
+            "Exceptions thrown by an audio server's OnStreamConnected observers, caught and reported without closing the connection");
 
     // --- Latency ---
 

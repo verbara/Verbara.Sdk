@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Net.WebSockets;
-using System.Reactive.Subjects;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -86,7 +85,8 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     // A connection enters it pending, before the stop is read a second time, and is announced only once
     // admitted; the stop claims a pending entry for its registrant to withdraw.
     private readonly ConcurrentDictionary<WebSocketAudioSession, RegistryEntry> _live = new();
-    private readonly Subject<IAudioStream> _streamSubject = new();
+    // Each observer behind its own guard: what it throws is reported and loses nothing but its own call.
+    private readonly StreamAnnouncements _announcements;
     // Connection handlers that have not finished. Each handler removes and disposes its own session
     // on its way out, so StopAsync waits for these until its token is cancelled.
     private readonly ConcurrentDictionary<Task, byte> _connections = new();
@@ -106,7 +106,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
     /// that observer has returned and its connection has been released. Cancelling the stop's token ends that
     /// wait, and the stream is then disposed while the observer still runs.
     /// </remarks>
-    public IObservable<IAudioStream> OnStreamConnected => _streamSubject;
+    public IObservable<IAudioStream> OnStreamConnected => _announcements;
 
     /// <summary>
     /// Get an active stream by the call its <c>MEDIA_START</c> named: the literal <c>channel_id</c> of the
@@ -165,6 +165,7 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
         _options = options;
         _logger = logger;
         _timeProvider = timeProvider;
+        _announcements = new StreamAnnouncements(logger, "[WebSocketAudio]", AudioStreamMetrics.WebSocketTransport);
     }
 
     /// <summary>
@@ -614,7 +615,9 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
                 if (ct.IsCancellationRequested || !entry.TryAdmit())
                     return;
 
-                _streamSubject.OnNext(session);
+                // Each observer stands behind its own guard, so what one throws is reported there and the
+                // announcement goes on to the next: nothing an observer throws reaches this handler.
+                _announcements.Announce(session);
 
                 // The session completes this signal when its ending is published, before any consumer
                 // observer is notified, so the release does not depend on what those observers do.
@@ -635,8 +638,8 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
             catch (ObjectDisposedException) when (ct.IsCancellationRequested)
             {
                 // An announcement that met the subject a racing DisposeAsync released: that is the
-                // stop, not a connection error. A consumer's own handler that throws
-                // ObjectDisposedException while the server runs still reaches the catch below.
+                // stop, not a connection error. What a consumer's own observer throws, an
+                // ObjectDisposedException included, never reaches here: its guard reports it.
                 /* Best effort — the server is being disposed */
             }
             catch (Exception ex)
@@ -862,8 +865,8 @@ public sealed class WebSocketAudioServer : IAudioServer, IAsyncDisposable
             return;
 
         if (IsRunning) await StopAsync();
-        _streamSubject.OnCompleted();
-        _streamSubject.Dispose();
+        _announcements.Complete();
+        _announcements.Dispose();
         _cts?.Dispose();
     }
 

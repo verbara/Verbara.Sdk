@@ -172,6 +172,34 @@ previous stream, which `AmiConnection` never does. A custom `IAmiConnection` tha
 each session keeps being subscribed again on each reconnect, as before; it must end them before it raises
 `Reconnected`.
 
+### Changed — BREAKING: an `OnStreamConnected` observer that throws loses no connection (#631)
+
+`AudioSocketServer` and `WebSocketAudioServer` now guard each `OnStreamConnected` subscription on its own, and
+`CompositeAudioServer`, which `AddVerbara` registers and which forwards from both, inherits that guard with its code
+unchanged. An observer that throws on a new stream loses nothing but its own call: the connection stays open and
+registered (`GetStream` finds it, `ActiveStreamCount` counts it, its audio flows), and every observer subscribed after
+it still receives that stream. An observer that throws on the completion a server's disposal raises no longer stops the
+disposal: `DisposeAsync` returns normally and every other observer is completed. The failure is counted on
+`audio.stream_connected.subscriber_faults` (meter `Verbara.Sdk.Ari.Audio`, tagged `audio.transport` with `audiosocket`
+or `websocket`), then logged once at Warning with the exception: `[AudioSocket] OnStreamConnected observer failed; the
+connection and the other observers go on: channel_id=<id>` (or `[WebSocketAudio] …`, and `… failed on the completion;
+…`). The fault is counted before the line is written, and a logger that throws on that line is ignored. The observer
+that threw stays subscribed; one composed through an Rx operator (`Where`, `Select`, …) is ended by that operator on
+its first exception. `OutOfMemoryException` is not caught. What breaks: up to 2.10.x, a throwing observer lost that
+connection (the server logged `Connection error` at Error, then closed and deregistered it), the observers after it
+never received the stream, and a throw on the completion made `DisposeAsync` throw; an observer that threw `ObjectDisposedException` while the server was stopping was dropped with no trace, and is now counted and logged at Warning like any other observer failure. An observer that threw to refuse a
+stream must now dispose that `IAudioStream` itself. Why: one observer's bug should not drop a caller's audio or hide
+the stream from the other observers. The `IAudioServer.OnStreamConnected` and `CompositeAudioServer` XML documentation
+now states this. See the [troubleshooting guide](docs/guides/troubleshooting.md#an-onstreamconnected-observer-that-throws-ari-audio-servers).
+
+### Added: an AudioSocket stream counts the frames its full buffer drops (#631)
+
+When its consumer falls behind, an ARI AudioSocket stream's full receive buffer discards the oldest frame, as before;
+each discarded frame now adds one to `audio.frames.dropped` (meter `Verbara.Sdk.Ari.Audio`, tagged
+`audio.transport=audiosocket`), the counter WebSocket streams have recorded their drops on since 2.10.0, so the two
+transports report loss alike. The frame is still counted in `audio.frames.received`. No public API change. See the
+[troubleshooting guide](docs/guides/troubleshooting.md#audioframesdropped-an-ari-audio-streams-consumer-fell-behind).
+
 ### Changed — BREAKING: a `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else (#625)
 
 `QueueManager` (`QueueUpdated`, `MemberAdded`, `MemberRemoved`, `MemberStatusChanged`, `MemberPaused`, `CallerJoined`,

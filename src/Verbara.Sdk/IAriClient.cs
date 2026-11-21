@@ -988,9 +988,14 @@ public interface IAudioServer
     /// observer returns.
     /// </para>
     /// <para>
-    /// An observer that <b>throws</b> loses that connection: the server logs the failure, releases the
-    /// connection and closes it, and observers subscribed after the throwing one do not receive that stream.
-    /// The observer that threw stays subscribed and receives later streams.
+    /// An observer that <b>throws</b> loses nothing but its own call: the server counts the failure on
+    /// <c>audio.stream_connected.subscriber_faults</c> and logs it once at Warning, the connection stays open and
+    /// registered, and observers subscribed after the throwing one still receive that stream. The same holds for
+    /// the completion a server's disposal raises: the disposal finishes and every other observer is completed. The
+    /// observer that threw stays subscribed and receives later streams; one composed through an Rx operator is
+    /// ended by that operator on its first exception. An observer that relied on its exception to close the
+    /// connection disposes the stream itself. Up to 2.10.x a throwing observer lost that connection and the
+    /// observers after it.
     /// </para>
     /// <para>
     /// An observer may be invoked <b>concurrently</b> for different connections: each connection's handler
