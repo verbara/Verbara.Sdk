@@ -14,6 +14,8 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk`, `Verbara.Sdk.Ari` | [The bridge `format` arguments are named for what they format](#the-bridge-format-arguments-are-named-for-what-they-format) | renamed arguments, BREAKING (named arguments only) |
 | `Verbara.Sdk.Live` | [A `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else](#a-queuemanager-or-meetmemanager-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error) |
 | `Verbara.Sdk.Live` | [An `AgentManager` or `BridgeManager` subscriber that throws stops nothing else](#an-agentmanager-or-bridgemanager-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error) |
+| `Verbara.Sdk.Ari` | [An `OnStreamConnected` observer that throws loses no connection](#an-onstreamconnected-observer-that-throws-loses-no-connection) | behavior, BREAKING (no compiler error) |
+| `Verbara.Sdk.Ari` | [An ARI outbound observer that throws keeps its connection](#an-ari-outbound-observer-that-throws-keeps-its-connection) | behavior, BREAKING (no compiler error) |
 
 ## Before you start: move every package at once
 
@@ -344,7 +346,7 @@ static async Task PlayAndRecord(IAriClient ari, string bridgeId)
 
 ## Subscribers that throw
 
-From 2.11.0 the Live managers raise each event subscriber by subscriber, as `ChannelManager` has since 2.10.0. Code
+From 2.11.0 the Live managers and the ARI audio and outbound servers raise each event subscriber by subscriber, as `ChannelManager` has since 2.10.0. Code
 that changes nothing on a subscriber's failure is not affected; code that threw from a handler to stop something is.
 The [troubleshooting guide](troubleshooting.md#what-a-live-event-handler-may-do) has the full rule for each manager.
 
@@ -487,4 +489,91 @@ static async Task<IReadOnlyList<string>> StartAndFindUnprovisionedAsync(
     await server.StartAsync(ct);
     return [.. unprovisioned];
 }
+```
+
+### An `OnStreamConnected` observer that throws loses no connection
+
+**What changed.** The ARI `AudioSocketServer` and `WebSocketAudioServer` guard each `OnStreamConnected` subscription on
+its own, and `CompositeAudioServer` (which `AddVerbara` registers) inherits that guard. An observer that throws on a new
+stream loses nothing but its own call: the connection stays open and registered (`GetStream` finds it,
+`ActiveStreamCount` counts it, its audio flows), and every observer subscribed after it still receives the stream. An
+observer that throws on the completion a server's disposal raises no longer stops the disposal. The failure is counted
+on `audio.stream_connected.subscriber_faults` (meter `Verbara.Sdk.Ari.Audio`, tag `audio.transport`: `audiosocket` or
+`websocket`), then logged once at Warning: `[AudioSocket] OnStreamConnected observer failed; the connection and the
+other observers go on: channel_id=<id>` (or `[WebSocketAudio] …`). The observer stays subscribed; one composed through
+an Rx operator (`Where`, `Select`, …) is ended by that operator on its first exception. `OutOfMemoryException` is not
+caught.
+
+**Who is affected.** Nothing reports a compiler error. Up to 2.10.x a throwing observer lost that connection (the
+server logged `Connection error` at Error, then closed and deregistered it), the observers after it never received the
+stream, and a throw on the completion made `DisposeAsync` throw. An observer that threw `ObjectDisposedException` while
+the server was stopping was dropped with no trace; it is now counted and logged like any other failure. Code that threw
+from an observer **to refuse a stream** now leaves that stream open.
+
+**What to do.** Refuse a stream by disposing it. Before (2.10.x: the throw closed the connection; from 2.11.0 the
+connection stays open):
+
+<!-- skip-doc-snippet -->
+```csharp
+server.OnStreamConnected.Subscribe(stream =>
+{
+    if (!IsExpected(stream.ChannelId))
+        throw new InvalidOperationException("unexpected stream");
+});
+```
+
+After:
+
+```csharp
+using Verbara.Sdk;
+
+static IDisposable RefuseUnexpected(IAudioServer server, Func<string, bool> isExpected) =>
+    server.OnStreamConnected.Subscribe(stream =>
+    {
+        if (!isExpected(stream.ChannelId))
+            _ = stream.DisposeAsync().AsTask();
+    });
+```
+
+### An ARI outbound observer that throws keeps its connection
+
+**What changed.** `AriOutboundListener.OnConnectionAccepted` and `AriOutboundConnection.Events` guard each subscription
+on its own, as `IAriClient` does. An observer that throws from `OnNext`, `OnCompleted` or `OnError` loses only that
+call: the connection stays open, tracked (`ActiveConnectionCount`, `GetByApplication`) and read; the later observers are
+still told about the connection, the event or the end of the stream; and a throw on the listener's completion no longer
+keeps `DisposeAsync` from finishing. The failure is counted on `ari.outbound.subscriber_faults` (meter
+`Verbara.Sdk.Ari`, tag `surface`: `connection_accepted` or `events`) and logged once at Warning:
+`[AriOutbound] OnConnectionAccepted observer threw on <Notification>: remote=<RemoteEndpoint> app=<Application>; …` or
+`[AriOutbound] Events observer threw on <EventType>: remote=<RemoteEndpoint> app=<Application>; …`.
+`OutOfMemoryException` is not caught.
+
+**Who is affected.** Nothing reports a compiler error. Up to 2.10.x an `OnConnectionAccepted` observer that threw closed
+the connection it was told about, kept the later observers from it and was logged as `[AriOutbound] Connection error`
+at Error; an `Events` observer that threw ended the read pump and closed the connection; and one that threw on a
+completion kept the later observers from it. Code that threw from an observer **to refuse a connection** now leaves it
+open.
+
+**What to do.** Refuse it yourself: call `DisconnectAsync`, or restrict `AllowedApplications` in the listener's options.
+Before (2.10.x: the throw closed the connection; from 2.11.0 it stays open):
+
+<!-- skip-doc-snippet -->
+```csharp
+listener.OnConnectionAccepted.Subscribe(connection =>
+{
+    if (connection.ApplicationName != "ivr")
+        throw new InvalidOperationException("not ours");
+});
+```
+
+After:
+
+```csharp
+using Verbara.Sdk.Ari.Outbound;
+
+static IDisposable RefuseOthers(IAriOutboundListener listener, IReadOnlySet<string> ours) =>
+    listener.OnConnectionAccepted.Subscribe(connection =>
+    {
+        if (!ours.Contains(connection.ApplicationName))
+            _ = connection.DisconnectAsync().AsTask();
+    });
 ```

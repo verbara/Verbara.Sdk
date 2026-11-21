@@ -62,7 +62,7 @@ Only a call site that names `format:` on either member is affected: it reports `
 renamed. Each argument keeps its position, type and default, the request is the same byte for byte, and a binary built
 against 2.10.x keeps running. The [2.11.0 migration guide](docs/guides/migration-2.11.0.md) has the before and after.
 
-### Added: `CallConnectedEvent.AgentInterface` names the member whose connection the event announces
+### Added: `CallConnectedEvent.AgentInterface` names the member whose connection the event announces (#615)
 
 `CallConnectedEvent` gains `string? AgentInterface { get; init; }`: the interface of the member whose connect the event
 announces, exactly as Asterisk reported it in that connect (`PJSIP/agent1`, or the `Local` interface of a member that
