@@ -257,10 +257,68 @@ mute far ends cost one second, not N. See the [ARI package README](../../src/Ver
 
 **What a dropped event costs under sustained overload.** Because the sweep verifies for a loss only once the drop has been delivered through, a backlog that persists adds no snapshot for it. Measured on 2026-10-31 against release candidates of Asterisk 22.12, 23.6 and 24.0 (70 calls/s held 5–15 s, an 8 ms handler, a 22,000-event buffer whose mean fill stayed above 16,000 in every minute from the second to the sixth, 420 s): the sweep sent the snapshots it sends anyway, at most one per tick, each prompted by a call's age and none by a loss, and the live events dropped over minutes 3–6 differed from the SDK without this verification by −0.65 % on average over nine paired runs (95 % interval −2.1 % to +0.8 %; one snapshot's answer, about 1,470 events, is 1.6 % of those drops).
 
-**Live without Hosting.** `Verbara.Sdk.Live` alone has no sweep, so a call whose `Hangup` was dropped stays in the channel table until the next reconnect's reload. The connection raises no public event per drop; the route is a `MeterListener` on the `Verbara.Sdk.Ami` meter and a reconciliation of your own once the drop has been delivered through, repeated until one covers it. Two public readings say when, and the reconciliation's span says whether:
+**Live without Hosting.** `Verbara.Sdk.Live` alone has no sweep, so a call whose `Hangup` was dropped stays in the channel table until the next reconnect's reload, unless you reconcile the server's channels yourself once the drop has been delivered through. From 2.11.0 the server says when, exactly and per server:
+
+- `VerbaraServer.HasUnreconciledLoss` is `true` when an event the full buffer dropped has been delivered through (every event received before it has been dispatched to its handlers) and no covering channel read has covered it since. `false` means "nothing to reconcile now", not "nothing lost": it also reads `false` while the drop is still behind the backlog, while a reconnect is pending (the reload after it owns that loss), while a load of the server is running (its start's, the reload after a reconnect, or `RequestInitialStateAsync`), which reads the channels itself, and over a connection that is not the SDK's own `AmiConnection`.
+- `VerbaraServer.UnreconciledLossDelivered` is raised, naming the server, once for each loss, when that reading first reads true for it: when delivery passes a drop (drops passed together give one notice), or, when a load of the server or a pending reconnect was holding the reading `false` then, when it ends without having covered the loss. A handler added after the reading turned true hears nothing for that loss: subscribe before `StartAsync`, or read `HasUnreconciledLoss` once after subscribing. It runs on a thread-pool thread, outside the connection's reader and any event dispatch, so a `ReconcileChannelsAsync` started from it waits for the backlog and can cover the drop. Start the reconciliation there; do not wait for it inside the handler. A handler that throws is logged at Warning and counted on `live.server.subscriber_faults`, and the other handlers still run.
+- One notice per loss: a reconciliation that does not cover (refused, overlapped by another channel read, or out of its 10 s wait for the backlog) leaves the reading `true` and no second notice comes for the same loss, and none comes when a later load of the server ends without covering it. Read `HasUnreconciledLoss` after the call and try again on a later tick, as the sample does.
+- A notice says "look now", and the reading says whether: by the time a handler runs, a load of the server may have started or another read may have covered the loss, and the reading is then `false`. The sample reads it before it reconciles, whether a notice or the tick started it. That check narrows the window and does not close it: a load that starts right after it still overlaps the reconciliation, which then does not cover, and the reading after the call says so.
+
+```csharp
+using System.Collections.Concurrent;
+
+VerbaraServer[] servers = []; // your servers
+var ct = CancellationToken.None; // your host's stopping token
+var running = new ConcurrentDictionary<VerbaraServer, byte>(); // one reconciliation per server at a time
+
+foreach (var server in servers)
+    server.UnreconciledLossDelivered += s => _ = ReconcileAsync(s); // start it; never wait inside the handler
+
+// The retry: a reconciliation that did not cover leaves the reading true, and no second notice comes for that loss.
+using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+while (await timer.WaitForNextTickAsync(ct))
+{
+    foreach (var server in servers)
+    {
+        if (server.HasUnreconciledLoss)
+            await ReconcileAsync(server);
+    }
+}
+
+async Task ReconcileAsync(VerbaraServer server)
+{
+    if (!running.TryAdd(server, 0))
+        return; // a reconciliation of this server is in flight: a second one would overlap it, and neither would cover
+    try
+    {
+        // A notice can arrive stale: a load may have started, or another read covered the loss, since it was raised.
+        if (!server.HasUnreconciledLoss)
+            return;
+        await server.ReconcileChannelsAsync(ct);
+        if (server.HasUnreconciledLoss)
+            Console.Error.WriteLine("the reconciliation did not cover the drop; the next tick retries"); // your logger
+    }
+    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+    {
+        // the host is stopping
+    }
+    catch (Exception ex) // AmiNotConnectedException included: the reading stays true and the next tick retries
+    {
+        Console.Error.WriteLine(ex.Message); // your logger
+    }
+    finally
+    {
+        running.TryRemove(server, out _);
+    }
+}
+```
+
+The reconciliation's own span says why a read did not cover (below). A refused `Status` keeps the reading `true` for the rest of the AMI session (the SDK warns once per session): fix the AMI user's permission rather than the loop. Do not reconcile from inside an AMI event handler: a read started there cannot wait for the pump that handler holds and never covers. Live's spans of a pooled server carry `server.id` (the pool id); `live.server` carries the Asterisk version, not the server, and is obsolete (removed in 2.12.0).
+
+**Live without Hosting, versions before 2.11.0.** Before 2.11.0 the connection raises no public event per drop and the reading above is not public; the route is a `MeterListener` on the `Verbara.Sdk.Ami` meter and a reconciliation of your own once the drop has been delivered through, repeated until one covers it. Two public readings say when, and the reconciliation's span says whether:
 
 - *When.* At a refusal the buffer holds exactly `EventPumpCapacity` events, and `ami.events.dispatched` counts an event once every observer, the live server included, has seen it. So once that counter has advanced by more than `EventPumpCapacity` since the latest `buffer_full` drop, every event received before the drop has reached the live server. That is a bound, not an exact reading, and a stream that goes quiet need not reach it: the drop is measured a few instructions after the refusal, and the consumer can count buffered events in between, so the counter can stop at or below `EventPumpCapacity`. The buffer itself then says the same thing with no counting: `ami.event_pump.pending` at 0, pulled on the tick, means every event received before the drop has left the buffer — at most the one in dispatch is still in its observers, and a read that catches it reads `covered = false` and is retried. The sample reads both, and never treats a gauge it has not observed as 0. In the measurement above, the counter crossed the capacity 4.2 s after the last drop, about one second before the buffer was empty; under the sustained overload the buffer held 16,000–22,000 of its 22,000 events, so do not wait for 0 while traffic flows.
-- *Whether.* `ReconcileChannelsAsync` returns nothing that says whether it removed what the snapshot no longer lists. Its `live channel-reconcile` span (source `Verbara.Sdk.Live`) does: `live.reconcile.covered` is `true` when the read completed on the session it began on, waited for the events received before its `Status`, kept no channel whose creation event was received before that `Status`, and overlapped no other channel read of the server; otherwise `false`, with the reason beside it where there is one — `live.status.refused` (Asterisk refused the `Status`), `live.reconcile.deferred` (the 10 s wait ran out, nothing removed), `live.reconcile.kept_stale` (the number of channels kept that the snapshot could not vouch for) or `live.reconcile.overlapped`. A read run from inside an event handler reads `false` with no reason beside it. The span carries the Asterisk version in `live.server`, not the server, so the sample attributes it by parent: it starts an `Activity` of its own around each call and reads the span whose `ParentId` is that activity's `Id`, so a reconciliation another caller runs beside it settles nothing.
+- *Whether.* `ReconcileChannelsAsync` returns nothing that says whether it removed what the snapshot no longer lists. Its `live channel-reconcile` span (source `Verbara.Sdk.Live`) does: `live.reconcile.covered` is `true` when the read completed on the session it began on, waited for the events received before its `Status`, kept no channel whose creation event was received before that `Status`, and overlapped no other channel read of the server; otherwise `false`, with the reason beside it where there is one — `live.status.refused` (Asterisk refused the `Status`), `live.reconcile.deferred` (the 10 s wait ran out, nothing removed), `live.reconcile.kept_stale` (the number of channels kept that the snapshot could not vouch for) or `live.reconcile.overlapped`. A read run from inside an event handler reads `false` with no reason beside it. `live.server` carries the Asterisk version and is obsolete (removed in 2.12.0); a pooled server is identified by `server.id`, which those versions do not put on this span, so the sample attributes it by parent: it starts an `Activity` of its own around each call and reads the span whose `ParentId` is that activity's `Id`, so a reconciliation another caller runs beside it settles nothing.
 
 `ami.event_pump.pending` is also a cost guard: the snapshot's answer events (about one per channel Asterisk holds, 5,300 at 5,000 channels) go through the same buffer, so the sample skips a tick while more than half the capacity is in use. It is an observable `int` gauge, one per connection: a `MeterListener` reads it only when the sample calls `RecordObservableInstruments()`, once per tick here, through a `SetMeasurementEventCallback<int>` (a `long` callback is never called for it), and the sample adds the connections' readings.
 
@@ -382,8 +440,9 @@ has left untrusted: once the full buffer has refused an event, such a call is ke
 until a channel reconciliation covers the loss. With Hosting's reconciliation sweep running, that reconciliation is sent
 on the first tick after the drop has been delivered through. A host that runs no sweep — `ReconciliationInterval` set
 to `Timeout.InfiniteTimeSpan`, a server outside the pool, or a server attached by hand without the sweep — must send it
-itself: run `ReconcileChannelsAsync` on the server once the drop has been delivered through, exactly as the loop above
-does, and its completion decides the calls that were waiting. Until then they stay as they were, with no time bound; an
+itself: run `ReconcileChannelsAsync` on the server once the drop has been delivered through (from 2.11.0
+`UnreconciledLossDelivered` says when, and `HasUnreconciledLoss` whether it is still due), exactly as the loops above
+do, and its completion decides the calls that were waiting. Until then they stay as they were, with no time bound; an
 admission on such a table and the reload after a reconnect also cover it — the admission's read only when you do not
 await the admission from inside an AMI event handler, since a read sent from there cannot wait for the pump that
 handler holds and covers nothing.

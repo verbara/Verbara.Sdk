@@ -61,7 +61,9 @@ A `ChannelManager` subscriber that throws is logged at Warning and counted on `l
 subscribers still receive the event. From 2.11.0 a `QueueManager`, `MeetMeManager`, `AgentManager` or `BridgeManager`
 subscriber that throws is handled the same way, counted on `live.queues.subscriber_faults`, `live.meetme.subscriber_faults`,
 `live.agents.subscriber_faults` or `live.bridges.subscriber_faults`, and nothing is thrown from the call that made the
-change; a throwing `AgentStateChanged` subscriber no longer skips the `AgentConnected` that follows it.
+change; a throwing `AgentStateChanged` subscriber no longer skips the `AgentConnected` that follows it. A subscriber of
+`VerbaraServer.UnreconciledLossDelivered` (from 2.11.0) that throws is logged at Warning and counted on
+`live.server.subscriber_faults`; the other subscribers are still told.
 
 ## Reconciling the channels
 
@@ -89,7 +91,14 @@ await server.ReconcileChannelsAsync(cancellationToken);
   one `status-refused` string entry (`serverId: message` per refusal, separated by `; ` in ordinal server-id order),
   while each server's own entry remains its connection state's name.
 - Each run is traced as a `live channel-reconcile` activity, tagged `live.channels` and, on a refusal,
-  `live.status.refused`, and logged at Debug. It is not reported as a state load.
+  `live.status.refused`, and logged at Debug. It is not reported as a state load. From 2.11.0 the `live channel-reconcile`,
+  `live state-load` and `live originate` activities of a pooled server carry `server.id` (its pool id); `live.server`
+  carries the Asterisk version, not the server, and is obsolete (removed in 2.12.0).
+- From 2.11.0 `server.HasUnreconciledLoss` says whether an event the full buffer dropped has been delivered through, no
+  covering read has covered it yet and no load of the server is running, and `server.UnreconciledLossDelivered` is raised
+  once for each loss, when that first reads true: the
+  route for a host without the session sweep (see the
+  [high-load guide](../../docs/guides/high-load-tuning.md#session-reconciliation)).
 
 The session engine's reconciliation sweep calls it: `AddVerbaraSessions` for the single server, and
 `AddVerbaraSessionsMultiServer` for every server of the pool. A host can also call it on a schedule of its own; on a

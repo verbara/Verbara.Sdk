@@ -7,6 +7,7 @@ using FluentAssertions.Execution;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Connection;
 using Verbara.Sdk.Ami.Events;
+using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Live.Tests.Harness;
 
 namespace Verbara.Sdk.Live.Tests.Server;
@@ -32,7 +33,7 @@ namespace Verbara.Sdk.Live.Tests.Server;
 /// inside an activity of this class's own source, so a span of another test running in parallel is never read.
 /// </para>
 /// </remarks>
-public sealed class ChannelReadCoverageTests
+public sealed partial class ChannelReadCoverageTests
 {
     private const int Capacity = 2;
     private const string ReconcileSpan = "live channel-reconcile";
@@ -371,6 +372,124 @@ public sealed class ChannelReadCoverageTests
             Tag(spanB, Covered).Should().Be("False");
             Tag(spanB, Overlapped).Should().Be("True", "B saw A in flight when it was raised");
             run.Server.HasPendingLoss.Should().BeFalse("A covered the drop");
+        }
+    }
+
+    [Fact]
+    public async Task ReconcileChannelsAsync_ShouldLeaveACoveredLossCovered_WhenAReadThatBeganEarlierOpensAfterAnotherCovered()
+    {
+        using var spans = new Spans();
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await StartAsync(peer);
+
+        // Inside A, which has begun and not opened: an event is dropped and delivered, and B runs to a covering completion.
+        Activity? spanB = null;
+        var heldA = 0;
+        run.Server.ChannelReadBegun = async () =>
+        {
+            if (Interlocked.Exchange(ref heldA, 1) != 0) return;
+            using (var hold = await HoldAndDropAsync(run, peer, "begun-1"))
+                await DeliverAsync(run, peer, hold, "begun-1");
+            spanB = await spans.TraceAsync(() => run.Server.ReconcileChannelsAsync().AsTask());
+        };
+        var spanA = await spans.TraceAsync(() => run.Server.ReconcileChannelsAsync().AsTask());
+        run.Server.ChannelReadBegun = null;
+        var statusAsked = peer.Asked("Status");
+
+        using (new AssertionScope())
+        {
+            spanB.Should().NotBeNull("premise: B ran inside A's begun and unopened read");
+            Tag(spanB!, Covered).Should().Be("True", "premise: B covered the drop");
+            Tag(spanA, Overlapped).Should().BeNull("premise: A opened after B had finished, so nothing overlapped it");
+            run.Server.HasPendingLoss.Should().BeFalse(
+                "B covered the drop and A, opened after B, cannot publish an older sample over B's");
+            run.Server.HasDeliveredUnreconciledLoss.Should().BeFalse(
+                "the reading the session sweep sends a Status on reads false, so its next tick sends none for the drop");
+            peer.Asked("Status").Should().Be(statusAsked, "nothing else asked for a Status after the two reads");
+        }
+    }
+
+    [Fact]
+    public async Task ReconcileChannelsAsync_ShouldSampleTheLossInsideItsOpening_WhenAReadOpens()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await StartAsync(peer);
+        using (var hold = await HoldAndDropAsync(run, peer, "opening-1"))
+            await DeliverAsync(run, peer, hold, "opening-1");
+        var seen = new ConcurrentQueue<(bool Held, long Opening, EventLossEpoch Sampled)>();
+        run.Server.ChannelReadOpened = (opening, sampled) => seen.Enqueue((run.Server.ChannelReadGateHeld, opening, sampled));
+
+        await run.Server.ReconcileChannelsAsync().AsTask().WaitAsync(Run.Bound);
+        run.Server.ChannelReadOpened = null;
+
+        using (new AssertionScope())
+        {
+            seen.Should().ContainSingle("premise: one channel read opened");
+            seen.Single().Held.Should().BeTrue(
+                "the read is opened inside the acquisition of the read gate that assigns it its opening number");
+            seen.Single().Sampled.Should().Be(run.Server.ReadCurrentEventLossEpoch(),
+                "premise: nothing was lost after the read sampled, so its sample is the epoch now");
+            run.Server.CoveredOpening.Should().Be(seen.Single().Opening,
+                "the read publishes its sample under the opening number it was observed with");
+            run.Server.HasPendingLoss.Should().BeFalse("premise: the read covered the delivered drop");
+        }
+    }
+
+    [Fact]
+    public async Task ReconcileChannelsAsync_ShouldSampleTheLossAfterItTakesTheReadGate_WhenItWaitedForTheGateWhileAnEventWasLost()
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true };
+        await using var run = await StartAsync(peer);
+
+        // A opens and stays inside the read gate, in its opening seam; B begins on a thread of its own and parks on the gate.
+        using var aInside = new ManualResetEventSlim();
+        using var releaseA = new ManualResetEventSlim();
+        var bSeen = new TaskCompletionSource<(bool Held, EventLossEpoch Sampled)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var openings = 0;
+        run.Server.ChannelReadOpened = (_, sampled) =>
+        {
+            if (Interlocked.Increment(ref openings) == 1)
+            {
+                aInside.Set();
+                releaseA.Wait(Run.Bound);
+            }
+            else
+            {
+                bSeen.TrySetResult((run.Server.ChannelReadGateHeld, sampled));
+            }
+        };
+        Thread? bThread = null;
+        var begun = 0;
+        run.Server.ChannelReadBegun = () =>
+        {
+            // A completed ValueTask: B goes on, on this same thread, to the read gate.
+            if (Interlocked.Increment(ref begun) == 2)
+                Volatile.Write(ref bThread, Thread.CurrentThread);
+            return ValueTask.CompletedTask;
+        };
+
+        var readA = Task.Run(async () => await run.Server.ReconcileChannelsAsync());
+        aInside.Wait(Run.Bound).Should().BeTrue("premise: A holds the read gate in its opening seam");
+        var readB = Task.Run(async () => await run.Server.ReconcileChannelsAsync());
+        // fence-allow: LOOP-DRIVER — waits for B's thread to park on the read gate A holds, so the drop below falls after B began and before B samples
+        SpinWait.SpinUntil(() => Volatile.Read(ref bThread) is { } t && t.ThreadState.HasFlag(System.Threading.ThreadState.WaitSleepJoin), Run.Bound)
+            .Should().BeTrue("premise: B has begun and waits for the read gate");
+
+        var hold = await HoldAndDropAsync(run, peer, "parked-1");
+        var afterTheDrop = run.Server.ReadCurrentEventLossEpoch();
+        releaseA.Set();
+        var (heldAtB, sampledByB) = await bSeen.Task.WaitAsync(Run.Bound);
+        run.Server.ChannelReadOpened = null;
+        run.Server.ChannelReadBegun = null;
+        await DeliverAsync(run, peer, hold, "parked-1");
+        hold.Dispose();
+        await Task.WhenAll(readA, readB).WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            heldAtB.Should().BeTrue("B's opening seam runs inside its acquisition of the read gate");
+            sampledByB.Should().Be(afterTheDrop,
+                "B samples the loss only once it holds the read gate, after the drop that fell while it waited for it");
         }
     }
 

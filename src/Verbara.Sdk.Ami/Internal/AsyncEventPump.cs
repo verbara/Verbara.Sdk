@@ -118,6 +118,13 @@ public sealed class AsyncEventPump : IAsyncDisposable
     internal long LastLossOrdinal => Volatile.Read(ref _lastLossOrdinal);
 
     /// <summary>
+    /// How many waits for <see cref="WaitDispatchedThroughAsync"/> are registered and not yet met: while it is non-zero,
+    /// the busy consumer takes the progress lock after each event. Read by the benchmarks, to start a drain only once the
+    /// loss watcher's wait is registered.
+    /// </summary>
+    internal int RegisteredWaiters => Volatile.Read(ref _waiterCount);
+
+    /// <summary>
     /// Whether every event up to the last lost one (<see cref="LastLossOrdinal"/>) has been dispatched or dropped:
     /// <see cref="DispatchedThrough"/> has reached it. False while an event received before the loss is still buffered or in
     /// its handler; true with no loss, and once the consumer has passed the loss, also when no event follows it. One
@@ -155,6 +162,27 @@ public sealed class AsyncEventPump : IAsyncDisposable
     /// <see cref="DrainAndDisposeAsync"/>) when the episode is still open then.
     /// </summary>
     internal Action<long, TimeSpan>? OnDropEpisodeEnded { get; set; }
+
+    /// <summary>
+    /// Called once delivery has passed the last lost event (<see cref="DeliveredThroughLastLoss"/> has turned true): once
+    /// for the losses passed together, again for a later loss passed later. Never on the writer's thread nor on the
+    /// consumer's, never inside a dispatch, and not for a loss the pump stopped before passing. Set it before the first
+    /// event; with none set, a loss starts no watcher.
+    /// </summary>
+    /// <remarks>
+    /// One watcher per pump, started on demand by the first loss that finds none running. It waits on the dispatch
+    /// barrier for the last loss and re-arms while a newer loss arrived, so the busy consumer pays nothing new per event:
+    /// it takes the progress lock after an event only while a waiter is registered, that is during and right after an
+    /// overflow. A callback that throws is the owner's to report: the watcher goes on.
+    /// </remarks>
+    internal Action? OnLossDeliveredThrough { get; set; }
+
+    /// <summary>The loss watcher's task, completed while none runs; read by tests to tell when it has stopped.</summary>
+    internal Task LossWatcher { get; private set; } = Task.CompletedTask;
+
+    // 1 while a loss watcher runs. A refusal sets it with an exchange after it wrote the loss's ordinal; the watcher clears
+    // it with an exchange and then reads the ordinal again, so of a refusal and a watcher leaving, one sees the other.
+    private int _lossWatched;
 
     /// <summary>The clock an overflow episode's duration is measured on. Set it before the first event.</summary>
     internal TimeProvider Clock { get; init; } = TimeProvider.System;
@@ -456,6 +484,52 @@ public sealed class AsyncEventPump : IAsyncDisposable
         }
     }
 
+    // Starts the loss watcher unless one runs. On the writer's thread: the watcher runs on the thread pool, with no
+    // execution context of the writer's flowing into it.
+    private void WatchLoss()
+    {
+        if (Interlocked.Exchange(ref _lossWatched, 1) != 0)
+            return;
+
+        using (ExecutionContext.SuppressFlow())
+            LossWatcher = Task.Run(WatchLossAsync);
+    }
+
+    private async Task WatchLossAsync()
+    {
+        while (true)
+        {
+            var target = Volatile.Read(ref _lastLossOrdinal);
+            var outcome = await WaitDispatchedThroughAsync(target, Timeout.InfiniteTimeSpan, TimeProvider.System)
+                .ConfigureAwait(false);
+            if (outcome != DispatchBarrierOutcome.Reached)
+            {
+                // The pump stopped dispatching before it passed the loss: nothing will pass it.
+                Interlocked.Exchange(ref _lossWatched, 0);
+                return;
+            }
+
+            // A newer loss arrived while this one was waited for: wait for that one instead, one signal for both.
+            if (Volatile.Read(ref _lastLossOrdinal) != target)
+                continue;
+
+            try
+            {
+                OnLossDeliveredThrough?.Invoke();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The callback is the owner's, and reports its own failures; the watcher must still leave cleanly.
+            }
+
+            Interlocked.Exchange(ref _lossWatched, 0);
+
+            // A loss refused after the read above found the watcher running and started none: take it over.
+            if (Volatile.Read(ref _lastLossOrdinal) == target || Interlocked.Exchange(ref _lossWatched, 1) != 0)
+                return;
+        }
+    }
+
     /// <summary>Enqueue an event for async dispatch. Returns false if the event was dropped.</summary>
     /// <remarks>A refusal counts as a lost event (<see cref="DroppedUncollectedEvents"/>).</remarks>
     public bool TryEnqueue(ManagerEvent evt) => TryEnqueue(evt, collected: false);
@@ -496,6 +570,8 @@ public sealed class AsyncEventPump : IAsyncDisposable
             }
 
             Release(met, reached: true);
+            if (!collected && OnLossDeliveredThrough is not null)
+                WatchLoss();
 
             // The episode's start before its count: a release that takes the episode once it is counted reads this
             // refusal's start, never an earlier episode's. Only the writer raises the count from 0, so the read below

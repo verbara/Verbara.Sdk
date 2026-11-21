@@ -50,7 +50,8 @@ public class AsyncEventPumpBenchmark
 
     // The refusal path: a pump of 1,000 slots that is never started is offered 10,000 events, so 9,000 are refused, each
     // through the loss bookkeeping and the refusal callback, set as the connection sets it (a null delegate measures no
-    // call).
+    // call). The loss callback (OnLossDeliveredThrough), which the connection also sets, is not set here, so no loss
+    // watcher runs: the rows with it armed are in AsyncEventPumpOverflowBenchmark.
     [Benchmark]
     public async Task Refuse9000Of10000Events()
     {

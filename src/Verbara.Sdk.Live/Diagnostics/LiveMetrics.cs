@@ -95,6 +95,14 @@ public static class LiveMetrics
         Meter.CreateCounter<long>("live.bridges.subscriber_faults", "faults",
             "Bridge subscriber failures (a bridge event handler threw); delivery goes on");
 
+    /// <summary>
+    /// Failures of subscribers of the server's own notices: a handler of <c>VerbaraServer.UnreconciledLossDelivered</c>
+    /// that threw, one per failure. Each is also logged at Warning; the later subscribers are still told.
+    /// </summary>
+    internal static readonly Counter<long> ServerSubscriberFaults =
+        Meter.CreateCounter<long>("live.server.subscriber_faults", "faults",
+            "Failures of subscribers of the server's own notices (a notice handler threw); the others are still told");
+
     // --- Histograms ---
 
     /// <summary>Time a caller waited in queue before being answered.</summary>
