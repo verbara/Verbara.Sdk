@@ -546,7 +546,8 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </remarks>
     public event Action<VerbaraServer>? UnreconciledLossDelivered;
 
-    // The loss mark of the last notice raised: one notice per mark, compared by equality like every loss mark.
+    // The loss mark of the last notice raised: one notice per mark, compared by equality like every loss mark, and read and
+    // written only under the gate, with the mark it is compared with sampled there too.
     private readonly Lock _noticeGate = new();
     private EventLossEpoch? _notifiedMark;
     private long _lossNoticesPosted;
@@ -561,22 +562,25 @@ public sealed class VerbaraServer : IVerbaraServer
 
     // Evaluated at each moment the reading can turn true: the delivery passing a loss, a pending reconnect settling, and
     // the last running load of this server ending. Each of the three writes its own state with a full fence and only then
-    // evaluates, so whichever happens last sees all three. The mark is read before the reading: a drop counted between
-    // the two either leaves the reading false (it is not delivered yet) or is delivered and announced again later, so a
-    // mark is never recorded for a drop whose delivery has not been read.
+    // evaluates, so whichever happens last sees all three. The three are not serialized with one another, so the mark,
+    // the reading and the decision are taken together under the gate: an evaluation that read an older mark outside it
+    // could otherwise record that mark over a newer one announced meanwhile, and announce the older loss again. Inside,
+    // the mark is read before the reading: a drop counted between the two either leaves the reading false (it is not
+    // delivered yet) or is delivered and announced again later, so a mark is never recorded for a drop whose delivery
+    // has not been read. The reading outside the gate only spares it the evaluations that would find nothing.
     private void AnnounceUnreconciledLoss()
     {
         if (_disposing.IsCancellationRequested || UnreconciledLossDelivered is null)
             return;
 
-        var mark = ReadCurrentEventLossEpoch();
         if (!HasUnreconciledLoss)
             return;
 
         LossNoticeDeciding?.Invoke();
         lock (_noticeGate)
         {
-            if (mark == _notifiedMark)
+            var mark = ReadCurrentEventLossEpoch();
+            if (!HasUnreconciledLoss || mark == _notifiedMark)
                 return;
             _notifiedMark = mark;
             Interlocked.Increment(ref _lossNoticesPosted);
