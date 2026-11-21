@@ -118,6 +118,13 @@ public sealed class AsyncEventPump : IAsyncDisposable
     internal long LastLossOrdinal => Volatile.Read(ref _lastLossOrdinal);
 
     /// <summary>
+    /// How many waits for <see cref="WaitDispatchedThroughAsync"/> are registered and not yet met: while it is non-zero,
+    /// the busy consumer takes the progress lock after each event. Read by the benchmarks, to start a drain only once the
+    /// loss watcher's wait is registered.
+    /// </summary>
+    internal int RegisteredWaiters => Volatile.Read(ref _waiterCount);
+
+    /// <summary>
     /// Whether every event up to the last lost one (<see cref="LastLossOrdinal"/>) has been dispatched or dropped:
     /// <see cref="DispatchedThrough"/> has reached it. False while an event received before the loss is still buffered or in
     /// its handler; true with no loss, and once the consumer has passed the loss, also when no event follows it. One

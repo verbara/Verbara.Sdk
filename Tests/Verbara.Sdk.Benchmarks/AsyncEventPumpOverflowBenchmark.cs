@@ -46,9 +46,13 @@ public class AsyncEventPumpOverflowBenchmark
         await pump.LossWatcher;
     }
 
-    // D: 10,000 events buffered and one refused before the consumer starts, then consumed. Armed, the watcher's waiter is
-    // registered for the whole drain, so the consumer takes the progress lock after every event; the row also awaits the
-    // watcher's signal, which is part of the armed cost (one thread-pool hop at the end).
+    // D: 10,000 events buffered and one refused before the consumer starts, then consumed. Armed, the refusal only
+    // schedules the watcher, so the row waits for the watcher's wait to be registered before it starts the consumer. The
+    // waiter targets the refused event, the last one received, which the consumer passes only once the buffer is empty,
+    // so it is registered for the whole drain and the consumer takes the progress lock after every one of the 10,000
+    // events. The wait for the registration (one thread-pool hop) and the watcher's signal at the end (another) are
+    // counted in the armed arm, so armed - unarmed over 10,000 is an upper bound on the cost per event dispatched with
+    // the waiter registered.
     [Benchmark]
     public async Task Prefill10000Refuse1ThenConsume()
     {
@@ -62,6 +66,11 @@ public class AsyncEventPumpOverflowBenchmark
 
         for (int i = 0; i < 10_001; i++)
             pump.TryEnqueue(_events[i]);
+        // The waiter's target is the refused event, the last one received: passed only once the buffer is empty.
+        if (pump.LastLossOrdinal != 10_001)
+            throw new InvalidOperationException("The refused event is not the last one received.");
+        if (WatcherArmed && !SpinWait.SpinUntil(() => pump.RegisteredWaiters != 0, TimeSpan.FromSeconds(5)))
+            throw new InvalidOperationException("The loss watcher's wait was not registered before the drain.");
 
         var drained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         pump.Start(evt =>
