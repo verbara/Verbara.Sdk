@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Net.WebSockets;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Text;
 using Verbara.Sdk.Ari.Outbound;
@@ -44,45 +45,38 @@ public sealed class AriOutboundSubscriberIsolationTests
             _ => throw new InvalidOperationException("the first observer failed"));
         var told = new TaskCompletionSource<AriOutboundConnection>(TaskCreationOptions.RunContinuationsAsynchronously);
         var received = new TaskCompletionSource<AriEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
-        IDisposable? events = null;
+        using var events = new CompositeDisposable();
         using var second = listener.OnConnectionAccepted.Subscribe(connection =>
         {
-            events = connection.Events.Subscribe(evt => received.TrySetResult(evt));
+            events.Add(connection.Events.Subscribe(evt => received.TrySetResult(evt)));
             told.TrySetResult(connection);
         });
         await listener.StartAsync();
 
-        try
-        {
-            // Act
-            using var peer = await ConnectAsync(listener.BoundPort, "first-app");
-            var connection = await WithinLimitAsync(told.Task, "the later observer is told about the connection");
-            await SendEventAsync(peer, "first-app");
-            var delivered = await WithinLimitAsync(received.Task, "the connection it was told about is served");
+        // Act
+        using var peer = await ConnectAsync(listener.BoundPort, "first-app");
+        var connection = await WithinLimitAsync(told.Task, "the later observer is told about the connection");
+        await SendEventAsync(peer, "first-app");
+        var delivered = await WithinLimitAsync(received.Task, "the connection it was told about is served");
 
-            // Assert
-            using (new AssertionScope())
-            {
-                delivered!.Type.Should().Be("StasisStart");
-                connection!.IsConnected.Should().BeTrue("an observer that throws does not close the connection");
-                listener.ActiveConnectionCount.Should().Be(1, "the connection stays tracked");
-                listener.GetByApplication("first-app").Should().ContainSingle(c => ReferenceEquals(c, connection));
-                faults.Total.Should().Be(1, "one observer threw once");
-                faults.For("connection_accepted").Should().Be(1, "the failure is the announcement's");
-                logger.Entries.Should().ContainSingle(
-                    e => e.Level == LogLevel.Warning && e.EventName == "AcceptedObserverFault",
-                    "the failure is logged once at Warning; the listener logged [{0}]",
-                    Describe(logger));
-                logger.Entries.Single(e => e.EventName == "AcceptedObserverFault").Exception
-                    .Should().BeOfType<InvalidOperationException>("the observer's exception is attached");
-                logger.Entries.Should().NotContain(
-                    e => e.EventName == "ConnectionError",
-                    "the connection did not fail: its observer did");
-            }
-        }
-        finally
+        // Assert
+        using (new AssertionScope())
         {
-            events?.Dispose();
+            delivered!.Type.Should().Be("StasisStart");
+            connection!.IsConnected.Should().BeTrue("an observer that throws does not close the connection");
+            listener.ActiveConnectionCount.Should().Be(1, "the connection stays tracked");
+            listener.GetByApplication("first-app").Should().ContainSingle(c => ReferenceEquals(c, connection));
+            faults.Total.Should().Be(1, "one observer threw once");
+            faults.For("connection_accepted").Should().Be(1, "the failure is the announcement's");
+            logger.Entries.Should().ContainSingle(
+                e => e.Level == LogLevel.Warning && e.EventName == "AcceptedObserverFault",
+                "the failure is logged once at Warning; the listener logged [{0}]",
+                Describe(logger));
+            logger.Entries.Single(e => e.EventName == "AcceptedObserverFault").Exception
+                .Should().BeOfType<InvalidOperationException>("the observer's exception is attached");
+            logger.Entries.Should().NotContain(
+                e => e.EventName == "ConnectionError",
+                "the connection did not fail: its observer did");
         }
     }
 
@@ -188,7 +182,7 @@ public sealed class AriOutboundSubscriberIsolationTests
         var thrower = 0;
         var received = new ConcurrentQueue<AriEvent>();
         var both = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var subscriptions = new ConcurrentBag<IDisposable>();
+        using var subscriptions = new CompositeDisposable();
         var told = new TaskCompletionSource<AriOutboundConnection>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var announced = listener.OnConnectionAccepted.Subscribe(connection =>
         {
@@ -207,33 +201,25 @@ public sealed class AriOutboundSubscriberIsolationTests
         });
         await listener.StartAsync();
 
-        try
-        {
-            // Act
-            using var peer = await ConnectAsync(listener.BoundPort, "first-app");
-            var connection = await WithinLimitAsync(told.Task, "the connection is announced");
-            await SendEventAsync(peer, "first-app");
-            await SendEventAsync(peer, "first-app");
-            await WithinLimitAsync(both.Task, "the later observer receives both events");
+        // Act
+        using var peer = await ConnectAsync(listener.BoundPort, "first-app");
+        var connection = await WithinLimitAsync(told.Task, "the connection is announced");
+        await SendEventAsync(peer, "first-app");
+        await SendEventAsync(peer, "first-app");
+        await WithinLimitAsync(both.Task, "the later observer receives both events");
 
-            // Assert
-            using (new AssertionScope())
-            {
-                received.Should().HaveCount(2);
-                Volatile.Read(ref thrower).Should().Be(2, "a direct subscriber that threw stays subscribed");
-                connection!.IsConnected.Should().BeTrue("an observer that throws does not close the connection");
-                listener.ActiveConnectionCount.Should().Be(1);
-                faults.Total.Should().Be(2, "one fault per event the observer threw on");
-                faults.For("events").Should().Be(2);
-                logger.Entries.Where(e => e.Level == LogLevel.Warning && e.EventName == "EventsObserverFault")
-                    .Should().HaveCount(2, "each failure is logged once; the listener logged [{0}]", Describe(logger));
-                logger.Entries.Should().NotContain(e => e.EventName == "ConnectionError");
-            }
-        }
-        finally
+        // Assert
+        using (new AssertionScope())
         {
-            foreach (var subscription in subscriptions)
-                subscription.Dispose();
+            received.Should().HaveCount(2);
+            Volatile.Read(ref thrower).Should().Be(2, "a direct subscriber that threw stays subscribed");
+            connection!.IsConnected.Should().BeTrue("an observer that throws does not close the connection");
+            listener.ActiveConnectionCount.Should().Be(1);
+            faults.Total.Should().Be(2, "one fault per event the observer threw on");
+            faults.For("events").Should().Be(2);
+            logger.Entries.Where(e => e.Level == LogLevel.Warning && e.EventName == "EventsObserverFault")
+                .Should().HaveCount(2, "each failure is logged once; the listener logged [{0}]", Describe(logger));
+            logger.Entries.Should().NotContain(e => e.EventName == "ConnectionError");
         }
     }
 
@@ -245,7 +231,7 @@ public sealed class AriOutboundSubscriberIsolationTests
         var logger = new CapturingLogger<AriOutboundListener>();
         await using var listener = CreateListener(logger);
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var subscriptions = new ConcurrentBag<IDisposable>();
+        using var subscriptions = new CompositeDisposable();
         var told = new TaskCompletionSource<AriOutboundConnection>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var announced = listener.OnConnectionAccepted.Subscribe(connection =>
         {
@@ -257,32 +243,24 @@ public sealed class AriOutboundSubscriberIsolationTests
         });
         await listener.StartAsync();
 
-        try
-        {
-            // Act — the peer closes, the read pump ends and the connection completes its events
-            using var peer = await ConnectAsync(listener.BoundPort, "first-app");
-            await WithinLimitAsync(told.Task, "the connection is announced");
-            await peer.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None).WaitAsync(WaitLimit);
-            var ended = await EndsWithinLimitAsync(completed.Task);
-            await WithinLimitAsync(
-                logger.WhenLogged(e => e.EventName == "ConnectionClosed"),
-                "the read pump ends and releases the connection");
+        // Act — the peer closes, the read pump ends and the connection completes its events
+        using var peer = await ConnectAsync(listener.BoundPort, "first-app");
+        await WithinLimitAsync(told.Task, "the connection is announced");
+        await peer.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None).WaitAsync(WaitLimit);
+        var ended = await EndsWithinLimitAsync(completed.Task);
+        await WithinLimitAsync(
+            logger.WhenLogged(e => e.EventName == "ConnectionClosed"),
+            "the read pump ends and releases the connection");
 
-            // Assert
-            using (new AssertionScope())
-            {
-                ended.Should().BeTrue("the later observer receives the completion the first one threw on");
-                faults.For("events").Should().Be(1);
-                logger.Entries.Should().ContainSingle(
-                    e => e.Level == LogLevel.Warning && e.EventName == "EventsObserverFault",
-                    "the listener logged [{0}]",
-                    Describe(logger));
-            }
-        }
-        finally
+        // Assert
+        using (new AssertionScope())
         {
-            foreach (var subscription in subscriptions)
-                subscription.Dispose();
+            ended.Should().BeTrue("the later observer receives the completion the first one threw on");
+            faults.For("events").Should().Be(1);
+            logger.Entries.Should().ContainSingle(
+                e => e.Level == LogLevel.Warning && e.EventName == "EventsObserverFault",
+                "the listener logged [{0}]",
+                Describe(logger));
         }
     }
 
@@ -295,7 +273,7 @@ public sealed class AriOutboundSubscriberIsolationTests
         var composedCalls = 0;
         var received = 0;
         var all = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var subscriptions = new ConcurrentBag<IDisposable>();
+        using var subscriptions = new CompositeDisposable();
         var told = new TaskCompletionSource<AriOutboundConnection>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var announced = listener.OnConnectionAccepted.Subscribe(connection =>
         {
@@ -313,27 +291,19 @@ public sealed class AriOutboundSubscriberIsolationTests
         });
         await listener.StartAsync();
 
-        try
-        {
-            // Act
-            using var peer = await ConnectAsync(listener.BoundPort, "first-app");
-            var connection = await WithinLimitAsync(told.Task, "the connection is announced");
-            for (var i = 0; i < 3; i++)
-                await SendEventAsync(peer, "first-app");
-            await WithinLimitAsync(all.Task, "the direct observer receives all three events");
+        // Act
+        using var peer = await ConnectAsync(listener.BoundPort, "first-app");
+        var connection = await WithinLimitAsync(told.Task, "the connection is announced");
+        for (var i = 0; i < 3; i++)
+            await SendEventAsync(peer, "first-app");
+        await WithinLimitAsync(all.Task, "the direct observer receives all three events");
 
-            // Assert
-            using (new AssertionScope())
-            {
-                Volatile.Read(ref composedCalls).Should().Be(1, "the operator ends its subscription on the first failure");
-                faults.For("events").Should().Be(1, "the composed subscription's failure is counted once");
-                connection!.IsConnected.Should().BeTrue();
-            }
-        }
-        finally
+        // Assert
+        using (new AssertionScope())
         {
-            foreach (var subscription in subscriptions)
-                subscription.Dispose();
+            Volatile.Read(ref composedCalls).Should().Be(1, "the operator ends its subscription on the first failure");
+            faults.For("events").Should().Be(1, "the composed subscription's failure is counted once");
+            connection!.IsConnected.Should().BeTrue();
         }
     }
 
@@ -345,7 +315,7 @@ public sealed class AriOutboundSubscriberIsolationTests
         await using var listener = CreateListener(new ThrowingOnWarningLogger());
         var received = 0;
         var both = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var subscriptions = new ConcurrentBag<IDisposable>();
+        using var subscriptions = new CompositeDisposable();
         var told = new TaskCompletionSource<AriOutboundConnection>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var announced = listener.OnConnectionAccepted.Subscribe(connection =>
         {
@@ -360,26 +330,18 @@ public sealed class AriOutboundSubscriberIsolationTests
         });
         await listener.StartAsync();
 
-        try
-        {
-            // Act
-            using var peer = await ConnectAsync(listener.BoundPort, "first-app");
-            var connection = await WithinLimitAsync(told.Task, "the connection is announced");
-            await SendEventAsync(peer, "first-app");
-            await SendEventAsync(peer, "first-app");
-            await WithinLimitAsync(both.Task, "a logger that throws on the report stops no delivery");
+        // Act
+        using var peer = await ConnectAsync(listener.BoundPort, "first-app");
+        var connection = await WithinLimitAsync(told.Task, "the connection is announced");
+        await SendEventAsync(peer, "first-app");
+        await SendEventAsync(peer, "first-app");
+        await WithinLimitAsync(both.Task, "a logger that throws on the report stops no delivery");
 
-            // Assert
-            using (new AssertionScope())
-            {
-                faults.For("events").Should().Be(2, "each fault is counted before the line that failed");
-                connection!.IsConnected.Should().BeTrue();
-            }
-        }
-        finally
+        // Assert
+        using (new AssertionScope())
         {
-            foreach (var subscription in subscriptions)
-                subscription.Dispose();
+            faults.For("events").Should().Be(2, "each fault is counted before the line that failed");
+            connection!.IsConnected.Should().BeTrue();
         }
     }
 
