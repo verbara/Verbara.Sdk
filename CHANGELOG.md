@@ -487,6 +487,48 @@ The push bus caught every exception an observer threw, `OutOfMemoryException` in
 completes its observers. Any other exception from an observer is still caught, logged and counted as a dropped
 delivery.
 
+### Changed — BREAKING: a session store's `linkedid` lookup that names no server answers only when one server holds the id (#642)
+
+`ISessionStore.GetByLinkedIdAsync(linkedId, ct)` returns `null` when two or more servers have a session stored under
+that `linkedid`, in the default, Redis and Postgres stores, where it returned one of them: the last saved in Redis,
+the newest row in Postgres, whichever it enumerated first in the default store. With one server and one session under
+the id nothing changes. When one server holds two sessions under the id, the default store now answers with the
+newest (by `CreatedAt`) where it returned whichever it enumerated first; Postgres already answered with the newest, and
+Redis answers with the last saved. It is the same rule the session manager's unscoped lookups follow since 2.10.0;
+name the server with the new scoped lookup (below). A session counts while the store keeps it — in Postgres until its
+row is deleted, so a `linkedid` two servers ever used stays ambiguous there for as long as both rows are kept.
+
+**The Redis index the README documents changes key and type:** `{prefix}idx:linked:{linkedId}` (a string) becomes
+`{prefix}idx:linked-by-server:{linkedId}` (a hash, one field per server id, value `<expiryUnixMs>|<sessionId>`). There
+is no migration: the store still reads the old string, so sessions written by 2.10.x stay findable, and never writes
+it again. Tools of your own that read `idx:linked:` must read the hash. **Redis 5.0 or later is required, and the
+connection's user must be allowed to run scripts** (`EVALSHA`/`EVAL` and `SCRIPT LOAD`, ACL category `@scripting`,
+plus the commands the scripts call): a live save writes its index entry with plain commands, but ending or deleting a
+session runs a single-key Lua script, so a deployment or proxy that refuses scripting is not supported. A lookup only
+reads and removes no index entry. Every script names one key, so none is refused with `CROSSSLOT` on Redis Cluster.
+**Measured cost:** a live save writes two index commands (`HSET` + `PERSIST`) where it wrote one `SET` —
+`SaveBatchAsync` of 100 live sessions ×1.22 the time of 2.10.x (allocation 258 → 292 KB), a single `SaveAsync`
+×1.05, `GetByLinkedIdAsync` ×1.01; ending or deleting a session runs one script per session (a batch of ended
+sessions was not timed). During a rolling upgrade a 2.10.x node does not find by `linkedid` a session a 2.11.0 node
+created. The [2.11.0 migration guide](docs/guides/migration-2.11.0.md) has who is affected and what to write.
+
+### Added: a session store lookup by `linkedid` that names the server (#642)
+
+`GetByLinkedIdAsync(serverId, linkedId, ct)` on `ISessionStore` (a default interface member) and `SessionStoreBase`
+(`virtual`), overridden by `RedisSessionStore` and `PostgresSessionStore` and by the default store, returns the named
+server's session whatever another server holds under the same id. A store of your own compiles unchanged: its default
+keeps the unscoped answer only when it belongs to the named server, so it can return `null` for an id two servers hold
+until you override it.
+
+### Fixed: in Redis, ending or deleting one server's session no longer hides another server's session with the same `linkedid` (#642)
+
+The Redis store kept one index entry per `linkedid` that the last writer overwrote: when two servers reported the same
+`linkedid`, the first server's terminal save gave the shared entry its retention, and its delete removed the entry, so
+the other server's live session was no longer found by `linkedid`. Each server's entry is now written, removed (only
+while it still names the deleted session) and expired on its own, and the index key expires only when every server's
+session under it has ended. The store does not order two concurrent saves of the same session: save a session from one
+place at a time, as the session manager does.
+
 ### Fixed: a decorated session manager keeps its attach, its persistence token, its sweep and its queue counters (#628)
 
 The hosting services that act on the session manager tested the resolved `ICallSessionManager` for the concrete

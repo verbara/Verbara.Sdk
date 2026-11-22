@@ -18,7 +18,8 @@ public sealed class RedisSessionStoreOptions
     public string KeyPrefix { get; set; } = "ast:";
 
     /// <summary>
-    /// TTL for completed sessions (and their linked-id index). Sessions older than this that
+    /// TTL for completed sessions (and their server's entry in the linked-id index: the index key itself expires
+    /// only when every server's session under that linked id has ended, with the latest of them). Sessions older than this that
     /// have reached a terminal state are also pruned from the <c>{prefix}sessions:completed</c>
     /// sorted set on each terminal write. Default: 10 minutes.
     /// </summary>

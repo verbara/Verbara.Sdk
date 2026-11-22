@@ -71,6 +71,19 @@ public sealed class ExtensionBaseClassTests
     }
 
     [Fact]
+    public async Task SessionStoreBase_GetByLinkedIdAsync_ShouldReturnNothing_WhenTheUnscopedAnswerBelongsToAnotherServer()
+    {
+        var store = new UnscopedOnlySessionStore(new CallSession("session-b", "shared", "server-b", CallDirection.Inbound));
+
+        var named = await store.GetByLinkedIdAsync("server-b", "shared", CancellationToken.None);
+        var other = await store.GetByLinkedIdAsync("server-a", "shared", CancellationToken.None);
+
+        new { Named = named?.SessionId, Other = other?.SessionId }.Should().BeEquivalentTo(
+            new { Named = "session-b", Other = default(string) },
+            "the default scoped lookup keeps the unscoped answer only when it belongs to the named server");
+    }
+
+    [Fact]
     public async Task SessionStoreBase_SaveBatchAsync_ShouldCallSaveForEachSession()
     {
         var store = new TestSessionStore();
@@ -122,6 +135,17 @@ public sealed class ExtensionBaseClassTests
 
         public override ValueTask<CallSession?> GetAsync(string sessionId, CancellationToken ct)
             => ValueTask.FromResult<CallSession?>(null);
+    }
+
+    private sealed class UnscopedOnlySessionStore(CallSession answer) : SessionStoreBase
+    {
+        public override ValueTask SaveAsync(CallSession session, CancellationToken ct) => ValueTask.CompletedTask;
+
+        public override ValueTask<CallSession?> GetAsync(string sessionId, CancellationToken ct)
+            => ValueTask.FromResult<CallSession?>(null);
+
+        public override ValueTask<CallSession?> GetByLinkedIdAsync(string linkedId, CancellationToken ct)
+            => ValueTask.FromResult<CallSession?>(answer.LinkedId == linkedId ? answer : null);
     }
 
     private sealed class TestAgentSelector : AgentSelectorBase

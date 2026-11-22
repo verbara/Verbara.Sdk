@@ -60,6 +60,38 @@ public sealed class ISessionStoreTests
         roundTripped!.SessionId.Should().Be("s1");
     }
 
+    [Fact]
+    public async Task GetByLinkedIdAsync_ShouldReturnNothing_WhenTheUnscopedAnswerBelongsToAnotherServer()
+    {
+        ISessionStore store = new DirectSessionStore(new CallSession("session-b", "shared", "server-b", CallDirection.Inbound));
+
+        var named = await store.GetByLinkedIdAsync("server-b", "shared", CancellationToken.None);
+        var other = await store.GetByLinkedIdAsync("server-a", "shared", CancellationToken.None);
+
+        new { Named = named?.SessionId, Other = other?.SessionId }.Should().BeEquivalentTo(
+            new { Named = "session-b", Other = default(string) },
+            "the interface's default scoped lookup keeps the unscoped answer only when it belongs to the named server");
+    }
+
+    /// <summary>A store that implements the interface directly, so the scoped lookup is the interface default.</summary>
+    private sealed class DirectSessionStore(CallSession answer) : ISessionStore
+    {
+        public ValueTask SaveAsync(CallSession session, CancellationToken ct) => ValueTask.CompletedTask;
+
+        public ValueTask<CallSession?> GetAsync(string sessionId, CancellationToken ct)
+            => ValueTask.FromResult<CallSession?>(null);
+
+        public ValueTask<IEnumerable<CallSession>> GetActiveAsync(CancellationToken ct)
+            => ValueTask.FromResult(Enumerable.Empty<CallSession>());
+
+        public ValueTask DeleteAsync(string sessionId, CancellationToken ct) => ValueTask.CompletedTask;
+
+        public ValueTask<CallSession?> GetByLinkedIdAsync(string linkedId, CancellationToken ct)
+            => ValueTask.FromResult<CallSession?>(answer.LinkedId == linkedId ? answer : null);
+
+        public ValueTask SaveBatchAsync(IReadOnlyList<CallSession> sessions, CancellationToken ct) => ValueTask.CompletedTask;
+    }
+
     /// <summary>
     /// Minimal test-only <see cref="ISessionsBuilder"/> implementation so we can exercise
     /// the fluent builder without pulling in the full <c>AddVerbaraSessionsBuilder</c>

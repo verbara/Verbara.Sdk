@@ -7,10 +7,17 @@ The Session Engine tracks live call sessions (`CallSession`) from AMI/ARI events
 | Package | Backend | Multi-instance | Crash recovery | Read latency | Recommended for |
 |---------|---------|----------------|----------------|--------------|-----------------|
 | **`Verbara.Sdk.Sessions`** (default) | `InMemorySessionStore` | ❌ | ❌ | In-process: no I/O, no serialization | Single-process apps, tests, POCs |
-| **`Verbara.Sdk.Sessions.Redis`** | `RedisSessionStore` | ✅ | ✅ (with `completedRetention`) | Network round trip: one `GET` for `GetAsync`, two for `GetByLinkedIdAsync` | HA deployments, low-latency SLAs |
+| **`Verbara.Sdk.Sessions.Redis`** | `RedisSessionStore` | ✅ | ✅ (with `completedRetention`) | Network round trip: one `GET` for `GetAsync`, two pipelined round trips for `GetByLinkedIdAsync` | HA deployments, low-latency SLAs |
 | **`Verbara.Sdk.Sessions.Postgres`** | `PostgresSessionStore` | ✅ | ✅ (durable) | Network I/O: one `SELECT` per read; by default each single save also waits for a WAL flush | Teams already running Postgres, regulatory/audit workloads |
 
 All three implement the public **`ISessionStore`** interface and derive from **`SessionStoreBase`** — the session manager (`CallSessionManager`) and the reconciliation sweep are agnostic to the backend choice. Switching is a one-line DI change; no code outside the registration needs to move.
+
+**Lookup by `linkedid` with several servers.** Two Asterisk servers can report the same `linkedid` for two unrelated calls. Every store keeps each server's session apart and offers two lookups, the same pair the session manager has:
+
+- `GetByLinkedIdAsync(serverId, linkedId, ct)` returns the session the named server holds under that `linkedid`, or `null`.
+- `GetByLinkedIdAsync(linkedId, ct)` returns the session when exactly **one** server holds that `linkedid`, and `null` when none or two or more do. Treat its `null` as "absent or not unique". With one server and one session under the id the answer is the same as before; when one server holds two sessions under the id, see the newest rule below.
+
+A server "holds" the id while the store keeps its session: Redis until its `CompletedRetention` runs out, InMemory until the session manager releases it, Postgres for as long as the row is kept — so in Postgres a `linkedid` two servers ever used stays ambiguous to the unscoped lookup; use the scoped one. Within one server each store answers with the newest session (Postgres and InMemory by `CreatedAt`, Redis the last saved). A store of your own that derives from `SessionStoreBase` or implements `ISessionStore` gets a default scoped lookup that keeps the unscoped answer only when it belongs to the named server, so it can answer `null` for an id two servers hold until you override it.
 
 ---
 
@@ -72,11 +79,21 @@ Three registration overloads cover common patterns:
 | Key | Type | Purpose |
 |-----|------|---------|
 | `ast:session:{id}` | String (JSON) | Snapshot serialized via `SessionJsonContext` (source-gen, AOT-safe) |
-| `ast:idx:linked:{linkedId}` | String | Maps `LinkedId → SessionId` for `GetByLinkedIdAsync` |
+| `ast:idx:linked-by-server:{linkedId}` | Hash | One field per server id, value `<expiryUnixMs>\|<sessionId>` (`0` = live), for both `GetByLinkedIdAsync` lookups |
 | `ast:sessions:active` | Set | Membership of non-terminal sessions for `GetActiveAsync` (cursor scan, `pageSize: 500`) |
 | `ast:sessions:completed` | Sorted Set (score = completed Unix ms) | Completed sessions with TTL-driven eviction |
 
 I/O is pipelined via `IDatabase.CreateBatch()` + `Task.WhenAll(...).WaitAsync(ct)` — cancellation is honored at entry and around all batch awaits. Completed-retention pruning runs lazily on terminal writes (no background timer).
+
+**The `linkedid` index.** Each server writes, removes and expires only its own field of the hash. A live save writes its field with `HSET` and then clears the key's expiry with `PERSIST`, in the same batch as the session key. Ending or deleting a session runs a single-key Lua script (atomic): a delete removes the field only while it still names that session, and the key has no expiry while any field is live and otherwise expires with the latest ended one. Deleting or expiring one server's session therefore never hides another server's. Every script names one key, so none is refused with `CROSSSLOT` on Redis Cluster; there a session key and its index entry are in different slots and are not written in order, so a lookup that races a session's first save can miss it once. The suite runs against a single node. A lookup reads the hash (and the key of earlier versions, below), then the candidate sessions — two pipelined round trips — counts a candidate only while its session key exists, and writes nothing: an entry whose session is gone is ignored, not removed.
+
+**Requirements.** Redis **5.0 or later** (the script reads the server clock with `TIME`), and a connection whose user may run scripts: `EVALSHA`/`EVAL` and `SCRIPT LOAD` (ACL category `@scripting`) plus the commands the scripts call (`TIME`, `HSET`, `HGET`, `HDEL`, `HGETALL`, `PERSIST`, `PEXPIREAT`, `GET`, `DEL`, `PEXPIRE`). A deployment or proxy that refuses scripting is not supported: live saves succeed there, but ending or deleting a session fails.
+
+**Cost.** A live save writes two index commands (`HSET` + `PERSIST`) where 2.10.x wrote one `SET`; ending or deleting a session runs one script per session, sent after the save's batch.
+
+**Concurrent saves of one session.** The store does not order two saves of the same session against each other: two concurrent saves of one session (for example a live and an ended snapshot from two places) can leave the session key and its index entry from different saves. Save a session from one place at a time, as the session manager does.
+
+**Upgrading from 2.10.x.** Earlier versions kept one string per `linkedid`, `ast:idx:linked:{linkedId}`, which the last writer overwrote. It is not migrated: this store still reads it, counting the session it names as that session's server unless that server has a field in the hash, and never writes it again — it only gives it its retention when the session it names ends, and removes it when that session is deleted. Nodes of both versions can run side by side during a rolling upgrade (the keys differ in name and type, so neither gets `WRONGTYPE`), but a 2.10.x node does not find by `linkedid` a session a newer node created. Tools of your own that read `idx:linked:` must read the hash instead.
 
 ---
 
@@ -116,7 +133,7 @@ CREATE INDEX IF NOT EXISTS ix_asterisk_sessions_active    ON asterisk_call_sessi
 
 **Write path:** UPSERT via `INSERT … ON CONFLICT (session_id) DO UPDATE …`. `SaveBatchAsync` wraps the loop in a transaction with rollback on throw.
 
-**Read path:** `GetActiveAsync` uses the `ix_asterisk_sessions_active` partial index (predicate `completed_at IS NULL`). `GetByLinkedIdAsync` orders by `created_at DESC LIMIT 1` (matches Redis single-session-per-linked semantics).
+**Read path:** `GetActiveAsync` uses the `ix_asterisk_sessions_active` partial index (predicate `completed_at IS NULL`). `GetByLinkedIdAsync(linkedId)` reads `DISTINCT ON (server_id) … ORDER BY server_id, created_at DESC LIMIT 2` through `ix_asterisk_sessions_linked_id` and answers only when one row comes back (one server); `GetByLinkedIdAsync(serverId, linkedId)` adds `AND server_id = @server` and returns that server's newest row. No migration or new index is needed.
 
 **Identifier safety.** `TableName` and `SchemaName` are interpolated into SQL (not parameterizable), so they're validated at resolve time against `^[A-Za-z_][A-Za-z0-9_]*$` via `AddOptions<T>().Validate()`. Values are then double-quoted (`"public"."asterisk_call_sessions"`).
 

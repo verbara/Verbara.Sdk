@@ -91,6 +91,11 @@ two calls.
 - **An implementation of your own.** `ICallSessionManager`'s default implementation of each scoped lookup calls the
   unscoped one and keeps the call only when it belongs to the named server, so it returns `null` for an id two servers
   hold. Override the three members to answer per server.
+- **The session stores.** `ISessionStore` has the same pair for `linkedid`: `GetByLinkedIdAsync(serverId, linkedId, ct)`
+  returns the named server's session, and `GetByLinkedIdAsync(linkedId, ct)` answers only when exactly one server holds
+  the id. The default, Redis and Postgres stores answer per server; a store of your own gets a default scoped lookup
+  that keeps the unscoped answer only when it belongs to the named server. See
+  [session-store-backends](../../docs/guides/session-store-backends.md).
 - **Calls already up when a server is attached.** `AdmitExistingCalls(serverId)`, called after `AttachToServer` (and
   after registering any reconstructed call with `RegisterReconstructedSession`), opens a session, as a reload does, for
   each call the server's channel table holds that no session holds, raising its `CallStartedEvent`, and joins the legs
