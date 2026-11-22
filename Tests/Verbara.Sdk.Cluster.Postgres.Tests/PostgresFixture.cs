@@ -29,6 +29,18 @@ public sealed class PostgresFixture : IAsyncLifetime
         $"Host={_container!.Hostname};Port={_container.GetMappedPublicPort(5432)};" +
         $"Database={DbName};Username={DbUser};Password={DbPassword};SSL Mode=Disable";
 
+    /// <summary>
+    /// Creates an empty database in the fixture's container and returns its connection string, for the
+    /// migration tests that need a table no other test has created yet.
+    /// </summary>
+    public async Task<string> CreateFreshDatabaseAsync()
+    {
+        var name = $"fresh_{Guid.NewGuid():N}";
+        await using (var cmd = DataSource.CreateCommand($"CREATE DATABASE {name}"))
+            await cmd.ExecuteNonQueryAsync();
+        return new NpgsqlConnectionStringBuilder(ConnectionString) { Database = name }.ConnectionString;
+    }
+
     public async Task InitializeAsync()
     {
         _container = new ContainerBuilder("postgres:18-alpine")
