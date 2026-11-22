@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Verbara.Sdk.Live.Bridges;
+using Verbara.Sdk.Live.Conferences;
 using Verbara.Sdk.Live.MeetMe;
 using FluentAssertions;
 
@@ -53,22 +54,23 @@ public sealed class LiveObjectBaseSetFieldTests
     [Fact]
     public void MeetMeUser_ShouldExposeAllProperties()
     {
-        var user = new MeetMeUser
+        var user = new ConferenceUser
         {
             UserNum = 1,
             Channel = "SIP/100-00000001",
-            State = MeetMeUserState.Joined,
+            State = ConferenceUserState.Joined,
             Muted = false,
             Talking = true
         };
 
         user.UserNum.Should().Be(1);
         user.Channel.Should().Be("SIP/100-00000001");
-        user.State.Should().Be(MeetMeUserState.Joined);
+        user.State.Should().Be(ConferenceUserState.Joined);
         user.Muted.Should().BeFalse();
         user.Talking.Should().BeTrue();
     }
 
+#pragma warning disable VSDK0008 // The former names keep their public setters and mutable Users until 2.12.0.
     [Fact]
     public void MeetMeUser_ShouldAllowMutedAndTalkingStateChanges()
     {
@@ -91,6 +93,7 @@ public sealed class LiveObjectBaseSetFieldTests
         room.UserCount.Should().Be(2, "two channels sharing ConfBridge user number 0 are two participants");
         room.RoomNumber.Should().Be("1000");
     }
+#pragma warning restore VSDK0008
 
     [Fact]
     public void AsteriskBridge_ShouldSupportAllProperties()

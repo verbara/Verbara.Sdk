@@ -1,3 +1,31 @@
 #nullable enable
 Verbara.Sdk.Live.Server.VerbaraServer.HasUnreconciledLoss.get -> bool
 Verbara.Sdk.Live.Server.VerbaraServer.UnreconciledLossDelivered -> System.Action<Verbara.Sdk.Live.Server.VerbaraServer!>?
+Verbara.Sdk.Live.Conferences.ConferenceManager
+Verbara.Sdk.Live.Conferences.ConferenceManager.Clear() -> void
+Verbara.Sdk.Live.Conferences.ConferenceManager.ConferenceManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+Verbara.Sdk.Live.Conferences.ConferenceManager.GetRoom(string! roomNumber) -> Verbara.Sdk.Live.Conferences.ConferenceRoom?
+Verbara.Sdk.Live.Conferences.ConferenceManager.OnConferenceEnded(string! roomNumber) -> void
+Verbara.Sdk.Live.Conferences.ConferenceManager.OnUserJoined(string! roomNumber, int userNum, string! channel) -> void
+Verbara.Sdk.Live.Conferences.ConferenceManager.OnUserJoined(string! roomNumber, int userNum, string! channel, string? uniqueId) -> void
+Verbara.Sdk.Live.Conferences.ConferenceManager.OnUserLeft(string! roomNumber, string! channel) -> void
+Verbara.Sdk.Live.Conferences.ConferenceManager.Rooms.get -> System.Collections.Generic.IReadOnlyCollection<Verbara.Sdk.Live.Conferences.ConferenceRoom!>!
+Verbara.Sdk.Live.Conferences.ConferenceManager.UserJoined -> System.Action<Verbara.Sdk.Live.Conferences.ConferenceRoom!, Verbara.Sdk.Live.Conferences.ConferenceUser!>?
+Verbara.Sdk.Live.Conferences.ConferenceManager.UserLeft -> System.Action<Verbara.Sdk.Live.Conferences.ConferenceRoom!, Verbara.Sdk.Live.Conferences.ConferenceUser!>?
+Verbara.Sdk.Live.Conferences.ConferenceManager.UserStateChanged -> System.Action<Verbara.Sdk.Live.Conferences.ConferenceRoom!, Verbara.Sdk.Live.Conferences.ConferenceUser!>?
+Verbara.Sdk.Live.Conferences.ConferenceRoom
+Verbara.Sdk.Live.Conferences.ConferenceRoom.RoomNumber.get -> string!
+Verbara.Sdk.Live.Conferences.ConferenceRoom.UserCount.get -> int
+Verbara.Sdk.Live.Conferences.ConferenceRoom.Users.get -> System.Collections.Generic.IReadOnlyDictionary<string!, Verbara.Sdk.Live.Conferences.ConferenceUser!>!
+Verbara.Sdk.Live.Conferences.ConferenceUser
+Verbara.Sdk.Live.Conferences.ConferenceUser.Channel.get -> string!
+Verbara.Sdk.Live.Conferences.ConferenceUser.LeaveNotObserved.get -> bool
+Verbara.Sdk.Live.Conferences.ConferenceUser.Muted.get -> bool
+Verbara.Sdk.Live.Conferences.ConferenceUser.State.get -> Verbara.Sdk.Live.ConferenceUserState
+Verbara.Sdk.Live.Conferences.ConferenceUser.Talking.get -> bool
+Verbara.Sdk.Live.Conferences.ConferenceUser.UniqueId.get -> string?
+Verbara.Sdk.Live.Conferences.ConferenceUser.UserNum.get -> int
+Verbara.Sdk.Live.ConferenceUserState
+Verbara.Sdk.Live.ConferenceUserState.Joined = 0 -> Verbara.Sdk.Live.ConferenceUserState
+Verbara.Sdk.Live.ConferenceUserState.Left = 1 -> Verbara.Sdk.Live.ConferenceUserState
+Verbara.Sdk.Live.Server.VerbaraServer.Conferences.get -> Verbara.Sdk.Live.Conferences.ConferenceManager!

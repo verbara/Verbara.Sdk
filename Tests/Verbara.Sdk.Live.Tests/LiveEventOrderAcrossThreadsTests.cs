@@ -4,7 +4,7 @@ using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Channels;
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 using Verbara.Sdk.Live.Queues;
 using Verbara.Sdk.Live.Server;
 
@@ -21,7 +21,7 @@ public sealed class LiveEventOrderAcrossThreadsTests
     private static readonly EventLossEpoch Epoch = new(0, 1, 0);
 
     private readonly QueueManager _queues = new(NullLogger.Instance);
-    private readonly MeetMeManager _rooms = new(NullLogger.Instance);
+    private readonly ConferenceManager _rooms = new(NullLogger.Instance);
     private readonly HandlerOffloadProbe _probe = new();
 
     [Fact]

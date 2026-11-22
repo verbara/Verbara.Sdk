@@ -59,9 +59,12 @@ internal static class DeprecationIdRegister
 
     public const string MigrationGuide2_10 = "docs/guides/migration-2.10.0.md";
 
+    public const string MigrationGuide2_11 = "docs/guides/migration-2.11.0.md";
+
     private const string Ami = "Verbara.Sdk.Ami";
     private const string Ari = "Verbara.Sdk.Ari";
     private const string Sessions = "Verbara.Sdk.Sessions";
+    private const string Live = "Verbara.Sdk.Live";
 
     public static IReadOnlyList<DeprecationIdRow> Rows { get; } =
     [
@@ -85,6 +88,11 @@ internal static class DeprecationIdRegister
                 new(Ami, "DbPrefixGetAction"), new(Ami, "ExecAction"), new(Ami, "JitterBufStatsEvent"), new(Ami, "MasqueradeEvent"),
                 new(Ami, "PriEventEvent"), new(Ami, "RtpReceiverStatEvent"), new(Ami, "RtpSenderStatEvent"),
             ]),
+        new("VSDK0008", DeprecationIdState.Marked, "2.12.0", MigrationGuide2_11,
+            [
+                new(Live, "MeetMeManager"), new(Live, "MeetMeRoom"), new(Live, "MeetMeUser"), new(Live, "MeetMeUserState"),
+                new(Live, "VerbaraServer.MeetMe"),
+            ], []),
     ];
 
     public static DeprecationIdRow Row(string id) => Rows.Single(r => r.Id == id);

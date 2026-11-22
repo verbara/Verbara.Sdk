@@ -87,12 +87,12 @@ public sealed class ReloadRestoresBridgeAndRoomTests : FunctionalTestBase
             }
 
             var learned = await WaitUntilAsync(
-                () => server.Bridges.ActiveBridgeCount >= 2 && server.MeetMe.GetRoom(conference)?.UserCount == 2,
+                () => server.Bridges.ActiveBridgeCount >= 2 && server.Conferences.GetRoom(conference)?.UserCount == 2,
                 LearnBound);
             learned.Should().BeTrue(
                 "Live learns the bridge, the room's bridge and both participants from their events before the cut "
                 + "(after {0}: {1} active bridges, {2} participants)",
-                elapsed.Elapsed, server.Bridges.ActiveBridgeCount, server.MeetMe.GetRoom(conference)?.UserCount);
+                elapsed.Elapsed, server.Bridges.ActiveBridgeCount, server.Conferences.GetRoom(conference)?.UserCount);
             var heldBefore = server.Bridges.ActiveBridges.Select(b => b.Id).ToHashSet(StringComparer.Ordinal);
 
             await ToxiproxyControl.AddToxicAsync(ProxyName, ToxicName, "reset_peer", "downstream",
@@ -149,7 +149,7 @@ public sealed class ReloadRestoresBridgeAndRoomTests : FunctionalTestBase
     }
 
     private static HashSet<string> Participants(VerbaraServer server, string conference) =>
-        server.MeetMe.GetRoom(conference)?.Users.Keys.ToHashSet(StringComparer.Ordinal) ?? [];
+        server.Conferences.GetRoom(conference)?.Users.Keys.ToHashSet(StringComparer.Ordinal) ?? [];
 
     private static async Task<List<string>> ListBridgeIdsAsync(AmiConnection connection)
     {

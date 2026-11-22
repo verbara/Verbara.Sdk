@@ -269,4 +269,5 @@ you can read the participant instead.
   `Clear` still raises nothing. From 2.10.0 it sets `Left` and marks `LeaveNotObserved` on each
   participant the table held, as a join with another `Uniqueid` does for the participant it
   replaces, with no `UserLeft`.
-- The type names stay `MeetMe*`: they track ConfBridge conferences.
+- The type names stay `MeetMe*` in 2.9.0 and 2.10.x. 2.11.0 names them `Conference*` and deprecates the
+  `MeetMe*` names: see [the 2.11.0 guide](migration-2.11.0.md#the-conference-types-are-named-for-what-they-track).

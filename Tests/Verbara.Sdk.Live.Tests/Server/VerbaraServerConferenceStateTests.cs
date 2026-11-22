@@ -1,7 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk;
 using Verbara.Sdk.Ami.Events;
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 using Verbara.Sdk.Live.Server;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,7 +11,7 @@ namespace Verbara.Sdk.Live.Tests.Server;
 
 /// <summary>
 /// Routes ConfBridge join, mute, unmute and talking events through the live server's observer and
-/// reads each participant's <see cref="MeetMeUser.Muted"/> and <see cref="MeetMeUser.Talking"/>.
+/// reads each participant's <see cref="ConferenceUser.Muted"/> and <see cref="ConferenceUser.Talking"/>.
 /// The conference, channel and muted values are the ones Asterisk 20, 22 and 23 sent for three
 /// Local channels in conference <c>100</c>: one joined with a start-muted user profile
 /// (<c>Muted: Yes</c>), two with the default profile (<c>Muted: No</c>).
@@ -72,9 +72,9 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
     private void Talking(string channel, bool? status, string conference = Conference) =>
         _observer!.OnNext(new ConfbridgeTalkingEvent { Conference = conference, Channel = channel, TalkingStatus = status });
 
-    private MeetMeUser Participant(string channel)
+    private ConferenceUser Participant(string channel)
     {
-        var room = _sut.MeetMe.GetRoom(Conference);
+        var room = _sut.Conferences.GetRoom(Conference);
         room.Should().NotBeNull("the join opened conference {0}", Conference);
         room!.Users.Should().ContainKey(channel, "the participant is keyed by its join's channel");
         return room.Users[channel];
@@ -91,7 +91,7 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
     public async Task ConfbridgeJoin_ShouldReadMuted_WhenJoinCarriesAnAmiTrueWord(string muted)
     {
         bool? mutedSeenByUserJoined = null;
-        _sut.MeetMe.UserJoined += (_, user) => mutedSeenByUserJoined = user.Muted;
+        _sut.Conferences.UserJoined += (_, user) => mutedSeenByUserJoined = user.Muted;
         await StartAndGetObserverAsync();
 
         Join(MutedChannel, muted);
@@ -138,8 +138,8 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
         Join(AdminChannel, "No");
         var joined = 0;
         var left = 0;
-        _sut.MeetMe.UserJoined += (_, _) => joined++;
-        _sut.MeetMe.UserLeft += (_, _) => left++;
+        _sut.Conferences.UserJoined += (_, _) => joined++;
+        _sut.Conferences.UserLeft += (_, _) => left++;
 
         Mute(AdminChannel);
         Unmute(AdminChannel);
@@ -227,7 +227,7 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
 
         Join(MutedChannel, "No");
 
-        _sut.MeetMe.GetRoom(Conference)!.UserCount.Should().Be(1, "a repeated join for a held channel replaces that participant");
+        _sut.Conferences.GetRoom(Conference)!.UserCount.Should().Be(1, "a repeated join for a held channel replaces that participant");
         Participant(MutedChannel).Muted.Should().BeFalse("the new join carried Muted: No");
         Participant(MutedChannel).Talking.Should().BeFalse("a new join starts not talking");
     }
@@ -237,8 +237,8 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
     [Fact]
     public async Task UserStateChanged_ShouldBeRaisedOnce_WhenParticipantIsMutedTwice()
     {
-        var notified = new List<(MeetMeRoom Room, MeetMeUser User, bool Muted)>();
-        _sut.MeetMe.UserStateChanged += (room, user) => notified.Add((room, user, user.Muted));
+        var notified = new List<(ConferenceRoom Room, ConferenceUser User, bool Muted)>();
+        _sut.Conferences.UserStateChanged += (room, user) => notified.Add((room, user, user.Muted));
         await StartAndGetObserverAsync();
         Join(AdminChannel, "No");
         notified.Should().BeEmpty("a join raises UserJoined, not UserStateChanged");
@@ -259,7 +259,7 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
     public async Task UserStateChanged_ShouldNotBeRaised_WhenParticipantJoinsMuted()
     {
         var notified = 0;
-        _sut.MeetMe.UserStateChanged += (_, _) => notified++;
+        _sut.Conferences.UserStateChanged += (_, _) => notified++;
         await StartAndGetObserverAsync();
 
         Join(MutedChannel, "Yes");
@@ -272,7 +272,7 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
     public async Task UserStateChanged_ShouldBeRaisedOncePerChange_WhenTalkingStatusChangesAndRepeats()
     {
         var notified = 0;
-        _sut.MeetMe.UserStateChanged += (_, _) => notified++;
+        _sut.Conferences.UserStateChanged += (_, _) => notified++;
         await StartAndGetObserverAsync();
         Join(TalkerChannel, "No");
 
@@ -293,7 +293,7 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
 
         Mute(AdminChannel);
 
-        _sut.MeetMe.Rooms.Should().BeEmpty("a mute for a participant not held creates no room");
+        _sut.Conferences.Rooms.Should().BeEmpty("a mute for a participant not held creates no room");
 
         Join(AdminChannel, "No");
 
@@ -308,7 +308,7 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
         Mute(AdminChannel, conference: "300");
         Talking(AdminChannel, true, conference: "300");
 
-        _sut.MeetMe.Rooms.Should().BeEmpty("a mute or talking event for a conference not held creates no room");
+        _sut.Conferences.Rooms.Should().BeEmpty("a mute or talking event for a conference not held creates no room");
     }
 
     [Fact]
@@ -319,7 +319,7 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
 
         Mute(TalkerChannel);
 
-        _sut.MeetMe.GetRoom(Conference)!.UserCount.Should().Be(1, "a mute for a channel not held creates no participant");
+        _sut.Conferences.GetRoom(Conference)!.UserCount.Should().Be(1, "a mute for a channel not held creates no participant");
         Participant(AdminChannel).Muted.Should().BeFalse("the mute named another channel");
     }
 
@@ -331,7 +331,7 @@ public sealed class VerbaraServerConferenceStateTests : IAsyncLifetime
 
         Mute(null);
 
-        _sut.MeetMe.GetRoom(Conference)!.UserCount.Should().Be(1, "a mute with no channel creates no participant");
+        _sut.Conferences.GetRoom(Conference)!.UserCount.Should().Be(1, "a mute with no channel creates no participant");
         Participant(AdminChannel).Muted.Should().BeFalse("the mute named no channel");
     }
 }

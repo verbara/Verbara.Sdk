@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Verbara.Sdk.Live.Bridges;
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 using Verbara.Sdk.Live.Queues;
 
 namespace Verbara.Sdk.Live.Tests;
@@ -20,7 +20,7 @@ public sealed class LiveEventHandlerOffloadTests
     private const string Room = "room-1";
 
     private readonly QueueManager _queues = new(NullLogger.Instance);
-    private readonly MeetMeManager _rooms = new(NullLogger.Instance);
+    private readonly ConferenceManager _rooms = new(NullLogger.Instance);
     private readonly BridgeManager _bridges = new(NullLogger.Instance);
     private readonly HandlerOffloadProbe _probe = new();
 

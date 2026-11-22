@@ -37,20 +37,38 @@ public sealed class DeprecationIdGuardTests(ITestOutputHelper output)
     // ---- The register -------------------------------------------------------------------------------------------
 
     [Fact]
-    public void Register_ShouldHoldSevenRetiredIdsAndNoMarkedOne_WhenReadOn2_11_0()
+    public void Register_ShouldHoldSevenRetiredIdsAndTheMarkedVsdk0008_WhenReadOn2_11_0()
     {
         var rows = DeprecationIdRegister.Rows;
 
-        rows.Select(r => r.Id).Should().Equal("VSDK0001", "VSDK0002", "VSDK0003", "VSDK0004", "VSDK0005", "VSDK0006", "VSDK0007");
-        rows.Should().OnlyContain(r => r.State == DeprecationIdState.Retired, "2.11.0 removed every symbol a marked id carried");
-        rows.Select(r => (r.Id, r.Release)).Should().Equal(
+        rows.Select(r => r.Id).Should().Equal("VSDK0001", "VSDK0002", "VSDK0003", "VSDK0004", "VSDK0005", "VSDK0006", "VSDK0007", "VSDK0008");
+        var retired = rows.Where(r => r.Id != "VSDK0008").ToList();
+        retired.Should().OnlyContain(r => r.State == DeprecationIdState.Retired, "2.11.0 removed every symbol a marked id carried before it");
+        retired.Select(r => (r.Id, r.Release)).Should().Equal(
             ("VSDK0001", "2.9.0"), ("VSDK0002", "2.11.0"), ("VSDK0003", "2.11.0"), ("VSDK0004", "2.11.0"),
             ("VSDK0005", "2.10.0"), ("VSDK0006", "2.11.0"), ("VSDK0007", "2.11.0"));
-        rows.Should().OnlyContain(r => r.Members.Count == 0);
+        retired.Should().OnlyContain(r => r.Members.Count == 0);
         rows.Where(r => r.Release == "2.11.0").Should().OnlyContain(r => r.GuidePath == DeprecationIdRegister.MigrationGuide2_10,
             "a retired id keeps its guide, so the links in the 2.10.x binaries keep opening a heading");
         rows.Where(r => r.Release == "2.11.0").Select(r => (r.Id, r.RemovedSet.Count))
             .Should().Equal(("VSDK0002", 6), ("VSDK0003", 1), ("VSDK0004", 5), ("VSDK0006", 2), ("VSDK0007", 7));
+    }
+
+    [Fact]
+    public void Register_ShouldMarkTheFiveMeetMeSymbolsForRemovalIn2_12_0_WhenReadOn2_11_0()
+    {
+        var row = DeprecationIdRegister.Row("VSDK0008");
+
+        row.State.Should().Be(DeprecationIdState.Marked);
+        row.Release.Should().Be("2.12.0", "a mark first published in 2.11.0 leaves one release later, never in the same one");
+        row.GuidePath.Should().Be(DeprecationIdRegister.MigrationGuide2_11);
+        row.Link.Should().Be("https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.11.0.md#vsdk0008");
+        row.Members.Select(m => $"{m.Package} {m.Key}").Should().BeEquivalentTo(
+        [
+            "Verbara.Sdk.Live MeetMeManager", "Verbara.Sdk.Live MeetMeRoom", "Verbara.Sdk.Live MeetMeUser",
+            "Verbara.Sdk.Live MeetMeUserState", "Verbara.Sdk.Live VerbaraServer.MeetMe",
+        ]);
+        row.RemovedSet.Should().BeEmpty();
     }
 
     [Fact]

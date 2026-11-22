@@ -1,11 +1,11 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 
-namespace Verbara.Sdk.Live.Tests.MeetMe;
+namespace Verbara.Sdk.Live.Tests.Conferences;
 
 /// <summary>
-/// What a <see cref="MeetMeManager.UserLeft"/> handler reads from <see cref="MeetMeUser.LeaveNotObserved"/>, one test per
+/// What a <see cref="ConferenceManager.UserLeft"/> handler reads from <see cref="ConferenceUser.LeaveNotObserved"/>, one test per
 /// path that takes a participant out of the table. Each reads the value inside the handler, where a consumer does. This
 /// assembly is a friend of Live, so these prove the marking; what a consumer can read and assign is proved by the
 /// compilations in the DocSnippets tests.
@@ -19,7 +19,7 @@ public sealed class ConferenceLeaveNotObservedTests
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<ConferenceSnapshotParticipant>> NoRows =
         new Dictionary<string, IReadOnlyList<ConferenceSnapshotParticipant>>();
 
-    private readonly MeetMeManager _sut = new(NullLogger.Instance);
+    private readonly ConferenceManager _sut = new(NullLogger.Instance);
     private readonly List<ReadInHandler> _left = [];
 
     public ConferenceLeaveNotObservedTests() =>
@@ -92,7 +92,7 @@ public sealed class ConferenceLeaveNotObservedTests
         _sut.Clear();
 
         new { Raised = _left.Count, held.LeaveNotObserved, held.State }.Should().BeEquivalentTo(
-            new { Raised = 0, LeaveNotObserved = true, State = MeetMeUserState.Left },
+            new { Raised = 0, LeaveNotObserved = true, State = ConferenceUserState.Left },
             "Clear raises nothing, so the mark is readable only on the instance the table held");
     }
 
@@ -117,8 +117,8 @@ public sealed class ConferenceLeaveNotObservedTests
             {
                 new
                 {
-                    Replaced = new { LeaveNotObserved = true, State = MeetMeUserState.Left },
-                    Joined = new { UniqueId = "b", LeaveNotObserved = false, State = MeetMeUserState.Joined },
+                    Replaced = new { LeaveNotObserved = true, State = ConferenceUserState.Left },
+                    Joined = new { UniqueId = "b", LeaveNotObserved = false, State = ConferenceUserState.Joined },
                 },
             },
         });
@@ -138,7 +138,7 @@ public sealed class ConferenceLeaveNotObservedTests
         _sut.OnUserJoined(Room, 0, ChannelA, joining);
 
         new { Left = _left.Count, repeated.LeaveNotObserved, repeated.State }.Should().BeEquivalentTo(
-            new { Left = 0, LeaveNotObserved = false, State = MeetMeUserState.Joined },
+            new { Left = 0, LeaveNotObserved = false, State = ConferenceUserState.Joined },
             "the same Uniqueid, or a side without one, is the same participant, who did not leave");
     }
 
@@ -171,7 +171,7 @@ public sealed class ConferenceLeaveNotObservedTests
     {
         _sut.OnUserJoined(Room, 0, ChannelA, "a");
         var readWhenPosted = new List<bool>();
-        _sut.Events.Posted = (_, user) => readWhenPosted.Add(((MeetMeUser)user!).LeaveNotObserved);
+        _sut.Events.Posted = (_, user) => readWhenPosted.Add(((ConferenceUser)user!).LeaveNotObserved);
         using var window = _sut.OpenSnapshotWindow();
 
         _sut.ReconcileWithSnapshot(window, [], NoRows, removeOmitted: true);

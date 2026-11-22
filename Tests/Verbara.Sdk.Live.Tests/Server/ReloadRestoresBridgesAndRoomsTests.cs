@@ -154,7 +154,7 @@ public sealed class ReloadRestoresBridgesAndRoomsTests
 
         new
         {
-            RoomHeld = rig.Run.Server.MeetMe.GetRoom(Room) is not null,
+            RoomHeld = rig.Run.Server.Conferences.GetRoom(Room) is not null,
             ListingAsked = second.Asked("ConfbridgeListRooms"),
             PeerFault = second.Fault?.Message,
         }.Should().BeEquivalentTo(
@@ -320,7 +320,7 @@ public sealed class ReloadRestoresBridgesAndRoomsTests
         new
         {
             UsersLeft = seen.UsersLeft.Order().ToArray(),
-            RoomHeld = rig.Run.Server.MeetMe.GetRoom(Room) is not null,
+            RoomHeld = rig.Run.Server.Conferences.GetRoom(Room) is not null,
             PeerFault = second.Fault?.Message,
         }.Should().BeEquivalentTo(
             new
@@ -673,7 +673,7 @@ public sealed class ReloadRestoresBridgesAndRoomsTests
             LeftWhileHeld = measured.WhileHeld,
             FirstLeft = seen.UsersLeft.FirstOrDefault(),
             LeftAfter = seen.UsersLeft.Order().ToArray(),
-            RoomHeld = rig.Run.Server.MeetMe.GetRoom(Room) is not null,
+            RoomHeld = rig.Run.Server.Conferences.GetRoom(Room) is not null,
             measured.GateTimedOut,
             PeerFault = rig.First.Fault?.Message,
         }.Should().BeEquivalentTo(
@@ -769,7 +769,7 @@ public sealed class ReloadRestoresBridgesAndRoomsTests
         server.Queues.GetByName(BootingAsterisk.QueueName)?.EntryCount ?? 0;
 
     private static string[] RoomParticipants(VerbaraServer server) =>
-        server.MeetMe.GetRoom(Room)?.Users.Keys.Order().ToArray() ?? [];
+        server.Conferences.GetRoom(Room)?.Users.Keys.Order().ToArray() ?? [];
 
     /// <summary>What the server raised from the moment <see cref="Rig.Watch"/> was called.</summary>
     private sealed class Seen
@@ -809,13 +809,13 @@ public sealed class ReloadRestoresBridgesAndRoomsTests
         {
             server.Bridges.BridgeCreated += _ => Interlocked.Increment(ref _bridgesCreated);
             server.Bridges.ChannelEntered += (_, _) => Interlocked.Increment(ref _channelsEntered);
-            server.MeetMe.UserJoined += (_, _) => Interlocked.Increment(ref _usersJoined);
+            server.Conferences.UserJoined += (_, _) => Interlocked.Increment(ref _usersJoined);
             server.Bridges.BridgeDestroyed += b =>
             {
                 lock (_gate)
                     _destroyed.Add(b.BridgeUniqueid);
             };
-            server.MeetMe.UserLeft += (_, u) =>
+            server.Conferences.UserLeft += (_, u) =>
             {
                 lock (_gate)
                     _usersLeft.Add(u.Channel);
@@ -875,7 +875,7 @@ public sealed class ReloadRestoresBridgesAndRoomsTests
         {
             var entries = (bridges.Count * 2) + participants.Count + (announcer ? 1 : 0);
             var entered = Counted(entries, h => Run.Server.Bridges.ChannelEntered += (_, _) => h());
-            var joined = Counted(participants.Count, h => Run.Server.MeetMe.UserJoined += (_, _) => h());
+            var joined = Counted(participants.Count, h => Run.Server.Conferences.UserJoined += (_, _) => h());
 
             foreach (var bridge in bridges)
             {

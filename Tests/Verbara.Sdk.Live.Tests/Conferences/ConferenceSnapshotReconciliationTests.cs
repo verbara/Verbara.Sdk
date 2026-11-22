@@ -1,8 +1,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 
-namespace Verbara.Sdk.Live.Tests.MeetMe;
+namespace Verbara.Sdk.Live.Tests.Conferences;
 
 /// <summary>
 /// The conference table's reconciliation against a load's listings holds to the read window: a participant that joined
@@ -17,7 +17,7 @@ public sealed class ConferenceSnapshotReconciliationTests
     private const string ChannelB = "Local/conf@probe-00000002;2";
     private const string ChannelC = "Local/conf@probe-00000004;2";
 
-    private readonly MeetMeManager _sut = new(NullLogger.Instance);
+    private readonly ConferenceManager _sut = new(NullLogger.Instance);
     private readonly List<string> _left = [];
     private readonly List<string> _joined = [];
 

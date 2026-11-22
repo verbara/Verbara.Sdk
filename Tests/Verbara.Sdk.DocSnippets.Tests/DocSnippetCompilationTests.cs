@@ -95,6 +95,37 @@ public sealed class DocSnippetCompilationTests
         errors.Should().Equal("CS0200");
     }
 
+    [Fact]
+    public void ConferenceUser_ShouldNotCompile_WhenAConsumerSetsItsState()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk.Live;
+            using Verbara.Sdk.Live.Conferences;
+
+            ConferenceUser user = null!;
+            user.Muted = true;
+            user.Talking = true;
+            user.State = ConferenceUserState.Left;
+            """);
+
+        errors.Should().Equal("CS0200", "CS0200", "CS0200");
+    }
+
+    [Fact]
+    public void ConferenceRoom_ShouldNotCompile_WhenAConsumerWritesItsParticipants()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk.Live.Conferences;
+
+            ConferenceRoom room = null!;
+            ConferenceUser user = null!;
+            room.Users["SIP/100"] = user;
+            _ = new ConferenceRoom();
+            """);
+
+        errors.Should().Equal("CS0200", "CS1729");
+    }
+
     /// <summary>
     /// A caller that still names the 2.10 <c>format:</c> argument on <c>Bridges.PlayAsync</c> must get a compile
     /// error, never a call that binds the value to some other argument. <c>format</c> is the only named argument here,

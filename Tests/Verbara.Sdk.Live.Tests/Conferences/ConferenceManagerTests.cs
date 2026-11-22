@@ -1,16 +1,16 @@
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Verbara.Sdk.Live.Tests.MeetMe;
+namespace Verbara.Sdk.Live.Tests.Conferences;
 
 /// <summary>
 /// The conference table: one participant per channel. ConfBridge sends no user number, so every
 /// ConfBridge participant is recorded with user number <c>0</c>; the channel is the key. The
 /// channel and unique-id values are ones Asterisk 22 sent for Local channels in conference <c>100</c>.
 /// </summary>
-public sealed class MeetMeManagerTests
+public sealed class ConferenceManagerTests
 {
     private const string Room = "100";
     private const string ChannelA = "Local/conf@probe-00000000;2";
@@ -18,7 +18,7 @@ public sealed class MeetMeManagerTests
     private const string ChannelB = "Local/conf@probe-00000002;2";
     private const string UniqueIdB = "1792103775.5";
 
-    private readonly MeetMeManager _sut = new(NullLogger.Instance);
+    private readonly ConferenceManager _sut = new(NullLogger.Instance);
 
     private void JoinBoth()
     {
@@ -37,13 +37,13 @@ public sealed class MeetMeManagerTests
         room.UserCount.Should().Be(1);
         room.Users.Keys.Should().BeEquivalentTo([ChannelA]);
         room.Users[ChannelA].Channel.Should().Be(ChannelA);
-        room.Users[ChannelA].State.Should().Be(MeetMeUserState.Joined);
+        room.Users[ChannelA].State.Should().Be(ConferenceUserState.Joined);
     }
 
     [Fact]
     public void OnUserJoined_ShouldAddToExistingRoom_WhenRoomAlreadyExists()
     {
-        var joined = new List<MeetMeUser>();
+        var joined = new List<ConferenceUser>();
         _sut.UserJoined += (_, user) => joined.Add(user);
 
         JoinBoth();
@@ -97,7 +97,7 @@ public sealed class MeetMeManagerTests
     [Fact]
     public void OnUserJoined_ShouldKeepOneParticipant_WhenHeldChannelJoinsAgain()
     {
-        var joined = new List<MeetMeUser>();
+        var joined = new List<ConferenceUser>();
         _sut.UserJoined += (_, user) => joined.Add(user);
 
         _sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
@@ -112,7 +112,7 @@ public sealed class MeetMeManagerTests
     [Fact]
     public void OnUserLeft_ShouldRemoveUser_WhenOtherUsersRemain()
     {
-        var left = new List<MeetMeUser>();
+        var left = new List<ConferenceUser>();
         _sut.UserLeft += (_, user) => left.Add(user);
         JoinBoth();
 
@@ -123,7 +123,7 @@ public sealed class MeetMeManagerTests
         room!.UserCount.Should().Be(1);
         room.Users.Keys.Should().BeEquivalentTo([ChannelB]);
         left.Should().ContainSingle().Which.Channel.Should().Be(ChannelA);
-        left[0].State.Should().Be(MeetMeUserState.Left);
+        left[0].State.Should().Be(ConferenceUserState.Left);
     }
 
     [Fact]
@@ -155,21 +155,21 @@ public sealed class MeetMeManagerTests
     [Fact]
     public void OnUserLeft_ShouldSetUserStateToLeft()
     {
-        MeetMeUser? leftUser = null;
+        ConferenceUser? leftUser = null;
         _sut.UserLeft += (_, user) => leftUser = user;
 
         _sut.OnUserJoined(Room, 0, ChannelA);
         _sut.OnUserLeft(Room, ChannelA);
 
         leftUser.Should().NotBeNull();
-        leftUser!.State.Should().Be(MeetMeUserState.Left);
+        leftUser!.State.Should().Be(ConferenceUserState.Left);
     }
 
     [Fact]
     public void UserJoined_ShouldFireEvent_WhenUserJoins()
     {
-        MeetMeRoom? firedRoom = null;
-        MeetMeUser? firedUser = null;
+        ConferenceRoom? firedRoom = null;
+        ConferenceUser? firedUser = null;
         _sut.UserJoined += (room, user) =>
         {
             firedRoom = room;
@@ -188,8 +188,8 @@ public sealed class MeetMeManagerTests
     [Fact]
     public void UserLeft_ShouldFireEvent_WhenUserLeaves()
     {
-        MeetMeRoom? firedRoom = null;
-        MeetMeUser? firedUser = null;
+        ConferenceRoom? firedRoom = null;
+        ConferenceUser? firedUser = null;
         _sut.UserLeft += (room, user) =>
         {
             firedRoom = room;
@@ -220,7 +220,7 @@ public sealed class MeetMeManagerTests
     [Fact]
     public void OnConferenceEnded_ShouldRemoveRemainingParticipantsAndRoom_WhenRoomIsHeld()
     {
-        var left = new List<(MeetMeUser User, MeetMeUserState StateWhenRaised)>();
+        var left = new List<(ConferenceUser User, ConferenceUserState StateWhenRaised)>();
         _sut.UserLeft += (_, user) => left.Add((user, user.State));
         JoinBoth();
 
@@ -229,7 +229,7 @@ public sealed class MeetMeManagerTests
         _sut.GetRoom(Room).Should().BeNull("the conference ended");
         left.Select(l => l.User.Channel).Should().BeEquivalentTo([ChannelA, ChannelB],
             "UserLeft is raised once for each participant still held");
-        left.Select(l => l.StateWhenRaised).Should().AllBeEquivalentTo(MeetMeUserState.Left);
+        left.Select(l => l.StateWhenRaised).Should().AllBeEquivalentTo(ConferenceUserState.Left);
     }
 
     [Fact]
@@ -256,7 +256,7 @@ public sealed class MeetMeManagerTests
         const string firstUid = "1792104515.1";
         const string second = "Local/conf@probe-00000003;2";
         const string secondUid = "1792104517.7";
-        var left = new List<MeetMeUser>();
+        var left = new List<ConferenceUser>();
         _sut.UserLeft += (_, user) => left.Add(user);
         _sut.OnUserJoined(Room, 0, first, firstUid);
         _sut.OnUserJoined(Room, 0, second, secondUid);
@@ -281,7 +281,7 @@ public sealed class MeetMeManagerTests
     public void OnUserJoined_ShouldNotApply_WhenConferenceOrChannelIsEmpty(string roomNumber, string channel)
     {
         var logger = new CapturingLogger();
-        var sut = new MeetMeManager(logger);
+        var sut = new ConferenceManager(logger);
         var fired = false;
         sut.UserJoined += (_, _) => fired = true;
 
@@ -298,7 +298,7 @@ public sealed class MeetMeManagerTests
     public void OnUserLeft_ShouldNotApply_WhenConferenceOrChannelIsEmpty(string roomNumber, string channel)
     {
         var logger = new CapturingLogger();
-        var sut = new MeetMeManager(logger);
+        var sut = new ConferenceManager(logger);
         var fired = false;
         sut.UserLeft += (_, _) => fired = true;
         sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
@@ -314,7 +314,7 @@ public sealed class MeetMeManagerTests
     public void OnConferenceEnded_ShouldNotApply_WhenConferenceIsEmpty()
     {
         var logger = new CapturingLogger();
-        var sut = new MeetMeManager(logger);
+        var sut = new ConferenceManager(logger);
         var fired = false;
         sut.UserLeft += (_, _) => fired = true;
         sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
@@ -371,7 +371,7 @@ public sealed class MeetMeManagerTests
     public void OnUserMuted_ShouldMuteNamedParticipantAndRaiseOnce_WhenMuteThenRepeatThenUnmute()
     {
         JoinBoth();
-        var notified = new List<(MeetMeRoom Room, MeetMeUser User, bool Muted)>();
+        var notified = new List<(ConferenceRoom Room, ConferenceUser User, bool Muted)>();
         _sut.UserStateChanged += (room, user) => notified.Add((room, user, user.Muted));
 
         _sut.OnUserMuted(Room, ChannelA, true);
@@ -442,7 +442,7 @@ public sealed class MeetMeManagerTests
     public void OnUserMutedAndOnUserTalking_ShouldLogAppliedEvents()
     {
         var logger = new CapturingLogger();
-        var sut = new MeetMeManager(logger);
+        var sut = new ConferenceManager(logger);
         sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
 
         sut.OnUserMuted(Room, ChannelA, true);
@@ -460,7 +460,7 @@ public sealed class MeetMeManagerTests
     public void OnUserMutedOrOnUserTalking_ShouldCreateNothingOrNotify_WhenRoomOrParticipantIsNotHeldWithoutAnOpenRead(string roomNumber, string channel, string eventName)
     {
         var logger = new CapturingLogger();
-        var sut = new MeetMeManager(logger);
+        var sut = new ConferenceManager(logger);
         sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
         var notified = 0;
         sut.UserStateChanged += (_, _) => notified++;
@@ -490,7 +490,7 @@ public sealed class MeetMeManagerTests
     public void OnUserMutedOrOnUserTalking_ShouldNotApply_WhenConferenceOrChannelIsEmpty(string roomNumber, string channel, string eventName)
     {
         var logger = new CapturingLogger();
-        var sut = new MeetMeManager(logger);
+        var sut = new ConferenceManager(logger);
         sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
         var notified = 0;
         sut.UserStateChanged += (_, _) => notified++;

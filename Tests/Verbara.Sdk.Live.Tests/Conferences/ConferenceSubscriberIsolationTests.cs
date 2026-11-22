@@ -4,9 +4,9 @@ using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 
-namespace Verbara.Sdk.Live.Tests.MeetMe;
+namespace Verbara.Sdk.Live.Tests.Conferences;
 
 /// <summary>
 /// A conference subscriber's failure is its own: every later subscriber of the same event still hears it, the table
@@ -33,7 +33,7 @@ public sealed class ConferenceSubscriberIsolationTests
     public void Raise_ShouldReachTheSecondHandlerLogAndCountOnce_WhenTheFirstHandlerThrows(ConferenceEvent conferenceEvent)
     {
         var logger = new CapturingLogger();
-        var manager = new MeetMeManager(logger);
+        var manager = new ConferenceManager(logger);
         Prepare(manager, conferenceEvent);
         var firstHeard = 0;
         var secondHeard = 0;
@@ -70,7 +70,7 @@ public sealed class ConferenceSubscriberIsolationTests
     [MemberData(nameof(AllEvents))]
     public void Raise_ShouldReachEveryHandlerAndCountNothing_WhenNoHandlerThrows(ConferenceEvent conferenceEvent)
     {
-        var manager = new MeetMeManager(NullLogger.Instance);
+        var manager = new ConferenceManager(NullLogger.Instance);
         Prepare(manager, conferenceEvent);
         var heard = new List<string>();
         Subscribe(manager, conferenceEvent, () => heard.Add("first"));
@@ -87,7 +87,7 @@ public sealed class ConferenceSubscriberIsolationTests
     [Fact]
     public void ReconcileWithSnapshot_ShouldRemoveEveryOmittedParticipantAndReturnNormally_WhenAUserLeftHandlerThrows()
     {
-        var manager = new MeetMeManager(NullLogger.Instance);
+        var manager = new ConferenceManager(NullLogger.Instance);
         manager.OnUserJoined(Room, 1, Channel("a"), "uid-a");
         manager.OnUserJoined(Room, 2, Channel("b"), "uid-b");
         manager.OnUserJoined(Room, 3, Channel("c"), "uid-c");
@@ -120,8 +120,8 @@ public sealed class ConferenceSubscriberIsolationTests
     [Fact]
     public void Raise_ShouldCountTheFaultAndReachTheLaterHandlers_WhenTheLoggerThrowsToo()
     {
-        var logger = new ReportThrowingLogger<MeetMeManager>("Subscriber failed");
-        var manager = new MeetMeManager(logger);
+        var logger = new ReportThrowingLogger<ConferenceManager>("Subscriber failed");
+        var manager = new ConferenceManager(logger);
         var secondHeard = 0;
         manager.UserJoined += (_, _) => throw new InvalidOperationException("first-handler");
         manager.UserJoined += (_, _) => secondHeard++;
@@ -140,7 +140,7 @@ public sealed class ConferenceSubscriberIsolationTests
     public void Raise_ShouldNotCatchOutOfMemory_WhenAHandlerThrowsIt()
     {
         var logger = new CapturingLogger();
-        var manager = new MeetMeManager(logger);
+        var manager = new ConferenceManager(logger);
 #pragma warning disable CA2201, MA0012
         manager.UserJoined += (_, _) => throw new OutOfMemoryException("handler-oom");
 #pragma warning restore CA2201, MA0012
@@ -156,7 +156,7 @@ public sealed class ConferenceSubscriberIsolationTests
 
     private static string Channel(string id) => "PJSIP/conf-" + id;
 
-    private static void Prepare(MeetMeManager manager, ConferenceEvent conferenceEvent)
+    private static void Prepare(ConferenceManager manager, ConferenceEvent conferenceEvent)
     {
         if (conferenceEvent is ConferenceEvent.UserLeft or ConferenceEvent.UserStateChanged)
         {
@@ -165,7 +165,7 @@ public sealed class ConferenceSubscriberIsolationTests
         }
     }
 
-    private static void Subscribe(MeetMeManager manager, ConferenceEvent conferenceEvent, Action handler)
+    private static void Subscribe(ConferenceManager manager, ConferenceEvent conferenceEvent, Action handler)
     {
         switch (conferenceEvent)
         {
@@ -176,7 +176,7 @@ public sealed class ConferenceSubscriberIsolationTests
         }
     }
 
-    private static void Raise(MeetMeManager manager, ConferenceEvent conferenceEvent, string id)
+    private static void Raise(ConferenceManager manager, ConferenceEvent conferenceEvent, string id)
     {
         switch (conferenceEvent)
         {
