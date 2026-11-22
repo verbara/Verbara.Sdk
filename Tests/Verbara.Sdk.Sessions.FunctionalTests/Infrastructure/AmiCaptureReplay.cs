@@ -113,6 +113,20 @@ internal static class AmiCaptureReplay
         "queue-revisit-asterisk-24.0.0.raw",
     ];
 
+    /// <summary>
+    /// The queue-ring-no-answer captures, one per image of <c>docker/asterisk-base-images.txt</c> (20.20.1, 22.12.0,
+    /// 23.6.0, 24.0.0), made by <c>scripts/capture-ami-recording.py</c>'s <c>queue-ring-no-answer</c> workload: a
+    /// member that rings out unanswered (step <c>rna-01</c>), one that answers busy (step <c>busy-01</c>), each before
+    /// the next member answers, and a call answered at once (step <c>answer-01</c>).
+    /// </summary>
+    public static readonly IReadOnlyList<string> QueueRingNoAnswerCaptures =
+    [
+        "queue-ring-no-answer-asterisk-20.20.1.raw",
+        "queue-ring-no-answer-asterisk-22.12.0.raw",
+        "queue-ring-no-answer-asterisk-23.6.0.raw",
+        "queue-ring-no-answer-asterisk-24.0.0.raw",
+    ];
+
     private const string MarkerUserEvent = "N5Marker";
     private const string BeforeFirstMarker = "(before-the-first-marker)";
 
