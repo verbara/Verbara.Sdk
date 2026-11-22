@@ -22,6 +22,9 @@ public sealed class RedisSessionStoreTwoServersTests : IAsyncLifetime
 {
     private const string SharedLinkedId = "1700000000.1";
 
+    /// <summary>The session id a lookup that finds nothing answers with, typed for the anonymous expectations.</summary>
+    private const string? NoSession = null;
+
     private readonly RedisFixture _fixture;
 
     public RedisSessionStoreTwoServersTests(RedisFixture fixture) => _fixture = fixture;
@@ -534,5 +537,89 @@ public sealed class RedisSessionStoreTwoServersTests : IAsyncLifetime
         new { A = foundA?.SessionId, B = foundB?.SessionId, HasTtl = ttl.HasValue }.Should().BeEquivalentTo(
             new { A = "session-a", B = "session-b", HasTtl = true },
             "the store's scripts are sent again after the server forgot them, and both ended sessions are indexed");
+    }
+
+    private Task<bool> WriteSessionKeyAsync(CallSession session) =>
+        Database.StringSetAsync(
+            $"test:session:{session.SessionId}",
+            JsonSerializer.Serialize(CallSessionSnapshot.FromSession(session), SessionJsonContext.Default.CallSessionSnapshot));
+
+    private static async Task<CallSession?> LookUpAsync(RedisSessionStore store, string? serverId, string linkedId) =>
+        serverId is null
+            ? await store.GetByLinkedIdAsync(linkedId, CancellationToken.None)
+            : await store.GetByLinkedIdAsync(serverId, linkedId, CancellationToken.None);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetByLinkedIdAsync_ShouldKeepALiveIndexEntry_WhenItsSessionKeyIsWrittenLater(bool scoped)
+    {
+        var store = CreateStore();
+        var server = scoped ? "server-b" : null;
+        // The order a Redis Cluster allows: the index entry (one node) is there before the session key (another node).
+        await Database.HashSetAsync(HashKey(SharedLinkedId), "server-b", "0|session-b");
+
+        var early = await LookUpAsync(store, server, SharedLinkedId);
+        await WriteSessionKeyAsync(CreateSession("session-b", "server-b"));
+        var late = await LookUpAsync(store, server, SharedLinkedId);
+
+        new { Early = early?.SessionId, Late = late?.SessionId, Field = (string?)await Database.HashGetAsync(HashKey(SharedLinkedId), "server-b") }
+            .Should().BeEquivalentTo(
+                new { Early = NoSession, Late = "session-b", Field = "0|session-b" },
+                "a lookup that does not find an entry's session yet leaves the entry, so the next lookup finds the session");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetByLinkedIdAsync_ShouldKeepAnEndedIndexEntry_WhenItsSessionKeyIsMissing(bool scoped)
+    {
+        var store = CreateStore();
+        var expiry = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeMilliseconds();
+        await Database.HashSetAsync(HashKey(SharedLinkedId), "server-b", $"{expiry}|session-b");
+
+        var found = await LookUpAsync(store, scoped ? "server-b" : null, SharedLinkedId);
+
+        found.Should().BeNull();
+        (await Database.HashExistsAsync(HashKey(SharedLinkedId), "server-b")).Should().BeTrue(
+            "a lookup only reads: an ended entry leaves with its retention, not with a lookup");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetByLinkedIdAsync_ShouldKeepAnIndexEntry_WhenTheSessionItNamesBelongsToAnotherLinkedIdOrServer(bool scoped)
+    {
+        var store = CreateStore();
+        await Database.HashSetAsync(
+            HashKey(SharedLinkedId), [new HashEntry("server-b", "0|session-x"), new HashEntry("server-c", "0|session-y")]);
+        await WriteSessionKeyAsync(CreateSession("session-x", "server-b", "other-linked"));
+        await WriteSessionKeyAsync(CreateSession("session-y", "server-z"));
+
+        var b = await LookUpAsync(store, scoped ? "server-b" : null, SharedLinkedId);
+        var c = scoped ? await LookUpAsync(store, "server-c", SharedLinkedId) : null;
+
+        new { B = b?.SessionId, C = c?.SessionId, Fields = await Database.HashLengthAsync(HashKey(SharedLinkedId)) }
+            .Should().BeEquivalentTo(
+                new { B = NoSession, C = NoSession, Fields = 2L },
+                "an entry whose session holds another linkedid or server is not counted, and a lookup removes nothing");
+    }
+
+    [Fact]
+    public async Task GetByLinkedIdAsync_ShouldSendNoScript_WhenAnIndexEntryNamesNoStoredSession()
+    {
+        var store = CreateStore();
+        await store.SaveAsync(CreateSession("session-a", "server-a"), CancellationToken.None);
+        await Database.HashSetAsync(HashKey(SharedLinkedId), "server-b", "0|session-b");
+        var before = await ScriptCallCountsAsync();
+
+        var unscoped = await store.GetByLinkedIdAsync(SharedLinkedId, CancellationToken.None);
+        var scopedB = await store.GetByLinkedIdAsync("server-b", SharedLinkedId, CancellationToken.None);
+
+        var after = await ScriptCallCountsAsync();
+        new { Unscoped = unscoped?.SessionId, ScopedB = scopedB?.SessionId, Scripts = after }
+            .Should().BeEquivalentTo(
+                new { Unscoped = "session-a", ScopedB = NoSession, Scripts = before },
+                "a lookup only reads, so it sends no script even over an entry whose session is not stored");
     }
 }
