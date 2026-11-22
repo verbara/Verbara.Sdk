@@ -112,6 +112,31 @@ first read already rejects a `null` kind. They use the check so that a field add
 The requests the SDK sends do not change: every request type serializes to the same bytes as before. No public API
 changes.
 
+### Fixed: an OpenAI Realtime event with `null` in a required field is skipped and counted, not passed on (#640)
+
+The OpenAI Realtime bridge now checks, when it reads a vendor event, that a field the vendor contract says is never
+`null` is not `null`. Before, an explicit `null` there was read without an error and reached the caller, a function
+handler or the bridge's own dispatch. Such an event is now skipped: it is logged once at Warning with the
+`JsonException`, counted once on `openai_realtime.frames.unparseable` (meter `Verbara.Sdk.VoiceAi.OpenAiRealtime`,
+tagged `voiceai.provider`), and the call goes on with the next event.
+
+- **`type: null`, on any event.** Before, the event was dropped without being counted or logged.
+- **A transcript delta or a final transcript with `delta` or `transcript` `null`.** Before, it was published as a
+  `RealtimeTranscriptEvent` whose `Transcript` is `null`.
+- **A function call with `call_id`, `name` or `arguments` `null`.** Before, a `null` `name` threw
+  `ArgumentNullException` and ended the bridge's session while the caller was on the line; a `null` `call_id` or `arguments` ran the registered handler and
+  published a `RealtimeFunctionCalledEvent` with the `null` value. Now no handler runs, no `RealtimeFunctionCalledEvent`
+  is published and nothing is sent back to the vendor.
+- **An audio delta with `delta: null`** was already skipped and counted. Its Warning now carries the `JsonException`;
+  before, it carried no exception.
+
+An `error` event whose `error.message` is `null` still publishes one `RealtimeErrorEvent` with the message
+`unknown error`, uncounted, as before: the vendor names a failure, so the bridge reports it rather than skipping it. A
+`null` event root is still ignored without being counted.
+
+The messages the bridge sends do not change: every request type serializes to the same bytes as before. No public API
+changes.
+
 ### Changed: `Verbara.Sdk.OpenTelemetry` moves to OpenTelemetry 1.21 (#618)
 
 `Verbara.Sdk.OpenTelemetry` now declares `OpenTelemetry`, `OpenTelemetry.Extensions.Hosting`,
