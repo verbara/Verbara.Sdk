@@ -119,7 +119,7 @@ public sealed class AgentSessionTrackerTests : IDisposable
     }
 
     [Fact]
-    public void OnRingNoAnswer_ShouldIncrementCallsMissed()
+    public void OnRingNoAnswer_ShouldIncrementCallsMissed_WhenARingNoAnswerIsFedByHand()
     {
         _events.OnNext(new CallRingNoAnswerEvent("sess-1", "srv-1", DateTimeOffset.UtcNow,
             "agent-1", "queue-1"));
