@@ -409,7 +409,7 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
                 LmntServerNotification? notification;
                 try
                 {
-                    notification = JsonSerializer.Deserialize(json, VoiceAiTtsJsonContext.Default.LmntServerNotification);
+                    notification = JsonSerializer.Deserialize(json, TtsJsonReadOptions.For<LmntServerNotification>.TypeInfo);
                 }
                 catch (JsonException)
                 {

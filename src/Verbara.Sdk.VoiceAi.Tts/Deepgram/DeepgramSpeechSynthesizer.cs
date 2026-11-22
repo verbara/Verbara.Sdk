@@ -323,7 +323,7 @@ public sealed class DeepgramSpeechSynthesizer : SpeechSynthesizer
         DeepgramTtsServerMessage? control;
         try
         {
-            control = JsonSerializer.Deserialize(json, VoiceAiTtsJsonContext.Default.DeepgramTtsServerMessage);
+            control = JsonSerializer.Deserialize(json, TtsJsonReadOptions.For<DeepgramTtsServerMessage>.TypeInfo);
         }
         catch (JsonException)
         {

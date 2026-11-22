@@ -137,6 +137,23 @@ An `error` event whose `error.message` is `null` still publishes one `RealtimeEr
 The messages the bridge sends do not change: every request type serializes to the same bytes as before. No public API
 changes.
 
+### Changed: the TTS synthesizers read provider replies through the null check, which rejects nothing today (#641)
+
+The Cartesia, Deepgram, ElevenLabs and LMNT synthesizers now read each provider reply with the same check the STT
+recognizers use (#636): a reply field declared never `null` is rejected when it arrives as `null`. No reply is rejected
+by it today, by design. No vendor contract that the SDK can check says that any TTS reply field is never `null`, so
+every reply field is declared nullable, and an explicit `null` reads exactly as it did before. The check is wired in so
+that a field added later is held to its contract. Azure and Speechmatics return raw audio and have no JSON reply to
+check.
+
+- **Cartesia's `type`.** It is now declared nullable. A frame whose `type` is `null` or absent is ignored, as a frame
+  of an unknown kind is, and is not counted. Its `data` is not played, and the audio after it still arrives. This was
+  already the behaviour before; tests now pin it.
+- **A `null` reply root** (the frame `null`) is still ignored without being counted, for all four providers.
+
+The requests the SDK sends do not change: every request type serializes to the same bytes as before. No public API
+changes.
+
 ### Changed: `Verbara.Sdk.OpenTelemetry` moves to OpenTelemetry 1.21 (#618)
 
 `Verbara.Sdk.OpenTelemetry` now declares `OpenTelemetry`, `OpenTelemetry.Extensions.Hosting`,

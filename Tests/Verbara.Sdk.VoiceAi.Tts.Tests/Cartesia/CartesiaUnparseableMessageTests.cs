@@ -194,6 +194,38 @@ public sealed class CartesiaUnparseableMessageTests : IAsyncLifetime
         _unparseable.Count.Should().Be(3, "every frame whose audio did not decode is counted");
     }
 
+    /// <summary>
+    /// A JSON null root is outside nullable-member enforcement. The existing root guard ignores it,
+    /// and the following audio and terminator still complete synthesis without counting the root.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldIgnoreRootNullAndDeliverFollowingAudio_WhenPayloadIsJsonNull()
+    {
+        _server.TextFramesAmongAudio.Add((0, "null"));
+
+        var frames = await Synthesize();
+
+        frames.SelectMany(f => f.ToArray()).Should().Equal(RecordedAudio);
+        _unparseable.Count.Should().Be(0, "a null root is ignored rather than counted as unreadable");
+    }
+
+    /// <summary>
+    /// Hand-authored frames: no licensed contract establishes a non-null kind. A null or absent kind
+    /// is undispatchable, so its distinct three audio bytes are ignored; subsequent chunk/done frames work.
+    /// </summary>
+    [Theory]
+    [InlineData("{\"type\":null,\"data\":\"AQID\",\"done\":false}")]
+    [InlineData("{\"data\":\"AQID\",\"done\":false}")]
+    public async Task SynthesizeAsync_ShouldIgnoreUndispatchableFrameAndDeliverFollowingAudio_WhenKindIsNullOrAbsent(string json)
+    {
+        _server.TextFramesAmongAudio.Add((0, json));
+
+        var frames = await Synthesize();
+
+        frames.SelectMany(f => f.ToArray()).Should().Equal(RecordedAudio);
+        _unparseable.Count.Should().Be(0, "a missing kind has no dispatch target and is ignored like an unknown kind");
+    }
+
     private async Task<List<ReadOnlyMemory<byte>>> Synthesize() =>
         await BuildSynthesizer().SynthesizeAsync("hola mundo", AudioFormat.Slin16Mono8kHz).ToListAsync();
 

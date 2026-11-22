@@ -152,6 +152,21 @@ public sealed class LmntUnparseableMessageTests : IAsyncLifetime
         _unparseable.Count.Should().Be(0);
     }
 
+    /// <summary>
+    /// A JSON null root is outside nullable-member enforcement. The existing root guard ignores it,
+    /// and the following audio and terminator still complete synthesis without counting the root.
+    /// </summary>
+    [Fact]
+    public async Task SynthesizeAsync_ShouldIgnoreRootNullAndDeliverFollowingAudio_WhenPayloadIsJsonNull()
+    {
+        _server.TextFramesAmongAudio.Add((0, "null"));
+
+        var frames = await Synthesize();
+
+        frames.SelectMany(f => f.ToArray()).Should().Equal(RecordedAudio);
+        _unparseable.Count.Should().Be(0, "a null root is ignored rather than counted as unreadable");
+    }
+
     private async Task<List<ReadOnlyMemory<byte>>> Synthesize() =>
         await BuildSynthesizer().SynthesizeAsync("hola mundo", AudioFormat.Slin16Mono8kHz).ToListAsync();
 

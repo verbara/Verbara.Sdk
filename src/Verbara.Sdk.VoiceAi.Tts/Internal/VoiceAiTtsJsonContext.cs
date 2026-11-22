@@ -110,7 +110,9 @@ internal sealed class CartesiaTtsOutputFormat
 internal sealed class CartesiaTtsServerMessage
 {
     /// <summary>Discriminator: <c>chunk</c>, <c>done</c>, <c>error</c>, …</summary>
-    [JsonPropertyName("type")] public string Type { get; set; } = string.Empty;
+    // No openly licensed surface contract establishes non-nullability. A null kind
+    // cannot be dispatched and is ignored, like an unknown message kind.
+    [JsonPropertyName("type")] public string? Type { get; set; } = string.Empty;
 
     /// <summary>Base64 of the audio in the requested <c>output_format</c>. Present on <c>chunk</c>.</summary>
     [JsonPropertyName("data")] public string? Data { get; set; }
