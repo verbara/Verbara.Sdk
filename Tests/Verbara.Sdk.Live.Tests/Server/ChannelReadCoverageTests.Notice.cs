@@ -744,7 +744,7 @@ public sealed partial class ChannelReadCoverageTests
             await DeliverAsync(run, peer, hold, "throws-1");
         await third.Task.WaitAsync(Run.Bound);
         await peer.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Ghost, GhostChannel, Ghost));
-        await FenceAsync(run);
+        await DispatchFenceAsync(run, peer, "throws-1-after-ghost");
         var failures = run.ServerLog.Entries.Where(e => e.Line.Contains(NoticeSubscriberFailed, StringComparison.Ordinal)).ToList();
 
         using (new AssertionScope())

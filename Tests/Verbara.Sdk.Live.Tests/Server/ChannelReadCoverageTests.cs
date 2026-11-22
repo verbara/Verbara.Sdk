@@ -716,8 +716,28 @@ public sealed partial class ChannelReadCoverageTests
         }
     }
 
+    /// <summary>
+    /// A reader fence: the Ping's answer says the reader has handed every earlier event to the buffer. It does not say the
+    /// pump has dispatched them; for state an earlier event's dispatch writes, use <see cref="DispatchFenceAsync"/>.
+    /// </summary>
     private static async Task FenceAsync(Run run) =>
         _ = await run.Connection.SendActionAsync(new PingAction()).AsTask().WaitAsync(Run.Bound);
+
+    /// <summary>
+    /// A dispatch fence: writes the marker <c>UserEvent</c> <paramref name="name"/> and waits until it is dispatched. The
+    /// pump dispatches in order and calls each event's observers in turn, so every earlier event's dispatch has returned.
+    /// </summary>
+    private static async Task DispatchFenceAsync(Run run, BootingAsterisk peer, string name)
+    {
+        var dispatched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var subscription = run.Connection.Subscribe(new Observer(e =>
+        {
+            if (e is UserEventEvent u && u.UserEvent == name)
+                dispatched.TrySetResult();
+        }));
+        await peer.SendEventAsync("UserEvent", DispatchGate.Frame(name));
+        await dispatched.Task.WaitAsync(Run.Bound);
+    }
 
     private static Task BarrierSignal(Run run)
     {
