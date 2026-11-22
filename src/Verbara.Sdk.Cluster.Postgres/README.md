@@ -61,11 +61,11 @@ CREATE TABLE IF NOT EXISTS cluster_distributed_lock (
     owner    TEXT NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL
 );
--- V002
+-- V002 (runs the ALTER only while pg_attribute has no acquired_at column)
 ALTER TABLE cluster_distributed_lock ADD COLUMN IF NOT EXISTS acquired_at TIMESTAMPTZ;
 ```
 
-`EnsureSchemaAsync` runs both, in order, on every call; there is no version table. Each statement is idempotent, and several hosts may run it at once against the same database.
+`EnsureSchemaAsync` runs both, in order, on every call, in one transaction; there is no version table. Each statement is idempotent, and several hosts may run it at once against the same database: a transaction-scoped advisory lock makes their runs wait for each other. Once the column exists, V002 issues no `ALTER TABLE`, so a start no longer takes the `ACCESS EXCLUSIVE` lock that would wait behind an open reader of the table and hold up every acquire behind it. The role that runs `EnsureSchemaAsync` must own the table, as before: V001's `COMMENT ON TABLE` requires it.
 
 ## AOT
 
