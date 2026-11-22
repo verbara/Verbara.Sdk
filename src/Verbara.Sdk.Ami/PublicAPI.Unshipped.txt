@@ -97,3 +97,5 @@
 *REMOVED*Verbara.Sdk.Ami.Events.StatusEvent.Link.set -> void
 *REMOVED*Verbara.Sdk.Ami.Events.StatusEvent.State.get -> string?
 *REMOVED*Verbara.Sdk.Ami.Events.StatusEvent.State.set -> void
+Verbara.Sdk.Ami.Actions.SendFlashAction.Receive.get -> bool?
+Verbara.Sdk.Ami.Actions.SendFlashAction.Receive.set -> void
