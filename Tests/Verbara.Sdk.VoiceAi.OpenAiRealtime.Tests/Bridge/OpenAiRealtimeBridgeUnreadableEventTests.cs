@@ -101,7 +101,7 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
             AssertServedPastOneCountedSkip(seen);
             seen.UnparseableTags.Should().HaveCount(1, "a delta the vendor's contract says is a string is unreadable when null");
             seen.Log.Where(e => e.Level == LogLevel.Warning).Should().ContainSingle()
-                .Which.Exception.Should().BeNull("no decoder failed: the delta was absent");
+                .Which.Exception.Should().BeOfType<JsonException>("the read fence rejects an explicit null delta during decode");
         }
     }
 
@@ -129,6 +129,109 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
                 "no zero-length audio frame reaches the caller; the readable delta's 20 ms at 8 kHz does");
             seen.Failed.Should().Be(0);
             seen.Unparseable.Should().Be(0, "a delta without audio is not an unreadable event");
+            seen.Log.Count(e => e.Level == LogLevel.Warning).Should().Be(0);
+        }
+    }
+
+    [Theory]
+    [InlineData("""{"type":null}""")]
+    [InlineData("""{"type":null,"delta":"AAAA"}""")]
+    [InlineData("""{"type":null,"delta":"lost"}""")]
+    [InlineData("""{"type":null,"transcript":"lost"}""")]
+    [InlineData("""{"type":null,"call_id":"c1","name":"f","arguments":"{}"}""")]
+    [InlineData("""{"type":null,"error":{"message":"boom"}}""")]
+    public async Task HandleSessionAsync_ShouldCountSkipAndKeepServing_WhenEventTypeIsExplicitNull(string frame)
+    {
+        // The six DTO shapes share the first-pass discriminator. A null Type cannot reach a
+        // specific second pass; direct read-contract cases separately hold those annotations.
+        var handler = new CountingFunctionHandler();
+        var seen = await ServeAsync(Frames(frame), handlers: [handler]);
+
+        using (new AssertionScope())
+        {
+            AssertServedPastOneCountedSkip(seen);
+            handler.Calls.Should().Be(0);
+            seen.Events.OfType<RealtimeFunctionCalledEvent>().Should().BeEmpty();
+            seen.VendorReceived.Should().ContainSingle("only session.update is sent");
+            seen.UnparseableTags.Should().HaveCount(1);
+            seen.Log.Where(e => e.Level == LogLevel.Warning).Should().ContainSingle()
+                .Which.Exception.Should().BeOfType<JsonException>();
+        }
+    }
+
+    [Theory]
+    [InlineData("""{"type":"response.output_audio_transcript.delta","delta":null}""")]
+    [InlineData("""{"type":"response.output_audio_transcript.done","transcript":null}""")]
+    public async Task HandleSessionAsync_ShouldCountSkipAndKeepServing_WhenTranscriptMemberIsExplicitNull(string frame)
+    {
+        var seen = await ServeAsync(Frames(frame));
+
+        using (new AssertionScope())
+        {
+            AssertServedPastOneCountedSkip(seen);
+            seen.Events.OfType<RealtimeTranscriptEvent>().Should().ContainSingle()
+                .Which.Transcript.Should().Be(FinalTranscript, "the null transcript must never reach the subscriber");
+            seen.UnparseableTags.Should().HaveCount(1);
+            seen.Log.Where(e => e.Level == LogLevel.Warning).Should().ContainSingle()
+                .Which.Exception.Should().BeOfType<JsonException>();
+        }
+    }
+
+    [Theory]
+    [InlineData("""{"type":"response.function_call_arguments.done","call_id":null,"name":"f","arguments":"{}"}""")]
+    [InlineData("""{"type":"response.function_call_arguments.done","call_id":"c1","name":null,"arguments":"{}"}""")]
+    [InlineData("""{"type":"response.function_call_arguments.done","call_id":"c1","name":"f","arguments":null}""")]
+    public async Task HandleSessionAsync_ShouldCountSkipAndCallNothing_WhenFunctionMemberIsExplicitNull(string frame)
+    {
+        var handler = new CountingFunctionHandler();
+
+        var seen = await ServeAsync(Frames(frame), handlers: [handler]);
+
+        using (new AssertionScope())
+        {
+            AssertServedPastOneCountedSkip(seen);
+            handler.Calls.Should().Be(0, "a registered handler must not run with an unreadable call");
+            seen.Events.OfType<RealtimeFunctionCalledEvent>().Should().BeEmpty();
+            seen.VendorReceived.Should().ContainSingle("only session.update is sent; no output or response answers the null call");
+            seen.UnparseableTags.Should().HaveCount(1);
+            seen.Log.Where(e => e.Level == LogLevel.Warning).Should().ContainSingle()
+                .Which.Exception.Should().BeOfType<JsonException>();
+        }
+    }
+
+    [Fact]
+    public async Task HandleSessionAsync_ShouldPublishUnknownErrorAndKeepServing_WhenErrorMessageIsExplicitNull()
+    {
+        var seen = await ServeAsync(Frames("""{"type":"error","error":{"message":null}}"""));
+
+        using (new AssertionScope())
+        {
+            seen.FaultText.Should().Be("none");
+            seen.EndedWhileServed.Should().BeFalse();
+            seen.Events.OfType<RealtimeErrorEvent>().Should().ContainSingle().Which.Message.Should().Be("unknown error");
+            seen.Log.Count(e => e.EventId.Name == "OpenAiError").Should().Be(1);
+            seen.FinalTranscripts.Should().Equal(FinalTranscript);
+            seen.AudioReachedCaller.Should().BeTrue();
+            seen.Failed.Should().Be(0);
+            seen.Unparseable.Should().Be(0);
+            seen.Log.Count(e => e.Level == LogLevel.Warning).Should().Be(0);
+        }
+    }
+
+    [Fact]
+    public async Task HandleSessionAsync_ShouldIgnoreWithoutCounting_WhenPayloadIsRootNull()
+    {
+        var seen = await ServeAsync(Frames("null"));
+
+        using (new AssertionScope())
+        {
+            seen.FaultText.Should().Be("none");
+            seen.EndedWhileServed.Should().BeFalse();
+            seen.FinalTranscripts.Should().Equal(FinalTranscript);
+            seen.AudioReachedCaller.Should().BeTrue();
+            seen.Failed.Should().Be(0);
+            seen.Unparseable.Should().Be(0, "root null is ignored outside the member fence");
+            seen.Events.OfType<RealtimeErrorEvent>().Should().BeEmpty();
             seen.Log.Count(e => e.Level == LogLevel.Warning).Should().Be(0);
         }
     }
@@ -455,14 +558,15 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
     /// </summary>
     private static async Task<Observation> ServeAsync(
         Func<RealtimeFakeServer, Task> send,
-        Func<IObservable<RealtimeEvent>, IDisposable>? subscribe = null)
+        Func<IObservable<RealtimeEvent>, IDisposable>? subscribe = null,
+        IRealtimeFunctionHandler[]? handlers = null)
     {
         await using var fakeOpenAi = new RealtimeFakeServer { HoldOpenUntilDisposed = true };
         fakeOpenAi.Start();
 
         var (session, audioServer, client) = await CreateAudioSessionAsync();
         var log = new RecordingLogger<OpenAiRealtimeBridge>();
-        await using var bridge = CreateBridge(fakeOpenAi, log);
+        await using var bridge = CreateBridge(fakeOpenAi, log, handlers);
         using var metrics = new MeterCapture(MeterName);
         using var collector = new RealtimeEventCollector(
             bridge.Events, e => e.OfType<RealtimeTranscriptEvent>().Any(t => t.IsFinal));
@@ -570,7 +674,8 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
         return (session, audioServer, client);
     }
 
-    private static OpenAiRealtimeBridge CreateBridge(RealtimeFakeServer fakeOpenAi, ILogger<OpenAiRealtimeBridge> logger)
+    private static OpenAiRealtimeBridge CreateBridge(RealtimeFakeServer fakeOpenAi, ILogger<OpenAiRealtimeBridge> logger,
+        IRealtimeFunctionHandler[]? handlers = null)
     {
         var options = Options.Create(new OpenAiRealtimeOptions
         {
@@ -578,10 +683,25 @@ public sealed class OpenAiRealtimeBridgeUnreadableEventTests
             Model = "gpt-realtime",
             InputFormat = Audio.AudioFormat.Slin16Mono8kHz,
         });
-        return new OpenAiRealtimeBridge(options, new RealtimeFunctionRegistry([]), logger)
+        return new OpenAiRealtimeBridge(options, new RealtimeFunctionRegistry(handlers ?? []), logger)
         {
             BaseUri = new Uri($"ws://127.0.0.1:{fakeOpenAi.Port}/"),
         };
+    }
+
+    private sealed class CountingFunctionHandler : IRealtimeFunctionHandler
+    {
+        private int _calls;
+        public int Calls => Volatile.Read(ref _calls);
+        public string Name => "f";
+        public string Description => "Counts calls";
+        public string ParametersSchema => "{}";
+
+        public ValueTask<string> ExecuteAsync(string argumentsJson, CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _calls);
+            return ValueTask.FromResult("{}");
+        }
     }
 
     /// <summary>A caller that speaks the AudioSocket wire directly, as Asterisk does.</summary>

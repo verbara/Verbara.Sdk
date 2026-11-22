@@ -25,14 +25,15 @@ internal static class SttSendContextScanner
     public const string ReadOptionsType = "SttJsonReadOptions";
 
     /// <summary>The violations in <paramref name="source"/>, in source order.</summary>
-    public static IReadOnlyList<SttSendContextViolation> Scan(string source, string path)
+    public static IReadOnlyList<SttSendContextViolation> Scan(string source, string path, string readOptionsType = ReadOptionsType)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(readOptionsType);
 
         var root = CSharpSyntaxTree.ParseText(source).GetRoot();
         var violations = new List<SttSendContextViolation>();
-        foreach (var reference in ReadOptionsReferences(root))
+        foreach (var reference in ReadOptionsReferences(root, readOptionsType))
         {
             var line = reference.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
             var call = EnclosingSerializerCall(reference);
@@ -44,7 +45,7 @@ internal static class SttSendContextScanner
             else if (!SerializerMethod(call)!.StartsWith("Deserialize", StringComparison.Ordinal))
             {
                 violations.Add(new SttSendContextViolation(path, line,
-                    $"passed to JsonSerializer.{SerializerMethod(call)}: sends must use VoiceAiSttJsonContext.Default"));
+                    $"passed to JsonSerializer.{SerializerMethod(call)}: sends must use the plain generated context"));
             }
         }
 
@@ -68,20 +69,23 @@ internal static class SttSendContextScanner
     /// The number of <c>JsonSerializer.Deserialize*</c> calls in <paramref name="source"/> that read
     /// through the strict options: the fenced read sites.
     /// </summary>
-    public static int CountStrictReads(string source)
+    public static int CountStrictReads(string source) => CountStrictReads(source, ReadOptionsType);
+
+    public static int CountStrictReads(string source, string readOptionsType)
     {
         ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(readOptionsType);
 
         var root = CSharpSyntaxTree.ParseText(source).GetRoot();
-        return ReadOptionsReferences(root)
+        return ReadOptionsReferences(root, readOptionsType)
             .Select(EnclosingSerializerCall)
             .Count(call => call is not null &&
                 SerializerMethod(call)!.StartsWith("Deserialize", StringComparison.Ordinal));
     }
 
-    private static IEnumerable<IdentifierNameSyntax> ReadOptionsReferences(SyntaxNode root) =>
+    private static IEnumerable<IdentifierNameSyntax> ReadOptionsReferences(SyntaxNode root, string readOptionsType) =>
         root.DescendantNodes().OfType<IdentifierNameSyntax>()
-            .Where(id => id.Identifier.Text == ReadOptionsType);
+            .Where(id => id.Identifier.Text == readOptionsType);
 
     /// <summary>
     /// The innermost <c>JsonSerializer.X(…)</c> invocation whose argument list contains

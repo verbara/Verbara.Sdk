@@ -87,5 +87,7 @@ internal sealed class ServerErrorEvent
 
 internal sealed class ServerError
 {
-    public string Message { get; set; } = "";
+    // Deliberately tolerant even though the vendor contract requires a string: an explicit null
+    // message must still surface the failure, with the bridge's "unknown error" fallback.
+    public string? Message { get; set; } = "";
 }
