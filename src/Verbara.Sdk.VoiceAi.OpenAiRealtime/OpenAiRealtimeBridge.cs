@@ -568,15 +568,17 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
             ServerEventBase? baseEvt;
             try
             {
-                baseEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ServerEventBase);
+                baseEvt = JsonSerializer.Deserialize(json, RealtimeJsonReadOptions.For<ServerEventBase>.TypeInfo);
             }
             catch (JsonException ex)
             {
-                // This pass reads the type alone, so it fails only on a frame that is not JSON or whose type
-                // is not a string: neither says "error", the test the error branch below applies.
+                // This pass reads type alone: malformed JSON, an incompatible root shape or an explicit
+                // non-string type (including null) cannot name "error". A frame with type:"error"
+                // still reaches the error branch, which reports even an unreadable error body.
                 SkipUnreadable(channelId, ex, eventType: "(type unreadable)");
                 continue;
             }
+            // Root null is outside the member fence: no event to dispatch, ignored without counting.
             if (baseEvt is null) continue;
 
             switch (baseEvt.Type)
@@ -591,12 +593,12 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     ResponseAudioDeltaEvent? audioEvt;
                     try
                     {
-                        audioEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioDeltaEvent);
+                        audioEvt = JsonSerializer.Deserialize(json, RealtimeJsonReadOptions.For<ResponseAudioDeltaEvent>.TypeInfo);
                     }
                     catch (JsonException ex) { SkipUnreadable(channelId, ex, baseEvt.Type); break; }
                     if (audioEvt is null) break;
-                    // The vendor documents delta as a required string: a null one is an event the bridge
-                    // cannot read, and so is one the base64 decoder rejects. Only the decode is guarded.
+                    // Unreachable under the read fence, retained as defence if its wiring changes:
+                    // null audio is unreadable, never passed to the base64 decoder.
                     if (audioEvt.Delta is null) { SkipUnreadable(channelId, exception: null, baseEvt.Type); break; }
                     byte[] pcm16Bytes;
                     try
@@ -636,7 +638,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     ResponseAudioTranscriptDeltaEvent? tEvt;
                     try
                     {
-                        tEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioTranscriptDeltaEvent);
+                        tEvt = JsonSerializer.Deserialize(json, RealtimeJsonReadOptions.For<ResponseAudioTranscriptDeltaEvent>.TypeInfo);
                     }
                     catch (JsonException ex) { SkipUnreadable(channelId, ex, baseEvt.Type); break; }
                     if (tEvt is not null)
@@ -649,7 +651,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     ResponseAudioTranscriptDoneEvent? tEvt;
                     try
                     {
-                        tEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ResponseAudioTranscriptDoneEvent);
+                        tEvt = JsonSerializer.Deserialize(json, RealtimeJsonReadOptions.For<ResponseAudioTranscriptDoneEvent>.TypeInfo);
                     }
                     catch (JsonException ex) { SkipUnreadable(channelId, ex, baseEvt.Type); break; }
                     if (tEvt is not null)
@@ -713,9 +715,11 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
                     ServerErrorEvent? errEvt;
                     try
                     {
-                        errEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.ServerErrorEvent);
+                        errEvt = JsonSerializer.Deserialize(json, RealtimeJsonReadOptions.For<ServerErrorEvent>.TypeInfo);
                     }
                     catch (JsonException) { ReportUnreadableError(channelId, json); break; }
+                    // Null means the vendor named a failure without readable message text. Publish
+                    // the failure with a fallback rather than skipping it or losing the error signal.
                     var msg = errEvt?.Error?.Message ?? "unknown error";
                     RealtimeLog.OpenAiError(_logger, channelId, msg);
                     Publish(new RealtimeErrorEvent(channelId, DateTimeOffset.UtcNow, msg));
@@ -768,7 +772,7 @@ public class OpenAiRealtimeBridge : ISessionHandler, IAsyncDisposable
         FunctionCallArgumentsDoneEvent? fnEvt;
         try
         {
-            fnEvt = JsonSerializer.Deserialize(json, RealtimeJsonContext.Default.FunctionCallArgumentsDoneEvent);
+            fnEvt = JsonSerializer.Deserialize(json, RealtimeJsonReadOptions.For<FunctionCallArgumentsDoneEvent>.TypeInfo);
         }
         catch (JsonException ex)
         {
