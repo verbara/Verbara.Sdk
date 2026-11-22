@@ -468,6 +468,11 @@ public sealed partial class ChannelReadCoverageTests
             return ValueTask.CompletedTask;
         };
 
+        // Both reads' Status answers wait for the drop's delivery. Their StatusComplete events go through the event buffer
+        // too: answered while DeliverAsync runs, they could fill it after its last filler and have its tail refused.
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.StatusAnsweredAfter = answer.Task;
+
         var readA = Task.Run(async () => await run.Server.ReconcileChannelsAsync());
         aInside.Wait(Run.Bound).Should().BeTrue("premise: A holds the read gate in its opening seam");
         var readB = Task.Run(async () => await run.Server.ReconcileChannelsAsync());
@@ -483,6 +488,7 @@ public sealed partial class ChannelReadCoverageTests
         run.Server.ChannelReadBegun = null;
         await DeliverAsync(run, peer, hold, "parked-1");
         hold.Dispose();
+        answer.SetResult();
         await Task.WhenAll(readA, readB).WaitAsync(Run.Bound);
 
         using (new AssertionScope())
