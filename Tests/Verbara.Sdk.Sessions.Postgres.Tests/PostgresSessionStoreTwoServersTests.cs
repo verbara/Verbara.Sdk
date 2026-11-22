@@ -156,6 +156,26 @@ public sealed class PostgresSessionStoreTwoServersTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetByLinkedIdAsync_ShouldReturnTheNewestSession_WhenTheOlderOneWasSavedFirst()
+    {
+        var store = CreateStore();
+        var now = DateTimeOffset.UtcNow;
+        await store.SaveAsync(
+            new CallSession("session-older", SharedLinkedId, "server-a", CallDirection.Inbound) { CreatedAt = now.AddMinutes(-1) },
+            CancellationToken.None);
+        await store.SaveAsync(
+            new CallSession("session-newer", SharedLinkedId, "server-a", CallDirection.Inbound) { CreatedAt = now },
+            CancellationToken.None);
+
+        var unscoped = await store.GetByLinkedIdAsync(SharedLinkedId, CancellationToken.None);
+        var scoped = await store.GetByLinkedIdAsync("server-a", SharedLinkedId, CancellationToken.None);
+
+        new { Unscoped = unscoped?.SessionId, Scoped = scoped?.SessionId }.Should().BeEquivalentTo(
+            new { Unscoped = "session-newer", Scoped = "session-newer" },
+            "both lookups order by creation time, not by the order the rows were written");
+    }
+
+    [Fact]
     public async Task GetByLinkedIdAsync_ShouldReturnNothing_WhenTwoServersHoldTheLinkedIdAndOneHasEnded()
     {
         var store = CreateStore();

@@ -349,4 +349,190 @@ public sealed class RedisSessionStoreTwoServersTests : IAsyncLifetime
         found.Should().NotBeNull("the store's scripts are sent again after the server forgot them");
         found!.SessionId.Should().Be("session-b");
     }
+
+    private static CallSession CreateSession(string sessionId, string serverId, string linkedId)
+    {
+        var session = new CallSession(sessionId, linkedId, serverId, CallDirection.Inbound);
+        session.Transition(CallSessionState.Dialing);
+        return session;
+    }
+
+    [Fact]
+    public async Task SaveAsync_ShouldClearTheIndexExpiry_WhenALiveSessionIsSavedAfterTheOtherServersEnded()
+    {
+        var store = CreateStore(completedRetention: TimeSpan.FromSeconds(2));
+        var a = CreateSession("session-a", "server-a");
+        await store.SaveAsync(a, CancellationToken.None);
+        a.Transition(CallSessionState.Failed);
+        await store.SaveAsync(a, CancellationToken.None);
+
+        await store.SaveAsync(CreateSession("session-b", "server-b"), CancellationToken.None);
+        await Task.Delay(TimeSpan.FromSeconds(3)); // fence-allow: SETTLE — outlasts the 2 s retention, whose expiry Redis runs on its own clock
+
+        var ttl = await Database.KeyTimeToLiveAsync(HashKey(SharedLinkedId));
+        var found = await store.GetByLinkedIdAsync(SharedLinkedId, CancellationToken.None);
+        new { Found = found?.SessionId, HasTtl = ttl.HasValue }.Should().BeEquivalentTo(
+            new { Found = "session-b", HasTtl = false },
+            "a live save clears the expiry the other server's ended session left on the index key");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ShouldRemoveTheDeletedSessionsIndexField_AndLetTheKeyExpireAfterTheOtherEnds()
+    {
+        var store = CreateStore(completedRetention: TimeSpan.FromSeconds(30));
+        await store.SaveAsync(CreateSession("session-a", "server-a"), CancellationToken.None);
+        var b = CreateSession("session-b", "server-b");
+        await store.SaveAsync(b, CancellationToken.None);
+
+        await store.DeleteAsync("session-a", CancellationToken.None);
+        var fieldA = await Database.HashExistsAsync(HashKey(SharedLinkedId), "server-a");
+        b.Transition(CallSessionState.Failed);
+        await store.SaveAsync(b, CancellationToken.None);
+        var ttl = await Database.KeyTimeToLiveAsync(HashKey(SharedLinkedId));
+
+        new { FieldA = fieldA, HasTtl = ttl.HasValue }.Should().BeEquivalentTo(
+            new { FieldA = false, HasTtl = true },
+            "a delete removes its server's field, so the key expires once the remaining session has ended");
+    }
+
+    [Fact]
+    public async Task SaveAsync_ShouldKeepBothServersEntries_WhenTwoServersWriteTheSameLinkedIdsConcurrently()
+    {
+        await using var muxB = await ConnectionMultiplexer.ConnectAsync(_fixture.ConnectionString);
+        var storeA = CreateStore(completedRetention: TimeSpan.FromMinutes(5));
+        var storeB = new RedisSessionStore(muxB, new RedisSessionStoreOptions
+        {
+            KeyPrefix = "test:",
+            CompletedRetention = TimeSpan.FromMinutes(5),
+        });
+        const int n = 300;
+        var sa = Enumerable.Range(0, n).Select(i => CreateSession($"a-{i}", "server-a", $"L-{i}")).ToArray();
+        var sb = Enumerable.Range(0, n).Select(i => CreateSession($"b-{i}", "server-b", $"L-{i}")).ToArray();
+
+        await Task.WhenAll(
+            Task.Run(async () => { foreach (var s in sa) await storeA.SaveAsync(s, CancellationToken.None); }),
+            Task.Run(async () => { foreach (var s in sb) await storeB.SaveAsync(s, CancellationToken.None); }),
+            Task.Run(async () => await storeA.SaveBatchAsync(sa, CancellationToken.None)),
+            Task.Run(async () => await storeB.SaveBatchAsync(sb, CancellationToken.None)));
+
+        // server-a ends every session while server-b re-saves half of its own live and deletes the other half.
+        foreach (var s in sa) s.Transition(CallSessionState.Failed);
+        await Task.WhenAll(
+            Task.Run(async () => await storeA.SaveBatchAsync(sa, CancellationToken.None)),
+            Task.Run(async () => { for (var i = 1; i < n; i += 2) await storeB.SaveAsync(sb[i], CancellationToken.None); }),
+            Task.Run(async () => { for (var i = 0; i < n; i += 2) await storeB.DeleteAsync($"b-{i}", CancellationToken.None); }));
+
+        var bad = new List<string>();
+        for (var i = 0; i < n; i++)
+        {
+            var a = await storeA.GetByLinkedIdAsync("server-a", $"L-{i}", CancellationToken.None);
+            var b = await storeA.GetByLinkedIdAsync("server-b", $"L-{i}", CancellationToken.None);
+            var u = await storeA.GetByLinkedIdAsync($"L-{i}", CancellationToken.None);
+            var ttl = await Database.KeyTimeToLiveAsync(HashKey($"L-{i}"));
+            var bDeleted = i % 2 == 0;
+            var ok = a?.SessionId == $"a-{i}"
+                && (bDeleted ? b is null : b?.SessionId == $"b-{i}")
+                && (bDeleted ? u?.SessionId == $"a-{i}" : u is null)
+                && (bDeleted ? ttl.HasValue : !ttl.HasValue);
+            if (!ok) bad.Add($"L-{i}: a={a?.SessionId} b={b?.SessionId} u={u?.SessionId} ttl={ttl}");
+        }
+
+        bad.Should().BeEmpty("each server's entry is written, removed and expired on its own, whatever the other does meanwhile");
+    }
+
+    [Fact]
+    public async Task GetByLinkedIdAsync_ShouldCountThe210EntryOnce_WhenItsServerAlsoHasANewEntry()
+    {
+        var store = CreateStore();
+        await SeedAs210Async(CreateSession("session-old", "server-b"));
+        await store.SaveAsync(CreateSession("session-new", "server-b"), CancellationToken.None);
+
+        var unscoped = await store.GetByLinkedIdAsync(SharedLinkedId, CancellationToken.None);
+        var scoped = await store.GetByLinkedIdAsync("server-b", SharedLinkedId, CancellationToken.None);
+
+        new { Unscoped = unscoped?.SessionId, Scoped = scoped?.SessionId }.Should().BeEquivalentTo(
+            new { Unscoped = "session-new", Scoped = "session-new" },
+            "the earlier version's entry and the new one belong to the same server, so one server holds the linkedid");
+    }
+
+    [Fact]
+    public async Task SaveAsync_ShouldClearAnIndexExpiry_WhenAnotherServersEntryIsLive()
+    {
+        var store = CreateStore();
+        // The state a live save of server-b leaves when its connection is cut between its two index commands:
+        // a live field, and the expiry an earlier ended session left on the key.
+        var b = CreateSession("session-b", "server-b");
+        var json = JsonSerializer.Serialize(CallSessionSnapshot.FromSession(b), SessionJsonContext.Default.CallSessionSnapshot);
+        await Database.StringSetAsync("test:session:session-b", json);
+        await Database.HashSetAsync(HashKey(SharedLinkedId), "server-b", "0|session-b");
+        await Database.KeyExpireAsync(HashKey(SharedLinkedId), TimeSpan.FromMinutes(1));
+
+        var a = CreateSession("session-a", "server-a");
+        a.Transition(CallSessionState.Failed);
+        await store.SaveAsync(a, CancellationToken.None);
+
+        var ttl = await Database.KeyTimeToLiveAsync(HashKey(SharedLinkedId));
+        ttl.Should().BeNull("server-b's entry is live, so the next index script clears the key's expiry");
+    }
+
+    private async Task<Dictionary<string, long>> ScriptCallCountsAsync()
+    {
+        var server = _fixture.Redis.GetServer(_fixture.Redis.GetEndPoints()[0]);
+        var info = await server.InfoAsync("commandstats");
+        var counts = new Dictionary<string, long>(StringComparer.Ordinal)
+        {
+            ["cmdstat_eval"] = 0,
+            ["cmdstat_evalsha"] = 0,
+            ["cmdstat_script|load"] = 0,
+        };
+        var tracked = info.SelectMany(static group => group).Where(pair => counts.ContainsKey(pair.Key)).ToList();
+        foreach (var pair in tracked)
+        {
+            var calls = pair.Value.Split(',')[0];
+            counts[pair.Key] = long.Parse(calls["calls=".Length..], System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        return counts;
+    }
+
+    [Fact]
+    public async Task SaveBatchAsync_ShouldSendNoScript_WhenEverySessionIsLive()
+    {
+        var store = CreateStore();
+        var before = await ScriptCallCountsAsync();
+
+        await store.SaveAsync(CreateSession("session-a", "server-a"), CancellationToken.None);
+        await store.SaveBatchAsync(
+            [CreateSession("session-b", "server-b"), CreateSession("session-c", "server-c", "other-linked")],
+            CancellationToken.None);
+
+        var after = await ScriptCallCountsAsync();
+        after.Should().BeEquivalentTo(before, "a live save writes its index entry with plain commands");
+        (await store.GetByLinkedIdAsync("server-b", SharedLinkedId, CancellationToken.None))?.SessionId
+            .Should().Be("session-b");
+    }
+
+    [Fact]
+    public async Task SaveBatchAsync_ShouldIndexEndedSessions_AfterTheServerForgetsItsScripts()
+    {
+        var store = CreateStore();
+        var warm = CreateSession("session-warm", "server-a", "other-linked");
+        warm.Transition(CallSessionState.Failed);
+        await store.SaveAsync(warm, CancellationToken.None);
+        var server = _fixture.Redis.GetServer(_fixture.Redis.GetEndPoints()[0]);
+        await server.ScriptFlushAsync();
+
+        var a = CreateSession("session-a", "server-a");
+        var b = CreateSession("session-b", "server-b");
+        a.Transition(CallSessionState.Failed);
+        b.Transition(CallSessionState.Failed);
+        await store.SaveBatchAsync([a, b], CancellationToken.None).AsTask().WaitAsync(TimeSpan.FromSeconds(30));
+
+        var foundA = await store.GetByLinkedIdAsync("server-a", SharedLinkedId, CancellationToken.None);
+        var foundB = await store.GetByLinkedIdAsync("server-b", SharedLinkedId, CancellationToken.None);
+        var ttl = await Database.KeyTimeToLiveAsync(HashKey(SharedLinkedId));
+        new { A = foundA?.SessionId, B = foundB?.SessionId, HasTtl = ttl.HasValue }.Should().BeEquivalentTo(
+            new { A = "session-a", B = "session-b", HasTtl = true },
+            "the store's scripts are sent again after the server forgot them, and both ended sessions are indexed");
+    }
 }
