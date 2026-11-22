@@ -18,6 +18,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [An ARI outbound observer that throws keeps its connection](#an-ari-outbound-observer-that-throws-keeps-its-connection) | behavior, BREAKING (no compiler error) |
 | `Verbara.Sdk.Activities`, `Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An activity, voice pipeline or realtime bridge subscriber that throws stops nothing else](#an-activity-voice-pipeline-or-realtime-bridge-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error; a cast of `StatusChanges` to `BehaviorSubject` fails at run time) |
 | `Verbara.Sdk.VoiceAi.AudioSocket` | [An `OnSessionStarted` subscriber that fails ends the AudioSocket call only when every subscriber did](#an-onsessionstarted-subscriber-that-fails-ends-the-audiosocket-call-only-when-every-subscriber-did) | behavior, BREAKING (no compiler error) |
+| `Verbara.Sdk.Sessions`, `Verbara.Sdk.Sessions.Redis`, `Verbara.Sdk.Sessions.Postgres` | [A session store's `linkedid` lookup with several servers](#a-session-stores-linkedid-lookup-with-several-servers) | behavior, BREAKING (no compiler error; new Redis index key) |
 
 ## Before you start: move every package at once
 
@@ -699,3 +700,79 @@ static void ServeOrHangUp(AudioSocketServer server, Func<Guid, bool> isAllowed, 
         }
     };
 ```
+
+## A session store's `linkedid` lookup with several servers
+
+### Who is affected
+
+You are affected if one session store — the default store, `RedisSessionStore`, `PostgresSessionStore`, or a store of
+your own — holds sessions of **two or more Asterisk servers**, and your code calls
+`ISessionStore.GetByLinkedIdAsync(linkedId, ct)`. Two servers report the same `linkedid` when their Asterisk servers
+have no `systemname` of their own, or when one Asterisk is attached under two server ids. With one server and one
+session under the id nothing changes; when one server holds two sessions under the id, the default store now answers
+with the newest (by `CreatedAt`) where it returned whichever it enumerated first. You are also affected if a tool of your own reads the Redis key `{prefix}idx:linked:{linkedId}`.
+
+### What changes
+
+- `GetByLinkedIdAsync(linkedId, ct)` returns the session only when exactly one server has a session stored under that
+  `linkedid`, and `null` when two or more do. Before, it returned one of them (Redis: the last saved; Postgres: the
+  newest row; the default store: the first it found). It is the rule the session manager's unscoped lookups follow
+  since 2.10.0.
+- A session counts while the store keeps it: Redis until its `CompletedRetention` runs out, the default store until the
+  session manager releases it, Postgres until its row is deleted. **In Postgres a `linkedid` that two servers ever used
+  stays ambiguous to the unscoped lookup for as long as both rows are kept.**
+- New: `GetByLinkedIdAsync(serverId, linkedId, ct)` returns the named server's session whatever another server holds.
+
+### What to write
+
+Treat a `null` from the unscoped lookup as "absent or not unique", and name the server when you know it (every
+`CallSession` carries its `ServerId`):
+
+Before (2.10.x: one of two unrelated calls when two servers share the `linkedid`; from 2.11.0, `null`):
+
+<!-- skip-doc-snippet -->
+```csharp
+var session = await store.GetByLinkedIdAsync(linkedId, ct);
+```
+
+After (the call of the server that reported the event):
+
+```csharp
+using Verbara.Sdk.Sessions;
+
+static ValueTask<CallSession?> FindCall(ISessionStore store, string serverId, string linkedId, CancellationToken ct) =>
+    store.GetByLinkedIdAsync(serverId, linkedId, ct);
+```
+
+A store of your own keeps compiling. Its scoped lookup is a default that calls your unscoped one and keeps the answer
+only when it belongs to the named server, so it can return `null` for an id two servers hold. Override
+`GetByLinkedIdAsync(string serverId, string linkedId, CancellationToken ct)` (on `SessionStoreBase` it is `virtual`) to
+answer per server.
+
+### Redis: a new index key, Redis 5.0 or later, scripting allowed
+
+- The `linkedid` index moves from `{prefix}idx:linked:{linkedId}` (a string holding one session id) to
+  `{prefix}idx:linked-by-server:{linkedId}`, a hash with one field per server id whose value is
+  `<expiryUnixMs>|<sessionId>` (`0` while the session is live). Read the hash in tools of your own.
+- A live save writes its server's field with `HSET` and clears the key's expiry with `PERSIST`, in the save's batch.
+  Ending or deleting a session runs a single-key Lua script that reads the server clock with `TIME`: **Redis 5.0 or
+  later** is required, and **the connection's user must be allowed to run scripts** — `EVALSHA`/`EVAL` and `SCRIPT LOAD` (ACL category `@scripting`) plus `TIME`, `HSET`, `HGET`, `HDEL`,
+  `HGETALL`, `PERSIST`, `PEXPIREAT`, `GET`, `DEL` and `PEXPIRE`. A deployment or proxy that refuses scripting is not
+  supported: live saves succeed there, but ending or deleting a session fails. A lookup only reads: it removes no
+  index entry. Every script names one key, so none is refused with `CROSSSLOT` on Redis Cluster; there a lookup that
+  races a session's first save can miss it once. The suite runs against a single node.
+- Cost: a live save sends two index commands where 2.10.x sent one; a `SaveBatchAsync` of 100 live sessions measured
+  ×1.22 the time of 2.10.x, a single `SaveAsync` ×1.05. Ending or deleting a session costs one script per session.
+- Save a session from one place at a time: the store does not order two concurrent saves of the same session, which
+  can leave the session and its index entry from different saves.
+- **No migration.** The old string is still read — a session it names counts as its server's while that session exists
+  and that server has no field in the hash — and is never written again. When the session it names ends, the store
+  gives it that session's retention; when that session is deleted, the store removes it. Nothing is left behind.
+- **Rolling upgrade.** Nodes of 2.10.x and 2.11.0 can share one Redis: the keys differ in name and type, so neither
+  receives `WRONGTYPE`. During the window a 2.10.x node does not find by `linkedid` a session a 2.11.0 node created, and
+  2.10.x nodes keep the old behaviour among themselves until they are upgraded. A session whose old entry another
+  server overwrote before the upgrade is found again after its next save from a 2.11.0 node.
+
+### Postgres and the default store
+
+No schema change, no migration, no new index: both read the same rows as before.
