@@ -180,6 +180,20 @@ pending again, and the session sweep (or a host's own loop) sent one more `Statu
 taken in the same step as the opening, so a read opened later never carries an older sample. It never read an
 uncovered loss as covered.
 
+### Fixed: a queue listing being read when the host calls `RemoveQueue` no longer brings the queue back (#638)
+
+`QueueManager.RemoveQueue` took the queue out of the table but left no mark in the queue listings being read at that
+moment. A load applies the rows of a `QueueStatus` answer only once the answer is complete, so a row read before the
+removal was applied after it: the queue was recreated and marked listed, its members were added back to
+`GetQueueObjectsForMember`, and its waiting callers were admitted again and counted joined on
+`live.queue.calls.joined`. This applied to a start, a reconnect reload, `ReconcileQueuesAsync` and a targeted discovery
+listing.
+
+`RemoveQueue` now records the removal in every listing being read, the way a caller's `Hangup` already is, and that
+listing's rows for the removed queue are not applied. A listing asked for after the removal still admits the queue
+again, with the members and waiting callers Asterisk lists, as the next event that names it already did. No public API
+changes.
+
 ### Fixed: a reconnect reload no longer drops the events dispatched while it replaces its subscription (#600)
 
 On every reconnect, on the reconnect loop and on the caller's own `ConnectAsync`, `VerbaraServer` released its event
