@@ -53,7 +53,7 @@ public sealed class PostgresDistributedLockTenureTests
 
         (await lk.TryAcquireAsync(resource, "owner-A", TimeSpan.FromSeconds(30))).Should().BeTrue();
         var first = await LockRows.ReadAsync(_fixture.DataSource, resource);
-        await Task.Delay(50);
+        await LockRows.WaitForServerClockPastAsync(_fixture.DataSource, first.AcquiredAt!.Value);
 
         (await lk.TryAcquireAsync(resource, "owner-A", TimeSpan.FromSeconds(30))).Should().BeTrue();
         var renewed = await LockRows.ReadAsync(_fixture.DataSource, resource);
@@ -252,6 +252,18 @@ internal static class LockRows
         return (DateTime)(await cmd.ExecuteScalarAsync())!;
     }
 
+    /// <summary>Waits until the server clock is past <paramref name="instant"/>, so the next statement's NOW() differs.</summary>
+    public static async Task WaitForServerClockPastAsync(NpgsqlDataSource dataSource, DateTime instant)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (await ServerClockAsync(dataSource) <= instant)
+        {
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException("The server clock did not advance within 10 s.");
+            await Task.Delay(1); // fence-allow: LOOP-DRIVER — polls the server clock; the exit is the clock condition
+        }
+    }
+
     /// <summary>Waits until the server clock is past the row's <c>expires_at</c>.</summary>
     public static async Task WaitPastExpiryAsync(NpgsqlDataSource dataSource, string resource)
     {
@@ -265,7 +277,7 @@ internal static class LockRows
                 return;
             if (DateTime.UtcNow > deadline)
                 throw new TimeoutException($"Lock row {resource} did not expire within 10 s of server time.");
-            await Task.Delay(100);
+            await Task.Delay(100); // fence-allow: LOOP-DRIVER — polls the row against the server clock; the exit is the expiry condition
         }
     }
 

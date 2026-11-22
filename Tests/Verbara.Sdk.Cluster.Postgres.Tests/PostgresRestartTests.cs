@@ -88,7 +88,7 @@ public sealed class PostgresRestartTests : IAsyncLifetime
         }
 
         await _container!.StopAsync();
-        await Task.Delay(TimeSpan.FromSeconds(1.5));
+        await Task.Delay(TimeSpan.FromSeconds(1.5)); // fence-allow: SIMULATED-WORK — Postgres stays down past the 1 s expiry; the check after restart waits on the server clock
         await _container.StartAsync();
 
         await using var second = await OpenAsync();
@@ -115,7 +115,7 @@ public sealed class PostgresRestartTests : IAsyncLifetime
             }
             catch (Exception e) when (attempt < 20 && e is NpgsqlException or System.Net.Sockets.SocketException)
             {
-                await Task.Delay(500);
+                await Task.Delay(500); // fence-allow: LOOP-DRIVER — reconnect retry after the restart; the exit is an open connection
             }
         }
     }
