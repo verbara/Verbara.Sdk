@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="..\Verbara.Sdk.Ami.Tests\Connection\PipedSocketFactory.cs" Link="Harness\PipedSocketFactory.cs" />
     <Compile Include="..\Shared\Sessions\SessionIndexInvariant.cs" Link="Shared\Sessions\SessionIndexInvariant.cs" />
+    <Compile Include="..\Shared\Sessions\InstanceIdentityNames.cs" Link="Shared\Sessions\InstanceIdentityNames.cs" />
     <Compile Include="..\Shared\Metrics\LiveQueueWaitSamples.cs" Link="Shared\Metrics\LiveQueueWaitSamples.cs" />
     <Compile Include="..\Shared\Threading\ThreadHold.cs" Link="Shared\Threading\ThreadHold.cs" />
     <Using Include="Verbara.Sdk.Tests.Shared.Threading" />

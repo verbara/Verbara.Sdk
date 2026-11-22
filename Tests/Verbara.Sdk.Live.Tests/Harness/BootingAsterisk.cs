@@ -176,6 +176,21 @@ internal sealed class BootingAsterisk
     /// <summary>Whether the peer answers the login with <c>Authentication failed</c>, which fails the connect.</summary>
     public bool RefusesLogin { get; init; }
 
+    /// <summary>
+    /// The <c>SystemName</c> header of the peer's <c>CoreSettings</c> response, at the connect's version probe and on any
+    /// later ask: the instance's <c>systemname</c> from <c>asterisk.conf</c>, and <see cref="string.Empty"/> for an
+    /// Asterisk with none set, which writes the header with an empty value (as a raw AMI probe of 22, 23 and 24 read it;
+    /// not yet a capture by digest). <see langword="null"/>, the default, writes no header, as before.
+    /// </summary>
+    public string? SystemName { get; init; }
+
+    /// <summary>
+    /// Whether the peer refuses <c>CoreSettings</c> with <c>Response: Error</c> and <c>Message: Permission denied</c>,
+    /// as Asterisk does for an AMI user whose read classes include neither <c>system</c> nor <c>reporting</c>. The
+    /// connect still succeeds: the version probe treats the refusal as a version it could not read.
+    /// </summary>
+    public bool RefusesCoreSettings { get; init; }
+
     /// <summary>Where a peer booted at the login sends <c>FullyBooted</c> during the connect.</summary>
     public FullyBootedPlacement FullyBootedAt { get; init; } = FullyBootedPlacement.AfterConnect;
 
@@ -485,8 +500,7 @@ internal sealed class BootingAsterisk
         if (await ReadCountedAsync(socket, cancellationToken) is not { } versionProbe)
             return false;
 
-        await socket.RespondAsync("Success", PipedSocket.ActionIdOf(versionProbe),
-            [new("AMIversion", "9.0.0"), new("AsteriskVersion", "22.9.0")]);
+        await AnswerCoreSettingsAsync(socket, PipedSocket.ActionIdOf(versionProbe));
 
         if (reportsAtLogin && FullyBootedAt == FullyBootedPlacement.AfterConnect)
             await WriteFullyBootedAsync(socket);
@@ -559,6 +573,12 @@ internal sealed class BootingAsterisk
             return true;
         }
 
+        if (string.Equals(name, "CoreSettings", StringComparison.OrdinalIgnoreCase))
+        {
+            await AnswerCoreSettingsAsync(socket, id);
+            return true;
+        }
+
         if (string.Equals(name, "ConfbridgeListRooms", StringComparison.OrdinalIgnoreCase))
         {
             await AnswerConfbridgeListRoomsAsync(socket, id);
@@ -573,6 +593,24 @@ internal sealed class BootingAsterisk
 
         await socket.RespondAsync("Success", id);
         return true;
+    }
+
+    /// <summary>
+    /// <c>CoreSettings</c>: refused under <see cref="RefusesCoreSettings"/>; otherwise <c>Response: Success</c> with the
+    /// versions and, when <see cref="SystemName"/> is set, its <c>SystemName</c> header.
+    /// </summary>
+    private async Task AnswerCoreSettingsAsync(PipedSocket socket, string id)
+    {
+        if (RefusesCoreSettings)
+        {
+            await socket.RespondAsync("Error", id, [new("Message", PermissionDenied)]);
+            return;
+        }
+
+        List<KeyValuePair<string, string>> fields = [new("AMIversion", "9.0.0"), new("AsteriskVersion", "22.9.0")];
+        if (SystemName is { } systemName)
+            fields.Add(new("SystemName", systemName));
+        await socket.RespondAsync("Success", id, fields);
     }
 
     private static async Task AnswerBridgeListAsync(PipedSocket socket, string id, IReadOnlyList<ListedBridge> bridges)
