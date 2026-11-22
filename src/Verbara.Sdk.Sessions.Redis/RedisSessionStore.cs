@@ -17,9 +17,10 @@ namespace Verbara.Sdk.Sessions.Redis;
 /// Two Asterisk servers can report the same LinkedID for two unrelated calls. Each server's entry in the
 /// LinkedID index is written, removed and expired on its own: removing or expiring one server's session never
 /// hides another server's. A live save writes its server's entry with plain commands in the save's batch; ending or
-/// deleting a session, and pruning during a lookup, go through a single-key Lua script that reads the server clock
-/// with <c>TIME</c> before it writes, so the store requires Redis 5.0 or later and a connection allowed to run
-/// scripts. Every script names one key, so the store stays valid on Redis Cluster. The index key of earlier versions,
+/// deleting a session goes through a single-key Lua script that reads the server clock with <c>TIME</c> before it
+/// writes, so the store requires Redis 5.0 or later and a connection allowed to run scripts. A lookup only reads: it
+/// counts an entry while its session key exists and never removes one. Every script names one key, so none is refused
+/// with <c>CROSSSLOT</c> on Redis Cluster. The index key of earlier versions,
 /// <c>{prefix}idx:linked:{linkedId}</c> (a string), is still read so that sessions those versions wrote are found,
 /// and is never written again; it is only given its retention or removed when it names a session this store
 /// ends or deletes.
@@ -36,7 +37,7 @@ public sealed class RedisSessionStore : SessionStoreBase
     /// <c>expiryMs|sessionId</c>; a delete removes the field only while it still names that session. Both then prune
     /// the fields whose expiry passed and set the key's expiry from every field: none while any is live (expiry 0,
     /// written by a live save without this script), else the latest expiry. The <c>PERSIST</c> on a live field also
-    /// repairs a key whose live writer was cut between its two commands.
+    /// repairs a key whose live writer was cut between its two commands. A lookup never runs it: a lookup only reads.
     /// </summary>
     private const string LinkedIndexScript = """
         local t = redis.call('TIME')
@@ -161,9 +162,10 @@ public sealed class RedisSessionStore : SessionStoreBase
     /// <summary>
     /// Sends the index scripts of one ended session: its server's entry in the LinkedID index and the retention of
     /// the earlier versions' entry when it names this session. A live session sends none: its entry went in the
-    /// batch. Sent on the database, never inside a batch, and after the batch that wrote the session key, so that a
-    /// reader never sees an entry whose session was not written yet. (Inside a batch, a script the server no longer
-    /// knows — after <c>SCRIPT FLUSH</c> or a restart — was never resent and its task never completed.)
+    /// batch. Sent on the database, never inside a batch, and after the batch that wrote the session key, so that, on
+    /// a single node, a reader never sees an entry whose session was not written yet. (Inside a batch, a script the
+    /// server no longer knows — after <c>SCRIPT FLUSH</c> or a restart — was never resent and its task never
+    /// completed.)
     /// </summary>
     private void SendSaveScripts(IDatabaseAsync db, CallSessionSnapshot snapshot, bool terminal, List<Task> tasks)
     {
@@ -291,10 +293,9 @@ public sealed class RedisSessionStore : SessionStoreBase
         CallSessionSnapshot? found = null;
         CallSessionSnapshot? legacyFound = null;
         var servers = new HashSet<string>(StringComparer.Ordinal);
-        List<Task>? prunes = null;
         for (var i = 0; i < candidates.Count; i++)
         {
-            var (server, sessionId) = candidates[i];
+            var (server, _) = candidates[i];
             var snapshot = snapshots[i];
             if (server is null)
             {
@@ -307,7 +308,7 @@ public sealed class RedisSessionStore : SessionStoreBase
                 || !string.Equals(snapshot.LinkedId, linkedId, StringComparison.Ordinal)
                 || !string.Equals(ServerField(snapshot.ServerId).ToString(), server, StringComparison.Ordinal))
             {
-                (prunes ??= []).Add(DeleteIndexEntryAsync(db, indexKey, server, sessionId));
+                // Not counted and not removed: on Redis Cluster the session key can arrive after its field.
                 continue;
             }
 
@@ -320,8 +321,6 @@ public sealed class RedisSessionStore : SessionStoreBase
         {
             found = legacyFound;
         }
-
-        if (prunes is not null) await Task.WhenAll(prunes).WaitAsync(ct).ConfigureAwait(false);
 
         return servers.Count == 1 ? found!.ToSession() : null;
     }
@@ -374,7 +373,6 @@ public sealed class RedisSessionStore : SessionStoreBase
             }
 
             if (matches) return snapshot!.ToSession();
-            await DeleteIndexEntryAsync(db, indexKey, serverId, candidates[i].SessionId).WaitAsync(ct).ConfigureAwait(false);
         }
 
         return legacyFound?.ToSession();
