@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Reflection;
+using System.Text.Json.Serialization.Metadata;
 using Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal;
 using FluentAssertions;
 using Xunit;
@@ -7,6 +9,100 @@ namespace Verbara.Sdk.VoiceAi.OpenAiRealtime.Tests.Internal;
 
 public sealed class RealtimeMessageSerializationTests
 {
+    // Test-only lookup keeps the tests-first commit buildable before the helper exists. There is
+    // no local options copy or fallback: every contract assertion reads the shipped For<T> field.
+    private static JsonTypeInfo<T> StrictInfo<T>()
+    {
+        // Literal closed type names let the trim/AOT analyzers follow this test seam too;
+        // MakeGenericType would require runtime code generation. Product code uses direct fields.
+        var cache = typeof(T) == typeof(ServerEventBase)
+            ? Type.GetType("Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.RealtimeJsonReadOptions+For`1[[Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.ServerEventBase, Verbara.Sdk.VoiceAi.OpenAiRealtime]], Verbara.Sdk.VoiceAi.OpenAiRealtime")
+            : typeof(T) == typeof(ResponseAudioDeltaEvent)
+            ? Type.GetType("Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.RealtimeJsonReadOptions+For`1[[Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.ResponseAudioDeltaEvent, Verbara.Sdk.VoiceAi.OpenAiRealtime]], Verbara.Sdk.VoiceAi.OpenAiRealtime")
+            : typeof(T) == typeof(ResponseAudioTranscriptDeltaEvent)
+            ? Type.GetType("Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.RealtimeJsonReadOptions+For`1[[Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.ResponseAudioTranscriptDeltaEvent, Verbara.Sdk.VoiceAi.OpenAiRealtime]], Verbara.Sdk.VoiceAi.OpenAiRealtime")
+            : typeof(T) == typeof(ResponseAudioTranscriptDoneEvent)
+            ? Type.GetType("Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.RealtimeJsonReadOptions+For`1[[Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.ResponseAudioTranscriptDoneEvent, Verbara.Sdk.VoiceAi.OpenAiRealtime]], Verbara.Sdk.VoiceAi.OpenAiRealtime")
+            : typeof(T) == typeof(FunctionCallArgumentsDoneEvent)
+            ? Type.GetType("Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.RealtimeJsonReadOptions+For`1[[Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.FunctionCallArgumentsDoneEvent, Verbara.Sdk.VoiceAi.OpenAiRealtime]], Verbara.Sdk.VoiceAi.OpenAiRealtime")
+            : typeof(T) == typeof(ServerErrorEvent)
+            ? Type.GetType("Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.RealtimeJsonReadOptions+For`1[[Verbara.Sdk.VoiceAi.OpenAiRealtime.Internal.ServerErrorEvent, Verbara.Sdk.VoiceAi.OpenAiRealtime]], Verbara.Sdk.VoiceAi.OpenAiRealtime")
+            : throw new InvalidOperationException("Unsupported DTO type in the strict-read test seam.");
+        cache.Should().NotBeNull("the shipped read fence must exist");
+        var field = cache!.GetField("TypeInfo", BindingFlags.Static | BindingFlags.NonPublic);
+        field.Should().NotBeNull();
+        return (JsonTypeInfo<T>)field!.GetValue(null)!;
+    }
+
+    [Theory]
+    [InlineData("ServerEventBase", "type")]
+    [InlineData("ResponseAudioDeltaEvent", "type")]
+    [InlineData("ResponseAudioDeltaEvent", "delta")]
+    [InlineData("ResponseAudioTranscriptDeltaEvent", "type")]
+    [InlineData("ResponseAudioTranscriptDeltaEvent", "delta")]
+    [InlineData("ResponseAudioTranscriptDoneEvent", "type")]
+    [InlineData("ResponseAudioTranscriptDoneEvent", "transcript")]
+    [InlineData("FunctionCallArgumentsDoneEvent", "type")]
+    [InlineData("FunctionCallArgumentsDoneEvent", "call_id")]
+    [InlineData("FunctionCallArgumentsDoneEvent", "name")]
+    [InlineData("FunctionCallArgumentsDoneEvent", "arguments")]
+    [InlineData("ServerErrorEvent", "type")]
+    public void Deserialize_ShouldRejectExplicitNull_WhenMemberIsFenced(string dto, string member)
+    {
+        // Hand-authored payloads. Absent siblings retain defaults; only this member is mutated.
+        var json = "{\"" + member + "\":null}";
+        JsonTypeInfo info = dto switch
+        {
+            "ServerEventBase" => StrictInfo<ServerEventBase>(),
+            "ResponseAudioDeltaEvent" => StrictInfo<ResponseAudioDeltaEvent>(),
+            "ResponseAudioTranscriptDeltaEvent" => StrictInfo<ResponseAudioTranscriptDeltaEvent>(),
+            "ResponseAudioTranscriptDoneEvent" => StrictInfo<ResponseAudioTranscriptDoneEvent>(),
+            "FunctionCallArgumentsDoneEvent" => StrictInfo<FunctionCallArgumentsDoneEvent>(),
+            "ServerErrorEvent" => StrictInfo<ServerErrorEvent>(),
+            _ => throw new ArgumentOutOfRangeException(nameof(dto)),
+        };
+        var act = () => JsonSerializer.Deserialize(json, info);
+
+        act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
+    public void Deserialize_ShouldAcceptExplicitNull_WhenErrorMessageIsNullable()
+    {
+        var result = JsonSerializer.Deserialize("""{"type":"error","error":{"message":null}}""", StrictInfo<ServerErrorEvent>());
+
+        result.Should().NotBeNull();
+        result!.Error.Should().NotBeNull();
+        result.Error!.Message.Should().BeNull();
+    }
+
+    [Fact]
+    public void Deserialize_ShouldKeepSnakeCaseNaming_WhenUsingStrictReadMetadata()
+    {
+        var info = StrictInfo<FunctionCallArgumentsDoneEvent>();
+
+        var snake = JsonSerializer.Deserialize(
+            """{"type":"response.function_call_arguments.done","call_id":"c1","name":"f","arguments":"{}"}""", info);
+        var camel = JsonSerializer.Deserialize(
+            """{"type":"response.function_call_arguments.done","callId":"c1","name":"f","arguments":"{}"}""", info);
+
+        info.Options.PropertyNamingPolicy.Should().BeSameAs(JsonNamingPolicy.SnakeCaseLower);
+        info.Options.RespectNullableAnnotations.Should().BeTrue();
+        info.Options.IsReadOnly.Should().BeTrue();
+        snake.Should().NotBeNull();
+        snake!.CallId.Should().Be("c1");
+        snake.Name.Should().Be("f");
+        snake.Arguments.Should().Be("{}");
+        camel.Should().NotBeNull();
+        camel!.CallId.Should().BeEmpty("camelCase is an absent wire member, which retains its default");
+    }
+
+    [Fact]
+    public void Deserialize_ShouldReturnNull_WhenStrictReadPayloadIsRootNull()
+    {
+        JsonSerializer.Deserialize("null", StrictInfo<ServerEventBase>()).Should().BeNull();
+    }
+
     // ── InputAudioBufferAppendRequest ────────────────────────────────────────
 
     [Fact]
