@@ -934,9 +934,13 @@ public interface IAudioStream : IAsyncDisposable
     /// The stream publishes its ending once: <see cref="AudioStreamState.Disconnected"/> exactly once, as
     /// the last state, after <see cref="AudioStreamState.Error"/> when it ended badly; a disposal after the
     /// ending publishes nothing more. What precedes <see cref="AudioStreamState.Disconnected"/> depends on the
-    /// transport. An AudioSocket stream publishes <see cref="AudioStreamState.Error"/> when an error frame
-    /// ended it, and a reset or other failed connection ends it as <see cref="AudioStreamState.Disconnected"/>
-    /// alone, as a hangup does. A WebSocket stream publishes <see cref="AudioStreamState.Error"/> when its
+    /// transport. An AudioSocket stream publishes <see cref="AudioStreamState.Error"/> only when an error frame
+    /// ended it; every other ending, a hangup frame, a closed connection, a reset or other failed connection,
+    /// ends it as <see cref="AudioStreamState.Disconnected"/> alone. On an AudioSocket stream
+    /// <see cref="AudioStreamState.Disconnected"/> therefore says that the stream ended, not that the call ended
+    /// in order: Asterisk closes the connection the same way for a hangup, for its own shutdown and for most of
+    /// its failures, and a stalled Asterisk closes nothing, so the stream cannot tell them apart. Learn that
+    /// Asterisk failed or stopped from the control connection, the AMI or ARI connection's own loss. A WebSocket stream publishes <see cref="AudioStreamState.Error"/> when its
     /// connection failed while it was live: a reset, or an end with no close frame from the peer. A close
     /// frame from the peer, whatever its status, and an ending on this side (a disposal or the server's stop)
     /// publish <see cref="AudioStreamState.Disconnected"/> alone, even when the connection fails while that
@@ -960,7 +964,21 @@ public enum AudioStreamState
 {
     Connecting,
     Connected,
+
+    /// <summary>The stream ended; it is published exactly once, as the stream's last state.</summary>
+    /// <remarks>
+    /// It says that the audio stream is over, not why. On an AudioSocket stream it follows a hangup, a server
+    /// shutdown and most Asterisk failures alike, because Asterisk ends the connection the same way for all of
+    /// them; whether the call ended in order is learned from the AMI or ARI connection.
+    /// </remarks>
     Disconnected,
+
+    /// <summary>The stream ended badly; <see cref="Disconnected"/> follows it.</summary>
+    /// <remarks>
+    /// On an AudioSocket stream it means the peer sent an error frame. On a WebSocket stream it means the
+    /// connection failed while the stream was live: a reset, or an end with no close frame from the peer.
+    /// Its absence is not evidence that the call ended in order.
+    /// </remarks>
     Error
 }
 
