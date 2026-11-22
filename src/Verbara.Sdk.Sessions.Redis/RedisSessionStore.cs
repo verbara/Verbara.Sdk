@@ -16,8 +16,10 @@ namespace Verbara.Sdk.Sessions.Redis;
 /// <remarks>
 /// Two Asterisk servers can report the same LinkedID for two unrelated calls. Each server's entry in the
 /// LinkedID index is written, removed and expired on its own: removing or expiring one server's session never
-/// hides another server's. The index is kept by a single-key Lua script that reads the server clock with
-/// <c>TIME</c> before it writes, so the store requires Redis 5.0 or later. The index key of earlier versions,
+/// hides another server's. A live save writes its server's entry with plain commands in the save's batch; ending or
+/// deleting a session, and pruning during a lookup, go through a single-key Lua script that reads the server clock
+/// with <c>TIME</c> before it writes, so the store requires Redis 5.0 or later and a connection allowed to run
+/// scripts. Every script names one key, so the store stays valid on Redis Cluster. The index key of earlier versions,
 /// <c>{prefix}idx:linked:{linkedId}</c> (a string), is still read so that sessions those versions wrote are found,
 /// and is never written again; it is only given its retention or removed when it names a session this store
 /// ends or deletes.
@@ -28,20 +30,20 @@ public sealed class RedisSessionStore : SessionStoreBase
         [CallSessionState.Completed, CallSessionState.Failed, CallSessionState.TimedOut];
 
     /// <summary>
-    /// Maintains the per-server LinkedID index. KEYS[1] = the index hash; ARGV[1] = <c>save</c> or <c>delete</c>;
-    /// ARGV[2] = the server id (the hash field); ARGV[3] = the session id; ARGV[4] = the retention in milliseconds
-    /// for a save (0 = live). A save writes the field as <c>expiryMs|sessionId</c> (expiry 0 = live); a delete
-    /// removes the field only while it still names that session. Both then prune the fields whose expiry passed
-    /// and set the key's expiry from every field: none while any is live, else the latest expiry.
+    /// Maintains the per-server LinkedID index for an ended or deleted session. KEYS[1] = the index hash;
+    /// ARGV[1] = <c>save</c> (the session ended) or <c>delete</c>; ARGV[2] = the server id (the hash field);
+    /// ARGV[3] = the session id; ARGV[4] = the retention in milliseconds (save only). A save writes the field as
+    /// <c>expiryMs|sessionId</c>; a delete removes the field only while it still names that session. Both then prune
+    /// the fields whose expiry passed and set the key's expiry from every field: none while any is live (expiry 0,
+    /// written by a live save without this script), else the latest expiry. The <c>PERSIST</c> on a live field also
+    /// repairs a key whose live writer was cut between its two commands.
     /// </summary>
     private const string LinkedIndexScript = """
         local t = redis.call('TIME')
         local now = t[1] * 1000 + math.floor(t[2] / 1000)
         local changed = 0
         if ARGV[1] == 'save' then
-          local exp = 0
-          local r = tonumber(ARGV[4])
-          if r > 0 then exp = now + r end
+          local exp = now + tonumber(ARGV[4])
           redis.call('HSET', KEYS[1], ARGV[2], string.format('%.0f', exp) .. '|' .. ARGV[3])
           changed = 1
         else
@@ -127,8 +129,9 @@ public sealed class RedisSessionStore : SessionStoreBase
         db.ScriptEvaluateAsync(LinkedIndexScript, [key], ["delete", ServerField(serverId), sessionId]);
 
     /// <summary>
-    /// Queues the plain writes of one session (its key and its set membership) on <paramref name="batch"/>, shared
-    /// by <see cref="SaveAsync"/> and <see cref="SaveBatchAsync"/>. Returns whether the session is terminal.
+    /// Queues the plain writes of one session (its key, its set membership and, for a live session, its server's
+    /// entry in the LinkedID index) on <paramref name="batch"/>, shared by <see cref="SaveAsync"/> and
+    /// <see cref="SaveBatchAsync"/>. Returns whether the session is terminal.
     /// </summary>
     private bool QueueSaveCommands(IBatch batch, CallSessionSnapshot snapshot, List<Task> tasks)
     {
@@ -146,28 +149,32 @@ public sealed class RedisSessionStore : SessionStoreBase
 
         tasks.Add(batch.StringSetAsync(sessionKey, json));
         tasks.Add(batch.SetAddAsync(ActiveSetKey(), snapshot.SessionId));
+
+        // The field first, then the key's expiry is cleared. The reverse order lets another server's ending script
+        // run in between, see no live field yet, and leave an expiry on a key that then holds a live field.
+        var indexKey = LinkedIndexKey(snapshot.LinkedId);
+        tasks.Add(batch.HashSetAsync(indexKey, ServerField(snapshot.ServerId), "0|" + snapshot.SessionId));
+        tasks.Add(batch.KeyPersistAsync(indexKey));
         return false;
     }
 
     /// <summary>
-    /// Sends the index scripts of one saved session: its server's entry in the LinkedID index and, for a terminal
-    /// session, the retention of the earlier versions' entry when it names this session. Sent on the database, never
-    /// inside a batch, and after the batch that wrote the session key, so that a reader never sees an entry whose
-    /// session was not written yet. (Inside a batch, a script the server no longer knows — after <c>SCRIPT FLUSH</c>
-    /// or a restart — was never resent and its task never completed.)
+    /// Sends the index scripts of one ended session: its server's entry in the LinkedID index and the retention of
+    /// the earlier versions' entry when it names this session. A live session sends none: its entry went in the
+    /// batch. Sent on the database, never inside a batch, and after the batch that wrote the session key, so that a
+    /// reader never sees an entry whose session was not written yet. (Inside a batch, a script the server no longer
+    /// knows — after <c>SCRIPT FLUSH</c> or a restart — was never resent and its task never completed.)
     /// </summary>
     private void SendSaveScripts(IDatabaseAsync db, CallSessionSnapshot snapshot, bool terminal, List<Task> tasks)
     {
-        var retentionMs = terminal ? RetentionMilliseconds() : 0L;
+        if (!terminal) return;
+        var retentionMs = RetentionMilliseconds();
         tasks.Add(SaveIndexEntryAsync(
             db, LinkedIndexKey(snapshot.LinkedId), snapshot.ServerId, snapshot.SessionId, retentionMs));
-        if (terminal)
-        {
-            tasks.Add(db.ScriptEvaluateAsync(
-                LegacyLinkedIndexScript,
-                [LegacyLinkedIndexKey(snapshot.LinkedId)],
-                ["expire", snapshot.SessionId, retentionMs]));
-        }
+        tasks.Add(db.ScriptEvaluateAsync(
+            LegacyLinkedIndexScript,
+            [LegacyLinkedIndexKey(snapshot.LinkedId)],
+            ["expire", snapshot.SessionId, retentionMs]));
     }
 
     private async ValueTask TrimCompletedAsync(IDatabase db, CancellationToken ct)

@@ -27,8 +27,15 @@ services.AddVerbaraSessionsBuilder()
 - AOT-safe: uses source-generated JSON only.
 - Active sessions stored as Redis `STRING` keyed by `{prefix}session:{sessionId}` with active set
   `{prefix}sessions:active` and a `linkedid` index `{prefix}idx:linked-by-server:{linkedId}`: a `HASH` with one field
-  per server id, kept by a single-key Lua script, so removing or expiring one server's session never hides another
-  server's. Requires Redis 5.0 or later.
+  per server id, so removing or expiring one server's session never hides another server's. A live save writes its
+  server's field with `HSET` + `PERSIST` in the save's batch; ending or deleting a session, and pruning during a
+  lookup, run a single-key Lua script. Every script names one key, so the store stays valid on Redis Cluster.
+- Requirements: Redis 5.0 or later, and a connection whose user may run scripts — `EVALSHA`/`EVAL` and `SCRIPT LOAD`
+  (ACL category `@scripting`) plus the commands the scripts call (`TIME`, `HSET`, `HGET`, `HDEL`, `HGETALL`,
+  `PERSIST`, `PEXPIREAT`, `GET`, `DEL`, `PEXPIRE`). A deployment or proxy that refuses scripting is not supported:
+  ending or deleting a session fails there.
+- Saves of one session are not ordered by the store: two concurrent saves of the same session (a live and an ended
+  snapshot) can leave the session and its index entry from different saves. Save a session from one place at a time.
 - Two lookups by `linkedid`: `GetByLinkedIdAsync(serverId, linkedId, ct)` returns the named server's session;
   `GetByLinkedIdAsync(linkedId, ct)` answers only when exactly one server holds the id, and returns `null` when two or
   more do.
