@@ -701,9 +701,11 @@ static void ServeOrHangUp(AudioSocketServer server, Func<Guid, bool> isAllowed, 
     };
 ```
 
-## A session store's `linkedid` lookup with several servers
+## Session stores
 
-### Who is affected
+### A session store's `linkedid` lookup with several servers
+
+#### Who is affected
 
 You are affected if one session store — the default store, `RedisSessionStore`, `PostgresSessionStore`, or a store of
 your own — holds sessions of **two or more Asterisk servers**, and your code calls
@@ -712,7 +714,7 @@ have no `systemname` of their own, or when one Asterisk is attached under two se
 session under the id nothing changes; when one server holds two sessions under the id, the default store now answers
 with the newest (by `CreatedAt`) where it returned whichever it enumerated first. You are also affected if a tool of your own reads the Redis key `{prefix}idx:linked:{linkedId}`.
 
-### What changes
+#### What changes
 
 - `GetByLinkedIdAsync(linkedId, ct)` returns the session only when exactly one server has a session stored under that
   `linkedid`, and `null` when two or more do. Before, it returned one of them (Redis: the last saved; Postgres: the
@@ -723,7 +725,7 @@ with the newest (by `CreatedAt`) where it returned whichever it enumerated first
   stays ambiguous to the unscoped lookup for as long as both rows are kept.**
 - New: `GetByLinkedIdAsync(serverId, linkedId, ct)` returns the named server's session whatever another server holds.
 
-### What to write
+#### What to write
 
 Treat a `null` from the unscoped lookup as "absent or not unique", and name the server when you know it (every
 `CallSession` carries its `ServerId`):
@@ -749,7 +751,7 @@ only when it belongs to the named server, so it can return `null` for an id two 
 `GetByLinkedIdAsync(string serverId, string linkedId, CancellationToken ct)` (on `SessionStoreBase` it is `virtual`) to
 answer per server.
 
-### Redis: a new index key, Redis 5.0 or later, scripting allowed
+#### Redis: a new index key, Redis 5.0 or later, scripting allowed
 
 - The `linkedid` index moves from `{prefix}idx:linked:{linkedId}` (a string holding one session id) to
   `{prefix}idx:linked-by-server:{linkedId}`, a hash with one field per server id whose value is
@@ -773,6 +775,6 @@ answer per server.
   2.10.x nodes keep the old behaviour among themselves until they are upgraded. A session whose old entry another
   server overwrote before the upgrade is found again after its next save from a 2.11.0 node.
 
-### Postgres and the default store
+#### Postgres and the default store
 
 No schema change, no migration, no new index: both read the same rows as before.

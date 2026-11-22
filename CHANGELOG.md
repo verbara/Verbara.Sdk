@@ -279,6 +279,8 @@ stream must now dispose that `IAudioStream` itself. Why: one observer's bug shou
 the stream from the other observers. The `IAudioServer.OnStreamConnected` and `CompositeAudioServer` XML documentation
 now states this. See the [troubleshooting guide](docs/guides/troubleshooting.md#an-onstreamconnected-observer-that-throws-ari-audio-servers).
 
+The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#an-onstreamconnected-observer-that-throws-loses-no-connection) has who is affected and what to write.
+
 ### Added: an AudioSocket stream counts the frames its full buffer drops (#631)
 
 When its consumer falls behind, an ARI AudioSocket stream's full receive buffer discards the oldest frame, as before;
@@ -344,6 +346,8 @@ Code that ended a session by throwing from a subscriber has to end it another wa
 Why: one subscriber's bug should not silence the others, nor end a call or an activity that did nothing wrong. See the
 [troubleshooting guide](docs/guides/troubleshooting.md#missing-events), items 13 and 14.
 
+The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#an-activity-voice-pipeline-or-realtime-bridge-subscriber-that-throws-stops-nothing-else) has who is affected and what to write.
+
 ### Fixed: a logger that throws on an audio stream's observer report no longer stops the stream's notifications (#633)
 
 When a `StateChanges` observer of an ARI audio stream threw, the stream reported it on one Error line. If the logger
@@ -375,6 +379,8 @@ Warning instead. Why: one subscriber's bug should not silence the others, and it
 did nothing wrong. See the
 [troubleshooting guide](docs/guides/troubleshooting.md#what-a-live-event-handler-may-do).
 
+The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#a-queuemanager-or-meetmemanager-subscriber-that-throws-stops-nothing-else) has who is affected and what to write.
+
 ### Changed — BREAKING: an ARI outbound observer that throws keeps its connection (#632)
 
 `AriOutboundListener.OnConnectionAccepted` and `AriOutboundConnection.Events` now guard each subscription on its own,
@@ -397,6 +403,8 @@ threw from an observer to refuse a connection has to refuse it itself: call `Dis
 restrict `AllowedApplications`. Why: one observer's bug should not cost a connection that did nothing wrong, nor
 silence the other observers. See the
 [troubleshooting guide](docs/guides/troubleshooting.md#missing-events).
+
+The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#an-ari-outbound-observer-that-throws-keeps-its-connection) has who is affected and what to write.
 
 ### Changed — BREAKING: an `OnSessionStarted` subscriber that fails ends the AudioSocket call only when every subscriber did (#635)
 
@@ -428,6 +436,8 @@ not take the call from another subscriber that is serving it, nor skip the subsc
 a trace. The `OnSessionStarted` XML documentation now states this. See the
 [troubleshooting guide](docs/guides/troubleshooting.md#sessionstartedsubscriberfailed-an-onsessionstarted-subscriber-failed).
 
+The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#an-onsessionstarted-subscriber-that-fails-ends-the-audiosocket-call-only-when-every-subscriber-did) has who is affected and what to write.
+
 ### Changed — BREAKING: an `AgentManager` or `BridgeManager` subscriber that throws stops nothing else (#626)
 
 `AgentManager` (`AgentLoggedIn`, `AgentLoggedOff`, `AgentStateChanged`, `AgentConnected`) and `BridgeManager`
@@ -449,6 +459,8 @@ from running, and its exception left the manager call: a live event's surfaced a
 Code that relied on that exception has to make that decision itself: read the counter or the Warning instead. Why: one
 subscriber's bug should not silence the others, skip the events after it, or fail a start or a reload that did nothing
 wrong. See the [troubleshooting guide](docs/guides/troubleshooting.md#what-a-live-event-handler-may-do).
+
+The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#an-agentmanager-or-bridgemanager-subscriber-that-throws-stops-nothing-else) has who is affected and what to write.
 
 ### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.35 (#619)
 
