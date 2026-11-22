@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Migrations\V001__DistributedLockSchema.sql" />
+    <EmbeddedResource Include="Migrations\V002__DistributedLockAcquiredAt.sql" />
   </ItemGroup>
 
 </Project>
