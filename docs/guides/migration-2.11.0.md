@@ -16,6 +16,8 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Live` | [An `AgentManager` or `BridgeManager` subscriber that throws stops nothing else](#an-agentmanager-or-bridgemanager-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error) |
 | `Verbara.Sdk.Ari` | [An `OnStreamConnected` observer that throws loses no connection](#an-onstreamconnected-observer-that-throws-loses-no-connection) | behavior, BREAKING (no compiler error) |
 | `Verbara.Sdk.Ari` | [An ARI outbound observer that throws keeps its connection](#an-ari-outbound-observer-that-throws-keeps-its-connection) | behavior, BREAKING (no compiler error) |
+| `Verbara.Sdk.Activities`, `Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An activity, voice pipeline or realtime bridge subscriber that throws stops nothing else](#an-activity-voice-pipeline-or-realtime-bridge-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error; a cast of `StatusChanges` to `BehaviorSubject` fails at run time) |
+| `Verbara.Sdk.VoiceAi.AudioSocket` | [An `OnSessionStarted` subscriber that fails ends the AudioSocket call only when every subscriber did](#an-onsessionstarted-subscriber-that-fails-ends-the-audiosocket-call-only-when-every-subscriber-did) | behavior, BREAKING (no compiler error) |
 
 ## Before you start: move every package at once
 
@@ -346,7 +348,7 @@ static async Task PlayAndRecord(IAriClient ari, string bridgeId)
 
 ## Subscribers that throw
 
-From 2.11.0 the Live managers and the ARI audio and outbound servers raise each event subscriber by subscriber, as `ChannelManager` has since 2.10.0. Code
+From 2.11.0 the Live managers, the ARI audio and outbound servers, the activities and the voice sessions raise each event subscriber by subscriber, as `ChannelManager` has since 2.10.0. Code
 that changes nothing on a subscriber's failure is not affected; code that threw from a handler to stop something is.
 The [troubleshooting guide](troubleshooting.md#what-a-live-event-handler-may-do) has the full rule for each manager.
 
@@ -576,4 +578,124 @@ static IDisposable RefuseOthers(IAriOutboundListener listener, IReadOnlySet<stri
         if (!ours.Contains(connection.ApplicationName))
             _ = connection.DisconnectAsync().AsTask();
     });
+```
+
+### An activity, voice pipeline or realtime bridge subscriber that throws stops nothing else
+
+**What changed.** A subscriber of an activity's `StatusChanges` (`ActivityBase`, `AmiActivityBase`, `AriActivityBase`
+and every shipped activity), of `VoiceAiPipeline.Events` or of `OpenAiRealtimeBridge.Events` has its own guard. If it
+throws from `OnNext`, `OnError` or `OnCompleted`, every other subscriber still gets the notification, in subscription
+order, and nothing is thrown from the call that raised it (`Subscribe`, `StartAsync`, `CancelAsync` or `DisposeAsync` for
+an activity; the session loop or `DisposeAsync` for the pipeline and the bridge). The failure is counted:
+
+| Publisher | Counter (meter) | Log |
+|---|---|---|
+| Activity | `activities.status.subscriber_faults`, tag `activity.type` (new meter `Verbara.Sdk.Activities`) | none: the activity bases hold no logger |
+| `VoiceAiPipeline` | `voiceai.pipeline.subscriber_faults` (`Verbara.Sdk.VoiceAi`) | Warning `VoiceAi pipeline event subscriber threw on <EventType>; …` |
+| `OpenAiRealtimeBridge` | `openai_realtime.subscriber_faults` (`Verbara.Sdk.VoiceAi.OpenAiRealtime`) | Warning `[<ChannelId>] A Realtime event subscriber threw on <EventType>; …` |
+
+`VerbaraTelemetry.MeterNames` lists the new meter: 16 meters, where it had 15. `StatusChanges` is still typed
+`IObservable<ActivityStatus>`, but it is no longer the activity's `BehaviorSubject`: a cast of it to
+`BehaviorSubject<ActivityStatus>` or `ISubject<ActivityStatus>` now fails at run time.
+
+**Who is affected.** Nothing reports a compiler error. Up to 2.10.x a throwing subscriber kept the later subscribers
+from that notification, and its exception left the call that raised it:
+
+- an activity could be left in `Starting`, with `StartAsync`, `CancelAsync` or `DisposeAsync` throwing the subscriber's
+  exception, and an ARI activity skipped `OnCancellingAsync`;
+- an activity whose subscriber threw on `InProgress` ended `Failed` **without executing**; one that threw on `Completed`
+  turned a completed activity into a `Failed` one. From 2.11.0 the activity executes, so its side effects happen (a
+  dial dials), and it ends `Completed`;
+- the pipeline's or the bridge's session ended as failed (`voiceai.sessions.failed`, `openai_realtime.sessions.failed`);
+- a pipeline subscriber that threw on `TranscriptReceivedEvent`, `ResponseGeneratedEvent` or `SynthesisEndedEvent`
+  failed that step: a `VoiceAi pipeline error [<Stt|Handler|Tts>]` Warning, a `PipelineErrorEvent`, a count on
+  `stt.transcriptions.failed` or `tts.syntheses.failed`, and the rest of the turn dropped. From 2.11.0 none of these
+  appear for a subscriber's failure, so a dashboard or alert on them sees fewer, and the turn finishes.
+
+**What to do.** Stop an activity with `CancelAsync`, and end a voice session by cancelling the token passed to
+`HandleSessionAsync` or by returning from the conversation handler. Read the counter, or the Warning where the
+publisher logs. Before (2.10.x: the throw on `InProgress` failed the activity before it executed; from 2.11.0 it
+executes):
+
+<!-- skip-doc-snippet -->
+```csharp
+activity.StatusChanges.Subscribe(status =>
+{
+    if (status == ActivityStatus.InProgress && !allowed)
+        throw new InvalidOperationException("not allowed now");
+});
+await activity.StartAsync(ct);
+```
+
+After, decided before the start, or cancelled explicitly:
+
+```csharp
+using Verbara.Sdk.Activities.Activities;
+
+static async ValueTask StartIfAllowedAsync(IActivity activity, Func<bool> allowed, CancellationToken ct)
+{
+    if (!allowed())
+        return;
+    using var stop = activity.StatusChanges.Subscribe(status =>
+    {
+        if (status == ActivityStatus.InProgress && !allowed())
+            _ = activity.CancelAsync().AsTask();
+    });
+    await activity.StartAsync(ct);
+}
+```
+
+### An `OnSessionStarted` subscriber that fails ends the AudioSocket call only when every subscriber did
+
+**What changed.** The VoiceAi `AudioSocketServer` invokes every `OnSessionStarted` subscriber, in subscription order,
+whatever an earlier one threw, and then awaits all of their tasks together. A subscriber that throws, or whose task
+faults, is counted on `audiosocket.subscriber_faults` (meter `Verbara.Sdk.VoiceAi.AudioSocket`) and logged once
+at Warning, `[AudioSocket] An OnSessionStarted subscriber failed for channel <uuid>`, when it fails. The connection is
+closed only when **every** subscriber failed, and then with a hangup frame first, so on Asterisk 20 and later the call
+goes on in the dialplan after `AudioSocket()`. `OutOfMemoryException` is not caught.
+
+**Who is affected.** Nothing reports a compiler error.
+
+- **Two or more subscribers** (for example a session broker from `AddVoiceAiPipeline` or `AddOpenAiRealtimeBridge` next
+  to a handler of your own): up to 2.10.x only the last subscriber's task was awaited. A synchronous throw skipped every
+  later subscriber and closed the connection; an earlier subscriber's faulted task was lost with no line and no count;
+  and a failure of the last subscriber closed the connection even when another was serving the call. Now the call
+  another subscriber completed on stays up. A subscriber that owns the call and fails next to a passive one that
+  completes leaves the connection open until the far end hangs up.
+- **One subscriber:** its failure still closes the connection, now with a hangup frame before the close, and is reported
+  as the Warning and the counter above instead of `[AudioSocket] Error handling connection` at Error.
+
+**What to do.** A subscriber that threw to end the call hangs up and returns instead; one that owns the call catches
+its own failure and hangs up. Before (2.10.x: the throw closed the connection; from 2.11.0 it does so only if every
+subscriber failed):
+
+<!-- skip-doc-snippet -->
+```csharp
+server.OnSessionStarted += session =>
+    IsAllowed(session.ChannelId) ? ServeAsync(session) : throw new InvalidOperationException("refused");
+```
+
+After:
+
+```csharp
+using Verbara.Sdk.VoiceAi.AudioSocket;
+
+static void ServeOrHangUp(AudioSocketServer server, Func<Guid, bool> isAllowed, Func<AudioSocketSession, ValueTask> serve) =>
+    server.OnSessionStarted += async session =>
+    {
+        if (!isAllowed(session.ChannelId))
+        {
+            await session.HangupAsync();
+            return;
+        }
+        try
+        {
+            await serve(session);
+        }
+        catch (Exception)
+        {
+            await session.HangupAsync();
+            throw;
+        }
+    };
 ```
