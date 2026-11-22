@@ -11,7 +11,8 @@ namespace Verbara.Sdk.Cluster.Postgres.Migrations;
 /// <c>typeof(MigrationRunner).Assembly.GetManifestResourceStream(...)</c> with constant names (AOT-safe;
 /// no reflection-based discovery), against the supplied <see cref="NpgsqlDataSource"/>. There is no
 /// version table: every statement is guarded by <c>IF NOT EXISTS</c>, so the whole list runs on every
-/// call and is safe to invoke repeatedly.
+/// call and is safe to invoke repeatedly. Concurrent calls from several hosts are serialized by a
+/// transaction-scoped advisory lock, and the whole list runs in one transaction.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -35,6 +36,12 @@ public static partial class MigrationRunner
     ];
 
     /// <summary>
+    /// Key of the transaction-scoped advisory lock that serializes concurrent schema runs: the first eight
+    /// bytes of the SHA-256 of "Verbara.Sdk.Cluster.Postgres.MigrationRunner", as a big-endian signed bigint.
+    /// </summary>
+    private const long SchemaLockKey = -8524031975985183522;
+
+    /// <summary>
     /// Ensure the <c>cluster_distributed_lock</c> schema exists and is current. Idempotent; consumers
     /// invoke once at startup.
     /// </summary>
@@ -43,11 +50,26 @@ public static partial class MigrationRunner
         ArgumentNullException.ThrowIfNull(dataSource);
         ArgumentNullException.ThrowIfNull(logger);
 
+        // One transaction, serialized across hosts by a transaction-scoped advisory lock: two hosts that
+        // run CREATE TABLE IF NOT EXISTS at once on a fresh database race in the catalog and the loser
+        // fails with 23505 on pg_type_typname_nsp_index. The lock is released at COMMIT or ROLLBACK; the
+        // cluster lock itself stays a row with an expiry.
+        await using var connection = await dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(ct).ConfigureAwait(false);
+
+        await using (var serialize = new NpgsqlCommand("SELECT pg_advisory_xact_lock(@key)", connection, transaction))
+        {
+            serialize.Parameters.Add(new NpgsqlParameter("key", NpgsqlTypes.NpgsqlDbType.Bigint) { Value = SchemaLockKey });
+            await serialize.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+
         foreach (var resourceName in MigrationResourceNames)
         {
-            await using var cmd = dataSource.CreateCommand(LoadEmbeddedMigrationSql(resourceName));
+            await using var cmd = new NpgsqlCommand(LoadEmbeddedMigrationSql(resourceName), connection, transaction);
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         }
+
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
 
         LogSchemaEnsured(logger);
     }
