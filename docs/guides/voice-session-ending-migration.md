@@ -108,6 +108,11 @@ handler next to the broker's (`AddVoiceAiPipeline` or `AddOpenAiRealtimeBridge`)
 session for your handler too, as soon as the broker's handler is done. Move your work into the `ISessionHandler`, or
 run the two on separate servers.
 
+The other way round, from 2.11.0, your handler's failure does not end the broker's call: the server invokes every
+subscriber, awaits them all, counts and logs each failure (`audiosocket.subscriber_faults`, a Warning), and
+closes the connection only when every subscriber failed. Up to 2.10.x a failure of the last subscriber closed the
+connection under the broker's call, and a synchronous throw from an earlier one kept the broker from ever seeing it.
+
 ## The shutdown waits for the handlers
 
 **Before:** the broker's `StopAsync` unsubscribed from the server and returned at once. The handlers kept running

@@ -31,6 +31,9 @@ internal static partial class AudioSocketLog
     [LoggerMessage(Level = LogLevel.Error, Message = "[AudioSocket] Error handling connection")]
     public static partial void HandleConnectionError(ILogger logger, Exception exception);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] An OnSessionStarted subscriber failed for channel {ChannelId}")]
+    public static partial void SessionStartedSubscriberFailed(ILogger logger, Exception exception, Guid channelId);
+
     // ── Session ──
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "[AudioSocket] Read loop ended for channel {ChannelId}")]

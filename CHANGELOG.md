@@ -342,6 +342,36 @@ restrict `AllowedApplications`. Why: one observer's bug should not cost a connec
 silence the other observers. See the
 [troubleshooting guide](docs/guides/troubleshooting.md#missing-events).
 
+### Changed — BREAKING: an `OnSessionStarted` subscriber that fails ends the AudioSocket call only when every subscriber did (#635)
+
+The VoiceAi `AudioSocketServer` now raises `OnSessionStarted` subscriber by subscriber. It invokes every subscriber,
+in subscription order, whatever an earlier one threw, and only then awaits all of their tasks together, so no
+subscriber's start waits for another's completion. A subscriber that throws, or whose task faults, is counted on
+`audiosocket.subscriber_faults` (meter `Verbara.Sdk.VoiceAi.AudioSocket`) and then logged once at Warning
+with the exception, `[AudioSocket] An OnSessionStarted subscriber failed for channel <uuid>`, at the moment it fails,
+not when the other subscribers finish. The count comes before the line, and a logger that throws on that line is
+ignored. `OutOfMemoryException` is not caught. The connection is then closed only when **every** subscriber failed,
+and it is closed with a hangup frame first (as the server's refusals and its stop already do), so on Asterisk 20 and
+later the call goes on in the dialplan after `AudioSocket()`. When at least one subscriber completed, the connection
+stays open for it.
+
+What breaks, for a server with **two or more** subscribers (for example a session broker from `AddVoiceAiPipeline` or
+`AddOpenAiRealtimeBridge` next to a handler of your own): up to 2.10.x only the last subscriber's task was awaited. A
+synchronous throw skipped every later subscriber and closed the connection; an earlier subscriber's faulted task was
+lost with no line and no count; and a failure of the last subscriber closed the connection even when another
+subscriber was serving the call, so a side handler's bug cut the broker's live call. Now the later subscribers run, the
+earlier fault is reported, and the call another subscriber completed on stays up. If your code threw from a subscriber
+to end the call, call `session.HangupAsync()` and return instead.
+
+For a server with **one** subscriber, its failure still closes the connection, now with a hangup frame before the
+close, and it is reported as the Warning above plus the counter instead of `[AudioSocket] Error handling connection`
+at Error (`HandleConnectionError`), which a subscriber's failure no longer produces. A subscriber that owns the call
+and fails next to another that completes (a passive observer) leaves the connection open until the far end hangs up;
+have the owner catch its failure and hang up. No public symbol is added or removed. Why: one subscriber's bug should
+not take the call from another subscriber that is serving it, nor skip the subscribers after it, nor disappear without
+a trace. The `OnSessionStarted` XML documentation now states this. See the
+[troubleshooting guide](docs/guides/troubleshooting.md#sessionstartedsubscriberfailed-an-onsessionstarted-subscriber-failed).
+
 ### Changed — BREAKING: an `AgentManager` or `BridgeManager` subscriber that throws stops nothing else (#626)
 
 `AgentManager` (`AgentLoggedIn`, `AgentLoggedOff`, `AgentStateChanged`, `AgentConnected`) and `BridgeManager`

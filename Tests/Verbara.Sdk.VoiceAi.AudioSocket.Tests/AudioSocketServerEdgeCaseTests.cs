@@ -19,13 +19,10 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
     private static readonly TimeSpan SignalTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// The event ids the logging source generator gives <c>NoUuidFrame</c> and
-    /// <c>HandleConnectionError</c>. A consumer's log filter can key on them, so they are asserted
-    /// along with the names.
+    /// The event id the logging source generator gives <c>NoUuidFrame</c>. A consumer's log filter can
+    /// key on it, so it is asserted along with the name.
     /// </summary>
     private const int NoUuidFrameEventId = 1608362970;
-
-    private const int HandleConnectionErrorEventId = 663784587;
 
     private readonly AudioSocketServer _server;
 
@@ -217,40 +214,6 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
         (await peerRead).Should().Be(0, "the handler closes the connection once the server stops");
         var loopFault = await Record.ExceptionAsync(() => loop.WaitAsync(SignalTimeout));
         loopFault.Should().BeNull("a cancelled accept ends the loop; it neither hangs nor escapes as an exception");
-    }
-
-    [Fact]
-    public async Task Server_ShouldLogHandleConnectionError_WhenOnSessionStartedThrowsOperationCanceledException()
-    {
-        // Arrange — a subscriber runs only once the UUID frame has arrived, so an
-        // OperationCanceledException it raises is the consumer's own failure, not the end of the wait
-        // for the UUID. The UUID timeout runs on a fake clock that never moves, so it cannot fire.
-        var logger = new CapturingLogger();
-        await using var server = new AudioSocketServer(
-            new AudioSocketOptions { ListenAddress = "127.0.0.1", Port = 0 },
-            logger,
-            new FakeTimeProvider());
-        server.OnSessionStarted += _ => ValueTask.FromException(new OperationCanceledException());
-        await server.StartAsync(CancellationToken.None);
-
-        // Act
-        await using var client = new AudioSocketClient("127.0.0.1", server.BoundPort, Guid.NewGuid());
-        await client.ConnectAsync();
-        var firstWarningOrAbove = await logger.FirstWarningOrAbove.WaitAsync(SignalTimeout);
-        var audioBytes = await AudioBytesUntilServerClosesAsync(client).WaitAsync(SignalTimeout);
-
-        // Assert — the handler closes the connection after it logs, so once the client has seen the close,
-        // every entry the handler logs for the connection is in. The session's read loop can still add a
-        // warning of its own as the connection goes, so the full list is not pinned.
-        firstWarningOrAbove.Should().Be(
-            new LogEntry(LogLevel.Error, HandleConnectionErrorEventId, "HandleConnectionError", nameof(OperationCanceledException)),
-            "a cancellation raised by a subscriber after the UUID arrived is a connection error, as it always was");
-        logger.Entries.Should().NotContain(
-            entry => entry.EventName == "NoUuidFrame",
-            "the client sent its UUID frame, so it missed no deadline");
-        logger.Entries.Where(entry => entry.Level >= LogLevel.Error).Should().ContainSingle(
-            "the subscriber's failure is logged once");
-        audioBytes.Should().Be(0, "the server sends no audio and closes the connection");
     }
 
     [Fact]
@@ -763,19 +726,6 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Totals the audio the server sends until it closes the connection. The enumeration ends only on
-    /// that close, so completing at all is the signal.
-    /// </summary>
-    private static async Task<int> AudioBytesUntilServerClosesAsync(AudioSocketClient client)
-    {
-        var bytes = 0;
-        await foreach (var frame in client.ReadAudioAsync())
-            bytes += frame.Length;
-
-        return bytes;
-    }
-
-    /// <summary>
     /// An accept that never returns a connection and ends only when <paramref name="token"/> does, so
     /// a loop parked on it attempts nothing further and puts no wait on any clock, fake or real. The
     /// park is the token's own registration rather than a delay, so nothing here is timed.
@@ -794,16 +744,10 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
     /// <summary>A server log entry, reduced to what these tests assert on.</summary>
     private sealed record LogEntry(LogLevel Level, int EventId, string? EventName, string? ExceptionType);
 
-    /// <summary>
-    /// Records every entry the server logs, and completes <see cref="FirstWarningOrAbove"/> with the
-    /// first one at <see cref="LogLevel.Warning"/> or above.
-    /// </summary>
+    /// <summary>Records every entry the server logs.</summary>
     private sealed class CapturingLogger : ILogger<AudioSocketServer>
     {
         private readonly ConcurrentQueue<LogEntry> _entries = new();
-
-        private readonly TaskCompletionSource<LogEntry> _firstWarningOrAbove =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public IReadOnlyCollection<LogEntry> Entries => _entries.ToArray();
 
@@ -811,8 +755,6 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
 
         /// <summary>Every entry's formatted message, in logging order.</summary>
         public IReadOnlyCollection<string> Messages => _messages.ToArray();
-
-        public Task<LogEntry> FirstWarningOrAbove => _firstWarningOrAbove.Task;
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
@@ -828,8 +770,6 @@ public sealed class AudioSocketServerEdgeCaseTests : IAsyncLifetime
             var entry = new LogEntry(logLevel, eventId.Id, eventId.Name, exception?.GetType().Name);
             _entries.Enqueue(entry);
             _messages.Enqueue(formatter(state, exception));
-            if (logLevel >= LogLevel.Warning)
-                _firstWarningOrAbove.TrySetResult(entry);
         }
     }
 }

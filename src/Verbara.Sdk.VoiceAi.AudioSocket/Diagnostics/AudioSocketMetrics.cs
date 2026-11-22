@@ -45,6 +45,15 @@ public static class AudioSocketMetrics
         Meter.CreateCounter<long>("audiosocket.bytes.sent", "bytes",
             "Total bytes sent to Asterisk via AudioSocket");
 
+    /// <summary>
+    /// <c>OnSessionStarted</c> subscriber failures: a subscriber that threw or whose task faulted, one per failure. Each
+    /// is also logged at Warning; the other subscribers still run, and the connection is closed only when every
+    /// subscriber failed.
+    /// </summary>
+    internal static readonly Counter<long> SessionStartedSubscriberFaults =
+        Meter.CreateCounter<long>("audiosocket.subscriber_faults", "faults",
+            "OnSessionStarted subscriber failures (a subscriber threw or its task faulted); the others still run");
+
     // --- Histograms ---
 
     /// <summary>Duration of AudioSocket sessions in milliseconds.</summary>

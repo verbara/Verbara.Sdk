@@ -142,9 +142,20 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     private bool _lifecycleBegun;
 
     /// <summary>Raised when a new AudioSocket session has been established and the UUID frame received.</summary>
-    /// <remarks>Raised once per served connection, and never for a refused one. For a channel id that
+    /// <remarks>
+    /// <para>Raised once per served connection, and never for a refused one. For a channel id that
     /// connects again, it is raised after every <see cref="AudioSocketSession.OnHangup"/> handler of the
-    /// previous session has returned (see the class remarks).</remarks>
+    /// previous session has returned (see the class remarks).</para>
+    /// <para>Every subscriber is invoked, in subscription order, whatever an earlier one threw; then all of
+    /// their tasks are awaited together, so no subscriber's start waits for another's completion. A
+    /// subscriber that throws or whose task faults is logged once at Warning and counted on
+    /// <c>audiosocket.subscriber_faults</c> when the failure happens. The connection is then closed,
+    /// with a hangup frame first, only when every subscriber failed; when one completed, the connection is
+    /// left to it, so a side subscriber's failure does not end the call a session broker is serving.
+    /// <see cref="OutOfMemoryException"/> is not caught. Up to 2.10.x only the last subscriber's task was
+    /// awaited: a throw skipped the later subscribers, an earlier subscriber's faulted task went unobserved,
+    /// and the last one's failure closed the connection without a hangup frame.</para>
+    /// </remarks>
     public event Func<AudioSocketSession, ValueTask>? OnSessionStarted;
 
     /// <summary>
@@ -318,7 +329,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
             // however many sessions it ends.
             using var bound = new CancellationTokenSource(StopEndingBound, _timeProvider);
             using var ending = CancellationTokenSource.CreateLinkedTokenSource(bound.Token, cancellationToken);
-            await Task.WhenAll(live.Select(s => EndForStopAsync(s, ending.Token))).ConfigureAwait(false);
+            await Task.WhenAll(live.Select(s => EndWithinBoundAsync(s, ending.Token))).ConfigureAwait(false);
         }
 
         _sessions.Clear();
@@ -326,8 +337,9 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     }
 
     /// <summary>
-    /// Ends one live session for the stop: a hangup frame and the close, or, once <paramref name="ct"/>
-    /// fires, the close alone. Never throws, and the session is no longer connected when it returns.
+    /// Ends one live session from the server's side: a hangup frame and the close, or, once
+    /// <paramref name="ct"/> fires, the close alone. Never throws, and the session is no longer connected
+    /// when it returns. Used by the stop and when every <see cref="OnSessionStarted"/> subscriber failed.
     /// </summary>
     /// <remarks>
     /// The wait on the ending is bounded by <paramref name="ct"/> itself, not only by the token the ending
@@ -335,7 +347,7 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
     /// disposal that follows closes the transport, which ends that flush; the ending then finds the session
     /// already torn down.
     /// </remarks>
-    private static async Task EndForStopAsync(AudioSocketSession session, CancellationToken ct)
+    private static async Task EndWithinBoundAsync(AudioSocketSession session, CancellationToken ct)
     {
         try
         {
@@ -544,13 +556,100 @@ public sealed class AudioSocketServer : IHostedService, IAsyncDisposable
 
             AudioSocketLog.SessionStarted(_logger, channelId);
 
-            if (OnSessionStarted is not null)
-                await OnSessionStarted(session).ConfigureAwait(false);
+            var subscribers = OnSessionStarted;
+            if (subscribers is not null && !await RaiseSessionStartedAsync(subscribers, session).ConfigureAwait(false))
+            {
+                // Every subscriber failed: nobody serves this call. A hangup frame first, so on Asterisk 20 and
+                // later the call goes on in the dialplan, bounded as the stop's endings are.
+                using var bound = new CancellationTokenSource(StopEndingBound, _timeProvider);
+                await EndWithinBoundAsync(session, bound.Token).ConfigureAwait(false);
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             AudioSocketLog.HandleConnectionError(_logger, ex);
             client.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Raises <see cref="OnSessionStarted"/> subscriber by subscriber. Every subscriber is invoked first, in subscription
+    /// order, whatever an earlier one threw; only then are their tasks awaited, all together, so that no subscriber's start
+    /// waits for another's completion. Each failure is reported when it happens, by a continuation of its own task.
+    /// </summary>
+    /// <returns><see langword="true"/> when at least one subscriber completed; <see langword="false"/> when every one
+    /// failed.</returns>
+    /// <remarks><see cref="OutOfMemoryException"/> is not caught: a subscriber's leaves this method and the connection's
+    /// handler.</remarks>
+    private async ValueTask<bool> RaiseSessionStartedAsync(
+        Func<AudioSocketSession, ValueTask> subscribers, AudioSocketSession session)
+    {
+        var anyCompleted = false;
+        List<Task<bool>>? running = null;
+        foreach (var subscriber in Delegate.EnumerateInvocationList(subscribers))
+        {
+            ValueTask invocation;
+            try
+            {
+                invocation = subscriber(session);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                ReportSubscriberFailure(ex, session.ChannelId);
+                continue;
+            }
+
+            if (invocation.IsCompletedSuccessfully)
+            {
+                invocation.GetAwaiter().GetResult(); // consumes a pooled source, if any
+                anyCompleted = true;
+                continue;
+            }
+
+            (running ??= []).Add(ObserveSubscriberAsync(invocation, session.ChannelId));
+        }
+
+        if (running is null)
+            return anyCompleted;
+
+        foreach (var completed in await Task.WhenAll(running).ConfigureAwait(false))
+            anyCompleted |= completed;
+
+        return anyCompleted;
+    }
+
+    /// <summary>
+    /// Awaits one subscriber's task and reports its failure as soon as it faults, not when the other subscribers' tasks
+    /// complete. <see langword="true"/> when it completed.
+    /// </summary>
+    private async Task<bool> ObserveSubscriberAsync(ValueTask invocation, Guid channelId)
+    {
+        try
+        {
+            await invocation.ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            ReportSubscriberFailure(ex, channelId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// One subscriber's failure: counted first, then logged at Warning. The log sits in its own guard, so a host logger
+    /// that throws on the report leaves the count and the dispatch as they are.
+    /// </summary>
+    private void ReportSubscriberFailure(Exception failure, Guid channelId)
+    {
+        AudioSocketMetrics.SessionStartedSubscriberFaults.Add(1);
+        try
+        {
+            AudioSocketLog.SessionStartedSubscriberFailed(_logger, failure, channelId);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The host's logger failed on the report: the line is lost, the count already carries the fault.
         }
     }
 
