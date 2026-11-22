@@ -81,7 +81,8 @@ public sealed class MigrationRunnerTests
             var hosts = sources
                 .Select(ds => Task.Run(async () =>
                 {
-                    await using (var warm = await ds.OpenConnectionAsync()) { } // pool warm, so the start is close
+                    var warm = await ds.OpenConnectionAsync(); // pool warm, so the start is close
+                    await warm.DisposeAsync();
                     await start.WaitAsync();
                     await MigrationRunner.EnsureSchemaAsync(ds, NullLogger.Instance);
                 }))
