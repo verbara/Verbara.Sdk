@@ -77,17 +77,31 @@ public sealed class MigrationRunnerTests
         var sources = Enumerable.Range(0, 8).Select(_ => NpgsqlDataSource.Create(connectionString)).ToArray();
         try
         {
-            using var start = new SemaphoreSlim(0);
+            // A start barrier: every host warms its pool, says it is ready, and waits; the eight runs are
+            // released together only once all eight are ready, so a slow warm-up cannot spread the starts.
+            var ready = sources
+                .Select(_ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously))
+                .ToArray();
+            var go = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var hosts = sources
-                .Select(ds => Task.Run(async () =>
+                .Select((ds, i) => Task.Run(async () =>
                 {
-                    var warm = await ds.OpenConnectionAsync(); // pool warm, so the start is close
-                    await warm.DisposeAsync();
-                    await start.WaitAsync();
+                    try
+                    {
+                        var warm = await ds.OpenConnectionAsync();
+                        await warm.DisposeAsync();
+                    }
+                    finally
+                    {
+                        ready[i].SetResult(); // a failed warm-up still releases the barrier; its host then fails
+                    }
+
+                    await go.Task;
                     await MigrationRunner.EnsureSchemaAsync(ds, NullLogger.Instance);
                 }))
                 .ToArray();
-            start.Release(sources.Length);
+            await Task.WhenAll(ready.Select(r => r.Task));
+            go.SetResult();
 
             var act = async () => await Task.WhenAll(hosts);
 
