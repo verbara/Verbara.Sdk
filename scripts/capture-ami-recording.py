@@ -49,6 +49,13 @@ always gives the same output bytes:
   can choose `--drop-events`), one that still contains the run's secret, or one that the repository's
   recording redaction check (`scripts/check-recording-redaction.py`) would reject.
 
+A take under load (`--workload confbridge-exits-under-load`) is too large to reduce: `--tap-only`
+streams the unredacted tap to `--raw-dir` as it arrives and writes no recording. That workload holds
+a ladder of background load levels (`--load-levels 0,150,400`; 0 is the control) on a second
+manager session with `Events: off`, so the measured connection carries none of the control traffic,
+and announces each load sample (channels, the container's CPU time) as `UserEvent: CaptureLoad` into
+the measured stream; `--cpus` pins the container's CPU share so a level is reproducible.
+
 Docker is driven through its CLI; there is no third-party Python dependency (stdlib only, by the
 same rule as the other `scripts/*.py`).
 
@@ -65,12 +72,14 @@ import hashlib
 import importlib.util
 import json
 import os
+import queue
 import re
 import secrets
 import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -321,15 +330,20 @@ def write_recording(tap: bytes, meta, out_dir: Path, drop_events=(), keep_steps=
 class Tap:
     """A raw AMI client that records every byte it receives and parses frames as they arrive."""
 
-    def __init__(self, sock: socket.socket, clock=time.monotonic):
+    def __init__(self, sock: socket.socket, clock=time.monotonic, sink=None):
         self.sock = sock
         self.clock = clock
+        self.sink = sink  # a binary file: every byte goes there instead of `transcript`
         self.transcript = bytearray()
+        self.bytes_in = 0
         self.buf = b""
         self.frames = []  # parsed header dicts, in arrival order
+        self.observers = []  # callables given each parsed frame, in arrival order
         self.n = 0
         self.options = {}  # workload options from the command line (e.g. sequential_calls)
         self.ari = None  # an AriClient when the workload asked for ARI
+        self.open_session = None  # capture(): opens another logged-in Tap on the same PBX
+        self.read_cpu = None  # capture(): the container's cgroup CPU time, in microseconds
         self.banner = self._read_banner()
 
     def _recv(self, timeout: float) -> bool:
@@ -340,7 +354,11 @@ class Tap:
             return False
         if not chunk:
             raise ConnectionClosed("the PBX closed the manager connection")
-        self.transcript += chunk
+        self.bytes_in += len(chunk)
+        if self.sink is not None:
+            self.sink.write(chunk)
+        else:
+            self.transcript += chunk
         self.buf += chunk
         return True
 
@@ -358,8 +376,11 @@ class Tap:
             j = self.buf.find(b"\r\n\r\n")
             if j < 0:
                 return
-            self.frames.append(headers(self.buf[: j + 4]))
+            frame = headers(self.buf[: j + 4])
             self.buf = self.buf[j + 4:]
+            self.frames.append(frame)
+            for observe in self.observers:
+                observe(frame)
 
     def pump(self, seconds: float):
         deadline = self.clock() + seconds
@@ -367,9 +388,9 @@ class Tap:
             self._recv(deadline - self.clock())
             self._parse()
 
-    def send(self, fields) -> str:
+    def send(self, fields, action_id=None) -> str:
         self.n += 1
-        action_id = f"cap-{self.n}"
+        action_id = action_id or f"cap-{self.n}"
         payload = "".join(f"{k}: {v}\r\n" for k, v in list(fields) + [("ActionID", action_id)])
         self.sock.sendall((payload + "\r\n").encode("latin-1"))
         return action_id
@@ -417,9 +438,9 @@ class Tap:
 
         return self.wait_for(ended, timeout, mark, f"the end of {dict(fields).get('Action')}")
 
-    def login(self, user: str, secret: str):
+    def login(self, user: str, secret: str, events: str = "on"):
         response = self.action([("Action", "Login"), ("Username", user), ("Secret", secret),
-                                ("Events", "on")])
+                                ("Events", events)])
         if response.get("Response") != "Success":
             raise CaptureError(f"AMI login refused: {response.get('Message')}")
 
@@ -446,7 +467,7 @@ timestampevents = {timestamps}
 secret = {secret}
 read = all
 write = all
-deny = 0.0.0.0/0.0.0.0
+{user_extra}deny = 0.0.0.0/0.0.0.0
 permit = 0.0.0.0/0.0.0.0
 """
 
@@ -1596,12 +1617,636 @@ def _queue_ring_no_answer(tap: Tap):
     return steps
 
 
+# --- confbridge-exits-under-load: room exits and reliefs while the PBX carries a fixed load ----
+
+LOAD_ACCOUNT = "load"
+LOAD_TARGET_ROOM = "capture-room"
+CHANNELS_PER_UNIT = 4
+
+# The background load: a room participant is a Local pair whose far leg sits in one of the
+# background rooms for LOADT seconds while its near leg dials a tone, so audio crosses the pair into
+# the room's mixing; a call is two PJSIP loopback legs bridged with a tone on the answering side and
+# Echo() on the calling side, so RTP flows both ways. Each is four channels. Every load channel is
+# named `Local/load-...` or `PJSIP/loadout-...`, or carries the account code `load`, so a listing
+# tells it from the channels under measurement.
+_LOAD_CAPTURE = """; the relief probe's anchor: stays in capture-room until the tap ends it (600 s is a safety net only)
+exten => conf-anchor,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=600)
+ same => n,ConfBridge(capture-room)
+ same => n,Hangup()
+"""
+
+_LOAD_SIP = """; a background call's answering leg: up for the seconds its extension names, bridged with a tone
+exten => _load-call-X.,1,Answer()
+ same => n,Set(CHANNEL(accountcode)=load)
+ same => n,Set(TIMEOUT(absolute)=${EXTEN:10})
+ same => n,Dial(Local/load-tone@capture-load/n)
+ same => n,Hangup()
+"""
+
+_LOAD_CONTEXT = """
+[capture-load]
+; a background participant: the far leg of a Local pair, in room LOADROOM for LOADT seconds
+exten => load-conf,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=${LOADT})
+ same => n,ConfBridge(${LOADROOM})
+ same => n,Hangup()
+; its near leg: dials a tone, so audio crosses the pair into the room
+exten => load-dialtone,1,Dial(Local/load-tone@capture-load/n)
+ same => n,Hangup()
+exten => load-tone,1,Answer()
+ same => n,Milliwatt()
+ same => n,Hangup()
+"""
+
+_LOAD_EXTENSIONS = (_RENAMED_EXTENSIONS
+                    .replace("[capture]\n", "[capture]\n" + _LOAD_CAPTURE, 1)
+                    .replace("[capture-sip]\n", "[capture-sip]\n" + _LOAD_SIP, 1)
+                    + _LOAD_CONTEXT)
+
+# The calling leg of a background call: its own endpoint name on the loopback's address of record,
+# so it is `PJSIP/loadout-...`; the INVITE comes back in as `loop` (by its source address).
+_LOAD_PJSIP = _RENAMED_PJSIP + """
+[loadout]
+type = endpoint
+transport = transport-loopback
+context = capture-sip
+disallow = all
+allow = ulaw
+aors = loop
+direct_media = no
+"""
+
+# Asterisk drops a manager client that does not read a frame within `writetimeout` ms (100 by
+# default); under load the reader must not be cut for a pause the measurement then cannot see.
+_LOAD_MANAGER_USER = "writetimeout = 10000\n"
+
+
+def is_load_channel(row) -> bool:
+    """A CoreShowChannel row (or any frame) of the background load, not of the measurement."""
+    channel = row.get("Channel", "")
+    return (channel.startswith("Local/load-") or channel.startswith("PJSIP/loadout-")
+            or row.get("AccountCode", "") == LOAD_ACCOUNT)
+
+
+def parse_cpu_stat(text):
+    """`usage_usec` from a cgroup v2 `cpu.stat`, or None when it is not there."""
+    for line in (text or "").splitlines():
+        key, _, value = line.partition(" ")
+        if key == "usage_usec" and value.strip().isdigit():
+            return int(value)
+    return None
+
+
+def parse_levels(value) -> list:
+    """`0,150,400` -> [0, 150, 400]: the ladder of live load channels, in the order it is walked."""
+    levels = []
+    for part in str(value).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if not part.isdigit():
+            raise CaptureError(f"a load level is a whole number of channels, got {part!r}")
+        levels.append(int(part))
+    if not levels:
+        raise CaptureError("the load ladder is empty")
+    return levels
+
+
+def level_holds(loads, target: int, tolerance: float = 0.10) -> bool:
+    """Whether every sampled load channel count sits within +-tolerance of the target (0 at 0)."""
+    if not loads:
+        return False
+    if target == 0:
+        return max(loads) == 0
+    low, high = target * (1 - tolerance), target * (1 + tolerance)
+    return all(low <= n <= high for n in loads)
+
+
+class LoadStart:
+    """One background unit to originate now: slot, kind (`room` or `call`), room, lifetime in s."""
+
+    def __init__(self, slot, kind, room, lifetime):
+        self.slot, self.kind, self.room, self.lifetime = slot, kind, room, lifetime
+
+    def fields(self):
+        if self.kind == "call":
+            fields = [("Channel", f"PJSIP/load-call-{self.lifetime}@loadout"), ("Application", "Echo")]
+        else:
+            fields = [("Channel", "Local/load-conf@capture-load/n"), ("Context", "capture-load"),
+                      ("Exten", "load-dialtone"), ("Priority", "1"),
+                      ("Variable", f"__LOADT={self.lifetime}"), ("Variable", f"__LOADROOM={self.room}")]
+        return [("Action", "Originate"), *fields, ("CallerID", f"Load <{9000 + self.slot}>"),
+                ("Account", LOAD_ACCOUNT), ("Async", "true")]
+
+
+class LoadPlan:
+    """When to start which background unit, so that `level` channels stay up. Pure: the caller
+    passes the clock.
+
+    The level is held as round(level / 4) units of four channels; `call_share` of them are calls,
+    spread among the room participants, which go round-robin into `rooms` background rooms. Slot j
+    first starts at `ramp_rate` starts per second, with a lifetime spread over (0, lifetime] so the
+    expiries do not bunch, and then again every `lifetime` seconds: units / lifetime starts per
+    second once the ramp is over. While the measured load is at or over `ceiling` nothing starts,
+    and the slot is tried again on the next call."""
+
+    def __init__(self, level, now, rooms=20, lifetime=20, call_share=0.5, ramp_rate=10.0, ceiling=None):
+        if level < 0 or rooms < 1 or lifetime < 1 or not 0 <= call_share <= 1 or ramp_rate <= 0:
+            raise CaptureError("a load plan needs level >= 0, rooms >= 1, lifetime >= 1 s, "
+                               "0 <= call share <= 1 and a positive ramp rate")
+        self.level = level
+        self.units = round(level / CHANNELS_PER_UNIT)
+        self.rooms = rooms
+        self.lifetime = int(lifetime)
+        self.call_share = call_share
+        self.ceiling = ceiling if ceiling is not None else int(level * 1.2) + CHANNELS_PER_UNIT
+        self.next_at = [now + j / ramp_rate for j in range(self.units)]
+        self.started = [0] * self.units
+
+    def kind(self, slot) -> str:
+        share = self.call_share
+        return "call" if int((slot + 1) * share) > int(slot * share) else "room"
+
+    def room(self, slot) -> str:
+        rooms_before = sum(1 for j in range(slot) if self.kind(j) == "room")
+        return f"load-room-{rooms_before % self.rooms + 1:02d}"
+
+    def due(self, now, live=None):
+        """The units to start at `now`, given the load channels last measured (None: unknown)."""
+        if live is not None and live >= self.ceiling:
+            return []
+        out = []
+        for slot in range(self.units):
+            if self.next_at[slot] > now:
+                continue
+            if self.started[slot]:
+                lifetime = self.lifetime
+            else:
+                lifetime = max(1, round(self.lifetime * (slot + 1) / self.units))
+            self.started[slot] += 1
+            self.next_at[slot] = now + lifetime
+            out.append(LoadStart(slot, self.kind(slot), self.room(slot), lifetime))
+        return out
+
+
+class LoadGenerator(threading.Thread):
+    """Holds the load on a second manager session with `Events: off`, so the measured connection
+    carries no control traffic of its own. `set_level` moves it to a new level: every load channel
+    is hung up first, then the new plan ramps. Every `sample_every` seconds it counts the channels
+    (`CoreShowChannels`) and the container's CPU time and announces them as
+    `UserEvent: CaptureLoad`, which reaches the measured connection in wire order: the tap's bytes
+    hold the load it was taken under. `stop` hangs the load up and logs off; an error ends the thread
+    and is kept in `error`."""
+
+    def __init__(self, open_session, plan_for, read_cpu=None, sample_every=2.0, tick=0.05,
+                 clear_timeout=30.0, clock=time.monotonic):
+        super().__init__(daemon=True)
+        self._open_session = open_session
+        self._plan_for = plan_for
+        self._read_cpu = read_cpu
+        self._sample_every = sample_every
+        self._tick = tick
+        self._clear_timeout = clear_timeout
+        self._clock = clock
+        self._levels = queue.Queue()
+        self._halt = threading.Event()
+        self.error = None
+        self.starts = 0
+
+    def set_level(self, level: int):
+        self._levels.put(level)
+
+    def stop(self, timeout: float = 60.0):
+        self._halt.set()
+        self.join(timeout)
+
+    def _rows(self, tap):
+        mark = len(tap.frames)
+        end = tap.list_action([("Action", "CoreShowChannels")])
+        return [f for f in tap.frames[mark:] if f.get("Event") == "CoreShowChannel"
+                and f.get("ActionID") == end.get("ActionID")]
+
+    def _sample(self, tap, plan):
+        rows = self._rows(tap)
+        load = sum(1 for r in rows if is_load_channel(r))
+        cpu = self._read_cpu() if self._read_cpu else None
+        tap.action([("Action", "UserEvent"), ("UserEvent", "CaptureLoad"),
+                    ("Target", str(plan.level if plan else 0)), ("Units", str(plan.units if plan else 0)),
+                    ("LoadChannels", str(load)), ("AllChannels", str(len(rows))),
+                    ("CpuUsec", "" if cpu is None else str(cpu)), ("Starts", str(self.starts))])
+        return load
+
+    def _clear(self, tap):
+        tap.action([("Action", "Hangup"), ("Channel", "/^(Local\\/load-|PJSIP\\/loadout-)/")])
+        deadline = self._clock() + self._clear_timeout
+        while any(is_load_channel(r) for r in self._rows(tap)) and self._clock() < deadline:
+            tap.pump(0.5)
+
+    def run(self):
+        tap = None
+        plan = None
+        try:
+            tap = self._open_session("off")
+            live = None
+            next_sample = self._clock()
+            while not self._halt.is_set():
+                try:
+                    level = self._levels.get_nowait()
+                except queue.Empty:
+                    level = None
+                if level is not None:
+                    self._clear(tap)
+                    plan = self._plan_for(level, self._clock())
+                    live = None
+                    next_sample = self._clock()
+                now = self._clock()
+                if plan is not None:
+                    for start in plan.due(now, live):
+                        tap.send(start.fields())
+                        self.starts += 1
+                if now >= next_sample:
+                    live = self._sample(tap, plan)
+                    next_sample = now + self._sample_every
+                tap.pump(self._tick)
+                del tap.frames[:]  # the answers are drained; nothing waits on an old index
+            self._clear(tap)
+            self._sample(tap, None)
+            tap.logoff()
+        except (CaptureError, OSError) as error:
+            self.error = str(error) or type(error).__name__
+        finally:
+            if tap is not None:
+                try:
+                    tap.sock.close()
+                except OSError:
+                    pass
+
+
+class HangupLister:
+    """Asks for a room's ConfbridgeList the moment one of its participants hangs up before its
+    ConfbridgeLeave was seen: once per participant, never once its leave arrived, never for a
+    channel that did not join that room. `observe` returns (action_id, fields) to send, or None; the
+    ActionID is `hl-<Uniqueid>`, so the tap ties each list to the hangup that asked for it."""
+
+    def __init__(self, room: str):
+        self.room = room
+        self.joined = set()
+        self.left = set()
+        self.hung_up = set()
+        self.asked = []  # Uniqueids, in the order their lists were asked
+
+    def observe(self, f):
+        event, uid = f.get("Event"), f.get("Uniqueid", "")
+        if is_sentinel_uniqueid(uid):
+            return None
+        if event == "ConfbridgeJoin" and f.get("Conference") == self.room:
+            self.joined.add(uid)
+        elif event == "ConfbridgeLeave" and f.get("Conference") == self.room:
+            self.left.add(uid)
+        elif event == "Hangup" and uid in self.joined:
+            self.hung_up.add(uid)
+            if uid not in self.left and uid not in self.asked:
+                self.asked.append(uid)
+                return f"hl-{uid}", [("Action", "ConfbridgeList"), ("Conference", self.room)]
+        return None
+
+    def pending(self) -> set:
+        """Participants that joined and have not hung up yet."""
+        return self.joined - self.hung_up
+
+
+class ReaderMeter:
+    """Whether the reader keeps up: for each frame with a `Timestamp` (timestampevents = yes), the
+    wall-clock time it was parsed minus that Timestamp; host and container share one clock. A window
+    in which any frame was parsed more than `limit` seconds after Asterisk stamped it is not valid:
+    the order on the wire is still exact, but a time the measurement reports is the reader's."""
+
+    def __init__(self, limit: float = 0.5, wall=time.time):
+        self.limit = limit
+        self.wall = wall
+        self.reset(0)
+
+    def reset(self, bytes_in: int):
+        self.started = self.wall()
+        self.bytes_at_start = bytes_in
+        self.frames = self.stamped = self.late = 0
+        self.max_lag = 0.0
+
+    def observe(self, f):
+        self.frames += 1
+        stamp = f.get("Timestamp")
+        if not stamp:
+            return
+        try:
+            lag = self.wall() - float(stamp)
+        except ValueError:
+            return
+        self.stamped += 1
+        self.max_lag = max(self.max_lag, lag)
+        if lag > self.limit:
+            self.late += 1
+
+    def report(self, bytes_in: int):
+        seconds = max(self.wall() - self.started, 1e-9)
+        return {"frames": self.frames, "seconds": round(seconds, 3),
+                "events_per_second": round(self.frames / seconds, 1),
+                "bytes_per_second": round((bytes_in - self.bytes_at_start) / seconds, 1),
+                "max_lag_ms": round(self.max_lag * 1000, 3), "late_frames": self.late,
+                "valid": self.stamped > 0 and self.late == 0}
+
+
+class LoadSamples:
+    """The `UserEvent: CaptureLoad` frames the measured connection received, in order."""
+
+    def __init__(self):
+        self.samples = []
+
+    def observe(self, f):
+        if f.get("Event") == "UserEvent" and f.get("UserEvent") == "CaptureLoad":
+            cpu = f.get("CpuUsec", "")
+            stamp = f.get("Timestamp", "")
+            self.samples.append({"target": int(f.get("Target", "0") or 0),
+                                 "load": int(f.get("LoadChannels", "0") or 0),
+                                 "all": int(f.get("AllChannels", "0") or 0),
+                                 "cpu_usec": int(cpu) if cpu.isdigit() else None,
+                                 "wall": float(stamp) if stamp else None})
+
+
+def level_summary(samples, target: int, tolerance: float = 0.10):
+    """What a level's window measured: its samples' load range, whether it held, and the CPU
+    cores the container used between the first and last sample that carry CPU time and a stamp."""
+    loads = [s["load"] for s in samples]
+    timed = [s for s in samples if s["cpu_usec"] is not None and s["wall"] is not None]
+    cores = None
+    if len(timed) >= 2 and timed[-1]["wall"] > timed[0]["wall"]:
+        cores = round((timed[-1]["cpu_usec"] - timed[0]["cpu_usec"]) / 1e6
+                      / (timed[-1]["wall"] - timed[0]["wall"]), 3)
+    return {"samples": len(samples), "load_min": min(loads) if loads else None,
+            "load_max": max(loads) if loads else None, "held": level_holds(loads, target, tolerance),
+            "cpu_cores": cores}
+
+
+def _confbridge_exits_under_load(tap: Tap):
+    """For each level of the load ladder (`load_levels`, default `0`; `0` is the control): ramp
+    the background load on a second session and wait until it holds; `exits` normal exits from
+    `capture-room` (`conf-seq`, one second each, started at `exit_rate` per second); then the relief
+    probe: a PJSIP participant relieved by an INVITE with Replaces of its own dialog, `reliefs`
+    times alone in the room and `reliefs` times beside an anchor that stays, each with
+    ConfbridgeList every ~50 ms from the INVITE to `relief_poll_after` s after the relieved
+    channel's Hangup, a `relief_window` s wait for a late leave, then the successor listed, muted
+    and hung up.
+
+    Throughout, the moment a participant of `capture-room` hangs up before its ConfbridgeLeave was
+    seen, the room's ConfbridgeList is asked on the measured connection (ActionID `hl-<Uniqueid>`).
+    Each level ends with `UserEvent: CaptureLevel`: the load range sampled during the window and
+    whether it held within 10 %, the container's CPU cores, the frames, events and bytes per second
+    the reader took, its largest lag behind Asterisk's Timestamp and whether it stayed within
+    `max_reader_lag` s, and the lists asked on a hangup. The measurement itself never hangs up a
+    load channel. A relief that fails or times out is recorded, never fatal."""
+    opts = tap.options
+    if tap.open_session is None:
+        raise CaptureError("confbridge-exits-under-load needs a second manager session (capture() opens it)")
+    levels = parse_levels(opts.get("load_levels", "0"))
+    room = LOAD_TARGET_ROOM
+    timeout = float(opts.get("join_timeout", 20))
+    tolerance = float(opts.get("load_tolerance", 0.10))
+    steps = []
+
+    lister = HangupLister(room)
+    meter = ReaderMeter(float(opts.get("max_reader_lag", 0.5)))
+    loads = LoadSamples()
+
+    def ask_list(f):
+        asked = lister.observe(f)
+        if asked:
+            try:
+                tap.send(asked[1], action_id=asked[0])
+            except OSError as error:
+                raise ConnectionClosed(f"the manager connection failed: {error}") from error
+
+    tap.observers += [ask_list, meter.observe, loads.observe]
+
+    def step(name, clear=False):
+        steps.append(name)
+        if clear:  # nothing still waits on an index taken before this step
+            del tap.frames[:]
+        tap.marker(name)
+        return len(tap.frames)
+
+    def originate(channel, cid, app="Wait", data="30", variables=(), exten=None):
+        fields = [("Action", "Originate"), ("Channel", channel)]
+        if exten:
+            fields += [("Context", "capture"), ("Exten", exten), ("Priority", "1")]
+        else:
+            fields += [("Application", app), ("Data", data)]
+        fields += [("CallerID", f"Capture <{cid}>"), ("Async", "true")]
+        fields += [("Variable", v) for v in variables]
+        return tap.send(fields)
+
+    def note(name, **kv):
+        fields = [("Action", "UserEvent"), ("UserEvent", "CaptureOutcome"), ("Step", name)]
+        fields += [(k, re.sub(r"[\r\n]+", " ", str(v))[:200]) for k, v in kv.items()]
+        tap.action(fields)
+
+    def channels():
+        mark = len(tap.frames)
+        end = tap.list_action([("Action", "CoreShowChannels")])
+        return [f for f in tap.frames[mark:] if f.get("Event") == "CoreShowChannel"
+                and f.get("ActionID") == end.get("ActionID")]
+
+    def cleanup(keep_uids, wait=15.0):
+        """Hang up every channel of the measurement but `keep_uids`; never a load channel."""
+        deadline = tap.clock() + wait
+        while True:
+            rest = [c for c in channels() if c.get("Uniqueid") not in keep_uids and not is_load_channel(c)]
+            if not rest or tap.clock() > deadline:
+                return len(rest)
+            for c in rest:
+                tap.send([("Action", "Hangup"), ("Channel", c.get("Channel", ""))])
+            tap.pump(0.5)
+
+    def conf_list():
+        mark = len(tap.frames)
+        end = tap.list_action([("Action", "ConfbridgeList"), ("Conference", room)])
+        return [f for f in tap.frames[mark:] if f.get("Event") == "ConfbridgeList"
+                and f.get("ActionID") == end.get("ActionID")]
+
+    def dialog_of(target):
+        values = {}
+        for key in ("call-id", "local_tag", "remote_tag"):
+            response = tap.action([("Action", "Getvar"), ("Channel", target["Channel"]),
+                                   ("Variable", f"CHANNEL(pjsip,{key})")])
+            values[key] = response.get("Value", "")
+        if not all(values.values()):
+            return None
+        return f"{values['call-id']};to-tag={values['local_tag']};from-tag={values['remote_tag']}"
+
+    def wait_level(level):
+        """Pump until the last three samples taken at this level hold it, or the ramp times out."""
+        deadline = tap.clock() + float(opts.get("ramp_timeout", 180))
+        first = len(loads.samples)
+        while tap.clock() < deadline:
+            mine = [s["load"] for s in loads.samples[first:] if s["target"] == level]
+            if len(mine) >= 3 and level_holds(mine[-3:], level, tolerance):
+                return True
+            tap.pump(0.2)
+        return False
+
+    def exits(prefix):
+        n = int(opts.get("exits", 0))
+        if not 0 <= n <= 1000:
+            raise CaptureError("exits is a count from 0 to 1000 (caller IDs 8000-8999)")
+        interval = 1.0 / float(opts.get("exit_rate", 2.0))
+        for i in range(n):
+            originate("Local/conf-seq@capture/n", str(8000 + i), data="5")
+            tap.pump(interval)
+        deadline = tap.clock() + timeout + 10
+        while lister.pending() and tap.clock() < deadline:
+            tap.pump(0.2)
+        tap.pump(float(opts.get("relief_window", 5.0)))  # a late leave still lands in this step
+        left = cleanup(set())
+        note(f"{prefix}-exits", Exits=n, Pending=len(lister.pending()), LeftOver=left)
+
+    def relief(prefix, counter):
+        n = int(opts.get("reliefs", 10))
+        window = float(opts.get("relief_window", 5.0))
+        after = float(opts.get("relief_poll_after", 1.0))
+        for shape in ("alone", "anchored"):
+            if not n:
+                break
+            anchor, keep = None, set()
+            if shape == "anchored":
+                mark = step(f"{prefix}-anchor-join", clear=True)
+                cid = str(next(counter))
+                originate("Local/conf-anchor@capture/n", cid, data="600")
+                anchor = tap.wait_for(lambda f, c=cid: f.get("Event") == "ConfbridgeJoin"
+                                      and f.get("CallerIDNum") == c, timeout, mark, "the anchor's join")
+                tap.pump(0.5)
+                keep = {c.get("Uniqueid") for c in channels() if not is_load_channel(c)}
+            for i in range(1, n + 1):
+                name = f"{prefix}-relief-{shape}-{i:02d}"
+                mark = step(name, clear=True)
+                try:
+                    cid = str(next(counter))
+                    originate("PJSIP/conf-in@loop", cid)
+                    join = tap.wait_for(lambda f, c=cid: f.get("Event") == "ConfbridgeJoin"
+                                        and f.get("CallerIDNum") == c, timeout, mark, "the target's join")
+                    u1, ch1 = join["Uniqueid"], join["Channel"]
+                    tap.pump(0.5)
+                    conf_list()  # L0: before the relief, the target is listed (the list's own control)
+                    header = dialog_of(join)
+                    if header is None:
+                        note(name, Shape=shape, Result="no-dialog", TargetId=u1)
+                        cleanup(keep)
+                        continue
+                    hmark = len(tap.frames)
+                    originate("Local/replace@capture/n", str(next(counter)), data="20",
+                              variables=[f"__RH={header}"])
+                    polls, t_hang = 0, None
+                    deadline = tap.clock() + 8.0
+                    while tap.clock() < deadline:
+                        conf_list()
+                        polls += 1
+                        if t_hang is None and tap.count(lambda f: f.get("Event") == "Hangup"
+                                                        and f.get("Uniqueid") == u1, hmark):
+                            t_hang = tap.clock()
+                            step(f"{name}-hungup")
+                        if t_hang is not None and tap.clock() - t_hang >= after:
+                            break
+                        tap.pump(0.05)
+                    if t_hang is not None:
+                        rest = window - (tap.clock() - t_hang)
+                        if rest > 0:
+                            tap.pump(rest)
+                    step(f"{name}-after-window")
+                    rows = conf_list()
+                    succ = [r for r in rows if r.get("Uniqueid") != u1 and r.get("Channel") != ch1
+                            and (anchor is None or r.get("Channel") != anchor.get("Channel"))]
+                    for r in succ:
+                        tap.action([("Action", "ConfbridgeMute"), ("Conference", room),
+                                    ("Channel", r.get("Channel", ""))])
+                    tap.pump(0.3)
+                    step(f"{name}-successor-hangup")
+                    for r in succ:
+                        tap.action([("Action", "Hangup"), ("Channel", r.get("Channel", ""))])
+                    tap.pump(1.5)
+                    left = cleanup(keep)
+                    tap.pump(0.5)
+                    leaves = tap.count(lambda f: f.get("Event") == "ConfbridgeLeave"
+                                       and f.get("Uniqueid") == u1, mark)
+                    note(name, Shape=shape, Result="ok" if t_hang is not None else "no-hangup",
+                         TargetId=u1, TargetName=ch1, Polls=polls, LeavesOfTarget=leaves,
+                         HangupList="yes" if u1 in lister.asked else "no",
+                         Successors=",".join(r.get("Channel", "") for r in succ), LeftOver=left)
+                except ConnectionClosed:
+                    raise
+                except CaptureError as error:
+                    cleanup(keep)
+                    note(name, Shape=shape, Result="error", Detail=str(error))
+            if anchor is not None:
+                step(f"{prefix}-anchor-hangup")
+                cleanup(set())
+                tap.pump(1.0)
+
+    def plan_for(level, now):
+        return LoadPlan(level, now, rooms=int(opts.get("load_rooms", 20)),
+                        lifetime=int(opts.get("load_lifetime", 20)),
+                        call_share=float(opts.get("load_call_share", 0.5)),
+                        ramp_rate=float(opts.get("load_ramp_rate", 10.0)))
+
+    generator = LoadGenerator(tap.open_session, plan_for, tap.read_cpu,
+                              sample_every=float(opts.get("load_sample_every", 2.0)))
+    generator.start()
+    try:
+        for level in levels:
+            prefix = f"level-{level}"
+            step(f"{prefix}-ramp", clear=True)
+            generator.set_level(level)
+            ramp_held = wait_level(level)
+            first_sample = len(loads.samples)
+            asked_before = len(lister.asked)
+            meter.reset(tap.bytes_in)
+            step(f"{prefix}-exits", clear=True)
+            exits(prefix)
+            relief(prefix, iter(range(7200, 7999)))
+            window = [s for s in loads.samples[first_sample:] if s["target"] == level]
+            summary = level_summary(window, level, tolerance)
+            reader = meter.report(tap.bytes_in)
+            note(prefix, Level=level, RampHeld="yes" if ramp_held else "no",
+                 Held="yes" if summary["held"] else "no", Samples=summary["samples"],
+                 LoadMin=summary["load_min"], LoadMax=summary["load_max"], CpuCores=summary["cpu_cores"],
+                 Frames=reader["frames"], EventsPerSecond=reader["events_per_second"],
+                 BytesPerSecond=reader["bytes_per_second"], MaxLagMs=reader["max_lag_ms"],
+                 LateFrames=reader["late_frames"], ReaderValid="yes" if reader["valid"] else "no",
+                 HangupLists=len(lister.asked) - asked_before, LoadStarts=generator.starts,
+                 LoadError=generator.error or "")
+            if generator.error:
+                break
+        step("load-stop", clear=True)
+    finally:
+        generator.stop()
+    note("load-stop", LoadError=generator.error or "", LoadStarts=generator.starts)
+    step("done")
+    return steps
+
+
 WORKLOADS = {
     "bridges-and-conference": {
         "description": "Local call; two-party bridge + BridgeList/BridgeInfo/Status; two-participant "
                        "ConfBridge + ConfbridgeListRooms/ConfbridgeList/BridgeList; empty listings.",
         "files": {"extensions.conf": _BRIDGES_EXTENSIONS, "confbridge.conf": _BRIDGES_CONFBRIDGE},
         "run": _bridges_and_conference,
+    },
+    "confbridge-exits-under-load": {
+        "description": "Under each level of a load ladder (--load-levels, 0 = control) held on a second "
+                       "Events-off session: --exits normal ConfBridge exits, then --reliefs reliefs by an "
+                       "INVITE with Replaces alone and beside an anchor; ConfbridgeList asked on every "
+                       "participant Hangup whose leave was not seen; load, CPU and reader lag per level.",
+        "files": {"extensions.conf": _LOAD_EXTENSIONS, "queues.conf": _RENAMED_QUEUES,
+                  "confbridge.conf": _BRIDGES_CONFBRIDGE, "pjsip.conf": _LOAD_PJSIP},
+        "manager_user": _LOAD_MANAGER_USER,
+        "run": _confbridge_exits_under_load,
     },
     "dialplan-and-parking": {
         "description": "Mid-call CALLERID change + Goto (NewCallerid, Newexten); Redirect; Park() picked "
@@ -1680,8 +2325,34 @@ def _check_version_matches_tag(tag, asterisk_version):
         raise CaptureError(f"the tag {tag!r} does not name the running build ({asterisk_version!r})")
 
 
+def manager_conf(secret: str, timestamps=True, user_extra="") -> str:
+    """The manager.conf of a run: one account, with `user_extra` lines (e.g. `writetimeout`)."""
+    return _MANAGER_CONF.format(user=MANAGER_USER, secret=secret,
+                                timestamps="yes" if timestamps else "no", user_extra=user_extra)
+
+
+def _open_session_on(host: str, port: int, secret: str):
+    """A factory of further logged-in Taps on the run's PBX (`events` = the Login's Events)."""
+
+    def open_session(events="off"):
+        sock = socket.create_connection((host, port), timeout=15)
+        try:
+            tap = Tap(sock)
+            tap.login(MANAGER_USER, secret, events)
+        except BaseException:
+            sock.close()
+            raise
+        return tap
+
+    return open_session
+
+
 def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timestamps=True,
-            drop_events=(), keep_steps=(), name_prefix="labc", options=None):
+            drop_events=(), keep_steps=(), name_prefix="labc", options=None, docker_args=(),
+            tap_only=False):
+    """Run one workload on one image. With `tap_only` the tap streams to `<raw_dir>/<name>.tap.raw`
+    as it arrives (a take too large to hold in memory or to reduce) and nothing is reduced: the
+    return value is (tap_path, None). `docker_args` go to `docker run` (e.g. `--cpus 4`)."""
     workload = WORKLOADS.get(workload_name)
     if workload is None:
         raise CaptureError(f"unknown workload {workload_name!r}; see `workloads`")
@@ -1691,8 +2362,7 @@ def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timest
     container = f"{name_prefix}-{workload_name}-{os.getpid()}-{secrets.token_hex(3)}"
     conf_dir = Path(tempfile.mkdtemp(prefix="ami-capture-conf-"))
     files = dict(workload["files"])
-    files["manager.conf"] = _MANAGER_CONF.format(
-        user=MANAGER_USER, secret=secret, timestamps="yes" if timestamps else "no")
+    files["manager.conf"] = manager_conf(secret, timestamps, workload.get("manager_user", ""))
     ports = ["-p", f"127.0.0.1::{AMI_PORT}"]
     ari_secret = None
     if workload.get("ari"):  # ARI on its own ephemeral loopback port, with a password made for this run
@@ -1708,7 +2378,7 @@ def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timest
         mounts += ["-v", f"{path}:/etc/asterisk/{filename}:ro"]
     started = False
     try:
-        _docker("run", "-d", "--name", container, *ports, *mounts, run_ref)
+        _docker("run", "-d", "--name", container, *docker_args, *ports, *mounts, run_ref)
         started = True
         booted = _docker("exec", container, "asterisk", "-rx", "core waitfullybooted",
                          check=False, timeout=90)
@@ -1727,9 +2397,17 @@ def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timest
         port = _docker("port", container, f"{AMI_PORT}/tcp").stdout.strip().splitlines()[0]
         host, _, port_number = port.rpartition(":")
         sock = socket.create_connection((host.strip("[]"), int(port_number)), timeout=15)
+        sink = None
         try:
-            tap = Tap(sock)
+            if tap_only:
+                raw_dir.mkdir(parents=True, exist_ok=True)
+                tap_path = raw_dir / f"{recording_name(workload_name, asterisk_version)}.tap.raw"
+                sink = open(tap_path, "wb")
+            tap = Tap(sock, sink=sink)
             tap.options = dict(options or {})
+            tap.open_session = _open_session_on(host.strip("[]"), int(port_number), secret)
+            tap.read_cpu = lambda: parse_cpu_stat(_docker(
+                "exec", container, "cat", "/sys/fs/cgroup/cpu.stat", check=False, timeout=15).stdout)
             if ari_secret:
                 ari = _docker("port", container, f"{ARI_PORT}/tcp").stdout.strip().splitlines()[0]
                 ari_host, _, ari_port = ari.rpartition(":")
@@ -1742,7 +2420,9 @@ def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timest
             tap.logoff()
         finally:
             sock.close()
-        tap_bytes = bytes(tap.transcript)
+            if sink is not None:
+                sink.close()
+        tap_bytes = b"" if tap_only else bytes(tap.transcript)
     finally:
         if started:
             _docker("rm", "-f", container, check=False)
@@ -1751,6 +2431,14 @@ def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timest
         conf_dir.rmdir()
 
     captured = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if tap_only:
+        digest = hashlib.sha256()
+        with open(tap_path, "rb") as kept:
+            for block in iter(lambda: kept.read(1 << 20), b""):
+                digest.update(block)
+        tap_sha256, tap_size = digest.hexdigest(), tap_path.stat().st_size
+    else:
+        tap_sha256, tap_size = hashlib.sha256(tap_bytes).hexdigest(), len(tap_bytes)
     meta = {
         "workload": workload_name,
         "image": image,
@@ -1760,14 +2448,19 @@ def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timest
         "captured_utc": captured,
         "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "steps": steps,
-        "tap_bytes": len(tap_bytes),
-        "tap_sha256": hashlib.sha256(tap_bytes).hexdigest(),
+        "tap_bytes": tap_size,
+        "tap_sha256": tap_sha256,
+        "docker_args": list(docker_args),
+        "options": {k: v for k, v in sorted((options or {}).items())},
     }
     raw_dir.mkdir(parents=True, exist_ok=True)
     stem = recording_name(workload_name, asterisk_version)
     tap_path = raw_dir / f"{stem}.tap.raw"
-    tap_path.write_bytes(tap_bytes)
+    if not tap_only:
+        tap_path.write_bytes(tap_bytes)
     (raw_dir / f"{stem}.tap.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    if tap_only:
+        return tap_path, None
     written = write_recording(tap_bytes, meta, out_dir, drop_events, keep_steps,
                               forbidden=[v for v in (secret, ari_secret) if v])
     return tap_path, written
@@ -1798,6 +2491,23 @@ def main(argv=None):
     cap.add_argument("--sequential-calls", type=int, default=0,
                      help="renamed-caller-and-participant: N sequential calls per surface (default 0); "
                           "queue-revisit, queue-ring-no-answer: N calls of each kind (default 1)")
+    cap.add_argument("--tap-only", action="store_true",
+                     help="stream the unredacted tap to --raw-dir and reduce nothing (a take over the cap)")
+    cap.add_argument("--cpus", default="",
+                     help="docker run --cpus for the container (e.g. 4), so a load level is reproducible")
+    load = cap.add_argument_group("confbridge-exits-under-load")
+    load.add_argument("--load-levels", default="0", help="live load channels per level, walked in order")
+    load.add_argument("--load-rooms", type=int, default=20, help="background rooms")
+    load.add_argument("--load-lifetime", type=int, default=20, help="seconds each background unit lives")
+    load.add_argument("--load-call-share", type=float, default=0.5, help="share of units that are calls")
+    load.add_argument("--load-ramp-rate", type=float, default=10.0, help="unit starts per second while ramping")
+    load.add_argument("--load-sample-every", type=float, default=2.0, help="seconds between load samples")
+    load.add_argument("--exits", type=int, default=300, help="normal room exits per level")
+    load.add_argument("--exit-rate", type=float, default=2.0, help="normal exits started per second")
+    load.add_argument("--reliefs", type=int, default=10, help="reliefs per shape (alone, anchored) per level")
+    load.add_argument("--relief-window", type=float, default=5.0, help="seconds to wait for a late leave")
+    load.add_argument("--max-reader-lag", type=float, default=0.5,
+                      help="seconds a frame may be parsed after its Timestamp before the level is not valid")
 
     red = sub.add_parser("reduce", help="reduce a kept tap again (deterministic)")
     red.add_argument("tap", type=Path, help="<name>.tap.raw; its <name>.tap.json must be beside it")
@@ -1825,13 +2535,26 @@ def main(argv=None):
                   f"frames) and {side.name} in {args.out}")
             return 0
         raw_dir = args.raw_dir or Path(tempfile.mkdtemp(prefix="ami-capture-tap-"))
+        options = {"sequential_calls": args.sequential_calls}
+        if args.workload == "confbridge-exits-under-load":
+            parse_levels(args.load_levels)
+            options.update({
+                "load_levels": args.load_levels, "load_rooms": args.load_rooms,
+                "load_lifetime": args.load_lifetime, "load_call_share": args.load_call_share,
+                "load_ramp_rate": args.load_ramp_rate, "load_sample_every": args.load_sample_every,
+                "exits": args.exits, "exit_rate": args.exit_rate, "reliefs": args.reliefs,
+                "relief_window": args.relief_window, "max_reader_lag": args.max_reader_lag})
+        docker_args = ("--cpus", args.cpus) if args.cpus else ()
         for image in args.image:
-            tap_path, (raw, side, report, size) = capture(
+            tap_path, written = capture(
                 image, args.workload, args.out, raw_dir, not args.no_timestamps,
-                _csv(args.drop_events), _csv(args.keep_steps),
-                options={"sequential_calls": args.sequential_calls})
+                _csv(args.drop_events), _csv(args.keep_steps), options=options,
+                docker_args=docker_args, tap_only=args.tap_only)
             print(f"{image}: tap {tap_path} ({tap_path.stat().st_size} bytes, unredacted -- keep it "
                   f"out of the repository)")
+            if written is None:
+                continue
+            raw, side, report, size = written
             print(f"  wrote {raw.name} ({size} bytes, {report['frames_kept']}/{report['frames_in']} "
                   f"frames) and {side.name} in {args.out}")
         return 0

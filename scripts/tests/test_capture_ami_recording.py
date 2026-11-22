@@ -1295,5 +1295,580 @@ class QueueRingNoAnswerWorkloadTests(unittest.TestCase):
         self.assertEqual(["1", "1", "0"], [o[2] for o in outcomes], "the missed ring is still indexed")
 
 
+# --- confbridge-exits-under-load ---------------------------------------------------------------
+
+
+class _LockedPbx(_FakePbx):
+    """A fake whose socket another fake may also write to (the load session's broadcasts)."""
+
+    def __init__(self, sock, script):
+        super().__init__(sock, script)
+        self.lock = threading.Lock()
+
+    def _send(self, data):
+        with self.lock:
+            super()._send(data)
+
+    def broadcast(self, data):
+        try:
+            self._send(data)
+        except OSError:
+            pass
+
+
+def _ok(message="Success"):
+    return b"Response: Success\r\nActionID: {id}\r\nMessage: " + message.encode() + b"\r\n\r\n"
+
+
+def _list(rows, item):
+    """A list answer: start, one `item` event per row (each a list of header pairs), Complete."""
+    return ([b"Response: Success\r\nActionID: {id}\r\nEventList: start\r\n\r\n"]
+            + [frame(("Event", item), ("ActionID", "{id}"), *row) for row in rows]
+            + [frame(("Event", item + "Complete"), ("ActionID", "{id}"), ("EventList", "Complete"),
+                     ("ListItems", str(len(rows))))])
+
+
+def _user_event(h):
+    """Echo a UserEvent with every header it was sent with, stamped like timestampevents = yes."""
+    pairs = [("Event", "UserEvent")] + [(k, v) for k, v in h.items() if k not in ("Action", "ActionID")]
+    return frame(*pairs, ("ActionID", h["ActionID"]), ("Timestamp", f"{__import__('time').time():.6f}"))
+
+
+class _LoadPbx:
+    """The load session's side: counts four channels per unit originated since the last clear,
+    answers the clear's Hangup, and relays each CaptureLoad UserEvent to the measured session."""
+
+    def __init__(self):
+        self.units = 0
+        self.measured = None  # the measured session's fake, set once both exist
+        self.events = []
+
+    def script(self):
+        def originate(h):
+            self.units += 1
+            return [_ok("Originate successfully queued")]
+
+        def hangup(h):
+            self.units = 0
+            return [_ok("Channel Hungup")]
+
+        def channels(h):
+            rows = [[("Channel", f"Local/load-conf@capture-load-{n:08d};2"), ("Uniqueid", f"9.{n}")]
+                    for n in range(self.units * 4)]
+            return _list(rows, "CoreShowChannel")
+
+        def user_event(h):
+            self.events.append(h)
+            if self.measured is not None:
+                self.measured.broadcast(_user_event(h).replace(b"{id}", h["ActionID"].encode()))
+            return [_ok("Event Sent")]
+
+        return {"Login": [_ok("Authentication accepted")], "Originate": originate, "Hangup": hangup,
+                "CoreShowChannels": channels, "UserEvent": user_event,
+                "Logoff": [b"Response: Goodbye\r\nActionID: {id}\r\n\r\n"]}
+
+
+class _RoomPbx:
+    """The measured session's side of confbridge-exits-under-load. Each normal exit joins, leaves and
+    hangs up -- except caller 8001, whose Hangup comes before its leave (the race the hangup list is
+    for); a relief target is hung up with Cause 0 and no leave, and its successor is listed from then
+    on; the successor and the anchor leave when hung up. The listing always shows one load channel,
+    which the measurement must never hang up."""
+
+    LOAD_ROW = [("Channel", "Local/load-conf@capture-load-00000001;2"), ("Uniqueid", "9.1")]
+
+    def __init__(self):
+        self.n = 0
+        self.live = {}  # channel -> uniqueid, the measurement's channels in the room
+        self.target = None
+        self.hangups = []
+
+    def _next(self, stem):
+        self.n += 1
+        return f"{stem}-{self.n:08d}", f"1700000000.{self.n}"
+
+    def _join(self, channel, uid, cid):
+        self.live[channel] = uid
+        return _ev(("Event", "ConfbridgeJoin"), ("Conference", "capture-room"), ("Channel", channel),
+                   ("Uniqueid", uid), ("CallerIDNum", cid))
+
+    def _leave(self, channel, uid):
+        return _ev(("Event", "ConfbridgeLeave"), ("Conference", "capture-room"), ("Channel", channel),
+                   ("Uniqueid", uid))
+
+    def _hangup(self, channel, uid, cause="16"):
+        self.live.pop(channel, None)
+        return _ev(("Event", "Hangup"), ("Channel", channel), ("Uniqueid", uid), ("Cause", cause))
+
+    def originate(self, h):
+        cid = h["CallerID"].split("<")[1].rstrip(">")
+        queued = [_ok("Originate successfully queued")]
+        channel = h["Channel"]
+        if channel == "Local/conf-seq@capture/n":
+            ch, uid = self._next("Local/conf-seq@capture")
+            if cid == "8001":
+                return queued + [self._join(ch, uid, cid), self._hangup(ch, uid), self._leave(ch, uid)]
+            return queued + [self._join(ch, uid, cid), self._leave(ch, uid), self._hangup(ch, uid)]
+        if channel in ("PJSIP/conf-in@loop", "Local/conf-anchor@capture/n"):
+            ch, uid = self._next("PJSIP/loop" if channel.startswith("PJSIP") else "Local/conf-anchor@capture")
+            if channel.startswith("PJSIP"):
+                self.target = (ch, uid)
+            return queued + [self._join(ch, uid, cid)]
+        if channel == "Local/replace@capture/n":
+            ch, uid = self.target
+            succ, succ_uid = self._next("PJSIP/loop")
+            self.live[succ] = succ_uid
+            return queued + [self._hangup(ch, uid, cause="0")]
+        return [b"Response: Error\r\nActionID: {id}\r\nMessage: Originate failed\r\n\r\n"]
+
+    def hangup(self, h):
+        self.hangups.append(h["Channel"])
+        uid = self.live.get(h["Channel"])
+        if uid is None:
+            return [_ok("Channel Hungup")]
+        return [_ok("Channel Hungup"), self._leave(h["Channel"], uid), self._hangup(h["Channel"], uid)]
+
+    def script(self):
+        def conf_list(h):
+            return _list([[("Conference", "capture-room"), ("Channel", c), ("Uniqueid", u)]
+                          for c, u in self.live.items()], "ConfbridgeList")
+
+        def channels(h):
+            rows = [self.LOAD_ROW] + [[("Channel", c), ("Uniqueid", u)] for c, u in self.live.items()]
+            return _list(rows, "CoreShowChannel")
+
+        return {
+            "Login": [_ok("Authentication accepted")],
+            "UserEvent": lambda h: [_ok("Event Sent"), _user_event(h)],
+            "Originate": self.originate,
+            "Getvar": lambda h: [b"Response: Success\r\nActionID: {id}\r\nValue: v-"
+                                 + h["Variable"].encode() + b"\r\n\r\n"],
+            "ConfbridgeList": conf_list,
+            "ConfbridgeMute": [_ok("User muted")],
+            "CoreShowChannels": channels,
+            "Hangup": self.hangup,
+            "Logoff": [b"Response: Goodbye\r\nActionID: {id}\r\n\r\n"],
+        }
+
+
+class _Sessions:
+    """A measured fake and a load fake on two socket pairs, wired as capture() wires the real PBX."""
+
+    def __init__(self):
+        self.room, self.load = _RoomPbx(), _LoadPbx()
+        self.ours, theirs = socket.socketpair()
+        self.pbx = _LockedPbx(theirs, self.room.script())
+        self.load.measured = self.pbx
+        self.load_pbx = None
+        self._socks = [self.ours, theirs]
+        self.pbx.start()
+        self.logins = []
+
+    def open_session(self, events="off"):
+        ours, theirs = socket.socketpair()
+        self._socks += [ours, theirs]
+        self.load_pbx = _LockedPbx(theirs, self.load.script())
+        self.load_pbx.start()
+        tap = cap.Tap(ours)
+        tap.pump = lambda seconds: cap.Tap.pump(tap, min(seconds, 0.02))
+        tap.login("capture", "secret", events)
+        self.logins.append(events)
+        return tap
+
+    def close(self):
+        for s in self._socks:
+            s.close()
+        self.pbx.join(2)
+        if self.load_pbx:
+            self.load_pbx.join(2)
+
+
+_FAST = {"exits": 3, "exit_rate": 100, "reliefs": 1, "relief_window": 0.05, "relief_poll_after": 0.05,
+         "load_sample_every": 0.05, "load_ramp_rate": 1000, "ramp_timeout": 10, "join_timeout": 2}
+
+
+class LoadPlanTests(unittest.TestCase):
+    def test_plan_ShouldHoldTheLevelInFourChannelUnits_HalfOfThemCallsSpreadAmongTheRooms(self):
+        plan = cap.LoadPlan(40, now=0.0, rooms=3)
+
+        self.assertEqual(10, plan.units)
+        kinds = [plan.kind(j) for j in range(plan.units)]
+        self.assertEqual(5, kinds.count("call"))
+        self.assertNotEqual(["call"] * 5, kinds[:5], "calls are interleaved, not bunched")
+        rooms = [plan.room(j) for j in range(plan.units) if plan.kind(j) == "room"]
+        self.assertEqual(["load-room-01", "load-room-02", "load-room-03", "load-room-01", "load-room-02"], rooms)
+
+    def test_due_ShouldRampAtTheRampRate_AndSpreadTheFirstLifetimes(self):
+        plan = cap.LoadPlan(40, now=0.0, lifetime=20, ramp_rate=10.0)
+
+        first = plan.due(0.0)
+        rest = plan.due(0.95)
+
+        self.assertEqual([0], [s.slot for s in first])
+        self.assertEqual(list(range(1, 10)), [s.slot for s in rest])
+        self.assertEqual([2, 4, 6, 8, 10, 12, 14, 16, 18, 20], [s.lifetime for s in first + rest],
+                         "expiries spread over the lifetime, so the level does not saw")
+        self.assertEqual([], plan.due(1.5))
+
+    def test_due_ShouldRestartEachSlotWhenItsUnitExpires_WithTheFullLifetime(self):
+        plan = cap.LoadPlan(8, now=0.0, lifetime=20, ramp_rate=100.0)
+        plan.due(1.0)  # slot 0 lives 10 s, slot 1 lives 20 s
+
+        again = plan.due(11.0)
+
+        self.assertEqual([(0, 20)], [(s.slot, s.lifetime) for s in again])
+        self.assertEqual([(1, 20)], [(s.slot, s.lifetime) for s in plan.due(21.0)])
+
+    def test_due_ShouldStartNothingAtTheCeiling_AndRetryOnTheNextCall(self):
+        plan = cap.LoadPlan(40, now=0.0, ramp_rate=1000.0)
+
+        self.assertEqual([], plan.due(1.0, live=plan.ceiling))
+        self.assertEqual(10, len(plan.due(1.0, live=plan.ceiling - 1)))
+
+    def test_plan_ShouldStartNothing_AtTheControlLevel(self):
+        plan = cap.LoadPlan(0, now=0.0)
+
+        self.assertEqual(0, plan.units)
+        self.assertEqual([], plan.due(100.0))
+
+    def test_plan_ShouldRefuse_ImpossibleParameters(self):
+        for kwargs in ({"rooms": 0}, {"lifetime": 0}, {"call_share": 1.5}, {"ramp_rate": 0}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(cap.CaptureError):
+                cap.LoadPlan(40, now=0.0, **kwargs)
+
+    def test_start_ShouldOriginateARoomParticipantWithATone_OrALoopbackCallEchoingOne(self):
+        room = dict(cap.LoadStart(3, "room", "load-room-02", 12).fields())
+        call = cap.LoadStart(4, "call", "", 15).fields()
+
+        self.assertEqual("Local/load-conf@capture-load/n", room["Channel"])
+        self.assertEqual("load-dialtone", room["Exten"])
+        self.assertIn(("Variable", "__LOADT=12"), cap.LoadStart(3, "room", "load-room-02", 12).fields())
+        self.assertIn(("Variable", "__LOADROOM=load-room-02"), cap.LoadStart(3, "room", "load-room-02", 12).fields())
+        self.assertIn(("Channel", "PJSIP/load-call-15@loadout"), call)
+        self.assertIn(("Application", "Echo"), call)
+        self.assertIn(("Account", "load"), call)
+        self.assertIn(("Async", "true"), call)
+
+    def test_isLoadChannel_ShouldTellTheLoadFromTheMeasurement_ByNameOrAccountCode(self):
+        self.assertTrue(cap.is_load_channel({"Channel": "Local/load-tone@capture-load-00000002;1"}))
+        self.assertTrue(cap.is_load_channel({"Channel": "PJSIP/loadout-0000000a"}))
+        self.assertTrue(cap.is_load_channel({"Channel": "PJSIP/loop-0000000b", "AccountCode": "load"}))
+        self.assertFalse(cap.is_load_channel({"Channel": "PJSIP/loop-0000000c", "AccountCode": ""}))
+        self.assertFalse(cap.is_load_channel({"Channel": "Local/conf-seq@capture-00000003;2"}))
+
+
+class LoadMeasureTests(unittest.TestCase):
+    def test_levelHolds_ShouldAcceptOnlyCountsWithinTenPercent_AndOnlyZeroAtTheControl(self):
+        self.assertTrue(cap.level_holds([140, 150, 165], 150))
+        self.assertFalse(cap.level_holds([140, 134], 150))
+        self.assertFalse(cap.level_holds([150, 166], 150))
+        self.assertTrue(cap.level_holds([0, 0], 0))
+        self.assertFalse(cap.level_holds([0, 4], 0))
+        self.assertFalse(cap.level_holds([], 150), "no sample is no evidence the level held")
+
+    def test_parseLevels_ShouldKeepTheLadderInOrder_AndRefuseAnythingButWholeCounts(self):
+        self.assertEqual([0, 150, 400], cap.parse_levels("0, 150,400"))
+        for bad in ("", "0,high", "-5"):
+            with self.subTest(bad=bad), self.assertRaises(cap.CaptureError):
+                cap.parse_levels(bad)
+
+    def test_parseCpuStat_ShouldReadUsageUsec_OrNoneWhenTheFileHasNone(self):
+        self.assertEqual(123456, cap.parse_cpu_stat("usage_usec 123456\nuser_usec 100000\n"))
+        self.assertIsNone(cap.parse_cpu_stat("OCI runtime exec failed"))
+        self.assertIsNone(cap.parse_cpu_stat(None))
+
+    def test_levelSummary_ShouldReportTheRangeAndTheCoresUsedBetweenTheTimedSamples(self):
+        samples = [{"load": 148, "cpu_usec": 1_000_000, "wall": 100.0},
+                   {"load": 152, "cpu_usec": None, "wall": 102.0},
+                   {"load": 151, "cpu_usec": 9_000_000, "wall": 104.0}]
+
+        summary = cap.level_summary(samples, 150)
+
+        self.assertEqual({"samples": 3, "load_min": 148, "load_max": 152, "held": True, "cpu_cores": 2.0},
+                         summary)
+        self.assertIsNone(cap.level_summary(samples[:1], 150)["cpu_cores"])
+
+    def test_readerMeter_ShouldMarkTheWindowNotValid_WhenAFrameIsParsedLateAfterItsTimestamp(self):
+        now = [1000.0]
+        meter = cap.ReaderMeter(limit=0.5, wall=lambda: now[0])
+        meter.reset(bytes_in=0)
+        meter.observe({"Event": "Newchannel", "Timestamp": "999.9"})
+        now[0] = 1002.0
+        meter.observe({"Event": "Hangup", "Timestamp": "1000.5"})
+
+        report = meter.report(bytes_in=4000)
+
+        self.assertFalse(report["valid"])
+        self.assertEqual(1, report["late_frames"])
+        self.assertEqual(1500.0, report["max_lag_ms"])
+        self.assertEqual(2000.0, report["bytes_per_second"])
+        self.assertEqual(1.0, report["events_per_second"])
+
+    def test_readerMeter_ShouldBeValid_WhenEveryFrameKeepsUp_AndNotWhenNoFrameIsStamped(self):
+        now = [10.0]
+        meter = cap.ReaderMeter(limit=0.5, wall=lambda: now[0])
+        meter.observe({"Event": "Newchannel"})
+        self.assertFalse(meter.report(0)["valid"], "without timestampevents nothing says the reader kept up")
+        meter.observe({"Event": "Hangup", "Timestamp": "9.8"})
+        self.assertTrue(meter.report(0)["valid"])
+
+
+class HangupListerTests(unittest.TestCase):
+    @staticmethod
+    def _f(event, uid, room="capture-room"):
+        return {"Event": event, "Uniqueid": uid, "Conference": room}
+
+    def test_observe_ShouldAskTheRoomsListOnce_WhenAParticipantHangsUpBeforeItsLeave(self):
+        lister = cap.HangupLister("capture-room")
+        lister.observe(self._f("ConfbridgeJoin", "1.1"))
+
+        asked = lister.observe(self._f("Hangup", "1.1"))
+        again = lister.observe(self._f("Hangup", "1.1"))
+
+        self.assertEqual(("hl-1.1", [("Action", "ConfbridgeList"), ("Conference", "capture-room")]), asked)
+        self.assertIsNone(again)
+        self.assertEqual(["1.1"], lister.asked)
+
+    def test_observe_ShouldNotAsk_WhenTheLeaveCameFirst(self):
+        lister = cap.HangupLister("capture-room")
+        lister.observe(self._f("ConfbridgeJoin", "1.2"))
+        lister.observe(self._f("ConfbridgeLeave", "1.2"))
+
+        self.assertIsNone(lister.observe(self._f("Hangup", "1.2")))
+        self.assertEqual(set(), lister.pending())
+
+    def test_observe_ShouldIgnoreOtherRoomsAndChannelsThatNeverJoined(self):
+        lister = cap.HangupLister("capture-room")
+        lister.observe(self._f("ConfbridgeJoin", "1.3", room="load-room-01"))
+
+        self.assertIsNone(lister.observe(self._f("Hangup", "1.3")))
+        self.assertIsNone(lister.observe(self._f("Hangup", "1.4")))
+        self.assertIsNone(lister.observe(self._f("Hangup", "<unknown>")))
+        self.assertEqual([], lister.asked)
+
+    def test_pending_ShouldHoldTheParticipantsThatJoinedAndHaveNotHungUp(self):
+        lister = cap.HangupLister("capture-room")
+        for uid in ("1.5", "1.6"):
+            lister.observe(self._f("ConfbridgeJoin", uid))
+        lister.observe(self._f("Hangup", "1.5"))
+
+        self.assertEqual({"1.6"}, lister.pending())
+
+
+class LoadTapTests(unittest.TestCase):
+    def test_tap_ShouldGiveObserversEachFrameInOrder_AndSendTheActionIdItIsGiven(self):
+        script = {"Login": [_ok("Authentication accepted")],
+                  "ConfbridgeList": _list([[("Channel", "PJSIP/loop-1")]], "ConfbridgeList")}
+        ours, theirs = socket.socketpair()
+        pbx = _FakePbx(theirs, script)
+        pbx.start()
+        seen = []
+        try:
+            tap = cap.Tap(ours)
+            tap.observers.append(lambda f: seen.append(f.get("Event") or f.get("Response")))
+            tap.login("capture", "secret", "off")
+            mark = len(tap.frames)
+            tap.send([("Action", "ConfbridgeList")], action_id="hl-7.1")
+            end = tap.wait_for(lambda f: f.get("EventList") == "Complete", 2, mark)
+        finally:
+            ours.close()
+            theirs.close()
+            pbx.join(2)
+
+        self.assertEqual("off", pbx.received[0]["Events"])
+        self.assertEqual("hl-7.1", pbx.received[1]["ActionID"])
+        self.assertEqual("hl-7.1", end["ActionID"])
+        self.assertEqual(["Success", "Success", "ConfbridgeList", "ConfbridgeListComplete"], seen)
+
+    def test_tap_ShouldStreamEveryByteToTheSink_AndKeepNoTranscript(self):
+        ours, theirs = socket.socketpair()
+        pbx = _FakePbx(theirs, {"Login": [_ok("Authentication accepted")]})
+        pbx.start()
+        sink = io.BytesIO()
+        try:
+            tap = cap.Tap(ours, sink=sink)
+            tap.login("capture", "secret")
+        finally:
+            ours.close()
+            theirs.close()
+            pbx.join(2)
+
+        self.assertEqual(bytes(pbx.sent), sink.getvalue())
+        self.assertEqual(len(pbx.sent), tap.bytes_in)
+        self.assertEqual(b"", bytes(tap.transcript))
+
+
+class LoadFilesTests(unittest.TestCase):
+    def test_managerConf_ShouldBeUnchangedForTheOtherWorkloads_AndRaiseWritetimeoutUnderLoad(self):
+        plain = cap.manager_conf("s3cret")
+        loaded = cap.manager_conf("s3cret", True, cap.WORKLOADS["confbridge-exits-under-load"]["manager_user"])
+
+        self.assertIn("write = all\ndeny = 0.0.0.0/0.0.0.0\n", plain)
+        self.assertIn("timestampevents = yes\n", plain)
+        for name, workload in cap.WORKLOADS.items():
+            if name != "confbridge-exits-under-load":
+                self.assertNotIn("manager_user", workload)
+        self.assertIn("write = all\nwritetimeout = 10000\ndeny = 0.0.0.0/0.0.0.0\n", loaded)
+
+    def test_files_ShouldAddTheLoadDialplanAndEndpoint_AndKeepTheRenamedWorkloadsShapes(self):
+        files = cap.WORKLOADS["confbridge-exits-under-load"]["files"]
+        ext, pjsip = files["extensions.conf"], files["pjsip.conf"]
+
+        for context in ("[capture]\n", "[capture-sip]\n", "[capture-load]\n", "[capture-replaces]\n"):
+            self.assertEqual(1, ext.count(context), context)
+        self.assertIn("exten => conf-anchor,1,Answer()", ext)
+        self.assertIn("exten => _load-call-X.,1,Answer()\n same => n,Set(CHANNEL(accountcode)=load)", ext)
+        self.assertIn("Set(TIMEOUT(absolute)=${EXTEN:10})", ext)
+        self.assertIn("exten => load-conf,1,Answer()\n same => n,Set(TIMEOUT(absolute)=${LOADT})\n"
+                      " same => n,ConfBridge(${LOADROOM})", ext)
+        self.assertIn("Dial(Local/load-tone@capture-load/n)", ext)
+        self.assertIn("exten => conf-seq,1,Answer()", ext)
+        self.assertIn("exten => replace,1,Dial(PJSIP/replace-in@loop", ext)
+        self.assertIn("[loadout]\ntype = endpoint\ntransport = transport-loopback", pjsip)
+        self.assertNotIn("0.0.0.0", pjsip)
+
+
+class LoadGeneratorTests(unittest.TestCase):
+    def _run(self, levels, hold=0.4):
+        sessions = _Sessions()
+        try:
+            tap = cap.Tap(sessions.ours)
+            tap.login("capture", "secret")
+            gen = cap.LoadGenerator(sessions.open_session,
+                                    lambda level, now: cap.LoadPlan(level, now, ramp_rate=1000.0),
+                                    read_cpu=lambda: 42, sample_every=0.05, tick=0.01, clear_timeout=1.0)
+            gen.start()
+            for level in levels:
+                gen.set_level(level)
+                tap.pump(hold)
+            gen.stop(5)
+            tap.pump(0.2)
+        finally:
+            sessions.close()
+        return sessions, gen, tap
+
+    def test_generator_ShouldHoldTheLevelOnAnEventsOffSession_AndAnnounceEachSampleToTheMeasuredOne(self):
+        sessions, gen, tap = self._run([40])
+
+        self.assertIsNone(gen.error)
+        self.assertEqual(["off"], sessions.logins)
+        self.assertEqual(10, gen.starts)
+        originates = [h for h in sessions.load_pbx.received if h.get("Action") == "Originate"]
+        self.assertEqual(5, sum(1 for h in originates if h["Channel"].startswith("PJSIP/load-call-")))
+        loads = [f for f in tap.frames if f.get("UserEvent") == "CaptureLoad"]
+        held = [f for f in loads if f["Target"] == "40" and f["LoadChannels"] == "40"]
+        self.assertGreaterEqual(len(held), 2, "the samples reach the measured connection")
+        self.assertEqual("42", held[0]["CpuUsec"])
+
+    def test_generator_ShouldHangUpTheLoadBeforeANewLevel_AndWhenItStops(self):
+        sessions, gen, tap = self._run([40, 0])
+
+        hangups = [h["Channel"] for h in sessions.load_pbx.received if h.get("Action") == "Hangup"]
+        self.assertEqual(["/^(Local\\/load-|PJSIP\\/loadout-)/"] * 3, hangups)
+        self.assertEqual("Logoff", sessions.load_pbx.received[-1]["Action"])
+        last = [f for f in tap.frames if f.get("UserEvent") == "CaptureLoad"][-1]
+        self.assertEqual(("0", "0"), (last["Target"], last["LoadChannels"]))
+
+    def test_generator_ShouldKeepTheError_WhenTheLoadSessionCannotOpen(self):
+        def refused(events):
+            raise cap.CaptureError("AMI login refused: no")
+
+        gen = cap.LoadGenerator(refused, lambda level, now: None)
+        gen.start()
+        gen.stop(5)
+
+        self.assertEqual("AMI login refused: no", gen.error)
+
+
+class ConfbridgeExitsUnderLoadWorkloadTests(unittest.TestCase):
+    _NAME = "confbridge-exits-under-load"
+
+    def _run(self, **options):
+        sessions = _Sessions()
+        try:
+            tap = cap.Tap(sessions.ours)
+            tap.pump = lambda seconds: cap.Tap.pump(tap, min(seconds, 0.02))
+            tap.options = {**_FAST, **options}
+            tap.open_session = sessions.open_session
+            tap.read_cpu = lambda: 7
+            tap.login("capture", "secret")
+            steps = cap.WORKLOADS[self._NAME]["run"](tap)
+            tap.logoff()
+        finally:
+            sessions.close()
+        return steps, sessions
+
+    @staticmethod
+    def _notes(received, prefix=""):
+        return {h["Step"]: h for h in received if h.get("Action") == "UserEvent"
+                and h.get("UserEvent") == "CaptureOutcome" and h["Step"].startswith(prefix)}
+
+    def test_run_ShouldWalkTheLadder_ExitsThenReliefsAloneAndAnchored_PerLevel(self):
+        steps, _ = self._run(load_levels="0,40")
+
+        top = [s for s in steps if not s.endswith(("-hungup", "-after-window", "-successor-hangup"))]
+        expected = []
+        for level in (0, 40):
+            p = f"level-{level}"
+            expected += [f"{p}-ramp", f"{p}-exits", f"{p}-relief-alone-01", f"{p}-anchor-join",
+                         f"{p}-relief-anchored-01", f"{p}-anchor-hangup"]
+        self.assertEqual(expected + ["load-stop", "done"], top)
+
+    def test_run_ShouldAskTheListTheMomentAParticipantHangsUpBeforeItsLeave_AndOnlyThen(self):
+        _, sessions = self._run(load_levels="0")
+
+        lists = [h["ActionID"] for h in sessions.pbx.received
+                 if h.get("Action") == "ConfbridgeList" and h["ActionID"].startswith("hl-")]
+        reliefs = self._notes(sessions.pbx.received, "level-0-relief-")
+        relieved = sorted(n["TargetId"] for n in reliefs.values())
+        inverted = "1700000000.2"  # caller 8001, the second exit: its Hangup came before its leave
+        self.assertEqual(sorted([f"hl-{inverted}"] + [f"hl-{uid}" for uid in relieved]), sorted(lists))
+        self.assertTrue(all(n["HangupList"] == "yes" for n in reliefs.values()))
+        self.assertTrue(all(n["Result"] == "ok" and n["LeavesOfTarget"] == "0" for n in reliefs.values()))
+
+    def test_run_ShouldReportEachLevelsLoadCpuAndReader_AndTheControlAtZero(self):
+        _, sessions = self._run(load_levels="0,40")
+
+        notes = self._notes(sessions.pbx.received)
+        zero, loaded = notes["level-0"], notes["level-40"]
+        self.assertEqual(("yes", "yes", "0", "0"), (zero["RampHeld"], zero["Held"], zero["LoadMin"], zero["LoadMax"]))
+        self.assertEqual(("yes", "yes", "40", "40"),
+                         (loaded["RampHeld"], loaded["Held"], loaded["LoadMin"], loaded["LoadMax"]))
+        self.assertEqual("yes", loaded["ReaderValid"])
+        self.assertEqual("0", loaded["LateFrames"])
+        self.assertEqual("3", loaded["HangupLists"], "one inverted exit and two reliefs at this level")
+        self.assertEqual("0.0", loaded["CpuCores"], "the fake's CPU time never moves")
+        self.assertEqual("", notes["load-stop"]["LoadError"])
+
+    def test_run_ShouldOriginateTheExitsAtTheirRate_AndNeverHangUpALoadChannel(self):
+        _, sessions = self._run(load_levels="0", exits=5)
+
+        exits = [h["CallerID"] for h in sessions.pbx.received
+                 if h.get("Action") == "Originate" and h["Channel"] == "Local/conf-seq@capture/n"]
+        self.assertEqual([f"Capture <{8000 + i}>" for i in range(5)], exits)
+        self.assertNotIn(_RoomPbx.LOAD_ROW[0][1], sessions.room.hangups)
+        self.assertTrue(sessions.room.hangups, "the measurement's own channels are hung up")
+
+    def test_run_ShouldRefuse_WithoutASecondSession(self):
+        ours, theirs = socket.socketpair()
+        try:
+            tap = cap.Tap.__new__(cap.Tap)
+            tap.open_session, tap.options = None, {}
+            with self.assertRaises(cap.CaptureError):
+                cap.WORKLOADS[self._NAME]["run"](tap)
+        finally:
+            ours.close()
+            theirs.close()
+
+    def test_cli_ShouldRefuseALadderThatIsNotWholeCounts_BeforeStartingAnything(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc = cap.main(["capture", "--image", f"vendor/asterisk:22.10.1@{_DIGEST}",
+                           "--workload", self._NAME, "--load-levels", "0,high", "--tap-only"])
+
+        self.assertEqual(1, rc)
+        self.assertIn("load level", err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
