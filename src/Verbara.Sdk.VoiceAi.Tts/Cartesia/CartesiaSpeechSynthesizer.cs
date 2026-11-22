@@ -312,7 +312,7 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
             CartesiaTtsServerMessage? message;
             try
             {
-                message = JsonSerializer.Deserialize(assembled.WrittenSpan, VoiceAiTtsJsonContext.Default.CartesiaTtsServerMessage);
+                message = JsonSerializer.Deserialize(assembled.WrittenSpan, TtsJsonReadOptions.For<CartesiaTtsServerMessage>.TypeInfo);
             }
             catch (JsonException)
             {
@@ -332,7 +332,11 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
 
             if (message is null) continue;
 
-            if (string.Equals(message.Type, "chunk", StringComparison.Ordinal) &&
+            // A null kind is undispatchable. Coalesce to an empty kind so the frame is
+            // ignored, as an unknown kind is, without inventing a provider contract.
+            var messageType = message.Type ?? string.Empty;
+
+            if (string.Equals(messageType, "chunk", StringComparison.Ordinal) &&
                 message.Data is { Length: > 0 } base64)
             {
                 // The audio is the message's second pass: by now the failure test has run on the typed
@@ -359,7 +363,7 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
             // malformed request all arrive here as
             // {"type":"error","error":…,"status_code":4xx}, and the caller was left an empty stream
             // and no exception. The vendor's own two fields go out verbatim.
-            if (string.Equals(message.Type, "error", StringComparison.Ordinal))
+            if (string.Equals(messageType, "error", StringComparison.Ordinal))
             {
                 throw SpeechProviderFailureException.FromErrorFrame(
                     provider,
@@ -368,7 +372,7 @@ public sealed class CartesiaSpeechSynthesizer : SpeechSynthesizer
             }
 
             // `done` is the vendor saying the synthesis is complete. Still the only clean end.
-            if (string.Equals(message.Type, "done", StringComparison.Ordinal)) break;
+            if (string.Equals(messageType, "done", StringComparison.Ordinal)) break;
 
             // Any other type is deliberately ignored rather than treated as a failure: an
             // unrecognised type is not evidence of one, and a vendor adding a benign lifecycle

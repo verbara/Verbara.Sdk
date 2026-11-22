@@ -318,7 +318,7 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
         ElevenLabsAudioOutput? frame;
         try
         {
-            frame = JsonSerializer.Deserialize(utf8Json, VoiceAiTtsJsonContext.Default.ElevenLabsAudioOutput);
+            frame = JsonSerializer.Deserialize(utf8Json, TtsJsonReadOptions.For<ElevenLabsAudioOutput>.TypeInfo);
         }
         catch (JsonException)
         {
