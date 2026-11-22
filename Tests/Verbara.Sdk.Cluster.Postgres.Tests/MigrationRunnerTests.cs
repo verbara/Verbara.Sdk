@@ -99,6 +99,31 @@ public sealed class MigrationRunnerTests
         }
     }
 
+    [Fact]
+    public async Task EnsureSchemaAsync_ShouldNotWaitForAnOpenReaderOfTheTable_WhenTheSchemaIsAlreadyCurrent()
+    {
+        // Every host runs the list on every start. On a current schema it must not queue behind a transaction
+        // that reads the lock table (nor make every later acquire queue behind itself): with a two-second
+        // lock_timeout it completes while a reader holds the table.
+        var connectionString = await _fixture.CreateFreshDatabaseAsync();
+        await using (var first = NpgsqlDataSource.Create(connectionString))
+            await MigrationRunner.EnsureSchemaAsync(first, NullLogger.Instance);
+
+        await using var holder = NpgsqlDataSource.Create(connectionString);
+        await using var reader = await holder.OpenConnectionAsync();
+        await using var open = await reader.BeginTransactionAsync();
+        await using (var read = new NpgsqlCommand("SELECT count(*) FROM cluster_distributed_lock", reader, open))
+            await read.ExecuteScalarAsync();
+
+        var bounded = new NpgsqlConnectionStringBuilder(connectionString) { Options = "-c lock_timeout=2000" };
+        await using var host = NpgsqlDataSource.Create(bounded.ConnectionString);
+
+        var act = async () => await MigrationRunner.EnsureSchemaAsync(host, NullLogger.Instance);
+
+        await act.Should().NotThrowAsync("a current schema takes no lock that conflicts with a reader");
+        await open.RollbackAsync();
+    }
+
     private static async Task ExecuteAsync(NpgsqlDataSource dataSource, string sql)
     {
         await using var cmd = dataSource.CreateCommand(sql);
