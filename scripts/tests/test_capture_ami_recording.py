@@ -1440,7 +1440,7 @@ class _RoomPbx:
         return {
             "Login": [_ok("Authentication accepted")],
             "UserEvent": lambda h: [_ok("Event Sent"), _user_event(h)],
-            "Originate": self.originate,
+            "Originate": lambda h: self.originate(h),
             "Getvar": lambda h: [b"Response: Success\r\nActionID: {id}\r\nValue: v-"
                                  + h["Variable"].encode() + b"\r\n\r\n"],
             "ConfbridgeList": conf_list,
@@ -1783,8 +1783,10 @@ class LoadGeneratorTests(unittest.TestCase):
 class ConfbridgeExitsUnderLoadWorkloadTests(unittest.TestCase):
     _NAME = "confbridge-exits-under-load"
 
-    def _run(self, **options):
+    def _run(self, instrument=None, **options):
         sessions = _Sessions()
+        if instrument:
+            instrument(sessions.room)
         try:
             tap = cap.Tap(sessions.ours)
             tap.pump = lambda seconds: cap.Tap.pump(tap, min(seconds, 0.02))
@@ -1848,6 +1850,33 @@ class ConfbridgeExitsUnderLoadWorkloadTests(unittest.TestCase):
         self.assertEqual([f"Capture <{8000 + i}>" for i in range(5)], exits)
         self.assertNotIn(_RoomPbx.LOAD_ROW[0][1], sessions.room.hangups)
         self.assertTrue(sessions.room.hangups, "the measurement's own channels are hung up")
+
+    def test_run_ShouldRecordAnAnchorThatNeverJoins_AndGoOnToTheNextLevel(self):
+        def no_anchor(room):
+            plain = room.originate
+
+            def originate(h):
+                if h["Channel"] == "Local/conf-anchor@capture/n":
+                    return [_ok("Originate successfully queued")]
+                return plain(h)
+            room.originate = originate
+
+        steps, sessions = self._run(load_levels="0,40", join_timeout=0.3, instrument=no_anchor)
+
+        notes = self._notes(sessions.pbx.received)
+        self.assertEqual("error", notes["level-0-anchor-join"]["Result"])
+        self.assertIn("the anchor's join", notes["level-0-anchor-join"]["Detail"])
+        self.assertNotIn("level-0-relief-anchored-01", steps)
+        self.assertIn("level-40-relief-alone-01", steps)
+        self.assertIn("level-40", notes)
+
+    def test_workload_ShouldRaiseTheOpenFilesLimit_SoTheLoadIsNotCappedByIt(self):
+        args = cap.WORKLOADS[self._NAME]["docker_args"]
+
+        self.assertEqual(("--ulimit", "nofile=65536:65536"), args)
+        for name, workload in cap.WORKLOADS.items():
+            if name != self._NAME:
+                self.assertNotIn("docker_args", workload)
 
     def test_run_ShouldRefuse_WithoutASecondSession(self):
         ours, theirs = socket.socketpair()

@@ -1681,6 +1681,10 @@ direct_media = no
 # default); under load the reader must not be cut for a pause the measurement then cannot see.
 _LOAD_MANAGER_USER = "writetimeout = 10000\n"
 
+# The image's soft limit of 1024 open files caps Asterisk near 280 such channels (RTP sockets, Local
+# channel alert pipes): past it every Originate fails with Reason 0 and a ConfBridge join is dropped.
+_LOAD_DOCKER_ARGS = ("--ulimit", "nofile=65536:65536")
+
 
 def is_load_channel(row) -> bool:
     """A CoreShowChannel row (or any frame) of the background load, not of the measurement."""
@@ -2120,8 +2124,15 @@ def _confbridge_exits_under_load(tap: Tap):
                 mark = step(f"{prefix}-anchor-join", clear=True)
                 cid = str(next(counter))
                 originate("Local/conf-anchor@capture/n", cid, data="600")
-                anchor = tap.wait_for(lambda f, c=cid: f.get("Event") == "ConfbridgeJoin"
-                                      and f.get("CallerIDNum") == c, timeout, mark, "the anchor's join")
+                try:
+                    anchor = tap.wait_for(lambda f, c=cid: f.get("Event") == "ConfbridgeJoin"
+                                          and f.get("CallerIDNum") == c, timeout, mark, "the anchor's join")
+                except ConnectionClosed:
+                    raise
+                except CaptureError as error:  # no anchor, no anchored shape at this level
+                    cleanup(set())
+                    note(f"{prefix}-anchor-join", Result="error", Detail=str(error))
+                    break
                 tap.pump(0.5)
                 keep = {c.get("Uniqueid") for c in channels() if not is_load_channel(c)}
             for i in range(1, n + 1):
@@ -2246,6 +2257,7 @@ WORKLOADS = {
         "files": {"extensions.conf": _LOAD_EXTENSIONS, "queues.conf": _RENAMED_QUEUES,
                   "confbridge.conf": _BRIDGES_CONFBRIDGE, "pjsip.conf": _LOAD_PJSIP},
         "manager_user": _LOAD_MANAGER_USER,
+        "docker_args": _LOAD_DOCKER_ARGS,
         "run": _confbridge_exits_under_load,
     },
     "dialplan-and-parking": {
@@ -2378,7 +2390,8 @@ def capture(image: str, workload_name: str, out_dir: Path, raw_dir: Path, timest
         mounts += ["-v", f"{path}:/etc/asterisk/{filename}:ro"]
     started = False
     try:
-        _docker("run", "-d", "--name", container, *docker_args, *ports, *mounts, run_ref)
+        _docker("run", "-d", "--name", container, *workload.get("docker_args", ()), *docker_args,
+                *ports, *mounts, run_ref)
         started = True
         booted = _docker("exec", container, "asterisk", "-rx", "core waitfullybooted",
                          check=False, timeout=90)
