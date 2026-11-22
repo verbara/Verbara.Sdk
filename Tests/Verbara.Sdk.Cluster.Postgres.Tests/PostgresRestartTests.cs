@@ -28,7 +28,7 @@ public sealed class PostgresRestartTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _container = new ContainerBuilder("postgres:18-alpine")
+        _container = new ContainerBuilder(PostgresFixture.Image)
             .WithPortBinding(5432, true)
             .WithEnvironment("POSTGRES_USER", DbUser)
             .WithEnvironment("POSTGRES_PASSWORD", DbPassword)

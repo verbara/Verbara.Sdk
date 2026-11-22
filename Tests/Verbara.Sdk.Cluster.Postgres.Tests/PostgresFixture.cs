@@ -8,13 +8,20 @@ using Xunit;
 namespace Verbara.Sdk.Cluster.Postgres.Tests;
 
 /// <summary>
-/// Testcontainers-backed Postgres 18 fixture. Spins up <c>postgres:18-alpine</c> in a disposable
-/// container, runs <see cref="MigrationRunner.EnsureSchemaAsync"/> to create the
+/// Testcontainers-backed Postgres 18 fixture. Spins up <c>postgres:18-alpine</c> (pinned by digest,
+/// <see cref="Image"/>) in a disposable container, runs <see cref="MigrationRunner.EnsureSchemaAsync"/> to create the
 /// <c>cluster_distributed_lock</c> table, and exposes a ready <see cref="NpgsqlDataSource"/>.
 /// Mirrors the canonical <c>Verbara.Sdk.Sessions.Postgres.Tests.PostgresFixture</c>.
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
+    /// <summary>
+    /// The Postgres image every test of this package runs on, pinned by digest so a re-tag of
+    /// <c>18-alpine</c> cannot change the server under the tests (PostgreSQL 18.7).
+    /// </summary>
+    internal const string Image =
+        "postgres:18-alpine@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71";
+
     private const string DbUser = "postgres";
     private const string DbPassword = "postgres";
     private const string DbName = "verbara_cluster_test";
@@ -43,7 +50,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _container = new ContainerBuilder("postgres:18-alpine")
+        _container = new ContainerBuilder(Image)
             .WithPortBinding(5432, true)
             .WithEnvironment("POSTGRES_USER", DbUser)
             .WithEnvironment("POSTGRES_PASSWORD", DbPassword)
