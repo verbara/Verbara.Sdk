@@ -390,6 +390,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             (callerUniqueId, memberName, memberInterface) =>
                 OnQueueCallerConnected(callerUniqueId, memberName, memberInterface, serverId, index, attachment));
         var onQueueCallerCompleted = Gated<QueueCallerCompletion>(gate, completion => OnQueueCallerCompleted(completion, serverId, index));
+        var onQueueMemberRingNoAnswer = Gated<QueueMemberRingNoAnswer>(gate,
+            report => OnQueueMemberRingNoAnswer(report, index, attachment));
 
         Action<ChannelSnapshotCompletion> onChannelSnapshotCompleted = _ =>
         {
@@ -406,7 +408,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             onAdded, onRemoved, onStateChanged, onDialBegin, onDialEnd,
             onHeld, onUnheld, onBridgeEntered, onBridgeDestroyed, onTransfer, onCallerJoined,
             onCallerLeft, onAbandonReported, onQueueStatus, onSnapshotCompleted, onAgentConnected, onQueueCallerConnected,
-            onQueueCallerCompleted, onChannelSnapshotCompleted);
+            onQueueCallerCompleted, onQueueMemberRingNoAnswer, onChannelSnapshotCompleted);
         if (Subscribe(serverId, attachment))
         {
             Step(HandlerStep.AttachmentReadyToDecide, serverId, string.Empty);
@@ -2165,6 +2167,41 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         _ = PersistAsync(session);
     }
 
+    /// <summary>
+    /// app_queue rang a member for a waiting caller and the member did not answer (<c>AgentRingNoAnswer</c>): one
+    /// <see cref="CallRingNoAnswerEvent"/> for the call, raised under its lock inside the report's delivery. The call is
+    /// found on the delivering server by the caller's own channel, else by the <c>Linkedid</c>, as the member's
+    /// <c>AgentComplete</c> is; a report for no held call, or for a call that has ended, raises nothing. It is raised
+    /// whether or not the manager saw the caller join a queue: a missed ring is not an offer, so it cannot make
+    /// answered exceed offered. The member is the agent the report names, else its interface; a report naming
+    /// neither raises nothing. Nothing about the call itself changes.
+    /// </summary>
+    private void OnQueueMemberRingNoAnswer(QueueMemberRingNoAnswer report, ServerIndex index,
+        ServerSubscriptions attachment)
+    {
+        var memberInterface = string.IsNullOrEmpty(report.MemberInterface) ? null : report.MemberInterface;
+        if ((string.IsNullOrEmpty(report.Agent) ? memberInterface : report.Agent) is not { } agentId)
+            return;
+
+        CallSession? session = null;
+        if (report.CallerUniqueId is { } callerUniqueId)
+            index.ByChannelId.TryGetValue(callerUniqueId, out session);
+        if (session is null && report.LinkedId is { } linkedId)
+            index.ByLinkedId.TryGetValue(linkedId, out session);
+        if (session is null)
+            return;
+
+        lock (session.SyncRoot)
+        {
+            if (!IsHeld(session) || HasEnded(session) || session.EndingDelivered)
+                return;
+
+            var queue = string.IsNullOrEmpty(report.Queue) ? session.QueueName : report.Queue;
+            Publish(new CallRingNoAnswerEvent(session.SessionId, session.ServerId, _timeProvider.GetUtcNow(),
+                agentId, queue) { AgentInterface = memberInterface }, attachment);
+        }
+    }
+
     // --- Dial event handlers ---
 
     private void OnChannelDialBegin(AsteriskChannel channel, string serverId, ServerIndex index)
@@ -2248,6 +2285,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         Action<string, string?, string?> onAgentConnected,
         Action<string?, string?, string?> onQueueCallerConnected,
         Action<QueueCallerCompletion> onQueueCallerCompleted,
+        Action<QueueMemberRingNoAnswer> onQueueMemberRingNoAnswer,
         Action<ChannelSnapshotCompletion> onChannelSnapshotCompleted)
     {
         /// <summary>The gate every handler of this attachment runs through.</summary>
@@ -2290,6 +2328,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             Server.Agents.AgentConnected += onAgentConnected;
             Server.Agents.QueueCallerConnected += onQueueCallerConnected;
             Server.Agents.QueueCallerCompleted += onQueueCallerCompleted;
+            Server.Agents.QueueMemberRingNoAnswered += onQueueMemberRingNoAnswer;
         }
 
         // A one-way lifetime notification for admission waits. Keep leaves the handler gate open.
@@ -2319,6 +2358,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             Server.Agents.AgentConnected -= onAgentConnected;
             Server.Agents.QueueCallerConnected -= onQueueCallerConnected;
             Server.Agents.QueueCallerCompleted -= onQueueCallerCompleted;
+            Server.Agents.QueueMemberRingNoAnswered -= onQueueMemberRingNoAnswer;
         }
     }
 }

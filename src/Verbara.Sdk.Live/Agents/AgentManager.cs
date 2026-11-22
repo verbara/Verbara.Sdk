@@ -71,6 +71,13 @@ public sealed class AgentManager
     /// </summary>
     internal event Action<QueueCallerCompletion>? QueueCallerCompleted;
 
+    /// <summary>
+    /// Raised for every <c>AgentRingNoAnswer</c>: app_queue rang a member for a waiting caller and the member did not
+    /// answer. Like <see cref="QueueCallerConnected"/> it fires whether or not the member is an agent this manager
+    /// knows by name, and it carries the caller's <c>Uniqueid</c> to key the call by. It changes no agent's state.
+    /// </summary>
+    internal event Action<QueueMemberRingNoAnswer>? QueueMemberRingNoAnswered;
+
     public AgentManager(ILogger logger) => _logger = logger;
 
     /// <summary>
@@ -179,7 +186,11 @@ public sealed class AgentManager
     /// <see cref="OnAgentComplete"/>, so a known agent's state handlers run first, as they always did.
     /// </summary>
     internal void OnQueueCallerCompleted(QueueCallerCompletion completion) =>
-        RaiseCallerCompleted(QueueCallerCompleted, completion);
+        RaiseReport(QueueCallerCompleted, nameof(QueueCallerCompleted), completion, completion.CallerUniqueId);
+
+    /// <summary>Raise <see cref="QueueMemberRingNoAnswered"/> for an <c>AgentRingNoAnswer</c>.</summary>
+    internal void OnQueueMemberRingNoAnswer(QueueMemberRingNoAnswer report) =>
+        RaiseReport(QueueMemberRingNoAnswered, nameof(QueueMemberRingNoAnswered), report, report.CallerUniqueId);
 
     /// <summary>Handle AgentComplete event (agent finished a queue call).</summary>
     public void OnAgentComplete(string agentId, long talkTimeSecs = 0, long holdTimeSecs = 0)
@@ -532,8 +543,12 @@ public sealed class AgentManager
         }
     }
 
-    /// <summary>The <see cref="QueueCallerCompleted"/> shape of <see cref="RaiseAgent"/>.</summary>
-    private void RaiseCallerCompleted(Action<QueueCallerCompletion>? handlers, QueueCallerCompletion completion)
+    /// <summary>
+    /// The one-report shape of <see cref="RaiseAgent"/>, for <see cref="QueueCallerCompleted"/> and
+    /// <see cref="QueueMemberRingNoAnswered"/>: each subscriber in its own guard, a failure reported under
+    /// <paramref name="eventName"/> with <paramref name="subject"/>.
+    /// </summary>
+    private void RaiseReport<T>(Action<T>? handlers, string eventName, T report, string? subject)
     {
         if (handlers is null)
             return;
@@ -543,11 +558,11 @@ public sealed class AgentManager
         {
             try
             {
-                handlers(completion);
+                handlers(report);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                ReportSubscriberFailure(ex, nameof(QueueCallerCompleted), completion.CallerUniqueId);
+                ReportSubscriberFailure(ex, eventName, subject);
             }
 
             return;
@@ -557,11 +572,11 @@ public sealed class AgentManager
         {
             try
             {
-                handler(completion);
+                handler(report);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                ReportSubscriberFailure(ex, nameof(QueueCallerCompleted), completion.CallerUniqueId);
+                ReportSubscriberFailure(ex, eventName, subject);
             }
         }
     }
@@ -669,3 +684,12 @@ public enum AgentState { Unknown, LoggedOff, Available, OnCall, Paused }
 /// </summary>
 internal readonly record struct QueueCallerCompletion(
     string? CallerUniqueId, string? LinkedId, string? MemberInterface, long TalkTimeSeconds, string? Queue);
+
+/// <summary>
+/// One <c>AgentRingNoAnswer</c> as <see cref="AgentManager.QueueMemberRingNoAnswered"/> delivers it: the caller's
+/// channel (<c>Uniqueid</c>), the call's <c>Linkedid</c>, the member's <c>Interface</c>, the frame's <c>Agent</c>
+/// (which app_queue does not send for an ordinary member) and its <c>Queue</c>; each <see langword="null"/> when the
+/// frame carries none.
+/// </summary>
+internal readonly record struct QueueMemberRingNoAnswer(
+    string? CallerUniqueId, string? LinkedId, string? MemberInterface, string? Agent, string? Queue);
