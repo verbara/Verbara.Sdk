@@ -383,6 +383,9 @@ public sealed class QueueManager
         ArgumentNullException.ThrowIfNull(window);
         lock (window.Gate)
         {
+            // A row read before RemoveQueue took this queue out of the table would bring it back: it says nothing now.
+            if (window.QueueRemovedLocked(queueName))
+                return;
             window.ListQueue(queueName);
             OnQueueParams(queueName, max, strategy, calls, holdTime, talkTime, completed, abandoned);
             if (_queues.TryGetValue(queueName, out var listed))
@@ -406,6 +409,8 @@ public sealed class QueueManager
         SnapshotMemberApplying?.Invoke();
         lock (window.Gate)
         {
+            if (window.QueueRemovedLocked(queueName))
+                return;
             window.ListMember(queueName, iface);
             var member = window.MergeMemberLocked(queueName, iface, memberName, penalty, paused, status);
             if (member is not null)
@@ -617,6 +622,8 @@ public sealed class QueueManager
                     QueueManagerLog.SnapshotEntryAfterLeave(_logger, queueName, channel);
                     return null;
                 }
+                if (window.QueueRemovedLocked(queueName))
+                    return null;
                 window.ListLocked(queueName, uniqueId, channel);
                 return Join(queueName, channel, callerId, position, fromSnapshot: true, reportedWaitSeconds, uniqueId,
                     lossEpoch, readAt, window.OrderPoint, announce);
@@ -1231,7 +1238,9 @@ public sealed class QueueManager
     /// <remarks>
     /// Each caller the queue held is counted in <c>live.queue.calls.left</c>, with no <c>live.queue.wait_time</c>
     /// sample since no leave was observed, so that <c>live.queue.calls.joined</c> minus <c>live.queue.calls.left</c>
-    /// keeps counting the callers held. No event is raised. A server on the SDK's own AMI connection holds no listing of
+    /// keeps counting the callers held. No event is raised. A queue listing being read when the queue is removed does not
+    /// bring it back: its rows for that queue, read before the removal, are not applied. A server on the SDK's own AMI
+    /// connection holds no listing of
     /// the queue any more, so the next queue event that names it makes the server ask Asterisk for that queue's listing
     /// and admit it again, with the members and waiting callers Asterisk lists.
     /// </remarks>
@@ -1241,6 +1250,10 @@ public sealed class QueueManager
         {
             if (!_queues.TryGetValue(queueName, out var queue))
                 return false;
+            // Recorded in every open snapshot window under the gate their rows are applied under: a row read before this
+            // removal and applied after it finds the mark and leaves the queue out of the table.
+            foreach (var window in _windows)
+                window.OnQueueRemovedLocked(queue.Name);
             List<AsteriskQueueEntry> gone = [];
             lock (queue.SyncRoot)
             {
@@ -1498,6 +1511,9 @@ internal sealed class QueueSnapshotWindow : IDisposable
     private readonly HashSet<(string Queue, string Key)> _listedMembers = new(QueueKeyComparer.Instance);
     private readonly HashSet<(string Queue, string Key)> _liveMembers = new(QueueKeyComparer.Instance);
 
+    // Queues RemoveQueue took out of the table while this window was open, keyed as the manager keys queues.
+    private readonly HashSet<string> _removedQueues = new(StringComparer.OrdinalIgnoreCase);
+
     internal QueueSnapshotWindow(QueueManager owner, long orderPoint)
     {
         _owner = owner;
@@ -1533,6 +1549,16 @@ internal sealed class QueueSnapshotWindow : IDisposable
                 _leftChannels.Remove(channel);
         }
     }
+
+    /// <summary>Records a queue <c>RemoveQueue</c> took out of the table; the caller holds <see cref="Gate"/>.</summary>
+    internal void OnQueueRemovedLocked(string queueName)
+    {
+        if (!_closed)
+            _removedQueues.Add(queueName);
+    }
+
+    /// <summary>Whether <c>RemoveQueue</c> removed this queue while the window was open; the caller holds <see cref="Gate"/>.</summary>
+    internal bool QueueRemovedLocked(string queueName) => _removedQueues.Contains(queueName);
 
     internal bool LeftAfterRequestLocked(string? uniqueId, string channel) =>
         _closed || (!string.IsNullOrEmpty(uniqueId) && _leftUniqueIds.Contains(uniqueId))
@@ -1660,6 +1686,7 @@ internal sealed class QueueSnapshotWindow : IDisposable
         _listedCallers.Clear();
         _listedMembers.Clear();
         _liveMembers.Clear();
+        _removedQueues.Clear();
     }
 
     /// <summary>A copy of what the snapshot listed per queue, for the table's completion.</summary>
