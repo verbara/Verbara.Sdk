@@ -62,6 +62,37 @@ Only a call site that names `format:` on either member is affected: it reports `
 renamed. Each argument keeps its position, type and default, the request is the same byte for byte, and a binary built
 against 2.10.x keeps running. The [2.11.0 migration guide](docs/guides/migration-2.11.0.md) has the before and after.
 
+### Fixed: a queue member's missed ring raises `CallRingNoAnswerEvent`, and `AgentSession.CallsMissed` counts it (#646)
+
+`CallRingNoAnswerEvent` was declared, and `IAgentSessionTracker` counted it into `AgentSession.CallsMissed`, but the
+SDK never raised it: Asterisk's `AgentRingNoAnswer` was read and dropped. So every consumer that counts missed offers
+from the event counted 0, and `CallsMissed` stayed 0. Now the session manager raises one `CallRingNoAnswerEvent` for
+each `AgentRingNoAnswer` Asterisk reports for a call it holds and has not ended. That is, app_queue rang a member and
+the member did not answer, because the ring timed out or the member answered busy. The call is found on the server
+that reported the frame. `QueueName` is the queue the frame names, else the call's. `AgentId` is the agent the frame
+names, else the member's interface. On every capture, from 20.20.1 to 24.0.0, app_queue names no agent, so for an
+ordinary member `AgentId` is its interface. A member rung and missed twice is reported twice.
+
+What a consumer sees change: subscribers to `CallRingNoAnswerEvent` start receiving it. `IAgentSessionTracker` now
+holds a session keyed by the member's interface for a member that missed a call, and lists it in `ActiveAgents`. Its
+`CallsMissed` counts the misses, and its other statistics stay at zero, because the tracker still counts a connected
+call only for an agent known by name. Filtering `CallRingNoAnswerEvent` in your own subscription changes only your
+handlers: the tracker still receives the event, so `CallsMissed` and `ActiveAgents` cannot be turned back from there.
+
+### Added: `CallRingNoAnswerEvent.AgentInterface` names the member that did not answer (#646)
+
+`CallRingNoAnswerEvent` gains `string? AgentInterface { get; init; }`: the interface of the member that did not answer,
+exactly as Asterisk reported it, and `null` when the report named none. It is an init-only member, as on
+`CallConnectedEvent`, so the record's constructor and `Deconstruct` are as before. Comparing whole values is affected:
+an event built positionally with the same other values is no longer equal to a published one.
+
+### Added: `SendFlashAction.Receive` asks for the flash on the named channel (#646)
+
+`SendFlashAction` gains `bool? Receive { get; set; }`, written as `Receive: true` or `Receive: false` after `Channel`
+when set, and not written when null, so an existing action is unchanged on the wire. With `true`, measured on Asterisk
+20.20.1, 22.12.0, 23.6.0 and 24.0.0, the flash is raised on the named channel itself. Without the field, it is raised
+on the other leg of the call. What Asterisk does with `false` was not measured.
+
 ### Added: `CallConnectedEvent.AgentInterface` names the member whose connection the event announces (#615)
 
 `CallConnectedEvent` gains `string? AgentInterface { get; init; }`: the interface of the member whose connect the event
