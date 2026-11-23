@@ -79,6 +79,8 @@ holds a session keyed by the member's interface for a member that missed a call,
 call only for an agent known by name. Filtering `CallRingNoAnswerEvent` in your own subscription changes only your
 handlers: the tracker still receives the event, so `CallsMissed` and `ActiveAgents` cannot be turned back from there.
 
+The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#callringnoanswerevent-is-raised-and-iagentsessiontracker-lists-members-that-only-missed-calls) has who is affected and what to do.
+
 ### Added: `CallRingNoAnswerEvent.AgentInterface` names the member that did not answer (#646)
 
 `CallRingNoAnswerEvent` gains `string? AgentInterface { get; init; }`: the interface of the member that did not answer,
@@ -564,6 +566,8 @@ reads `NULL` as unknown. There is no new API: read the table. The package README
 as on 2.10.x, where V001's `COMMENT ON TABLE` already required it. Once the column exists, the migration issues no
 `ALTER TABLE`, so a host's start takes no `ACCESS EXCLUSIVE` lock on the table and does not wait behind an open reader
 of the table, or make lock renewals wait.
+
+The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#the-cluster-lock-row-says-since-when-its-owner-holds-it) has who is affected and what to do.
 
 ### Fixed: hosts that create the cluster lock schema at the same time on a fresh database no longer fail (#647)
 
