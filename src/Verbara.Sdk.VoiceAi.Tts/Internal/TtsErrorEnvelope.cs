@@ -46,7 +46,7 @@ internal static class TtsErrorEnvelope
         {
             JsonValueKind.Null or JsonValueKind.Undefined or JsonValueKind.False => false,
             JsonValueKind.String => error.GetString() is { Length: > 0 },
-            JsonValueKind.Number => !error.TryGetDouble(out var number) || number != 0,
+            JsonValueKind.Number => !error.TryGetDecimal(out var number) || number != 0m,
             JsonValueKind.Object => error.EnumerateObject().MoveNext(),
             JsonValueKind.Array => error.GetArrayLength() > 0,
             _ => true,
