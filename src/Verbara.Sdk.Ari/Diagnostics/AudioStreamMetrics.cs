@@ -113,8 +113,10 @@ public static class AudioStreamMetrics
     /// AudioSocket: the connection was reset, or a read from the socket otherwise failed, after the
     /// identification frame and before any hangup or error frame. On WebSocket: the connection was reset,
     /// or otherwise ended without the peer's close frame. What the session publishes differs by door. An
-    /// AudioSocket session still ends as <c>Disconnected</c> alone, as a hangup does, so there this counter
-    /// and the session's Warning are what tell the two apart. A WebSocket session publishes <c>Error</c>
+    /// AudioSocket session still ends as <c>Disconnected</c> alone, as a hangup does; there this counter and
+    /// the session's Warning record the failures the SDK saw, never a count of failed calls: Asterisk ends most
+    /// of its failures with the same close as a hangup, and a server writing faster than real time can see a reset
+    /// on an orderly ending. A WebSocket session publishes <c>Error</c>
     /// then <c>Disconnected</c>, and the count and the Warning already exist when <c>Error</c> is
     /// published. Internal:
     /// the instrument's name is the contract an exporter sees, and the field adds no public API.
