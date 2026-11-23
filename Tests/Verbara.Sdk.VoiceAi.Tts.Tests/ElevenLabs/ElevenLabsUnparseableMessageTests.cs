@@ -211,6 +211,29 @@ public sealed class ElevenLabsUnparseableMessageTests : IAsyncLifetime
         _unparseable.Count.Should().Be(0, "a null root is ignored rather than counted as unreadable");
     }
 
+    /// <summary>
+    /// (g) An unreadable message whose <c>error</c> member is the empty value of its kind — <c>false</c>,
+    /// <c>0</c>, <c>{}</c>, <c>[]</c> — says no error occurred: it is counted and skipped like any other
+    /// unreadable message, and the synthesis delivers the audio around it.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"audio":null,"isFinal":false,"error":false}""")]
+    [InlineData("""{"audio":null,"isFinal":false,"error":0}""")]
+    [InlineData("""{"audio":null,"isFinal":false,"error":{}}""")]
+    [InlineData("""{"audio":null,"isFinal":false,"error":[]}""")]
+    public async Task SynthesizeAsync_ShouldCountSkipAndDeliverTheAudioAroundIt_WhenAnUnreadableMessageHasAnEmptyErrorMember(string message)
+    {
+        // Arrange
+        _server.TextFramesAmongAudio.Add((1, message));
+
+        // Act
+        var frames = await Synthesize();
+
+        // Assert
+        frames.SelectMany(f => f.ToArray()).Should().Equal(RecordedAudio, "an empty error member names no failure");
+        _unparseable.Count.Should().Be(1, "the unreadable message is counted once, not raised as the vendor's failure");
+    }
+
     private async Task<List<ReadOnlyMemory<byte>>> Synthesize() =>
         await BuildSynthesizer().SynthesizeAsync("hola mundo", AudioFormat.Slin16Mono8kHz).ToListAsync();
 

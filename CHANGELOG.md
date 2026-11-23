@@ -114,19 +114,25 @@ To roll back, keep the property and stop setting it (it then reads `null`), or r
 that reads it: a consumer compiled against the property does not build, or fails to bind at run time, against a
 package that lacks it.
 
+### Changed — BREAKING: a Whisper or Azure Whisper reply with `"text": null` makes `StreamAsync` throw (#636)
+
+The Whisper and Azure Whisper recognizers (HTTP) now throw `JsonException` from `StreamAsync` when the vendor replies
+`{"text":null}`. Before, they returned no result and no error, silently. Both vendor contracts require `text`.
+Nothing reports a compiler error.
+
+`VoiceAiPipeline` absorbs the exception: it counts the transcription as failed, publishes a `PipelineErrorEvent` and
+goes back to listening. A caller that drives `StreamAsync` directly sees the exception and must handle it; the
+[2.11.0 migration guide](docs/guides/migration-2.11.0.md#a-whisper-or-azure-whisper-reply-with-a-null-text-makes-streamasync-throw) shows how.
+
 ### Fixed: an STT provider reply with `null` in a required field is skipped and counted, not passed on (#636)
 
 The STT recognizers now check, when they read a provider reply, that a field the vendor contract says is never `null`
 is not `null`. Before, an explicit `null` there was read without an error and reached the caller as a result with no
-text or no kind.
+text or no kind. Whisper and Azure Whisper, which now throw, have their own entry above.
 
 - **Deepgram and Speechmatics (WebSocket).** A frame with `null` in a required field is skipped. It counts once on
   `stt.frames.unparseable`, and the stream goes on with the next frame. The fields are Deepgram's `type` and
   `transcript`, and Speechmatics' `message` and `content`.
-- **Whisper and Azure Whisper (HTTP) — behaviour change.** A `{"text":null}` reply now makes `StreamAsync` throw
-  `JsonException`. Before, it returned no result and no error, silently. Both vendor contracts require `text`.
-  `VoiceAiPipeline` absorbs the exception: it counts the transcription as failed, publishes a `PipelineErrorEvent` and
-  goes back to listening. A caller that drives `StreamAsync` directly sees the exception and must handle it.
 - **Speechmatics.** A `null` entry in `results`, or a `null` first alternative, is skipped. The entries left keep
   their text and their confidence. Before, it threw `NullReferenceException` and ended the stream.
 
@@ -186,6 +192,16 @@ check.
 
 The requests the SDK sends do not change: every request type serializes to the same bytes as before. No public API
 changes.
+
+### Fixed: an ElevenLabs or LMNT reply whose `error` is `false`, `0`, `{}` or `[]` no longer ends the synthesis (#653)
+
+The ElevenLabs and LMNT synthesizers look for a bare `error` member in a reply they cannot otherwise read, because that
+member is how these vendors mark a failure. Any `error` that was not a string, `false`, `0`, `{}` and `[]` included, was
+taken as the vendor's failure: `SynthesizeAsync` threw `SpeechProviderFailureException` with the `ErrorFrame` signal and
+the synthesis ended. Such a value says that no error occurred. The reply is now counted once on
+`tts.frames.unparseable` and skipped, like any other reply the synthesizer cannot read, and the audio around it still
+arrives. An `error` that holds a value (a non-empty string, object or array, a number other than zero, or `true`)
+still ends the synthesis with the vendor's failure, as before. No public API changes.
 
 ### Changed: `Verbara.Sdk.OpenTelemetry` moves to OpenTelemetry 1.21 (#618)
 

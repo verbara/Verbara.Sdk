@@ -450,8 +450,9 @@ public sealed class LmntSpeechSynthesizer : SpeechSynthesizer
 
     /// <summary>
     /// Whether a message that failed to deserialize names a failure by either of the tests the readable
-    /// branch applies: an <c>error</c> member that is present, not <see langword="null"/> and not empty, or
-    /// <c>"type": "error"</c> at its top level. A message that is not a JSON object names no failure. No code
+    /// branch applies: an <c>error</c> member that holds a value (present, not <see langword="null"/>, not
+    /// empty, and not <see langword="false"/>, <c>0</c>, <c>{}</c> or <c>[]</c>), or <c>"type": "error"</c> at
+    /// its top level. A message that is not a JSON object names no failure. No code
     /// is read: the readable branch reads none on this vendor.
     /// </summary>
     /// <remarks>

@@ -19,6 +19,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [An ARI outbound observer that throws keeps its connection](#an-ari-outbound-observer-that-throws-keeps-its-connection) | behavior, BREAKING (no compiler error) |
 | `Verbara.Sdk.Activities`, `Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An activity, voice pipeline or realtime bridge subscriber that throws stops nothing else](#an-activity-voice-pipeline-or-realtime-bridge-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error; a cast of `StatusChanges` to `BehaviorSubject` fails at run time) |
 | `Verbara.Sdk.VoiceAi.AudioSocket` | [An `OnSessionStarted` subscriber that fails ends the AudioSocket call only when every subscriber did](#an-onsessionstarted-subscriber-that-fails-ends-the-audiosocket-call-only-when-every-subscriber-did) | behavior, BREAKING (no compiler error) |
+| `Verbara.Sdk.VoiceAi.Stt` | [A Whisper or Azure Whisper reply with a `null` text makes `StreamAsync` throw](#a-whisper-or-azure-whisper-reply-with-a-null-text-makes-streamasync-throw) | behavior, BREAKING (no compiler error) |
 | `Verbara.Sdk.Sessions`, `Verbara.Sdk.Sessions.Redis`, `Verbara.Sdk.Sessions.Postgres` | [A session store's `linkedid` lookup with several servers](#a-session-stores-linkedid-lookup-with-several-servers) | behavior, BREAKING (no compiler error; new Redis index key) |
 | `Verbara.Sdk.Sessions` | [`CallRingNoAnswerEvent` is raised, and `IAgentSessionTracker` lists members that only missed calls](#callringnoanswerevent-is-raised-and-iagentsessiontracker-lists-members-that-only-missed-calls) | behavior (no compiler error) |
 | `Verbara.Sdk.Cluster.Postgres` | [The cluster lock row says since when its owner holds it](#the-cluster-lock-row-says-since-when-its-owner-holds-it) | new nullable column, migration V002 (no compiler error) |
@@ -769,6 +770,50 @@ static void ServeOrHangUp(AudioSocketServer server, Func<Guid, bool> isAllowed, 
             throw;
         }
     };
+```
+
+## Provider replies
+
+### A Whisper or Azure Whisper reply with a `null` text makes `StreamAsync` throw
+
+#### Who is affected
+
+You are affected if your code enumerates `StreamAsync` of `WhisperSpeechRecognizer` or `AzureWhisperSpeechRecognizer`
+itself. Nothing reports a compiler error. Through `VoiceAiPipeline` nothing throws: the pipeline catches the exception,
+counts the transcription as failed, publishes a `PipelineErrorEvent` and goes back to listening. Before, such a reply
+published no event, so a `PipelineErrorEvent` subscriber now sees one where it saw none.
+
+#### What changes
+
+When the vendor replies `{"text":null}`, `StreamAsync` throws `JsonException` from the `await foreach`. Up to 2.10.x it
+returned no result and no error, so the reply could not be told from silence. Both vendor contracts require `text`, so
+a `null` there is a reply the SDK cannot read, and it is now reported as one.
+
+#### What to do
+
+Catch `JsonException` where you enumerate `StreamAsync` on these two recognizers, and treat it as a failed
+transcription, as the pipeline does:
+
+```csharp
+using System.Text.Json;
+using Verbara.Sdk.Audio;
+
+static async Task<string?> TranscribeAsync(
+    SpeechRecognizer whisper, IAsyncEnumerable<ReadOnlyMemory<byte>> audio, AudioFormat format, CancellationToken ct)
+{
+    try
+    {
+        await foreach (var result in whisper.StreamAsync(audio, format, ct))
+            return result.Transcript;
+
+        return null;
+    }
+    catch (JsonException)
+    {
+        // The vendor replied without a transcript: a failed transcription, not silence.
+        return null;
+    }
+}
 ```
 
 ## Session stores

@@ -17,6 +17,7 @@ namespace Verbara.Sdk.VoiceAi.Tts.Tests.Deepgram;
 /// <c>DeepgramTtsFakeServer</c> on <c>WebSocketTestServer</c> stays. Fidelity here comes from
 /// recorded frames (D4), not from a different server.
 /// </summary>
+[Collection(TtsProcessWideCounters.Name)]
 [SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
 public class DeepgramSpeechSynthesizerTests : IAsyncLifetime
 {
@@ -338,6 +339,7 @@ public class DeepgramSpeechSynthesizerTests : IAsyncLifetime
     {
         // Arrange
         _server.TextFrameFragmentBytes = 16;
+        using var unparseable = new TtsUnparseableFrames("DeepgramTts");
         var synth = BuildSynthesizer();
 
         // Act
@@ -345,6 +347,7 @@ public class DeepgramSpeechSynthesizerTests : IAsyncLifetime
 
         // Assert
         frames.SelectMany(f => f.ToArray()).ToArray().Should().Equal(RecordedAudio);
+        unparseable.Count.Should().Be(0, "the message was parsed whole; parsed per read, each fragment is an unreadable message counted and skipped while the audio still arrives");
     }
 
     /// <summary>
@@ -358,6 +361,7 @@ public class DeepgramSpeechSynthesizerTests : IAsyncLifetime
         var flushed = $$"""{"type":"Flushed","sequence_id":1,"padding":"{{new string('x', 70_000)}}"}""";
         Encoding.UTF8.GetByteCount(flushed).Should().BeGreaterThan(64 * 1024, "the message must outgrow one read");
         _server.FlushedFrameJson = flushed;
+        using var unparseable = new TtsUnparseableFrames("DeepgramTts");
         var synth = BuildSynthesizer();
 
         // Act
@@ -365,6 +369,7 @@ public class DeepgramSpeechSynthesizerTests : IAsyncLifetime
 
         // Assert
         frames.SelectMany(f => f.ToArray()).ToArray().Should().Equal(RecordedAudio);
+        unparseable.Count.Should().Be(0, "the message was parsed whole; parsed per read, each fragment is an unreadable message counted and skipped while the audio still arrives");
     }
 
     /// <summary>
