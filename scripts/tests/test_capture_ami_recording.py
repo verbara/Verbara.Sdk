@@ -1167,5 +1167,133 @@ class QueueRevisitWorkloadTests(unittest.TestCase):
         self.assertEqual(["revisit-01", "once-01", "done"], steps)
 
 
+
+class _RingNoAnswerPbx:
+    """The answers a PBX gives the queue-ring-no-answer workload, in a fake's script shape: an originated caller of
+    rna-in or busy-in is reported not answered by its queue's first member, then connected to PJSIP/agent2; one of
+    answer-in is connected to PJSIP/agent2 at once. With `never_connect`, no AgentConnect follows."""
+
+    _FIRST = {"rna-in": ("q-rna", "PJSIP/agent1"), "busy-in": ("q-busy", "PJSIP/agent3"), "answer-in": ("q-answer", None)}
+
+    def __init__(self, never_connect=False):
+        self.never_connect = never_connect
+        self.calls = 0
+
+    def ok(self, message="Success"):
+        return b"Response: Success\r\nActionID: {id}\r\nMessage: " + message.encode() + b"\r\n\r\n"
+
+    def member_event(self, event, cid, queue, member):
+        return _ev(("Event", event), ("Channel", f"PJSIP/loop-{self.calls:08d}"),
+                   ("Uniqueid", f"1700000000.{self.calls}"), ("CallerIDNum", cid), ("Queue", queue),
+                   ("Interface", member), ("MemberName", member))
+
+    def originate(self, h):
+        self.calls += 1
+        cid = h["CallerID"].split("<")[1].rstrip(">")
+        queue, first = self._FIRST[h["Channel"].split("/")[1].split("@")[0]]
+        frames = [self.ok("Originate successfully queued")]
+        if first:
+            frames.append(self.member_event("AgentRingNoAnswer", cid, queue, first))
+        if not self.never_connect:
+            frames.append(self.member_event("AgentConnect", cid, queue, "PJSIP/agent2"))
+        return frames
+
+    def script(self):
+        return {
+            "Login": [self.ok("Authentication accepted")],
+            "UserEvent": lambda h: [self.ok("Event Sent"),
+                                    _ev(("Event", "UserEvent"), ("UserEvent", h["UserEvent"]),
+                                        ("Step", h.get("Step", "")), ("ActionID", h["ActionID"]))],
+            "Originate": self.originate,
+            "Hangup": [self.ok("Channel Hungup")],
+            "CoreShowChannels": [b"Response: Success\r\nActionID: {id}\r\nEventList: start\r\n\r\n",
+                                 b"Event: CoreShowChannelsComplete\r\nActionID: {id}\r\nEventList: Complete\r\n"
+                                 b"ListItems: 0\r\n\r\n"],
+            "Logoff": [b"Response: Goodbye\r\nActionID: {id}\r\n\r\n"],
+        }
+
+
+class QueueRingNoAnswerWorkloadTests(unittest.TestCase):
+    _NAME = "queue-ring-no-answer"
+
+    def _run(self, calls, never_connect=False):
+        pbx_state = _RingNoAnswerPbx(never_connect)
+        ours, theirs = socket.socketpair()
+        pbx = _FakePbx(theirs, pbx_state.script())
+        pbx.start()
+        try:
+            tap = cap.Tap(ours)
+            tap.pump = lambda seconds: cap.Tap.pump(tap, min(seconds, 0.02))
+            tap.options = {"sequential_calls": calls, "join_timeout": 0.3}
+            tap.login("capture", "secret")
+            steps = cap.WORKLOADS[self._NAME]["run"](tap)
+            tap.logoff()
+        finally:
+            ours.close()
+            theirs.close()
+            pbx.join(2)
+        return steps, pbx.received
+
+    @staticmethod
+    def _outcomes(received):
+        return [(h["Step"], h["CallerId"], h["RingNoAnswers"], h["Missed"], h["Connects"], h["Members"],
+                 h.get("Detail", ""))
+                for h in received if h.get("Action") == "UserEvent" and h.get("UserEvent") == "CaptureOutcome"]
+
+    def test_workloads_ShouldOfferQueueRingNoAnswer(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(0, cap.main(["workloads"]))
+
+        self.assertIn(self._NAME + ":", out.getvalue())
+
+    def test_files_ShouldConfigureLinearQueuesWhoseFirstMemberDoesNotAnswer_OnALoopback(self):
+        files = cap.WORKLOADS[self._NAME]["files"]
+
+        self.assertEqual({"extensions.conf", "queues.conf", "pjsip.conf"}, set(files))
+        queues = files["queues.conf"]
+        self.assertIn("strategy = linear", queues)
+        self.assertIn("timeout = 2", queues)
+        self.assertIn("[q-rna](rna)\nmember => PJSIP/agent1\nmember => PJSIP/agent2", queues)
+        self.assertIn("[q-busy](rna)\nmember => PJSIP/agent3\nmember => PJSIP/agent2", queues)
+        self.assertIn("[q-answer](rna)\nmember => PJSIP/agent2\n", queues)
+        extensions = files["extensions.conf"]
+        self.assertIn("exten => agent1,1,Ringing()\n same => n,Wait(60)", extensions, "agent1 never answers")
+        self.assertIn("exten => agent3,1,Busy(5)", extensions)
+        for extension, queue in (("rna-in", "q-rna"), ("busy-in", "q-busy"), ("answer-in", "q-answer")):
+            self.assertIn(f"exten => {extension},1,Answer()", extensions)
+            self.assertIn(f"Queue({queue})", extensions)
+        pjsip = files["pjsip.conf"]
+        self.assertIn("bind = 127.0.0.1:5060", pjsip, "SIP stays inside the container")
+        for member in ("agent1", "agent2", "agent3"):
+            self.assertIn(f"contact = sip:{member}@127.0.0.1:5060", pjsip)
+        self.assertNotIn("0.0.0.0", pjsip)
+
+    def test_run_ShouldPlaceEachKindInItsQueue_AndRecordTheMissedAndConnectedMembers(self):
+        steps, received = self._run(2)
+
+        self.assertEqual(["rna-01", "rna-02", "busy-01", "busy-02", "answer-01", "answer-02", "done"], steps)
+        originates = [(h["Channel"], h["CallerID"]) for h in received if h.get("Action") == "Originate"]
+        self.assertEqual([("PJSIP/rna-in@loop", "Capture <9301>"), ("PJSIP/rna-in@loop", "Capture <9302>"),
+                          ("PJSIP/busy-in@loop", "Capture <9401>"), ("PJSIP/busy-in@loop", "Capture <9402>"),
+                          ("PJSIP/answer-in@loop", "Capture <9501>"), ("PJSIP/answer-in@loop", "Capture <9502>")],
+                         originates)
+        self.assertEqual([("rna-01", "9301", "1", "PJSIP/agent1", "1", "PJSIP/agent2", ""),
+                          ("rna-02", "9302", "1", "PJSIP/agent1", "1", "PJSIP/agent2", ""),
+                          ("busy-01", "9401", "1", "PJSIP/agent3", "1", "PJSIP/agent2", ""),
+                          ("busy-02", "9402", "1", "PJSIP/agent3", "1", "PJSIP/agent2", ""),
+                          ("answer-01", "9501", "0", "", "1", "PJSIP/agent2", ""),
+                          ("answer-02", "9502", "0", "", "1", "PJSIP/agent2", "")], self._outcomes(received))
+
+    def test_run_ShouldRecordATimeoutAndGoOn_WhenNoMemberIsConnected(self):
+        steps, received = self._run(1, never_connect=True)
+
+        self.assertEqual(["rna-01", "busy-01", "answer-01", "done"], steps)
+        outcomes = self._outcomes(received)
+        self.assertEqual(["0", "0", "0"], [o[4] for o in outcomes])
+        self.assertTrue(all(o[6].startswith("error: timed out") for o in outcomes), outcomes)
+        self.assertEqual(["1", "1", "0"], [o[2] for o in outcomes], "the missed ring is still indexed")
+
+
 if __name__ == "__main__":
     unittest.main()

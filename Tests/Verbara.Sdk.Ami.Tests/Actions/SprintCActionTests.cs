@@ -260,6 +260,34 @@ public class SprintCActionTests
     }
 
     [Fact]
+    public async Task SendFlashAction_ShouldWriteReceiveAfterChannel_WhenReceiveIsSet()
+    {
+        // Asterisk's SendFlash reads Receive: with true the flash lands on the named channel instead of its peer
+        // (measured on 20.20.1, 22.12.0, 23.6.0 and 24.0.0). The field is written only when set, after Channel.
+        var action = new SendFlashAction { Channel = "PJSIP/flash-00000000", Receive = true };
+        var pipe = new Pipe();
+        var writer = new AmiProtocolWriter(pipe.Writer);
+
+        await writer.WriteActionAsync(
+            GeneratedActionSerializer.GetActionName(action), "flash-2", GeneratedActionSerializer.Serialize(action));
+
+        await pipe.Writer.CompleteAsync();
+        var result = await pipe.Reader.ReadAsync();
+        var wire = Encoding.UTF8.GetString(result.Buffer.ToArray());
+        wire.Should().Be("Action: SendFlash\r\nActionID: flash-2\r\nChannel: PJSIP/flash-00000000\r\nReceive: true\r\n\r\n");
+    }
+
+    [Fact]
+    public void SendFlashAction_ShouldWriteReceiveFalse_WhenReceiveIsFalse()
+    {
+        var fields = GeneratedActionSerializer.Serialize(new SendFlashAction { Channel = "PJSIP/flash-00000000", Receive = false });
+
+        fields.Should().Equal(
+            new KeyValuePair<string, string>("Channel", "PJSIP/flash-00000000"),
+            new KeyValuePair<string, string>("Receive", "false"));
+    }
+
+    [Fact]
     public void SendFlashAction_ShouldInheritFromManagerAction()
     {
         new SendFlashAction().Should().BeAssignableTo<ManagerAction>();

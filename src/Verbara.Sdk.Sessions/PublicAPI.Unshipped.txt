@@ -5,3 +5,5 @@ Verbara.Sdk.Sessions.CallConnectedEvent.AgentInterface.init -> void
 *REMOVED*static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsTimedOut -> System.Diagnostics.Metrics.Counter<long>!
 Verbara.Sdk.Sessions.ISessionStore.GetByLinkedIdAsync(string! serverId, string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>
 virtual Verbara.Sdk.Sessions.Extensions.SessionStoreBase.GetByLinkedIdAsync(string! serverId, string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent.AgentInterface.get -> string?
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent.AgentInterface.init -> void

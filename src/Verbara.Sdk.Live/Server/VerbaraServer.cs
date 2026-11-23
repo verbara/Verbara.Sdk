@@ -3333,6 +3333,15 @@ public sealed class VerbaraServer : IVerbaraServer
                         acoe.RawFields?.GetValueOrDefault("Queue")));
                     break;
 
+                // app_queue rang a member for a waiting caller and the member did not answer. It changes no agent's
+                // state; it is reported, keyed by the caller's Uniqueid as the connect and complete reports are. The
+                // queue comes from the frame's Queue header: AgentRingNoAnswerEvent has no typed member for it.
+                case AgentRingNoAnswerEvent arna:
+                    server.Agents.OnQueueMemberRingNoAnswer(new QueueMemberRingNoAnswer(
+                        arna.UniqueId, arna.LinkedId, arna.Interface, arna.Agent,
+                        arna.RawFields?.GetValueOrDefault("Queue")));
+                    break;
+
                 // Device state events
                 case DeviceStateChangeEvent dsc:
                     if (dsc.Device is not null && dsc.State is not null)

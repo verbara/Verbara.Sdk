@@ -1461,6 +1461,141 @@ def _queue_revisit(tap: Tap):
     return steps
 
 
+_RNA_EXTENSIONS = """[general]
+static = yes
+writeprotect = no
+
+[capture-sip]
+; the answering legs of the caller's PJSIP loopback calls: the callers the PBX sees, one queue each
+exten => rna-in,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=90)
+ same => n,Queue(q-rna)
+ same => n,Hangup()
+exten => busy-in,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=90)
+ same => n,Queue(q-busy)
+ same => n,Hangup()
+exten => answer-in,1,Answer()
+ same => n,Set(TIMEOUT(absolute)=90)
+ same => n,Queue(q-answer)
+ same => n,Hangup()
+; the member phones: agent1 rings and never answers, agent2 rings 1 s and answers, agent3 is busy
+exten => agent1,1,Ringing()
+ same => n,Wait(60)
+ same => n,Hangup()
+exten => agent2,1,Ringing()
+ same => n,Wait(1)
+ same => n,Answer()
+ same => n,Wait(60)
+ same => n,Hangup()
+exten => agent3,1,Busy(5)
+"""
+
+_RNA_QUEUES = """[general]
+persistentmembers = no
+
+[rna](!)
+strategy = linear
+timeout = 2
+retry = 1
+wrapuptime = 0
+joinempty = yes
+leavewhenempty = no
+ringinuse = yes
+autopause = no
+announce-frequency = 0
+periodic-announce-frequency = 0
+announce-position = no
+announce-holdtime = no
+
+[q-rna](rna)
+member => PJSIP/agent1
+member => PJSIP/agent2
+
+[q-busy](rna)
+member => PJSIP/agent3
+member => PJSIP/agent2
+
+[q-answer](rna)
+member => PJSIP/agent2
+"""
+
+# The queue-revisit loopback and its two members, plus `agent3`, the member that answers busy.
+_RNA_PJSIP = _REVISIT_PJSIP + """
+[agent3]
+type = aor
+contact = sip:agent3@127.0.0.1:5060
+
+[agent3]
+type = endpoint
+transport = transport-loopback
+context = capture-sip
+disallow = all
+allow = ulaw
+aors = agent3
+direct_media = no
+"""
+
+
+def _queue_ring_no_answer(tap: Tap):
+    """N calls (`--sequential-calls`, default 1) of each kind, one at a time, each gone before the next starts:
+    `rna-NN` waits in `q-rna`, where `PJSIP/agent1` rings for the member timeout and never answers, then
+    `PJSIP/agent2` answers; `busy-NN` waits in `q-busy`, where `PJSIP/agent3` answers busy, then `PJSIP/agent2`
+    answers; `answer-NN` waits in `q-answer`, where `PJSIP/agent2` answers at once (the negative control).
+
+    A call that fails or times out is recorded, never fatal. Each call ends with `UserEvent: CaptureOutcome` (the
+    caller's id, the members app_queue reported not answering and connecting, in order, and the error if any); the
+    tap's bytes stay the evidence, the outcome line only indexes them."""
+    steps = []
+    calls = max(1, int(tap.options.get("sequential_calls", 0) or 0))
+    timeout = float(tap.options.get("join_timeout", 20))
+
+    def step(name):
+        steps.append(name)
+        tap.marker(name)
+        return len(tap.frames)
+
+    def of_caller(mark, event, cid):
+        return [f for f in tap.frames[mark:] if f.get("Event") == event and f.get("CallerIDNum") == cid]
+
+    def outcome(name, mark, cid, detail=""):
+        missed = of_caller(mark, "AgentRingNoAnswer", cid)
+        connects = of_caller(mark, "AgentConnect", cid)
+        fields = [("Action", "UserEvent"), ("UserEvent", "CaptureOutcome"), ("Step", name),
+                  ("CallerId", cid), ("RingNoAnswers", str(len(missed))),
+                  ("Missed", ",".join(f.get("Interface", "") for f in missed)),
+                  ("Connects", str(len(connects))),
+                  ("Members", ",".join(f.get("Interface", "") for f in connects))]
+        if detail:
+            fields.append(("Detail", re.sub(r"[\r\n]+", " ", detail)[:200]))
+        tap.action(fields)
+
+    def call(name, cid, extension, queue):
+        mark = step(name)
+        detail = ""
+        try:
+            tap.send([("Action", "Originate"), ("Channel", f"PJSIP/{extension}@loop"), ("Application", "Wait"),
+                      ("Data", "60"), ("CallerID", f"Capture <{cid}>"), ("Async", "true")])
+            tap.wait_for(lambda f: f.get("Event") == "AgentConnect" and f.get("Queue") == queue
+                         and f.get("CallerIDNum") == cid, timeout, mark, f"the AgentConnect of {cid} in {queue}")
+            tap.pump(2.0)
+        except ConnectionClosed:
+            raise
+        except CaptureError as error:
+            detail = f"error: {error}"
+        _hangup_all(tap)
+        tap.pump(1.0)
+        outcome(name, mark, cid, detail)
+
+    for kind, base, extension, queue in (("rna", 9300, "rna-in", "q-rna"), ("busy", 9400, "busy-in", "q-busy"),
+                                         ("answer", 9500, "answer-in", "q-answer")):
+        for i in range(1, calls + 1):
+            call(f"{kind}-{i:02d}", str(base + i), extension, queue)
+
+    step("done")
+    return steps
+
+
 WORKLOADS = {
     "bridges-and-conference": {
         "description": "Local call; two-party bridge + BridgeList/BridgeInfo/Status; two-participant "
@@ -1475,6 +1610,13 @@ WORKLOADS = {
         "files": {"extensions.conf": _PARKING_EXTENSIONS, "res_parking.conf": _PARKING_RES_PARKING,
                   "pjsip.conf": _PARKING_PJSIP},
         "run": _dialplan_and_parking,
+    },
+    "queue-ring-no-answer": {
+        "description": "N calls (--sequential-calls, default 1) of each kind: in q-rna PJSIP/agent1 rings out "
+                       "unanswered, then PJSIP/agent2 answers; in q-busy PJSIP/agent3 answers busy, then "
+                       "PJSIP/agent2 answers; in q-answer PJSIP/agent2 answers at once (the negative control).",
+        "files": {"extensions.conf": _RNA_EXTENSIONS, "queues.conf": _RNA_QUEUES, "pjsip.conf": _RNA_PJSIP},
+        "run": _queue_ring_no_answer,
     },
     "queue-revisit": {
         "description": "N calls (--sequential-calls, default 1) each answered in q-first by PJSIP/agent1, "
@@ -1655,7 +1797,7 @@ def main(argv=None):
     cap.add_argument("--keep-steps", default="")
     cap.add_argument("--sequential-calls", type=int, default=0,
                      help="renamed-caller-and-participant: N sequential calls per surface (default 0); "
-                          "queue-revisit: N calls of each kind (default 1)")
+                          "queue-revisit, queue-ring-no-answer: N calls of each kind (default 1)")
 
     red = sub.add_parser("reduce", help="reduce a kept tap again (deterministic)")
     red.add_argument("tap", type=Path, help="<name>.tap.raw; its <name>.tap.json must be beside it")

@@ -103,10 +103,34 @@ public sealed record CallWrapUpEvent(
     string? AgentId, string? QueueName, TimeSpan WrapUpDuration)
     : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
+/// <summary>
+/// Reports that app_queue rang a queue member for the call and the member did not answer (Asterisk's
+/// <c>AgentRingNoAnswer</c>): raised once per such report, while the session engine holds the call's lock, for a call
+/// it holds and has not ended, on the server that delivered the report. A member rung and missed twice is reported
+/// twice. Nothing is raised for a report of a call the engine does not hold.
+/// <para>
+/// <c>SessionId</c> and <c>ServerId</c> are the call's; <c>QueueName</c> is the queue the report names, else the
+/// call's; <c>AgentId</c> is the agent the report names when it names one, else the member's interface
+/// (<see cref="AgentInterface"/>): app_queue names no agent for an ordinary member, so for one the two are equal.
+/// <c>Timestamp</c> is the instant the report was handled.
+/// </para>
+/// </summary>
 public sealed record CallRingNoAnswerEvent(
     string SessionId, string ServerId, DateTimeOffset Timestamp,
     string AgentId, string? QueueName)
-    : SessionDomainEvent(SessionId, ServerId, Timestamp);
+    : SessionDomainEvent(SessionId, ServerId, Timestamp)
+{
+    /// <summary>
+    /// The interface of the member that did not answer, exactly as Asterisk reported it (<c>PJSIP/agent1</c>, or the
+    /// <c>Local</c> interface of a member that is a <c>Local</c> channel); <see langword="null"/> when the report named
+    /// none.
+    /// </summary>
+    /// <remarks>
+    /// Not a positional member: a notification built with the positional constructor alone names no interface, and
+    /// two notifications that differ only by it are not equal.
+    /// </remarks>
+    public string? AgentInterface { get; init; }
+}
 
 public sealed record AgentSessionStateChanged(
     string SessionId, string ServerId, DateTimeOffset Timestamp,

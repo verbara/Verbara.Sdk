@@ -1,0 +1,8151 @@
+Asterisk Call Manager/13.0.0
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795361848.389854
+UserEvent: CaptureProvenance
+AsteriskVersion: Asterisk 24.0.0
+Image: ghcr.io/verbara/asterisk-base:24.0.0_trixie-c62758c@sha256:09d05c27812adc0ab863be12f325acd71bbba040a3d71c639f07dbdc00a7cd7f
+Workload: queue-ring-no-answer
+ActionID: cap-2
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795361848.389897
+UserEvent: CaptureMarker
+Step: rna-01
+ActionID: cap-3
+
+Response: Success
+ActionID: cap-4
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361848.396050
+Channel: PJSIP/loop-00000000
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361848.396105
+Channel: PJSIP/loop-00000000
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+Extension: s
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1795361848.396118
+Channel: PJSIP/loop-00000000
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795361848.396124
+Channel: PJSIP/loop-00000000
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1795361848.397180
+DestChannel: PJSIP/loop-00000000
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 9301
+DestCallerIDName: Capture
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795361848.0
+DestLinkedid: 1795361848.0
+DialString: rna-in@loop
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361848.397663
+Channel: PJSIP/loop-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361848.397783
+Channel: PJSIP/loop-00000001
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Extension: rna-in
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361848.397795
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361848.397829
+Device: PJSIP/loop
+State: INUSE
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361848.398368
+Channel: PJSIP/loop-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795361848.398383
+DestChannel: PJSIP/loop-00000000
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 9301
+DestCallerIDName: Capture
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795361848.0
+DestLinkedid: 1795361848.0
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1795361848.398385
+ActionID: cap-4
+Response: Success
+Channel: PJSIP/loop-00000000
+Application: Wait
+Data: 60
+Reason: 4
+Uniqueid: 1795361848.0
+CallerIDNum: 9301
+CallerIDName: Capture
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361848.898899
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 2
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Extension: rna-in
+Application: Set
+AppData: TIMEOUT(absolute)=90
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361848.898965
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Extension: rna-in
+Application: Queue
+AppData: q-rna
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361848.898982
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361848.898996
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361848.899006
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361848.899009
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361848.899010
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361848.899013
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361848.899053
+Device: Queue:q-rna
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1795361848.899075
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Queue: q-rna
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361848.899421
+Channel: PJSIP/agent1-00000002
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.2
+Linkedid: 1795361848.1
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361848.899464
+Channel: PJSIP/agent1-00000002
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.2
+Linkedid: 1795361848.1
+Extension: s
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1795361848.899470
+Channel: PJSIP/agent1-00000002
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.2
+Linkedid: 1795361848.1
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361848.899473
+Channel: PJSIP/agent1-00000002
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.2
+Linkedid: 1795361848.1
+Variable: DIALEDPEERNUMBER
+Value: agent1
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1795361848.900036
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent1-00000002
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: rna-in
+DestPriority: 1
+DestUniqueid: 1795361848.2
+DestLinkedid: 1795361848.1
+Queue: q-rna
+Interface: PJSIP/agent1
+MemberName: PJSIP/agent1
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1795361848.900041
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent1-00000002
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795361848.2
+DestLinkedid: 1795361848.1
+DialString: PJSIP/agent1
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795361848.900066
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361848.900357
+Channel: PJSIP/loop-00000003
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 1
+Uniqueid: 1795361848.3
+Linkedid: 1795361848.3
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361848.900505
+Channel: PJSIP/loop-00000003
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 1
+Uniqueid: 1795361848.3
+Linkedid: 1795361848.3
+Extension: agent1
+Application: Ringing
+AppData: 
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361848.900535
+Channel: PJSIP/loop-00000003
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 2
+Uniqueid: 1795361848.3
+Linkedid: 1795361848.3
+Extension: agent1
+Application: Wait
+AppData: 60
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361848.900643
+Channel: PJSIP/agent1-00000002
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361848.2
+Linkedid: 1795361848.1
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361848.900646
+Channel: PJSIP/agent1-00000002
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361848.2
+Linkedid: 1795361848.1
+Extension: rna-in
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795361848.900653
+Channel: PJSIP/agent1-00000002
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361848.2
+Linkedid: 1795361848.1
+
+Event: DialState
+Privilege: call,all
+Timestamp: 1795361848.900667
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent1-00000002
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: rna-in
+DestPriority: 1
+DestUniqueid: 1795361848.2
+DestLinkedid: 1795361848.1
+DialStatus: RINGING
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361848.900682
+Device: PJSIP/agent1
+State: RINGING
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361848.900696
+Queue: q-rna
+MemberName: PJSIP/agent1
+Interface: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361848.900707
+Device: Queue:q-rna_avail
+State: NOT_INUSE
+
+Event: AgentRingNoAnswer
+Privilege: agent,all
+Timestamp: 1795361850.902043
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent1-00000002
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: rna-in
+DestPriority: 1
+DestUniqueid: 1795361848.2
+DestLinkedid: 1795361848.1
+Queue: q-rna
+Interface: PJSIP/agent1
+MemberName: PJSIP/agent1
+RingTime: 2000
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795361850.902061
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent1-00000002
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: rna-in
+DestPriority: 1
+DestUniqueid: 1795361848.2
+DestLinkedid: 1795361848.1
+DialStatus: NOANSWER
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795361850.902066
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent1-00000002
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: rna-in
+DestPriority: 1
+DestUniqueid: 1795361848.2
+DestLinkedid: 1795361848.1
+DialStatus: CANCEL
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361850.902300
+Channel: PJSIP/agent1-00000002
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361848.2
+Linkedid: 1795361848.1
+Cause: 0
+Cause-txt: Unknown
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361850.902370
+Device: PJSIP/agent1
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361850.902401
+Queue: q-rna
+MemberName: PJSIP/agent1
+Interface: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1795361850.902596
+Channel: PJSIP/loop-00000003
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 2
+Uniqueid: 1795361848.3
+Linkedid: 1795361848.3
+Cause: 127
+TechCause: 487
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1795361850.902629
+Channel: PJSIP/loop-00000003
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 2
+Uniqueid: 1795361848.3
+Linkedid: 1795361848.3
+Cause: 16
+TechCause: 487
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361850.902785
+Channel: PJSIP/loop-00000003
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 2
+Uniqueid: 1795361848.3
+Linkedid: 1795361848.3
+Cause: 127
+Cause-txt: Interworking, unspecified
+TechCause: 487
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361851.903448
+Channel: PJSIP/agent2-00000004
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361851.903490
+Channel: PJSIP/agent2-00000004
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Extension: s
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1795361851.903494
+Channel: PJSIP/agent2-00000004
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361851.903510
+Channel: PJSIP/agent2-00000004
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: DIALEDPEERNUMBER
+Value: agent2
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1795361851.903906
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent2-00000004
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: rna-in
+DestPriority: 1
+DestUniqueid: 1795361851.4
+DestLinkedid: 1795361848.1
+Queue: q-rna
+Interface: PJSIP/agent2
+MemberName: PJSIP/agent2
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1795361851.903915
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent2-00000004
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795361851.4
+DestLinkedid: 1795361848.1
+DialString: PJSIP/agent2
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361851.904218
+Channel: PJSIP/loop-00000005
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 1
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361851.904330
+Channel: PJSIP/loop-00000005
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 1
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Extension: agent2
+Application: Ringing
+AppData: 
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361851.904370
+Channel: PJSIP/loop-00000005
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 2
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Extension: agent2
+Application: Wait
+AppData: 1
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361851.904486
+Channel: PJSIP/agent2-00000004
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361851.904488
+Channel: PJSIP/agent2-00000004
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Extension: rna-in
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795361851.904489
+Channel: PJSIP/agent2-00000004
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361851.904514
+Device: PJSIP/agent2
+State: RINGING
+
+Event: DialState
+Privilege: call,all
+Timestamp: 1795361851.904527
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent2-00000004
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: rna-in
+DestPriority: 1
+DestUniqueid: 1795361851.4
+DestLinkedid: 1795361848.1
+DialStatus: RINGING
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361851.904556
+Queue: q-busy
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361851.904570
+Device: Queue:q-busy_avail
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361851.904592
+Queue: q-rna
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361851.904606
+Queue: q-answer
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361851.904614
+Device: Queue:q-answer_avail
+State: NOT_INUSE
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361852.905504
+Channel: PJSIP/loop-00000005
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 3
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Extension: agent2
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361852.905537
+Channel: PJSIP/loop-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 3
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361852.906070
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795361852.906086
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent2-00000004
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: rna-in
+DestPriority: 1
+DestUniqueid: 1795361851.4
+DestLinkedid: 1795361848.1
+DialStatus: ANSWER
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361852.906094
+Device: PJSIP/agent2
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361852.906104
+Device: Queue:q-rna
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361852.906113
+Queue: q-busy
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1795361852.906127
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Queue: q-rna
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906132
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361852.906147
+Queue: q-rna
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906152
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: QUEUEWAIT
+Value: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906156
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: QUEUEWAIT_MS
+Value: 4000
+
+Event: AgentConnect
+Privilege: agent,all
+Timestamp: 1795361852.906174
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent2-00000004
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: rna-in
+DestPriority: 1
+DestUniqueid: 1795361851.4
+DestLinkedid: 1795361848.1
+Queue: q-rna
+Interface: PJSIP/agent2
+MemberName: PJSIP/agent2
+HoldTime: 4
+RingTime: 1
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361852.906182
+Queue: q-answer
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1795361852.906270
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1795361852.906352
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1795361852.906414
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906494
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: BRIDGEPEER
+Value: PJSIP/agent2-00000004
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906499
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: BRIDGEPVTCALLID
+Value: 22222222-2222-2222-2222-222222222222
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906507
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000001
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906512
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: BRIDGEPVTCALLID
+Value: 33333333-3333-3333-3333-333333333333
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906566
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: BRIDGEPEER
+Value: PJSIP/agent2-00000004
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906569
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: BRIDGEPVTCALLID
+Value: 22222222-2222-2222-2222-222222222222
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906586
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000001
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906591
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: BRIDGEPVTCALLID
+Value: 33333333-3333-3333-3333-333333333333
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906652
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: BRIDGEPEER
+Value: PJSIP/agent2-00000004
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906655
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: BRIDGEPVTCALLID
+Value: 22222222-2222-2222-2222-222222222222
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906670
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000001
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361852.906673
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: BRIDGEPVTCALLID
+Value: 33333333-3333-3333-3333-333333333333
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361853.406436
+Channel: PJSIP/loop-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Extension: agent2
+Application: Wait
+AppData: 60
+
+Response: Success
+ActionID: cap-5
+EventList: start
+Message: Channels hung up will follow
+
+Event: ChannelHungup
+Channel: PJSIP/agent2-00000004
+ActionID: cap-5
+
+Event: ChannelHungup
+Channel: PJSIP/loop-00000001
+ActionID: cap-5
+
+Event: ChannelHungup
+Channel: PJSIP/loop-00000000
+ActionID: cap-5
+
+Event: ChannelHungup
+Channel: PJSIP/loop-00000005
+ActionID: cap-5
+
+Event: ChannelsHungupListComplete
+ActionID: cap-5
+EventList: Complete
+ListItems: 4
+
+Response: Success
+ActionID: cap-6
+EventList: start
+Message: Channels will follow
+
+Event: CoreShowChannel
+ActionID: cap-6
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Application: AppQueue
+ApplicationData: (Outgoing Line)
+Duration: 00:00:03
+BridgeId: 11111111-1111-1111-1111-111111111111
+
+Event: CoreShowChannel
+ActionID: cap-6
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Application: Queue
+ApplicationData: q-rna
+Duration: 00:00:06
+BridgeId: 11111111-1111-1111-1111-111111111111
+
+Event: CoreShowChannel
+ActionID: cap-6
+Channel: PJSIP/loop-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+Application: Wait
+ApplicationData: 60
+Duration: 00:00:06
+BridgeId: 
+
+Event: CoreShowChannel
+ActionID: cap-6
+Channel: PJSIP/loop-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Application: Wait
+ApplicationData: 60
+Duration: 00:00:03
+BridgeId: 
+
+Event: CoreShowChannelsComplete
+ActionID: cap-6
+EventList: Complete
+ListItems: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908640
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908649
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908653
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908678
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1795361854.908690
+Channel: PJSIP/loop-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Cause: 16
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908697
+Channel: PJSIP/loop-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+Variable: RTPAUDIOQOS
+Value: ssrc=1683633109;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908712
+Channel: PJSIP/loop-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908718
+Channel: PJSIP/loop-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1795361854.908723
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908727
+Channel: PJSIP/loop-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908730
+Channel: PJSIP/loop-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908737
+Channel: PJSIP/loop-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Variable: RTPAUDIOQOS
+Value: ssrc=2131174509;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908749
+Channel: PJSIP/loop-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908757
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: ANSWEREDTIME
+Value: 2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908761
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: ANSWEREDTIME_MS
+Value: 2002
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908765
+Channel: PJSIP/loop-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908775
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: DIALEDTIME
+Value: 6
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908783
+Channel: PJSIP/loop-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908786
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: DIALEDTIME_MS
+Value: 6511
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1795361854.908790
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.908796
+Channel: PJSIP/loop-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1795361854.908804
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Cause: 16
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1795361854.908870
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: AgentComplete
+Privilege: agent,all
+Timestamp: 1795361854.908882
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+DestChannel: PJSIP/agent2-00000004
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: rna-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9301
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: rna-in
+DestPriority: 1
+DestUniqueid: 1795361851.4
+DestLinkedid: 1795361848.1
+Queue: q-rna
+Interface: PJSIP/agent2
+MemberName: PJSIP/agent2
+HoldTime: 4
+TalkTime: 2
+Reason: caller
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361854.908987
+Channel: PJSIP/loop-00000000
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361848.0
+Linkedid: 1795361848.0
+Cause: 0
+Cause-txt: Unknown
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361854.909229
+Channel: PJSIP/loop-00000005
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361851.5
+Linkedid: 1795361851.5
+Cause: 0
+Cause-txt: Unknown
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.909249
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: RTPAUDIOQOS
+Value: ssrc=1623787148;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.909256
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.909273
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.909279
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: RTPAUDIOQOS
+Value: ssrc=1661520713;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.909286
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.909291
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.909295
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.909299
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.909301
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361854.909305
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361854.909380
+Channel: PJSIP/agent2-00000004
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: rna-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9301
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 1
+Uniqueid: 1795361851.4
+Linkedid: 1795361848.1
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361854.909413
+Device: PJSIP/agent2
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361854.909426
+Queue: q-busy
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361854.909433
+Queue: q-rna
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1795361854
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361854.909441
+Queue: q-answer
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361854.909488
+Channel: PJSIP/loop-00000001
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9301
+CallerIDName: Capture
+ConnectedLineNum: rna-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: rna-in
+Priority: 3
+Uniqueid: 1795361848.1
+Linkedid: 1795361848.1
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361854.909528
+Device: PJSIP/loop
+State: NOT_INUSE
+
+Response: Success
+ActionID: cap-7
+EventList: start
+Message: Channels will follow
+
+Event: CoreShowChannelsComplete
+ActionID: cap-7
+EventList: Complete
+ListItems: 0
+
+Response: Success
+ActionID: cap-8
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795361856.411803
+UserEvent: CaptureOutcome
+Step: rna-01
+CallerId: 9301
+RingNoAnswers: 1
+Missed: PJSIP/agent1
+Connects: 1
+Members: PJSIP/agent2
+ActionID: cap-8
+
+Response: Success
+ActionID: cap-9
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795361872.446871
+UserEvent: CaptureMarker
+Step: busy-01
+ActionID: cap-21
+
+Response: Success
+ActionID: cap-22
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361872.447316
+Channel: PJSIP/loop-00000012
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361872.447333
+Channel: PJSIP/loop-00000012
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+Extension: s
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1795361872.447338
+Channel: PJSIP/loop-00000012
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795361872.447342
+Channel: PJSIP/loop-00000012
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1795361872.447776
+DestChannel: PJSIP/loop-00000012
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 9401
+DestCallerIDName: Capture
+DestConnectedLineNum: 9401
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795361872.18
+DestLinkedid: 1795361872.18
+DialString: busy-in@loop
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361872.448076
+Channel: PJSIP/loop-00000013
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361872.448177
+Channel: PJSIP/loop-00000013
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Extension: busy-in
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361872.448196
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361872.448239
+Device: PJSIP/loop
+State: INUSE
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361872.448648
+Channel: PJSIP/loop-00000012
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795361872.448673
+DestChannel: PJSIP/loop-00000012
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 9401
+DestCallerIDName: Capture
+DestConnectedLineNum: 9401
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795361872.18
+DestLinkedid: 1795361872.18
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1795361872.448674
+ActionID: cap-22
+Response: Success
+Channel: PJSIP/loop-00000012
+Application: Wait
+Data: 60
+Reason: 4
+Uniqueid: 1795361872.18
+CallerIDNum: 9401
+CallerIDName: Capture
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361872.949006
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 2
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Extension: busy-in
+Application: Set
+AppData: TIMEOUT(absolute)=90
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361872.949052
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Extension: busy-in
+Application: Queue
+AppData: q-busy
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361872.949074
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361872.949085
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361872.949090
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361872.949093
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361872.949096
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361872.949098
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361872.949149
+Device: Queue:q-busy
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1795361872.949166
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Queue: q-busy
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361872.949457
+Channel: PJSIP/agent3-00000014
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.20
+Linkedid: 1795361872.19
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361872.949504
+Channel: PJSIP/agent3-00000014
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.20
+Linkedid: 1795361872.19
+Extension: s
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1795361872.949507
+Channel: PJSIP/agent3-00000014
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.20
+Linkedid: 1795361872.19
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361872.949514
+Channel: PJSIP/agent3-00000014
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.20
+Linkedid: 1795361872.19
+Variable: DIALEDPEERNUMBER
+Value: agent3
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1795361872.949939
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+DestChannel: PJSIP/agent3-00000014
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: busy-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9401
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: busy-in
+DestPriority: 1
+DestUniqueid: 1795361872.20
+DestLinkedid: 1795361872.19
+Queue: q-busy
+Interface: PJSIP/agent3
+MemberName: PJSIP/agent3
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1795361872.949951
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+DestChannel: PJSIP/agent3-00000014
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: busy-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795361872.20
+DestLinkedid: 1795361872.19
+DialString: PJSIP/agent3
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795361872.950006
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361872.950303
+Channel: PJSIP/loop-00000015
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent3
+Priority: 1
+Uniqueid: 1795361872.21
+Linkedid: 1795361872.21
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361872.950415
+Channel: PJSIP/loop-00000015
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent3
+Priority: 1
+Uniqueid: 1795361872.21
+Linkedid: 1795361872.21
+Extension: agent3
+Application: Busy
+AppData: 5
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361872.950431
+Channel: PJSIP/loop-00000015
+ChannelState: 7
+ChannelStateDesc: Busy
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent3
+Priority: 1
+Uniqueid: 1795361872.21
+Linkedid: 1795361872.21
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361872.950481
+Device: PJSIP/loop
+State: BUSY
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1795361872.950553
+Channel: PJSIP/loop-00000015
+ChannelState: 7
+ChannelStateDesc: Busy
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent3
+Priority: 1
+Uniqueid: 1795361872.21
+Linkedid: 1795361872.21
+Cause: 17
+TechCause: 486
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1795361872.950571
+Channel: PJSIP/loop-00000015
+ChannelState: 7
+ChannelStateDesc: Busy
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent3
+Priority: 1
+Uniqueid: 1795361872.21
+Linkedid: 1795361872.21
+Cause: 16
+TechCause: 486
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361872.950734
+Channel: PJSIP/loop-00000015
+ChannelState: 7
+ChannelStateDesc: Busy
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent3
+Priority: 1
+Uniqueid: 1795361872.21
+Linkedid: 1795361872.21
+Cause: 17
+Cause-txt: User busy
+TechCause: 486
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1795361872.950771
+Channel: PJSIP/agent3-00000014
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.20
+Linkedid: 1795361872.19
+Cause: 17
+TechCause: 486
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361872.950775
+Device: PJSIP/loop
+State: INUSE
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795361872.950792
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+DestChannel: PJSIP/agent3-00000014
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: busy-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9401
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: busy-in
+DestPriority: 1
+DestUniqueid: 1795361872.20
+DestLinkedid: 1795361872.19
+DialStatus: NOANSWER
+
+Event: AgentRingNoAnswer
+Privilege: agent,all
+Timestamp: 1795361872.950804
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+DestChannel: PJSIP/agent3-00000014
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: busy-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9401
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: busy-in
+DestPriority: 1
+DestUniqueid: 1795361872.20
+DestLinkedid: 1795361872.19
+Queue: q-busy
+Interface: PJSIP/agent3
+MemberName: PJSIP/agent3
+RingTime: 0
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361872.950879
+Channel: PJSIP/agent3-00000014
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.20
+Linkedid: 1795361872.19
+Cause: 17
+Cause-txt: User busy
+TechCause: 486
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795361872.950880
+Channel: PJSIP/agent3-00000014
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.20
+Linkedid: 1795361872.19
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361872.951004
+Channel: PJSIP/agent2-00000016
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361872.951048
+Channel: PJSIP/agent2-00000016
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Extension: s
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1795361872.951050
+Channel: PJSIP/agent2-00000016
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361872.951056
+Channel: PJSIP/agent2-00000016
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: DIALEDPEERNUMBER
+Value: agent2
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1795361872.951240
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+DestChannel: PJSIP/agent2-00000016
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: busy-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9401
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: busy-in
+DestPriority: 1
+DestUniqueid: 1795361872.22
+DestLinkedid: 1795361872.19
+Queue: q-busy
+Interface: PJSIP/agent2
+MemberName: PJSIP/agent2
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1795361872.951255
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+DestChannel: PJSIP/agent2-00000016
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: busy-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795361872.22
+DestLinkedid: 1795361872.19
+DialString: PJSIP/agent2
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361872.951448
+Channel: PJSIP/loop-00000017
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 1
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361872.951521
+Channel: PJSIP/loop-00000017
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 1
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Extension: agent2
+Application: Ringing
+AppData: 
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361872.951544
+Channel: PJSIP/loop-00000017
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 2
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Extension: agent2
+Application: Wait
+AppData: 1
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361872.951625
+Channel: PJSIP/agent2-00000016
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361872.951627
+Channel: PJSIP/agent2-00000016
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Extension: busy-in
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795361872.951627
+Channel: PJSIP/agent2-00000016
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361872.951642
+Device: PJSIP/agent2
+State: RINGING
+
+Event: DialState
+Privilege: call,all
+Timestamp: 1795361872.951650
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+DestChannel: PJSIP/agent2-00000016
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: busy-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9401
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: busy-in
+DestPriority: 1
+DestUniqueid: 1795361872.22
+DestLinkedid: 1795361872.19
+DialStatus: RINGING
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361872.951659
+Queue: q-busy
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361872.951669
+Queue: q-rna
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1795361870
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361872.951679
+Queue: q-answer
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361873.952641
+Channel: PJSIP/loop-00000017
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 3
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Extension: agent2
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361873.952655
+Channel: PJSIP/loop-00000017
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 3
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361873.953184
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361873.953212
+Device: PJSIP/agent2
+State: INUSE
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795361873.953222
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+DestChannel: PJSIP/agent2-00000016
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: busy-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9401
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: busy-in
+DestPriority: 1
+DestUniqueid: 1795361872.22
+DestLinkedid: 1795361872.19
+DialStatus: ANSWER
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361873.953240
+Queue: q-busy
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361873.953252
+Queue: q-rna
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1795361870
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361873.953263
+Queue: q-answer
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361873.953280
+Device: Queue:q-busy
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1795361873.953296
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Queue: q-busy
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953306
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953325
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: QUEUEWAIT
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953329
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: QUEUEWAIT_MS
+Value: 1000
+
+Event: AgentConnect
+Privilege: agent,all
+Timestamp: 1795361873.953342
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+DestChannel: PJSIP/agent2-00000016
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: busy-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9401
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: busy-in
+DestPriority: 1
+DestUniqueid: 1795361872.22
+DestLinkedid: 1795361872.19
+Queue: q-busy
+Interface: PJSIP/agent2
+MemberName: PJSIP/agent2
+HoldTime: 1
+RingTime: 1
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1795361873.953471
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1795361873.953535
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1795361873.953614
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953711
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: BRIDGEPEER
+Value: PJSIP/agent2-00000016
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953714
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: BRIDGEPVTCALLID
+Value: 55555555-5555-5555-5555-555555555555
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953735
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000013
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953741
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: BRIDGEPVTCALLID
+Value: 66666666-6666-6666-6666-666666666666
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953806
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: BRIDGEPEER
+Value: PJSIP/agent2-00000016
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953810
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: BRIDGEPVTCALLID
+Value: 55555555-5555-5555-5555-555555555555
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953825
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000013
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953828
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: BRIDGEPVTCALLID
+Value: 66666666-6666-6666-6666-666666666666
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953886
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: BRIDGEPEER
+Value: PJSIP/agent2-00000016
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953888
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: BRIDGEPVTCALLID
+Value: 55555555-5555-5555-5555-555555555555
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953908
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000013
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361873.953912
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: BRIDGEPVTCALLID
+Value: 66666666-6666-6666-6666-666666666666
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361874.453600
+Channel: PJSIP/loop-00000017
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Extension: agent2
+Application: Wait
+AppData: 60
+
+Response: Success
+ActionID: cap-23
+EventList: start
+Message: Channels hung up will follow
+
+Event: ChannelHungup
+Channel: PJSIP/agent2-00000016
+ActionID: cap-23
+
+Event: ChannelHungup
+Channel: PJSIP/loop-00000012
+ActionID: cap-23
+
+Event: ChannelHungup
+Channel: PJSIP/loop-00000013
+ActionID: cap-23
+
+Event: ChannelHungup
+Channel: PJSIP/loop-00000017
+ActionID: cap-23
+
+Event: ChannelsHungupListComplete
+ActionID: cap-23
+EventList: Complete
+ListItems: 4
+
+Response: Success
+ActionID: cap-24
+EventList: start
+Message: Channels will follow
+
+Event: CoreShowChannel
+ActionID: cap-24
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Application: AppQueue
+ApplicationData: (Outgoing Line)
+Duration: 00:00:03
+BridgeId: 44444444-4444-4444-4444-444444444444
+
+Event: CoreShowChannel
+ActionID: cap-24
+Channel: PJSIP/loop-00000012
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+Application: Wait
+ApplicationData: 60
+Duration: 00:00:03
+BridgeId: 
+
+Event: CoreShowChannel
+ActionID: cap-24
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Application: Queue
+ApplicationData: q-busy
+Duration: 00:00:03
+BridgeId: 44444444-4444-4444-4444-444444444444
+
+Event: CoreShowChannel
+ActionID: cap-24
+Channel: PJSIP/loop-00000017
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Application: Wait
+ApplicationData: 60
+Duration: 00:00:03
+BridgeId: 
+
+Event: CoreShowChannelsComplete
+ActionID: cap-24
+EventList: Complete
+ListItems: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955676
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955683
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955686
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955689
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1795361875.955692
+Channel: PJSIP/loop-00000017
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Cause: 16
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955696
+Channel: PJSIP/loop-00000012
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+Variable: RTPAUDIOQOS
+Value: ssrc=1984267848;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955717
+Channel: PJSIP/loop-00000012
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955721
+Channel: PJSIP/loop-00000012
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955729
+Channel: PJSIP/loop-00000012
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955746
+Channel: PJSIP/loop-00000012
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955759
+Channel: PJSIP/loop-00000017
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Variable: RTPAUDIOQOS
+Value: ssrc=1426475035;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955773
+Channel: PJSIP/loop-00000017
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955788
+Channel: PJSIP/loop-00000017
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1795361875.955793
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955796
+Channel: PJSIP/loop-00000017
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955798
+Channel: PJSIP/loop-00000017
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955814
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: ANSWEREDTIME
+Value: 2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955820
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: ANSWEREDTIME_MS
+Value: 2002
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955823
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: DIALEDTIME
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.955826
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: DIALEDTIME_MS
+Value: 3507
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1795361875.955847
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1795361875.955863
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Cause: 16
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1795361875.955893
+BridgeUniqueid: 44444444-4444-4444-4444-444444444444
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361875.956025
+Channel: PJSIP/loop-00000017
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361872.23
+Linkedid: 1795361872.23
+Cause: 0
+Cause-txt: Unknown
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361875.956039
+Channel: PJSIP/loop-00000012
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361872.18
+Linkedid: 1795361872.18
+Cause: 0
+Cause-txt: Unknown
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.956072
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: RTPAUDIOQOS
+Value: ssrc=1060483553;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.956076
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.956080
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.956082
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.956086
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: RTPAUDIOQOS
+Value: ssrc=915058220;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.956088
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.956098
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.956103
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.956106
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361875.956108
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361875.956240
+Channel: PJSIP/agent2-00000016
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: busy-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9401
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 1
+Uniqueid: 1795361872.22
+Linkedid: 1795361872.19
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361875.956293
+Device: PJSIP/agent2
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361875.956328
+Queue: q-busy
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1795361875
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361875.956340
+Queue: q-rna
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1795361870
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361875.956347
+Queue: q-answer
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: AgentComplete
+Privilege: agent,all
+Timestamp: 1795361875.961101
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+DestChannel: PJSIP/agent2-00000016
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: busy-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9401
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: busy-in
+DestPriority: 1
+DestUniqueid: 1795361872.22
+DestLinkedid: 1795361872.19
+Queue: q-busy
+Interface: PJSIP/agent2
+MemberName: PJSIP/agent2
+HoldTime: 1
+TalkTime: 2
+Reason: caller
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361875.961138
+Channel: PJSIP/loop-00000013
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9401
+CallerIDName: Capture
+ConnectedLineNum: busy-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: busy-in
+Priority: 3
+Uniqueid: 1795361872.19
+Linkedid: 1795361872.19
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361875.961181
+Device: PJSIP/loop
+State: NOT_INUSE
+
+Response: Success
+ActionID: cap-25
+EventList: start
+Message: Channels will follow
+
+Event: CoreShowChannelsComplete
+ActionID: cap-25
+EventList: Complete
+ListItems: 0
+
+Response: Success
+ActionID: cap-26
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795361877.458276
+UserEvent: CaptureOutcome
+Step: busy-01
+CallerId: 9401
+RingNoAnswers: 1
+Missed: PJSIP/agent3
+Connects: 1
+Members: PJSIP/agent2
+ActionID: cap-26
+
+Response: Success
+ActionID: cap-27
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795361887.479648
+UserEvent: CaptureMarker
+Step: answer-01
+ActionID: cap-39
+
+Response: Success
+ActionID: cap-40
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361887.480050
+Channel: PJSIP/loop-00000024
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361887.480082
+Channel: PJSIP/loop-00000024
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+Extension: s
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1795361887.480089
+Channel: PJSIP/loop-00000024
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795361887.480093
+Channel: PJSIP/loop-00000024
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1795361887.480520
+DestChannel: PJSIP/loop-00000024
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 9501
+DestCallerIDName: Capture
+DestConnectedLineNum: 9501
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795361887.36
+DestLinkedid: 1795361887.36
+DialString: answer-in@loop
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361887.480770
+Channel: PJSIP/loop-00000025
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361887.480894
+Channel: PJSIP/loop-00000025
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Extension: answer-in
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361887.480908
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361887.480938
+Device: PJSIP/loop
+State: INUSE
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361887.481158
+Channel: PJSIP/loop-00000024
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795361887.481177
+DestChannel: PJSIP/loop-00000024
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 9501
+DestCallerIDName: Capture
+DestConnectedLineNum: 9501
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795361887.36
+DestLinkedid: 1795361887.36
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1795361887.481178
+ActionID: cap-40
+Response: Success
+Channel: PJSIP/loop-00000024
+Application: Wait
+Data: 60
+Reason: 4
+Uniqueid: 1795361887.36
+CallerIDNum: 9501
+CallerIDName: Capture
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361887.981686
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 2
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Extension: answer-in
+Application: Set
+AppData: TIMEOUT(absolute)=90
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361887.981753
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Extension: answer-in
+Application: Queue
+AppData: q-answer
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361887.981774
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361887.981781
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361887.981785
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361887.981790
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361887.981793
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361887.981796
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361887.981841
+Device: Queue:q-answer
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1795361887.981864
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Queue: q-answer
+Position: 1
+Count: 1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361887.982162
+Channel: PJSIP/agent2-00000026
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361887.982199
+Channel: PJSIP/agent2-00000026
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Extension: s
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1795361887.982202
+Channel: PJSIP/agent2-00000026
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361887.982207
+Channel: PJSIP/agent2-00000026
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: DIALEDPEERNUMBER
+Value: agent2
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1795361887.982576
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+DestChannel: PJSIP/agent2-00000026
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: answer-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9501
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: answer-in
+DestPriority: 1
+DestUniqueid: 1795361887.38
+DestLinkedid: 1795361887.37
+Queue: q-answer
+Interface: PJSIP/agent2
+MemberName: PJSIP/agent2
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1795361887.982587
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+DestChannel: PJSIP/agent2-00000026
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: answer-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795361887.38
+DestLinkedid: 1795361887.37
+DialString: PJSIP/agent2
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795361887.982605
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795361887.982986
+Channel: PJSIP/loop-00000027
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 1
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361887.983101
+Channel: PJSIP/loop-00000027
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 1
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Extension: agent2
+Application: Ringing
+AppData: 
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361887.983138
+Channel: PJSIP/loop-00000027
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 2
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Extension: agent2
+Application: Wait
+AppData: 1
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361887.983266
+Channel: PJSIP/agent2-00000026
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361887.983268
+Channel: PJSIP/agent2-00000026
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Extension: answer-in
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795361887.983269
+Channel: PJSIP/agent2-00000026
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361887.983294
+Device: PJSIP/agent2
+State: RINGING
+
+Event: DialState
+Privilege: call,all
+Timestamp: 1795361887.983298
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+DestChannel: PJSIP/agent2-00000026
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: answer-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9501
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: answer-in
+DestPriority: 1
+DestUniqueid: 1795361887.38
+DestLinkedid: 1795361887.37
+DialStatus: RINGING
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361887.983309
+Queue: q-busy
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1795361885
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361887.983320
+Queue: q-rna
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1795361870
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361887.983331
+Queue: q-answer
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361888.984283
+Channel: PJSIP/loop-00000027
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 3
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Extension: agent2
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361888.984300
+Channel: PJSIP/loop-00000027
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 3
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795361888.984912
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795361888.984933
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+DestChannel: PJSIP/agent2-00000026
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: answer-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9501
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: answer-in
+DestPriority: 1
+DestUniqueid: 1795361887.38
+DestLinkedid: 1795361887.37
+DialStatus: ANSWER
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361888.984940
+Device: PJSIP/agent2
+State: INUSE
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361888.984963
+Device: Queue:q-answer
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361888.984978
+Queue: q-busy
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1795361885
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1795361888.984989
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Queue: q-answer
+Position: 1
+Count: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361888.984992
+Queue: q-rna
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1795361870
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.984995
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361888.985009
+Queue: q-answer
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985024
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: QUEUEWAIT
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985027
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: QUEUEWAIT_MS
+Value: 1000
+
+Event: AgentConnect
+Privilege: agent,all
+Timestamp: 1795361888.985039
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+DestChannel: PJSIP/agent2-00000026
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: answer-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9501
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: answer-in
+DestPriority: 1
+DestUniqueid: 1795361887.38
+DestLinkedid: 1795361887.37
+Queue: q-answer
+Interface: PJSIP/agent2
+MemberName: PJSIP/agent2
+HoldTime: 1
+RingTime: 1
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1795361888.985142
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1795361888.985227
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1795361888.985288
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985366
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: BRIDGEPEER
+Value: PJSIP/agent2-00000026
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985371
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: BRIDGEPVTCALLID
+Value: 88888888-8888-8888-8888-888888888888
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985378
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000025
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985384
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: BRIDGEPVTCALLID
+Value: 99999999-9999-9999-9999-999999999999
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985443
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: BRIDGEPEER
+Value: PJSIP/agent2-00000026
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985446
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: BRIDGEPVTCALLID
+Value: 88888888-8888-8888-8888-888888888888
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985462
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000025
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985466
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: BRIDGEPVTCALLID
+Value: 99999999-9999-9999-9999-999999999999
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985506
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: BRIDGEPEER
+Value: PJSIP/agent2-00000026
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985512
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: BRIDGEPVTCALLID
+Value: 88888888-8888-8888-8888-888888888888
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985521
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000025
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361888.985525
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: BRIDGEPVTCALLID
+Value: 99999999-9999-9999-9999-999999999999
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795361889.485333
+Channel: PJSIP/loop-00000027
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Extension: agent2
+Application: Wait
+AppData: 60
+
+Response: Success
+ActionID: cap-41
+EventList: start
+Message: Channels hung up will follow
+
+Event: ChannelHungup
+Channel: PJSIP/agent2-00000026
+ActionID: cap-41
+
+Event: ChannelHungup
+Channel: PJSIP/loop-00000025
+ActionID: cap-41
+
+Event: ChannelHungup
+Channel: PJSIP/loop-00000024
+ActionID: cap-41
+
+Event: ChannelHungup
+Channel: PJSIP/loop-00000027
+ActionID: cap-41
+
+Event: ChannelsHungupListComplete
+ActionID: cap-41
+EventList: Complete
+ListItems: 4
+
+Response: Success
+ActionID: cap-42
+EventList: start
+Message: Channels will follow
+
+Event: CoreShowChannel
+ActionID: cap-42
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Application: AppQueue
+ApplicationData: (Outgoing Line)
+Duration: 00:00:03
+BridgeId: 77777777-7777-7777-7777-777777777777
+
+Event: CoreShowChannel
+ActionID: cap-42
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Application: AppQueue
+ApplicationData: (Outgoing Line)
+Duration: 00:00:03
+BridgeId: 77777777-7777-7777-7777-777777777777
+
+Event: CoreShowChannel
+ActionID: cap-42
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Application: Queue
+ApplicationData: q-answer
+Duration: 00:00:03
+BridgeId: 77777777-7777-7777-7777-777777777777
+
+Event: CoreShowChannel
+ActionID: cap-42
+Channel: PJSIP/loop-00000024
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+Application: Wait
+ApplicationData: 60
+Duration: 00:00:03
+BridgeId: 
+
+Event: CoreShowChannel
+ActionID: cap-42
+Channel: PJSIP/loop-00000027
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Application: Wait
+ApplicationData: 60
+Duration: 00:00:03
+BridgeId: 
+
+Event: CoreShowChannelsComplete
+ActionID: cap-42
+EventList: Complete
+ListItems: 5
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987531
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987541
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987552
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987563
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1795361890.987590
+Channel: PJSIP/loop-00000027
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Cause: 16
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987656
+Channel: PJSIP/loop-00000027
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Variable: RTPAUDIOQOS
+Value: ssrc=1431684187;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987663
+Channel: PJSIP/loop-00000027
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987669
+Channel: PJSIP/loop-00000027
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987675
+Channel: PJSIP/loop-00000027
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987689
+Channel: PJSIP/loop-00000027
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987707
+Channel: PJSIP/loop-00000024
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+Variable: RTPAUDIOQOS
+Value: ssrc=1274722188;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987710
+Channel: PJSIP/loop-00000024
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987723
+Channel: PJSIP/loop-00000024
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1795361890.987729
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987733
+Channel: PJSIP/loop-00000024
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987737
+Channel: PJSIP/loop-00000024
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987774
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: ANSWEREDTIME
+Value: 2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987778
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: ANSWEREDTIME_MS
+Value: 2002
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987782
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: DIALEDTIME
+Value: 3
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.987788
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: DIALEDTIME_MS
+Value: 3507
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1795361890.987819
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1795361890.987822
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Cause: 16
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1795361890.987879
+BridgeUniqueid: 77777777-7777-7777-7777-777777777777
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361890.987984
+Channel: PJSIP/loop-00000024
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795361887.36
+Linkedid: 1795361887.36
+Cause: 0
+Cause-txt: Unknown
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361890.987993
+Channel: PJSIP/loop-00000027
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent2
+Priority: 4
+Uniqueid: 1795361887.39
+Linkedid: 1795361887.39
+Cause: 0
+Cause-txt: Unknown
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.988034
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: RTPAUDIOQOS
+Value: ssrc=484459890;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.988039
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: RTPAUDIOQOS
+Value: ssrc=2137098334;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.988043
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.988047
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.988055
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.988060
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.988065
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.988069
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.988073
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795361890.988077
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361890.988141
+Channel: PJSIP/agent2-00000026
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: answer-in
+CallerIDName: <unknown>
+ConnectedLineNum: 9501
+ConnectedLineName: Capture
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 1
+Uniqueid: 1795361887.38
+Linkedid: 1795361887.37
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361890.988172
+Device: PJSIP/agent2
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361890.988203
+Queue: q-busy
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1795361885
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361890.988212
+Queue: q-rna
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 3
+LastCall: 1795361870
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795361890.988222
+Queue: q-answer
+MemberName: PJSIP/agent2
+Interface: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1795361890
+LastPause: 0
+LoginTime: 1795361847
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: AgentComplete
+Privilege: agent,all
+Timestamp: 1795361890.993000
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+DestChannel: PJSIP/agent2-00000026
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: answer-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 9501
+DestConnectedLineName: Capture
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: answer-in
+DestPriority: 1
+DestUniqueid: 1795361887.38
+DestLinkedid: 1795361887.37
+Queue: q-answer
+Interface: PJSIP/agent2
+MemberName: PJSIP/agent2
+HoldTime: 1
+TalkTime: 2
+Reason: caller
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795361890.993046
+Channel: PJSIP/loop-00000025
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 9501
+CallerIDName: Capture
+ConnectedLineNum: answer-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: answer-in
+Priority: 3
+Uniqueid: 1795361887.37
+Linkedid: 1795361887.37
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795361890.993092
+Device: PJSIP/loop
+State: NOT_INUSE
+
+Response: Success
+ActionID: cap-43
+EventList: start
+Message: Channels will follow
+
+Event: CoreShowChannelsComplete
+ActionID: cap-43
+EventList: Complete
+ListItems: 0
+
+Response: Success
+ActionID: cap-44
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795361892.490248
+UserEvent: CaptureOutcome
+Step: answer-01
+CallerId: 9501
+RingNoAnswers: 0
+Missed: 
+Connects: 1
+Members: PJSIP/agent2
+ActionID: cap-44
+
+Response: Success
+ActionID: cap-45
+Message: Event Sent
+

@@ -1,13 +1,14 @@
 # Recordings — asterisk-ami
 
 Byte captures of the AMI stream a real Asterisk PBX sent to one manager client, one capture per
-Asterisk version for each of eight sets: twelve call shapes (`call-shapes-*`), seventeen queue
+Asterisk version for each of nine sets: twelve call shapes (`call-shapes-*`), seventeen queue
 shapes (`queue-shapes-*`), four queue calls with the PBX's own state snapshots taken while they
 waited (`queue-reload-*`), and, read with the `dialplan` class, one call for each way of leaving a
 queue (`queue-exits-*`) and one timeout loop (`queue-loop-*`), the dialplan and parking events of one
 workload (`dialplan-and-parking-*`), and transfers and bridges of a waiting caller and of a conference participant
-(`renamed-caller-and-participant-*`), and one call answered on two queue visits by two members
-(`queue-revisit-*`). This suite replays them through the SDK's own parsing path, so a
+(`renamed-caller-and-participant-*`), one call answered on two queue visits by two members
+(`queue-revisit-*`), and queue members that ring out unanswered or answer busy before the next one answers
+(`queue-ring-no-answer-*`). This suite replays them through the SDK's own parsing path, so a
 call-session assertion made here is checked against what Asterisk actually sent rather than against
 what a test author believed it sends.
 
@@ -41,6 +42,10 @@ what a test author believed it sends.
 | `queue-revisit-asterisk-22.12.0.raw` | 22.12.0 | `Asterisk Call Manager/11.0.0` | 139 966 |
 | `queue-revisit-asterisk-23.6.0.raw` | 23.6.0 | `Asterisk Call Manager/12.0.0` | 140 425 |
 | `queue-revisit-asterisk-24.0.0.raw` | 24.0.0 | `Asterisk Call Manager/13.0.0` | 140 419 |
+| `queue-ring-no-answer-asterisk-20.20.1.raw` | 20.20.1 | `Asterisk Call Manager/9.0.0` | 178 124 |
+| `queue-ring-no-answer-asterisk-22.12.0.raw` | 22.12.0 | `Asterisk Call Manager/11.0.0` | 178 179 |
+| `queue-ring-no-answer-asterisk-23.6.0.raw` | 23.6.0 | `Asterisk Call Manager/12.0.0` | 178 185 |
+| `queue-ring-no-answer-asterisk-24.0.0.raw` | 24.0.0 | `Asterisk Call Manager/13.0.0` | 178 200 |
 
 The call and queue shapes were captured 2026-09-27, the reload, exit and loop captures 2026-09-28. The
 `.gitattributes` rule `**/Recordings/**/*.raw binary` keeps the CRLF framing byte-exact; never open
@@ -974,6 +979,29 @@ every one of the 10 calls of each kind matched this, on every version. They are 
 
 Each file keeps 341 or 342 of about 3 445 frames (the other eighteen calls are outside the kept steps) and replaced
 8 UUIDs and no address.
+
+## The queue-ring-no-answer captures
+
+One run of the `queue-ring-no-answer` workload of `scripts/capture-ami-recording.py` with `--sequential-calls 3` on
+each image of `docker/asterisk-base-images.txt`, by digest (the same four digests as the queue-revisit captures),
+captured 2026-11-22. Each file is that run's tap reduced with `--keep-steps rna-01,busy-01,answer-01`: the first call
+of each kind.
+
+The workload reuses the queue-revisit loopback. The caller is an `Originate` of `PJSIP/<kind>-in@loop`, whose
+answering leg joins one queue per kind; the queues are `linear` with a member timeout of 2 s and `retry = 1`. In
+`rna-01` (caller `9301`, `q-rna`) `PJSIP/agent1` rings and never answers, then `PJSIP/agent2` answers after 1 s; in
+`busy-01` (caller `9401`, `q-busy`) `PJSIP/agent3` answers `Busy()`, then `agent2` answers; in `answer-01` (caller
+`9501`, `q-answer`) `agent2` is the only member and answers. Each step ends with `UserEvent: CaptureOutcome` (the
+caller, the members reported not answering and connected, any error).
+
+What these files pin about the wire, on all four versions: the ring-out caller gets exactly one `AgentRingNoAnswer`
+with `Queue: q-rna`, `Interface` and `MemberName` `PJSIP/agent1` and `RingTime: 2000`, on the caller's own
+`Uniqueid` (the one its `AgentConnect` carries), before one `AgentConnect` of `PJSIP/agent2`; the busy caller gets
+exactly one with `Interface: PJSIP/agent3` and `RingTime: 0`; the control gets none. No `AgentRingNoAnswer` carries
+an `Agent` header. In the measured run every one of the 3 calls of each kind matched this, on every version. They are
+replayed by `QueueRingNoAnswerCaptureReplayTests`.
+
+Each file keeps 444 of about 1 355 frames (the other six calls are outside the kept steps).
 
 ## Capturing on a new Asterisk build
 
