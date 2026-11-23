@@ -3,8 +3,7 @@ using System.Text;
 namespace Verbara.Sdk.Governance.Tests;
 
 /// <summary>
-/// In-process guard for the tolerate-unknown-members default of every provider reply (openspec change
-/// <c>a-provider-reply-is-held-to-its-contract</c>): no VoiceAi package sets
+/// In-process guard for the tolerate-unknown-members default of every provider reply: no VoiceAi package sets
 /// <c>JsonUnmappedMemberHandling.Disallow</c> on a provider DTO, a serializer context or a
 /// <c>JsonSerializerOptions</c>. A vendor that adds a member to a reply must not break a released SDK.
 /// </summary>
