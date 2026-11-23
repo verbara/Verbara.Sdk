@@ -312,6 +312,18 @@ now states this. See the [troubleshooting guide](docs/guides/troubleshooting.md#
 
 The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#an-onstreamconnected-observer-that-throws-loses-no-connection) has who is affected and what to write.
 
+### Changed: an AudioSocket stream's `Disconnected` is documented as the stream's end, not the call's outcome (#649)
+
+Asterisk ends an AudioSocket connection the same way for a hangup, for its own shutdown and for most of its failures,
+and a stalled Asterisk ends nothing, so an AudioSocket stream cannot tell them apart: it ends as `Disconnected` alone
+for all of them, and `Error` only for an error frame from the peer. The `IAudioStream.StateChanges` and
+`AudioStreamState` XML documentation now says so and points to the AMI or ARI connection's loss as the way to learn that
+Asterisk failed. The Warning and `audio.transport.failures` record the transport failures the SDK saw, never a count of failed
+calls: Asterisk resets only some of its failures, and a server that writes audio faster than real time can also see a
+reset on an orderly ending. See the
+[troubleshooting guide](docs/guides/troubleshooting.md#an-ari-audiosocket-stream-ended-as-disconnected-a-hangup-or-a-failure).
+No behaviour or public API changes.
+
 ### Added: an AudioSocket stream counts the frames its full buffer drops (#631)
 
 When its consumer falls behind, an ARI AudioSocket stream's full receive buffer discards the oldest frame, as before;
