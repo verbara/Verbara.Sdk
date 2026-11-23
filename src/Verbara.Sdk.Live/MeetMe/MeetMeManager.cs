@@ -11,8 +11,10 @@ namespace Verbara.Sdk.Live.MeetMe;
 /// </summary>
 /// <remarks>
 /// A handler subscribed here and one subscribed to the same event of <see cref="ConferenceManager"/> are raised in one
-/// subscription order, each once per event, each in its own guard. Removing a handler removes its last subscription
-/// here; a multicast delegate is subscribed and removed one handler at a time.
+/// subscription order, each once per event, each in its own guard; each handler of a multicast delegate subscribed here
+/// is one subscription with its own guard. Removing a delegate here does what <see cref="Delegate.Remove"/> did on the
+/// field-like events of 2.10.x, over the delegates subscribed to the same event under this name: its handlers are
+/// removed only as the last contiguous run of those subscriptions, and nothing is removed when no run matches.
 /// </remarks>
 [Obsolete(
     "Renamed to Verbara.Sdk.Live.Conferences.ConferenceManager, the same manager: VerbaraServer.Conferences returns this instance, and its events carry ConferenceRoom and ConferenceUser. Removed in Verbara.Sdk 2.12.0.",
@@ -95,7 +97,9 @@ public sealed class MeetMeManager : ConferenceManager
         }
     }
 
-    // Removes, for each handler of the delegate from its last, the last subscription of that handler to the event.
+    // Delegate.Remove over the event's own subscriptions, as the field-like event of 2.10.x removed: the delegate's
+    // handlers are removed only as the last contiguous run of this event's former-name subscriptions (a subscription of
+    // another event, or one made under the conference name, does not break a run), and nothing when no run matches.
     private void Unsubscribe(int kind, Action<MeetMeRoom, MeetMeUser>? value)
     {
         if (value is null)
@@ -103,18 +107,69 @@ public sealed class MeetMeManager : ConferenceManager
 
         lock (_subscriptionGate)
         {
-            var handlers = value.GetInvocationList();
-            for (var i = handlers.Length - 1; i >= 0; i--)
+            if (value.HasSingleTarget)
             {
-                var handler = handlers[i];
-                var index = _subscriptions.FindLastIndex(s => s.Kind == kind && s.Handler.Equals(handler));
-                if (index < 0)
+                var index = LastIndexOf(kind, value, _subscriptions.Count - 1);
+                if (index >= 0)
+                    Remove(kind, index);
+
+                return;
+            }
+
+            var handlers = value.GetInvocationList();
+            var last = handlers.Length - 1;
+            for (var end = LastIndexOf(kind, handlers[last], _subscriptions.Count - 1); end >= 0;
+                 end = LastIndexOf(kind, handlers[last], end - 1))
+            {
+                // Walks back from the run's last handler over this event's subscriptions only; on a match, the indexes
+                // of the run are those of this event's subscriptions from the run's first to `end`.
+                var first = end;
+                var matched = 1;
+                for (var i = end - 1; i >= 0 && matched < handlers.Length; i--)
+                {
+                    var subscription = _subscriptions[i];
+                    if (subscription.Kind != kind)
+                        continue;
+
+                    if (!subscription.Handler.Equals(handlers[last - matched]))
+                        break;
+
+                    first = i;
+                    matched++;
+                }
+
+                if (matched < handlers.Length)
                     continue;
 
-                Detach(kind, _subscriptions[index].Adapter);
-                _subscriptions.RemoveAt(index);
+                for (var i = end; i >= first; i--)
+                {
+                    if (_subscriptions[i].Kind == kind)
+                        Remove(kind, i);
+                }
+
+                return;
             }
         }
+    }
+
+    // Under _subscriptionGate. The index of this event's last subscription of the handler at or before `from`, or -1.
+    private int LastIndexOf(int kind, Delegate handler, int from)
+    {
+        for (var i = from; i >= 0; i--)
+        {
+            var subscription = _subscriptions[i];
+            if (subscription.Kind == kind && subscription.Handler.Equals(handler))
+                return i;
+        }
+
+        return -1;
+    }
+
+    // Under _subscriptionGate.
+    private void Remove(int kind, int index)
+    {
+        Detach(kind, _subscriptions[index].Adapter);
+        _subscriptions.RemoveAt(index);
     }
 
     private void Attach(int kind, Action<ConferenceRoom, ConferenceUser> adapter)
