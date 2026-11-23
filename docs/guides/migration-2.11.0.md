@@ -20,6 +20,8 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Activities`, `Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An activity, voice pipeline or realtime bridge subscriber that throws stops nothing else](#an-activity-voice-pipeline-or-realtime-bridge-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error; a cast of `StatusChanges` to `BehaviorSubject` fails at run time) |
 | `Verbara.Sdk.VoiceAi.AudioSocket` | [An `OnSessionStarted` subscriber that fails ends the AudioSocket call only when every subscriber did](#an-onsessionstarted-subscriber-that-fails-ends-the-audiosocket-call-only-when-every-subscriber-did) | behavior, BREAKING (no compiler error) |
 | `Verbara.Sdk.Sessions`, `Verbara.Sdk.Sessions.Redis`, `Verbara.Sdk.Sessions.Postgres` | [A session store's `linkedid` lookup with several servers](#a-session-stores-linkedid-lookup-with-several-servers) | behavior, BREAKING (no compiler error; new Redis index key) |
+| `Verbara.Sdk.Sessions` | [`CallRingNoAnswerEvent` is raised, and `IAgentSessionTracker` lists members that only missed calls](#callringnoanswerevent-is-raised-and-iagentsessiontracker-lists-members-that-only-missed-calls) | behavior (no compiler error) |
+| `Verbara.Sdk.Cluster.Postgres` | [The cluster lock row says since when its owner holds it](#the-cluster-lock-row-says-since-when-its-owner-holds-it) | new nullable column, migration V002 (no compiler error) |
 
 ## Before you start: move every package at once
 
@@ -846,3 +848,80 @@ answer per server.
 #### Postgres and the default store
 
 No schema change, no migration, no new index: both read the same rows as before.
+
+## Events now raised
+
+### `CallRingNoAnswerEvent` is raised, and `IAgentSessionTracker` lists members that only missed calls
+
+#### Who is affected
+
+Applications that subscribe to `ICallSessionManager.Events` and handle `CallRingNoAnswerEvent`,
+and applications that list `IAgentSessionTracker.ActiveAgents`. Nothing fails to compile and nothing throws.
+
+#### What changes
+
+Before 2.11.0 the event was declared and never raised, so a handler of it never ran and
+`AgentSession.CallsMissed` was always 0. From 2.11.0 the event is raised once for each `AgentRingNoAnswer` Asterisk
+reports. That is, a queue member rang out unanswered or answered busy. Because app_queue names no agent for an ordinary
+member, `AgentId` is the member's interface (`PJSIP/agent1`). So `ActiveAgents` can now hold a session keyed by an
+interface. That session has `CallsMissed` > 0 and `CallsHandled` = 0, because connected calls are still counted only
+for an agent known by name.
+
+#### What to do
+
+- A real-time or interval counter of missed offers needs no change. It starts counting.
+- An application that treats every `ActiveAgents` entry as a logged-in agent known by name should filter the entries.
+  For example, skip a session whose `AgentId` contains `/`, or one that has no `CurrentCall` and `CallsHandled == 0`.
+- An application that wants the interface even when an agent is named reads `CallRingNoAnswerEvent.AgentInterface`.
+- Ignoring `CallRingNoAnswerEvent` in your own subscription keeps only your handlers as before. It does not change
+  what `IAgentSessionTracker` receives, so its `CallsMissed` and `ActiveAgents` change either way.
+
+## Cluster lock
+
+### The cluster lock row says since when its owner holds it
+
+#### Who is affected
+
+You are affected if you use `Verbara.Sdk.Cluster.Postgres`: you call `MigrationRunner.EnsureSchemaAsync`, or tools of
+your own read `cluster_distributed_lock`. Code that only calls `IDistributedLock` keeps working as it is. Its signatures
+and results do not change.
+
+#### What changes
+
+- `EnsureSchemaAsync` runs two migrations, V001 and then V002, in one transaction. Concurrent runs against the same
+  database wait for each other behind a transaction-scoped advisory lock. V002 adds `acquired_at TIMESTAMPTZ` (nullable,
+  with no default) and issues its `ALTER TABLE` only while the column is missing, so it takes no `ACCESS EXCLUSIVE`
+  lock on later starts.
+- `acquired_at` is the server time at which the current `owner` **name** took the lock:
+  - An insert stamps `NOW()`, and so does winning an expired row, whoever held it before.
+  - A renewal by the same owner before `expires_at` keeps the value.
+  - Rows that existed before the upgrade read `NULL`, which means unknown, and they stay `NULL` until the lock
+    expires and is taken again.
+
+#### What to do
+
+- **Nothing changes in what `EnsureSchemaAsync` needs.** It must run as the role that owns the table, as on 2.10.x,
+  where V001's `COMMENT ON TABLE` already required it. The first start after the upgrade adds the column. Every start
+  after that issues no `ALTER TABLE`, so it never waits behind an open reader of the table.
+- **If you read `acquired_at`, apply `max(acquired_at, the time you first saw this owner)` and treat `NULL` as
+  unknown.** The value measures how long the owner name has held the lock, not the process. A raw `acquired_at` can be
+  older than what you are watching in two cases:
+  - **A restart after a crash.** The row outlives the process, so a process restarted under the same machine or pod
+    name before expiry inherits the dead process's time.
+  - **A staggered deploy.** A node still on 2.10.x sets only `owner` and `expires_at`. Its rows read `NULL`, and when
+    it takes an expired row, the previous owner's `acquired_at` stays in place.
+
+  Before (2.10.x): there is no column, so the only tenure you can know is your own first observation, which a restart
+  of the reader resets.
+
+  After:
+
+  <!-- skip-doc-snippet -->
+  ```sql
+  SELECT owner, expires_at, acquired_at FROM cluster_distributed_lock WHERE resource = @resource;
+  -- tenure_start = GREATEST(acquired_at, first_seen_by_this_reader); NULL acquired_at = unknown
+  ```
+- If you start several hosts at once against a database that has no lock table yet, you need nothing more. On 2.10.x,
+  all but one of them could fail that start with `23505` on `pg_type_typname_nsp_index`. Hosts still on 2.10.x are not
+  covered by the new advisory lock, so an old host and a new host can still collide on a fresh database during a mixed
+  rollout. The host that loses succeeds on its next start.
