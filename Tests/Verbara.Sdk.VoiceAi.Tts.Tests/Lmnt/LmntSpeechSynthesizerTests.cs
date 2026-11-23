@@ -87,6 +87,7 @@ public class LmntTtsOptionsTests
 /// transports, and D3 splits the provider by transport rather than by suite: the HTTP class further
 /// down this file has migrated (§4.6), this one has not. Fidelity here comes from recorded frames (D4).
 /// </summary>
+[Collection(TtsProcessWideCounters.Name)]
 [SuppressMessage("Reliability", "CA1001:Types that own disposable fields should be disposable", Justification = "Disposed via IAsyncLifetime")]
 public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
 {
@@ -401,6 +402,7 @@ public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
     {
         // Arrange
         _server.TextFrameFragmentBytes = 16;
+        using var unparseable = new TtsUnparseableFrames("LMNT");
         var synth = BuildSynthesizer();
 
         // Act
@@ -408,6 +410,7 @@ public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
 
         // Assert
         frames.SelectMany(f => f.ToArray()).ToArray().Should().Equal(RecordedAudio);
+        unparseable.Count.Should().Be(0, "the message was parsed whole; parsed per read, each fragment is an unreadable message counted and skipped while the audio still arrives");
     }
 
     /// <summary>
@@ -421,6 +424,7 @@ public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
         var finish = $$"""{"type":"finish","padding":"{{new string('x', 70_000)}}"}""";
         Encoding.UTF8.GetByteCount(finish).Should().BeGreaterThan(64 * 1024, "the message must outgrow one read");
         _server.FinishFrameJson = finish;
+        using var unparseable = new TtsUnparseableFrames("LMNT");
         var synth = BuildSynthesizer();
 
         // Act
@@ -428,6 +432,7 @@ public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
 
         // Assert
         frames.SelectMany(f => f.ToArray()).ToArray().Should().Equal(RecordedAudio);
+        unparseable.Count.Should().Be(0, "the message was parsed whole; parsed per read, each fragment is an unreadable message counted and skipped while the audio still arrives");
     }
 
     /// <summary>
