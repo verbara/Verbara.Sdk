@@ -388,6 +388,31 @@ is now ignored, and the
 notification goes on to the next observer. As with every other subscriber report since #620, an `OutOfMemoryException`
 is not caught.
 
+### Added: Live's conference table is named for what it tracks: `VerbaraServer.Conferences` and the `Conference*` types (#650)
+
+The conference table tracks ConfBridge, from the `Confbridge*` events and, on each load, Asterisk's conference
+listing, but was published under MeetMe names. `Verbara.Sdk.Live` adds `VerbaraServer.Conferences`
+(`Verbara.Sdk.Live.Conferences.ConferenceManager`), `ConferenceRoom`, `ConferenceUser` and
+`Verbara.Sdk.Live.ConferenceUserState` (`Joined`, `Left`). They are the same objects as the former names: the server
+builds one manager, `Conferences` and `MeetMe` return it, every room and participant is one instance under both names,
+and a handler subscribed under either name is raised once per event, in one subscription order, in its own fault guard.
+
+The new rooms and participants are read-only to a consumer: `ConferenceRoom.Users` is an `IReadOnlyDictionary<string, ConferenceUser>`
+view of the room's participants, and `ConferenceUser` has no public setter. `ConferenceRoom` and `ConferenceUser` have
+no public constructor. `ConferenceManager` keeps its public constructor and its `OnUserJoined`, `OnUserLeft`,
+`OnConferenceEnded` and `Clear`, for a table fed by hand. The events, the `[CONFERENCE]` log lines and the
+`live.meetme.subscriber_faults` counter are unchanged.
+
+### Changed: the MeetMe names of the conference table are deprecated (`VSDK0008`); they are removed in 2.12.0 (#650)
+
+`VerbaraServer.MeetMe`, `MeetMeManager`, `MeetMeRoom`, `MeetMeUser` and `MeetMeUserState` are marked `[Obsolete]` with
+`VSDK0008`, a warning that says what each was renamed to and links to the
+[2.11.0 migration guide](docs/guides/migration-2.11.0.md#vsdk0008). They keep working, unchanged, as the same objects
+as the new names, and a binary built against 2.10.x runs unchanged; a build with TreatWarningsAsErrors fails on the
+warning until it moves or suppresses the id. `MeetMeUserState.Talking`, never assigned, leaves with them: whether a
+participant is talking is `ConferenceUser.Talking`. The mutable `MeetMeRoom.Users` and the `MeetMeUser` setters have no
+replacement: they changed the table outside the manager's synchronization.
+
 ### Changed — BREAKING: a `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else (#625)
 
 `QueueManager` (`QueueUpdated`, `MemberAdded`, `MemberRemoved`, `MemberStatusChanged`, `MemberPaused`, `CallerJoined`,
