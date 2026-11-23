@@ -9,8 +9,9 @@ namespace Verbara.Sdk.Governance.Tests;
 /// </summary>
 /// <remarks>
 /// The strict read options the provider packages build turn null enforcement on, and a later
-/// "harden the parser" edit could turn this on beside it in one line; every behaviour test would stay
-/// green, because none sends a member the DTO does not declare. This guard is a text scanner: it proves
+/// "harden the parser" edit could turn this on beside it in one line. A behaviour test fails only for a
+/// reply it sends with a member the DTO does not declare, and not every reply type has such a test; this
+/// guard names the line for every type. It is a text scanner: it proves
 /// which value the source names, not what an options object does at runtime (see
 /// <see cref="UnmappedMemberHandlingScanner"/>).
 /// </remarks>

@@ -779,8 +779,9 @@ static void ServeOrHangUp(AudioSocketServer server, Func<Guid, bool> isAllowed, 
 #### Who is affected
 
 You are affected if your code enumerates `StreamAsync` of `WhisperSpeechRecognizer` or `AzureWhisperSpeechRecognizer`
-itself. Nothing reports a compiler error. Through `VoiceAiPipeline` you are not affected: the pipeline already catches
-the exception, counts the transcription as failed, publishes a `PipelineErrorEvent` and goes back to listening.
+itself. Nothing reports a compiler error. Through `VoiceAiPipeline` nothing throws: the pipeline catches the exception,
+counts the transcription as failed, publishes a `PipelineErrorEvent` and goes back to listening. Before, such a reply
+published no event, so a `PipelineErrorEvent` subscriber now sees one where it saw none.
 
 #### What changes
 
