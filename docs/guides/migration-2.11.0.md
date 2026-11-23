@@ -372,7 +372,7 @@ Three differences come with the new names:
 
 - `ConferenceUserState` has no `Talking`. `MeetMeUserState.Talking` was never assigned; whether a participant is
   talking is `ConferenceUser.Talking`.
-- A consumer cannot change the table through the new names. `ConferenceRoom.Users` is a read-only view
+- A consumer cannot change a room or a participant through the new names. `ConferenceRoom.Users` is a read-only view
   (`IReadOnlyDictionary<string, ConferenceUser>`) of the room's participants, where `MeetMeRoom.Users` is the mutable
   dictionary itself, and the `ConferenceUser` properties have no public setter. Live is the only writer, and a write
   through the old names was outside the manager's synchronization.
