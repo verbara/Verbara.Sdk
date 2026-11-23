@@ -508,6 +508,38 @@ wrong. See the [troubleshooting guide](docs/guides/troubleshooting.md#what-a-liv
 
 The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#an-agentmanager-or-bridgemanager-subscriber-that-throws-stops-nothing-else) has who is affected and what to write.
 
+### Added: the cluster lock row says since when its owner holds the lock, in `acquired_at` (#647)
+
+`Verbara.Sdk.Cluster.Postgres` adds the column `acquired_at TIMESTAMPTZ` to `cluster_distributed_lock`, through a new
+migration V002 that `MigrationRunner.EnsureSchemaAsync` runs after V001. V001 is unchanged, byte for byte. The column
+holds the server time at which the current `owner` took the lock:
+
+- It measures how long the **owner name** (usually the machine or pod name) has held the lock, not the process. A
+  renewal by the same owner before `expires_at` keeps the value, so a process that crashed and restarts under the same
+  name before expiry inherits the dead process's time.
+- Taking a free row, or winning an expired one, stamps `NOW()`.
+- A row that existed before the upgrade, or that a node still on an earlier SDK wrote, reads `NULL`, which means
+  unknown. No time is invented for it. A node on an earlier SDK that takes an expired row leaves the previous owner's
+  value in place.
+
+A reader that needs the tenure of what it is watching uses `max(acquired_at, the time it first saw this owner)` and
+reads `NULL` as unknown. There is no new API: read the table. The package README describes this. `EnsureSchemaAsync` must still run as the role that owns the table,
+as on 2.10.x, where V001's `COMMENT ON TABLE` already required it. Once the column exists, the migration issues no
+`ALTER TABLE`, so a host's start takes no `ACCESS EXCLUSIVE` lock on the table and does not wait behind an open reader
+of the table, or make lock renewals wait.
+
+### Fixed: hosts that create the cluster lock schema at the same time on a fresh database no longer fail (#647)
+
+When several hosts called `MigrationRunner.EnsureSchemaAsync` at the same moment against a database with no
+`cluster_distributed_lock` table yet, Postgres let them all into `CREATE TABLE IF NOT EXISTS`, and all but one failed
+with `23505` on `pg_type_typname_nsp_index`. Measured on `postgres:18-alpine`: 349 and 350 of 400 statements failed with
+eight hosts at once, and the new eight-host test failed 10 of 10 runs before the fix. Now the migrations run in one
+transaction behind a transaction-scoped advisory lock with a constant key, so concurrent runs wait for each other, and
+the eight-host test passes 10 of 10. The lock is released with its transaction, so it also holds when hosts
+connect through PgBouncer in transaction mode (checked with PgBouncer 1.26.1; other poolers are untested). The cluster
+lock is still a row with an expiry, not an advisory lock. The root
+README no longer says it is "advisory-lock-backed" and gives the DI method its real name, `AddPostgresDistributedLock`.
+
 ### Changed: `Verbara.Sdk.Sessions.Redis` requires StackExchange.Redis 3.4.35 (#619)
 
 `Verbara.Sdk.Sessions.Redis` now declares `StackExchange.Redis >= 3.4.35` instead of `>= 3.4.31`. A patch release of

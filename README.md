@@ -432,7 +432,7 @@ class GetWeatherFunction : IRealtimeFunctionHandler
 | Package | Description |
 |---------|-------------|
 | **Verbara.Sdk.Cluster.Primitives** | `IClusterTransport`, `IDistributedLock`, `IMembershipProvider` contracts + in-memory reference implementations for single-node dev/test. |
-| **Verbara.Sdk.Cluster.Postgres** | Postgres-backed implementation of the cluster primitives. `PostgresDistributedLock` (advisory-lock-backed) + `MigrationRunner` + `AddPostgresClusterPrimitives(...)` DI helper. Built on `Verbara.Sdk.Data.Npgsql`. |
+| **Verbara.Sdk.Cluster.Postgres** | Postgres-backed implementation of the cluster primitives. `PostgresDistributedLock` (a row per resource with a server-time expiry and `acquired_at`, not an advisory lock) + `MigrationRunner` + `AddPostgresDistributedLock(...)` DI helper. Built on `Verbara.Sdk.Data.Npgsql`. |
 
 ### Resilience
 
