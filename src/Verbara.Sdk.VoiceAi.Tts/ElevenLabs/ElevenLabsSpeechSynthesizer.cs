@@ -353,9 +353,10 @@ public sealed class ElevenLabsSpeechSynthesizer : SpeechSynthesizer
     }
 
     /// <summary>
-    /// Whether a message that failed to deserialize carries an <c>error</c> member that is present, not
-    /// <see langword="null"/> and not empty — the test the readable branch applies, on a vendor whose
-    /// failure frame has no discriminator at all — and, if so, its code from <c>error</c> where that is a
+    /// Whether a message that failed to deserialize carries an <c>error</c> member that holds a value — the
+    /// readable branch's test (present, not <see langword="null"/>, not empty) carried to any shape, on a
+    /// vendor whose failure frame has no discriminator at all, with <see langword="false"/>, <c>0</c>,
+    /// <c>{}</c> and <c>[]</c> naming no failure — and, if so, its code from <c>error</c> where that is a
     /// string or a number. A message that is not a JSON object names no failure.
     /// </summary>
     /// <remarks>
