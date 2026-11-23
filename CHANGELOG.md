@@ -193,7 +193,7 @@ check.
 The requests the SDK sends do not change: every request type serializes to the same bytes as before. No public API
 changes.
 
-### Fixed: an ElevenLabs or LMNT reply whose `error` is `false`, `0`, `{}` or `[]` no longer ends the synthesis (#NNN)
+### Fixed: an ElevenLabs or LMNT reply whose `error` is `false`, `0`, `{}` or `[]` no longer ends the synthesis (#653)
 
 The ElevenLabs and LMNT synthesizers look for a bare `error` member in a reply they cannot otherwise read, because that
 member is how these vendors mark a failure. Any `error` that was not a string, `false`, `0`, `{}` and `[]` included, was
