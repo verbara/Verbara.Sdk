@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS cluster_distributed_lock (
 ALTER TABLE cluster_distributed_lock ADD COLUMN IF NOT EXISTS acquired_at TIMESTAMPTZ;
 ```
 
-`EnsureSchemaAsync` runs both, in order, on every call, in one transaction; there is no version table. Each statement is idempotent, and several hosts may run it at once against the same database: a transaction-scoped advisory lock makes their runs wait for each other. Once the column exists, V002 issues no `ALTER TABLE`, so a start no longer takes the `ACCESS EXCLUSIVE` lock that would wait behind an open reader of the table and hold up every acquire behind it. The role that runs `EnsureSchemaAsync` must own the table, as before: V001's `COMMENT ON TABLE` requires it.
+`EnsureSchemaAsync` runs both, in order, on every call, in one transaction; there is no version table. Each statement is idempotent, and several hosts may run it at once against the same database: a transaction-scoped advisory lock makes their runs wait for each other. Because that lock is released with its transaction, it also holds when hosts reach Postgres through a pooler in transaction mode; this was checked with PgBouncer 1.26.1 (`pool_mode = transaction`), and other poolers have not been tested. Once the column exists, V002 issues no `ALTER TABLE`, so a start no longer takes the `ACCESS EXCLUSIVE` lock that would wait behind an open reader of the table and hold up every acquire behind it. The role that runs `EnsureSchemaAsync` must own the table, as before: V001's `COMMENT ON TABLE` requires it.
 
 ## AOT
 
