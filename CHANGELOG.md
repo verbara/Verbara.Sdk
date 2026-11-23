@@ -267,6 +267,21 @@ listing's rows for the removed queue are not applied. A listing asked for after 
 again, with the members and waiting callers Asterisk lists, as the next event that names it already did. No public API
 changes.
 
+### Added: the AMI capture driver can hold a load on Asterisk while it measures room exits (#648)
+
+`scripts/capture-ami-recording.py` has a `confbridge-exits-under-load` workload. It walks a ladder of background
+load levels (`--load-levels 0,150,400`, where `0` is the control). Each level is held on a second manager session
+with `Events: off`, so the measured connection carries no control traffic. The load is ConfBridge participants
+hearing a tone, plus bridged loopback calls with RTP both ways, restarted on a staggered schedule. At each level the
+workload runs normal ConfBridge exits, then reliefs by an INVITE with `Replaces`, alone in the room and beside a
+participant who stays. The room's `ConfbridgeList` is requested the moment a participant hangs up before its
+`ConfbridgeLeave` arrives. Load samples (channel counts, the container's CPU time) enter the measured stream as
+`UserEvent: CaptureLoad`. Each level ends with an outcome line reporting whether the load stayed within 10 % and
+how far the reader fell behind Asterisk's `Timestamp`. `--tap-only` streams the unredacted tap to disk without
+reducing it, for takes over the recording cap, and `--cpus` caps the container's CPUs. The workload raises the container's open-files limit, since the
+image's 1024 caps Asterisk near 280 such channels. Existing workloads are
+unchanged. The tests run in the `Coverage Script Tests` job. No package changes.
+
 ### Fixed: a reconnect reload no longer drops the events dispatched while it replaces its subscription (#600)
 
 On every reconnect, on the reconnect loop and on the caller's own `ConnectAsync`, `VerbaraServer` released its event
