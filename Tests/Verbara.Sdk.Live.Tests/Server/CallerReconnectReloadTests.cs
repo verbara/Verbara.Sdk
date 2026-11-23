@@ -1975,7 +1975,7 @@ public sealed class CallerReconnectReloadTests
             return new Tables(
                 Sorted([.. server.Channels.ActiveChannels.Select(c => c.UniqueId)]),
                 Sorted([.. server.Queues.GetByName(BootingAsterisk.QueueName)?.Entries.Keys ?? []]),
-                Sorted([.. server.MeetMe.GetRoom(Room)?.Users.Keys ?? []]));
+                Sorted([.. server.Conferences.GetRoom(Room)?.Users.Keys ?? []]));
         }
 
         public string[] AgentIds() => Sorted([.. Run.Server.Agents.Agents.Select(a => a.AgentId)]);

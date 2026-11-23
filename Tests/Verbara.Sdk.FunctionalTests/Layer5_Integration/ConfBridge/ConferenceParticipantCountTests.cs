@@ -11,7 +11,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
-/// Two callers in one ConfBridge conference, tracked by <see cref="VerbaraServer.MeetMe"/> against a real Asterisk:
+/// Two callers in one ConfBridge conference, tracked by <see cref="VerbaraServer.Conferences"/> against a real Asterisk:
 /// both count, the first kick keeps the room with the other caller, and the second kick removes it.
 /// </summary>
 /// <remarks>
@@ -74,8 +74,8 @@ public sealed class ConferenceParticipantCountTests : FunctionalTestBase
             var joinedChannels = joins.Select(j => j.Channel!).ToList();
             joinedChannels.Should().OnlyHaveUniqueItems("each originate joins on its own channel");
 
-            await WaitUntilAsync(() => server.MeetMe.GetRoom(conference)?.UserCount == 2, RoomBound);
-            var room = server.MeetMe.GetRoom(conference);
+            await WaitUntilAsync(() => server.Conferences.GetRoom(conference)?.UserCount == 2, RoomBound);
+            var room = server.Conferences.GetRoom(conference);
             room.Should().NotBeNull("both callers are in the conference (after {0})", elapsed.Elapsed);
             room!.UserCount.Should().Be(2,
                 "two distinct channels joined the conference (after {0})", elapsed.Elapsed);
@@ -92,10 +92,10 @@ public sealed class ConferenceParticipantCountTests : FunctionalTestBase
                 "kicking {0} must produce a ConfbridgeLeave naming it within {1} (after {2})",
                 first, LeaveBound, elapsed.Elapsed);
 
-            await WaitUntilAsync(() => server.MeetMe.GetRoom(conference)?.UserCount == 1, RoomBound);
-            (server.MeetMe.GetRoom(conference)?.UserCount).Should().Be(1,
+            await WaitUntilAsync(() => server.Conferences.GetRoom(conference)?.UserCount == 1, RoomBound);
+            (server.Conferences.GetRoom(conference)?.UserCount).Should().Be(1,
                 "one caller is still in the conference after the first kick (after {0})", elapsed.Elapsed);
-            server.MeetMe.GetRoom(conference)!.Users.Values.Select(u => u.Channel).Should().BeEquivalentTo(
+            server.Conferences.GetRoom(conference)!.Users.Values.Select(u => u.Channel).Should().BeEquivalentTo(
                 [second], "the remaining participant is the caller that was not kicked (after {0})", elapsed.Elapsed);
 
             // Kick the other caller: the room is gone.
@@ -106,8 +106,8 @@ public sealed class ConferenceParticipantCountTests : FunctionalTestBase
                 "kicking {0} must produce a ConfbridgeLeave naming it within {1} (after {2})",
                 second, LeaveBound, elapsed.Elapsed);
 
-            await WaitUntilAsync(() => server.MeetMe.GetRoom(conference) is null, RoomBound);
-            server.MeetMe.GetRoom(conference).Should().BeNull(
+            await WaitUntilAsync(() => server.Conferences.GetRoom(conference) is null, RoomBound);
+            server.Conferences.GetRoom(conference).Should().BeNull(
                 "the last caller left the conference (after {0})", elapsed.Elapsed);
         }
         finally

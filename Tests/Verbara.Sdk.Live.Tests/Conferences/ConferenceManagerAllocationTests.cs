@@ -1,10 +1,10 @@
 using System.Globalization;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 using static Verbara.Sdk.Live.Tests.Harness.AllocationReadings;
 
-namespace Verbara.Sdk.Live.Tests.MeetMe;
+namespace Verbara.Sdk.Live.Tests.Conferences;
 
 /// <summary>
 /// What a participant's join, leave, mute or talking change costs the conference table in heap bytes. Bytes, not
@@ -13,7 +13,7 @@ namespace Verbara.Sdk.Live.Tests.MeetMe;
 /// counted escapes into the outbox, so no JIT tier removes it. These paths record no metric, so no listener can run
 /// on the measuring thread.
 /// </summary>
-public sealed class MeetMeManagerAllocationTests
+public sealed class ConferenceManagerAllocationTests
 {
     private const int Participants = 1_000;
     private const string Room = "100";
@@ -104,9 +104,9 @@ public sealed class MeetMeManagerAllocationTests
         allocated.Should().Be(0, "a leave nobody is subscribed to queues nothing");
     }
 
-    private void Count(MeetMeRoom room, MeetMeUser user) => _observed++;
+    private void Count(ConferenceRoom room, ConferenceUser user) => _observed++;
 
-    private void Flip(MeetMeManager manager, Field field)
+    private void Flip(ConferenceManager manager, Field field)
     {
         _value = !_value;
         foreach (var channel in ChannelNames)
@@ -120,10 +120,10 @@ public sealed class MeetMeManagerAllocationTests
 
     // Read after the measured round. The round before it set the opposite value, so all of them holding this round's
     // value means every report in it was a change.
-    private int HoldingValue(MeetMeManager manager, Field field) =>
+    private int HoldingValue(ConferenceManager manager, Field field) =>
         manager.GetRoom(Room)!.Users.Values.Count(user => (field == Field.Muted ? user.Muted : user.Talking) == _value);
 
-    private static void Join(MeetMeManager manager)
+    private static void Join(ConferenceManager manager)
     {
         foreach (var channel in ChannelNames)
             manager.OnUserJoined(Room, 0, channel);
@@ -146,9 +146,9 @@ public sealed class MeetMeManagerAllocationTests
         }
     };
 
-    private static MeetMeManager WithParticipants()
+    private static ConferenceManager WithParticipants()
     {
-        var manager = new MeetMeManager(NullLogger.Instance);
+        var manager = new ConferenceManager(NullLogger.Instance);
         Join(manager);
         return manager;
     }

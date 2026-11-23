@@ -1,7 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Verbara.Sdk;
 using Verbara.Sdk.Ami.Events;
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 using Verbara.Sdk.Live.Server;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -75,7 +75,7 @@ public sealed class VerbaraServerConferenceTests : IAsyncLifetime
 
         JoinBoth();
 
-        var room = _sut.MeetMe.GetRoom(Conference);
+        var room = _sut.Conferences.GetRoom(Conference);
         room.Should().NotBeNull("two joins open the conference");
         room!.UserCount.Should().Be(2, "two distinct channels joined the conference");
         room.Users.Values.Select(u => u.Channel).Should().BeEquivalentTo(
@@ -92,7 +92,7 @@ public sealed class VerbaraServerConferenceTests : IAsyncLifetime
 
         JoinBoth();
 
-        var room = _sut.MeetMe.GetRoom(Conference);
+        var room = _sut.Conferences.GetRoom(Conference);
         room.Should().NotBeNull("two joins open the conference");
         room!.Users[FirstChannel].UniqueId.Should().Be(FirstUniqueId, "the participant carries its join's Uniqueid");
         room.Users[SecondChannel].UniqueId.Should().Be(SecondUniqueId, "the participant carries its join's Uniqueid");
@@ -106,10 +106,10 @@ public sealed class VerbaraServerConferenceTests : IAsyncLifetime
 
         Leave(FirstChannel, FirstUniqueId);
 
-        (_sut.MeetMe.GetRoom(Conference)?.UserCount).Should().Be(1, "one participant is still in the conference");
-        (_sut.MeetMe.GetRoom(Conference)?.Users.Values.Select(u => u.Channel)).Should().BeEquivalentTo(
+        (_sut.Conferences.GetRoom(Conference)?.UserCount).Should().Be(1, "one participant is still in the conference");
+        (_sut.Conferences.GetRoom(Conference)?.Users.Values.Select(u => u.Channel)).Should().BeEquivalentTo(
             [SecondChannel], "only the channel that left is removed");
-        (_sut.MeetMe.GetRoom(Conference)?.Users.Keys).Should().BeEquivalentTo(
+        (_sut.Conferences.GetRoom(Conference)?.Users.Keys).Should().BeEquivalentTo(
             [SecondChannel], "the remaining participant is keyed by its channel");
     }
 
@@ -119,20 +119,20 @@ public sealed class VerbaraServerConferenceTests : IAsyncLifetime
         await StartAndGetObserverAsync();
         JoinBoth();
         Leave(FirstChannel, FirstUniqueId);
-        (_sut.MeetMe.GetRoom(Conference)?.UserCount).Should().Be(1, "the first leave keeps the other participant");
+        (_sut.Conferences.GetRoom(Conference)?.UserCount).Should().Be(1, "the first leave keeps the other participant");
 
         Leave(SecondChannel, SecondUniqueId);
 
-        _sut.MeetMe.GetRoom(Conference).Should().BeNull("the last participant left the conference");
+        _sut.Conferences.GetRoom(Conference).Should().BeNull("the last participant left the conference");
     }
 
     [Fact]
     public async Task ConfbridgeEvents_ShouldRaiseUserJoinedAndUserLeftTwice_WhenTwoParticipantsJoinAndLeave()
     {
-        var joined = new List<MeetMeUser>();
-        var left = new List<MeetMeUser>();
-        _sut.MeetMe.UserJoined += (_, user) => joined.Add(user);
-        _sut.MeetMe.UserLeft += (_, user) => left.Add(user);
+        var joined = new List<ConferenceUser>();
+        var left = new List<ConferenceUser>();
+        _sut.Conferences.UserJoined += (_, user) => joined.Add(user);
+        _sut.Conferences.UserLeft += (_, user) => left.Add(user);
         await StartAndGetObserverAsync();
 
         JoinBoth();
@@ -146,14 +146,14 @@ public sealed class VerbaraServerConferenceTests : IAsyncLifetime
     [Fact]
     public async Task Hangup_ShouldLeaveTheParticipantHeld_WhenNoLeaveFollows()
     {
-        var left = new List<MeetMeUser>();
-        _sut.MeetMe.UserLeft += (_, user) => left.Add(user);
+        var left = new List<ConferenceUser>();
+        _sut.Conferences.UserLeft += (_, user) => left.Add(user);
         await StartAndGetObserverAsync();
         JoinBoth();
 
         _observer!.OnNext(new HangupEvent { UniqueId = FirstUniqueId, Channel = FirstChannel, Cause = 16 });
 
-        (_sut.MeetMe.GetRoom(Conference)?.Users.Keys).Should().BeEquivalentTo([FirstChannel, SecondChannel],
+        (_sut.Conferences.GetRoom(Conference)?.Users.Keys).Should().BeEquivalentTo([FirstChannel, SecondChannel],
             "a Hangup is not a leave in a conference: Asterisk can report the participant's leave after it");
         left.Should().BeEmpty();
     }
@@ -162,7 +162,7 @@ public sealed class VerbaraServerConferenceTests : IAsyncLifetime
     public async Task ConfbridgeLeave_ShouldLeaveOnceAsObserved_WhenItArrivesAfterTheParticipantsHangup()
     {
         var left = new List<(string? UniqueId, bool LeaveNotObserved)>();
-        _sut.MeetMe.UserLeft += (_, user) => left.Add((user.UniqueId, user.LeaveNotObserved));
+        _sut.Conferences.UserLeft += (_, user) => left.Add((user.UniqueId, user.LeaveNotObserved));
         await StartAndGetObserverAsync();
         JoinBoth();
 

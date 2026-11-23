@@ -58,12 +58,16 @@ A channel's `Context`, `Extension` and `Priority` follow each `Newexten` the con
 `dialplan` class, and the filter the [troubleshooting guide](../../docs/guides/troubleshooting.md#the-cost-of-dialplan-and-a-filter-that-removes-it)
 recommends excludes it to save most of that class's volume, so behind it a channel keeps the location it was created with.
 A `ChannelManager` subscriber that throws is logged at Warning and counted on `live.channels.subscriber_faults`; the other
-subscribers still receive the event. From 2.11.0 a `QueueManager`, `MeetMeManager`, `AgentManager` or `BridgeManager`
+subscribers still receive the event. From 2.11.0 a `QueueManager`, `ConferenceManager`, `AgentManager` or `BridgeManager`
 subscriber that throws is handled the same way, counted on `live.queues.subscriber_faults`, `live.meetme.subscriber_faults`,
 `live.agents.subscriber_faults` or `live.bridges.subscriber_faults`, and nothing is thrown from the call that made the
 change; a throwing `AgentStateChanged` subscriber no longer skips the `AgentConnected` that follows it. A subscriber of
 `VerbaraServer.UnreconciledLossDelivered` (from 2.11.0) that throws is logged at Warning and counted on
 `live.server.subscriber_faults`; the other subscribers are still told.
+
+Conference rooms are `server.Conferences` (`ConferenceManager`, `ConferenceRoom`, `ConferenceUser`) from 2.11.0. The
+former `server.MeetMe` and `MeetMe*` types are the same objects under deprecated names (`VSDK0008`) until 2.12.0; see the
+[2.11.0 migration guide](../../docs/guides/migration-2.11.0.md#the-conference-types-are-named-for-what-they-track).
 
 ## Reconciling the channels
 

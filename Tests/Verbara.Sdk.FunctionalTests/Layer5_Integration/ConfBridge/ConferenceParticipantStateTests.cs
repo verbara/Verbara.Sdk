@@ -11,7 +11,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
-/// Two callers in one ConfBridge conference, tracked by <see cref="VerbaraServer.MeetMe"/> against a real Asterisk:
+/// Two callers in one ConfBridge conference, tracked by <see cref="VerbaraServer.Conferences"/> against a real Asterisk:
 /// the caller that enters with the start-muted <c>muted_user</c> profile reads muted from its join, and the caller
 /// with the default profile reads muted after a manager mute and not muted after the unmute.
 /// </summary>
@@ -107,16 +107,16 @@ public sealed class ConferenceParticipantStateTests : FunctionalTestBase
                 JoinBound, joins.Count, elapsed.Elapsed);
             var otherChannel = joins.Select(j => j.Channel!).Single(c => c != mutedChannel);
 
-            await WaitUntilAsync(() => server.MeetMe.GetRoom(conference)?.UserCount == 2, StateBound);
-            var room = server.MeetMe.GetRoom(conference);
+            await WaitUntilAsync(() => server.Conferences.GetRoom(conference)?.UserCount == 2, StateBound);
+            var room = server.Conferences.GetRoom(conference);
             room.Should().NotBeNull("both callers are in the conference (after {0})", elapsed.Elapsed);
             room!.Users.Keys.Should().BeEquivalentTo([mutedChannel, otherChannel],
                 "the room holds exactly the two joined channels (after {0})", elapsed.Elapsed);
 
-            await WaitUntilAsync(() => server.MeetMe.GetRoom(conference)?.Users.GetValueOrDefault(mutedChannel)?.Muted == true, StateBound);
-            (server.MeetMe.GetRoom(conference)?.Users.GetValueOrDefault(mutedChannel)?.Muted).Should().BeTrue(
+            await WaitUntilAsync(() => server.Conferences.GetRoom(conference)?.Users.GetValueOrDefault(mutedChannel)?.Muted == true, StateBound);
+            (server.Conferences.GetRoom(conference)?.Users.GetValueOrDefault(mutedChannel)?.Muted).Should().BeTrue(
                 "the caller that joined with Muted: Yes reads muted from its join (after {0})", elapsed.Elapsed);
-            (server.MeetMe.GetRoom(conference)?.Users.GetValueOrDefault(otherChannel)?.Muted).Should().BeFalse(
+            (server.Conferences.GetRoom(conference)?.Users.GetValueOrDefault(otherChannel)?.Muted).Should().BeFalse(
                 "the caller that joined with Muted: No reads not muted (after {0})", elapsed.Elapsed);
 
             // Mute the default caller through the manager interface.
@@ -130,8 +130,8 @@ public sealed class ConferenceParticipantStateTests : FunctionalTestBase
                 "muting {0} must produce a ConfbridgeMute naming it within {1} (after {2})",
                 otherChannel, MuteBound, elapsed.Elapsed);
 
-            await WaitUntilAsync(() => server.MeetMe.GetRoom(conference)?.Users.GetValueOrDefault(otherChannel)?.Muted == true, StateBound);
-            (server.MeetMe.GetRoom(conference)?.Users.GetValueOrDefault(otherChannel)?.Muted).Should().BeTrue(
+            await WaitUntilAsync(() => server.Conferences.GetRoom(conference)?.Users.GetValueOrDefault(otherChannel)?.Muted == true, StateBound);
+            (server.Conferences.GetRoom(conference)?.Users.GetValueOrDefault(otherChannel)?.Muted).Should().BeTrue(
                 "ConfbridgeMute named this caller (after {0})", elapsed.Elapsed);
 
             // Unmute it again.
@@ -145,8 +145,8 @@ public sealed class ConferenceParticipantStateTests : FunctionalTestBase
                 "unmuting {0} must produce a ConfbridgeUnmute naming it within {1} (after {2})",
                 otherChannel, MuteBound, elapsed.Elapsed);
 
-            await WaitUntilAsync(() => server.MeetMe.GetRoom(conference)?.Users.GetValueOrDefault(otherChannel)?.Muted == false, StateBound);
-            (server.MeetMe.GetRoom(conference)?.Users.GetValueOrDefault(otherChannel)?.Muted).Should().BeFalse(
+            await WaitUntilAsync(() => server.Conferences.GetRoom(conference)?.Users.GetValueOrDefault(otherChannel)?.Muted == false, StateBound);
+            (server.Conferences.GetRoom(conference)?.Users.GetValueOrDefault(otherChannel)?.Muted).Should().BeFalse(
                 "ConfbridgeUnmute named this caller (after {0})", elapsed.Elapsed);
         }
         finally

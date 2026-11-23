@@ -50,7 +50,7 @@ public sealed class QueueHangupCaptureReplayTests
         var left = new List<(string? UniqueId, bool LeaveNotObserved)>();
 
         var swallowed = await AmiCaptureReplay.ReplayStepsAsync(AmiCaptureReplay.LateConferenceLeaveCapture, steps,
-            probe => probe.Server.MeetMe.UserLeft += (_, user) => left.Add((user.UniqueId, user.LeaveNotObserved)));
+            probe => probe.Server.Conferences.UserLeft += (_, user) => left.Add((user.UniqueId, user.LeaveNotObserved)));
 
         using var scope = new AssertionScope();
         hangupAt.Should().BeGreaterThanOrEqualTo(0, "the capture holds the participant's Hangup");

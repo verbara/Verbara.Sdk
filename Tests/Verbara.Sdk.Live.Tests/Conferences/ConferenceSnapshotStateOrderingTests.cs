@@ -1,9 +1,9 @@
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 
-namespace Verbara.Sdk.Live.Tests.MeetMe;
+namespace Verbara.Sdk.Live.Tests.Conferences;
 
 /// <summary>
 /// A captured conference row cannot reverse a live report received during its read window. Mute and talking
@@ -16,11 +16,11 @@ public sealed class ConferenceSnapshotStateOrderingTests : IDisposable
     private const string ChannelB = "Local/conf@probe-00000002;2";
     private const string ChannelC = "Local/conf@probe-00000004;2";
 
-    private readonly MeetMeManager _sut = new(NullLogger.Instance);
+    private readonly ConferenceManager _sut = new(NullLogger.Instance);
     private readonly List<ConferenceSnapshotWindow> _windows = [];
     private readonly List<Observed> _changed = [];
-    private readonly List<MeetMeUser> _joined = [];
-    private readonly List<MeetMeUser> _left = [];
+    private readonly List<ConferenceUser> _joined = [];
+    private readonly List<ConferenceUser> _left = [];
 
     public ConferenceSnapshotStateOrderingTests()
     {
@@ -533,7 +533,7 @@ public sealed class ConferenceSnapshotStateOrderingTests : IDisposable
         return window;
     }
 
-    private MeetMeUser JoinWithField(string field, bool value)
+    private ConferenceUser JoinWithField(string field, bool value)
     {
         _sut.OnUserJoined(Room, 0, ChannelA, "a");
         Report(field, value);
@@ -560,20 +560,20 @@ public sealed class ConferenceSnapshotStateOrderingTests : IDisposable
     private static ConferenceSnapshotParticipant FieldRow(string field, bool value) =>
         field == "Muted" ? Row(ChannelA, muted: value, talking: null) : Row(ChannelA, muted: null, talking: value);
 
-    private static bool Value(MeetMeUser user, string field) => field == "Muted" ? user.Muted : user.Talking;
+    private static bool Value(ConferenceUser user, string field) => field == "Muted" ? user.Muted : user.Talking;
 
     private static Observed StateWith(string field, bool value) =>
         new(ChannelA, Muted: field == "Muted" && value, Talking: field == "Talking" && value);
 
-    private MeetMeUser Participant(string channel = ChannelA) => _sut.GetRoom(Room)!.Users[channel];
+    private ConferenceUser Participant(string channel = ChannelA) => _sut.GetRoom(Room)!.Users[channel];
 
-    private static Observed Observe(MeetMeUser user) => new(user.Channel, user.Muted, user.Talking);
+    private static Observed Observe(ConferenceUser user) => new(user.Channel, user.Muted, user.Talking);
 
-    private void ObserveChanged(MeetMeRoom _, MeetMeUser user) => _changed.Add(Observe(user));
+    private void ObserveChanged(ConferenceRoom _, ConferenceUser user) => _changed.Add(Observe(user));
 
-    private void ObserveJoined(MeetMeRoom _, MeetMeUser user) => _joined.Add(user);
+    private void ObserveJoined(ConferenceRoom _, ConferenceUser user) => _joined.Add(user);
 
-    private void ObserveLeft(MeetMeRoom _, MeetMeUser user) => _left.Add(user);
+    private void ObserveLeft(ConferenceRoom _, ConferenceUser user) => _left.Add(user);
 
     private void ClearObserved()
     {

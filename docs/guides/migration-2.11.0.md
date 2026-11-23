@@ -12,6 +12,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari` | [`ChanWebSocketDtmf` carries the digit alone: its constructor and `Deconstruct` change](#chanwebsocketdtmf-carries-the-digit-alone-its-constructor-and-deconstruct-change) | removed member, changed constructor and `Deconstruct`, BREAKING |
 | `Verbara.Sdk.Ari`, `Verbara.Sdk.Sessions` | [Three meter instruments nothing records are removed](#three-meter-instruments-nothing-records-are-removed) | removed fields and meter instruments, BREAKING |
 | `Verbara.Sdk`, `Verbara.Sdk.Ari` | [The bridge `format` arguments are named for what they format](#the-bridge-format-arguments-are-named-for-what-they-format) | renamed arguments, BREAKING (named arguments only) |
+| `Verbara.Sdk.Live` | [The conference types are named for what they track](#the-conference-types-are-named-for-what-they-track) | new names, former names deprecated (`VSDK0008`, warning) |
 | `Verbara.Sdk.Live` | [A `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else](#a-queuemanager-or-meetmemanager-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error) |
 | `Verbara.Sdk.Live` | [An `AgentManager` or `BridgeManager` subscriber that throws stops nothing else](#an-agentmanager-or-bridgemanager-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error) |
 | `Verbara.Sdk.Ari` | [An `OnStreamConnected` observer that throws loses no connection](#an-onstreamconnected-observer-that-throws-loses-no-connection) | behavior, BREAKING (no compiler error) |
@@ -347,6 +348,73 @@ static async Task PlayAndRecord(IAriClient ari, string bridgeId)
 }
 ```
 
+## Deprecated names
+
+### The conference types are named for what they track
+
+**What changed.** The Live conference table is named for conferences. Its types carried the name of MeetMe, but it
+tracks ConfBridge, from the `Confbridge*` events and, on each load, Asterisk's conference listing; it can still be fed
+by hand for app_meetme. 2.11.0 adds the conference names and marks the former names `[Obsolete]` with `VSDK0008`, a
+warning. Nothing else changes: the old and new names reach the same objects, so the server holds one table, raises
+each event once per subscriber, and every room and participant is the same instance under either name.
+
+#### VSDK0008
+
+| Former name (`VSDK0008`) | New name | Removed in |
+|---|---|---|
+| `VerbaraServer.MeetMe` | `VerbaraServer.Conferences`, which returns the same instance | 2.12.0 |
+| `Verbara.Sdk.Live.MeetMe.MeetMeManager` | `Verbara.Sdk.Live.Conferences.ConferenceManager` | 2.12.0 |
+| `Verbara.Sdk.Live.MeetMe.MeetMeRoom` | `Verbara.Sdk.Live.Conferences.ConferenceRoom` | 2.12.0 |
+| `Verbara.Sdk.Live.MeetMe.MeetMeUser` | `Verbara.Sdk.Live.Conferences.ConferenceUser` | 2.12.0 |
+| `Verbara.Sdk.Live.MeetMeUserState` | `Verbara.Sdk.Live.ConferenceUserState` (`Joined`, `Left`, same values) | 2.12.0 |
+
+Three differences come with the new names:
+
+- `ConferenceUserState` has no `Talking`. `MeetMeUserState.Talking` was never assigned; whether a participant is
+  talking is `ConferenceUser.Talking`.
+- A consumer cannot change a room or a participant through the new names. `ConferenceRoom.Users` is a read-only view
+  (`IReadOnlyDictionary<string, ConferenceUser>`) of the room's participants, where `MeetMeRoom.Users` is the mutable
+  dictionary itself, and the `ConferenceUser` properties have no public setter. Live is the only writer, and a write
+  through the old names was outside the manager's synchronization.
+- `ConferenceRoom` and `ConferenceUser` have no public constructor: the rooms and participants are the ones the
+  manager reports. To feed a table yourself, construct a `ConferenceManager` and call its `OnUserJoined`, `OnUserLeft`
+  and `OnConferenceEnded`, as with `MeetMeManager`.
+
+The events, their order, the `[CONFERENCE]` log lines and the `live.meetme.subscriber_faults` counter are unchanged. A
+handler subscribed under the old name and one under the new name share one subscription order.
+
+**Who is affected.** Code that names one of the former symbols. A build with TreatWarningsAsErrors fails on
+`VSDK0008` until the code moves or suppresses the id; any other build shows the warning. A binary built against 2.10.x
+runs unchanged.
+
+**What to do.** Move to the new names before 2.12.0. Before (2.10.x; compiles against 2.11.0 with `VSDK0008`):
+
+<!-- skip-doc-snippet -->
+```csharp
+using Verbara.Sdk.Live.MeetMe;
+
+server.MeetMe.UserJoined += (MeetMeRoom room, MeetMeUser user) => Console.WriteLine($"{user.Channel} joined {room.RoomNumber}");
+var count = server.MeetMe.GetRoom("100")?.UserCount ?? 0;
+```
+
+After:
+
+```csharp
+using Verbara.Sdk.Live.Conferences;
+using Verbara.Sdk.Live.Server;
+
+static int Watch(VerbaraServer server)
+{
+    server.Conferences.UserJoined += (ConferenceRoom room, ConferenceUser user) =>
+        Console.WriteLine($"{user.Channel} joined {room.RoomNumber}");
+    return server.Conferences.GetRoom("100")?.UserCount ?? 0;
+}
+```
+
+If you cannot move before upgrading, suppress `VSDK0008` where you name a former symbol (`#pragma warning disable
+VSDK0008`, or `NoWarn` in the project); the suppression works until 2.12.0 removes them. Code that wrote
+`MeetMeRoom.Users` or a `MeetMeUser` setter has no replacement: it changed the table without Live knowing.
+
 ## Subscribers that throw
 
 From 2.11.0 the Live managers, the ARI audio and outbound servers, the activities and the voice sessions raise each event subscriber by subscriber, as `ChannelManager` has since 2.10.0. Code
@@ -356,7 +424,7 @@ The [troubleshooting guide](troubleshooting.md#what-a-live-event-handler-may-do)
 ### A `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else
 
 **What changed.** `QueueManager` (`QueueUpdated`, `MemberAdded`, `MemberRemoved`, `MemberStatusChanged`,
-`MemberPaused`, `CallerJoined`, `CallerLeft`) and `MeetMeManager` (`UserJoined`, `UserLeft`, `UserStateChanged`)
+`MemberPaused`, `CallerJoined`, `CallerLeft`) and `MeetMeManager`, named `ConferenceManager` from 2.11.0 (`UserJoined`, `UserLeft`, `UserStateChanged`)
 deliver each event to every subscriber, in subscription order, whatever an earlier one threw. A failure is counted on
 `live.queues.subscriber_faults` or `live.meetme.subscriber_faults` (meter `Verbara.Sdk.Live`), then logged once at
 Warning with the exception:

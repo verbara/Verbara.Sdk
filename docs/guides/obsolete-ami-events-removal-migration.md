@@ -264,8 +264,10 @@ not built by default and it needs DAHDI. None of the pinned images ships it.
 | `MeetmeCommand` (`Verbara.Sdk.Agi`) | `EXEC MeetMe`: app_meetme, deprecated since Asterisk 19 | `ConfbridgeCommand` |
 | `MeetmeActivity.UseConfBridge` (`Verbara.Sdk.Activities`) | `false` ran MeetMe: app_meetme, deprecated since Asterisk 19 | none: remove the assignment; `MeetmeActivity` runs ConfBridge only. For MeetMe, `IAgiChannel.ExecAsync("MeetMe", args)` |
 
-`MeetmeActivity` itself, `MeetMeManager`, `MeetMeRoom`, `MeetMeUser` and `MeetMeUserState` are not
-deprecated and stay: they carry a MeetMe name, but ConfBridge feeds them.
+In 2.9.0, `MeetmeActivity` itself, `MeetMeManager`, `MeetMeRoom`, `MeetMeUser` and `MeetMeUserState` are not
+deprecated and stay: they carry a MeetMe name, but ConfBridge feeds them. 2.11.0 names the four Live types
+`Conference*` and deprecates their MeetMe names, which are the same objects until 2.12.0 removes them; see
+[the 2.11.0 guide](migration-2.11.0.md#the-conference-types-are-named-for-what-they-track). `MeetmeActivity` is unchanged.
 
 ### Skype for Asterisk (discontinued)
 

@@ -15,6 +15,7 @@ using Verbara.Sdk.Live.Agents;
 using Verbara.Sdk.Live.Bridges;
 using Verbara.Sdk.Live.Channels;
 using Verbara.Sdk.Live.Diagnostics;
+using Verbara.Sdk.Live.Conferences;
 using Verbara.Sdk.Live.MeetMe;
 using Verbara.Sdk.Live.Queues;
 using Microsoft.Extensions.Logging;
@@ -200,6 +201,17 @@ public sealed class VerbaraServer : IVerbaraServer
     public ChannelManager Channels { get; }
     public QueueManager Queues { get; }
     public AgentManager Agents { get; }
+    /// <summary>
+    /// The server's conference table: ConfBridge rooms and their participants, from the <c>Confbridge*</c> events and,
+    /// on each load, Asterisk's conference listing.
+    /// </summary>
+    public ConferenceManager Conferences { get; }
+
+    /// <summary>The former name of <see cref="Conferences"/>: the same instance, under its former type.</summary>
+    [Obsolete(
+        "Renamed to Conferences, which returns this same manager as a ConferenceManager. Removed in Verbara.Sdk 2.12.0.",
+        DiagnosticId = "VSDK0008",
+        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.11.0.md#vsdk0008")]
     public MeetMeManager MeetMe { get; }
     public BridgeManager Bridges { get; }
 
@@ -704,7 +716,11 @@ public sealed class VerbaraServer : IVerbaraServer
             Channels.SourceEventReader = () => sourceConnection.DispatchingEvent;
         Queues = new QueueManager(logger);
         Agents = new AgentManager(logger) { Memberships = Queues.AgentMembershipsOf };
-        MeetMe = new MeetMeManager(logger);
+#pragma warning disable VSDK0008 // One manager under both names until 2.12.0 removes MeetMeManager.
+        var conferences = new MeetMeManager(logger);
+        MeetMe = conferences;
+#pragma warning restore VSDK0008
+        Conferences = conferences;
         Bridges = new BridgeManager(logger);
         _instanceMeter = new Meter("Verbara.Sdk.Live", "1.0.0");
 
@@ -2182,7 +2198,7 @@ public sealed class VerbaraServer : IVerbaraServer
     private async ValueTask LoadConferencesAsync(LoadSession? session, LoadConnectionStates states, Activity? activity,
         Barriers barriers, Action<string> sending, CancellationToken cancellationToken)
     {
-        using var window = MeetMe.OpenSnapshotWindow();
+        using var window = Conferences.OpenSnapshotWindow();
 
         // The listings are read one after the other on one session, so the last one that ended — completed, or answered
         // with an error such as 'No active conferences.', which marks where the error arrived — ends furthest into the
@@ -2231,7 +2247,7 @@ public sealed class VerbaraServer : IVerbaraServer
         var removeOmitted = allComplete
             && await AwaitBarrierAsync(session, lastCompleted, "ConfbridgeList", states, ChannelReader.Load.Name, activity,
                 barriers, cancellationToken);
-        MeetMe.ReconcileWithSnapshot(window, rooms, participants, removeOmitted);
+        Conferences.ReconcileWithSnapshot(window, rooms, participants, removeOmitted);
     }
 
     /// <summary>
@@ -3350,32 +3366,32 @@ public sealed class VerbaraServer : IVerbaraServer
 
                 // ConfBridge events
                 case ConfbridgeJoinEvent cbj:
-                    server.MeetMe.OnUserJoined(cbj.Conference ?? "", 0, cbj.Channel ?? "", cbj.UniqueId,
+                    server.Conferences.OnUserJoined(cbj.Conference ?? "", 0, cbj.Channel ?? "", cbj.UniqueId,
                         AmiBoolean.Parse(cbj.Muted) ?? false);
                     break;
 
                 case ConfbridgeMuteEvent cbm:
-                    server.MeetMe.OnUserMuted(cbm.Conference ?? "", cbm.Channel ?? "", true);
+                    server.Conferences.OnUserMuted(cbm.Conference ?? "", cbm.Channel ?? "", true);
                     break;
 
                 case ConfbridgeUnmuteEvent cbu:
-                    server.MeetMe.OnUserMuted(cbu.Conference ?? "", cbu.Channel ?? "", false);
+                    server.Conferences.OnUserMuted(cbu.Conference ?? "", cbu.Channel ?? "", false);
                     break;
 
                 // TalkingStatus is null when absent or unreadable: the participant's talking state is left as it was.
                 case ConfbridgeTalkingEvent cbt:
                     if (cbt.TalkingStatus is { } talking)
-                        server.MeetMe.OnUserTalking(cbt.Conference ?? "", cbt.Channel ?? "", talking);
+                        server.Conferences.OnUserTalking(cbt.Conference ?? "", cbt.Channel ?? "", talking);
                     else
-                        MeetMeManagerLog.TalkingStatusUnreadable(server._logger, cbt.Conference, cbt.Channel);
+                        ConferenceManagerLog.TalkingStatusUnreadable(server._logger, cbt.Conference, cbt.Channel);
                     break;
 
                 case ConfbridgeLeaveEvent cbl:
-                    server.MeetMe.OnUserLeft(cbl.Conference ?? "", cbl.Channel ?? "");
+                    server.Conferences.OnUserLeft(cbl.Conference ?? "", cbl.Channel ?? "");
                     break;
 
                 case ConfbridgeEndEvent cbe:
-                    server.MeetMe.OnConferenceEnded(cbe.Conference ?? "");
+                    server.Conferences.OnConferenceEnded(cbe.Conference ?? "");
                     break;
 
                 // Bridge events
