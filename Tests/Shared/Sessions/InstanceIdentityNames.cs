@@ -10,7 +10,7 @@ namespace Verbara.Sdk.Tests.Shared.Sessions;
 /// <remarks>
 /// <para>
 /// The names are placeholders until the owner rules on the identity's form (the member <c>Instance</c>, the type
-/// <c>AsteriskInstanceIdentity</c> with a nullable <c>SystemName</c> and a nullable <c>EntityId</c>).
+/// <c>AsteriskInstanceIdentity</c>, whose one member today is the instance's <c>SystemName</c>).
 /// </para>
 /// <para>
 /// Until the member exists, build without <c>VERBARA_INSTANCE_IDENTITY</c>: every read answers
@@ -37,13 +37,15 @@ internal static class InstanceIdentityNames
     /// <summary>The instance's <c>SystemName</c>, <see langword="null"/> when the notification names no instance.</summary>
     public static string? SystemNameOf(SessionDomainEvent notification) => notification.Instance?.SystemName;
 
-    /// <summary>The value type's instance for the given parts.</summary>
-    public static object NewIdentity(string? systemName, string? entityId = null) =>
-        new AsteriskInstanceIdentity(systemName, entityId);
+    /// <summary>The value type's instance naming <paramref name="systemName"/>.</summary>
+    public static object NewIdentity(string systemName) => new AsteriskInstanceIdentity(systemName);
 
-    /// <summary>A copy of <paramref name="notification"/> naming the instance <paramref name="systemName"/>.</summary>
+    /// <summary>
+    /// A copy of <paramref name="notification"/> naming the instance <paramref name="systemName"/>, or naming none when it
+    /// is <see langword="null"/>.
+    /// </summary>
     public static SessionDomainEvent WithSystemName(SessionDomainEvent notification, string? systemName) =>
-        notification with { Instance = new AsteriskInstanceIdentity(systemName, null) };
+        notification with { Instance = systemName is null ? null : new AsteriskInstanceIdentity(systemName) };
 #else
     public static object? IdentityOf(SessionDomainEvent notification)
     {
@@ -57,8 +59,8 @@ internal static class InstanceIdentityNames
         return Unimplemented;
     }
 
-    public static object NewIdentity(string? systemName, string? entityId = null) =>
-        throw new NotSupportedException($"{Unimplemented}: no value type for ({systemName}, {entityId})");
+    public static object NewIdentity(string systemName) =>
+        throw new NotSupportedException($"{Unimplemented}: no value type for ({systemName})");
 
     public static SessionDomainEvent WithSystemName(SessionDomainEvent notification, string? systemName) =>
         throw new NotSupportedException($"{Unimplemented}: cannot name '{systemName}' on {notification.GetType().Name}");

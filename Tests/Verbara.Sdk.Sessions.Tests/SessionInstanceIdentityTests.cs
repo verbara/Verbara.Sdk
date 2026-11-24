@@ -8,7 +8,7 @@ namespace Verbara.Sdk.Sessions.Tests;
 
 /// <summary>
 /// The public instance identity a session notification carries, as a consumer sees it without a session engine: a value
-/// type compared by value; a member a notification built with the positional constructor leaves null, which is part of
+/// type compared by value that always names the instance; a member a notification built with the positional constructor leaves null, which is part of
 /// the notification's value; and its published documentation, which says that null means unknown and that
 /// <see cref="SessionDomainEvent.ServerId"/> is unchanged.
 /// </summary>
@@ -20,30 +20,41 @@ public sealed class SessionInstanceIdentityTests
     private static readonly DateTimeOffset Ts = new(2026, 11, 22, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Identity_ShouldBeEqualByValue_WhenBothPartsAreEqual()
+    public void Identity_ShouldBeEqualByValue_WhenTheSystemNamesAreEqual()
     {
-        var first = InstanceIdentityNames.NewIdentity("pbx-one", "e1:aa:bb:cc:dd:ee");
-        var same = InstanceIdentityNames.NewIdentity("pbx-one", "e1:aa:bb:cc:dd:ee");
+        var first = InstanceIdentityNames.NewIdentity("pbx-one");
+        var same = InstanceIdentityNames.NewIdentity("pbx-one");
 
         using (new AssertionScope())
         {
             first.Should().NotBeSameAs(same, "premise: two instances built apart");
-            first.Should().Be(same, "the identity is a value: equal parts, equal identity");
+            first.Should().Be(same, "the identity is a value: equal system names, equal identity");
             first.GetHashCode().Should().Be(same.GetHashCode(), "equal values hash alike");
         }
     }
 
     [Theory]
-    [InlineData("pbx-two", "e1:aa:bb:cc:dd:ee")]
-    [InlineData("pbx-one", "e1:aa:bb:cc:dd:ff")]
-    [InlineData("pbx-one", null)]
-    [InlineData(null, "e1:aa:bb:cc:dd:ee")]
-    public void Identity_ShouldNotBeEqual_WhenEitherPartDiffers(string? systemName, string? entityId)
+    [InlineData("pbx-two")]
+    [InlineData("PBX-ONE")]
+    public void Identity_ShouldNotBeEqual_WhenTheSystemNamesDiffer(string systemName)
     {
-        var first = InstanceIdentityNames.NewIdentity("pbx-one", "e1:aa:bb:cc:dd:ee");
-        var other = InstanceIdentityNames.NewIdentity(systemName, entityId);
+        var first = InstanceIdentityNames.NewIdentity("pbx-one");
+        var other = InstanceIdentityNames.NewIdentity(systemName);
 
-        other.Should().NotBe(first, "an identity that differs in its system name or its entity id is another identity");
+        other.Should().NotBe(first,
+            "an identity with another system name is another identity, compared as Asterisk wrote it (ordinal)");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Identity_ShouldRefuseTheValue_WhenTheSystemNameIsMissing(string? systemName)
+    {
+        // An instance that gives no system name has no identity: the notification's member is null (unknown), never an
+        // identity naming nothing.
+        var build = () => InstanceIdentityNames.NewIdentity(systemName!);
+
+        build.Should().Throw<ArgumentException>("an identity always names its instance; null on the notification means unknown");
     }
 
     [Fact]

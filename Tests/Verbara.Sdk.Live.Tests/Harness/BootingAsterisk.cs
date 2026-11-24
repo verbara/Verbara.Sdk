@@ -191,6 +191,14 @@ internal sealed class BootingAsterisk
     /// </summary>
     public bool RefusesCoreSettings { get; init; }
 
+    /// <summary>
+    /// Whether the peer never answers the login's <c>CoreSettings</c>, as an Asterisk too busy to reply within the
+    /// connection's response timeout: the connect's read times out and falls back to the CLI <c>core show version</c>,
+    /// which the peer answers like any other action, and the connect still succeeds. A later <c>CoreSettings</c> is
+    /// answered as usual.
+    /// </summary>
+    public bool SilentOnLoginCoreSettings { get; init; }
+
     /// <summary>Where a peer booted at the login sends <c>FullyBooted</c> during the connect.</summary>
     public FullyBootedPlacement FullyBootedAt { get; init; } = FullyBootedPlacement.AfterConnect;
 
@@ -500,7 +508,8 @@ internal sealed class BootingAsterisk
         if (await ReadCountedAsync(socket, cancellationToken) is not { } versionProbe)
             return false;
 
-        await AnswerCoreSettingsAsync(socket, PipedSocket.ActionIdOf(versionProbe));
+        if (!SilentOnLoginCoreSettings)
+            await AnswerCoreSettingsAsync(socket, PipedSocket.ActionIdOf(versionProbe));
 
         if (reportsAtLogin && FullyBootedAt == FullyBootedPlacement.AfterConnect)
             await WriteFullyBootedAsync(socket);
