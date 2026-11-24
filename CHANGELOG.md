@@ -635,6 +635,30 @@ The push bus caught every exception an observer threw, `OutOfMemoryException` in
 completes its observers. Any other exception from an observer is still caught, logged and counted as a dropped
 delivery.
 
+### Added: `RedisSessionStoreOptions.ActiveRecordTtl` lets the Redis session store retire the calls of a process that is gone (#655)
+
+Until now a shared Redis session store kept the active record of a call whose process crashed or restarted active
+forever: `GetActiveAsync` kept listing it, and the live entry of its `linkedid` index kept that small hash without an
+expiry. `RedisSessionStoreOptions.ActiveRecordTtl` (`TimeSpan?`, off by default, from 30 seconds to 24 hours, both
+included; five minutes is a reasonable value) makes an active record last only while a live process vouches for it.
+`UseRedis` fails the store's resolution with an `OptionsValidationException` outside that range. The
+[session store guide](docs/guides/session-store-backends.md#records-of-a-process-that-is-gone-activerecordttl) has the
+details and the limits.
+
+- **Under the SDK's sessions host.** Every sessions registration adds one internal hosted service. With the option set
+  it arms the store before any hosted service starts and, every third of the value, hands the store the calls the
+  session manager holds. A store built and used without that host ignores the option.
+- **What expires.** A live record and its `linkedid` index key carry an expiry that the host renews with two expiry
+  commands per held call; a record nobody renews expires and no lookup returns it. Its `linkedid` index entry is not
+  removed on its own: the index key leaves no later than the longer of the value and `CompletedRetention` after the
+  last save, refresh or ending under that `linkedid`. The active set is cleaned of members whose record expired, and
+  live records written before the option get an expiry.
+- **Set it on every process that shares the store, in the same deploy.** A process without it does not refresh its
+  records, and a quiet call of that process can lose its record until its next save.
+
+With the option unset, the store sends exactly the commands it sent before. Every sessions host now lists one more
+internal hosted service, `SessionStoreMaintenanceService`, which stays idle unless the store asks for it.
+
 ### Changed — BREAKING: a session store's `linkedid` lookup that names no server answers only when one server holds the id (#642)
 
 `ISessionStore.GetByLinkedIdAsync(linkedId, ct)` returns `null` when two or more servers have a session stored under
