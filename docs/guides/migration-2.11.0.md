@@ -13,6 +13,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari`, `Verbara.Sdk.Sessions` | [Three meter instruments nothing records are removed](#three-meter-instruments-nothing-records-are-removed) | removed fields and meter instruments, BREAKING |
 | `Verbara.Sdk`, `Verbara.Sdk.Ari` | [The bridge `format` arguments are named for what they format](#the-bridge-format-arguments-are-named-for-what-they-format) | renamed arguments, BREAKING (named arguments only) |
 | `Verbara.Sdk.Live` | [The conference types are named for what they track](#the-conference-types-are-named-for-what-they-track) | new names, former names deprecated (`VSDK0008`, warning) |
+| `Verbara.Sdk.Sessions` | [`CallFailedEvent` is never raised and is deprecated](#callfailedevent-is-never-raised-and-is-deprecated) | type deprecated (`VSDK0009`, warning) |
 | `Verbara.Sdk.Live` | [A `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else](#a-queuemanager-or-meetmemanager-subscriber-that-throws-stops-nothing-else) | behaviour, BREAKING (no compiler error) |
 | `Verbara.Sdk.Live` | [An `AgentManager` or `BridgeManager` subscriber that throws stops nothing else](#an-agentmanager-or-bridgemanager-subscriber-that-throws-stops-nothing-else) | behaviour, BREAKING (no compiler error) |
 | `Verbara.Sdk.Ari` | [An `OnStreamConnected` observer that throws loses no connection](#an-onstreamconnected-observer-that-throws-loses-no-connection) | behaviour, BREAKING (no compiler error) |
@@ -25,6 +26,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Sessions` | [`CallRingNoAnswerEvent` is raised, and `IAgentSessionTracker` lists members that only missed calls](#callringnoanswerevent-is-raised-and-iagentsessiontracker-lists-members-that-only-missed-calls) | fix, new member, behaviour (no compiler error) |
 | `Verbara.Sdk.Cluster.Postgres` | [The cluster lock row says since when its owner holds it](#the-cluster-lock-row-says-since-when-its-owner-holds-it) | new nullable column, migration V002, fix (no compiler error) |
 | `Verbara.Sdk.Live` | [The `live.server` span tag is obsolete](#the-liveserver-span-tag-is-obsolete) | span tag deprecated, new span tag (no compiler error) |
+| `Verbara.Sdk.OpenTelemetry` | [OpenTelemetry 1.21 needs `System.Diagnostics.DiagnosticSource` 11](#opentelemetry-121-needs-systemdiagnosticsdiagnosticsource-11) | dependency floor raised (restore error `NU1605` for a lower pin) |
 
 ## Before you start: move every package at once
 
@@ -419,6 +421,55 @@ static int Watch(VerbaraServer server)
 If you cannot move before upgrading, suppress `VSDK0008` where you name a former symbol (`#pragma warning disable
 VSDK0008`, or `NoWarn` in the project); the suppression works until 2.12.0 removes them. Code that wrote
 `MeetMeRoom.Users` or a `MeetMeUser` setter has no replacement: it changed the table without Live knowing.
+
+### `CallFailedEvent` is never raised and is deprecated
+
+**What changed.** The session manager raises every ending of a call as `CallEndedEvent`, a failed call included: its
+`Cause` is the hangup cause, and the session's `State` is `Failed`. It has never raised `CallFailedEvent`, so a handler
+for it never ran. 2.11.0 marks the record `[Obsolete]` with `VSDK0009`, a warning, and 2.12.0 removes it.
+
+#### VSDK0009
+
+| Deprecated symbol (`VSDK0009`) | Read instead | Removed in |
+|---|---|---|
+| `Verbara.Sdk.Sessions.CallFailedEvent` | `Verbara.Sdk.Sessions.CallEndedEvent`, raised for every ending, with its `Cause` | 2.12.0 |
+
+**Who is affected.** Code that names `CallFailedEvent`: a `case` or `is` test on the session events, or a record built
+by hand in a test or a replay. A build with TreatWarningsAsErrors fails on `VSDK0009` until the code moves or
+suppresses the id; any other build shows the warning. A binary built against 2.10.x runs unchanged, and behaves as it
+did: its `CallFailedEvent` handler still never runs.
+
+**What to do.** Handle the ending in the `CallEndedEvent` handler and drop the `CallFailedEvent` one. Before (2.10.x;
+compiles against 2.11.0 with `VSDK0009`):
+
+<!-- skip-doc-snippet -->
+```csharp
+sessions.Events.Subscribe(evt =>
+{
+    switch (evt)
+    {
+        case CallEndedEvent ended: Console.WriteLine($"{ended.SessionId} ended"); break;
+        case CallFailedEvent failed: Console.WriteLine($"{failed.SessionId} failed: {failed.Reason}"); break;
+    }
+});
+```
+
+After:
+
+```csharp
+using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Manager;
+
+static IDisposable Watch(ICallSessionManager sessions) =>
+    sessions.Events.Subscribe(evt =>
+    {
+        if (evt is CallEndedEvent ended)
+            Console.WriteLine($"{ended.SessionId} ended, cause {ended.Cause?.ToString() ?? "none"}");
+    });
+```
+
+If you cannot move before upgrading, suppress `VSDK0009` where you name the record (`#pragma warning disable
+VSDK0009`, or `NoWarn` in the project); the suppression works until 2.12.0 removes it.
 
 ## Subscribers that throw
 
@@ -1015,3 +1066,27 @@ public symbol changes.
 
 **What to do.** Read `server.id` to tell pooled servers apart before 2.12.0, and read `VerbaraServer.AsteriskVersion`
 if you used `live.server` for the Asterisk version.
+
+## Dependencies
+
+### OpenTelemetry 1.21 needs `System.Diagnostics.DiagnosticSource` 11
+
+**What changed.** `Verbara.Sdk.OpenTelemetry` now requires the five OpenTelemetry packages at 1.21
+(`OpenTelemetry.Exporter.Prometheus.AspNetCore` at `1.21.0-beta.1`). `OpenTelemetry.Api` 1.21.0 requires
+`System.Diagnostics.DiagnosticSource` 11.0.0 or later on `net10.0`, so the application restores that package and ships
+its own `System.Diagnostics.DiagnosticSource.dll` instead of the shared framework's copy.
+
+**Who is affected.** An application that references an OpenTelemetry package below 1.21, or
+`System.Diagnostics.DiagnosticSource` below 11.0.0, directly in its own project or `Directory.Packages.props`. Restore
+fails with:
+
+```
+error NU1605: Warning As Error: Detected package downgrade: System.Diagnostics.DiagnosticSource from 11.0.0 to 10.0.0.
+```
+
+An application that references neither package directly needs no change.
+
+**What to do.** Raise those references to OpenTelemetry 1.21 and `System.Diagnostics.DiagnosticSource` 11.0.0 or
+later, or remove them and let `Verbara.Sdk.OpenTelemetry` bring them. The
+[CHANGELOG](../../CHANGELOG.md) lists the upstream changes an application can see in its own telemetry (Prometheus
+scrape output, configuration binding, the experimental OTLP disk retry).

@@ -93,6 +93,7 @@ internal static class DeprecationIdRegister
                 new(Live, "MeetMeManager"), new(Live, "MeetMeRoom"), new(Live, "MeetMeUser"), new(Live, "MeetMeUserState"),
                 new(Live, "VerbaraServer.MeetMe"),
             ], []),
+        new("VSDK0009", DeprecationIdState.Marked, "2.12.0", MigrationGuide2_11, [new(Sessions, "CallFailedEvent")], []),
     ];
 
     public static DeprecationIdRow Row(string id) => Rows.Single(r => r.Id == id);
