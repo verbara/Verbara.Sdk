@@ -13,16 +13,18 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari`, `Verbara.Sdk.Sessions` | [Three meter instruments nothing records are removed](#three-meter-instruments-nothing-records-are-removed) | removed fields and meter instruments, BREAKING |
 | `Verbara.Sdk`, `Verbara.Sdk.Ari` | [The bridge `format` arguments are named for what they format](#the-bridge-format-arguments-are-named-for-what-they-format) | renamed arguments, BREAKING (named arguments only) |
 | `Verbara.Sdk.Live` | [The conference types are named for what they track](#the-conference-types-are-named-for-what-they-track) | new names, former names deprecated (`VSDK0008`, warning) |
-| `Verbara.Sdk.Live` | [A `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else](#a-queuemanager-or-meetmemanager-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error) |
-| `Verbara.Sdk.Live` | [An `AgentManager` or `BridgeManager` subscriber that throws stops nothing else](#an-agentmanager-or-bridgemanager-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error) |
-| `Verbara.Sdk.Ari` | [An `OnStreamConnected` observer that throws loses no connection](#an-onstreamconnected-observer-that-throws-loses-no-connection) | behavior, BREAKING (no compiler error) |
-| `Verbara.Sdk.Ari` | [An ARI outbound observer that throws keeps its connection](#an-ari-outbound-observer-that-throws-keeps-its-connection) | behavior, BREAKING (no compiler error) |
-| `Verbara.Sdk.Activities`, `Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An activity, voice pipeline or realtime bridge subscriber that throws stops nothing else](#an-activity-voice-pipeline-or-realtime-bridge-subscriber-that-throws-stops-nothing-else) | behavior, BREAKING (no compiler error; a cast of `StatusChanges` to `BehaviorSubject` fails at run time) |
-| `Verbara.Sdk.VoiceAi.AudioSocket` | [An `OnSessionStarted` subscriber that fails ends the AudioSocket call only when every subscriber did](#an-onsessionstarted-subscriber-that-fails-ends-the-audiosocket-call-only-when-every-subscriber-did) | behavior, BREAKING (no compiler error) |
-| `Verbara.Sdk.VoiceAi.Stt` | [A Whisper or Azure Whisper reply with a `null` text makes `StreamAsync` throw](#a-whisper-or-azure-whisper-reply-with-a-null-text-makes-streamasync-throw) | behavior, BREAKING (no compiler error) |
-| `Verbara.Sdk.Sessions`, `Verbara.Sdk.Sessions.Redis`, `Verbara.Sdk.Sessions.Postgres` | [A session store's `linkedid` lookup with several servers](#a-session-stores-linkedid-lookup-with-several-servers) | behavior, BREAKING (no compiler error; new Redis index key) |
-| `Verbara.Sdk.Sessions` | [`CallRingNoAnswerEvent` is raised, and `IAgentSessionTracker` lists members that only missed calls](#callringnoanswerevent-is-raised-and-iagentsessiontracker-lists-members-that-only-missed-calls) | behavior (no compiler error) |
-| `Verbara.Sdk.Cluster.Postgres` | [The cluster lock row says since when its owner holds it](#the-cluster-lock-row-says-since-when-its-owner-holds-it) | new nullable column, migration V002 (no compiler error) |
+| `Verbara.Sdk.Live` | [A `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else](#a-queuemanager-or-meetmemanager-subscriber-that-throws-stops-nothing-else) | behaviour, BREAKING (no compiler error) |
+| `Verbara.Sdk.Live` | [An `AgentManager` or `BridgeManager` subscriber that throws stops nothing else](#an-agentmanager-or-bridgemanager-subscriber-that-throws-stops-nothing-else) | behaviour, BREAKING (no compiler error) |
+| `Verbara.Sdk.Ari` | [An `OnStreamConnected` observer that throws loses no connection](#an-onstreamconnected-observer-that-throws-loses-no-connection) | behaviour, BREAKING (no compiler error) |
+| `Verbara.Sdk.Ari` | [An ARI outbound observer that throws keeps its connection](#an-ari-outbound-observer-that-throws-keeps-its-connection) | behaviour, BREAKING (no compiler error) |
+| `Verbara.Sdk.Activities`, `Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An activity, voice pipeline or realtime bridge subscriber that throws stops nothing else](#an-activity-voice-pipeline-or-realtime-bridge-subscriber-that-throws-stops-nothing-else) | behaviour, BREAKING (no compiler error; a cast of `StatusChanges` to `BehaviorSubject` fails at run time) |
+| `Verbara.Sdk.VoiceAi.AudioSocket` | [An `OnSessionStarted` subscriber that fails ends the AudioSocket call only when every subscriber did](#an-onsessionstarted-subscriber-that-fails-ends-the-audiosocket-call-only-when-every-subscriber-did) | behaviour, BREAKING (no compiler error) |
+| `Verbara.Sdk.VoiceAi.Stt` | [A Whisper or Azure Whisper reply with a `null` text makes `StreamAsync` throw](#a-whisper-or-azure-whisper-reply-with-a-null-text-makes-streamasync-throw) | behaviour, BREAKING (no compiler error) |
+| `Verbara.Sdk.Sessions`, `Verbara.Sdk.Sessions.Redis`, `Verbara.Sdk.Sessions.Postgres` | [A session store's `linkedid` lookup with several servers](#a-session-stores-linkedid-lookup-with-several-servers) | behaviour, new member, fix, BREAKING (no compiler error; new Redis index key) |
+| `Verbara.Sdk.Hosting` | [A host that attaches the server by hand or decorates the session manager](#a-host-that-attaches-the-server-by-hand-or-decorates-the-session-manager) | fix, behaviour (no compiler error) |
+| `Verbara.Sdk.Sessions` | [`CallRingNoAnswerEvent` is raised, and `IAgentSessionTracker` lists members that only missed calls](#callringnoanswerevent-is-raised-and-iagentsessiontracker-lists-members-that-only-missed-calls) | fix, new member, behaviour (no compiler error) |
+| `Verbara.Sdk.Cluster.Postgres` | [The cluster lock row says since when its owner holds it](#the-cluster-lock-row-says-since-when-its-owner-holds-it) | new nullable column, migration V002, fix (no compiler error) |
+| `Verbara.Sdk.Live` | [The `live.server` span tag is obsolete](#the-liveserver-span-tag-is-obsolete) | span tag deprecated, new span tag (no compiler error) |
 
 ## Before you start: move every package at once
 
@@ -443,7 +445,7 @@ notification queues now reads
 `[CHANNEL|QUEUE|CONFERENCE] Event notification failed outside its subscribers; nothing was thrown from the call`.
 
 **Who is affected.** Nothing reports a compiler error: no public symbol changes, and a binary built against 2.10.x
-runs unchanged. What changes is behavior that 2.10.x documented in the troubleshooting guide:
+runs unchanged. What changes is behaviour that 2.10.x documented in the troubleshooting guide:
 
 - a subscriber after one that throws now receives the event (up to 2.10.x it did not);
 - the first exception is no longer rethrown from the manager call that made the change, so a live event's failure no
@@ -776,22 +778,16 @@ static void ServeOrHangUp(AudioSocketServer server, Func<Guid, bool> isAllowed, 
 
 ### A Whisper or Azure Whisper reply with a `null` text makes `StreamAsync` throw
 
-#### Who is affected
+**What changed.** When the vendor replies `{"text":null}`, `StreamAsync` throws `JsonException` from the
+`await foreach`. Up to 2.10.x it returned no result and no error, so the reply could not be told from silence. Both
+vendor contracts require `text`, so a `null` there is a reply the SDK cannot read, and it is now reported as one.
 
-You are affected if your code enumerates `StreamAsync` of `WhisperSpeechRecognizer` or `AzureWhisperSpeechRecognizer`
+**Who is affected.** Code that enumerates `StreamAsync` of `WhisperSpeechRecognizer` or `AzureWhisperSpeechRecognizer`
 itself. Nothing reports a compiler error. Through `VoiceAiPipeline` nothing throws: the pipeline catches the exception,
 counts the transcription as failed, publishes a `PipelineErrorEvent` and goes back to listening. Before, such a reply
 published no event, so a `PipelineErrorEvent` subscriber now sees one where it saw none.
 
-#### What changes
-
-When the vendor replies `{"text":null}`, `StreamAsync` throws `JsonException` from the `await foreach`. Up to 2.10.x it
-returned no result and no error, so the reply could not be told from silence. Both vendor contracts require `text`, so
-a `null` there is a reply the SDK cannot read, and it is now reported as one.
-
-#### What to do
-
-Catch `JsonException` where you enumerate `StreamAsync` on these two recognizers, and treat it as a failed
+**What to do.** Catch `JsonException` where you enumerate `StreamAsync` on these two recognizers, and treat it as a failed
 transcription, as the pipeline does:
 
 ```csharp
@@ -820,16 +816,7 @@ static async Task<string?> TranscribeAsync(
 
 ### A session store's `linkedid` lookup with several servers
 
-#### Who is affected
-
-You are affected if one session store — the default store, `RedisSessionStore`, `PostgresSessionStore`, or a store of
-your own — holds sessions of **two or more Asterisk servers**, and your code calls
-`ISessionStore.GetByLinkedIdAsync(linkedId, ct)`. Two servers report the same `linkedid` when their Asterisk servers
-have no `systemname` of their own, or when one Asterisk is attached under two server ids. With one server and one
-session under the id nothing changes; when one server holds two sessions under the id, the default store now answers
-with the newest (by `CreatedAt`) where it returned whichever it enumerated first. You are also affected if a tool of your own reads the Redis key `{prefix}idx:linked:{linkedId}`.
-
-#### What changes
+**What changed.**
 
 - `GetByLinkedIdAsync(linkedId, ct)` returns the session only when exactly one server has a session stored under that
   `linkedid`, and `null` when two or more do. Before, it returned one of them (Redis: the last saved; Postgres: the
@@ -840,12 +827,17 @@ with the newest (by `CreatedAt`) where it returned whichever it enumerated first
   stays ambiguous to the unscoped lookup for as long as both rows are kept.**
 - New: `GetByLinkedIdAsync(serverId, linkedId, ct)` returns the named server's session whatever another server holds.
 
-#### What to write
+**Who is affected.** Code that calls `ISessionStore.GetByLinkedIdAsync(linkedId, ct)` on one session store — the
+default store, `RedisSessionStore`, `PostgresSessionStore`, or a store of your own — that holds sessions of **two or
+more Asterisk servers**. Two servers report the same `linkedid` when their Asterisk servers have no `systemname` of
+their own, or when one Asterisk is attached under two server ids. With one server and one session under the id nothing
+changes; when one server holds two sessions under the id, the default store now answers with the newest (by
+`CreatedAt`) where it returned whichever it enumerated first. A tool of your own that reads the Redis key
+`{prefix}idx:linked:{linkedId}` is affected too. Nothing reports a compiler error.
 
-Treat a `null` from the unscoped lookup as "absent or not unique", and name the server when you know it (every
-`CallSession` carries its `ServerId`):
-
-Before (2.10.x: one of two unrelated calls when two servers share the `linkedid`; from 2.11.0, `null`):
+**What to do.** Treat a `null` from the unscoped lookup as "absent or not unique", and name the server when you know it
+(every `CallSession` carries its `ServerId`). Before (2.10.x: one of two unrelated calls when two servers share the
+`linkedid`; from 2.11.0, `null`):
 
 <!-- skip-doc-snippet -->
 ```csharp
@@ -866,18 +858,19 @@ only when it belongs to the named server, so it can return `null` for an id two 
 `GetByLinkedIdAsync(string serverId, string linkedId, CancellationToken ct)` (on `SessionStoreBase` it is `virtual`) to
 answer per server.
 
-#### Redis: a new index key, Redis 5.0 or later, scripting allowed
+**Redis: a new index key, Redis 5.0 or later, scripting allowed.**
 
 - The `linkedid` index moves from `{prefix}idx:linked:{linkedId}` (a string holding one session id) to
   `{prefix}idx:linked-by-server:{linkedId}`, a hash with one field per server id whose value is
   `<expiryUnixMs>|<sessionId>` (`0` while the session is live). Read the hash in tools of your own.
 - A live save writes its server's field with `HSET` and clears the key's expiry with `PERSIST`, in the save's batch.
   Ending or deleting a session runs a single-key Lua script that reads the server clock with `TIME`: **Redis 5.0 or
-  later** is required, and **the connection's user must be allowed to run scripts** — `EVALSHA`/`EVAL` and `SCRIPT LOAD` (ACL category `@scripting`) plus `TIME`, `HSET`, `HGET`, `HDEL`,
-  `HGETALL`, `PERSIST`, `PEXPIREAT`, `GET`, `DEL` and `PEXPIRE`. A deployment or proxy that refuses scripting is not
-  supported: live saves succeed there, but ending or deleting a session fails. A lookup only reads: it removes no
-  index entry. Every script names one key, so none is refused with `CROSSSLOT` on Redis Cluster; there a lookup that
-  races a session's first save can miss it once. The suite runs against a single node.
+  later** is required, and **the connection's user must be allowed to run scripts** — `EVALSHA`/`EVAL` and
+  `SCRIPT LOAD` (ACL category `@scripting`) plus `TIME`, `HSET`, `HGET`, `HDEL`, `HGETALL`, `PERSIST`, `PEXPIREAT`,
+  `GET`, `DEL` and `PEXPIRE`. A deployment or proxy that refuses scripting is not supported: live saves succeed there,
+  but ending or deleting a session fails. A lookup only reads: it removes no index entry. Every script names one key,
+  so none is refused with `CROSSSLOT` on Redis Cluster; there a lookup that races a session's first save can miss it
+  once. The suite runs against a single node.
 - Cost: a live save sends two index commands where 2.10.x sent one; a `SaveBatchAsync` of 100 live sessions measured
   ×1.22 the time of 2.10.x, a single `SaveAsync` ×1.05. Ending or deleting a session costs one script per session.
 - Save a session from one place at a time: the store does not order two concurrent saves of the same session, which
@@ -890,29 +883,68 @@ answer per server.
   2.10.x nodes keep the old behaviour among themselves until they are upgraded. A session whose old entry another
   server overwrote before the upgrade is found again after its next save from a 2.11.0 node.
 
-#### Postgres and the default store
+**Postgres and the default store.** No schema change, no migration, no new index: both read the same rows as before.
 
-No schema change, no migration, no new index: both read the same rows as before.
+## Session hosts
+
+### A host that attaches the server by hand or decorates the session manager
+
+**What changed.** The hosting services act on the registered `ICallSessionManager` whatever its type, and the
+single-server stop detaches only the attachment its own start installed:
+
+- The single-server registrations (`AddVerbaraSessions`, `AddVerbaraSessionsBuilder`) call `AttachToServer` at start
+  and `DetachFromServer` at stop on any registered manager, a decorator or a test substitute included. Up to 2.10.x a
+  manager that was not the SDK's `CallSessionManager` got neither, so a decorated host opened no session at all.
+- The persistence token, the reconciliation sweeps and the queue counters' visit signals go to the engine the SDK finds
+  behind the registered manager: the resolved interface when it is a `CallSessionManager`, else a `CallSessionManager`
+  the host registered as itself. The SDK never builds an engine of its own to reach.
+- The stop releases the `default` attachment only when its start installed it. An attachment of the DI server under
+  `default` that the host made before the start, or one present when the start's attach threw or never ran, survives
+  the stop.
+- `CallSessionManager.DisposeAsync` returns at once on a second call.
+
+**Who is affected.** A host that attaches nothing by hand and registers no manager of its own sees no difference.
+Nothing reports a compiler error. For other hosts:
+
+- A manager whose `AttachToServer` throws now fails the host's start.
+- A decorated host that also attaches the DI server by hand under another id now gets two sessions and two saves per
+  call.
+- A hand attach of another server under `default` now throws `InvalidOperationException` at start.
+- A host whose token reaches no engine logs one Warning at start (EventId 1 in the
+  `Verbara.Sdk.Hosting.SessionPersistenceTokenService` category, naming the manager's type): its wrapper builds its
+  engine with `new` or `ActivatorUtilities`, or wraps no engine.
+- Behind a decorator over a registered engine, the sweep now sends `Status` and ends calls, and the queue counters count
+  key exits, timeouts and the end of the wait: `CallsAbandoned` drops by the key exits and `CallsTimedOut` rises from 0.
+- A host that registers a `CallSessionManager` as itself beside a manager of its own that does not wrap it hands the
+  token and the sweep to that idle instance.
+- On an undecorated host, a `default` attachment of the DI server made before the start now survives the stop: new
+  channels keep opening sessions until the host detaches it. A `default` attachment made after the start still belongs
+  to the SDK, and the stop still releases it.
+- A decorator that does not forward `AttachToServer` to the engine it wraps within the call is treated as a manager of
+  the host's own: it is attached at start and detached at stop, so a `default` attached through it before the start is
+  released at the stop.
+
+**What to do.** Register the engine as `CallSessionManager` and your wrapper as `ICallSessionManager` over that
+registered instance, as the Sessions README's recipe shows, and forward `AttachToServer` within the call. A decorated
+host that attached the DI server by hand under another id removes that attach: the SDK's start now makes it. Do not
+register an engine you never attach. Attach again after the stop if you need an attachment made after the start. The CHANGELOG entries for the decorated
+session manager and for the single-server stop list every case.
 
 ## Events now raised
 
 ### `CallRingNoAnswerEvent` is raised, and `IAgentSessionTracker` lists members that only missed calls
 
-#### Who is affected
-
-Applications that subscribe to `ICallSessionManager.Events` and handle `CallRingNoAnswerEvent`,
-and applications that list `IAgentSessionTracker.ActiveAgents`. Nothing fails to compile and nothing throws.
-
-#### What changes
-
-Before 2.11.0 the event was declared and never raised, so a handler of it never ran and
+**What changed.** Before 2.11.0 the event was declared and never raised, so a handler of it never ran and
 `AgentSession.CallsMissed` was always 0. From 2.11.0 the event is raised once for each `AgentRingNoAnswer` Asterisk
 reports. That is, a queue member rang out unanswered or answered busy. Because app_queue names no agent for an ordinary
 member, `AgentId` is the member's interface (`PJSIP/agent1`). So `ActiveAgents` can now hold a session keyed by an
 interface. That session has `CallsMissed` > 0 and `CallsHandled` = 0, because connected calls are still counted only
 for an agent known by name.
 
-#### What to do
+**Who is affected.** Applications that subscribe to `ICallSessionManager.Events` and handle `CallRingNoAnswerEvent`,
+and applications that list `IAgentSessionTracker.ActiveAgents`. Nothing fails to compile and nothing throws.
+
+**What to do.**
 
 - A real-time or interval counter of missed offers needs no change. It starts counting.
 - An application that treats every `ActiveAgents` entry as a logged-in agent known by name should filter the entries.
@@ -925,13 +957,7 @@ for an agent known by name.
 
 ### The cluster lock row says since when its owner holds it
 
-#### Who is affected
-
-You are affected if you use `Verbara.Sdk.Cluster.Postgres`: you call `MigrationRunner.EnsureSchemaAsync`, or tools of
-your own read `cluster_distributed_lock`. Code that only calls `IDistributedLock` keeps working as it is. Its signatures
-and results do not change.
-
-#### What changes
+**What changed.**
 
 - `EnsureSchemaAsync` runs two migrations, V001 and then V002, in one transaction. Concurrent runs against the same
   database wait for each other behind a transaction-scoped advisory lock. V002 adds `acquired_at TIMESTAMPTZ` (nullable,
@@ -943,7 +969,11 @@ and results do not change.
   - Rows that existed before the upgrade read `NULL`, which means unknown, and they stay `NULL` until the lock
     expires and is taken again.
 
-#### What to do
+**Who is affected.** Code that uses `Verbara.Sdk.Cluster.Postgres`: you call `MigrationRunner.EnsureSchemaAsync`, or
+tools of your own read `cluster_distributed_lock`. Code that only calls `IDistributedLock` keeps working as it is. Its
+signatures and results do not change.
+
+**What to do.**
 
 - **Nothing changes in what `EnsureSchemaAsync` needs.** It must run as the role that owns the table, as on 2.10.x,
   where V001's `COMMENT ON TABLE` already required it. The first start after the upgrade adds the column. Every start
@@ -970,3 +1000,18 @@ and results do not change.
   all but one of them could fail that start with `23505` on `pg_type_typname_nsp_index`. Hosts still on 2.10.x are not
   covered by the new advisory lock, so an old host and a new host can still collide on a fresh database during a mixed
   rollout. The host that loses succeeds on its next start.
+
+## Span tags
+
+### The `live.server` span tag is obsolete
+
+**What changed.** `live.server` on the `live channel-reconcile` and `live state-load` spans holds the Asterisk version,
+not a server identity. It keeps that value through 2.11.x, and 2.12.0 removes the tag. 2.11.0 adds `server.id`, the
+pool id, on `live channel-reconcile`, `live state-load` and `live originate` when the server is in a
+`VerbaraServerPool`; a standalone server's spans carry none.
+
+**Who is affected.** A dashboard, query or alert that reads `live.server`. Nothing reports a compiler error and no
+public symbol changes.
+
+**What to do.** Read `server.id` to tell pooled servers apart before 2.12.0, and read `VerbaraServer.AsteriskVersion`
+if you used `live.server` for the Asterisk version.

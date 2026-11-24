@@ -60,7 +60,7 @@ keeps its name, and the channel `Channels.RecordAsync` is not renamed.
 
 Only a call site that names `format:` on either member is affected: it reports `CS1739` until the argument is
 renamed. Each argument keeps its position, type and default, the request is the same byte for byte, and a binary built
-against 2.10.x keeps running. The [2.11.0 migration guide](docs/guides/migration-2.11.0.md) has the before and after.
+against 2.10.x keeps running. The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#the-bridge-format-arguments-are-named-for-what-they-format) has the before and after.
 
 ### Fixed: a queue member's missed ring raises `CallRingNoAnswerEvent`, and `AgentSession.CallsMissed` counts it (#646)
 
@@ -261,7 +261,8 @@ a `VerbaraServerPool` (read when the span starts); a standalone server's spans c
 `live.server` on `live channel-reconcile` and `live state-load` holds the Asterisk version, not a server identity. It
 keeps that value through 2.11.x; a dashboard that wants the server should read `server.id` before 2.12.0, which
 removes the tag. `VerbaraSemanticConventions.Resource.ServerName`'s documentation no longer cites a
-`VerbaraServer.Name` that does not exist: the SDK does not set that Resource attribute.
+`VerbaraServer.Name` that does not exist: the SDK does not set that Resource attribute. See the
+[2.11.0 migration guide](docs/guides/migration-2.11.0.md#the-liveserver-span-tag-is-obsolete).
 
 ### Fixed: a covered lost event could read pending again and cost one extra `Status` (#630)
 
@@ -420,7 +421,7 @@ left the call that raised it:
 Code that ended a session by throwing from a subscriber has to end it another way. Cancel the token passed to
 `HandleSessionAsync`, or let the conversation handler return. Read the counter, or the Warning where the publisher logs.
 Why: one subscriber's bug should not silence the others, nor end a call or an activity that did nothing wrong. See the
-[troubleshooting guide](docs/guides/troubleshooting.md#missing-events), items 13 and 14.
+[troubleshooting guide](docs/guides/troubleshooting.md#missing-events), items 14 and 15.
 
 The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#an-activity-voice-pipeline-or-realtime-bridge-subscriber-that-throws-stops-nothing-else) has who is affected and what to write.
 
@@ -657,7 +658,7 @@ reads and removes no index entry. Every script names one key, so none is refused
 `SaveBatchAsync` of 100 live sessions ×1.22 the time of 2.10.x (allocation 258 → 292 KB), a single `SaveAsync`
 ×1.05, `GetByLinkedIdAsync` ×1.01; ending or deleting a session runs one script per session (a batch of ended
 sessions was not timed). During a rolling upgrade a 2.10.x node does not find by `linkedid` a session a 2.11.0 node
-created. The [2.11.0 migration guide](docs/guides/migration-2.11.0.md) has who is affected and what to write.
+created. The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#a-session-stores-linkedid-lookup-with-several-servers) has who is affected and what to write.
 
 ### Added: a session store lookup by `linkedid` that names the server (#642)
 
@@ -724,6 +725,8 @@ To roll back, revert the package. A decorated single-server host then opens no s
 hand, its saves again run under a token that cannot be cancelled, and its queue counters again count key exits as
 abandoned and no timeouts.
 
+The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#a-host-that-attaches-the-server-by-hand-or-decorates-the-session-manager) has who is affected and what to do.
+
 ### Fixed: the single-server stop detaches only the attachment its own start installed (#629)
 
 `AddVerbaraSessions` and `AddVerbaraSessionsBuilder` attach the DI server under `default` at start, and called
@@ -766,6 +769,8 @@ public API changes.
 
 To roll back, revert the package. An undecorated host that attached `default` by hand before the start then loses that
 attachment at the SDK's stop again.
+
+The [2.11.0 migration guide](docs/guides/migration-2.11.0.md#a-host-that-attaches-the-server-by-hand-or-decorates-the-session-manager) has who is affected and what to do.
 
 ### Fixed: a multi-server sessions host ends its session saves with the stop phase (#623)
 
