@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Verbara.Sdk.Sessions.Extensions;
 
 /// <summary>
@@ -53,6 +56,44 @@ public abstract class SessionStoreBase : ISessionStore
     {
         // A durable store keeps its own retention: nothing to do.
     }
+
+    /// <summary>
+    /// How often the sessions host runs <see cref="MaintainAsync"/> on this store, or <see langword="null"/> when the
+    /// store needs no maintenance (the default, and the value of an SDK store whose option for it is unset). Read once,
+    /// when the host starts.
+    /// <para>
+    /// Internal, as <see cref="OnReleasedByManager"/>: no store outside this SDK sees it, and a store that wraps an SDK
+    /// store is therefore never maintained.
+    /// </para>
+    /// </summary>
+    internal virtual TimeSpan? MaintenanceInterval => null;
+
+    /// <summary>
+    /// Where a maintenance run reports what it removed. Set by the sessions host before
+    /// <see cref="ArmMaintenance"/>; nothing is logged until then.
+    /// </summary>
+    internal ILogger MaintenanceLogger { get; set; } = NullLogger.Instance;
+
+    /// <summary>
+    /// Called by the sessions host, synchronously and before any hosted service starts, when
+    /// <see cref="MaintenanceInterval"/> is not <see langword="null"/>: from then on the store may give the records it
+    /// writes a deadline, because something will refresh them. A store nobody arms writes what it writes today. Does no
+    /// I/O.
+    /// </summary>
+    internal virtual void ArmMaintenance()
+    {
+        // No maintenance by default.
+    }
+
+    /// <summary>
+    /// One maintenance run: <paramref name="heldActive"/> is what the session manager holds at that moment. A store
+    /// keeps those records alive and may remove the records of a process that stopped keeping its own. Runs
+    /// never overlap. Does nothing by default.
+    /// </summary>
+    /// <param name="heldActive">The sessions the manager holds; ended ones among them are left alone.</param>
+    /// <param name="ct">Cancelled when the host stops.</param>
+    internal virtual ValueTask MaintainAsync(IReadOnlyList<CallSession> heldActive, CancellationToken ct) =>
+        ValueTask.CompletedTask;
 
     /// <inheritdoc />
     public virtual async ValueTask SaveBatchAsync(IReadOnlyList<CallSession> sessions, CancellationToken ct)
