@@ -89,7 +89,7 @@ public sealed class SessionInstanceIdentityReconnectTests
         var second = new BootingAsterisk { BootedAtLogin = true, SystemName = "" };
 
         IdentityReading? nextStarted = null;
-        var (started, recorder) = await AcrossAReconnectAsync(first, second, route, async (seen, startedFirst) =>
+        var (started, _) = await AcrossAReconnectAsync(first, second, route, async (seen, startedFirst) =>
         {
             await second.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Next, NextChannel, Next));
             nextStarted = await seen.WaitAsync<CallStartedEvent>(e => e.SessionId != startedFirst.SessionId);
@@ -120,12 +120,17 @@ public sealed class SessionInstanceIdentityReconnectTests
 
         first.CloseSession();
         run.ReleaseSecondPeer();
+        // Reconnected is delivered only while the session it reports is current, and that session's login recorded its
+        // read before its ordinal advanced, so the second login's read is recorded once it completes. The delivered loss
+        // mark is not that signal: it names the session of the last event whose dispatch started, and no event of the
+        // second session need have been dispatched yet.
         await run.Reconnected.WaitAsync(Run.Bound);
+        var sessionNow = run.Server.ReadEventLossEpoch().AmiSession;
 
         using (new AssertionScope())
         {
             beforeTheLoss.Should().Be("pbx-one", "premise: the first login read pbx-one");
-            run.Server.ReadSessionLossMark()?.Session.Should().Be(2, "premise: the connection is now in its second session");
+            sessionNow.Should().Be(2, "premise: the connection is now in its second session");
             run.Server.ReadSystemName(new SessionLossMark(connection.Value, 1, 0)).Should().Be("pbx-one",
                 "a mark of the lost session answers that session's read, never the connection's current one");
             run.Server.ReadSystemName(new SessionLossMark(connection.Value, 2, 0)).Should().Be("pbx-two",
@@ -171,7 +176,7 @@ public sealed class SessionInstanceIdentityReconnectTests
             peers.Select(p => p.Asked("CoreSettings")).Should().AllBeEquivalentTo(1,
                 "premise: each of the ten logins read its own peer's CoreSettings once");
             answeredAfterTheirNextLogin.Should().Equal(
-                Enumerable.Range(1, Logins - 1).Select(i => ((long)i, (string?)$"pbx-{i:D2}")),
+                Enumerable.Range(1, Logins - 1).Select<int, (long, string?)>(i => (i, $"pbx-{i:D2}")),
                 "each session still answers its own login's read once the next session has logged in");
             Enumerable.Range(Logins - 7, 8).Select(i => NameOf(i)).Should().Equal(
                 Enumerable.Range(Logins - 7, 8).Select(i => $"pbx-{i:D2}"),
