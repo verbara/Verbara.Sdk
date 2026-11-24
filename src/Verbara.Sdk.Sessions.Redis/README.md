@@ -38,12 +38,12 @@ services.AddVerbaraSessionsBuilder()
   with `ActiveRecordTtl` set (below), it leaves with the index key's expiry once no process under that `linkedid`
   saves, refreshes or ends a call there (the longer of `ActiveRecordTtl` and `CompletedRetention` after the last of
   them); without the option, it stays, and keeps that `linkedid`'s small hash without an expiry.
-- `ActiveRecordTtl` (off by default, at least 30 s; 5 minutes is a reasonable value): under the SDK's sessions host, a
-  live session's key and its index key are written with an expiry that the host refreshes every third of the value
-  for the calls this process holds, so the record of a call whose process died or restarted expires on its own, and
-  the host's cleanup removes its active-set member. Without the host the option does nothing. Set the same value on
-  every process that shares the store, in the same deploy. Unset, the store sends exactly the commands it sent before
-  the option existed. See the session store guide for the limits.
+- `ActiveRecordTtl` (off by default, from 30 s to 24 h; 5 minutes is a reasonable value): under the SDK's sessions
+  host, a live session's key and its index key are written with an expiry that the host refreshes every third of the
+  value for the calls this process holds, so the record of a call whose process died or restarted expires on its own,
+  and the host's cleanup removes its active-set member. Without the host the option does nothing. Set the same value
+  on every process that shares the store, in the same deploy. Unset, the store sends exactly the commands it sent
+  before the option existed. See the session store guide for the limits.
 - Requirements: Redis 5.0 or later, and a connection whose user may run scripts — `EVALSHA`/`EVAL` and `SCRIPT LOAD`
   (ACL category `@scripting`) plus the commands the scripts call (`TIME`, `HSET`, `HGET`, `HDEL`, `HGETALL`,
   `PERSIST`, `PEXPIREAT`, `GET`, `DEL`, `PEXPIRE`). A deployment or proxy that refuses scripting is not supported:

@@ -111,11 +111,19 @@ public static class RedisSessionsBuilderExtensions
     /// <summary>The shortest <see cref="RedisSessionStoreOptions.ActiveRecordTtl"/> the store accepts.</summary>
     internal static readonly TimeSpan MinimumActiveRecordTtl = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// The longest <see cref="RedisSessionStoreOptions.ActiveRecordTtl"/> the store accepts: a day. The value bounds only
+    /// how long a gone process's records stay active (a held call is refreshed whatever its length), so a longer one
+    /// buys nothing a call needs.
+    /// </summary>
+    internal static readonly TimeSpan MaximumActiveRecordTtl = TimeSpan.FromHours(24);
+
     private static void AddValidation(IServiceCollection services) =>
         services.AddOptions<RedisSessionStoreOptions>()
             .Validate(
-                static o => o.ActiveRecordTtl is null || o.ActiveRecordTtl.Value >= MinimumActiveRecordTtl,
-                "RedisSessionStoreOptions.ActiveRecordTtl must be null or at least 30 seconds.");
+                static o => o.ActiveRecordTtl is null
+                    || (o.ActiveRecordTtl.Value >= MinimumActiveRecordTtl && o.ActiveRecordTtl.Value <= MaximumActiveRecordTtl),
+                "RedisSessionStoreOptions.ActiveRecordTtl must be null or between 30 seconds and 24 hours.");
 
     private static void RegisterStore(IServiceCollection services)
     {
