@@ -146,6 +146,65 @@ CREATE INDEX IF NOT EXISTS ix_asterisk_sessions_active    ON asterisk_call_sessi
 
 ---
 
+## Records of a process that is gone (`ActiveRecordTtl`)
+
+By default a session store keeps an active session's record until the session manager saves it ended or deletes it.
+When the process that held the call dies or restarts, nothing does either: the record stays active, `GetActiveAsync`
+keeps listing it, and in Redis its `linkedid` index entry keeps that small hash without an expiry. The Redis store's
+`ActiveRecordTtl` (off by default) makes an active record last only while a live process vouches for it. The Postgres
+store has no such option yet; support for it is planned.
+
+<!-- skip-doc-snippet -->
+```csharp
+builder.Services.AddVerbaraSessionsBuilder()
+    .UseRedis(redis, opts => opts.ActiveRecordTtl = TimeSpan.FromMinutes(5));
+```
+
+**How it works.** Every sessions registration (`AddVerbaraSessions`, `AddVerbaraSessionsBuilder` and the
+multi-server ones) adds one internal hosted service. When the option is set, it arms the store before any hosted
+service starts and, every third of `ActiveRecordTtl`, hands the store the calls the session manager holds, from one
+server or many. A record that this refresh keeps alive stays active however quiet the call; a record nobody refreshes
+for `ActiveRecordTtl` stops being active:
+
+- A live record and its `linkedid` index key are written with an expiry (in the record's `SET`, and on the index key
+  in place of `PERSIST`), which the refresh renews with two `EXPIRE` or `PEXPIRE` per held call.
+- A record nobody renews expires `ActiveRecordTtl` after its last save or refresh, and from then on neither lookup
+  returns it; it leaves no ended record behind.
+- On the first run and every third, the active set is cleaned of members whose record expired, and live records
+  written without an expiry (before the option was set) get one.
+- A held call whose record had expired anyway is written again, whole.
+
+**Requirements.**
+
+- The SDK's sessions host. A store built and used without it is never armed, and expires nothing whatever the option
+  says.
+- The same value on every process that shares the store, in the same deploy. A process without it does not refresh
+  its records: a quiet call of that process can lose its record until its next save. A process without it that ends a
+  call whose `linkedid` hash still holds a dead process's live field clears that key's expiry, so the key then never
+  expires.
+- At least 30 seconds (resolving the store fails below that). Five minutes is a reasonable value: after a crash or a
+  restart the previous process's records stay active for up to that long, beside the new process's own.
+- Nothing beyond the store's usual requirements; ending and deleting use a second script, with the same commands.
+
+**What an operator sees.** A dead process's field in a `linkedid` index hash (`idx:linked-by-server:*`) is not
+removed on its own: the hash's expiry is on the whole key, and any process holding a call under that `linkedid`
+renews it. The key leaves no later than the longer of `ActiveRecordTtl` and `CompletedRetention` after the last save,
+refresh or ending by any process under that `linkedid`, and never lacks an expiry while a live field is in it. So these
+keys and fields can outnumber live sessions: with a five-minute `ActiveRecordTtl` and the default ten-minute
+`CompletedRetention`, an index key outlives a dead record by five minutes, or for as long as another server keeps a call
+under that `linkedid`. This is bounded, not a leak. Both lookups skip a field whose record is gone (each one costs the
+lookup one extra `GET`), a new call of that server overwrites it, and the cleanup's log line counts active-set members
+only, so it does not report these fields.
+
+**Limits.** Reclaiming is bounded by the value, not immediate: the SDK does not claim a server's records when a new
+process attaches it, because that would end the records of an old process still running during an overlapping
+deploy. A refresh that races the same call's ending by microseconds can leave that ended record with
+`ActiveRecordTtl` instead of `CompletedRetention`; index hashes orphaned before the option was set, whose session is
+already gone and no longer listed, are never removed. A store of your own, or one that wraps an SDK store, is not
+maintained. On Redis Cluster this is argued from the code, not run.
+
+---
+
 ## Switching backends
 
 `UseRedis` / `UsePostgres` use `IServiceCollection.Replace(...)` so the call always overrides the `InMemorySessionStore` registered by `AddVerbaraSessions` / `AddVerbaraSessionsBuilder`. Order of registration in `Program.cs` doesn't matter; the last `Use*` wins:
