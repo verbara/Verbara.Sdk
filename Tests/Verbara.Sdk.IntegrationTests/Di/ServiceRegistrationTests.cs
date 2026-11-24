@@ -148,9 +148,13 @@ public class ServiceRegistrationTests
         var hostedServices = provider.GetServices<IHostedService>().Select(s => s.GetType().Name).ToList();
 
         hostedServices.Should().BeEquivalentTo(
-            ["HealthCheckPublisherHostedService", "SessionPersistenceTokenService", "PoolReconciliationService"],
-            "the multi-server registration adds the owner of the persistence token and the pool's reconciliation sweep, "
-            + "and no service that attaches a server: the host attaches each server of the pool itself");
+            [
+                "HealthCheckPublisherHostedService", "SessionPersistenceTokenService", "SessionStoreMaintenanceService",
+                "PoolReconciliationService",
+            ],
+            "the multi-server registration adds the owner of the persistence token, the store's maintenance (asleep "
+            + "unless the store asks for it) and the pool's reconciliation sweep, and no service that attaches a "
+            + "server: the host attaches each server of the pool itself");
     }
 
     [Fact]
