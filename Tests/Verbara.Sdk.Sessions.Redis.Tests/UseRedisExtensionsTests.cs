@@ -4,6 +4,7 @@ using Verbara.Sdk.Sessions;
 using Verbara.Sdk.Sessions.Extensions;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Verbara.Sdk.Sessions.Redis.Tests;
@@ -96,5 +97,34 @@ public sealed class UseRedisExtensionsTests : IAsyncLifetime
         var loaded = await store.GetAsync("connstr-1", CancellationToken.None);
         loaded.Should().NotBeNull();
         loaded!.SessionId.Should().Be("connstr-1");
+    }
+
+    [Theory]
+    [InlineData(29)]
+    [InlineData(0)]
+    public void UseRedis_ShouldFailToResolveTheStore_WhenActiveRecordTtlIsUnderThirtySeconds(int seconds)
+    {
+        var services = new ServiceCollection();
+        services.AddVerbaraSessionsBuilder()
+            .UseRedis(_fixture.Redis, opts => opts.ActiveRecordTtl = TimeSpan.FromSeconds(seconds));
+        using var provider = services.BuildServiceProvider();
+
+        var resolve = () => provider.GetRequiredService<SessionStoreBase>();
+
+        resolve.Should().Throw<OptionsValidationException>().WithMessage("*ActiveRecordTtl*30 seconds*");
+    }
+
+    [Fact]
+    public void UseRedis_ShouldResolveTheStore_WhenActiveRecordTtlIsThirtySecondsOrUnset()
+    {
+        foreach (var ttl in new TimeSpan?[] { null, TimeSpan.FromSeconds(30) })
+        {
+            var services = new ServiceCollection();
+            services.AddVerbaraSessionsBuilder()
+                .UseRedis(_fixture.ConnectionString, opts => opts.ActiveRecordTtl = ttl);
+            using var provider = services.BuildServiceProvider();
+
+            provider.GetRequiredService<SessionStoreBase>().Should().BeOfType<RedisSessionStore>();
+        }
     }
 }
