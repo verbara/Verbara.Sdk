@@ -36,6 +36,8 @@ public static class RedisSessionsBuilderExtensions
             builder.Services.Configure(configure);
         }
 
+        AddValidation(builder.Services);
+
         builder.Services.TryAddSingleton<IConnectionMultiplexer>(sp =>
         {
             var opts = sp.GetRequiredService<IOptions<RedisSessionStoreOptions>>().Value;
@@ -75,6 +77,8 @@ public static class RedisSessionsBuilderExtensions
             builder.Services.Configure(configure);
         }
 
+        AddValidation(builder.Services);
+
         builder.Services.TryAddSingleton(redis);
         RegisterStore(builder.Services);
         return builder;
@@ -103,6 +107,15 @@ public static class RedisSessionsBuilderExtensions
             configure?.Invoke(opts);
         });
     }
+
+    /// <summary>The shortest <see cref="RedisSessionStoreOptions.ActiveRecordTtl"/> the store accepts.</summary>
+    internal static readonly TimeSpan MinimumActiveRecordTtl = TimeSpan.FromSeconds(30);
+
+    private static void AddValidation(IServiceCollection services) =>
+        services.AddOptions<RedisSessionStoreOptions>()
+            .Validate(
+                static o => o.ActiveRecordTtl is null || o.ActiveRecordTtl.Value >= MinimumActiveRecordTtl,
+                "RedisSessionStoreOptions.ActiveRecordTtl must be null or at least 30 seconds.");
 
     private static void RegisterStore(IServiceCollection services)
     {
