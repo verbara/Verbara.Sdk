@@ -30,6 +30,7 @@ public sealed class SessionStoreMaintenanceServiceTests
     private sealed class MaintainedStore : SessionStoreBase
     {
         private readonly Channel<IReadOnlyList<CallSession>> _runs = Channel.CreateUnbounded<IReadOnlyList<CallSession>>();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<long> _startedAt = new();
         private int _inFlight;
 
         public MaintainedStore(TimeSpan? interval) => Interval = interval;
@@ -47,6 +48,13 @@ public sealed class SessionStoreMaintenanceServiceTests
 
         public ChannelReader<IReadOnlyList<CallSession>> Runs => _runs.Reader;
 
+        /// <summary>The system time from the start of run <paramref name="first"/> to the start of run <paramref name="second"/>.</summary>
+        public TimeSpan SystemTimeBetweenRuns(int first, int second)
+        {
+            var startedAt = _startedAt.ToArray();
+            return System.Diagnostics.Stopwatch.GetElapsedTime(startedAt[first - 1], startedAt[second - 1]);
+        }
+
         internal override TimeSpan? MaintenanceInterval => Interval;
 
         internal override void ArmMaintenance() => ArmCount++;
@@ -56,6 +64,8 @@ public sealed class SessionStoreMaintenanceServiceTests
             var concurrent = Interlocked.Increment(ref _inFlight);
             MaxConcurrentRuns = Math.Max(MaxConcurrentRuns, concurrent);
             var run = ++RunCount;
+            // Read before the run is published, so a test that saw the run reads its start.
+            _startedAt.Enqueue(System.Diagnostics.Stopwatch.GetTimestamp());
             try
             {
                 _runs.Writer.TryWrite(heldActive);
@@ -332,6 +342,9 @@ public sealed class SessionStoreMaintenanceServiceTests
         warnings.Warnings.Should().Be(0);
     }
 
+    /// <summary>How early a system timer may fire against <see cref="System.Diagnostics.Stopwatch"/> (millisecond ticks).</summary>
+    private static readonly TimeSpan SystemTimerSlack = TimeSpan.FromMilliseconds(25);
+
     /// <summary>A clock whose first timer cannot be made; every later one is the manual clock's.</summary>
     private sealed class FirstTimerFails(FakeTimeProvider inner) : TimeProvider
     {
@@ -352,8 +365,10 @@ public sealed class SessionStoreMaintenanceServiceTests
     [Fact]
     public async Task AWaitThatThrows_ShouldBeLogged_AndTheNextRunShouldGoOut()
     {
-        // Short, because the wait that replaces the failed one is on the system clock.
-        var store = new MaintainedStore(TimeSpan.FromMilliseconds(50));
+        // The wait that replaces the failed one is on the system clock: short, and long enough that a run that went
+        // out at once reads apart from one that waited it out.
+        var interval = TimeSpan.FromMilliseconds(250);
+        var store = new MaintainedStore(interval);
         var fake = new FakeTimeProvider();
         var warnings = new WarningCounter();
         using var factory = LoggerFactory.Create(b => b.AddProvider(warnings));
@@ -363,6 +378,8 @@ public sealed class SessionStoreMaintenanceServiceTests
         await sut.StartingAsync(CancellationToken.None);
         await NextRunAsync(store);
         await NextRunAsync(store);
+        // The injected clock never moves in this test, so only the system clock can space run 2 from run 1.
+        var between = store.SystemTimeBetweenRuns(1, 2);
         // The loop goes on on the injected clock after the failed wait.
         await fake.TimersCreated.ReadAsync().AsTask().WaitAsync(Bound);
         var stop = () => sut.StopAsync(CancellationToken.None);
@@ -370,5 +387,8 @@ public sealed class SessionStoreMaintenanceServiceTests
         await stop.Should().NotThrowAsync();
         store.RunCount.Should().Be(2);
         warnings.WarningIds.Should().Equal([2], "the failed wait is logged once, as EventId 2");
+        between.Should().BeGreaterThanOrEqualTo(
+            interval - SystemTimerSlack, "the next run waits out the interval on the system clock when the injected one fails");
+        fake.GetUtcNow().Should().Be(new FakeTimeProvider().GetUtcNow(), "the injected clock never moved");
     }
 }
