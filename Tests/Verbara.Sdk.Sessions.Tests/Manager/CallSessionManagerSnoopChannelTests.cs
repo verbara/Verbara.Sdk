@@ -261,7 +261,7 @@ public sealed class CallSessionManagerSnoopChannelTests : IAsyncLifetime
         _sut.ActiveSessions.Count(),
         meters.ReadActiveGauge(),
         _events.OfType<CallStartedEvent>().Count(),
-        _events.OfType<CallEndedEvent>().Count(),
+        Endings(),
         meters.Get("sessions.created"),
         meters.Get("sessions.completed"),
         meters.Get("sessions.failed"));
@@ -296,12 +296,25 @@ public sealed class CallSessionManagerSnoopChannelTests : IAsyncLifetime
     {
         State = call.State.ToString(),
         Cause = call.HangupCause?.ToString() ?? "none",
-        Notifications = _events
-            .OfType<CallEndedEvent>()
+        Notifications = EndingEvents()
             .Where(e => e.SessionId == call.SessionId)
             .Select(ended => $"ended cause={ended.Cause?.ToString() ?? "none"}")
             .ToArray(),
     };
+
+    private int Endings() => EndingEvents().Length;
+
+    /// <summary>
+    /// The endings published so far. Every ending is a <see cref="CallEndedEvent"/>, a failed one included, so a
+    /// CallFailedEvent published beside it fails the reading rather than slipping past it.
+    /// </summary>
+    private CallEndedEvent[] EndingEvents()
+    {
+#pragma warning disable VSDK0009 // Named on purpose: the SDK must never publish it.
+        _events.OfType<CallFailedEvent>().Should().BeEmpty("every ending, a failed one included, is a CallEndedEvent");
+#pragma warning restore VSDK0009
+        return [.. _events.OfType<CallEndedEvent>()];
+    }
 
     private static string[] Legs(CallSession call) => call.Participants.Select(p => p.UniqueId).ToArray();
 

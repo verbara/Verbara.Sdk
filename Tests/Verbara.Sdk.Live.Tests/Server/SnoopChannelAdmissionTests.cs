@@ -121,7 +121,7 @@ public sealed class SnoopChannelAdmissionTests
         rig.Manager.ActiveSessions.Should().BeEmpty();
         rig.Hangup("S1");
         rig.Ends(call).Should().Be(1);
-        rig.Events.OfType<CallEndedEvent>().Count().Should().Be(1);
+        Endings(rig).Should().Be(1);
         rig.AssertIndexes();
     }
 
@@ -349,7 +349,17 @@ public sealed class SnoopChannelAdmissionTests
         return rig;
     }
 
-    private static int Endings(AdmissionRig rig) => rig.Events.OfType<CallEndedEvent>().Count();
+    /// <summary>
+    /// The endings raised so far. Every ending is a <see cref="CallEndedEvent"/>, a failed one included, so a
+    /// CallFailedEvent raised beside it fails the count rather than slipping past it.
+    /// </summary>
+    private static int Endings(AdmissionRig rig)
+    {
+#pragma warning disable VSDK0009 // Named on purpose: the SDK must never raise it.
+        rig.Events.OfType<CallFailedEvent>().Should().BeEmpty("every ending, a failed one included, is a CallEndedEvent");
+#pragma warning restore VSDK0009
+        return rig.Events.OfType<CallEndedEvent>().Count();
+    }
 
     private static string TechnologyOf(string channel) => channel[..channel.IndexOf('/', StringComparison.Ordinal)];
 
