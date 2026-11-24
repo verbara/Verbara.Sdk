@@ -137,6 +137,74 @@ public sealed class SessionInstanceIdentityReconnectTests
         }
     }
 
+    /// <summary>
+    /// The lookup across more logins than the connection keeps: each of the most recent sessions still answers its own
+    /// login's read after later logins, the previous session's included, and a session older than those answers none.
+    /// </summary>
+    [Fact]
+    public async Task ReadSystemName_ShouldKeepTheMostRecentSessionsNames_WhenTheConnectionLogsInMoreTimesThanItKeeps()
+    {
+        const int Logins = 10;
+        var peers = Enumerable.Range(1, Logins)
+            .Select(i => new BootingAsterisk { BootedAtLogin = true, SystemName = $"pbx-{i:D2}" })
+            .ToArray();
+        await using var run = await Run.ConnectAsync(peers[0], peers[1], laterPeers: peers[2..]);
+        var connection = run.Server.ConnectionIdentity!.Value;
+        string? NameOf(long session) => run.Server.ReadSystemName(new SessionLossMark(connection, session, 0));
+
+        var answeredAfterTheirNextLogin = new List<(long Session, string? Name)>();
+        for (var i = 1; i < Logins; i++)
+        {
+            var lost = new SessionLostSignal();
+            run.Connection.StateChanged += lost.OnStateChanged;
+            peers[i - 1].CloseSession();
+            await lost.Left.WaitAsync(Run.Bound);
+            run.Connection.StateChanged -= lost.OnStateChanged;
+            if (i == 1)
+                run.ReleaseSecondPeer();
+            await run.Connection.ConnectAsync().AsTask().WaitAsync(Run.Bound);
+            answeredAfterTheirNextLogin.Add((i, NameOf(i)));
+        }
+
+        using (new AssertionScope())
+        {
+            peers.Select(p => p.Asked("CoreSettings")).Should().AllBeEquivalentTo(1,
+                "premise: each of the ten logins read its own peer's CoreSettings once");
+            answeredAfterTheirNextLogin.Should().Equal(
+                Enumerable.Range(1, Logins - 1).Select(i => ((long)i, (string?)$"pbx-{i:D2}")),
+                "each session still answers its own login's read once the next session has logged in");
+            Enumerable.Range(Logins - 7, 8).Select(i => NameOf(i)).Should().Equal(
+                Enumerable.Range(Logins - 7, 8).Select(i => $"pbx-{i:D2}"),
+                "the eight most recent sessions each answer their own login's read, never a neighbour's");
+            new[] { NameOf(1), NameOf(Logins - 8) }.Should().OnlyContain(n => n == null,
+                "a session older than the ones the connection keeps answers none, never another session's name");
+        }
+    }
+
+    /// <summary>
+    /// What the login's read takes as a name: only the <c>SystemName</c> of a successful <c>CoreSettings</c> response,
+    /// and never one that is white space.
+    /// </summary>
+    [Theory]
+    [InlineData("Success", "pbx-one", "pbx-one")]
+    [InlineData("Error", "pbx-one", null)]
+    [InlineData("Success", "   ", null)]
+    [InlineData("Success", "\t", null)]
+    public async Task ReadSystemName_ShouldTakeOnlyASuccessfulNonBlankName_WhenTheLoginReadsCoreSettings(
+        string responseStatus, string systemName, string? expected)
+    {
+        var peer = new BootingAsterisk { BootedAtLogin = true, SystemName = systemName, CoreSettingsStatus = responseStatus };
+        await using var run = await Run.ConnectAsync(peer);
+        var connection = run.Server.ConnectionIdentity!.Value;
+
+        using (new AssertionScope())
+        {
+            peer.Asked("CoreSettings").Should().Be(1, "premise: the login read CoreSettings once");
+            run.Server.ReadSystemName(new SessionLossMark(connection, 1, 0)).Should().Be(expected,
+                "the login takes the SystemName of a successful CoreSettings response only, and white space names nothing");
+        }
+    }
+
     /// <summary>Ordering test (a): the failed read.</summary>
     [Theory]
     [InlineData(ReconnectRoute.Loop)]

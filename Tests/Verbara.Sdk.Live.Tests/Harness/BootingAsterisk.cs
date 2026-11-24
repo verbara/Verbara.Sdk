@@ -192,6 +192,13 @@ internal sealed class BootingAsterisk
     public bool RefusesCoreSettings { get; init; }
 
     /// <summary>
+    /// The <c>Response</c> status of the peer's <c>CoreSettings</c> response when it does not refuse it: <c>Success</c>,
+    /// the default, as Asterisk answers. Another status writes the same headers, <see cref="SystemName"/> included, so a
+    /// test can show that the connection takes a name only from a successful response.
+    /// </summary>
+    public string CoreSettingsStatus { get; init; } = "Success";
+
+    /// <summary>
     /// Whether the peer never answers the login's <c>CoreSettings</c>, as an Asterisk too busy to reply within the
     /// connection's response timeout: the connect's read times out and falls back to the CLI <c>core show version</c>,
     /// which the peer answers like any other action, and the connect still succeeds. A later <c>CoreSettings</c> is
@@ -605,8 +612,9 @@ internal sealed class BootingAsterisk
     }
 
     /// <summary>
-    /// <c>CoreSettings</c>: refused under <see cref="RefusesCoreSettings"/>; otherwise <c>Response: Success</c> with the
-    /// versions and, when <see cref="SystemName"/> is set, its <c>SystemName</c> header.
+    /// <c>CoreSettings</c>: refused under <see cref="RefusesCoreSettings"/>; otherwise a response of
+    /// <see cref="CoreSettingsStatus"/> with the versions and, when <see cref="SystemName"/> is set, its <c>SystemName</c>
+    /// header.
     /// </summary>
     private async Task AnswerCoreSettingsAsync(PipedSocket socket, string id)
     {
@@ -619,7 +627,7 @@ internal sealed class BootingAsterisk
         List<KeyValuePair<string, string>> fields = [new("AMIversion", "9.0.0"), new("AsteriskVersion", "22.9.0")];
         if (SystemName is { } systemName)
             fields.Add(new("SystemName", systemName));
-        await socket.RespondAsync("Success", id, fields);
+        await socket.RespondAsync(CoreSettingsStatus, id, fields);
     }
 
     private static async Task AnswerBridgeListAsync(PipedSocket socket, string id, IReadOnlyList<ListedBridge> bridges)
