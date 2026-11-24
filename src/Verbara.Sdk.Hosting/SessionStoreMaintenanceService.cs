@@ -22,7 +22,9 @@ namespace Verbara.Sdk.Hosting;
 /// <c>StartAsync</c>, so no save of a call the host attaches can go out unarmed. A caller that drives this service as a
 /// plain <see cref="IHostedService"/> arms it in <see cref="StartAsync"/>. The start does no I/O and never fails on an
 /// unreachable store: the first run goes out on the loop. Runs never overlap. A run that throws logs one Warning
-/// (EventId 1) and the next tick runs as usual. <see cref="StopAsync"/> cancels the loop and waits for it.
+/// (EventId 1) and the next tick runs as usual. An interval longer than <see cref="MaximumWait"/> waits that long
+/// instead, and a wait the clock fails to make logs one Warning (EventId 2) and is made on the system clock, so no
+/// interval and no clock ends the loop. <see cref="StopAsync"/> cancels the loop and waits for it.
 /// </para>
 /// </remarks>
 internal sealed partial class SessionStoreMaintenanceService : IHostedLifecycleService, IDisposable
@@ -32,6 +34,12 @@ internal sealed partial class SessionStoreMaintenanceService : IHostedLifecycleS
     private readonly TimeProvider _time;
     private readonly ILogger<SessionStoreMaintenanceService> _logger;
     private readonly ILogger _storeLogger;
+
+    /// <summary>
+    /// The longest wait <see cref="Task.Delay(TimeSpan, TimeProvider, CancellationToken)"/> accepts (4,294,967,294 ms,
+    /// about 49.7 days): a longer interval waits this long, so its runs go out early, never not at all.
+    /// </summary>
+    internal static readonly TimeSpan MaximumWait = TimeSpan.FromMilliseconds(uint.MaxValue - 1d);
 
     /// <summary>Serializes the start, the stop and the disposal.</summary>
     private readonly Lock _gate = new();
@@ -123,17 +131,36 @@ internal sealed partial class SessionStoreMaintenanceService : IHostedLifecycleS
     /// <summary>One run at once, then one per interval after the previous run returned: runs never overlap.</summary>
     private async Task RunAsync(TimeSpan interval, CancellationToken ct)
     {
+        var wait = interval > MaximumWait ? MaximumWait : interval;
         try
         {
             while (!ct.IsCancellationRequested)
             {
                 await RunOnceAsync(ct).ConfigureAwait(false);
-                await Task.Delay(interval, _time, ct).ConfigureAwait(false);
+                await WaitAsync(wait, ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             // Stopped.
+        }
+    }
+
+    /// <summary>Waits on the host's clock; a wait that clock fails to make is logged and made on the system clock.</summary>
+    private async Task WaitAsync(TimeSpan wait, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(wait, _time, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogWaitFailed(_logger, ex, _store.GetType().Name);
+            await Task.Delay(wait, TimeProvider.System, ct).ConfigureAwait(false);
         }
     }
 
@@ -158,6 +185,10 @@ internal sealed partial class SessionStoreMaintenanceService : IHostedLifecycleS
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning,
         Message = "A maintenance run of the session store {StoreType} failed; the next run goes out on schedule.")]
     private static partial void LogRunFailed(ILogger logger, Exception exception, string storeType);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning,
+        Message = "The wait before the next maintenance run of the session store {StoreType} failed on the host's clock; it is made on the system clock.")]
+    private static partial void LogWaitFailed(ILogger logger, Exception exception, string storeType);
 
     public void Dispose()
     {
