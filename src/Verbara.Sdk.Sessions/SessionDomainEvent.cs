@@ -67,6 +67,14 @@ public sealed record CallResumedEvent(string SessionId, string ServerId, DateTim
 public sealed record CallEndedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     HangupCause? Cause, TimeSpan Duration, TimeSpan? TalkTime) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
+/// <summary>
+/// Never raised by the SDK. Every ending of a call, a failed one included, is raised as <see cref="CallEndedEvent"/>,
+/// whose <see cref="CallEndedEvent.Cause"/> carries the hangup cause.
+/// </summary>
+[Obsolete(
+    "Never raised: every ending of a call, a failed one included, is raised as CallEndedEvent; read CallEndedEvent and its Cause instead. Removed in Verbara.Sdk 2.12.0.",
+    DiagnosticId = "VSDK0009",
+    UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.11.0.md#vsdk0009")]
 public sealed record CallFailedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string Reason) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 

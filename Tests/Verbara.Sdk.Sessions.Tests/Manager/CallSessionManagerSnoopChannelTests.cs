@@ -261,7 +261,7 @@ public sealed class CallSessionManagerSnoopChannelTests : IAsyncLifetime
         _sut.ActiveSessions.Count(),
         meters.ReadActiveGauge(),
         _events.OfType<CallStartedEvent>().Count(),
-        _events.Count(e => e is CallEndedEvent or CallFailedEvent),
+        _events.OfType<CallEndedEvent>().Count(),
         meters.Get("sessions.created"),
         meters.Get("sessions.completed"),
         meters.Get("sessions.failed"));
@@ -297,13 +297,9 @@ public sealed class CallSessionManagerSnoopChannelTests : IAsyncLifetime
         State = call.State.ToString(),
         Cause = call.HangupCause?.ToString() ?? "none",
         Notifications = _events
-            .Where(e => e.SessionId == call.SessionId && e is CallEndedEvent or CallFailedEvent)
-            .Select(e => e switch
-            {
-                CallEndedEvent ended => $"ended cause={ended.Cause?.ToString() ?? "none"}",
-                CallFailedEvent failed => $"failed reason={failed.Reason}",
-                _ => e.GetType().Name,
-            })
+            .OfType<CallEndedEvent>()
+            .Where(e => e.SessionId == call.SessionId)
+            .Select(ended => $"ended cause={ended.Cause?.ToString() ?? "none"}")
             .ToArray(),
     };
 

@@ -417,7 +417,7 @@ public sealed class SnoopChannelSessionTests : FunctionalTestBase, IClassFixture
                 case CallStartedEvent:
                     Interlocked.Increment(ref _started);
                     break;
-                case CallEndedEvent or CallFailedEvent:
+                case CallEndedEvent:
                     Interlocked.Increment(ref _endings);
                     break;
             }

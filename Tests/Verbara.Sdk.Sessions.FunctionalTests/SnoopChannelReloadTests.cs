@@ -133,7 +133,7 @@ public sealed class SnoopChannelReloadTests : IAsyncLifetime
         _sessions.ActiveSessions.Count(),
         meters.ReadActiveGauge(),
         _sessionEvents.OfType<CallStartedEvent>().Count(),
-        _sessionEvents.Count(e => e is CallEndedEvent or CallFailedEvent),
+        _sessionEvents.OfType<CallEndedEvent>().Count(),
         meters.Get("sessions.created"),
         meters.Get("sessions.completed") + meters.Get("sessions.failed"));
 

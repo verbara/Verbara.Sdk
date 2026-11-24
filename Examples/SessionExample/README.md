@@ -23,7 +23,7 @@ dotnet run --project Examples/SessionExample/
 
 - Registering sessions with `AddVerbaraSessions()` alongside `AddVerbara()`
 - Subscribing to `ICallSessionManager.Events` to receive typed domain events
-- Handling `CallStartedEvent`, `CallConnectedEvent`, `CallHeldEvent`, `CallResumedEvent`, `CallEndedEvent`, and `CallFailedEvent`
+- Handling `CallStartedEvent`, `CallConnectedEvent`, `CallHeldEvent`, `CallResumedEvent`, and `CallEndedEvent` (raised for every ending, a failed call included, with its hangup cause)
 - Displaying wait time, talk time, agent ID, and queue name from event data
 - Printing a live summary every 10 seconds: active session count and recently completed count
 
