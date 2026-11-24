@@ -182,8 +182,8 @@ for `ActiveRecordTtl` stops being active:
   its records: a quiet call of that process can lose its record until its next save. A process without it that ends a
   call whose `linkedid` hash still holds a dead process's live field clears that key's expiry, so the key then never
   expires.
-- At least 30 seconds (resolving the store fails below that). Five minutes is a reasonable value: after a crash or a
-  restart the previous process's records stay active for up to that long, beside the new process's own.
+- From 30 seconds to 24 hours (resolving the store through `UseRedis` fails outside that range). Five minutes is a
+  reasonable value: after a crash or a restart the previous process's records stay active for up to that long.
 - Nothing beyond the store's usual requirements; ending and deleting use a second script, with the same commands.
 
 **What an operator sees.** A dead process's field in a `linkedid` index hash (`idx:linked-by-server:*`) is not
