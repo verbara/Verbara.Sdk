@@ -25,6 +25,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Sessions` | [`CallRingNoAnswerEvent` is raised, and `IAgentSessionTracker` lists members that only missed calls](#callringnoanswerevent-is-raised-and-iagentsessiontracker-lists-members-that-only-missed-calls) | fix, new member, behaviour (no compiler error) |
 | `Verbara.Sdk.Cluster.Postgres` | [The cluster lock row says since when its owner holds it](#the-cluster-lock-row-says-since-when-its-owner-holds-it) | new nullable column, migration V002, fix (no compiler error) |
 | `Verbara.Sdk.Live` | [The `live.server` span tag is obsolete](#the-liveserver-span-tag-is-obsolete) | span tag deprecated, new span tag (no compiler error) |
+| `Verbara.Sdk.OpenTelemetry` | [OpenTelemetry 1.21 needs `System.Diagnostics.DiagnosticSource` 11](#opentelemetry-121-needs-systemdiagnosticsdiagnosticsource-11) | dependency floor raised (restore error `NU1605` for a lower pin) |
 
 ## Before you start: move every package at once
 
@@ -1015,3 +1016,27 @@ public symbol changes.
 
 **What to do.** Read `server.id` to tell pooled servers apart before 2.12.0, and read `VerbaraServer.AsteriskVersion`
 if you used `live.server` for the Asterisk version.
+
+## Dependencies
+
+### OpenTelemetry 1.21 needs `System.Diagnostics.DiagnosticSource` 11
+
+**What changed.** `Verbara.Sdk.OpenTelemetry` now requires the five OpenTelemetry packages at 1.21
+(`OpenTelemetry.Exporter.Prometheus.AspNetCore` at `1.21.0-beta.1`). `OpenTelemetry.Api` 1.21.0 requires
+`System.Diagnostics.DiagnosticSource` 11.0.0 or later on `net10.0`, so the application restores that package and ships
+its own `System.Diagnostics.DiagnosticSource.dll` instead of the shared framework's copy.
+
+**Who is affected.** An application that references an OpenTelemetry package below 1.21, or
+`System.Diagnostics.DiagnosticSource` below 11.0.0, directly in its own project or `Directory.Packages.props`. Restore
+fails with:
+
+```
+error NU1605: Warning As Error: Detected package downgrade: System.Diagnostics.DiagnosticSource from 11.0.0 to 10.0.0.
+```
+
+An application that references neither package directly needs no change.
+
+**What to do.** Raise those references to OpenTelemetry 1.21 and `System.Diagnostics.DiagnosticSource` 11.0.0 or
+later, or remove them and let `Verbara.Sdk.OpenTelemetry` bring them. The
+[CHANGELOG](../../CHANGELOG.md) lists the upstream changes an application can see in its own telemetry (Prometheus
+scrape output, configuration binding, the experimental OTLP disk retry).
