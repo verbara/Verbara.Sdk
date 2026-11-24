@@ -40,6 +40,14 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "Microsoft.AspNetCore.*"
         update-types: ["version-update:semver-major"]
+      # The AMI source generator compiles against Microsoft.CodeAnalysis.CSharp, and the
+      # compiler refuses a generator built for a newer compiler than itself (CS9057).
+      # These two must not run ahead of the compiler in the newest .NET 10 SDK band
+      # (10.0.4xx ships 5.9). Raise them by hand when a newer band ships a newer compiler.
+      - dependency-name: "Microsoft.CodeAnalysis.CSharp"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "Microsoft.CodeAnalysis.Analyzers"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     groups:
       # Group Microsoft.Extensions.*/runtime bumps into a single PR — minor +
       # patch only, so a major stays an individual review event (ADR-0039 D2,
