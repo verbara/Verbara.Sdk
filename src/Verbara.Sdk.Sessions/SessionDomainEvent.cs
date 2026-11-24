@@ -30,7 +30,8 @@ public abstract record SessionDomainEvent(string SessionId, string ServerId, Dat
 
     /// <summary>
     /// The Asterisk instance the notification came from, as it named itself (its <c>systemname</c>), or
-    /// <see langword="null"/> when the session engine does not know it: null means unknown. It is added beside
+    /// <see langword="null"/> when the session engine does not know it: null means unknown, never an instance, so two
+    /// notifications that both carry null are not known to come from the same instance. It is added beside
     /// <see cref="ServerId"/>, which is unchanged and stays the key the host gave the server. Set by the session engine
     /// before any subscriber receives the notification, together with <see cref="Epoch"/>, and never changed after.
     /// </summary>
@@ -48,6 +49,11 @@ public abstract record SessionDomainEvent(string SessionId, string ServerId, Dat
     /// <para>
     /// Not a positional member: a notification built with the positional constructor alone names no instance. The
     /// identity is part of the notification's value: two notifications that differ only by it are not equal.
+    /// </para>
+    /// <para>
+    /// Do not compare two <see langword="null"/> identities as one instance: <see langword="null"/> equals
+    /// <see langword="null"/> in C#, but two unknown instances may be one Asterisk or two. Only two non-null identities
+    /// that are equal name the same instance.
     /// </para>
     /// </remarks>
     public AsteriskInstanceIdentity? Instance { get => _instance; init => _instance = value; }

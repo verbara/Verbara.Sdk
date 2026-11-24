@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using FluentAssertions;
 using FluentAssertions.Execution;
@@ -9,8 +10,8 @@ namespace Verbara.Sdk.Sessions.Tests;
 /// <summary>
 /// The public instance identity a session notification carries, as a consumer sees it without a session engine: a value
 /// type compared by value that always names the instance; a member a notification built with the positional constructor leaves null, which is part of
-/// the notification's value; and its published documentation, which says that null means unknown and that
-/// <see cref="SessionDomainEvent.ServerId"/> is unchanged.
+/// the notification's value; and its published documentation, which says that null means unknown, that two null
+/// identities are never the same instance, and that <see cref="SessionDomainEvent.ServerId"/> is unchanged.
 /// </summary>
 /// <remarks>
 /// The member and the type are named only through <see cref="InstanceIdentityNames"/>.
@@ -48,10 +49,12 @@ public sealed class SessionInstanceIdentityTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t ")]
     public void Identity_ShouldRefuseTheValue_WhenTheSystemNameIsMissing(string? systemName)
     {
         // An instance that gives no system name has no identity: the notification's member is null (unknown), never an
-        // identity naming nothing.
+        // identity naming nothing. White space names nothing either.
         var build = () => InstanceIdentityNames.NewIdentity(systemName!);
 
         build.Should().Throw<ArgumentException>("an identity always names its instance; null on the notification means unknown");
@@ -92,7 +95,7 @@ public sealed class SessionInstanceIdentityTests
     }
 
     [Fact]
-    public void PublishedDocumentation_ShouldSayNullMeansUnknownAndServerIdIsUnchanged_WhenAConsumerReadsIt()
+    public void PublishedDocumentation_ShouldSayNullMeansUnknownNeverTheSameInstance_WhenAConsumerReadsIt()
     {
         var file = Path.Join(AppContext.BaseDirectory, "Verbara.Sdk.Sessions.xml");
         File.Exists(file).Should().BeTrue($"premise: the build emits the package's documentation file beside the assembly ({file})");
@@ -111,12 +114,15 @@ public sealed class SessionInstanceIdentityTests
         new
         {
             Documented = member is not null,
-            SaysNullIsUnknown = normalized.Contains("null", StringComparison.Ordinal)
-                && normalized.Contains("unknown", StringComparison.OrdinalIgnoreCase),
-            NamesServerId = normalized.Contains("ServerId", StringComparison.Ordinal),
+            SaysNullIsUnknown = normalized.Contains("null means unknown", StringComparison.Ordinal),
+            SaysTwoNullsAreNotTheSameInstance = normalized.Contains(
+                "two notifications that both carry null are not known to come from the same instance",
+                StringComparison.Ordinal),
+            SaysServerIdIsUnchanged = Regex.IsMatch(normalized, @"\bServerId ?, which is unchanged\b"),
         }.Should().BeEquivalentTo(
-            new { Documented = true, SaysNullIsUnknown = true, NamesServerId = true },
-            $"the published documentation of {InstanceIdentityNames.DocumentationId} says that null means unknown and "
-            + $"that ServerId is unchanged. Published: \"{normalized}\"");
+            new { Documented = true, SaysNullIsUnknown = true, SaysTwoNullsAreNotTheSameInstance = true, SaysServerIdIsUnchanged = true },
+            $"the published documentation of {InstanceIdentityNames.DocumentationId} says that null means unknown, that "
+            + "two null identities are never the same instance, and that ServerId is unchanged. "
+            + $"Published: \"{normalized}\"");
     }
 }
