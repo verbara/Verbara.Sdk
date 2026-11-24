@@ -65,17 +65,13 @@ using var subscription = sessionManager.Events.Subscribe(evt =>
                 $"[{ts}] RESUMED  {id}");
             break;
 
+        // Every ending, a failed call included, arrives as CallEndedEvent; its Cause is the hangup cause.
         case CallEndedEvent ended:
             var talkTime = ended.TalkTime.HasValue
                 ? $"  Talk: {ended.TalkTime.Value.TotalSeconds:F1}s"
                 : "";
             WriteColored(ConsoleColor.Red,
-                $"[{ts}] ENDED    {id}  Duration: {ended.Duration.TotalSeconds:F1}s{talkTime}");
-            break;
-
-        case CallFailedEvent failed:
-            WriteColored(ConsoleColor.DarkRed,
-                $"[{ts}] FAILED   {id}  Reason: {failed.Reason}");
+                $"[{ts}] ENDED    {id}  Duration: {ended.Duration.TotalSeconds:F1}s{talkTime}  Cause: {ended.Cause?.ToString() ?? "none"}");
             break;
 
         default:

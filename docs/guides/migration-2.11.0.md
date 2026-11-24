@@ -13,6 +13,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Ari`, `Verbara.Sdk.Sessions` | [Three meter instruments nothing records are removed](#three-meter-instruments-nothing-records-are-removed) | removed fields and meter instruments, BREAKING |
 | `Verbara.Sdk`, `Verbara.Sdk.Ari` | [The bridge `format` arguments are named for what they format](#the-bridge-format-arguments-are-named-for-what-they-format) | renamed arguments, BREAKING (named arguments only) |
 | `Verbara.Sdk.Live` | [The conference types are named for what they track](#the-conference-types-are-named-for-what-they-track) | new names, former names deprecated (`VSDK0008`, warning) |
+| `Verbara.Sdk.Sessions` | [`CallFailedEvent` is never raised and is deprecated](#callfailedevent-is-never-raised-and-is-deprecated) | type deprecated (`VSDK0009`, warning) |
 | `Verbara.Sdk.Live` | [A `QueueManager` or `MeetMeManager` subscriber that throws stops nothing else](#a-queuemanager-or-meetmemanager-subscriber-that-throws-stops-nothing-else) | behaviour, BREAKING (no compiler error) |
 | `Verbara.Sdk.Live` | [An `AgentManager` or `BridgeManager` subscriber that throws stops nothing else](#an-agentmanager-or-bridgemanager-subscriber-that-throws-stops-nothing-else) | behaviour, BREAKING (no compiler error) |
 | `Verbara.Sdk.Ari` | [An `OnStreamConnected` observer that throws loses no connection](#an-onstreamconnected-observer-that-throws-loses-no-connection) | behaviour, BREAKING (no compiler error) |
@@ -420,6 +421,55 @@ static int Watch(VerbaraServer server)
 If you cannot move before upgrading, suppress `VSDK0008` where you name a former symbol (`#pragma warning disable
 VSDK0008`, or `NoWarn` in the project); the suppression works until 2.12.0 removes them. Code that wrote
 `MeetMeRoom.Users` or a `MeetMeUser` setter has no replacement: it changed the table without Live knowing.
+
+### `CallFailedEvent` is never raised and is deprecated
+
+**What changed.** The session manager raises every ending of a call as `CallEndedEvent`, a failed call included: its
+`Cause` is the hangup cause, and the session's `State` is `Failed`. It has never raised `CallFailedEvent`, so a handler
+for it never ran. 2.11.0 marks the record `[Obsolete]` with `VSDK0009`, a warning, and 2.12.0 removes it.
+
+#### VSDK0009
+
+| Deprecated symbol (`VSDK0009`) | Read instead | Removed in |
+|---|---|---|
+| `Verbara.Sdk.Sessions.CallFailedEvent` | `Verbara.Sdk.Sessions.CallEndedEvent`, raised for every ending, with its `Cause` | 2.12.0 |
+
+**Who is affected.** Code that names `CallFailedEvent`: a `case` or `is` test on the session events, or a record built
+by hand in a test or a replay. A build with TreatWarningsAsErrors fails on `VSDK0009` until the code moves or
+suppresses the id; any other build shows the warning. A binary built against 2.10.x runs unchanged, and behaves as it
+did: its `CallFailedEvent` handler still never runs.
+
+**What to do.** Handle the ending in the `CallEndedEvent` handler and drop the `CallFailedEvent` one. Before (2.10.x;
+compiles against 2.11.0 with `VSDK0009`):
+
+<!-- skip-doc-snippet -->
+```csharp
+sessions.Events.Subscribe(evt =>
+{
+    switch (evt)
+    {
+        case CallEndedEvent ended: Console.WriteLine($"{ended.SessionId} ended"); break;
+        case CallFailedEvent failed: Console.WriteLine($"{failed.SessionId} failed: {failed.Reason}"); break;
+    }
+});
+```
+
+After:
+
+```csharp
+using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Manager;
+
+static IDisposable Watch(ICallSessionManager sessions) =>
+    sessions.Events.Subscribe(evt =>
+    {
+        if (evt is CallEndedEvent ended)
+            Console.WriteLine($"{ended.SessionId} ended, cause {ended.Cause?.ToString() ?? "none"}");
+    });
+```
+
+If you cannot move before upgrading, suppress `VSDK0009` where you name the record (`#pragma warning disable
+VSDK0009`, or `NoWarn` in the project); the suppression works until 2.12.0 removes it.
 
 ## Subscribers that throw
 
