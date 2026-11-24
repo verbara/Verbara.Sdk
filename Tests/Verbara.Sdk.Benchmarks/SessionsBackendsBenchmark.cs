@@ -30,6 +30,9 @@ public class SessionsBackendsBenchmark
     private RedisSessionStore _redisStore = null!;
     private PostgresSessionStore _postgresStore = null!;
 
+    // Armed with ActiveRecordTtl, as the sessions host arms it: own key prefix.
+    private RedisSessionStore _redisArmedStore = null!;
+
     private CallSession _probeSession = null!;
     private string _probeSessionId = null!;
     private string _probeLinkedId = null!;
@@ -52,6 +55,13 @@ public class SessionsBackendsBenchmark
             CompletedRetention = TimeSpan.FromMinutes(5),
         });
         _redisStore = new RedisSessionStore(_redisConn, redisOptions);
+        _redisArmedStore = new RedisSessionStore(_redisConn, Options.Create(new RedisSessionStoreOptions
+        {
+            KeyPrefix = "bench-armed:",
+            CompletedRetention = TimeSpan.FromMinutes(5),
+            ActiveRecordTtl = TimeSpan.FromMinutes(5),
+        }));
+        _redisArmedStore.ArmMaintenance();
 
         // --- Postgres container ---
         _postgresContainer = new ContainerBuilder("postgres:18-alpine")
@@ -100,6 +110,7 @@ public class SessionsBackendsBenchmark
         _probeSession = BuildSession(_probeSessionId, _probeLinkedId);
         await _redisStore.SaveAsync(_probeSession, default);
         await _postgresStore.SaveAsync(_probeSession, default);
+        await _redisArmedStore.SaveAsync(_probeSession, default);
 
         _batch = Enumerable.Range(0, 100).Select(i => BuildSession($"batch-{i:000}", $"batch-linked-{i:000}")).ToList();
 
@@ -149,6 +160,14 @@ public class SessionsBackendsBenchmark
     [Benchmark]
     [BenchmarkCategory("SaveBatch_100", "Redis")]
     public async ValueTask RedisSaveBatch() => await _redisStore.SaveBatchAsync(_batch, default);
+
+    [Benchmark]
+    [BenchmarkCategory("Save", "Redis", "Armed")]
+    public async ValueTask RedisSaveArmed() => await _redisArmedStore.SaveAsync(_probeSession, default);
+
+    [Benchmark]
+    [BenchmarkCategory("SaveBatch_100", "Redis", "Armed")]
+    public async ValueTask RedisSaveBatchArmed() => await _redisArmedStore.SaveBatchAsync(_batch, default);
 
     // ---------------- Postgres ----------------
 

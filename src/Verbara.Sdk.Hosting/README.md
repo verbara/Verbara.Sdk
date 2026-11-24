@@ -125,6 +125,12 @@ builder.Services.AddVerbaraSessions(builder.Configuration, options =>
 }
 ```
 
+Every sessions registration also adds one internal hosted service that maintains the session store. It does nothing
+unless the store asks for it — the Redis store with `ActiveRecordTtl` set: then it arms the store before any hosted
+service starts and hands it, every third of `ActiveRecordTtl`, the calls the session manager holds, so the records of
+a process that died or restarted stop being active on their own (see the session store guide). A test that lists a
+host's hosted services sees it as `SessionStoreMaintenanceService`.
+
 For a pool, pass the configuration to `AddVerbaraSessionsMultiServer(builder.Configuration)` after
 `AddVerbaraMultiServer()`. A configured context list replaces its default list, including when the provider exposes
 an empty list key. An absent list keeps its own default, and an absent `Sessions` section keeps all defaults.

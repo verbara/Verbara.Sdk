@@ -25,6 +25,27 @@ public sealed class RedisSessionStoreOptions
     /// </summary>
     public TimeSpan CompletedRetention { get; set; } = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// How long a live session's record, and its server's entry in the linked-id index, stay without being refreshed
+    /// before Redis expires them; <see langword="null"/> (the default) gives live records no expiry, as before this
+    /// option existed. With it set, the SDK's sessions host refreshes the records of the calls this process holds every
+    /// third of this value, so a record outlives its call only when the process that held it is gone: then the record
+    /// leaves on its own within this value and no lookup returns it, an active-set member whose record is gone is
+    /// removed on the host's next cleanup, and its index entry leaves with the index key, no later than the longer of
+    /// this value and <see cref="CompletedRetention"/> after the last save, refresh or ending under that linked id. From
+    /// 30 seconds to 24 hours, both included: the <c>UseRedis</c> registrations fail the store's resolution outside that
+    /// range. A held call is refreshed however long it lasts, so the value bounds only how long a gone process's records
+    /// stay active; 5 minutes is a reasonable value.
+    /// <para>
+    /// Takes effect only under the SDK's sessions host (<c>AddVerbaraSessions</c> and the other sessions
+    /// registrations), which arms the store when it starts; a store built and used without that host gives no live
+    /// record an expiry, whatever this value. Set the same value on every process that shares the store, in the same
+    /// deploy: a process without it does not refresh its records, and a quiet call of that process can lose its record
+    /// until its next save.
+    /// </para>
+    /// </summary>
+    public TimeSpan? ActiveRecordTtl { get; set; }
+
     /// <summary>Redis database index. Default: 0.</summary>
     public int DatabaseIndex { get; set; }
 }

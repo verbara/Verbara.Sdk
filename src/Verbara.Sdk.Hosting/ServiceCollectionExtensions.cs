@@ -18,6 +18,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Verbara.Sdk.Hosting;
@@ -549,6 +550,14 @@ public static class ServiceCollectionExtensions
                 SessionEngine.Resolve(sp),
                 sp.GetRequiredService<ICallSessionManager>(),
                 sp.GetRequiredService<ILogger<SessionPersistenceTokenService>>())));
+        // The store's maintenance, once per host as the token: asleep unless the resolved store asks for it (an SDK store
+        // with its ActiveRecordTtl set). It reads what the resolved manager holds and never touches the engine.
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, SessionStoreMaintenanceService>(sp =>
+            new SessionStoreMaintenanceService(
+                sp.GetRequiredService<SessionStoreBase>(),
+                sp.GetRequiredService<ICallSessionManager>(),
+                sp.GetService<TimeProvider>() ?? TimeProvider.System,
+                sp.GetService<ILoggerFactory>() ?? NullLoggerFactory.Instance)));
 
         if (configure is not null)
             services.Configure(configure);
