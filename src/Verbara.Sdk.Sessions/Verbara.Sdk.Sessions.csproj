@@ -14,6 +14,8 @@
     <InternalsVisibleTo Include="Verbara.Sdk.Sessions.Redis.Tests" />
     <InternalsVisibleTo Include="Verbara.Sdk.Sessions.Postgres" />
     <InternalsVisibleTo Include="Verbara.Sdk.Sessions.Postgres.Tests" />
+    <!-- The store benchmarks arm a store as the sessions host does, to measure the armed save path. -->
+    <InternalsVisibleTo Include="Verbara.Sdk.Benchmarks" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Verbara.Sdk\Verbara.Sdk.csproj" />
