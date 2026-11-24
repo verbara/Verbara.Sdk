@@ -2,6 +2,7 @@ using FluentAssertions;
 using FluentAssertions.Execution;
 using Verbara.Sdk.Ami.Actions;
 using Verbara.Sdk.Ami.Events;
+using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Live.Tests.Harness;
 using Verbara.Sdk.Sessions;
 
@@ -100,6 +101,39 @@ public sealed class SessionInstanceIdentityReconnectTests
             nextStarted!.Epoch?.AmiSession.Should().Be(2, "premise: the next call started in the new AMI session");
             nextStarted!.Identity.Should().BeNull(
                 "the new session's instance gives no identity: unknown for that session, never the previous session's");
+        }
+    }
+
+    /// <summary>
+    /// The lookup the stamping makes, below the session engine's per-attachment reuse of its last answer: keyed by the
+    /// session a loss mark names, so the lost session's name still answers after the next login read another, and a mark
+    /// of another connection instance, or of a session this one never started, names none.
+    /// </summary>
+    [Fact]
+    public async Task ReadSystemName_ShouldAnswerTheMarksSession_WhenTheConnectionHasSinceLoggedInToAnotherName()
+    {
+        var first = new BootingAsterisk { BootedAtLogin = true, SystemName = "pbx-one" };
+        var second = new BootingAsterisk { BootedAtLogin = true, SystemName = "pbx-two" };
+        await using var run = await Run.StartAsync(first, second, autoReconnect: true);
+        var connection = run.Server.ConnectionIdentity;
+        var beforeTheLoss = run.Server.ReadSystemName(new SessionLossMark(connection!.Value, 1, 0));
+
+        first.CloseSession();
+        run.ReleaseSecondPeer();
+        await run.Reconnected.WaitAsync(Run.Bound);
+
+        using (new AssertionScope())
+        {
+            beforeTheLoss.Should().Be("pbx-one", "premise: the first login read pbx-one");
+            run.Server.ReadSessionLossMark()?.Session.Should().Be(2, "premise: the connection is now in its second session");
+            run.Server.ReadSystemName(new SessionLossMark(connection.Value, 1, 0)).Should().Be("pbx-one",
+                "a mark of the lost session answers that session's read, never the connection's current one");
+            run.Server.ReadSystemName(new SessionLossMark(connection.Value, 2, 0)).Should().Be("pbx-two",
+                "the new session's login read pbx-two");
+            run.Server.ReadSystemName(new SessionLossMark(connection.Value, 3, 0)).Should().BeNull(
+                "a session the connection never started has no read");
+            run.Server.ReadSystemName(new SessionLossMark(Guid.NewGuid(), 1, 0)).Should().BeNull(
+                "a mark of another connection instance names none of this one's sessions");
         }
     }
 
