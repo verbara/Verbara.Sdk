@@ -459,7 +459,7 @@ warning until it moves or suppresses the id. `MeetMeUserState.Talking`, never as
 participant is talking is `ConferenceUser.Talking`. The mutable `MeetMeRoom.Users` and the `MeetMeUser` setters have no
 replacement: they changed the table outside the manager's synchronization.
 
-### Changed: `CallFailedEvent`, never raised, is deprecated (`VSDK0009`); it is removed in 2.12.0 (#NNN)
+### Changed: `CallFailedEvent`, never raised, is deprecated (`VSDK0009`); it is removed in 2.12.0 (#658)
 
 The session manager raises every ending of a call as `CallEndedEvent`, a failed call included, with its hangup cause
 in `Cause`; it has never raised `CallFailedEvent`, so a handler for it never ran. The record is marked `[Obsolete]`
