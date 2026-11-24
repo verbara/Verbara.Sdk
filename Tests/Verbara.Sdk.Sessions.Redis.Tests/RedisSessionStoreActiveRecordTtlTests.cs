@@ -419,4 +419,35 @@ public sealed class RedisSessionStoreActiveRecordTtlTests : IAsyncLifetime
         Calls(calls, "sadd").Should().Be(0);
         Calls(calls, "hset").Should().Be(0);
     }
+
+    [Fact]
+    public async Task MaintainAsync_ShouldCleanTheActiveSet_OnTheFirstRunAndOnEveryThirdAfterIt()
+    {
+        var store = CreateStore(TimeSpan.FromSeconds(30));
+        var ct = CancellationToken.None;
+
+        // Saves a live session and removes its record: its active-set member stays until a cleanup run.
+        async Task LoseRecordAsync(string id)
+        {
+            await store.SaveAsync(Live(id, linkedId: "L-" + id), ct);
+            await Db.KeyDeleteAsync(SessionKey(id));
+        }
+
+        await LoseRecordAsync("before-1");
+        await store.MaintainAsync([], ct);
+        (await Db.SetContainsAsync(ActiveSet, "before-1")).Should().BeFalse("run 1 cleans the active set");
+
+        foreach (var (lost, cleanup) in new[] { ("before-2", 4), ("before-5", 7) })
+        {
+            await LoseRecordAsync(lost);
+            for (var run = cleanup - 2; run < cleanup; run++)
+            {
+                await store.MaintainAsync([], ct);
+                (await Db.SetContainsAsync(ActiveSet, lost)).Should().BeTrue($"run {run} does not clean the active set");
+            }
+
+            await store.MaintainAsync([], ct);
+            (await Db.SetContainsAsync(ActiveSet, lost)).Should().BeFalse($"run {cleanup} cleans the active set");
+        }
+    }
 }
