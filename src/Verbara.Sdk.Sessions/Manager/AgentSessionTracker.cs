@@ -77,8 +77,8 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
         _agents.GetOrAdd(agentId, static (id, clock) => new AgentSession(id, clock), _timeProvider);
 
     // Every change is caused by a session notification the tracker handled, and carries that notification's loss mark
-    // (null when the notification's was): the change says no more and no less about what the connection may have lost
-    // than its cause did.
+    // and instance identity (null when the notification's was): the change says no more and no less about what the
+    // connection may have lost, and about which Asterisk it came from, than its cause did.
     private void TransitionState(AgentSession agent, AgentSessionState newState, SessionDomainEvent cause)
     {
         var previous = agent.State;
@@ -91,7 +91,7 @@ internal sealed partial class AgentSessionTracker : IAgentSessionTracker, IDispo
 
         _stateChanges.OnNext(new AgentSessionStateChanged(
             cause.SessionId, cause.ServerId, now,
-            agent.AgentId, previous, newState) { Epoch = cause.Epoch });
+            agent.AgentId, previous, newState) { Epoch = cause.Epoch, Instance = cause.Instance });
     }
 
     private void OnCallConnected(CallConnectedEvent evt)
