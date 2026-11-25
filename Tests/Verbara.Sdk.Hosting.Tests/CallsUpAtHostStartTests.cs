@@ -242,8 +242,8 @@ public sealed class CallsUpAtHostStartTests
             var session = manager.ActiveSessions.Should().ContainSingle(
                 "the caller up at start has one session. "
                 + $"Measured: {Describe(manager.ActiveSessions.ToList(), seen)}").Subject;
-            session.State.Should().Be(CallSessionState.Connected,
-                "the reported state stays: Connected → Queued is not a transition of the session's state table");
+            session.State.Should().Be(CallSessionState.Queued,
+                "a call found connected and waiting in a queue waits there in queued, as any connected call that joins one");
             session.Metadata.GetValueOrDefault("origin").Should().Be("reload");
             session.QueueName.Should().Be(Queue, "the queue snapshot reported the caller waiting in it");
             var queued = seen.Of<CallQueuedEvent>().Should().ContainSingle(
