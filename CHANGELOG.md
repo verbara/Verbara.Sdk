@@ -95,7 +95,7 @@ when set, and not written when null, so an existing action is unchanged on the w
 20.20.1, 22.12.0, 23.6.0 and 24.0.0, the flash is raised on the named channel itself. Without the field, it is raised
 on the other leg of the call. What Asterisk does with `false` was not measured.
 
-### Added: every session notification names the Asterisk instance it came from (#NNN)
+### Added: every session notification names the Asterisk instance it came from (#659)
 
 `SessionDomainEvent` gains `Instance`, an `AsteriskInstanceIdentity?` carrying the `SystemName` the Asterisk instance
 gives itself in `asterisk.conf`. It is not a positional parameter, so existing constructors, `Deconstruct` and pattern
