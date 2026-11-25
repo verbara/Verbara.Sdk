@@ -1140,9 +1140,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         if (byReload)
         {
             // Marked on the session, which is what a consumer can reach from the SessionId
-            // on CallEndedEvent. The event record itself gains no field: CallEndedEvent is
-            // a positional record, so adding one would move the public API this change
-            // claims it does not touch.
+            // on CallEndedEvent. The event carries the state the call ended in, not how its
+            // ending was learned.
             session.SetMetadata(EndingProvenanceKey, EndingProvenanceReload);
 
             // No cause exists, so the outcome follows from what the session already was: a
@@ -1830,8 +1829,12 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 break;
         }
 
+        // Read here, after the call's final transition, so the ending carries the state the call ended in.
         Publish(new CallEndedEvent(session.SessionId, session.ServerId,
-            DateTimeOffset.UtcNow, session.HangupCause, session.Duration, session.TalkTime), attachment);
+            DateTimeOffset.UtcNow, session.HangupCause, session.Duration, session.TalkTime)
+        {
+            FinalState = session.State,
+        }, attachment);
 
         // After the ending, so a wrap-up it opens is never reported before it.
         EndConnectedLegsAtCallEnd(session);
