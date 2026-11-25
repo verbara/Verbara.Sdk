@@ -685,7 +685,11 @@ public sealed class CallSession
     }
 
     // Hold time tracking
-    internal void StartHold() => _holdStartedAt = DateTimeOffset.UtcNow;
+    internal void StartHold(string? channelUniqueId = null)
+    {
+        _holdStartedAt = DateTimeOffset.UtcNow;
+        HoldChannelUniqueId = channelUniqueId;
+    }
 
     internal void EndHold()
     {
@@ -694,7 +698,22 @@ public sealed class CallSession
             _accumulatedHoldTime += DateTimeOffset.UtcNow - _holdStartedAt.Value;
             _holdStartedAt = null;
         }
+        HoldChannelUniqueId = null;
     }
+
+    /// <summary>
+    /// The channel whose hold started the running hold clock, or <see langword="null"/> when no hold is running or it is
+    /// not known (a session restored from a store). Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal string? HoldChannelUniqueId { get; private set; }
+
+    /// <summary>
+    /// Whether the end of a hold of channel <paramref name="uniqueId"/> ends the running hold clock: a hold is running and
+    /// it was started by that channel, or by a channel not known (a session restored from a store). Read under
+    /// <see cref="SyncRoot"/>.
+    /// </summary>
+    internal bool IsRunningHoldOf(string uniqueId) => _holdStartedAt.HasValue
+        && (HoldChannelUniqueId is null || string.Equals(HoldChannelUniqueId, uniqueId, StringComparison.Ordinal));
 
     // Mutators
     internal void AddParticipant(SessionParticipant participant) => _participants.Add(participant);

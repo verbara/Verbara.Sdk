@@ -1306,7 +1306,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             var returned = ReturnFromUnansweredVisit(session, channel.UniqueId);
             if (session.TryTransition(CallSessionState.OnHold))
             {
-                session.StartHold();
+                session.StartHold(channel.UniqueId);
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Hold, channel.Name, null, channel.HoldMusicClass));
                 Publish(new CallHeldEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow), attachment);
@@ -1339,6 +1339,13 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Unhold, channel.Name, null, null));
                 Publish(new CallResumedEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow), attachment);
+                _ = PersistAsync(session);
+            }
+            else if (session.IsRunningHoldOf(channel.UniqueId))
+            {
+                // The held channel is off hold, although the call left on-hold meanwhile (a blind transfer of the held
+                // call): its hold is over, so its time stops growing. Nothing moves and nothing is published.
+                session.EndHold();
                 _ = PersistAsync(session);
             }
             else if (returned)
