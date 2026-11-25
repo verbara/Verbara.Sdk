@@ -95,6 +95,20 @@ when set, and not written when null, so an existing action is unchanged on the w
 20.20.1, 22.12.0, 23.6.0 and 24.0.0, the flash is raised on the named channel itself. Without the field, it is raised
 on the other leg of the call. What Asterisk does with `false` was not measured.
 
+### Added: every session notification names the Asterisk instance it came from (#NNN)
+
+`SessionDomainEvent` gains `Instance`, an `AsteriskInstanceIdentity?` carrying the `SystemName` the Asterisk instance
+gives itself in `asterisk.conf`. It is not a positional parameter, so existing constructors, `Deconstruct` and pattern
+matches are unchanged, and `ServerId` keeps its meaning: the pool key the host chose. The value is read once per AMI
+session, at login, from the `CoreSettings` reply the connection already requests, and is set before any subscriber
+sees the notification. After a reconnect, a notification carries the identity read for the AMI session it belongs to,
+so a buffered event of the lost session keeps the old name. `null` means unknown: no `systemname` configured (an empty
+value), an AMI user that may not read `CoreSettings`, a read that failed or timed out, a connection that has no AMI
+session (a fake `IAmiConnection`), or a notification built by the caller. Two notifications that both carry `null`
+are not known to come from the same instance. `AsteriskInstanceIdentity` refuses an empty name and compares by value;
+`IAgentSessionTracker` copies the identity of the notification that caused each agent state change. `Instance` is
+part of a notification's value, so two notifications that differ only by it are no longer equal.
+
 ### Added: `CallConnectedEvent.AgentInterface` names the member whose connection the event announces (#615)
 
 `CallConnectedEvent` gains `string? AgentInterface { get; init; }`: the interface of the member whose connect the event
