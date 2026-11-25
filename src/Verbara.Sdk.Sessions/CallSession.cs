@@ -32,7 +32,9 @@ public sealed class CallSession
     /// Where the call stands now. <see cref="CallSessionState.Connected"/> means the call is in conversation with someone
     /// now, and each entry into it from dialing, ringing, queued or transferring is announced by one
     /// <see cref="CallConnectedEvent"/>; a call that joins a queue, even after it was connected or transferring, waits in
-    /// <see cref="CallSessionState.Queued"/>. A call answered by the dialplan alone, with no dial or queue, stays
+    /// <see cref="CallSessionState.Queued"/>. A queue visit that ends unanswered (the queue reports it abandoned, then the
+    /// caller leaving, as on a queue timeout) returns the call, at its caller's channel's next report, silently to the
+    /// state it had before the visit. A call answered by the dialplan alone, with no dial or queue, stays
     /// <see cref="CallSessionState.Created"/> while it is live.
     /// </summary>
     public CallSessionState State { get; internal set; } = CallSessionState.Created;
@@ -89,7 +91,8 @@ public sealed class CallSession
     /// <summary>
     /// The cause Asterisk reported for the call's ending, or <c>null</c> when a state reload proved its channels gone and
     /// no hang-up was observed. It is the cause of the call's last departing channel, except for a call that was
-    /// connected and ends while it waits in a later queue: that one carries its caller's own channel's cause, whichever
+    /// connected and ends while it waits in a later queue, or while it is back in transferring after that queue's visit
+    /// ended unanswered and before anyone answered it: that one carries its caller's own channel's cause, whichever
     /// channel Asterisk reports hanging up last.
     /// </summary>
     public HangupCause? HangupCause { get; set; }
