@@ -12,10 +12,11 @@ public enum CallSessionState
     /// joins a queue waits here whether it joins from its initial, dialing or ringing state, or after it was connected or
     /// transferring. A visit ends unanswered when app_queue reports it abandoned and then the caller leaving (a queue
     /// timeout, an empty queue); the call still waits here until its caller's channel next reports something of its own
-    /// (a hold, a dial, a bridge entry), and from that report it is back in the state it had before the first visit of
-    /// a run of queues, with no event. A call that leaves this way and then hangs up with no such report ends here. A
-    /// call that ends here before any member answers ends <see cref="Failed"/> when it was never connected, a call the dialplan
-    /// answered included; one that was connected before (a reload or an admission that opened it connected included)
+    /// (a hold or its end, a dial, a bridge entry), and from that report it is back in the state it had before the first
+    /// visit of a run of queues, with no event. A call that leaves this way and then hangs up with no such report ends
+    /// here. A call that ends here before any member answers ends <see cref="Failed"/> when it was never connected, a call
+    /// the dialplan answered included, and so does a never-connected call back in its initial state after such a visit,
+    /// whatever its channel reported since, an answer included; one that was connected before (a reload or an admission that opened it connected included)
     /// ends <see cref="Completed"/> when its caller's own channel hangs up with normal clearing or a reload proves it
     /// gone, and <see cref="Failed"/> on any other cause of that channel.
     /// </summary>
@@ -29,6 +30,11 @@ public enum CallSessionState
     /// </summary>
     Connected,
 
+    /// <summary>
+    /// A connected call one of whose channels Asterisk reported on hold. The end of that hold returns it to
+    /// <see cref="Connected"/>, announced by <see cref="CallResumedEvent"/>. The end of a hold reported for a call in any
+    /// other state moves nothing and publishes nothing.
+    /// </summary>
     OnHold,
     Transferring, Conference, Completed, Failed,
 

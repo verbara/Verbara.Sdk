@@ -93,6 +93,11 @@ public sealed record CallTransferredEvent(string SessionId, string ServerId, Dat
 public sealed record CallHeldEvent(string SessionId, string ServerId, DateTimeOffset Timestamp)
     : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
+/// <summary>
+/// Reports that a call on hold (<see cref="CallSessionState.OnHold"/>) was taken off hold and is back in
+/// <see cref="CallSessionState.Connected"/>. Raised only for a call whose hold was counted: an unhold Asterisk reports
+/// for a call in any other state, as it does when a channel enters a bridge, raises nothing.
+/// </summary>
 public sealed record CallResumedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp)
     : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
