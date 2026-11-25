@@ -157,6 +157,28 @@ internal static class AmiCaptureReplay
         "connected-signal-matrix-hangup-reversed-asterisk-22.12.0.raw",
     ];
 
+    /// <summary>
+    /// The connected-signal-matrix capture of two queue visits that end unanswered, on 22.12.0: a call answered by a
+    /// plain dial, then queued in <c>q-tmo</c>, whose timeout releases it to the dialplan, which puts it on hold (step
+    /// <c>aq-timeout-hold-01</c>); and a call that waits in <c>q-tmo</c> first, times out, and is answered by an overflow
+    /// <c>Dial</c> (step <c>q-timeout-dial-01</c>).
+    /// </summary>
+    public const string UnansweredVisitCapture22 = "connected-signal-matrix-unanswered-asterisk-22.12.0.raw";
+
+    /// <summary>
+    /// The connected-signal-matrix capture, on 23.6.0, of a call answered in <c>q-first</c>, blind-transferred into
+    /// <c>q-tmo</c>, whose timeout releases it to the dialplan, which puts it on hold before it hangs up (step
+    /// <c>requeue-timeout-01</c>).
+    /// </summary>
+    public const string UnansweredVisitCapture23 = "connected-signal-matrix-unanswered-asterisk-23.6.0.raw";
+
+    /// <summary>
+    /// The connected-signal-matrix capture, on 24.0.0, of a call answered by a plain dial, then queued in <c>q-tmo</c>,
+    /// whose timeout releases it to the dialplan, which dials another endpoint that answers (step
+    /// <c>aq-timeout-dial-01</c>).
+    /// </summary>
+    public const string UnansweredVisitCapture24 = "connected-signal-matrix-unanswered-asterisk-24.0.0.raw";
+
     private const string MarkerUserEvent = "N5Marker";
     private const string BeforeFirstMarker = "(before-the-first-marker)";
 

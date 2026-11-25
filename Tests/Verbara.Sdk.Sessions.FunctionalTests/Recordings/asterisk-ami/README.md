@@ -9,8 +9,8 @@ workload (`dialplan-and-parking-*`), and transfers and bridges of a waiting call
 (`renamed-caller-and-participant-*`), one call answered on two queue visits by two members
 (`queue-revisit-*`), and queue members that ring out unanswered or answer busy before the next one answers
 (`queue-ring-no-answer-*`), and the calls of the connected-signal matrix: a plain dial, a re-queued call, a call
-answered by a dial and then queued, a hold, transfers that return to connected, and connected calls that hang up
-waiting in a later queue (`connected-signal-matrix-*`). This suite replays them through the SDK's own parsing path, so a
+answered by a dial and then queued, a hold, transfers that return to connected, connected calls that hang up
+waiting in a later queue, and queue visits that end unanswered (`connected-signal-matrix-*`). This suite replays them through the SDK's own parsing path, so a
 call-session assertion made here is checked against what Asterisk actually sent rather than against
 what a test author believed it sends.
 
@@ -56,6 +56,9 @@ what a test author believed it sends.
 | `connected-signal-matrix-hangup-asterisk-23.6.0.raw` | 23.6.0 | `Asterisk Call Manager/12.0.0` | 246 670 |
 | `connected-signal-matrix-hangup-asterisk-24.0.0.raw` | 24.0.0 | `Asterisk Call Manager/13.0.0` | 247 118 |
 | `connected-signal-matrix-hangup-reversed-asterisk-22.12.0.raw` | 22.12.0 | `Asterisk Call Manager/11.0.0` | 246 376 |
+| `connected-signal-matrix-unanswered-asterisk-22.12.0.raw` | 22.12.0 | `Asterisk Call Manager/11.0.0` | 162 238 |
+| `connected-signal-matrix-unanswered-asterisk-23.6.0.raw` | 23.6.0 | `Asterisk Call Manager/12.0.0` | 83 503 |
+| `connected-signal-matrix-unanswered-asterisk-24.0.0.raw` | 24.0.0 | `Asterisk Call Manager/13.0.0` | 119 448 |
 
 The call and queue shapes were captured 2026-09-27, the reload, exit and loop captures 2026-09-28. The
 `.gitattributes` rule `**/Recordings/**/*.raw binary` keeps the CRLF framing byte-exact; never open
@@ -1027,6 +1030,9 @@ below; the reduction replaced UUIDs (8 to 12 per file) and no address.
 | `connected-signal-matrix-repeat-asterisk-22.12.0.raw` | 2026-11-23 | `txbridge-01`, `aq-01`, `hold-01` | 589 of 3 945 |
 | `connected-signal-matrix-hangup-asterisk-*` (22.12.0, 23.6.0, 24.0.0) | 2026-11-24 | `requeue-hangup-01`, `aq-hangup-01`, `queue-txdial-01` | 615 or 616 of about 9 300 |
 | `connected-signal-matrix-hangup-reversed-asterisk-22.12.0.raw` | 2026-11-24 | `requeue-hangup-01`, `aq-hangup-01`, `queue-txdial-01` | 615 of 1 869 |
+| `connected-signal-matrix-unanswered-asterisk-22.12.0.raw` | 2026-11-25 | `aq-timeout-hold-01`, `q-timeout-dial-01` | 413 of 413 |
+| `connected-signal-matrix-unanswered-asterisk-23.6.0.raw` | 2026-11-25 | `requeue-timeout-01` | 210 of 414 |
+| `connected-signal-matrix-unanswered-asterisk-24.0.0.raw` | 2026-11-25 | `aq-timeout-dial-01` | 293 of 506 |
 
 The workload runs on one container with the queue-revisit PJSIP loopback. Each call is an `Originate` of
 `PJSIP/<row>-in@loop`, whose answering leg runs the row's dialplan; the members `PJSIP/agent1` (`q-first`),
@@ -1045,6 +1051,15 @@ after 1 s of ringing. The rows kept here:
   runs `Dial(PJSIP/agent2)`, so the caller returns to connected by that dial's outcome.
 - `requeue-hangup-01`: as `requeue-01`, but the caller hangs up while `agent2`'s leg is still ringing in `q-second`.
 - `aq-hangup-01`: as `aq-01`, but the caller hangs up while `agent2`'s leg is still ringing in `q-second`.
+- `aq-timeout-hold-01`: as `aq-01`, but the dialplan runs `Queue(q-tmo)`, whose only member, `PJSIP/agent4`, rings
+  and never answers; the queue's timeout releases the caller to the dialplan, which waits; the caller's channel is put
+  on hold, then hangs up.
+- `aq-timeout-dial-01`: as `aq-timeout-hold-01`, but after the timeout the dialplan runs `Dial(PJSIP/agent1)`, which
+  answers.
+- `requeue-timeout-01`: as `requeue-01`, but `agent1`'s `BlindTransfer` sends the caller to `Queue(q-tmo)`, which times
+  out; the caller's channel is put on hold, then hangs up.
+- `q-timeout-dial-01`: the answering leg runs `Queue(q-tmo)` first, which times out; the dialplan then runs
+  `Dial(PJSIP/agent1)`, which answers.
 
 Each step carries `UserEvent: CaptureCheckpoint` frames named for where the call stands (`answered`, `held`,
 `transferring`, `wait`, `wait2`, `up`, `end`); a checkpoint that names a `StatusId` and a `QueueStatusId` is followed
@@ -1056,6 +1071,13 @@ carry a second `QueueCallerJoin` on the same caller channel after the transfer; 
 reports one `Hold` and one `Unhold`. In the `-reversed` file the caller's `Hangup` (`Cause: 16`) of
 `requeue-hangup-01` precedes app_queue's `Hangup` of `agent2`'s ringing leg (`Cause: 0`); in the three other hang-up
 files that member leg's `Hangup` comes first. They are replayed by `ConnectedSignalMatrixReplayTests`.
+
+The `-unanswered` files are a lab capture of the same workload on the same three digests, captured 2026-11-25, its
+recordings reduced again here to the steps above with the same script and options (the 22.12.0 file is the lab's own
+reduction, byte for byte). In every timeout row app_queue reports, on the caller's channel and in this order, the
+member's `DialEnd` (`NOANSWER`, then `CANCEL`), `QueueCallerAbandon` and `QueueCallerLeave`, and then hangs up the
+member's ringing leg (`Cause: 0`); the caller's next report of its own (`Hold`, or the `DialBegin` of the dialplan's
+`Dial`) comes 1 or 2 seconds later. They are replayed by `UnansweredQueueVisitReplayTests`.
 
 ## Capturing on a new Asterisk build
 

@@ -394,6 +394,43 @@ internal static class SignalMatrix
         return run;
     }
 
+    /// <summary>A queue's counters as a <see cref="QueueSessionTracker"/> read them at the end of a run.</summary>
+    internal sealed record QueueCounts(int Offered, int Answered, int Abandoned, int TimedOut, int Waiting);
+
+    /// <summary>
+    /// <see cref="LiveAsync(Call, RecordingSessionStore?)"/> with a <see cref="QueueSessionTracker"/> over the manager,
+    /// and <paramref name="queueName"/>'s counters as the tracker read them once every frame was delivered.
+    /// </summary>
+    public static async Task<(Run Run, QueueCounts Queue)> LiveCountingAsync(Call call, string queueName)
+    {
+        var options = new SessionOptions();
+        await using var rig = await AmiCaptureReplay.ReplayRig.StartAsync(options);
+        using var tracker = new QueueSessionTracker(rig.Manager, Options.Create(options));
+        var run = new Run(call.CallerUniqueId, rig.Manager.GetByChannelId);
+        using var subscription = rig.Manager.Events.Subscribe(run.On);
+        foreach (var f in call.Frames)
+        {
+            if (IsUserEvent(f, "CaptureCheckpoint"))
+            {
+                run.Mark(Field(f, "Name") ?? "");
+                continue;
+            }
+
+            if (!IsLive(f))
+                continue;
+
+            if (rig.Deliver(f) is not null)
+                run.Swallowed++;
+            run.Bind();
+        }
+
+        var queue = tracker.GetByQueueName(queueName);
+        return (run, queue is null
+            ? new QueueCounts(0, 0, 0, 0, 0)
+            : new QueueCounts(queue.CallsOffered, queue.CallsAnswered, queue.CallsAbandoned, queue.CallsTimedOut,
+                queue.CallsWaiting));
+    }
+
     /// <summary>
     /// Withholds the call's frames before its last snapshot checkpoint, answers a reconnect reload with the
     /// <c>Status</c> and <c>QueueStatus</c> the capture took there, and delivers the rest.
