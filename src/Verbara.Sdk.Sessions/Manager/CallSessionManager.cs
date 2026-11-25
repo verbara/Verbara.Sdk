@@ -220,11 +220,15 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// a detached attachment keeps its own stamp. A raise no attachment produced (a wrap-up, which another
     /// server's delivery can close) passes none and reads the attachment of the notification's server installed now;
     /// with none, or over a connection that is not the SDK's, the mark is <see langword="null"/>.</para>
+    /// <para>With the mark, and as part of the same seal, the notification gets the instance identity read at the login
+    /// of the AMI session that mark names (<see cref="SessionDomainEvent.Instance"/>): never the connection's current
+    /// session's, and <see langword="null"/> whenever the mark is.</para>
     /// </summary>
     private void Publish(SessionDomainEvent notification, ServerSubscriptions? attachment = null,
         SessionLossMark? sampled = null)
     {
-        notification.StampEpoch(ReadEpoch(notification.ServerId, attachment, sampled));
+        var (epoch, instance) = ReadStamp(notification.ServerId, attachment, sampled);
+        notification.Seal(epoch, instance);
         EnterEngineWork();
         try
         {
@@ -240,16 +244,19 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// The mark <see cref="Publish"/> stamps: <paramref name="sampled"/> when given, else
     /// <paramref name="attachment"/>'s server's started side; with no attachment given, that of the attachment of
     /// <paramref name="serverId"/> installed now. <see langword="null"/> when there is none, or when the server's
-    /// connection reports no mark; never a default that reads as complete.
+    /// connection reports no mark; never a default that reads as complete. Beside it, the identity read for the AMI
+    /// session that mark names, <see langword="null"/> with no mark.
     /// </summary>
-    private SessionEventEpoch? ReadEpoch(string serverId, ServerSubscriptions? attachment, SessionLossMark? sampled)
+    private (SessionEventEpoch? Epoch, AsteriskInstanceIdentity? Instance) ReadStamp(string serverId,
+        ServerSubscriptions? attachment, SessionLossMark? sampled)
     {
         if (attachment is null && !_serverSubs.TryGetValue(serverId, out attachment))
-            return null;
+            return (null, null);
 
         return (sampled ?? attachment.Server.ReadSessionLossMark()) is { } mark
-            ? new SessionEventEpoch(mark.ConnectionId, mark.Session, mark.DroppedBefore, attachment.EpochAttachment)
-            : null;
+            ? (new SessionEventEpoch(mark.ConnectionId, mark.Session, mark.DroppedBefore, attachment.EpochAttachment),
+                attachment.InstanceOf(mark))
+            : (null, null);
     }
 
     /// <summary>
@@ -2300,6 +2307,30 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             Generation = generation;
             EpochAttachment = epochAttachment;
         }
+
+        // The identity this attachment stamped last and the AMI session it was read for, so a run of notifications of one
+        // session shares one instance and the hot path compares the session instead of reading the name. Replaced whole;
+        // two raises that miss it together each build an equal value, and either may stay.
+        private InstanceStamp? _lastInstance;
+
+        /// <summary>
+        /// The identity read at the login of the AMI session <paramref name="mark"/> names: <see langword="null"/> when
+        /// that read gave none. Keyed by the mark's connection and session, never by the server's current session.
+        /// </summary>
+        public AsteriskInstanceIdentity? InstanceOf(SessionLossMark mark)
+        {
+            if (Volatile.Read(ref _lastInstance) is { } last && last.Session == mark.Session
+                && last.ConnectionId == mark.ConnectionId)
+            {
+                return last.Identity;
+            }
+
+            var identity = Server.ReadSystemName(mark) is { } name ? new AsteriskInstanceIdentity(name) : null;
+            Volatile.Write(ref _lastInstance, new InstanceStamp(mark.ConnectionId, mark.Session, identity));
+            return identity;
+        }
+
+        private sealed record InstanceStamp(Guid ConnectionId, long Session, AsteriskInstanceIdentity? Identity);
         private int _hasBeenInstalled;
         // Monotonic history, separate from current membership: a captured old arrival still owns its birth stamp.
         public bool HasBeenInstalled => Volatile.Read(ref _hasBeenInstalled) != 0;

@@ -177,6 +177,12 @@ public sealed class AmiConnection : IAmiConnection
     // Written under _endingLock by StartSession; read without it.
     private long _sessionOrdinal;
 
+    // The SystemName each of the most recent AMI sessions' logins read, newest last, at most SessionsNamed of them.
+    // Replaced whole (never changed in place) under _endingLock by StartSession, before it advances _sessionOrdinal;
+    // read without it.
+    private SessionSystemName[] _sessionSystemNames = [];
+    private const int SessionsNamed = 8;
+
     // The frame of the event whose dispatch started most recently, and of the event whose observers all returned most
     // recently, in any session. Written by the pump's dispatch only (one at a time: the pump awaits each dispatch, and a
     // new session's pump dispatches only once the previous one is released); read without a lock by DeliveredLossMark
@@ -875,6 +881,8 @@ public sealed class AmiConnection : IAmiConnection
         var fullyBooted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _fullyBooted = fullyBooted;
         long session;
+        // What the login's CoreSettings said the instance is called; null when it said nothing.
+        string? systemName;
         // A heartbeat failure belongs to the session it ended; this attempt's session starts without one.
         _heartbeatFailure = null;
         try
@@ -928,11 +936,11 @@ public sealed class AmiConnection : IAmiConnection
                 // MD5 challenge-response login
                 await LoginAsync(reader, writer, connectToken);
 
-                // Detect Asterisk version
-                await DetectVersionAsync(reader, writer, connectToken, cancellationToken);
+                // Detect Asterisk version, and read the instance's name from the same response
+                systemName = await DetectVersionAsync(reader, writer, connectToken, cancellationToken);
             }
 
-            session = StartSession(byLoop, fullyBooted, socket, sessionToken);
+            session = StartSession(byLoop, fullyBooted, socket, systemName, sessionToken);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -969,12 +977,19 @@ public sealed class AmiConnection : IAmiConnection
     /// all under <c>_endingLock</c>, unless an ending has been recorded: then nothing starts, and the attempt yields with
     /// an <see cref="OperationCanceledException"/>. An ending recorded afterwards finds every part of the session in place.
     /// </summary>
-    private long StartSession(bool byLoop, TaskCompletionSource fullyBooted, ISocketConnection socket, CancellationToken sessionToken)
+    private long StartSession(bool byLoop, TaskCompletionSource fullyBooted, ISocketConnection socket, string? systemName,
+        CancellationToken sessionToken)
     {
         lock (_endingLock)
         {
             ThrowIfEndingRecordedLocked(byLoop);
-            var ordinal = Interlocked.Increment(ref _sessionOrdinal);
+
+            // The login's read is recorded for the new ordinal before anything can name that ordinal (the ordinal, the
+            // pump, a delivered mark): no reader ever finds the session without its read, and a session whose read gave
+            // nothing records that, so no lookup falls back to an earlier session's name.
+            var ordinal = Volatile.Read(ref _sessionOrdinal) + 1;
+            RecordSystemNameLocked(ordinal, systemName);
+            Interlocked.Exchange(ref _sessionOrdinal, ordinal);
 
             // Decided once, at the login: the connect that follows a loss owes its handlers a notice, and only a notice
             // queued can clear the pending session. The first session follows nothing, and the loop has Reconnected.
@@ -1277,7 +1292,12 @@ public sealed class AmiConnection : IAmiConnection
         }
     }
 
-    private async ValueTask DetectVersionAsync(AmiProtocolReader reader, AmiProtocolWriter writer, CancellationToken ct,
+    /// <summary>
+    /// Reads the version from the login's <c>CoreSettings</c>, and returns the instance's <c>SystemName</c> from the same
+    /// response: <see langword="null"/> when the response gives none (an Asterisk with no <c>systemname</c> writes the
+    /// header empty), when the action is refused, and when the read fails, whatever the fallback reads for the version.
+    /// </summary>
+    private async ValueTask<string?> DetectVersionAsync(AmiProtocolReader reader, AmiProtocolWriter writer, CancellationToken ct,
         CancellationToken callerToken)
     {
         // A probe that fails or times out falls back to the CLI command and then to "Unknown",
@@ -1288,6 +1308,10 @@ public sealed class AmiConnection : IAmiConnection
             await writer.WriteActionAsync("CoreSettings", actionId, cancellationToken: ct);
             var response = await ReadResponseAsync(reader, actionId, ct);
             AsteriskVersion = response["AsteriskVersion"];
+            return string.Equals(response.ResponseStatus, "Success", StringComparison.OrdinalIgnoreCase)
+                && response["SystemName"] is { } name && !string.IsNullOrWhiteSpace(name)
+                    ? name
+                    : null;
         }
         catch (Exception) when (!callerToken.IsCancellationRequested)
         {
@@ -1304,8 +1328,47 @@ public sealed class AmiConnection : IAmiConnection
             {
                 AsteriskVersion = "Unknown";
             }
+
+            return null;
         }
     }
+
+    /// <summary>
+    /// Records <paramref name="systemName"/> as the login read of session <paramref name="ordinal"/>, keeping the
+    /// <see cref="SessionsNamed"/> most recent sessions. Called under <c>_endingLock</c> only.
+    /// </summary>
+    private void RecordSystemNameLocked(long ordinal, string? systemName)
+    {
+        var current = _sessionSystemNames;
+        var keep = Math.Min(current.Length, SessionsNamed - 1);
+        var next = new SessionSystemName[keep + 1];
+        Array.Copy(current, current.Length - keep, next, 0, keep);
+        next[keep] = new SessionSystemName(ordinal, systemName);
+        Volatile.Write(ref _sessionSystemNames, next);
+    }
+
+    /// <summary>
+    /// The instance's <c>SystemName</c> as the login of AMI session <paramref name="session"/> read it from its
+    /// <c>CoreSettings</c> response: the session a loss mark names (<see cref="DeliveredLossMark"/>,
+    /// <see cref="AppliedLossMark"/>). <see langword="null"/> when that read gave none (no <c>systemname</c>, the action
+    /// refused, the read failed), and for a session older than the most recent few, or one this connection never started:
+    /// never another session's name.
+    /// </summary>
+    /// <remarks>Called by Verbara.Sdk.Live; kept with this signature until 3.0.</remarks>
+    internal string? SystemNameOf(long session)
+    {
+        var names = Volatile.Read(ref _sessionSystemNames);
+        for (var i = names.Length - 1; i >= 0; i--)
+        {
+            if (names[i].Session == session)
+                return names[i].SystemName;
+        }
+
+        return null;
+    }
+
+    /// <summary>The <c>SystemName</c> the login of one AMI session read, <see langword="null"/> for none.</summary>
+    private readonly record struct SessionSystemName(long Session, string? SystemName);
 
     /// <summary>
     /// Read messages until we find the response matching the given actionId. It serves the connect, before the reader
