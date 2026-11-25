@@ -1569,13 +1569,17 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             }
 
             session.QueueVisitLeft = true;
+            var mayHaveLostEvents = session.QueueVisitLossEpoch is not { } opened || opened != report.LossEpoch;
 
             // An abandon and then this leave, or a leave with no abandon whose dialplan location differs from the join's
             // (the exit key): the visit ended unanswered. Every answered visit leaves with its join's values, and a visit
-            // whose join was not seen has none to compare, so neither is judged. The call waits in queued until the next
-            // report of the channel that waited there (ReturnFromUnansweredVisit), not at this leave.
+            // whose join was not seen has none to compare, so neither is judged. Nor is the location when events may
+            // have been lost since the visit opened: the caller may have left and re-joined from elsewhere unseen, and a
+            // reload that finds it waiting keeps the held visit with the first join's location. The call waits in queued
+            // until the next report of the channel that waited there (ReturnFromUnansweredVisit), not at this leave.
             if (session.State == CallSessionState.Queued
-                && (session.QueueVisitAbandonReported || IsExitKeyLeave(session.QueueVisitJoinLocation, report.Location)))
+                && (session.QueueVisitAbandonReported
+                    || (!mayHaveLostEvents && IsExitKeyLeave(session.QueueVisitJoinLocation, report.Location))))
             {
                 session.QueueVisitEndedUnanswered = true;
             }
@@ -1583,7 +1587,6 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (CurrentVisit(session, report.Queue) is not { } visit)
                 return;
 
-            var mayHaveLostEvents = session.QueueVisitLossEpoch is not { } opened || opened != report.LossEpoch;
             VisitLeft?.Invoke(new QueueVisitSignal(session.SessionId, session.QueueName!, visit,
                 session.QueueVisitAbandonReported, mayHaveLostEvents));
         }
@@ -1591,7 +1594,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     /// <summary>
     /// Whether a leave with no abandon before it left by the queue's exit key: the join's and the leave's dialplan
-    /// locations are both known and differ in <c>Context</c>, <c>Exten</c> or <c>Priority</c>.
+    /// locations are both known and differ in <c>Context</c>, <c>Exten</c> or <c>Priority</c>. Asked only when the
+    /// leave carries the event-loss epoch the visit opened under; across a possible loss the held join may be an
+    /// earlier visit's, so the comparison says nothing.
     /// </summary>
     private static bool IsExitKeyLeave(QueueDialplanLocation? joined, QueueDialplanLocation? left) =>
         joined is not null && left is not null && joined != left;

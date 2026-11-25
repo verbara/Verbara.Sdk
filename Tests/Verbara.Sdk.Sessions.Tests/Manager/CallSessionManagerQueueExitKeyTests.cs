@@ -15,7 +15,9 @@ namespace Verbara.Sdk.Sessions.Tests.Manager;
 /// Runs on the real manager over <see cref="WrapUpRig"/>'s frames. The frames are synthetic, in the order the
 /// connected-signal-matrix key captures show (the join, the member's ringing leg, the leave, the hang-up of the member's
 /// leg): no capture holds a key exit that changes only the context or only the priority, a leave with no abandon and
-/// its join's values on a call that then reports a hold, or a join that carries no dialplan values.
+/// its join's values on a call that then reports a hold, or a join that carries no dialplan values. The reconnect is a
+/// substitute connection's <c>Reconnected</c>, whose reload answers <c>Status</c> and <c>QueueStatus</c> with typed
+/// synthetic frames.
 /// </remarks>
 [Collection(SessionSubscriberFaultsGroup.Name)]
 public sealed class CallSessionManagerQueueExitKeyTests
@@ -111,6 +113,81 @@ public sealed class CallSessionManagerQueueExitKeyTests
         session.State.Should().Be(CallSessionState.Queued,
             "a leave with its join's values is how every answered visit leaves, so it does not end the visit");
         rig.Events.OfType<CallHeldEvent>().Should().BeEmpty("the call did not return to connected");
+    }
+
+    /// <summary>
+    /// The second queue's <c>QueueStatus</c> answer after a reconnect: the caller still waiting, its wait reported as
+    /// zero seconds, so the reload takes it for the visit already held.
+    /// </summary>
+    private static ManagerEvent[] CallerStillWaitingInSecondQueue() =>
+    [
+        new QueueParamsEvent
+        {
+            Queue = "q-second", Max = 0, Strategy = "ringall", Calls = 1, HoldTime = 0, TalkTime = 0, Completed = 0,
+            Abandoned = 0,
+        },
+        new QueueEntryEvent
+        {
+            Queue = "q-second", Position = 1, Channel = CallerChan, Uniqueid = Caller, CallerIDNum = Caller,
+            CallerIDName = Caller, Wait = 0, Priority = 0,
+        },
+    ];
+
+    /// <summary>The <c>Status</c> answer after a reconnect: the caller's channel and the member's ringing leg, still up.</summary>
+    private static ManagerEvent[] ChannelsStillUp() =>
+    [
+        StatusOf(Caller, CallerChan, "6", "Up"),
+        StatusOf(RingingLeg, MemberChannel("PJSIP/agent9", RingingLeg), "5", "Ringing"),
+    ];
+
+    private static StatusEvent StatusOf(string uniqueId, string channel, string state, string stateDesc) => new()
+    {
+        UniqueId = uniqueId,
+        Channel = channel,
+        RawFields = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["ChannelState"] = state, ["ChannelStateDesc"] = stateDesc, ["Linkedid"] = Caller,
+            ["Context"] = JoinedAt.Context, ["Exten"] = JoinedAt.Exten, ["Priority"] = JoinedAt.Priority,
+        },
+    };
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CallSession_ShouldJudgeALeaveByItsLocation_OnlyWhenNoEventCanHaveBeenLostSinceTheJoin(
+        bool reconnectsWhileQueued)
+    {
+        // Started at the wall clock: the reload stamps the snapshot's read instant on the server's clock, and the visit's
+        // start is on this one, so the two are compared as the held-visit rule compares them in production.
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider(DateTimeOffset.UtcNow));
+        var frames = ConnectedThenLeavesWithNoAbandon(JoinedAt, ("queue-exit", "1", "0"));
+        var leave = Array.FindLastIndex(frames, f => f is QueueCallerLeaveEvent);
+        rig.Deliver(frames[..leave]);
+        if (reconnectsWhileQueued)
+            await rig.ReconnectAsync(ChannelsStillUp(), CallerStillWaitingInSecondQueue());
+        rig.Deliver(frames[leave..]);
+        var session = rig.Session(Caller);
+        var afterLeave = session.State;
+
+        rig.Deliver(Hold(Caller));
+
+        using var scope = new AssertionScope();
+        afterLeave.Should().Be(CallSessionState.Queued, "the leave itself never moves the call out of queued");
+        if (reconnectsWhileQueued)
+        {
+            rig.Events.OfType<CallQueuedEvent>().Should().HaveCount(2,
+                "premise: the reload took the waiting caller for the visit held, not a new one");
+            session.State.Should().Be(CallSessionState.Queued,
+                "across a reconnect the caller may have left and re-joined from elsewhere unseen, and the reload "
+                + "keeps the held visit with the first join's location, so a leave that differs from it is not judged");
+            rig.Events.OfType<CallHeldEvent>().Should().BeEmpty("the call did not return to connected");
+        }
+        else
+        {
+            session.State.Should().Be(CallSessionState.OnHold,
+                "with no reconnect between the join and the leave, a differing location is the exit key");
+            rig.Events.OfType<CallHeldEvent>().Should().ContainSingle("the hold of a call back in connected is counted");
+        }
     }
 
     [Fact]
