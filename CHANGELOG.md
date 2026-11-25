@@ -109,6 +109,42 @@ are not known to come from the same instance. `AsteriskInstanceIdentity` refuses
 `IAgentSessionTracker` copies the identity of the notification that caused each agent state change. `Instance` is
 part of a notification's value, so two notifications that differ only by it are no longer equal.
 
+### Changed — BREAKING: a call is connected each time someone answers it (#NNN)
+
+"Connected" now means one thing for the notification, the state and the connection time: the call is in conversation
+with someone now. Code that counts answered calls, starts assistance or reserves capacity from `CallConnectedEvent`
+should read the [2.11.0 migration guide](docs/guides/migration-2.11.0.md#what-a-connected-call-means).
+
+- **One `CallConnectedEvent` each time the call enters `Connected`** from `Dialing`, `Ringing`, `Queued` or
+  `Transferring`, whatever report made it: a leg's answer, the dial outcome, a bridge entry, an agent's connect or the
+  queue's report. A re-queued call and a call back from a transfer now raise one more. None is raised on a return from
+  hold (that is `CallResumedEvent`), after a reload or an admission, or for a call the dialplan answers with no dial or
+  queue. `CallSession.ConnectedAt` is the first connection the SDK observed and never moves after it.
+- **A connected or transferring call that joins a queue waits in `Queued`.** It used to stay `Connected` or
+  `Transferring`. The enum's ordinals do not move. A call that hangs up while waiting ends on the cause of the channel
+  that waited: `Completed` on a normal hangup if it was ever connected, `Failed` otherwise.
+- **`CallConnectedEvent.WaitTime` is the wait of that connection:** from the start of the queue visit it answers, from
+  creation for a first connection with no queue, or from the instant the call became `Transferring` for a return from a
+  transfer. `CallSession.WaitTime` does not change.
+- **The event's `QueueName`, `AgentId` and `AgentInterface` are those of its own connection.** `QueueName` is `null`
+  unless the connection answers a queue visit. `CallSession.AgentInterface` and `CallSession.AgentId` follow the most
+  recent connection (they kept the first), `null` after a connection that names none; `CallSession.QueueName` keeps the
+  last queue.
+- **`CallEndedEvent.FinalState`** (new, not positional) says whether the call ended `Completed` or `Failed`, so a stored
+  notification carries its outcome; it is `null` when the event is built with the positional constructor.
+- **A queue visit that ends unanswered returns the call to where it was.** When the caller abandons the queue
+  (`QueueCallerAbandon` then `QueueCallerLeave`) or leaves by the queue's exit key (a leave whose `Context`, `Exten` or
+  `Priority` differ from the join's), the call returns, on the next report of the channel that waited, to the state it
+  had before the queue: `Connected`, `Transferring` or the never-connected state it came from. A call that never talked
+  to anyone ends `Failed` with no `ConnectedAt`, even when the dialplan answered it, unless someone else answers it
+  afterwards (an overflow `Dial` that answers, another channel of the call answering, or its own entry into a bridge
+  where someone already is); that raises `CallConnectedEvent` with no queue and no member. Its own answer or a bridge
+  entry alone connects nothing. The guide lists the known limits, among them that what the call knows about its visit is
+  not saved in a session store.
+- **An unhold resumes only a call that is on hold.** From any other state it moves nothing and raises no
+  `CallResumedEvent`. The held channel's own unhold ends the hold time even after the call left `OnHold` (a held call
+  that is transferred); another channel's unhold does not.
+
 ### Added: `CallConnectedEvent.AgentInterface` names the member whose connection the event announces (#615)
 
 `CallConnectedEvent` gains `string? AgentInterface { get; init; }`: the interface of the member whose connect the event
