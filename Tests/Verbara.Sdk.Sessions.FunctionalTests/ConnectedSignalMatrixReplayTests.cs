@@ -233,6 +233,8 @@ internal static class SignalMatrix
 
         public int Transferred { get; private set; }
 
+        public List<CallEndedEvent> Endings { get; } = [];
+
         public int Swallowed { get; set; }
 
         public CallSessionState? StateAt(string checkpoint) =>
@@ -263,6 +265,7 @@ internal static class SignalMatrix
                 case CallHeldEvent: Held++; break;
                 case CallResumedEvent: Resumed++; break;
                 case CallTransferredEvent: Transferred++; break;
+                case CallEndedEvent e: Endings.Add(e); break;
             }
         }
 
@@ -276,7 +279,9 @@ internal static class SignalMatrix
             $"session={Session?.SessionId ?? "(none)"} state={Session?.State} connectedAt={Session?.ConnectedAt?.ToString("O", CultureInfo.InvariantCulture)} "
             + $"checkpoints=[{string.Join(", ", _checkpoints.Select(c => $"{c.Key}:{c.Value.State}/{c.Value.Announcements}"))}] "
             + $"announcements=[{string.Join(", ", Announcements.Select(a => $"{a.Event.QueueName}|{a.Event.AgentInterface}|{a.State}"))}] "
-            + $"queued=[{string.Join(", ", StatesWhenQueued)}] held={Held} resumed={Resumed} transferred={Transferred}";
+            + $"queued=[{string.Join(", ", StatesWhenQueued)}] held={Held} resumed={Resumed} transferred={Transferred} "
+            + $"cause={Session?.HangupCause?.ToString() ?? "null"} talk={Session?.TalkTime} "
+            + $"endings=[{string.Join(", ", Endings.Select(e => e.Cause?.ToString() ?? "null"))}]";
     }
 
     private static string? Field(ManagerEvent e, string key) => e.RawFields?.GetValueOrDefault(key);
@@ -289,11 +294,18 @@ internal static class SignalMatrix
         Field(f, "ActionID") is null && !(Field(f, "UserEvent")?.StartsWith("Capture", StringComparison.Ordinal) ?? false);
 
     /// <summary>The frames of <paramref name="step"/>, from its <c>CaptureMarker</c> to the next one.</summary>
-    public static async Task<Call> ReadAsync(string fixture, string step)
+    public static async Task<Call> ReadAsync(string fixture, string step) =>
+        Slice(await AmiCaptureReplay.ReadCaptureAsync(fixture), fixture, step);
+
+    /// <summary>The frames of <paramref name="step"/> in a capture held in memory (a copy a test altered).</summary>
+    public static async Task<Call> ReadAsync(byte[] capture, string step) =>
+        Slice(await AmiCaptureReplay.ReadCaptureAsync(capture), "(in memory)", step);
+
+    private static Call Slice(IReadOnlyList<ManagerEvent> capture, string fixture, string step)
     {
         var frames = new List<ManagerEvent>();
         string? current = null;
-        foreach (var f in await AmiCaptureReplay.ReadCaptureAsync(fixture))
+        foreach (var f in capture)
         {
             if (IsUserEvent(f, "CaptureMarker"))
             {
@@ -314,9 +326,11 @@ internal static class SignalMatrix
     }
 
     /// <summary>Delivers every live frame of the call, in capture order, to a fresh server and manager.</summary>
-    public static async Task<Run> LiveAsync(string fixture, string step)
+    public static async Task<Run> LiveAsync(string fixture, string step) => await LiveAsync(await ReadAsync(fixture, step));
+
+    /// <summary>Delivers every live frame of <paramref name="call"/>, in order, to a fresh server and manager.</summary>
+    public static async Task<Run> LiveAsync(Call call)
     {
-        var call = await ReadAsync(fixture, step);
         await using var rig = await AmiCaptureReplay.ReplayRig.StartAsync(new SessionOptions());
         var run = new Run(call.CallerUniqueId, rig.Manager.GetByChannelId);
         using var subscription = rig.Manager.Events.Subscribe(run.On);
@@ -343,9 +357,12 @@ internal static class SignalMatrix
     /// Withholds the call's frames before its last snapshot checkpoint, answers a reconnect reload with the
     /// <c>Status</c> and <c>QueueStatus</c> the capture took there, and delivers the rest.
     /// </summary>
-    public static async Task<Run> ReloadAsync(string fixture, string step)
+    public static async Task<Run> ReloadAsync(string fixture, string step) =>
+        await ReloadAsync(await ReadAsync(fixture, step));
+
+    /// <summary>The reload arm of <see cref="ReloadAsync(string, string)"/> over <paramref name="call"/>.</summary>
+    public static async Task<Run> ReloadAsync(Call call)
     {
-        var call = await ReadAsync(fixture, step);
         var at = call.Checkpoints.Last(c => c.StatusId is not null && c.QueueStatusId is not null);
         var status = call.Frames.Where(f => Field(f, "ActionID") == at.StatusId).ToList();
         var queueStatus = call.Frames.Where(f => Field(f, "ActionID") == at.QueueStatusId).ToList();
@@ -391,6 +408,69 @@ internal static class SignalMatrix
 
                 run.Bind();
             }
+        }
+        finally
+        {
+            await manager.DisposeAsync();
+            await server.DisposeAsync();
+        }
+
+        return run;
+    }
+
+    /// <summary>
+    /// Delivers the call's live frames up to <paramref name="checkpoint"/>, then answers a reconnect reload with the
+    /// list ends of the <c>Status</c> and <c>QueueStatus</c> the capture took there and none of their rows: an Asterisk
+    /// that no longer holds any of the call's channels. Nothing after the checkpoint is delivered.
+    /// </summary>
+    public static async Task<Run> GoneAtAsync(Call call, string checkpoint)
+    {
+        var at = call.Checkpoints.Single(c => string.Equals(c.Name, checkpoint, StringComparison.Ordinal)
+            && c.StatusId is not null && c.QueueStatusId is not null);
+        var statusEnd = call.Frames.Where(f => Field(f, "ActionID") == at.StatusId
+            && string.Equals(f.EventType, "StatusComplete", StringComparison.Ordinal)).ToList();
+        var queueStatusEnd = call.Frames.Where(f => Field(f, "ActionID") == at.QueueStatusId
+            && string.Equals(f.EventType, "QueueStatusComplete", StringComparison.Ordinal)).ToList();
+        if (statusEnd.Count != 1 || queueStatusEnd.Count != 1)
+            throw new InvalidOperationException($"premise: the {checkpoint} snapshots end with their list-complete frames");
+
+        var connection = new ReloadableConnection();
+        var server = new VerbaraServer(connection.Connection, NullLogger<VerbaraServer>.Instance);
+        var manager = new CallSessionManager(Options.Create(new SessionOptions()), NullLogger<CallSessionManager>.Instance,
+            new InMemorySessionStore());
+        var run = new Run(call.CallerUniqueId, manager.GetByChannelId);
+        try
+        {
+            using var subscription = manager.Events.Subscribe(run.On);
+            manager.AttachToServer(server, "reload-replay");
+            await server.StartAsync();
+            for (var i = 0; i < at.Index; i++)
+            {
+                var f = call.Frames[i];
+                if (IsUserEvent(f, "CaptureCheckpoint"))
+                {
+                    run.Mark(Field(f, "Name") ?? "");
+                    continue;
+                }
+
+                if (!IsLive(f))
+                    continue;
+
+                try
+                {
+                    connection.Observer.OnNext(f);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    run.Swallowed++;
+                }
+
+                run.Bind();
+            }
+
+            run.Mark(checkpoint);
+            await connection.ReloadAsync(statusEnd, queueStatusEnd);
+            run.Mark("gone");
         }
         finally
         {
