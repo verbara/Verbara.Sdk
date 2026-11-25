@@ -206,7 +206,12 @@ internal static class SignalMatrix
     internal sealed record Call(string Step, IReadOnlyList<ManagerEvent> Frames, string CallerUniqueId,
         IReadOnlyList<(int Index, string Name, string? StatusId, string? QueueStatusId)> Checkpoints);
 
-    internal sealed record Announcement(CallConnectedEvent Event, CallSessionState State, DateTimeOffset? ConnectedAt);
+    /// <summary>
+    /// A <see cref="CallConnectedEvent"/> and what the call recorded when it was delivered: its state, its connected
+    /// time, its agent and member, and how many saves the run's store had received.
+    /// </summary>
+    internal sealed record Announcement(CallConnectedEvent Event, CallSessionState State, DateTimeOffset? ConnectedAt,
+        string? AgentId = null, string? AgentInterface = null, int SavesBefore = 0);
 
     internal sealed class Run
     {
@@ -215,11 +220,15 @@ internal static class SignalMatrix
         private readonly Dictionary<string, (CallSessionState? State, int Announcements)> _checkpoints =
             new(StringComparer.Ordinal);
 
-        public Run(string? callerUniqueId, Func<string, CallSession?> byChannel)
+        public Run(string? callerUniqueId, Func<string, CallSession?> byChannel, RecordingSessionStore? store = null)
         {
             _callerUniqueId = callerUniqueId;
             _byChannel = byChannel;
+            Store = store;
         }
+
+        /// <summary>The store the run's manager saves to, when the run records its saves.</summary>
+        public RecordingSessionStore? Store { get; }
 
         public CallSession? Session { get; private set; }
 
@@ -264,7 +273,10 @@ internal static class SignalMatrix
             Log.Add(evt);
             switch (evt)
             {
-                case CallConnectedEvent c: Announcements.Add(new Announcement(c, Session.State, Session.ConnectedAt)); break;
+                case CallConnectedEvent c:
+                    Announcements.Add(new Announcement(c, Session.State, Session.ConnectedAt, Session.AgentId,
+                        Session.AgentInterface, Store?.Saves.Count ?? 0));
+                    break;
                 case CallQueuedEvent: StatesWhenQueued.Add(Session.State); break;
                 case CallHeldEvent: Held++; break;
                 case CallResumedEvent: Resumed++; break;
@@ -332,11 +344,14 @@ internal static class SignalMatrix
     /// <summary>Delivers every live frame of the call, in capture order, to a fresh server and manager.</summary>
     public static async Task<Run> LiveAsync(string fixture, string step) => await LiveAsync(await ReadAsync(fixture, step));
 
-    /// <summary>Delivers every live frame of <paramref name="call"/>, in order, to a fresh server and manager.</summary>
-    public static async Task<Run> LiveAsync(Call call)
+    /// <summary>
+    /// Delivers every live frame of <paramref name="call"/>, in order, to a fresh server and manager, which saves to
+    /// <paramref name="store"/> when one is given.
+    /// </summary>
+    public static async Task<Run> LiveAsync(Call call, RecordingSessionStore? store = null)
     {
-        await using var rig = await AmiCaptureReplay.ReplayRig.StartAsync(new SessionOptions());
-        var run = new Run(call.CallerUniqueId, rig.Manager.GetByChannelId);
+        await using var rig = await AmiCaptureReplay.ReplayRig.StartAsync(new SessionOptions(), store);
+        var run = new Run(call.CallerUniqueId, rig.Manager.GetByChannelId, store);
         using var subscription = rig.Manager.Events.Subscribe(run.On);
         foreach (var f in call.Frames)
         {

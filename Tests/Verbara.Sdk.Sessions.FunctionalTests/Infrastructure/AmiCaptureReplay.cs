@@ -8,6 +8,7 @@ using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Ami.Generated;
 using Verbara.Sdk.Ami.Internal;
 using Verbara.Sdk.Live.Server;
+using Verbara.Sdk.Sessions.Extensions;
 using Verbara.Sdk.Sessions.Internal;
 using Verbara.Sdk.Sessions.Manager;
 
@@ -1031,6 +1032,13 @@ internal static class AmiCaptureReplay
         public static Task<ReplayRig> StartAsync(SessionOptions options) => StartOnAsync(options, clock: null);
 
         /// <summary>
+        /// As <see cref="StartAsync(SessionOptions)"/>, with the manager saving to <paramref name="store"/>, or to an
+        /// in-memory store when it is <see langword="null"/>.
+        /// </summary>
+        public static Task<ReplayRig> StartAsync(SessionOptions options, SessionStoreBase? store) =>
+            StartOnAsync(options, clock: null, store: store);
+
+        /// <summary>
         /// Starts a rig whose manager runs on <paramref name="clock"/>, through its internal constructor, with
         /// <paramref name="wrapUpDurations"/> when one is given.
         /// </summary>
@@ -1042,7 +1050,7 @@ internal static class AmiCaptureReplay
         }
 
         private static async Task<ReplayRig> StartOnAsync(SessionOptions options, TimeProvider? clock,
-            IWrapUpDurationProvider? wrapUpDurations = null)
+            IWrapUpDurationProvider? wrapUpDurations = null, SessionStoreBase? store = null)
         {
             var connection = Substitute.For<IAmiConnection>();
             connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
@@ -1056,7 +1064,7 @@ internal static class AmiCaptureReplay
                 ? new CallSessionManager(
                     Options.Create(options),
                     NullLogger<CallSessionManager>.Instance,
-                    new InMemorySessionStore())
+                    store ?? new InMemorySessionStore())
                 : new CallSessionManager(
                     Options.Create(options),
                     NullLogger<CallSessionManager>.Instance,

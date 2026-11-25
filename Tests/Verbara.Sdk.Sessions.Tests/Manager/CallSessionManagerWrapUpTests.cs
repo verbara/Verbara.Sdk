@@ -275,6 +275,71 @@ public sealed class CallSessionManagerWrapUpTests
     }
 
     [Fact]
+    public async Task AgentConnect_ShouldLeaveTheKnownAgentsWrapUpOpenAndClearTheAgent_WhenAMemberThatNamesNoAgentTakesTheCallsNextVisit()
+    {
+        const string secondMember = "PJSIP/agent2";
+        var clock = new FakeTimeProvider();
+        await using var rig = await WrapUpRig.StartAsync(clock, Options());
+        rig.Deliver(AgentLogin("agent-1", Member, "login-1"));
+        rig.Deliver(QueueCallConnected(Queue, "c1", "m1", Member, agent: "agent-1"));
+        var session = rig.Session("c1");
+        var sessionId = session.SessionId;
+        (string? AgentId, string? AgentInterface)? atSecondAnnouncement = null;
+        var announcements = 0;
+        using var reader = rig.Manager.Events.Subscribe(evt =>
+        {
+            if (evt is CallConnectedEvent c && c.SessionId == sessionId && ++announcements == 1)
+                atSecondAnnouncement = (session.AgentId, session.AgentInterface);
+        });
+        var afterFirstVisit = (session.AgentId, session.AgentInterface);
+        clock.Advance(TimeSpan.FromSeconds(60));
+        var firstCompletedAt = clock.GetUtcNow();
+        rig.Deliver(MemberBlindTransfers(Queue, "c1", "m1", Member, "queues", "support", agent: "agent-1"));
+
+        clock.Advance(TimeSpan.FromSeconds(2));
+        var beforeSecondConnect = rig.Events.Count;
+        rig.Deliver(SecondVisitConnected("support", "c1", "m2", secondMember));
+        var wrapUpsAtSecondConnect = rig.Events.Skip(beforeSecondConnect).OfType<CallWrapUpEvent>().ToArray();
+        clock.Advance(TimeSpan.FromSeconds(15));
+        var secondCompletedAt = clock.GetUtcNow();
+        rig.Deliver(SecondMemberHangsUp("support", "c1", "m2", secondMember, Bridge("c1") + "-2"));
+        clock.Advance(TimeSpan.FromMinutes(5));
+
+        new
+        {
+            AfterFirstVisit = afterFirstVisit,
+            WrapUpsAtSecondConnect = wrapUpsAtSecondConnect,
+            Announced = rig.Events.OfType<CallConnectedEvent>().Where(e => e.SessionId == sessionId)
+                .Select(e => (e.AgentId, e.QueueName, e.AgentInterface)).ToArray(),
+            AtSecondAnnouncement = atSecondAnnouncement,
+            AtEnd = (session.AgentId, session.AgentInterface),
+            WrapUps = rig.WrapUps.ToArray(),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                AfterFirstVisit = ((string?)"agent-1", (string?)Member),
+                WrapUpsAtSecondConnect = Array.Empty<CallWrapUpEvent>(),
+                Announced = new (string?, string?, string?)[]
+                {
+                    ("agent-1", Queue, Member),
+                    (null, "support", secondMember),
+                },
+                AtSecondAnnouncement = ((string?, string?)?)(null, secondMember),
+                AtEnd = ((string?)null, (string?)secondMember),
+                WrapUps = new[]
+                {
+                    new CallWrapUpEvent(sessionId, ServerId, firstCompletedAt + WrapUp, "agent-1", Queue, WrapUp),
+                    new CallWrapUpEvent(sessionId, ServerId, secondCompletedAt + WrapUp, null, "support", WrapUp),
+                },
+            },
+            "the call records the agent and the member of its most recent connection: app_queue's connect of the "
+            + "second visit to a member that names no agent clears agent-1 and records that member, already when the "
+            + "second visit is announced and still at the end. Its wrap-up key is read from the call as written, so "
+            + "agent-1's open wrap-up is not closed at that connect and runs its own 30 s, and the second leg's "
+            + "wrap-up opens on the member's interface on this server with no agent. " + Describe(rig));
+    }
+
+    [Fact]
     public async Task AgentComplete_ShouldOpenNoWrapUpUntilTheMembersLastConnectedCallEnds_WhenTheMemberTakesTwoCallsAtOnce()
     {
         var clock = new FakeTimeProvider();
@@ -330,6 +395,42 @@ public sealed class CallSessionManagerWrapUpTests
     }
 
     // --- Guards: green on unfixed code, and must stay green ------------------------------------------------------
+
+    [Fact]
+    public async Task AgentConnect_ShouldKeepTheKnownAgentAndKeyItsWrapUpOnTheAgent_WhenTheQueueReportsTheKnownAgentsOwnConnection()
+    {
+        var clock = new FakeTimeProvider();
+        await using var rig = await WrapUpRig.StartAsync(clock, Options());
+        rig.Deliver(AgentLogin("agent-1", Member, "login-1"));
+        rig.Deliver(QueueCallConnected(Queue, "c1", "m1", Member, agent: "agent-1"));
+        var session = rig.Session("c1");
+        var afterConnect = (session.AgentId, session.AgentInterface);
+        clock.Advance(TimeSpan.FromSeconds(60));
+        var completedAt = clock.GetUtcNow();
+        rig.Deliver(MemberHangsUp(Queue, "c1", "m1", Member, agent: "agent-1"));
+        clock.Advance(WrapUp);
+        clock.Advance(TimeSpan.FromMinutes(5));
+
+        new
+        {
+            AfterConnect = afterConnect,
+            Announced = rig.Events.OfType<CallConnectedEvent>().Where(e => e.SessionId == session.SessionId)
+                .Select(e => (e.AgentId, e.QueueName, e.AgentInterface)).ToArray(),
+            WrapUps = rig.WrapUps.ToArray(),
+        }.Should().BeEquivalentTo(
+            new
+            {
+                AfterConnect = ((string?)"agent-1", (string?)Member),
+                Announced = new (string?, string?, string?)[] { ("agent-1", Queue, Member) },
+                WrapUps = new[]
+                {
+                    new CallWrapUpEvent(session.SessionId, ServerId, completedAt + WrapUp, "agent-1", Queue, WrapUp),
+                },
+            },
+            "Guard: the known agent's connect makes the connection and app_queue's report of the same connection, "
+            + "which follows it, finds the call connected: it keeps agent-1 and its interface, and keys the leg, so "
+            + "the wrap-up, on agent-1. " + Describe(rig));
+    }
 
     [Fact]
     public async Task CallEnded_ShouldNeverRaiseAWrapUp_WhenNoAgentOrMemberTookTheCall()
