@@ -42,6 +42,7 @@ internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
     private readonly TimeSpan _metricsWindow;
     private readonly TimeSpan _slaThreshold;
     private readonly IDisposable _subscription;
+    private readonly ICallSessionManager _manager;
     private readonly IQueueVisitSource? _visitSource;
 
     /// <summary>Over <paramref name="manager"/> alone: its visit signals when it is the engine itself.</summary>
@@ -58,6 +59,7 @@ internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
     {
         _metricsWindow = options.Value.QueueMetricsWindow;
         _slaThreshold = options.Value.SlaThreshold;
+        _manager = manager;
         _subscription = manager.Events.Subscribe(new EventObserver(this));
         _visitSource = visitSource;
         if (_visitSource is not null)
@@ -153,16 +155,26 @@ internal sealed class QueueSessionTracker : IQueueSessionTracker, IDisposable
 
         // The visit's wait runs from its start to this connection, whether the leave that precedes every answer was
         // seen or not. When no visit was observed (the tracker was built after its join, or the session was
-        // reconstructed), the event's own wait since the call was created stands in for it, so the answer still
-        // carries a wait.
+        // reconstructed), the event's own wait stands in for it, so the answer still carries a wait.
         if (visit is null || was == VisitState.Gone)
         {
-            Count(evt.QueueName, answered: 1, answeredWait: evt.WaitTime);
+            Count(evt.QueueName, answered: 1, answeredWait: UnobservedVisitWait(evt));
             return;
         }
 
         Count(evt.QueueName, answered: 1, waiting: was == VisitState.Open ? -1 : 0, answeredWait: evt.Timestamp - visit.OpenedAt);
     }
+
+    /// <summary>
+    /// The wait of an answer whose visit this tracker did not observe: the event's own, the visit's wait. A zero there
+    /// is the manager's "the visit's start is unknown", not an answer at once, so the wait since the call was created
+    /// stands in, as the queue wait-time histogram reads it: an upper bound that never counts an unmeasured wait within
+    /// the SLA. Zero stays when the call is no longer reachable or was created after the event's instant.
+    /// </summary>
+    private TimeSpan UnobservedVisitWait(CallConnectedEvent evt) =>
+        evt.WaitTime == TimeSpan.Zero && _manager.GetById(evt.SessionId) is { } call && evt.Timestamp >= call.CreatedAt
+            ? evt.Timestamp - call.CreatedAt
+            : evt.WaitTime;
 
     private void HandleCallEnded(CallEndedEvent evt)
     {
