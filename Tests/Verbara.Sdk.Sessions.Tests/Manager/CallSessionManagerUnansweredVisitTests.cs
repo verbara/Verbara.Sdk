@@ -455,6 +455,35 @@ public sealed class CallSessionManagerUnansweredVisitTests
     }
 
     /// <summary>
+    /// A never-connected call back in its initial state after an unanswered visit that dials on from there is connected
+    /// by the dialled party answering, not by its own channel entering a bridge alone or answering.
+    /// </summary>
+    [Fact]
+    public async Task CallSession_ShouldEndFailedWithNoConnection_WhenACallBackInItsInitialStateDialsAndOnlyItsOwnChannelReports()
+    {
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
+        rig.Deliver(UnansweredThenTimesOut());
+        const string overflowLeg = "o1";
+        const string overflowChannel = "PJSIP/overflow-o1";
+        rig.Deliver(
+            NewChannel(overflowLeg, overflowChannel, "Down", Caller, context: "overflow"),
+            DialBegin(overflowLeg, overflowChannel),
+            BridgeCreate("lone"),
+            BridgeEnter("lone", Caller),
+            NewState(Caller, "Up"));
+        var session = rig.Session(Caller);
+        var afterReports = session.State;
+
+        rig.Deliver(HangupWith(overflowLeg, HangupCause.NoAnswer), Hangup(Caller));
+
+        using var scope = new AssertionScope();
+        afterReports.Should().Be(CallSessionState.Dialing, "the dial began, and nobody answered it");
+        session.State.Should().Be(CallSessionState.Failed, "nobody answered the call");
+        session.ConnectedAt.Should().BeNull("nobody answered the call");
+        rig.Events.OfType<CallConnectedEvent>().Should().BeEmpty("nothing connected the call");
+    }
+
+    /// <summary>
     /// The control: an overflow <c>Dial</c> that answers a call dialing before its unanswered visit connects it, once,
     /// whichever report of the answer comes first. <c>leg-up</c> is the order the q-timeout-dial capture shows (the
     /// dialled leg's answer, the <c>DialEnd</c> ANSWER, the caller's own answer, the dialled leg and then the caller

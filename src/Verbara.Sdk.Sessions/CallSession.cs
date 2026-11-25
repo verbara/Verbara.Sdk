@@ -476,8 +476,31 @@ public sealed class CallSession
         State = before;
         if (before == CallSessionState.Transferring)
             TransferringAfterUnansweredVisit = true;
+        if (before is CallSessionState.Created or CallSessionState.Dialing or CallSessionState.Ringing && !HasBeenConnected)
+            AwaitingAnswerAfterUnansweredVisit = true;
         return true;
     }
+
+    /// <summary>
+    /// Whether the call, never connected, is back in its initial state, <see cref="CallSessionState.Dialing"/> or
+    /// <see cref="CallSessionState.Ringing"/> after a queue visit that ended unanswered (and has dialed on from there,
+    /// if it was back in its initial state) and nobody has answered it since.
+    /// Until then a report of the channel that waited in the queue does not connect it
+    /// (<see cref="IsUnansweredWaitingCallersOwnReport"/>): only someone else answering does. Set by
+    /// <see cref="TryReturnFromUnansweredVisit"/>, cleared by the call's next connection and at each visit the manager
+    /// opens. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal bool AwaitingAnswerAfterUnansweredVisit { get; set; }
+
+    /// <summary>
+    /// Whether a report of channel <paramref name="uniqueId"/> is the waiting channel's own while the call awaits an
+    /// answer after an unanswered visit (<see cref="AwaitingAnswerAfterUnansweredVisit"/>): its answer (the dialplan's
+    /// <c>Answer()</c>) or its entering a bridge alone. Nobody answered the call, so such a report does not connect it;
+    /// a dial outcome of ANSWER, or another channel of the call answering or entering a bridge, does. Read under
+    /// <see cref="SyncRoot"/>.
+    /// </summary>
+    internal bool IsUnansweredWaitingCallersOwnReport(string uniqueId) => AwaitingAnswerAfterUnansweredVisit
+        && string.Equals(QueueVisitCallerUniqueId, uniqueId, StringComparison.Ordinal);
 
     /// <summary>
     /// Whether the call is back in <see cref="CallSessionState.Transferring"/> after a queue visit that ended unanswered

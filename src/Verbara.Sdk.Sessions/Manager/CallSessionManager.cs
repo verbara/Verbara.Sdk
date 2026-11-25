@@ -1263,6 +1263,12 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                     if (session.State == CallSessionState.Queued)
                         break;
 
+                    // A never-connected call back from an unanswered visit (and dialing or ringing): the waiting
+                    // channel's own answer is the dialplan's, not someone answering it, and no answer in the initial
+                    // state either, since the call entered a queue.
+                    if (session.IsUnansweredWaitingCallersOwnReport(channel.UniqueId))
+                        break;
+
                     if (EnterConnected(session) is { } answeredFrom)
                     {
                         RecordConnectionMember(session, answeredFrom, agentId: null, memberInterface: null);
@@ -1368,6 +1374,15 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (session.State == CallSessionState.Queued)
                 return;
 
+            // A never-connected call back from an unanswered visit is not connected by its waiting channel entering a
+            // bridge: only by the entry of another channel of the call, someone who answered.
+            if (session.IsUnansweredWaitingCallersOwnReport(uniqueId))
+            {
+                if (returned)
+                    _ = PersistAsync(session);
+                return;
+            }
+
             if (EnterConnected(session) is { } bridgedFrom)
             {
                 RecordConnectionMember(session, bridgedFrom, agentId: null, memberInterface: null);
@@ -1448,6 +1463,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             session.QueueVisitLeft = false;
             session.QueueVisitAbandonReported = false;
             session.QueueVisitEndedUnanswered = false;
+            session.AwaitingAnswerAfterUnansweredVisit = false;
             session.QueueVisitStartedAt = visitStartedAt;
             session.QueueVisitLossEpoch = entry.LossEpoch ?? server.ReadEventLossEpoch();
             session.QueueVisitJoinOrdinal = entry.JoinOrdinal;
@@ -1817,6 +1833,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         var connectedAt = _timeProvider.GetUtcNow();
         session.ConnectedAt ??= connectedAt;
         session.TransferringAfterUnansweredVisit = false;
+        session.AwaitingAnswerAfterUnansweredVisit = false;
         var answersAVisit = enteredFrom is CallSessionState.Queued;
         DateTimeOffset? waitedFrom = enteredFrom switch
         {
