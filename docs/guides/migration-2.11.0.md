@@ -26,6 +26,7 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Sessions` | [`CallConnectedEvent.WaitTime` is the wait of its own connection](#callconnectedeventwaittime-is-the-wait-of-its-own-connection) | behaviour, BREAKING (no compiler error) |
 | `Verbara.Sdk.Sessions` | [Each connected announcement names its own queue and member; the call keeps its latest member](#each-connected-announcement-names-its-own-queue-and-member-the-call-keeps-its-latest-member) | behaviour, new member, BREAKING (no compiler error) |
 | `Verbara.Sdk.Sessions` | [`CallEndedEvent` carries the state the call ended in](#callendedevent-carries-the-state-the-call-ended-in) | new member (no compiler error) |
+| `Verbara.Sdk.Sessions` | [Every session notification names the Asterisk instance it came from](#every-session-notification-names-the-asterisk-instance-it-came-from) | new member (no compiler error) |
 | `Verbara.Sdk.Sessions` | [A queue visit that ends unanswered returns the call to its state before the visit](#a-queue-visit-that-ends-unanswered-returns-the-call-to-its-state-before-the-visit) | behaviour, BREAKING (no compiler error) |
 | `Verbara.Sdk.Sessions`, `Verbara.Sdk.Sessions.Redis`, `Verbara.Sdk.Sessions.Postgres` | [A session store's `linkedid` lookup with several servers](#a-session-stores-linkedid-lookup-with-several-servers) | behaviour, new member, fix, BREAKING (no compiler error; new Redis index key) |
 | `Verbara.Sdk.Hosting` | [A host that attaches the server by hand or decorates the session manager](#a-host-that-attaches-the-server-by-hand-or-decorates-the-session-manager) | fix, behaviour (no compiler error) |
@@ -906,8 +907,8 @@ passes through states in orders it did not before.
 **Who is affected.** Code that subscribes to `ICallSessionManager.Events` and treats each `CallConnectedEvent` as a new
 answered call: an "answered" counter, the start of an assistance or recording step, or the reservation of an agent's
 capacity. A plain dialed call now reaches that code, and a re-queued call or a call back from a transfer reaches it
-twice. A click-to-dial call your code classifies as inbound can move from offered to active twice: do not reserve
-capacity twice for it.
+twice. Code that reserves an agent's capacity or opens a conversation on each event does it once per connection
+unless it checks first whether the call is already active.
 
 **What to do.** Count answered calls per session, not per event, or act on the first event of each call only. When a
 step belongs only to a queue's answer, test the event's `QueueName` or `AgentInterface` (see
@@ -1082,6 +1083,20 @@ static bool EndedFailed(CallEndedEvent ended) => ended.FinalState == CallSession
 static CallEndedEvent Replayed(string sessionId, string serverId, DateTimeOffset at, CallSessionState finalState) =>
     new(sessionId, serverId, at, Cause: null, Duration: TimeSpan.Zero, TalkTime: null) { FinalState = finalState };
 ```
+
+### Every session notification names the Asterisk instance it came from
+
+**What changed.** `SessionDomainEvent` gains `Instance`, an `AsteriskInstanceIdentity?` whose `SystemName` is the name
+the Asterisk instance gives itself (`systemname` in `asterisk.conf`), read once per AMI session at login. It is added,
+not positional, and `ServerId` keeps its meaning: the pool key your host chose. `null` means unknown, never "the same
+instance": no `systemname` configured, an AMI user without the `system` or `reporting` write class, or a notification
+no AMI session raised. Two notifications that differ only by `Instance` are not equal.
+
+**Who is affected.** Nothing breaks. Code that stores and replays notifications loses the identity unless it gives it a
+field, and tests that compare a notification they build with one the SDK raised now differ by it.
+
+**What to do.** Set a distinct `systemname` on every Asterisk and give the SDK's AMI user the `system` or `reporting`
+write class. Without it the instances' uniqueids and linkedids carry no prefix and can collide between them.
 
 ### A queue visit that ends unanswered returns the call to its state before the visit
 
