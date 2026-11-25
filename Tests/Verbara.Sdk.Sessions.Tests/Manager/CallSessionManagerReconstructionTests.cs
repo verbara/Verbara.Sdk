@@ -120,6 +120,32 @@ public sealed class CallSessionManagerReconstructionTests : IAsyncLifetime
         SessionIndexInvariant.Assert(_sut);
     }
 
+    /// <summary>
+    /// A reconstructed call registered in a state only a connection reaches counts as having been connected, the rule
+    /// a session restored from its snapshot follows; one registered before any connection does not.
+    /// </summary>
+    [Theory]
+    [InlineData(CallSessionState.Connected, true)]
+    [InlineData(CallSessionState.OnHold, true)]
+    [InlineData(CallSessionState.Transferring, true)]
+    [InlineData(CallSessionState.Conference, true)]
+    [InlineData(CallSessionState.Created, false)]
+    [InlineData(CallSessionState.Dialing, false)]
+    [InlineData(CallSessionState.Ringing, false)]
+    [InlineData(CallSessionState.Queued, false)]
+    public void RegisterReconstructedSession_ShouldMarkTheCallConnected_WhenItIsRegisteredInAStateOnlyAConnectionReaches(
+        CallSessionState state, bool connected)
+    {
+        var call = Reconstructed("sess-state", "srv-1", "uid-state");
+        call.State = state;
+
+        _sut.RegisterReconstructedSession(call).Should().BeTrue("premise: the registration is accepted");
+
+        call.HasBeenConnected.Should().Be(connected,
+            connected ? "only a connection reaches that state" : "no connection reaches that state");
+        call.ConnectedAt.Should().BeNull("the registration records no connected time");
+    }
+
     private static CallSession Reconstructed(string id, string serverId, string leg)
     {
         var call = new CallSession(id, "linked-dup", serverId, CallDirection.Inbound);
