@@ -60,9 +60,12 @@ public sealed class CallSession
     public string? QueueName { get; set; }
 
     /// <summary>
-    /// The agent the SDK knows by name that took the call, as its connect names it. Set only by the connect of
-    /// an agent the server knows by name; app_queue's own connect report names no agent, so a call taken by a
-    /// queue member that is not such an agent leaves it <c>null</c>.
+    /// The agent the SDK knows by name whose connect made the call's most recent connection, as that connect names
+    /// it. Each connection replaces an earlier connection's, and one whose connect named no agent sets it to
+    /// <c>null</c>: app_queue's report of a new connection (it names no agent, so a call taken by a queue member that
+    /// is not such an agent reads <c>null</c>), a leg's answer, a dial outcome or a bridge entry, as for a return from
+    /// a transfer. app_queue's report of the connection a known agent's connect has just made keeps it. Written
+    /// together with <see cref="AgentInterface"/>, before the connection is announced.
     /// </summary>
     public string? AgentId { get; set; }
 
@@ -70,10 +73,12 @@ public sealed class CallSession
     /// The interface of the queue member that took the call, exactly as app_queue reports it in its connect
     /// report (<c>AgentConnect</c>'s <c>Interface</c>): <c>PJSIP/agent1</c> for an endpoint member. For a member
     /// that is a <c>Local</c> channel it is the <c>Local</c> interface (<c>Local/agent1@from-queue/n</c>), not
-    /// the device it dials. It is set on the first connection and kept when a later queue visit of the call is
-    /// taken by another member; the connect of an agent known by name writes that agent's interface on each
-    /// visit it takes. It is <c>null</c> when no member took the call, or when the AMI user lacks the
-    /// <c>agent</c> read class, without which Asterisk sends none of app_queue's events.
+    /// the device it dials. It is the member of the call's most recent connection, recorded before that connection is
+    /// announced: a later queue visit taken by another member replaces it, and the connect of an agent known by name
+    /// records that agent's interface, which app_queue's report of the same connection keeps. A connection no member
+    /// made (a leg's answer, a dial outcome or a bridge entry, as for a return from a transfer) sets it to <c>null</c>.
+    /// It is <c>null</c> when no member took the call, or when the AMI user lacks the <c>agent</c> read class, without
+    /// which Asterisk sends none of app_queue's events.
     /// </summary>
     public string? AgentInterface { get; set; }
     public string? BridgeId { get; set; }

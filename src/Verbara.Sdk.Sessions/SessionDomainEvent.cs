@@ -80,8 +80,8 @@ public sealed record CallConnectedEvent(string SessionId, string ServerId, DateT
     /// </summary>
     /// <remarks>
     /// It is taken from the connect being announced, so each queue visit of a call names the member that answered that
-    /// visit. It may differ from <see cref="CallSession.AgentInterface"/>, which keeps the call's first member when a
-    /// later visit is taken by another. Not a positional member: a notification built with the positional constructor
+    /// visit. When this notification is delivered, <see cref="CallSession.AgentInterface"/> already records the member
+    /// of the connection it announces. Not a positional member: a notification built with the positional constructor
     /// alone names no member, and two notifications that differ only by it are not equal.
     /// </remarks>
     public string? AgentInterface { get; init; }

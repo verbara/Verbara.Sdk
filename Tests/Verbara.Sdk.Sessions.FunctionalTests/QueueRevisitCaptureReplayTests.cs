@@ -70,8 +70,8 @@ public sealed class QueueRevisitCaptureReplayTests
         (string? Queue, string? Member, string? Agent)[] once = [("q-first", "PJSIP/agent1", null)];
         byCaller["9101"].Select(e => (e.QueueName, e.AgentInterface, e.AgentId)).Should().Equal(revisit,
             "each visit is announced once and names the member app_queue reported connecting it");
-        sessions[byCaller["9101"][0].SessionId].AgentInterface.Should().Be("PJSIP/agent1",
-            "the call keeps recording its first member, as before");
+        sessions[byCaller["9101"][0].SessionId].AgentInterface.Should().Be("PJSIP/agent2",
+            "the call records the member of its most recent connection, the second visit's");
         byCaller["9201"].Select(e => (e.QueueName, e.AgentInterface, e.AgentId)).Should().Equal(once,
             "a call answered once is announced once, naming its member");
     }

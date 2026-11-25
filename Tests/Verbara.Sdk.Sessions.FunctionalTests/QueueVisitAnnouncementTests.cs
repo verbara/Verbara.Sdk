@@ -86,8 +86,8 @@ public sealed class QueueVisitAnnouncementTests
         rig.Connected.Select(e => (e.QueueName, e.AgentInterface)).Should().Equal(
             [("q-pjsip", "PJSIP/agent1"), ("q-pjsip3", "PJSIP/agent3")],
             "each visit's announcement names the member app_queue reported connecting that visit");
-        rig.Manager.GetById(rig.Connected[1].SessionId)!.AgentInterface.Should().Be("PJSIP/agent1",
-            "the call keeps recording its first member, as before");
+        rig.Manager.GetById(rig.Connected[1].SessionId)!.AgentInterface.Should().Be("PJSIP/agent3",
+            "the call records the member of its most recent connection, the second visit's");
     }
 
     /// <summary>

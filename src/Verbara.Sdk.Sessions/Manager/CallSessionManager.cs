@@ -1246,6 +1246,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
                     if (EnterConnected(session) is { } answeredFrom)
                     {
+                        RecordConnectionMember(session, answeredFrom, agentId: null, memberInterface: null);
                         session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                             CallSessionEventType.Connected, channel.Name, null, null));
                         PublishConnected(session, answeredFrom, agentId: null, memberInterface: null, attachment);
@@ -1339,6 +1340,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
             if (EnterConnected(session) is { } bridgedFrom)
             {
+                RecordConnectionMember(session, bridgedFrom, agentId: null, memberInterface: null);
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Connected, null, null, $"bridge:{bridge.BridgeUniqueid}"));
                 PublishConnected(session, bridgedFrom, agentId: null, memberInterface: null, attachment);
@@ -1687,6 +1689,35 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     }
 
     /// <summary>
+    /// Whether a move into <see cref="CallSessionState.Connected"/> that left <paramref name="enteredFrom"/>, what
+    /// <see cref="EnterConnected"/> returned, makes a connection: it left <see cref="CallSessionState.Dialing"/>,
+    /// <see cref="CallSessionState.Ringing"/>, <see cref="CallSessionState.Queued"/> or
+    /// <see cref="CallSessionState.Transferring"/>. A refused move, and a return from
+    /// <see cref="CallSessionState.OnHold"/> or <see cref="CallSessionState.Conference"/>, make none.
+    /// </summary>
+    private static bool MakesConnection(CallSessionState? enteredFrom) =>
+        enteredFrom is CallSessionState.Dialing or CallSessionState.Ringing or CallSessionState.Queued
+            or CallSessionState.Transferring;
+
+    /// <summary>
+    /// Records, for a move that makes a connection (<see cref="MakesConnection"/>), the agent and the member interface
+    /// the connect that made it reported, as the call's <see cref="CallSession.AgentId"/> and
+    /// <see cref="CallSession.AgentInterface"/>, each <see langword="null"/> when that connect reported none (a leg's
+    /// answer, a dial outcome, a bridge entry, or app_queue's report, which names no agent). It replaces an earlier
+    /// connection's; a move that makes no connection changes neither. Called under the session's lock, before the
+    /// connection is announced.
+    /// </summary>
+    private static void RecordConnectionMember(CallSession session, CallSessionState? enteredFrom, string? agentId,
+        string? memberInterface)
+    {
+        if (!MakesConnection(enteredFrom))
+            return;
+
+        session.AgentId = agentId;
+        session.AgentInterface = memberInterface;
+    }
+
+    /// <summary>
     /// The one place a <see cref="CallConnectedEvent"/> is published. It publishes exactly when
     /// <paramref name="enteredFrom"/>, what <see cref="EnterConnected"/> returned, says the call has just entered
     /// <see cref="CallSessionState.Connected"/> from <see cref="CallSessionState.Dialing"/>,
@@ -1722,11 +1753,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     private void PublishConnected(CallSession session, CallSessionState? enteredFrom, string? agentId,
         string? memberInterface, ServerSubscriptions attachment)
     {
-        if (enteredFrom is not (CallSessionState.Dialing or CallSessionState.Ringing or CallSessionState.Queued
-            or CallSessionState.Transferring))
-        {
+        if (!MakesConnection(enteredFrom))
             return;
-        }
 
         var connectedAt = _timeProvider.GetUtcNow();
         session.ConnectedAt ??= connectedAt;
@@ -2112,8 +2140,6 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (!IsHeld(session))
                 return;
 
-            session.AgentId = agentId;
-            session.AgentInterface = interface_;
             session.AddEvent(new CallSessionEvent(
                 DateTimeOffset.UtcNow,
                 CallSessionEventType.AgentConnected,
@@ -2121,7 +2147,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 null,
                 $"Agent {agentId}"));
 
+            // The connect that makes a connection records its agent and its interface, replacing an earlier
+            // connection's; one that finds the call already connected replaces neither.
             var connectedFrom = EnterConnected(session);
+            RecordConnectionMember(session, connectedFrom, agentId, interface_);
             if (session.QueueName is not null)
                 session.QueueVisitAnnounced = true;
 
@@ -2145,8 +2174,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
     /// <summary>
     /// app_queue connected a queue caller to a member (<c>AgentConnect</c>), whether or not the member is
-    /// an agent the SDK knows by name: the queue visit is answered, and the call records the member's
-    /// interface as its <see cref="CallSession.AgentInterface"/> unless it already records one. The caller
+    /// an agent the SDK knows by name: the queue visit is answered, and, when this report makes the connection, the
+    /// call records the member's interface as its <see cref="CallSession.AgentInterface"/> and no
+    /// <see cref="CallSession.AgentId"/>, replacing an earlier connection's. The caller
     /// is looked up by its own channel, <paramref name="callerUniqueId"/>, which a <c>Linkedid</c> rewrite
     /// does not move.
     /// <para>
@@ -2172,24 +2202,22 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (session.QueueName is null)
                 return;
 
-            // app_queue's connect report names the member by its interface and, as Asterisk sends it, no
-            // agent, so the connect of an agent known by name (which runs first and records its own
-            // interface) does not run for it. The member is recorded here, before the call is announced, so
-            // a consumer of the announcement reads it. One already recorded is kept: a later queue visit of
-            // the same call, taken by another member, does not replace it; the announcement below names this
-            // report's member (CallConnectedEvent.AgentInterface) whichever the call keeps.
-            session.AgentInterface ??= memberInterface;
-
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.AgentConnected, memberInterface, null, memberName));
 
+            // In this order: first whether this report makes a new connection; then, only when it does, the
+            // call records its member and, as app_queue's report names no agent, no agent, replacing an earlier
+            // connection's, before the call is announced so a consumer of the announcement reads them; then the
+            // wrap-up key, read from the call as written. A report that finds the call already connected (the
+            // connect of an agent known by name, which runs first, made the connection) replaces neither.
             var connectedFrom = EnterConnected(session);
+            RecordConnectionMember(session, connectedFrom, agentId: null, memberInterface);
             session.QueueVisitAnnounced = true;
 
-            // The member's wrap-up is keyed on the member this report names: the agent known by name when
-            // that agent's connect has just recorded this interface, otherwise the interface on this server.
-            // Its open wrap-up ends here, before the call is announced, and the leg counts as connected
-            // until the member's AgentComplete.
+            // The member's wrap-up is keyed on the member this report names: the agent known by name when the
+            // call records that agent at this interface (its connect made this connection), otherwise the
+            // interface on this server. Its open wrap-up ends here, before the call is announced, and the leg
+            // counts as connected until the member's AgentComplete.
             if (memberInterface is not null)
             {
                 var agentId = session.AgentId is not null
@@ -2289,6 +2317,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (channel.DialStatus == "ANSWER" && session.State != CallSessionState.Queued
                 && EnterConnected(session) is { } dialedFrom)
             {
+                RecordConnectionMember(session, dialedFrom, agentId: null, memberInterface: null);
                 PublishConnected(session, dialedFrom, agentId: null, memberInterface: null, attachment);
             }
         }
