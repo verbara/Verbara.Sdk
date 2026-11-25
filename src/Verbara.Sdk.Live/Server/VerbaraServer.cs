@@ -3249,7 +3249,8 @@ public sealed class VerbaraServer : IVerbaraServer
                             qcj.RawFields?.GetValueOrDefault("CallerIDNum"),
                             qcj.Position ?? 0,
                             qcj.UniqueId,
-                            server.ReadEventLossEpoch());
+                            server.ReadEventLossEpoch(),
+                            QueueDialplanLocation.From(qcj.RawFields));
                     }
                     finally
                     {
@@ -3279,7 +3280,8 @@ public sealed class VerbaraServer : IVerbaraServer
                                 qcl.UniqueId ?? "",
                                 queue,
                                 qcl.RawFields?.GetValueOrDefault("Channel") ?? "",
-                                server.ReadEventLossEpoch());
+                                server.ReadEventLossEpoch(),
+                                QueueDialplanLocation.From(qcl.RawFields));
                         }
                         finally
                         {

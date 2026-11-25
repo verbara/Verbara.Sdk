@@ -11,7 +11,9 @@ public enum CallSessionState
     /// Waiting in a queue until app_queue reports a connection, the visit ends unanswered, or the call ends: a call that
     /// joins a queue waits here whether it joins from its initial, dialing or ringing state, or after it was connected or
     /// transferring. A visit ends unanswered when app_queue reports it abandoned and then the caller leaving (a queue
-    /// timeout, an empty queue); the call still waits here until its caller's channel next reports something of its own
+    /// timeout, an empty queue), or reports the caller leaving with no abandon and with a dialplan context, extension or
+    /// priority other than the ones it joined with (the queue's exit key; a visit whose join the SDK did not see, such as
+    /// one a state reload found, is not judged this way); the call still waits here until its caller's channel next reports something of its own
     /// (a hold or its end, a dial, a bridge entry), and from that report it is back in the state it had before the first
     /// visit of a run of queues, with no event. A call that leaves this way and then hangs up with no such report ends
     /// here. A call that ends here before any member answers ends <see cref="Failed"/> when it was never connected, a call

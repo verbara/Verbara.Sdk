@@ -578,8 +578,9 @@ public sealed class QueueManager
     /// entry carries (<see cref="AsteriskQueueEntry.UniqueId"/>, <see cref="AsteriskQueueEntry.LossEpoch"/>).
     /// </summary>
     internal void OnCallerJoined(string queueName, string channel, string? callerId, int position, string? uniqueId,
-        EventLossEpoch lossEpoch) =>
-        Join(queueName, channel, callerId, position, fromSnapshot: false, reportedWaitSeconds: null, uniqueId, lossEpoch);
+        EventLossEpoch lossEpoch, QueueDialplanLocation? joinLocation = null) =>
+        Join(queueName, channel, callerId, position, fromSnapshot: false, reportedWaitSeconds: null, uniqueId, lossEpoch,
+            joinLocation: joinLocation);
 
     /// <summary>
     /// Handle a caller that a <c>QueueStatus</c> snapshot reports waiting in a queue, with the wait
@@ -923,12 +924,13 @@ public sealed class QueueManager
     /// </summary>
     private AsteriskQueueEntry Join(string queueName, string channel, string? callerId, int position,
         bool fromSnapshot, long? reportedWaitSeconds, string? uniqueId, EventLossEpoch? lossEpoch,
-        DateTimeOffset? readAt = null, long? snapshotOrderPoint = null, bool announce = true)
+        DateTimeOffset? readAt = null, long? snapshotOrderPoint = null, bool announce = true,
+        QueueDialplanLocation? joinLocation = null)
     {
         try
         {
             return JoinUnderGate(queueName, channel, callerId, position, fromSnapshot, reportedWaitSeconds, uniqueId,
-                lossEpoch, readAt, snapshotOrderPoint, announce);
+                lossEpoch, readAt, snapshotOrderPoint, announce, joinLocation);
         }
         finally
         {
@@ -938,7 +940,7 @@ public sealed class QueueManager
 
     private AsteriskQueueEntry JoinUnderGate(string queueName, string channel, string? callerId, int position,
         bool fromSnapshot, long? reportedWaitSeconds, string? uniqueId, EventLossEpoch? lossEpoch,
-        DateTimeOffset? readAt, long? snapshotOrderPoint, bool announce)
+        DateTimeOffset? readAt, long? snapshotOrderPoint, bool announce, QueueDialplanLocation? joinLocation)
     {
         lock (_windowsLock)
         {
@@ -954,6 +956,7 @@ public sealed class QueueManager
                 UniqueId = string.IsNullOrEmpty(uniqueId) ? null : uniqueId,
                 LossEpoch = lossEpoch,
                 JoinOrdinal = Interlocked.Increment(ref _joinOrdinal),
+                JoinLocation = joinLocation,
             };
 
             // A live join after a leave the open windows recorded: the caller is waiting again, and a snapshot that lists
@@ -1154,7 +1157,8 @@ public sealed class QueueManager
     /// <see cref="CallerLeaveReported"/>, whether or not the table holds the caller (<see cref="OnCallerLeft"/> handles
     /// the table).
     /// </summary>
-    internal void OnCallerLeaveReported(string uniqueId, string queueName, string channel, EventLossEpoch lossEpoch)
+    internal void OnCallerLeaveReported(string uniqueId, string queueName, string channel, EventLossEpoch lossEpoch,
+        QueueDialplanLocation? location = null)
     {
         // Recorded and posted under the window gate, where a deferred snapshot join is decided and posted: a join
         // admitted before this leave reaches handlers before it.
@@ -1166,7 +1170,7 @@ public sealed class QueueManager
             if (CallerLeaveReported is not null)
             {
                 _events.Post(static (m, r, _) => ((QueueManager)m).RaiseCallerLeaveReported((QueueCallerLeaveReport)r!),
-                    this, new QueueCallerLeaveReport(uniqueId, queueName, channel, lossEpoch), null);
+                    this, new QueueCallerLeaveReport(uniqueId, queueName, channel, lossEpoch, location), null);
             }
         }
         RaisePending();
@@ -1435,6 +1439,14 @@ public sealed class AsteriskQueueEntry
     internal long JoinOrdinal { get; set; }
 
     /// <summary>
+    /// Where in the dialplan the caller stood when it joined, as the live <c>QueueCallerJoin</c> reported it;
+    /// <c>null</c> for a snapshot entry (a <c>QueueEntry</c> carries no context or extension), for an entry added through
+    /// the public <see cref="QueueManager.OnCallerJoined(string, string, string?, int)"/>, and for a join that lacked
+    /// any of the three headers.
+    /// </summary>
+    internal QueueDialplanLocation? JoinLocation { get; init; }
+
+    /// <summary>
     /// What Live observed of this caller's leave, which is not a statement of what Asterisk did: <c>true</c> exactly when
     /// Live took this entry out of the table without having observed a report of a leave for its channel name before the
     /// removal; <c>false</c> otherwise. Final before <see cref="QueueManager.CallerLeft"/> is raised for the entry, and
@@ -1485,11 +1497,32 @@ public sealed class AsteriskQueueEntry
         UniqueId = UniqueId,
         LossEpoch = LossEpoch,
         JoinOrdinal = JoinOrdinal,
+        JoinLocation = JoinLocation,
     };
 }
 
-/// <summary>A <c>QueueCallerLeave</c> as Asterisk reported it, with the event-loss epoch of the event.</summary>
-internal sealed record QueueCallerLeaveReport(string UniqueId, string Queue, string Channel, EventLossEpoch LossEpoch);
+/// <summary>
+/// A <c>QueueCallerLeave</c> as Asterisk reported it, with the event-loss epoch of the event and where in the dialplan
+/// the caller stood at the leave (<c>null</c> when the leave lacked any of the three headers).
+/// </summary>
+internal sealed record QueueCallerLeaveReport(string UniqueId, string Queue, string Channel, EventLossEpoch LossEpoch,
+    QueueDialplanLocation? Location = null);
+
+/// <summary>
+/// The <c>Context</c>, <c>Exten</c> and <c>Priority</c> headers of a queue caller's join or leave, exactly as Asterisk
+/// sent them. Two locations are equal only when all three are.
+/// </summary>
+internal sealed record QueueDialplanLocation(string Context, string Exten, string Priority)
+{
+    /// <summary>The location the headers <paramref name="fields"/> carry; <c>null</c> unless all three are present.</summary>
+    public static QueueDialplanLocation? From(IReadOnlyDictionary<string, string>? fields) =>
+        fields is not null
+        && fields.TryGetValue("Context", out var context)
+        && fields.TryGetValue("Exten", out var exten)
+        && fields.TryGetValue("Priority", out var priority)
+            ? new QueueDialplanLocation(context, exten, priority)
+            : null;
+}
 
 /// <summary>
 /// One load's <c>QueueStatus</c> read window, covering collection, its barrier and replay. After a timeout it stays

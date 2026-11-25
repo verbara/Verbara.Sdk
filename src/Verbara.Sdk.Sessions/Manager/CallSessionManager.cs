@@ -1477,6 +1477,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             session.QueueVisitStartedAt = visitStartedAt;
             session.QueueVisitLossEpoch = entry.LossEpoch ?? server.ReadEventLossEpoch();
             session.QueueVisitJoinOrdinal = entry.JoinOrdinal;
+            session.QueueVisitJoinLocation = entry.JoinLocation;
             session.OpenVisitCaller(uniqueId, entry.Channel);
 
             // The state a visit that ends unanswered returns the call to: the one it leaves here. A join that finds the
@@ -1569,10 +1570,15 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
             session.QueueVisitLeft = true;
 
-            // An abandon and then this leave: the visit ended unanswered. The call waits in queued until the next report
-            // of the channel that waited there (ReturnFromUnansweredVisit), not at this leave.
-            if (session.QueueVisitAbandonReported && session.State == CallSessionState.Queued)
+            // An abandon and then this leave, or a leave with no abandon whose dialplan location differs from the join's
+            // (the exit key): the visit ended unanswered. Every answered visit leaves with its join's values, and a visit
+            // whose join was not seen has none to compare, so neither is judged. The call waits in queued until the next
+            // report of the channel that waited there (ReturnFromUnansweredVisit), not at this leave.
+            if (session.State == CallSessionState.Queued
+                && (session.QueueVisitAbandonReported || IsExitKeyLeave(session.QueueVisitJoinLocation, report.Location)))
+            {
                 session.QueueVisitEndedUnanswered = true;
+            }
 
             if (CurrentVisit(session, report.Queue) is not { } visit)
                 return;
@@ -1582,6 +1588,13 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 session.QueueVisitAbandonReported, mayHaveLostEvents));
         }
     }
+
+    /// <summary>
+    /// Whether a leave with no abandon before it left by the queue's exit key: the join's and the leave's dialplan
+    /// locations are both known and differ in <c>Context</c>, <c>Exten</c> or <c>Priority</c>.
+    /// </summary>
+    private static bool IsExitKeyLeave(QueueDialplanLocation? joined, QueueDialplanLocation? left) =>
+        joined is not null && left is not null && joined != left;
 
     /// <summary>
     /// app_queue's report that it counted the caller's visit abandoned (<c>QueueCallerAbandon</c>), found by the

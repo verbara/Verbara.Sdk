@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Verbara.Sdk.Enums;
+using Verbara.Sdk.Live.Queues;
 using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Sessions.Exceptions;
 
@@ -444,10 +445,20 @@ public sealed class CallSession
     internal CallSessionState? StateBeforeQueueVisit { get; set; }
 
     /// <summary>
-    /// Whether the current visit ended unanswered and the call has not returned from it yet: app_queue reported the
-    /// visit abandoned (<c>QueueCallerAbandon</c>) and then the caller leaving (<c>QueueCallerLeave</c>) while the call
-    /// waited in <see cref="CallSessionState.Queued"/>. Set at that leave, cleared at the return and at each visit the
-    /// manager opens. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// Where in the dialplan the caller stood when the join that opened the current visit was reported: its
+    /// <c>Context</c>, <c>Exten</c> and <c>Priority</c>. <c>null</c> for a visit whose join the manager did not see (a
+    /// queue snapshot opened it) or whose join lacked any of the three. Set at each visit the manager opens. Written
+    /// only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal QueueDialplanLocation? QueueVisitJoinLocation { get; set; }
+
+    /// <summary>
+    /// Whether the current visit ended unanswered and the call has not returned from it yet, while the call waited in
+    /// <see cref="CallSessionState.Queued"/>: app_queue reported the visit abandoned (<c>QueueCallerAbandon</c>) and then
+    /// the caller leaving (<c>QueueCallerLeave</c>), or reported the leave with no abandon and with a <c>Context</c>,
+    /// <c>Exten</c> or <c>Priority</c> other than the join's (<see cref="QueueVisitJoinLocation"/>), which is how a caller
+    /// leaves by the queue's exit key. Set at that leave, cleared at the return and at each visit the manager opens.
+    /// Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
     internal bool QueueVisitEndedUnanswered { get; set; }
 

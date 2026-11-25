@@ -179,6 +179,21 @@ internal static class AmiCaptureReplay
     /// </summary>
     public const string UnansweredVisitCapture24 = "connected-signal-matrix-unanswered-asterisk-24.0.0.raw";
 
+    /// <summary>
+    /// The connected-signal-matrix capture of two callers who leave a queue by its exit key, on 22.12.0: a call
+    /// answered by a plain dial, then queued in <c>q-key</c>, whose caller presses the key to the exit context and is
+    /// put on hold there (step <c>aq-key-01</c>); and a call the dialplan answers and queues in <c>q-keyd</c>, whose
+    /// caller presses the key to an exit context that dials an endpoint that answers (step <c>q-key-dial-01</c>).
+    /// </summary>
+    public const string ExitKeyCapture22 = "connected-signal-matrix-key-asterisk-22.12.0.raw";
+
+    /// <summary>
+    /// The connected-signal-matrix capture, on 23.6.0, of a call the dialplan answers and queues in <c>q-keysame</c>,
+    /// whose exit context is the caller's own: the caller presses the key, is put on hold, and hangs up (step
+    /// <c>q-key-samectx-01</c>).
+    /// </summary>
+    public const string ExitKeyCapture23 = "connected-signal-matrix-key-asterisk-23.6.0.raw";
+
     private const string MarkerUserEvent = "N5Marker";
     private const string BeforeFirstMarker = "(before-the-first-marker)";
 

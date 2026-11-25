@@ -10,7 +10,8 @@ workload (`dialplan-and-parking-*`), and transfers and bridges of a waiting call
 (`queue-revisit-*`), and queue members that ring out unanswered or answer busy before the next one answers
 (`queue-ring-no-answer-*`), and the calls of the connected-signal matrix: a plain dial, a re-queued call, a call
 answered by a dial and then queued, a hold, transfers that return to connected, connected calls that hang up
-waiting in a later queue, and queue visits that end unanswered (`connected-signal-matrix-*`). This suite replays them through the SDK's own parsing path, so a
+waiting in a later queue, queue visits that end unanswered, and callers who leave a queue by its exit key
+(`connected-signal-matrix-*`). This suite replays them through the SDK's own parsing path, so a
 call-session assertion made here is checked against what Asterisk actually sent rather than against
 what a test author believed it sends.
 
@@ -59,6 +60,8 @@ what a test author believed it sends.
 | `connected-signal-matrix-unanswered-asterisk-22.12.0.raw` | 22.12.0 | `Asterisk Call Manager/11.0.0` | 162 238 |
 | `connected-signal-matrix-unanswered-asterisk-23.6.0.raw` | 23.6.0 | `Asterisk Call Manager/12.0.0` | 83 503 |
 | `connected-signal-matrix-unanswered-asterisk-24.0.0.raw` | 24.0.0 | `Asterisk Call Manager/13.0.0` | 119 448 |
+| `connected-signal-matrix-key-asterisk-22.12.0.raw` | 22.12.0 | `Asterisk Call Manager/11.0.0` | 166 947 |
+| `connected-signal-matrix-key-asterisk-23.6.0.raw` | 23.6.0 | `Asterisk Call Manager/12.0.0` | 45 452 |
 
 The call and queue shapes were captured 2026-09-27, the reload, exit and loop captures 2026-09-28. The
 `.gitattributes` rule `**/Recordings/**/*.raw binary` keeps the CRLF framing byte-exact; never open
@@ -1033,6 +1036,8 @@ below; the reduction replaced UUIDs (8 to 12 per file) and no address.
 | `connected-signal-matrix-unanswered-asterisk-22.12.0.raw` | 2026-11-25 | `aq-timeout-hold-01`, `q-timeout-dial-01` | 413 of 413 |
 | `connected-signal-matrix-unanswered-asterisk-23.6.0.raw` | 2026-11-25 | `requeue-timeout-01` | 210 of 414 |
 | `connected-signal-matrix-unanswered-asterisk-24.0.0.raw` | 2026-11-25 | `aq-timeout-dial-01` | 293 of 506 |
+| `connected-signal-matrix-key-asterisk-22.12.0.raw` | 2026-11-25 | `aq-key-01`, `q-key-dial-01` | 452 of 452 |
+| `connected-signal-matrix-key-asterisk-23.6.0.raw` | 2026-11-25 | `q-key-samectx-01` | 132 of 357 |
 
 The workload runs on one container with the queue-revisit PJSIP loopback. Each call is an `Originate` of
 `PJSIP/<row>-in@loop`, whose answering leg runs the row's dialplan; the members `PJSIP/agent1` (`q-first`),
@@ -1060,6 +1065,13 @@ after 1 s of ringing. The rows kept here:
   out; the caller's channel is put on hold, then hangs up.
 - `q-timeout-dial-01`: the answering leg runs `Queue(q-tmo)` first, which times out; the dialplan then runs
   `Dial(PJSIP/agent1)`, which answers.
+- `aq-key-01`: as `aq-01`, but the dialplan runs `Queue(q-key)`, whose only member, `PJSIP/agent4`, rings and never
+  answers; the caller presses `1`, the queue's exit key, which sends it to the exit context `aq-exit`; the caller's
+  channel is put on hold there, then hangs up.
+- `q-key-dial-01`: the answering leg runs `Answer()` and `Queue(q-keyd)`; the caller presses `1`, which sends it to the
+  exit context `qkey-exit-dial`, whose `Dial(PJSIP/agent1)` answers.
+- `q-key-samectx-01`: the answering leg runs `Answer()` and `Queue(q-keysame)`, whose exit context is the caller's own;
+  the caller presses `1`, its channel is put on hold, then hangs up.
 
 Each step carries `UserEvent: CaptureCheckpoint` frames named for where the call stands (`answered`, `held`,
 `transferring`, `wait`, `wait2`, `up`, `end`); a checkpoint that names a `StatusId` and a `QueueStatusId` is followed
@@ -1072,12 +1084,21 @@ reports one `Hold` and one `Unhold`. In the `-reversed` file the caller's `Hangu
 `requeue-hangup-01` precedes app_queue's `Hangup` of `agent2`'s ringing leg (`Cause: 0`); in the three other hang-up
 files that member leg's `Hangup` comes first. They are replayed by `ConnectedSignalMatrixReplayTests`.
 
-The `-unanswered` files are a lab capture of the same workload on the same three digests, captured 2026-11-25, its
-recordings reduced again here to the steps above with the same script and options (the 22.12.0 file is the lab's own
-reduction, byte for byte). In every timeout row app_queue reports, on the caller's channel and in this order, the
+The `-unanswered` files are a capture of the same workload on the same three digests, captured 2026-11-25, its
+recordings reduced again here to the steps above with the same script and options (the 22.12.0 file is the capture's
+own reduction, byte for byte). In every timeout row app_queue reports, on the caller's channel and in this order, the
 member's `DialEnd` (`NOANSWER`, then `CANCEL`), `QueueCallerAbandon` and `QueueCallerLeave`, and then hangs up the
 member's ringing leg (`Cause: 0`); the caller's next report of its own (`Hold`, or the `DialBegin` of the dialplan's
 `Dial`) comes 1 or 2 seconds later. They are replayed by `UnansweredQueueVisitReplayTests`.
+
+The `-key` files are a capture of the same workload on the 22.12.0 and 23.6.0 digests, captured 2026-11-25, with five
+calls per row; the 22.12.0 file is the capture's own reduction, byte for byte, and the 23.6.0 file its recording
+reduced again here to the step above with the same script and options. In every exit-key step app_queue reports no
+`QueueCallerAbandon`: after the caller's `DTMFEnd` (`Digit: 1`) the member's `DialEnd` (`CANCEL`) and the
+`QueueCallerLeave` carry the exit's `Context`, `Exten: 1` and `Priority: 0`, while the caller's `QueueCallerJoin`
+carried its own (`capture-sip`, the row's extension, `Priority: 2`); in `q-key-samectx-01` only `Exten` and `Priority`
+differ. No `AgentConnect` follows a key exit. They are replayed by `QueueExitKeyReplayTests`, beside the answered
+calls of the files above, whose every leave carries its join's values.
 
 ## Capturing on a new Asterisk build
 
