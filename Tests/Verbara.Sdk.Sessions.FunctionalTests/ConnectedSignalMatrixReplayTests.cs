@@ -235,6 +235,9 @@ internal static class SignalMatrix
 
         public List<CallEndedEvent> Endings { get; } = [];
 
+        /// <summary>Every notification the call published, in the order it was delivered.</summary>
+        public List<SessionDomainEvent> Log { get; } = [];
+
         public int Swallowed { get; set; }
 
         public CallSessionState? StateAt(string checkpoint) =>
@@ -258,6 +261,7 @@ internal static class SignalMatrix
             Bind();
             if (Session is null || !string.Equals(evt.SessionId, Session.SessionId, StringComparison.Ordinal))
                 return;
+            Log.Add(evt);
             switch (evt)
             {
                 case CallConnectedEvent c: Announcements.Add(new Announcement(c, Session.State, Session.ConnectedAt)); break;

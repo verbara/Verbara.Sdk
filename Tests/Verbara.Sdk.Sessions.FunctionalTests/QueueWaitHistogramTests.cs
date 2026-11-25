@@ -22,8 +22,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// <para>
 /// The values are proven on typed frames shaped as the captured ones, with the manager's clock seam fixing
 /// how long each visit lasts: the test moves the clock between deliveries, and nothing waits. The call's
-/// own timestamps (<see cref="CallSession.CreatedAt"/>, <see cref="CallSession.ConnectedAt"/>) still come
-/// from the wall clock, so the wait since the call was created is microseconds here, and a sample of the
+/// creation and connection (<see cref="CallSession.CreatedAt"/>, <see cref="CallSession.ConnectedAt"/>) are
+/// read on the same clock, and each test moves it before the call joins the queue as well, so a sample of the
 /// since-created wait cannot pass for a visit's.
 /// </para>
 /// </remarks>
@@ -77,8 +77,10 @@ public sealed class QueueWaitHistogramTests
         var session = rig.Manager.GetById(connected.SessionId);
         session.Should().NotBeNull("the call is still up");
         session!.ConnectedAt.Should().NotBeNull("the member answered");
-        connected.WaitTime.Should().Be(session.ConnectedAt!.Value - session.CreatedAt,
-            "the event still reports the wait since the call was created, whatever the histogram records");
+        connected.WaitTime.Should().Be(TimeSpan.FromSeconds(2),
+            "the event reports the wait of the visit it answers, the same wait the histogram records");
+        session.WaitTime.Should().Be(TimeSpan.FromSeconds(7.5),
+            "the call's own wait is still the time since it was created, IVR included");
     }
 
     [Fact]
@@ -217,15 +219,13 @@ public sealed class QueueWaitHistogramTests
     /// A call the manager holds with its queue already named, although the manager never saw it join: what
     /// a session restored from a snapshot carries, and what a consumer can write through the public
     /// <see cref="CallSession.QueueName"/>. With no visit start, the sample falls back to the call's wait
-    /// since it was created, and the queue's metrics, which never saw the visit open either, fall back to
-    /// the same wait.
+    /// since it was created. The announcement's own wait, whose start is unknown, is zero, and the queue's
+    /// metrics, which never saw the visit open either, record the announcement's wait.
     /// </summary>
     [Fact]
     public async Task WaitHistogram_ShouldRecordTheWaitSinceTheCallWasCreated_WhenTheManagerNeverSawTheVisitOpen()
     {
-        // The call's creation is stamped on the wall clock and its connection on the manager's, so the manager's clock
-        // starts at the wall clock's now and moves past the creation before the member answers.
-        var clock = new ManualClock(DateTimeOffset.UtcNow);
+        var clock = new ManualClock(T0);
         await using var rig = await QueueCallRig.StartAsync(clock);
         using var samples = new WaitTimeSamples();
 
@@ -241,11 +241,12 @@ public sealed class QueueWaitHistogramTests
 
         rig.Connected.Should().ContainSingle("app_queue connected the call once")
             .Which.QueueName.Should().Be("q-pjsip");
-        var sinceCreated = rig.Connected[0].WaitTime;
-        samples.Milliseconds.Should().Equal([sinceCreated.TotalMilliseconds],
+        samples.Milliseconds.Should().Equal([3_000d],
             "the manager never saw the visit open, so the sample is the call's wait since it was created");
-        rig.Tracker.GetByQueueName("q-pjsip")!.TotalWaitTime.Should().Be(sinceCreated,
-            "the queue's metrics never saw the visit open either, and fall back to the same wait");
+        rig.Connected[0].WaitTime.Should().Be(TimeSpan.Zero,
+            "the announcement waits from the visit's start, and that start is unknown");
+        rig.Tracker.GetByQueueName("q-pjsip")!.TotalWaitTime.Should().Be(TimeSpan.Zero,
+            "the queue's metrics never saw the visit open either, and record the announcement's wait");
     }
 
     // --- The frames ---------------------------------------------------------------------------
