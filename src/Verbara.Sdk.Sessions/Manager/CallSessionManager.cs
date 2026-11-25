@@ -833,7 +833,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// The value <see cref="EndingProvenanceKey"/> carries when a completed state reload proved the
     /// call's channels gone. A consumer reads it as positive evidence that the SDK did not observe the
     /// call's ending: the last departure it knows of was learned from a snapshot, not from a <c>Hangup</c> —
-    /// never by noticing that <c>HangupCause</c> is null.
+    /// never by noticing that <c>HangupCause</c> is null. A connected call whose caller's own hang-up was observed while
+    /// it waited in a queue carries it with that caller's cause when a reload then proves its remaining legs gone.
     /// </summary>
     private const string EndingProvenanceReload = "reload";
 
@@ -1139,10 +1140,13 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         // cause of the channel that waits there, never on the last departure's: app_queue may hang up a member leg
         // that was still ringing (no cause) just after the caller, in either order, and that leg decides nothing. That holds when a reload proves the remaining legs gone
         // after the caller's own hang-up was observed: only a call whose caller's hang-up was not observed ends by the
-        // reload, with no cause. Every other call keeps the last departure's cause.
+        // reload, with no cause. Every other call keeps the last departure's cause. Which cause decides the ending does
+        // not change how its last departure was learned: a reload that proved the remaining legs gone still marks it.
         var endsWhileWaiting = session.State == CallSessionState.Queued && session.HasBeenConnected;
         if (endsWhileWaiting && session.CallerHangupCause is { } callersOwn)
         {
+            if (byReload)
+                session.SetMetadata(EndingProvenanceKey, EndingProvenanceReload);
             observedCause = callersOwn;
             byReload = false;
         }
