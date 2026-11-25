@@ -105,9 +105,14 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// reports for it: a duration Asterisk measured, subtracted from this clock, so no two clocks are
     /// compared. It is also the clock of an agent's wrap-up: a wrap-up opens and closes on its instants,
     /// stamps <see cref="CallWrapUpEvent"/> with it, and runs one one-shot timer from it per open wrap-up,
-    /// created and disposed by this manager (release itself schedules nothing). Nothing else reads it:
-    /// the session's own timestamps (<see cref="CallSession.CreatedAt"/>,
-    /// <see cref="CallSession.ConnectedAt"/>) and its audit trail still come from the wall clock.
+    /// created and disposed by this manager (release itself schedules nothing). It also stamps the call's
+    /// creation (<see cref="CallSession.CreatedAt"/>), the instant the call last became transferring, and
+    /// each connection's announcement, whose one read also sets <see cref="CallSession.ConnectedAt"/>, so
+    /// the wait an announcement carries is measured on this clock alone. The session's other timestamps
+    /// (<see cref="CallSession.CompletedAt"/>, the hold times, the connected time a dialplan-answered call
+    /// is given when it ends) and its audit trail still come from the wall clock, so under a substituted
+    /// clock <see cref="CallSession.Duration"/> and <see cref="CallSession.TalkTime"/> subtract readings
+    /// of two clocks.
     /// </summary>
     internal CallSessionManager(
         IOptions<SessionOptions> options,
