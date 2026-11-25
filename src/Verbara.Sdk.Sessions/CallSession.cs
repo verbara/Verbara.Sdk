@@ -190,12 +190,18 @@ public sealed class CallSession
         _endingFlags &= unchecked((byte)~FirstDepartureRecordedFlag);
     }
 
+    /// <summary>
+    /// Records <paramref name="mark"/> as the admission mark of <paramref name="id"/>, a channel the call holds alive.
+    /// The caller's own channel held alive again no longer has the hang-up cause recorded for it, so that cause is
+    /// forgotten.
+    /// </summary>
     internal void SetParticipantMark(string id, long mark)
     {
         if (_participants.Count == 0 || IsFirstParticipant(id))
         {
             PreserveRecordedFirstMark(mark);
             _firstParticipantMark = mark;
+            ClearCallerHangup();
         }
         else
             ((_endingOverflow ??= new()).ParticipantMarks ??= new(StringComparer.Ordinal))[id] = mark;
@@ -245,8 +251,10 @@ public sealed class CallSession
 
     /// <summary>
     /// The cause Asterisk reported on the hang-up of the caller's own channel (the call's first participant, the leg the
-    /// session reports as its caller), recorded when that leg's departure is observed; <c>null</c> until then and for a
-    /// caller a reload proved gone. Called and read under <see cref="SyncRoot"/>.
+    /// session reports as its caller), recorded when that leg's departure is observed; <c>null</c> until then, for a
+    /// caller a reload proved gone, and again once the caller's channel is held alive again
+    /// (<see cref="SetParticipantMark"/>). A new attachment's demotion keeps it. Called and read under
+    /// <see cref="SyncRoot"/>.
     /// </summary>
     internal HangupCause? CallerHangupCause =>
         (_endingFlags & HasCallerCauseFlag) != 0 ? (HangupCause)_callerHangupCause : null;

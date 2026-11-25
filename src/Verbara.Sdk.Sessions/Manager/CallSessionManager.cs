@@ -927,7 +927,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         call.Unverified = true;
         call.ClearRecordedDepartures();
         call.LastDeparture = null;
-        call.ClearCallerHangup();
+        // The caller's own hang-up cause stays: it is what Asterisk reported on a channel that has hung up, which a
+        // lost event cannot undo. It is forgotten only if the caller's channel is admitted alive again.
         call.ClearParticipantMarks();
         call.AttachmentGeneration = oracle.Generation;
     }
@@ -1136,10 +1137,15 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(participants[i].UniqueId, session));
         // A call that was connected and is over while it waits in a later queue ends on its caller's own cause, never
         // on the last departure's: app_queue may hang up a member leg that was still ringing (no cause) just after the
-        // caller, in either order, and that leg decides nothing. Every other call keeps the last departure's cause.
+        // caller, in either order, and that leg decides nothing. That holds when a reload proves the remaining legs gone
+        // after the caller's own hang-up was observed: only a call whose caller's hang-up was not observed ends by the
+        // reload, with no cause. Every other call keeps the last departure's cause.
         var endsWhileWaiting = session.State == CallSessionState.Queued && session.HasBeenConnected;
-        if (!byReload && endsWhileWaiting && session.CallerHangupCause is { } callersOwn)
+        if (endsWhileWaiting && session.CallerHangupCause is { } callersOwn)
+        {
             observedCause = callersOwn;
+            byReload = false;
+        }
         session.HangupCause = observedCause;
 
         if (byReload)
