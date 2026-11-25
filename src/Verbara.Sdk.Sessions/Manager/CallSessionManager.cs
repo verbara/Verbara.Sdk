@@ -1135,9 +1135,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         for (var i = 0; i < participants.Count; i++)
             if (!string.Equals(participants[i].UniqueId, removedDepartureId, StringComparison.Ordinal))
                 index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(participants[i].UniqueId, session));
-        // A call that was connected and is over while it waits in a later queue ends on its caller's own cause, never
-        // on the last departure's: app_queue may hang up a member leg that was still ringing (no cause) just after the
-        // caller, in either order, and that leg decides nothing. That holds when a reload proves the remaining legs gone
+        // A call that was connected and is over while it waits in a later queue ends on its caller's own cause, the
+        // cause of the channel that waits there, never on the last departure's: app_queue may hang up a member leg
+        // that was still ringing (no cause) just after the caller, in either order, and that leg decides nothing. That holds when a reload proves the remaining legs gone
         // after the caller's own hang-up was observed: only a call whose caller's hang-up was not observed ends by the
         // reload, with no cause. Every other call keeps the last departure's cause.
         var endsWhileWaiting = session.State == CallSessionState.Queued && session.HasBeenConnected;
@@ -1426,8 +1426,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             session.QueueVisitStartedAt = visitStartedAt;
             session.QueueVisitLossEpoch = entry.LossEpoch ?? server.ReadEventLossEpoch();
             session.QueueVisitJoinOrdinal = entry.JoinOrdinal;
-            session.QueueVisitCallerChannel = entry.Channel;
-            session.QueueVisitCallerUniqueId = uniqueId;
+            session.OpenVisitCaller(uniqueId, entry.Channel);
             session.TryTransition(CallSessionState.Queued);
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.QueueJoined, entry.Channel, null, queueName));

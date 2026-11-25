@@ -179,6 +179,14 @@ public sealed class CallSession
     private bool IsFirstParticipant(string id) => _participants.Count != 0
         && string.Equals(_participants[0].UniqueId, id, StringComparison.Ordinal);
 
+    /// <summary>
+    /// Whether <paramref name="id"/> is the caller's own channel: the one whose join opened the call's current queue
+    /// visit (<see cref="QueueVisitCallerUniqueId"/>), and the call's first participant while it has had no visit.
+    /// </summary>
+    private bool IsCaller(string id) => QueueVisitCallerUniqueId is { } visitCaller
+        ? string.Equals(visitCaller, id, StringComparison.Ordinal)
+        : IsFirstParticipant(id);
+
     private HashSet<(string Id, long Mark)> OverflowDepartures =>
         (_endingOverflow ??= new()).RecordedDepartures ??= [];
 
@@ -197,11 +205,12 @@ public sealed class CallSession
     /// </summary>
     internal void SetParticipantMark(string id, long mark)
     {
+        if (_participants.Count == 0 || IsCaller(id))
+            ClearCallerHangup();
         if (_participants.Count == 0 || IsFirstParticipant(id))
         {
             PreserveRecordedFirstMark(mark);
             _firstParticipantMark = mark;
-            ClearCallerHangup();
         }
         else
             ((_endingOverflow ??= new()).ParticipantMarks ??= new(StringComparer.Ordinal))[id] = mark;
@@ -263,11 +272,12 @@ public sealed class CallSession
     }
 
     /// <summary>
-    /// The cause Asterisk reported on the hang-up of the caller's own channel (the call's first participant, the leg the
-    /// session reports as its caller), recorded when that leg's departure is observed; <c>null</c> until then, for a
-    /// caller a reload proved gone, and again once the caller's channel is held alive again
-    /// (<see cref="SetParticipantMark"/>). A new attachment's demotion keeps it. Called and read under
-    /// <see cref="SyncRoot"/>.
+    /// The cause Asterisk reported on the hang-up of the caller's own channel, recorded when that channel's departure is
+    /// observed: the channel whose join opened the call's current queue visit, which waits there, and the call's first
+    /// participant while it has had no visit. <c>null</c> until then, for a caller a reload proved gone, once the
+    /// caller's channel is held alive again (<see cref="SetParticipantMark"/>), and when a visit opens for another
+    /// channel than the one it was recorded for (<see cref="OpenVisitCaller"/>). A new attachment's demotion keeps it.
+    /// Called and read under <see cref="SyncRoot"/>.
     /// </summary>
     internal HangupCause? CallerHangupCause =>
         (_endingFlags & HasCallerCauseFlag) != 0 ? (HangupCause)_callerHangupCause : null;
@@ -275,7 +285,7 @@ public sealed class CallSession
     /// <summary>Records <paramref name="cause"/> when <paramref name="uniqueId"/> is the caller's own channel.</summary>
     internal void RecordCallerHangup(string uniqueId, HangupCause cause)
     {
-        if (!IsFirstParticipant(uniqueId)) return;
+        if (!IsCaller(uniqueId)) return;
         _endingFlags |= HasCallerCauseFlag;
         _callerHangupCause = (int)cause;
     }
@@ -408,6 +418,19 @@ public sealed class CallSession
 
     /// <inheritdoc cref="QueueVisitCallerUniqueId"/>
     internal string? QueueVisitCallerChannel { get; set; }
+
+    /// <summary>
+    /// Records the channel whose join opens a new visit as the visit's caller. A caller's hang-up cause recorded for
+    /// another channel (the call's first participant, or an earlier visit's caller) is not this caller's, so it is
+    /// forgotten. Called under <see cref="SyncRoot"/>.
+    /// </summary>
+    internal void OpenVisitCaller(string uniqueId, string? channel)
+    {
+        if (!IsCaller(uniqueId))
+            ClearCallerHangup();
+        QueueVisitCallerUniqueId = uniqueId;
+        QueueVisitCallerChannel = channel;
+    }
 
     /// <summary>
     /// The legs of this call that an agent or a queue member took and that the manager still counts as connected
