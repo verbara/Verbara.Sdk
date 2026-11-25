@@ -575,9 +575,10 @@ public sealed class CallSession
     /// <summary>
     /// When a leg of this call was observed answering while the session was still in its initial state
     /// (<see cref="CallSessionState.Created"/>): the dialplan answered it, and no dial or queue had reached
-    /// it yet. Only the first such answer is kept. It is a record, not a state: nothing is published,
-    /// counted or saved when it is taken, and it is not persisted. It is read only at the call's ending
-    /// (<see cref="TryCompleteAnsweredInInitialState"/>). Written only under <see cref="SyncRoot"/>.
+    /// it yet, or it is back there after a queue visit that ended unanswered. Only the first such answer is kept. It is a
+    /// record, not a state: nothing is published, counted or saved when it is taken, and it is not persisted. It is read
+    /// only at the call's ending (<see cref="TryCompleteAnsweredInInitialState"/>), which ignores it for a call that
+    /// entered a queue. Written only under <see cref="SyncRoot"/>.
     /// </summary>
     internal DateTimeOffset? AnsweredInInitialStateAt { get; private set; }
 
@@ -607,8 +608,14 @@ public sealed class CallSession
     /// and is queued or dialed afterwards, so the outcome is decided here, at the ending, instead.
     /// </para>
     /// <para>
+    /// It holds only for a call that never entered a queue (<see cref="QueuedAt"/> is unset). A call back in its
+    /// initial state after a queue visit that ended unanswered was abandoned in that queue: whatever its channel reported
+    /// after the visit (a hold, a bridge it entered alone, an answer), nobody answered it, and it ends
+    /// <see cref="CallSessionState.Failed"/> with no <see cref="ConnectedAt"/>.
+    /// </para>
+    /// <para>
     /// It guards its own state rather than trusting its caller: it acts only on a session that is still
-    /// <see cref="CallSessionState.Created"/> and holds an observed answer. A session that is already
+    /// <see cref="CallSessionState.Created"/>, never queued, and holds an observed answer. A session that is already
     /// terminal — ended by another route before the last leg left — keeps its ending. When it acts,
     /// <see cref="ConnectedAt"/> takes the observed answer unless it already holds a time, and
     /// <see cref="CompletedAt"/> takes the current time unless it already holds one. Called under
@@ -617,7 +624,8 @@ public sealed class CallSession
     /// </summary>
     internal bool TryCompleteAnsweredInInitialState()
     {
-        if (State != CallSessionState.Created || AnsweredInInitialStateAt is not { } answeredAt)
+        if (State != CallSessionState.Created || QueuedAt is not null
+            || AnsweredInInitialStateAt is not { } answeredAt)
             return false;
 
         ConnectedAt ??= answeredAt;
