@@ -329,6 +329,10 @@ internal static class AmiCaptureReplay
                 score?.RecordConnected(connected, manager.GetById(connected.SessionId)?.AgentInterface);
                 dispatch?.OnConnected(shape?.Id);
             }
+            else if (evt is CallQueuedEvent queued)
+            {
+                score?.RecordQueued(queued);
+            }
 
             var change = TakeTrackerChange(tracker, trackerSeen);
             if (score is not null)
@@ -1271,6 +1275,7 @@ internal readonly record struct QueueCounters(int Offered, int Answered, int Aba
 internal sealed class QueueShapeScore(QueueShape shape)
 {
     private readonly List<CallConnectedEvent> _connected = [];
+    private readonly List<CallQueuedEvent> _queued = [];
     private readonly List<string?> _agentInterfacesAtConnected = [];
     private readonly List<string?> _asteriskConnectInterfaces = [];
     private readonly List<CallSession> _sessions = [];
@@ -1305,6 +1310,12 @@ internal sealed class QueueShapeScore(QueueShape shape)
 
     /// <summary>The <see cref="CallConnectedEvent"/>s the manager published for the shape's calls, in order.</summary>
     public IReadOnlyList<CallConnectedEvent> ConnectedEvents => _connected;
+
+    /// <summary>
+    /// The <see cref="CallQueuedEvent"/>s the manager published for the shape's calls, in order: each carries the
+    /// start of the visit it opens.
+    /// </summary>
+    public IReadOnlyList<CallQueuedEvent> QueuedEvents => _queued;
 
     /// <summary>
     /// For each of <see cref="ConnectedEvents"/>, at the same index, the <see cref="CallSession.AgentInterface"/> of
@@ -1345,6 +1356,8 @@ internal sealed class QueueShapeScore(QueueShape shape)
         _connected.Add(evt);
         _agentInterfacesAtConnected.Add(agentInterfaceAtDelivery);
     }
+
+    internal void RecordQueued(CallQueuedEvent evt) => _queued.Add(evt);
 
     internal void RecordAsteriskConnect(string? memberInterface, bool namesAnAgent)
     {

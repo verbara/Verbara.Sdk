@@ -159,6 +159,22 @@ public sealed class ConnectedSignalMatrixReplayTests
     }
 
     [Fact]
+    public async Task CallSession_ShouldKeepTheFirstConnectedTime_WhenACapturedCallAnsweredByADialIsThenQueuedAndTaken()
+    {
+        var run = await SignalMatrix.LiveAsync(Repeat, "aq-01");
+
+        using var scope = new AssertionScope();
+        scope.AddReportable("run", run.Describe);
+        run.Announcements.Should().HaveCount(2, "premise: the dial's answer and the member's connection are announced");
+        var first = run.Announcements[0].Event.Timestamp;
+        run.Announcements[1].Event.Timestamp.Should().BeAfter(first, "premise: the member takes the call later");
+        run.Session!.State.Should().Be(CallSessionState.Completed, "premise: the call ends normally");
+        run.Session.ConnectedAt.Should().Be(first, "the call's connected time is its first connection's, not the later one's");
+        run.Session.TalkTime.Should().Be(run.Session.CompletedAt!.Value - first - run.Session.HoldTime,
+            "the talk time runs from the first connection to the end, minus the hold time");
+    }
+
+    [Fact]
     public async Task CallConnectedEvent_ShouldNotBePublished_WhenACapturedConnectedCallIsHeldAndResumed()
     {
         var run = await SignalMatrix.LiveAsync(Repeat, "hold-01");
