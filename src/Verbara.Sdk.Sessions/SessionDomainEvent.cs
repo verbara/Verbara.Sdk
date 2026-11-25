@@ -96,8 +96,25 @@ public sealed record CallHeldEvent(string SessionId, string ServerId, DateTimeOf
 public sealed record CallResumedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp)
     : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
+/// <summary>
+/// Reports that a call ended, raised once per call, a failed call included, while the session engine holds the call's
+/// lock; <c>Cause</c> is its hangup cause, and <see cref="FinalState"/> the state it ended in.
+/// </summary>
 public sealed record CallEndedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
-    HangupCause? Cause, TimeSpan Duration, TimeSpan? TalkTime) : SessionDomainEvent(SessionId, ServerId, Timestamp);
+    HangupCause? Cause, TimeSpan Duration, TimeSpan? TalkTime) : SessionDomainEvent(SessionId, ServerId, Timestamp)
+{
+    /// <summary>
+    /// The state the call ended in: <see cref="CallSessionState.Completed"/> or <see cref="CallSessionState.Failed"/>,
+    /// the state <see cref="CallSession.State"/> reads when this notification is delivered. Set by the session engine
+    /// after the call's final transition and before any subscriber receives the notification.
+    /// </summary>
+    /// <remarks>
+    /// It lets a consumer that keeps only the notifications learn how a call ended without its session. Not a
+    /// positional member: a notification built with the positional constructor alone carries <see langword="null"/>,
+    /// and two notifications that differ only by it are not equal.
+    /// </remarks>
+    public CallSessionState? FinalState { get; init; }
+}
 
 /// <summary>
 /// Never raised by the SDK. Every ending of a call, a failed one included, is raised as <see cref="CallEndedEvent"/>,

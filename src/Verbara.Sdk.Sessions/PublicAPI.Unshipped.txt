@@ -7,3 +7,5 @@ Verbara.Sdk.Sessions.ISessionStore.GetByLinkedIdAsync(string! serverId, string! 
 virtual Verbara.Sdk.Sessions.Extensions.SessionStoreBase.GetByLinkedIdAsync(string! serverId, string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>
 Verbara.Sdk.Sessions.CallRingNoAnswerEvent.AgentInterface.get -> string?
 Verbara.Sdk.Sessions.CallRingNoAnswerEvent.AgentInterface.init -> void
+Verbara.Sdk.Sessions.CallEndedEvent.FinalState.get -> Verbara.Sdk.Sessions.CallSessionState?
+Verbara.Sdk.Sessions.CallEndedEvent.FinalState.init -> void
