@@ -68,7 +68,7 @@ public sealed class CallSessionManagerConnectedMemberTests
     }
 
     [Fact]
-    public async Task BridgeEntered_ShouldNameTheInterfaceTheCallRecorded_WhenACallThatNeverJoinedAQueueConnectsAgain()
+    public async Task BridgeEntered_ShouldNameNoMember_WhenACallThatNeverJoinedAQueueConnectsAgainAfterATransfer()
     {
         await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
         rig.Deliver(AgentLogin("agent-4", "PJSIP/agent4", "login-4"));
@@ -87,12 +87,11 @@ public sealed class CallSessionManagerConnectedMemberTests
             BridgeEnter("bridge-n1-2", "n1"));
         var session = rig.Session("n1");
 
-        (string? Queue, string? Member)[] expected = [(null, "PJSIP/agent4"), (null, "PJSIP/agent4")];
+        (string? Queue, string? Member)[] expected = [(null, "PJSIP/agent4"), (null, null)];
 
         Connected(rig, session.SessionId).Should().Equal(expected,
             "the agent's connect announces the call with the agent's interface; after the transfer the call's "
-            + "bridge announces it connected again and names the interface the call recorded, the agent's");
-        session.AgentInterface.Should().Be("PJSIP/agent4", "the agent's connect recorded its interface");
+            + "bridge announces it connected again, and no member's connect made that connection");
     }
 
     [Fact]

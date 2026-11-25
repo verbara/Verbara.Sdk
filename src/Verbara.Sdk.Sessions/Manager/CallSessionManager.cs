@@ -518,7 +518,10 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         // The session this leg opens if it finds no live call to join. Built once, fully, before it can
         // be published, so whoever finds it through the linkedid index sees a complete session.
         var direction = _correlator.InferDirection(channel.Context, channel.Extension);
-        var session = new CallSession(Guid.NewGuid().ToString("N"), linkedId, serverId, direction);
+        var session = new CallSession(Guid.NewGuid().ToString("N"), linkedId, serverId, direction)
+        {
+            CreatedAt = _timeProvider.GetUtcNow(),
+        };
 
         // An arrival subscribed before installation can lose its removal before that subscription is ready.
         // Keep it pending until iii or completion, without borrowing a newer attachment for its birth stamp.
@@ -1245,7 +1248,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                     {
                         session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                             CallSessionEventType.Connected, channel.Name, null, null));
-                        PublishConnected(session, answeredFrom, session.AgentId, session.AgentInterface, attachment);
+                        PublishConnected(session, answeredFrom, agentId: null, memberInterface: null, attachment);
                         changed = true;
                     }
                     else
@@ -1338,7 +1341,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             {
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Connected, null, null, $"bridge:{bridge.BridgeUniqueid}"));
-                PublishConnected(session, bridgedFrom, session.AgentId, session.AgentInterface, attachment);
+                PublishConnected(session, bridgedFrom, agentId: null, memberInterface: null, attachment);
                 _ = PersistAsync(session);
             }
         }
@@ -1356,12 +1359,16 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (!IsHeld(session))
                 return;
 
+            // One clock read, on the manager's clock, is the transfer's instant: the notification's timestamp and the
+            // start the announcement of the call's return to connected waits from.
+            var transferredAt = _timeProvider.GetUtcNow();
             if (session.TryTransition(CallSessionState.Transferring))
             {
+                session.TransferringAt = transferredAt;
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Transfer, null, info.TargetChannel, info.TransferType));
                 Publish(new CallTransferredEvent(session.SessionId, session.ServerId,
-                    DateTimeOffset.UtcNow, info.TransferType, info.TargetChannel), attachment);
+                    transferredAt, info.TransferType, info.TargetChannel), attachment);
                 _ = PersistAsync(session);
             }
         }
@@ -1699,9 +1706,17 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     /// of zero is a sample, a negative one, from a clock stepping back, is dropped.
     /// </para>
     /// <para>
-    /// The event's <see cref="CallConnectedEvent.WaitTime"/> is the call's wait since it was created. Its
-    /// <see cref="CallConnectedEvent.AgentInterface"/> is <paramref name="memberInterface"/>, which each caller takes
-    /// from the connect being announced when a member's connect made it.
+    /// The event describes its own connection. Its <see cref="CallConnectedEvent.WaitTime"/> runs to this connection
+    /// from the visit's start for a connection from <see cref="CallSessionState.Queued"/>, from the call's creation
+    /// (<see cref="CallSession.CreatedAt"/>) for one from <see cref="CallSessionState.Dialing"/> or
+    /// <see cref="CallSessionState.Ringing"/>, which is always the call's first, and from the instant the call last
+    /// became transferring (<see cref="CallSession.TransferringAt"/>) for one from
+    /// <see cref="CallSessionState.Transferring"/>; it is zero when that start is unknown. Its
+    /// <see cref="CallConnectedEvent.QueueName"/> is the visit's queue only for a connection from
+    /// <see cref="CallSessionState.Queued"/>. Its <see cref="CallConnectedEvent.AgentId"/> and
+    /// <see cref="CallConnectedEvent.AgentInterface"/> are <paramref name="agentId"/> and
+    /// <paramref name="memberInterface"/>, which each caller takes from the connect that moved the call, and passes
+    /// as <see langword="null"/> for a connection a leg's answer, a dial outcome or a bridge entry made.
     /// </para>
     /// </summary>
     private void PublishConnected(CallSession session, CallSessionState? enteredFrom, string? agentId,
@@ -1715,16 +1730,21 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         var connectedAt = _timeProvider.GetUtcNow();
         session.ConnectedAt ??= connectedAt;
-        var waitSinceCreated = session.WaitTime ?? TimeSpan.Zero;
-        Publish(new CallConnectedEvent(session.SessionId, session.ServerId,
-            connectedAt, agentId, session.QueueName, waitSinceCreated) { AgentInterface = memberInterface }, attachment);
+        var answersAVisit = enteredFrom is CallSessionState.Queued;
+        DateTimeOffset? waitedFrom = enteredFrom switch
+        {
+            CallSessionState.Queued => session.QueueVisitStartedAt,
+            CallSessionState.Transferring => session.TransferringAt,
+            _ => session.CreatedAt,
+        };
+        var wait = waitedFrom is { } start ? connectedAt - start : TimeSpan.Zero;
+        Publish(new CallConnectedEvent(session.SessionId, session.ServerId, connectedAt, agentId,
+            answersAVisit ? session.QueueName : null, wait) { AgentInterface = memberInterface }, attachment);
 
-        if (enteredFrom is not CallSessionState.Queued)
+        if (!answersAVisit)
             return;
 
-        var visitWait = session.QueueVisitStartedAt is { } visitStartedAt
-            ? connectedAt - visitStartedAt
-            : waitSinceCreated;
+        var visitWait = session.QueueVisitStartedAt is not null ? wait : session.WaitTime ?? TimeSpan.Zero;
         if (visitWait >= TimeSpan.Zero)
             SessionMetrics.WaitTimeMs.Record(visitWait.TotalMilliseconds);
     }
@@ -2183,7 +2203,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 CountConnectedLeg(session, new WrapUpLeg(serverId, memberInterface, wrapUpKey, agentId, OpensAtCallEnd: false));
             }
 
-            PublishConnected(session, connectedFrom, session.AgentId, memberInterface, attachment);
+            // app_queue's report names no agent: a connection it makes is announced with its member and no agent.
+            PublishConnected(session, connectedFrom, agentId: null, memberInterface, attachment);
         }
 
         _ = PersistAsync(session);
@@ -2268,7 +2289,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (channel.DialStatus == "ANSWER" && session.State != CallSessionState.Queued
                 && EnterConnected(session) is { } dialedFrom)
             {
-                PublishConnected(session, dialedFrom, session.AgentId, session.AgentInterface, attachment);
+                PublishConnected(session, dialedFrom, agentId: null, memberInterface: null, attachment);
             }
         }
         _ = PersistAsync(session);

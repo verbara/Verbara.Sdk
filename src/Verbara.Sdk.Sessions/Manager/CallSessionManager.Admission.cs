@@ -204,6 +204,7 @@ public sealed partial class CallSessionManager
         var call = new CallSession(Guid.NewGuid().ToString("N"), linkedId, serverId,
             _correlator.InferDirection(channel.Context, channel.Extension))
         {
+            CreatedAt = _timeProvider.GetUtcNow(),
             Unverified = true,
             AttachmentGeneration = attachment.Generation,
             Context = channel.Context,

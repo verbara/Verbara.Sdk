@@ -90,6 +90,12 @@ public sealed class CallSession
     public HangupCause? HangupCause { get; set; }
 
     // Timestamps
+    /// <summary>
+    /// When the SDK opened the call's record: the arrival of its first channel the SDK observed, read on the session
+    /// engine's clock, or, for a call a state reload or the admission of existing calls opened, when the SDK learned
+    /// of it. <see cref="WaitTime"/> runs from it, and so does the wait the call's first
+    /// <see cref="CallConnectedEvent"/> carries when that connection answers no queue visit.
+    /// </summary>
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? DialingAt { get; set; }
     /// <summary>
@@ -325,6 +331,14 @@ public sealed class CallSession
     /// as for a session restored from a snapshot. Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
     internal DateTimeOffset? QueueVisitStartedAt { get; set; }
+
+    /// <summary>
+    /// When the call last became <see cref="CallSessionState.Transferring"/>, on the manager's clock: the instant its
+    /// latest <c>CallTransferredEvent</c> carries, replaced at each transfer. The announcement of a return from that
+    /// transfer waits from it. <c>null</c> when the manager never saw the call become transferring, as for a session
+    /// restored from a snapshot. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal DateTimeOffset? TransferringAt { get; set; }
 
     /// <summary>
     /// Whether Asterisk has reported the caller leaving the current visit's queue (a

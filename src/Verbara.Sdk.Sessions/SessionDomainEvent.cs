@@ -48,8 +48,26 @@ public sealed record CallStartedEvent(string SessionId, string ServerId, DateTim
 /// its initial state, or for a report that finds the call already connected.
 /// </summary>
 /// <remarks>
+/// <para>
 /// When it is delivered the call is connected and <see cref="CallSession.ConnectedAt"/> is set; the call's first one
 /// carries, as <see cref="SessionDomainEvent.Timestamp"/>, the instant <see cref="CallSession.ConnectedAt"/> holds.
+/// </para>
+/// <para>
+/// Each notification describes its own connection, not the call's history. <c>WaitTime</c> runs to this connection
+/// from: the queue visit's start (when Asterisk says the caller joined, the instant that visit's
+/// <see cref="CallQueuedEvent"/> carries) for a connection that answers a queue visit; the call's creation
+/// (<see cref="CallSession.CreatedAt"/>) for the call's first connection otherwise; and the instant the call last
+/// became transferring (the timestamp of its latest <see cref="CallTransferredEvent"/>) for a return from a transfer.
+/// It is zero when that start is unknown, as for a call restored from a snapshot. <see cref="CallSession.WaitTime"/>
+/// is not this: it stays the call's creation to its first connection.
+/// </para>
+/// <para>
+/// <c>QueueName</c> names the queue whose visit this connection answers, and is <see langword="null"/> for a
+/// connection that answers none (a plain dial's answer, a return from a transfer), even when the call joined a queue
+/// earlier; <see cref="CallSession.QueueName"/> keeps naming the last queue the call joined. <c>AgentId</c> is the
+/// agent the connect that made this connection named, <see langword="null"/> when no agent's connect made it, as for
+/// app_queue's own report, a leg's answer, a dial outcome or a bridge entry.
+/// </para>
 /// </remarks>
 public sealed record CallConnectedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string? AgentId, string? QueueName, TimeSpan WaitTime) : SessionDomainEvent(SessionId, ServerId, Timestamp)
@@ -57,8 +75,8 @@ public sealed record CallConnectedEvent(string SessionId, string ServerId, DateT
     /// <summary>
     /// The interface of the member whose connect this notification announces, exactly as Asterisk reported it in that
     /// connect: <c>PJSIP/agent1</c> for an endpoint member, the <c>Local</c> interface for a member that is a
-    /// <c>Local</c> channel. <see langword="null"/> when the SDK has none, as for a call that never joined a queue and
-    /// that no agent known by name connected.
+    /// <c>Local</c> channel. <see langword="null"/> when no member's connect made the connection: a leg's answer, a
+    /// dial outcome or a bridge entry, as for a plain dial's answer or a return from a transfer.
     /// </summary>
     /// <remarks>
     /// It is taken from the connect being announced, so each queue visit of a call names the member that answered that
