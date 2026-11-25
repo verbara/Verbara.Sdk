@@ -1292,6 +1292,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (!IsHeld(session))
                 return;
 
+            var returned = ReturnFromUnansweredVisit(session, channel.UniqueId);
             if (session.TryTransition(CallSessionState.OnHold))
             {
                 session.StartHold();
@@ -1300,6 +1301,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 Publish(new CallHeldEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow), attachment);
                 _ = PersistAsync(session);
             }
+            else if (returned)
+                _ = PersistAsync(session);
         }
     }
 
@@ -1314,6 +1317,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (!IsHeld(session))
                 return;
 
+            var returned = ReturnFromUnansweredVisit(session, channel.UniqueId);
             if (session.TryTransition(CallSessionState.Connected))
             {
                 session.EndHold();
@@ -1322,6 +1326,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 Publish(new CallResumedEvent(session.SessionId, session.ServerId, DateTimeOffset.UtcNow), attachment);
                 _ = PersistAsync(session);
             }
+            else if (returned)
+                _ = PersistAsync(session);
         }
     }
 
@@ -1345,6 +1351,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             }
             session.BridgeId = bridge.BridgeUniqueid;
             index.BridgeToSession[bridge.BridgeUniqueid] = session.SessionId;
+            var returned = ReturnFromUnansweredVisit(session, uniqueId);
 
             // A queued call is connected only by app_queue's report of it (OnQueueCallerConnected,
             // OnAgentConnected): a member leg can enter a bridge that app_queue never connects, as a
@@ -1360,6 +1367,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 PublishConnected(session, bridgedFrom, agentId: null, memberInterface: null, attachment);
                 _ = PersistAsync(session);
             }
+            else if (returned)
+                _ = PersistAsync(session);
         }
     }
 
@@ -1427,11 +1436,17 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             session.QueueVisitAnnounced = false;
             session.QueueVisitLeft = false;
             session.QueueVisitAbandonReported = false;
+            session.QueueVisitEndedUnanswered = false;
             session.QueueVisitStartedAt = visitStartedAt;
             session.QueueVisitLossEpoch = entry.LossEpoch ?? server.ReadEventLossEpoch();
             session.QueueVisitJoinOrdinal = entry.JoinOrdinal;
             session.OpenVisitCaller(uniqueId, entry.Channel);
-            session.TryTransition(CallSessionState.Queued);
+
+            // The state a visit that ends unanswered returns the call to: the one it leaves here. A join that finds the
+            // call still queued (a second queue right after an unanswered one) keeps the first visit's.
+            var beforeVisit = session.State;
+            if (session.TryTransition(CallSessionState.Queued))
+                session.StateBeforeQueueVisit = beforeVisit;
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.QueueJoined, entry.Channel, null, queueName));
 
@@ -1516,6 +1531,12 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             }
 
             session.QueueVisitLeft = true;
+
+            // An abandon and then this leave: the visit ended unanswered. The call waits in queued until the next report
+            // of the channel that waited there (ReturnFromUnansweredVisit), not at this leave.
+            if (session.QueueVisitAbandonReported && session.State == CallSessionState.Queued)
+                session.QueueVisitEndedUnanswered = true;
+
             if (CurrentVisit(session, report.Queue) is not { } visit)
                 return;
 
@@ -1688,6 +1709,19 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 ? reportedAt - TimeSpan.FromSeconds(waitSeconds)
                 : null;
     }
+
+    /// <summary>
+    /// A report of channel <paramref name="uniqueId"/> of <paramref name="session"/>: a hold or its end, a dial it
+    /// begins or that dial's outcome, or its entry into a bridge. When the call waits in
+    /// <see cref="CallSessionState.Queued"/> after a visit that ended unanswered (an abandon and then the leave) and the
+    /// channel is the one that waited there, this is the call's next report: the call returns, silently, to the state it
+    /// had before the visit (<see cref="CallSession.TryReturnFromUnansweredVisit"/>), and the report is then handled
+    /// there. A report of any other channel of the call (a member's leg, even after the abandon), the caller's own
+    /// dialplan and variable reports, and the queue's own frames return nothing; the caller's hang-up ends the call from
+    /// queued. Returns whether the call returned. Called under the session's lock.
+    /// </summary>
+    private static bool ReturnFromUnansweredVisit(CallSession session, string uniqueId) =>
+        session.TryReturnFromUnansweredVisit(uniqueId);
 
     /// <summary>
     /// Moves <paramref name="session"/> into <see cref="CallSessionState.Connected"/> through the transition table and
@@ -2305,12 +2339,15 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (!IsHeld(session))
                 return;
 
+            var returned = ReturnFromUnansweredVisit(session, channel.UniqueId);
             if (session.TryTransition(CallSessionState.Dialing))
             {
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Dialing, channel.Name, channel.DialedChannel, null));
                 _ = PersistAsync(session);
             }
+            else if (returned)
+                _ = PersistAsync(session);
         }
     }
 
@@ -2326,6 +2363,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             if (!IsHeld(session))
                 return;
 
+            _ = ReturnFromUnansweredVisit(session, channel.UniqueId);
             session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.Connected, channel.Name, null, $"dial:{channel.DialStatus}"));
 

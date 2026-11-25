@@ -433,6 +433,48 @@ public sealed class CallSession
     }
 
     /// <summary>
+    /// The state the call had before the first queue visit of a chain: set when a join moves the call into
+    /// <see cref="CallSessionState.Queued"/> from another state, and kept by a join that finds it still queued (a second
+    /// queue the dialplan runs right after an unanswered one). <see langword="null"/> for a call the manager never saw
+    /// join from another state. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal CallSessionState? StateBeforeQueueVisit { get; set; }
+
+    /// <summary>
+    /// Whether the current visit ended unanswered and the call has not returned from it yet: app_queue reported the
+    /// visit abandoned (<c>QueueCallerAbandon</c>) and then the caller leaving (<c>QueueCallerLeave</c>) while the call
+    /// waited in <see cref="CallSessionState.Queued"/>. Set at that leave, cleared at the return and at each visit the
+    /// manager opens. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal bool QueueVisitEndedUnanswered { get; set; }
+
+    /// <summary>
+    /// Returns the call, waiting in <see cref="CallSessionState.Queued"/> after a visit that ended unanswered
+    /// (<see cref="QueueVisitEndedUnanswered"/>), to <see cref="StateBeforeQueueVisit"/> when
+    /// <paramref name="uniqueId"/> is the channel that waited in the queue (<see cref="QueueVisitCallerUniqueId"/>): its
+    /// report is the call's next one, which the caller then handles in the state returned to. Returns <c>true</c> when it
+    /// returned the call; otherwise it changes nothing. A visit whose prior state is unknown leaves the call queued.
+    /// <para>
+    /// This is not a transition and deliberately does not go through <see cref="TryTransition"/>: nothing new happened
+    /// to the call, which is again what it was a moment before the visit, so no timestamp moves and nothing is
+    /// announced. Called under <see cref="SyncRoot"/>.
+    /// </para>
+    /// </summary>
+    internal bool TryReturnFromUnansweredVisit(string uniqueId)
+    {
+        if (!QueueVisitEndedUnanswered || State != CallSessionState.Queued
+            || !string.Equals(QueueVisitCallerUniqueId, uniqueId, StringComparison.Ordinal))
+            return false;
+
+        QueueVisitEndedUnanswered = false;
+        if (StateBeforeQueueVisit is not { } before || before == CallSessionState.Queued)
+            return false;
+
+        State = before;
+        return true;
+    }
+
+    /// <summary>
     /// The legs of this call that an agent or a queue member took and that the manager still counts as connected
     /// for that agent's or member's wrap-up, or <see langword="null"/> when there are none. A leg leaves the list
     /// when its end is handled: the member's <c>AgentComplete</c>, or the call's ending. Read and written only under
