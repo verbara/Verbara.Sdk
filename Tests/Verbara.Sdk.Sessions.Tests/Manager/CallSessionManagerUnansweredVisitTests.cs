@@ -17,7 +17,8 @@ namespace Verbara.Sdk.Sessions.Tests.Manager;
 /// synthetic, in the order the connected-signal-matrix captures show for a queue timeout (the member's ring ends, then
 /// the abandon, the leave, and the hang-up of the member's ringing leg): no capture holds two queues in a row, a member
 /// leg entering a bridge after an abandon, a caller returned to transferring that hangs up abnormally, a never-connected
-/// call whose channel reports again after its visit, or an unhold of a call that is not on hold.
+/// call whose channel reports again after its visit (one dialing before it included, and the overflow dial that answers
+/// it), an unhold of a call that is not on hold, or a held call blind-transferred and then unheld.
 /// </remarks>
 [Collection(SessionSubscriberFaultsGroup.Name)]
 public sealed class CallSessionManagerUnansweredVisitTests
@@ -45,6 +46,34 @@ public sealed class CallSessionManagerUnansweredVisitTests
 
     private static HangupEvent HangupWith(string uniqueId, HangupCause cause) =>
         new() { EventType = "Hangup", UniqueId = uniqueId, Cause = (int)cause };
+
+    private static DialBeginEvent DialBegin(string destUniqueId, string destChannel) => new()
+    {
+        EventType = "DialBegin", UniqueId = Caller, Channel = CallerChan, DestUniqueid = destUniqueId,
+        DestChannel = destChannel, DialString = destChannel,
+    };
+
+    private static DialEndEvent DialEnd(string destUniqueId, string destChannel, string dialStatus) => new()
+    {
+        EventType = "DialEnd", UniqueId = Caller, Channel = CallerChan, DestUniqueid = destUniqueId,
+        DestChannel = destChannel, DialStatus = dialStatus,
+    };
+
+    /// <summary>
+    /// The caller dials an extension that does not answer (the call is then <see cref="CallSessionState.Ringing"/>, or
+    /// still <see cref="CallSessionState.Dialing"/> when the extension never rings), and then waits in <c>q-tmo</c>,
+    /// which times out.
+    /// </summary>
+    private static ManagerEvent[] DialFailsThenVisitTimesOut(bool extensionRings) =>
+    [
+        NewChannel(Caller, CallerChan, "Ring", Caller, context: "from-trunk", exten: "500"),
+        NewChannel("d1", "PJSIP/ext-d1", "Down", Caller, context: "ext"),
+        DialBegin("d1", "PJSIP/ext-d1"),
+        .. (extensionRings ? new ManagerEvent[] { NewState("d1", "Ringing") } : Array.Empty<ManagerEvent>()),
+        DialEnd("d1", "PJSIP/ext-d1", "NOANSWER"),
+        HangupWith("d1", HangupCause.NoAnswer),
+        .. VisitTimesOut("q-tmo", RingingLeg),
+    ];
 
     /// <summary>The caller waits in <paramref name="queue"/>, a member's leg rings, and the queue times out.</summary>
     private static ManagerEvent[] VisitTimesOut(string queue, string ringingLeg) =>
@@ -366,5 +395,158 @@ public sealed class CallSessionManagerUnansweredVisitTests
         afterHold.Should().Be(CallSessionState.OnHold, "premise: the connected call's hold is counted");
         session.State.Should().Be(CallSessionState.Connected, "the unhold of a call on hold returns it to connected");
         rig.Events.OfType<CallResumedEvent>().Should().ContainSingle("the call resumed once");
+    }
+    /// <summary>
+    /// A never-connected call that was dialing or ringing before its visit is back there after the visit ends
+    /// unanswered, and nobody has answered it: its own answer (the dialplan's <c>Answer()</c>) or its entering a bridge
+    /// alone does not connect it, so it ends <see cref="CallSessionState.Failed"/> with no
+    /// <see cref="CallSession.ConnectedAt"/>.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "none")]
+    [InlineData(true, "hold")]
+    [InlineData(true, "bridge")]
+    [InlineData(true, "answer")]
+    [InlineData(true, "hold-then-answer")]
+    [InlineData(false, "none")]
+    [InlineData(false, "bridge")]
+    [InlineData(false, "answer")]
+    [InlineData(false, "hold-then-answer")]
+    public async Task CallSession_ShouldEndFailedWithNoConnection_WhenACallDialingBeforeItsVisitReportsAfterItEndsUnanswered(
+        bool extensionRings, string shape)
+    {
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
+        rig.Deliver(DialFailsThenVisitTimesOut(extensionRings));
+        var session = rig.Session(Caller);
+        var afterVisit = session.State;
+        switch (shape)
+        {
+            case "hold":
+                rig.Deliver(Hold(Caller));
+                break;
+            case "bridge":
+                rig.Deliver(BridgeCreate("lone"), BridgeEnter("lone", Caller));
+                break;
+            case "answer":
+                rig.Deliver(NewState(Caller, "Up"));
+                break;
+            case "hold-then-answer":
+                rig.Deliver(Hold(Caller), NewState(Caller, "Up"));
+                break;
+        }
+        var afterReport = session.State;
+
+        rig.Deliver(Hangup(Caller));
+
+        using var scope = new AssertionScope();
+        afterVisit.Should().Be(CallSessionState.Queued, "premise: the call waits until its caller reports again");
+        if (shape == "answer")
+            afterReport.Should().Be(CallSessionState.Queued,
+                "by choice, the caller's own answer is not a report that returns the call");
+        else if (shape != "none")
+            afterReport.Should().Be(extensionRings ? CallSessionState.Ringing : CallSessionState.Dialing,
+                "the caller's report returns the call to the state it had before the visit, and connects nothing");
+        session.State.Should().Be(CallSessionState.Failed,
+            "a call that entered a queue and that nobody answered is abandoned, whatever its channel reports after");
+        session.ConnectedAt.Should().BeNull("nobody answered the call");
+        rig.Events.OfType<CallConnectedEvent>().Should().BeEmpty("nothing connected the call");
+        rig.Events.OfType<CallEndedEvent>().Should().ContainSingle("the call ends once")
+            .Which.FinalState.Should().Be(CallSessionState.Failed);
+    }
+
+    /// <summary>
+    /// The control: an overflow <c>Dial</c> that answers a call dialing before its unanswered visit connects it, once,
+    /// whichever report of the answer comes first. <c>leg-up</c> is the order the q-timeout-dial capture shows (the
+    /// dialled leg's answer, the <c>DialEnd</c> ANSWER, the caller's own answer, the dialled leg and then the caller
+    /// entering the bridge); <c>dial-end</c> has no answer of the dialled leg; <c>bridge</c> has only the bridge, the
+    /// caller entering it first.
+    /// </summary>
+    [Theory]
+    [InlineData("leg-up")]
+    [InlineData("dial-end")]
+    [InlineData("bridge")]
+    public async Task CallConnectedEvent_ShouldBePublishedOnce_WhenAnOverflowDialAnswersACallDialingBeforeItsUnansweredVisit(
+        string shape)
+    {
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
+        rig.Deliver(DialFailsThenVisitTimesOut(extensionRings: true));
+        const string overflowLeg = "o1";
+        const string overflowChannel = "PJSIP/overflow-o1";
+        rig.Deliver(
+            NewChannel(overflowLeg, overflowChannel, "Down", Caller, context: "overflow"),
+            DialBegin(overflowLeg, overflowChannel),
+            NewState(overflowLeg, "Ringing"));
+        switch (shape)
+        {
+            case "leg-up":
+                rig.Deliver(
+                    NewState(overflowLeg, "Up"),
+                    DialEnd(overflowLeg, overflowChannel, "ANSWER"),
+                    NewState(Caller, "Up"),
+                    BridgeCreate("overflow"),
+                    BridgeEnter("overflow", overflowLeg),
+                    BridgeEnter("overflow", Caller));
+                break;
+            case "dial-end":
+                rig.Deliver(
+                    DialEnd(overflowLeg, overflowChannel, "ANSWER"),
+                    NewState(Caller, "Up"),
+                    BridgeCreate("overflow"),
+                    BridgeEnter("overflow", Caller),
+                    BridgeEnter("overflow", overflowLeg));
+                break;
+            case "bridge":
+                rig.Deliver(
+                    BridgeCreate("overflow"),
+                    BridgeEnter("overflow", Caller),
+                    BridgeEnter("overflow", overflowLeg));
+                break;
+        }
+        var session = rig.Session(Caller);
+        var afterAnswer = session.State;
+
+        rig.Deliver(Hangup(Caller), Hangup(overflowLeg));
+
+        using var scope = new AssertionScope();
+        afterAnswer.Should().Be(CallSessionState.Connected, "the overflow dial's answer connects the call");
+        rig.Events.OfType<CallConnectedEvent>().Should().ContainSingle("the overflow dial's answer is announced once")
+            .Which.QueueName.Should().BeNull("the connection answers no queue visit");
+        session.ConnectedAt.Should().NotBeNull("someone answered the call");
+        session.State.Should().Be(CallSessionState.Completed, "a connected call that hangs up normally completed");
+    }
+
+    /// <summary>
+    /// A call on hold that is blind-transferred stays on hold until its held channel is taken off it: the transfer does
+    /// not stop the hold clock, and the held caller's unhold stops it although the call, now transferring, does not
+    /// resume. An unhold of another channel (Asterisk reports one when a channel enters a bridge) stops nothing.
+    /// </summary>
+    [Fact]
+    public async Task HoldTime_ShouldStopGrowing_WhenTheHeldCallerIsUnheldAfterABlindTransferFromHold()
+    {
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
+        rig.Deliver(QueueCallConnected("q-first", Caller, FirstMemberLeg, FirstMember));
+        rig.Deliver(Hold(Caller));
+        var session = rig.Session(Caller);
+        var afterHold = session.State;
+
+        rig.Deliver(BlindTransfer(Bridge(Caller), Caller, CallerChan, "ext", "200"));
+        var afterTransfer = session.State;
+        var clockRunningAfterTransfer = session._holdStartedAt is not null;
+        rig.Deliver(Unhold(FirstMemberLeg));
+        var clockRunningAfterOtherUnhold = session._holdStartedAt is not null;
+        rig.Deliver(Unhold(Caller));
+        var afterUnhold = session.State;
+        var holdTime = session.HoldTime;
+        var holdTimeLater = session.HoldTime;
+
+        using var scope = new AssertionScope();
+        afterHold.Should().Be(CallSessionState.OnHold, "premise: the connected call's hold is counted");
+        afterTransfer.Should().Be(CallSessionState.Transferring, "premise: the blind transfer moves the held call");
+        clockRunningAfterTransfer.Should().BeTrue("the caller is still on hold while it is transferred");
+        clockRunningAfterOtherUnhold.Should().BeTrue("only the held channel's unhold ends its hold");
+        afterUnhold.Should().Be(CallSessionState.Transferring, "an unhold resumes only a call on hold");
+        session._holdStartedAt.Should().BeNull("the held caller's unhold ends the hold");
+        holdTimeLater.Should().Be(holdTime, "the hold is over, so its time no longer grows");
+        rig.Events.OfType<CallResumedEvent>().Should().BeEmpty("the call was not on hold when it was unheld");
     }
 }
