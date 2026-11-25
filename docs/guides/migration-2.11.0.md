@@ -21,6 +21,12 @@ each one reaches and what to do. The [CHANGELOG](../../CHANGELOG.md) has the ful
 | `Verbara.Sdk.Activities`, `Verbara.Sdk.VoiceAi`, `Verbara.Sdk.VoiceAi.OpenAiRealtime` | [An activity, voice pipeline or realtime bridge subscriber that throws stops nothing else](#an-activity-voice-pipeline-or-realtime-bridge-subscriber-that-throws-stops-nothing-else) | behaviour, BREAKING (no compiler error; a cast of `StatusChanges` to `BehaviorSubject` fails at run time) |
 | `Verbara.Sdk.VoiceAi.AudioSocket` | [An `OnSessionStarted` subscriber that fails ends the AudioSocket call only when every subscriber did](#an-onsessionstarted-subscriber-that-fails-ends-the-audiosocket-call-only-when-every-subscriber-did) | behaviour, BREAKING (no compiler error) |
 | `Verbara.Sdk.VoiceAi.Stt` | [A Whisper or Azure Whisper reply with a `null` text makes `StreamAsync` throw](#a-whisper-or-azure-whisper-reply-with-a-null-text-makes-streamasync-throw) | behaviour, BREAKING (no compiler error) |
+| `Verbara.Sdk.Sessions` | [A call is announced connected each time someone answers it](#a-call-is-announced-connected-each-time-someone-answers-it) | behaviour, BREAKING (no compiler error) |
+| `Verbara.Sdk.Sessions` | [A connected or transferring call that joins a queue waits in `Queued`](#a-connected-or-transferring-call-that-joins-a-queue-waits-in-queued) | behaviour, BREAKING (no compiler error) |
+| `Verbara.Sdk.Sessions` | [`CallConnectedEvent.WaitTime` is the wait of its own connection](#callconnectedeventwaittime-is-the-wait-of-its-own-connection) | behaviour, BREAKING (no compiler error) |
+| `Verbara.Sdk.Sessions` | [Each connected announcement names its own queue and member; the call keeps its latest member](#each-connected-announcement-names-its-own-queue-and-member-the-call-keeps-its-latest-member) | behaviour, new member, BREAKING (no compiler error) |
+| `Verbara.Sdk.Sessions` | [`CallEndedEvent` carries the state the call ended in](#callendedevent-carries-the-state-the-call-ended-in) | new member (no compiler error) |
+| `Verbara.Sdk.Sessions` | [A queue visit that ends unanswered returns the call to its state before the visit](#a-queue-visit-that-ends-unanswered-returns-the-call-to-its-state-before-the-visit) | behaviour, BREAKING (no compiler error) |
 | `Verbara.Sdk.Sessions`, `Verbara.Sdk.Sessions.Redis`, `Verbara.Sdk.Sessions.Postgres` | [A session store's `linkedid` lookup with several servers](#a-session-stores-linkedid-lookup-with-several-servers) | behaviour, new member, fix, BREAKING (no compiler error; new Redis index key) |
 | `Verbara.Sdk.Hosting` | [A host that attaches the server by hand or decorates the session manager](#a-host-that-attaches-the-server-by-hand-or-decorates-the-session-manager) | fix, behaviour (no compiler error) |
 | `Verbara.Sdk.Sessions` | [`CallRingNoAnswerEvent` is raised, and `IAgentSessionTracker` lists members that only missed calls](#callringnoanswerevent-is-raised-and-iagentsessiontracker-lists-members-that-only-missed-calls) | fix, new member, behaviour (no compiler error) |
@@ -862,6 +868,268 @@ static async Task<string?> TranscribeAsync(
     }
 }
 ```
+
+## What a connected call means
+
+Up to 2.10.x three signals said a call was connected, and they did not agree: `CallConnectedEvent`, the state
+`CallSession.State == Connected`, and the time `CallSession.ConnectedAt`. Whether a connection was announced depended
+on which of Asterisk's reports reached the SDK first, not on what happened to the call. From 2.11.0 the three say the
+same thing: `Connected` means **the call is in conversation with someone now**, each entry into it because someone
+answered is announced once, and `ConnectedAt` is the first of those entries. The sections below are the changes that
+follow from it. Nothing reports a compiler error. Code that stores or replays session notifications should give the
+new members below (`CallConnectedEvent.AgentInterface`, `CallEndedEvent.FinalState`) a field of their own, or they are
+lost on replay. Never hard-code or reorder the numeric values of `CallSessionState`: they did not move, but a call now
+passes through states in orders it did not before.
+
+### A call is announced connected each time someone answers it
+
+**What changed.**
+
+- One `CallConnectedEvent` is raised each time the call enters `Connected` from `Dialing`, `Ringing`, `Queued` or
+  `Transferring`, whatever report made it: a leg's answer, a dial's outcome, a bridge entry, the connect of an agent
+  known by name, or app_queue's report of the connection. A known agent's connect and app_queue's report of the same
+  connection raise one event between them, in either order.
+- So a call announces each connection it has. A call answered by a plain `Dial()`, which raised none up to 2.10.x, now
+  raises one. A call a second queue takes after a first one, or a call back from a transfer (by a bridge or by a dial),
+  raises one more for that connection.
+- None is raised for a return from hold (that is `CallResumedEvent`), for a call that a state reload after a reconnect
+  or the admission of calls already up at start opens in `Connected`, or for a report that finds the call already
+  connected.
+- A call the dialplan answers with no dial and no queue (an IVR, a voicemail, a bot reached after `Answer()`) is the
+  one exception, unchanged from 2.10.x: it stays `Created` while it is up, raises no `CallConnectedEvent`, and ends
+  `Completed` with `ConnectedAt` set at the ending from the answer the SDK observed.
+- `CallSession.ConnectedAt` is the first connection the SDK observed: the call's first `CallConnectedEvent` carries
+  that instant as its `Timestamp`, and a later connection never moves it. Every `CallConnectedEvent` finds the call
+  `Connected` with `ConnectedAt` set. A call in `Connected` with a `null` `ConnectedAt` is one a reload or an admission
+  found connected, since an unknown time; its first connection of its own sets it.
+
+**Who is affected.** Code that subscribes to `ICallSessionManager.Events` and treats each `CallConnectedEvent` as a new
+answered call: an "answered" counter, the start of an assistance or recording step, or the reservation of an agent's
+capacity. A plain dialed call now reaches that code, and a re-queued call or a call back from a transfer reaches it
+twice. A click-to-dial call your code classifies as inbound can move from offered to active twice: do not reserve
+capacity twice for it.
+
+**What to do.** Count answered calls per session, not per event, or act on the first event of each call only. When a
+step belongs only to a queue's answer, test the event's `QueueName` or `AgentInterface` (see
+[each connected announcement names its own queue and member](#each-connected-announcement-names-its-own-queue-and-member-the-call-keeps-its-latest-member)).
+Counting each call once:
+
+```csharp
+using System.Collections.Concurrent;
+using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Manager;
+
+sealed class AnsweredCalls
+{
+    private readonly ConcurrentDictionary<string, byte> _live = new();
+    private long _answered;
+
+    public long Answered => Interlocked.Read(ref _answered);
+
+    public IDisposable Watch(ICallSessionManager sessions) =>
+        sessions.Events.Subscribe(evt =>
+        {
+            switch (evt)
+            {
+                // A call is announced once per connection; count it at its first.
+                case CallConnectedEvent connected when _live.TryAdd(connected.SessionId, 0):
+                    Interlocked.Increment(ref _answered);
+                    break;
+                case CallEndedEvent ended:
+                    _live.TryRemove(ended.SessionId, out _);
+                    break;
+            }
+        });
+}
+```
+
+### A connected or transferring call that joins a queue waits in `Queued`
+
+**What changed.**
+
+- A call that joins a queue waits in `Queued` whatever state it joins from. Up to 2.10.x a call answered and then
+  queued stayed `Connected` while it waited, and a call transferred into a second queue waited in `Transferring`. The
+  state table gains `Connected → Queued` and `Transferring → Queued`; the numeric values of `CallSessionState` do not
+  change.
+- The call leaves `Queued` when a member answers (one `CallConnectedEvent`), when the visit ends unanswered (see
+  [a queue visit that ends unanswered](#a-queue-visit-that-ends-unanswered-returns-the-call-to-its-state-before-the-visit)),
+  or when it ends.
+- A call that ends while it waits ends on the cause of its own channel, the one that waits in the queue, not on the
+  cause of whichever of its channels Asterisk reports hanging up last: app_queue may hang up a member's leg that was
+  still ringing, before or after the caller, and that leg decides nothing.
+  - A call that was ever connected (one a reload or an admission opened connected included) ends `Completed` when its
+    channel hangs up with normal clearing, and `Failed` on any other cause, which is its `HangupCause`. A reload that
+    proves the call gone before its channel's hang-up was seen ends it `Completed`, with no `HangupCause`.
+  - A call never connected ends `Failed`, as before, a call the dialplan answered included.
+- Up to 2.10.x a call answered and then queued that hung up while waiting ended on its last departure's cause, and a
+  re-queued call that hung up while waiting ended `Failed` whatever its cause. Re-queued calls that hang up normally
+  while waiting now count in `sessions.completed`, not in `sessions.failed`.
+
+**Who is affected.** Code that reads `State == Connected` as "talking" or `State == Transferring` as "being
+transferred" for a call that is in fact waiting in a queue, code that keys on a sequence of states, and reports or
+alerts that count failed calls.
+
+**What to do.** Read `Queued` as "waiting in a queue", whatever came before it, and tell a call that waits again from a
+first-time caller by its `ConnectedAt`:
+
+```csharp
+using Verbara.Sdk.Sessions;
+
+static string Describe(CallSession call) => call.State switch
+{
+    CallSessionState.Queued when call.ConnectedAt is not null => $"waiting again, in {call.QueueName}",
+    CallSessionState.Queued => $"waiting in {call.QueueName}",
+    CallSessionState.Connected => "talking",
+    _ => call.State.ToString(),
+};
+```
+
+A call a reload or an admission opened connected has no `ConnectedAt` until a connection of its own is observed, so the
+first arm does not see it.
+
+### `CallConnectedEvent.WaitTime` is the wait of its own connection
+
+**What changed.** Up to 2.10.x every `CallConnectedEvent` carried the wait from the call's creation to its **first**
+connection: a call answered and then queued carried the first answer's wait for its queue visit, and a re-queued call's
+second event repeated the first one's value, which understated the second visit's wait. From 2.11.0 `WaitTime` runs to
+this event's connection from:
+
+- the start of the queue visit it answers (the instant Asterisk reported the caller joined, which that visit's
+  `CallQueuedEvent` carries as its `Timestamp`), for a connection that answers a queue visit;
+- the call's creation (`CallSession.CreatedAt`), for the call's first connection when it answers no queue visit, as
+  before;
+- the instant the call last became `Transferring` (its latest `CallTransferredEvent`), for a return from a transfer.
+
+It is zero when that start is unknown, as for a call restored from a snapshot. `CallSession.WaitTime` does not change:
+it is still `ConnectedAt − CreatedAt`, the creation to the first connection.
+
+**Who is affected.** Service-level and wait-time reports built from the event's `WaitTime`, and stores that keep the
+`WaitTime` of a call's last event. A re-queued call no longer reads faster than it was; a series of queue waits shows a
+step on the day you upgrade.
+
+**What to do.** For a queue's service level, read `WaitTime` from the events that answer a visit (the ones with a
+`QueueName`); for the time to the first answer of a call, read `CallSession.WaitTime`:
+
+```csharp
+using Verbara.Sdk.Sessions;
+
+static bool AnsweredInQueueWithin(CallConnectedEvent connected, TimeSpan target) =>
+    connected.QueueName is not null && connected.WaitTime <= target;
+```
+
+### Each connected announcement names its own queue and member; the call keeps its latest member
+
+**What changed.**
+
+- `CallConnectedEvent.QueueName` names a queue only when the connection answers a visit to that queue. Otherwise it is
+  `null`, even when the call joined a queue earlier: a plain dial's answer, a return from a transfer.
+- `CallConnectedEvent.AgentId` is the agent named by the connect that made this connection, `null` when no agent's
+  connect made it (app_queue's own report, a leg's answer, a dial's outcome, a bridge entry).
+- `CallConnectedEvent.AgentInterface`, new in 2.11.0, is the interface of the member whose connect made this
+  connection, exactly as Asterisk reported it (`PJSIP/agent1`, or the `Local` interface for a `Local` member), and
+  `null` when no member's connect made it. It is not a positional member: an event built with the positional
+  constructor alone names no member, and two events that differ only by it are not equal.
+- `CallSession.AgentInterface` and `CallSession.AgentId` are those of the call's **most recent** connection, recorded
+  before that connection is announced. Up to 2.10.x `AgentInterface` kept the first member, so a re-queued call read
+  the second queue with the first queue's member, a pair that never existed. Each connection now replaces them, and a
+  connection that names none (a return from a transfer, a dial's answer) sets them to `null`. app_queue's report of a
+  connection that a known agent's connect has just made keeps that agent.
+- `CallSession.QueueName` still names the last queue the call joined, also after a later connection that answers no
+  queue.
+
+**Who is affected.** Code that counts "answered in a queue" by an event's `QueueName` or that reads the agent from the
+event, code that reads `CallSession.AgentInterface` or `AgentId` at the end of the call as "the member who took it",
+and code that reassigns agent capacity on each queue answer: a second queue answer is a change of owner, the first
+member's call is over.
+
+**What to do.** Read who answered each connection from its event. When you need the call's first member, keep it from
+the first event that names one:
+
+```csharp
+using System.Collections.Concurrent;
+using Verbara.Sdk.Sessions;
+using Verbara.Sdk.Sessions.Manager;
+
+static IDisposable TrackFirstMember(ICallSessionManager sessions, ConcurrentDictionary<string, string> firstMember) =>
+    sessions.Events.Subscribe(evt =>
+    {
+        // Only a connection a queue member made names one; the call's own AgentInterface is its latest.
+        if (evt is CallConnectedEvent { AgentInterface: { } member } connected)
+            firstMember.TryAdd(connected.SessionId, member);
+    });
+```
+
+### `CallEndedEvent` carries the state the call ended in
+
+**What changed.** `CallEndedEvent` gains `FinalState`: `Completed` or `Failed`, the state `CallSession.State` reads when
+the event is delivered, set before any subscriber receives it. It is not a positional member: an event built with the
+positional constructor alone carries `null`, and two events that differ only by it are not equal. With it, a consumer
+that keeps only the notifications learns how a call ended without its session. It is the way to read a failed call
+now that `CallFailedEvent` is deprecated; see
+[`CallFailedEvent` is never raised and is deprecated](#callfailedevent-is-never-raised-and-is-deprecated).
+
+**Who is affected.** Code that stores and replays session notifications, and tests that build a `CallEndedEvent` and
+compare it with one the SDK raised.
+
+**What to do.** Give `FinalState` a field in a stored payload, and set it with an object initializer where you build the
+event yourself:
+
+```csharp
+using Verbara.Sdk.Sessions;
+
+static bool EndedFailed(CallEndedEvent ended) => ended.FinalState == CallSessionState.Failed;
+
+static CallEndedEvent Replayed(string sessionId, string serverId, DateTimeOffset at, CallSessionState finalState) =>
+    new(sessionId, serverId, at, Cause: null, Duration: TimeSpan.Zero, TalkTime: null) { FinalState = finalState };
+```
+
+### A queue visit that ends unanswered returns the call to its state before the visit
+
+**What changed.** A queue visit ends unanswered when app_queue reports it abandoned and then the caller leaving (a queue
+timeout, an empty queue), or reports the caller leaving with no abandon before it and with a dialplan context,
+extension or priority other than the ones the caller joined with (the queue's exit key). Then:
+
+- The call stays `Queued` until the channel that waited reports something of its own: a hold or the end of one, a dial
+  it begins or that dial's outcome, its entry into a bridge. From that report it is back, with no event, in the state
+  it had before the first visit of a run of queues (two queues in a row return it to its state before the first).
+  Reports of the call's other channels, and the queue's own, do not return it.
+- A call that was `Connected` returns to `Connected`, with no `CallConnectedEvent`.
+- A call that was `Transferring` returns to `Transferring`. Until someone answers it, it ends on the cause of the
+  channel that waited: `Completed` on normal clearing or when a reload proves it gone, `Failed` on any other cause.
+  A dial that someone answers connects it, with one `CallConnectedEvent` that names no queue.
+- A call never connected before the visit (in `Created`, `Dialing` or `Ringing`) ends `Failed`, with no `ConnectedAt`
+  and no `CallConnectedEvent`, a call the dialplan answered included, unless someone answers it after the visit: a dial
+  outcome of answer, another channel of the call answering or entering a bridge, or its own channel entering a bridge
+  where someone already is. That answer, for example an overflow `Dial()` after a queue timeout, connects the call with
+  one `CallConnectedEvent` that names no queue, no member and no agent, and the call ends `Completed` on normal
+  clearing. Its own channel's answer, or its entering a bridge alone, connects nothing.
+- The queue still counts the visit as it did: a timeout as abandoned, an exit key as offered, neither answered nor
+  abandoned. `CallSession.QueueName` keeps naming the queue.
+- The end of a hold returns the call to `Connected`, with one `CallResumedEvent`, only when the call is `OnHold`; from
+  any other state it moves nothing and raises nothing (Asterisk also reports the end of a hold when a channel enters a
+  bridge). The end of the held channel's hold ends the call's hold time even when the call left `OnHold` meanwhile, as
+  a held call that is blind-transferred does; another channel's does not.
+
+**Known limits.**
+
+- `Connected` can mean that the call is alive and alone in the dialplan after its other party left.
+- A call back in `Connected` that another `Dial()` then answers raises no `CallConnectedEvent`: it is connected
+  already. The same holds for two `Dial()`s in a row with no queue.
+- When no report of the waiting channel follows the queue (the dialplan sends it to voicemail, for example), the call
+  reads `Queued` until it ends, and ends as a connected call that hangs up waiting in a queue.
+- A hold while the call is alone, back in `Transferring`, is not counted: no `CallHeldEvent`, no hold time.
+- What a call knows about its queue visit is not saved in a session store. A call restored from Redis or Postgres while
+  it waits after a visit, or while it is back in `Transferring` after one, does not return from the visit and ends as
+  in 2.10.x: `Failed` from `Queued` or from `Transferring`.
+- The exit key is not judged for a visit whose join the SDK did not see (one a state reload found) or for a leave after
+  a reconnect since the join: the caller may have left and joined again during the outage. Such a call stays `Queued`.
+
+**Who is affected.** Code that reads `Queued` at the end of a call as "abandoned while waiting", abandonment and
+answer-rate reports, and code that expects a `CallResumedEvent` for every end of a hold Asterisk reports.
+
+**What to do.** Read how a call ended from `CallEndedEvent.FinalState` (or `CallSession.State`) and whether it was ever
+answered from `ConnectedAt`, not from the state it was in before it ended. Read abandoned and timed-out visits from the
+queue's counters (`IQueueSessionTracker.ActiveQueues`: `QueueSession.CallsAbandoned`, `CallsTimedOut`).
 
 ## Session stores
 
