@@ -80,6 +80,13 @@ public sealed class CallSession
 
     /// <summary>Tenant identifier. The SDK does not assign it; the host sets it.</summary>
     public string? TenantId { get; set; }
+
+    /// <summary>
+    /// The cause Asterisk reported for the call's ending, or <c>null</c> when a state reload proved its channels gone and
+    /// no hang-up was observed. It is the cause of the call's last departing channel, except for a call that was
+    /// connected and ends while it waits in a later queue: that one carries its caller's own channel's cause, whichever
+    /// channel Asterisk reports hanging up last.
+    /// </summary>
     public HangupCause? HangupCause { get; set; }
 
     // Timestamps
@@ -133,11 +140,14 @@ public sealed class CallSession
     private const byte HasLastDepartureFlag = 4;
     private const byte ReloadDepartureFlag = 8;
     private const byte HasDepartureCauseFlag = 16;
+    private const byte ConnectedFlag = 32;
+    private const byte HasCallerCauseFlag = 64;
     private const byte DepartureProvenanceFlags = HasLastDepartureFlag | ReloadDepartureFlag | HasDepartureCauseFlag;
     private byte _endingFlags;
     /// <summary>The delivering or joined attachment's generation; internal and never persisted.</summary>
     internal long AttachmentGeneration { get; set; }
     private int _lastDepartureCause;
+    private int _callerHangupCause;
     private long _firstParticipantMark;
     private EndingOverflow? _endingOverflow;
 
@@ -210,6 +220,38 @@ public sealed class CallSession
     {
         _endingFlags &= unchecked((byte)~FirstDepartureRecordedFlag);
         if (_endingOverflow is not null) _endingOverflow.RecordedDepartures = null;
+    }
+
+    /// <summary>
+    /// Whether this call was ever connected: it entered <see cref="CallSessionState.Connected"/> by a transition, or a
+    /// reload or an admission opened it there, or it was restored connected or with a connected time. An answer
+    /// recorded while the call was in its initial state (<see cref="AnsweredInInitialStateAt"/>) is not a connection
+    /// and does not set it. Not persisted; nothing clears it. Read under <see cref="SyncRoot"/>.
+    /// </summary>
+    internal bool HasBeenConnected => (_endingFlags & ConnectedFlag) != 0 || ConnectedAt.HasValue;
+
+    internal void MarkConnected() => _endingFlags |= ConnectedFlag;
+
+    /// <summary>
+    /// The cause Asterisk reported on the hang-up of the caller's own channel (the call's first participant, the leg the
+    /// session reports as its caller), recorded when that leg's departure is observed; <c>null</c> until then and for a
+    /// caller a reload proved gone. Called and read under <see cref="SyncRoot"/>.
+    /// </summary>
+    internal HangupCause? CallerHangupCause =>
+        (_endingFlags & HasCallerCauseFlag) != 0 ? (HangupCause)_callerHangupCause : null;
+
+    /// <summary>Records <paramref name="cause"/> when <paramref name="uniqueId"/> is the caller's own channel.</summary>
+    internal void RecordCallerHangup(string uniqueId, HangupCause cause)
+    {
+        if (!IsFirstParticipant(uniqueId)) return;
+        _endingFlags |= HasCallerCauseFlag;
+        _callerHangupCause = (int)cause;
+    }
+
+    internal void ClearCallerHangup()
+    {
+        _endingFlags &= unchecked((byte)~HasCallerCauseFlag);
+        _callerHangupCause = 0;
     }
 
     internal (bool Reload, HangupCause? Cause)? LastDeparture
@@ -381,6 +423,8 @@ public sealed class CallSession
             return;
 
         State = state;
+        if (state == CallSessionState.Connected)
+            MarkConnected();
     }
 
     /// <summary>
@@ -453,6 +497,31 @@ public sealed class CallSession
         return true;
     }
 
+    /// <summary>
+    /// Ends, as <see cref="CallSessionState.Completed"/>, a call that was connected and is over while it waits in a later
+    /// queue (<see cref="CallSessionState.Queued"/>): the caller hung up normally, or a reload proved its channels gone,
+    /// before any member answered. Returns <c>true</c> if it did; otherwise it changes nothing and returns <c>false</c>.
+    /// <para>
+    /// This is not a transition and deliberately does not go through <see cref="TryTransition"/>.
+    /// <see cref="CallSessionStateTransitions"/> lets <see cref="CallSessionState.Queued"/> end only as <c>Failed</c>,
+    /// which is right for a call abandoned in the queue before it ever connected, a call the dialplan answered included;
+    /// adding <c>Queued → Completed</c> to the table would end those completed too. A call that was connected took
+    /// place, so the outcome is decided here, at the ending. It acts only on a session that is still
+    /// <see cref="CallSessionState.Queued"/> and <see cref="HasBeenConnected"/>; <see cref="ConnectedAt"/> is left as it
+    /// is, and <see cref="CompletedAt"/> takes the current time unless it already holds one. Called under
+    /// <see cref="SyncRoot"/>.
+    /// </para>
+    /// </summary>
+    internal bool TryCompleteConnectedWhileWaiting()
+    {
+        if (State != CallSessionState.Queued || !HasBeenConnected)
+            return false;
+
+        State = CallSessionState.Completed;
+        CompletedAt ??= DateTimeOffset.UtcNow;
+        return true;
+    }
+
     // Hold time tracking
     internal void StartHold() => _holdStartedAt = DateTimeOffset.UtcNow;
 
@@ -478,6 +547,7 @@ public sealed class CallSession
             case CallSessionState.Dialing: DialingAt ??= now; break;
             case CallSessionState.Ringing: RingingAt ??= now; break;
             case CallSessionState.Queued: QueuedAt ??= now; break;
+            case CallSessionState.Connected: MarkConnected(); break;
             case CallSessionState.Completed:
             case CallSessionState.Failed:
             case CallSessionState.TimedOut:

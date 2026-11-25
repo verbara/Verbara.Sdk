@@ -89,6 +89,9 @@ internal sealed class CallSessionSnapshot
         };
 
         session.State = State;
+        if (State is CallSessionState.Connected or CallSessionState.OnHold or CallSessionState.Transferring
+            or CallSessionState.Conference)
+            session.MarkConnected();
         session.Context = Context;
         session.Extension = Extension;
         session.QueueName = QueueName;

@@ -919,6 +919,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         call.Unverified = true;
         call.ClearRecordedDepartures();
         call.LastDeparture = null;
+        call.ClearCallerHangup();
         call.ClearParticipantMarks();
         call.AttachmentGeneration = oracle.Generation;
     }
@@ -1055,6 +1056,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                         participant.HangupCause = departure.RemovedByReload ? null : departure.HangupCause;
                     }
                     call.LastDeparture = (departure.RemovedByReload, departure.RemovedByReload ? null : departure.HangupCause);
+                    if (!departure.RemovedByReload)
+                        call.RecordCallerHangup(departure.UniqueId, departure.HangupCause);
                     call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow, CallSessionEventType.ParticipantLeft,
                         departure.Name, null, departure.RemovedByReload ? EndingProvenanceReload : departure.HangupCause.ToString()));
                 }
@@ -1123,6 +1126,12 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         for (var i = 0; i < participants.Count; i++)
             if (!string.Equals(participants[i].UniqueId, removedDepartureId, StringComparison.Ordinal))
                 index.ByChannelId.TryRemove(new KeyValuePair<string, CallSession>(participants[i].UniqueId, session));
+        // A call that was connected and is over while it waits in a later queue ends on its caller's own cause, never
+        // on the last departure's: app_queue may hang up a member leg that was still ringing (no cause) just after the
+        // caller, in either order, and that leg decides nothing. Every other call keeps the last departure's cause.
+        var endsWhileWaiting = session.State == CallSessionState.Queued && session.HasBeenConnected;
+        if (!byReload && endsWhileWaiting && session.CallerHangupCause is { } callersOwn)
+            observedCause = callersOwn;
         session.HangupCause = observedCause;
 
         if (byReload)
@@ -1140,7 +1149,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             // queue reaching it (an IVR, an originate answered with no dial onward): that one
             // ends completed from its observed answer. Transferring is deliberately absent —
             // it has no valid transition to Completed — and falls to the Failed arm below.
-            if (!session.TryCompleteAnsweredInInitialState())
+            if (!session.TryCompleteAnsweredInInitialState() && !session.TryCompleteConnectedWhileWaiting())
             {
                 var reloadTarget = session.State is CallSessionState.Connected
                     or CallSessionState.OnHold or CallSessionState.Conference
@@ -1166,6 +1175,12 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             {
                 if (targetState != CallSessionState.Completed
                     || !session.TryCompleteAnsweredInInitialState())
+                    session.TryTransition(CallSessionState.Failed);
+            }
+            else if (endsWhileWaiting)
+            {
+                // Queued ends only Failed by the table; a call that was connected ends completed on a normal clearing.
+                if (targetState != CallSessionState.Completed || !session.TryCompleteConnectedWhileWaiting())
                     session.TryTransition(CallSessionState.Failed);
             }
             else if (!session.TryTransition(targetState))

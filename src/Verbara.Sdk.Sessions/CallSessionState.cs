@@ -9,7 +9,11 @@ public enum CallSessionState
 
     /// <summary>
     /// Waiting in a queue until app_queue reports a connection or the call ends: a call that joins a queue waits here
-    /// whether it joins from its initial, dialing or ringing state, or after it was connected or transferring.
+    /// whether it joins from its initial, dialing or ringing state, or after it was connected or transferring. A call
+    /// that ends here before any member answers ends <see cref="Failed"/> when it was never connected, a call the dialplan
+    /// answered included; one that was connected before (a reload or an admission that opened it connected included)
+    /// ends <see cref="Completed"/> when its caller's own channel hangs up with normal clearing or a reload proves it
+    /// gone, and <see cref="Failed"/> on any other cause of that channel.
     /// </summary>
     Queued,
 
