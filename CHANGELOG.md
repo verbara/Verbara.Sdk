@@ -109,7 +109,7 @@ are not known to come from the same instance. `AsteriskInstanceIdentity` refuses
 `IAgentSessionTracker` copies the identity of the notification that caused each agent state change. `Instance` is
 part of a notification's value, so two notifications that differ only by it are no longer equal.
 
-### Changed — BREAKING: a call is connected each time someone answers it (#NNN)
+### Changed — BREAKING: a call is connected each time someone answers it (#661)
 
 "Connected" now means one thing for the notification, the state and the connection time: the call is in conversation
 with someone now. Code that counts answered calls, starts assistance or reserves capacity from `CallConnectedEvent`
